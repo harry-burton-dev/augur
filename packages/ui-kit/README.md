@@ -24,5 +24,8 @@ import '@im/ui-kit';
 | `ui-text-field` | Label, hint, line; needs-you, error, warning, valid, read-only, busy; form-associated |
 | `ui-table` | Sort (status by urgency), filter, select, open, loading, empty, error |
 | `ui-dialog` | Native dialog on the veil; checks slotted fields, async submit with busy and error |
+| `ui-icon` | Line icons on a 24 grid, bare or in the bubble |
+| `ui-glance` | A quick look before you go in: veil, sheet, card, split, title; hairline or bubble; loading, error, empty |
+| `ui-shell` | The frame apps run in: the band, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
 
 Specs live in the design system's component READMEs.
