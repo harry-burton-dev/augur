@@ -1,0 +1,33 @@
+openapi: 3.1.0
+info:
+  title: Registry
+  version: 0.1.0
+  description: Catalogue of apps and micro frontends; serves the shell manifest.
+paths:
+  /manifest:
+    get:
+      summary: Apps the caller may open
+      responses:
+        "200":
+          description: Manifest entries filtered by the caller's roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AppManifestEntry" }
+components:
+  schemas:
+    AppManifestEntry:
+      type: object
+      required: [id, name, route, entry, version]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        route: { type: string, description: Route prefix the shell maps to this app }
+        entry: { type: string, description: URL of the app's ES module entry }
+        version: { type: string }
+        requiredRole: { type: string }
+        handles:
+          type: array
+          items: { type: string }
+          description: Intent types this app handles, e.g. document.open
