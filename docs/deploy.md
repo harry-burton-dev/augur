@@ -47,15 +47,20 @@ Check on it with `docker compose -f infra/deploy/compose.yml ps` and `... logs -
 
 To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'`.
 
-- **Update**: `git pull && pc up -d --build`. Services migrate their own database schemas on start.
+- **Update**: `git pull && pc up -d --build --remove-orphans`. Services migrate their own database schemas on start.
 - **Add people**: Keycloak's admin console is at `PLATFORM_URL/sso/admin`. Sign in as `KEYCLOAK_ADMIN_USER` (default `keycloak-admin`), switch to the **platform** realm, and add users under **Users**. Give someone the realm role `admin` to make them an admin. Their **Groups** are their departments. The Admin app will do this later.
 - **Back up**: `pc exec postgres pg_dumpall -U platform > backup.sql`. Everything lives in Postgres: the platform's data, people's preferences, and Keycloak's users.
+- **Remove an app** from the catalogue (for example the old samples, `sample-board` and `sample-palette`):
+  ```sh
+  pc exec registry node -e "fetch('http://localhost:8082/v1/apps/' + process.argv[1], { method: 'DELETE', headers: { 'x-user-id': 'server-admin', 'x-user-name': 'Server admin', 'x-user-roles': 'admin' } }).then((r) => console.log(r.status))" sample-board
+  ```
+  `204` means it's gone. Removing it is recorded in the audit log.
 - **Stop**: `pc down`. Data stays in the `pgdata` volume; `pc down -v` deletes it.
 
 ## What's in it
 
 - **Platform services**: identity, registry, events and the gateway. Only the gateway is reachable, and only through `/api`. Services talk to each other on the compose network with `SERVICE_TOKEN`.
-- **Apps**: Home, plus the two sample apps (Board and Palette). The samples are registered by the `register-samples` job, which exits once that's done. The Library app isn't deployed while it's paused.
+- **Apps**: Home. The Library app isn't deployed while it's paused.
 - **Sign-in**: Keycloak, imported on first start from `infra/deploy/keycloak/platform-realm.json`, with no test users. Keycloak reads that file only once. If you change `PLATFORM_URL` later, update the **shell** client's redirect URIs and web origins in the admin console.
 
 ## If something's wrong

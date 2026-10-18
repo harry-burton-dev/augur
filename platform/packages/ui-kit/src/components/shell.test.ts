@@ -227,4 +227,13 @@ describe('ui-shell', () => {
     await el.updateComplete;
     expect(links()).toEqual(['Sign out']);
   });
+
+  it('shows the version in Settings once the host gives one', async () => {
+    el.openView('settings');
+    await el.updateComplete;
+    expect(root().querySelector('.version')).toBeNull();
+    el.version = '0.3.0 · SDK 1.0.0';
+    await el.updateComplete;
+    expect(root().querySelector('.version')!.textContent).toContain('0.3.0 · SDK 1.0.0');
+  });
 });

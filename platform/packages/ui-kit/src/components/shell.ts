@@ -134,6 +134,7 @@ export class UiShell extends LitElement {
     settings: { attribute: false },
     away: { type: Boolean },
     canSwitchWorkspace: { attribute: false },
+    version: { type: String },
     background: { type: String, reflect: true },
     isOpen: { type: Boolean, reflect: true, attribute: 'open' },
     view: { type: String, reflect: true },
@@ -167,6 +168,8 @@ export class UiShell extends LitElement {
   declare away: boolean;
   /** Whether Account offers Switch workspace; a host with one workspace turns it off. */
   declare canSwitchWorkspace: boolean;
+  /** What's running, shown in Settings; the host sets it. */
+  declare version: string;
   /** The water's preset (Calm Tide unless a screen has a reason), or `none` for the still ground. */
   declare background: string;
   declare isOpen: boolean;
@@ -203,6 +206,7 @@ export class UiShell extends LitElement {
     this.settings = { reduceMotion: false, density: 'comfortable' };
     this.away = false;
     this.canSwitchWorkspace = true;
+    this.version = '';
     this.background = 'Calm Tide';
     this.isOpen = false;
     this.view = '';
@@ -592,6 +596,7 @@ export class UiShell extends LitElement {
       .search input::placeholder { color: color-mix(in srgb, var(--ink-muted) 75%, transparent); }
       .pair { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); padding: var(--space-4); border-bottom: 1px solid var(--hairline); }
       .pair > span { color: var(--ink-muted); }
+      .pair.version b { font-weight: inherit; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
       .who { padding: var(--space-4); }
       .who b { display: block; font-weight: 300; font-size: var(--type-heading); line-height: var(--leading-heading); }
       .who span { color: var(--ink-muted); }
@@ -810,6 +815,7 @@ export class UiShell extends LitElement {
             (d) => html`<button aria-pressed=${(s.density ?? 'comfortable') === d ? 'true' : 'false'} @click=${() => this.setSetting('density', d)}>${d[0].toUpperCase() + d.slice(1)}</button>`,
           )}
         </div></div>
+      ${this.version ? html`<div class="pair version"><span>Version</span><b>${this.version}</b></div>` : nothing}
       <div class="group label">Keys</div>
       <div class="keys">
         <kbd>\`</kbd><span>Open or close the shell (also Ctrl or ⌘ K)</span>

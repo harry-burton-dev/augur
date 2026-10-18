@@ -53,7 +53,7 @@ The platform comes first; apps come after its core integrations work.
 4. Identity and gateway sign-in (Keycloak locally) (done)
 5. Registry on Postgres, with apps registering themselves (done)
 6. Notifications feeding the Shell's stream, plus the audit log (done)
-7. Inter-app requests (intents) through the SDK, proven with sample apps (this step)
+7. Inter-app requests (intents) through the SDK, proven with two sample apps (since removed; the shell's tests keep the coverage)
 8. The Library app
 9. Deploy to the org cloud
 

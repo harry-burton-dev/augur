@@ -53,7 +53,6 @@ jobs:
           sed -e 's/=$/=ci-placeholder/' infra/deploy/.env.example > /tmp/ci.env
           docker compose -f infra/deploy/compose.yml --env-file /tmp/ci.env config -q
       - run: docker build -f infra/web.Dockerfile --target web -t platform-web .
-      - run: docker build -f infra/web.Dockerfile --target register -t platform-register .
       - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@platform/identity -t platform-identity .
       - name: The front door's nginx config loads
         run: docker run --rm --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 platform-web nginx -t
