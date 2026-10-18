@@ -217,4 +217,14 @@ describe('ui-shell', () => {
     el.openView('help');
     expect(fn).toHaveBeenCalledWith('help');
   });
+
+  it('offers Switch workspace only when the host has more than one', async () => {
+    el.openView('account');
+    await el.updateComplete;
+    const links = () => [...root().querySelectorAll('.view .link')].map((b) => b.textContent!.trim());
+    expect(links()).toEqual(['Switch workspace', 'Sign out']);
+    el.canSwitchWorkspace = false;
+    await el.updateComplete;
+    expect(links()).toEqual(['Sign out']);
+  });
 });

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -21,6 +21,34 @@ paths:
               schema: { $ref: "#/components/schemas/Caller" }
         "401":
           description: No signed-in caller
+  /me/preferences:
+    get:
+      summary: What the caller has chosen for the shell
+      responses:
+        "200":
+          description: Their preferences; empty when they have chosen nothing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Preferences" }
+        "401":
+          description: No signed-in caller
+    put:
+      summary: Replace the caller's preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Preferences" }
+      responses:
+        "200":
+          description: Saved, as sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Preferences" }
+        "400":
+          description: A field it doesn't know, or a value out of range
+        "401":
+          description: No signed-in caller
 components:
   schemas:
     Caller:
@@ -32,3 +60,16 @@ components:
         email: { type: string }
         departments: { type: array, items: { type: string } }
         roles: { type: array, items: { type: string } }
+    Preferences:
+      type: object
+      additionalProperties: false
+      description: Every field is optional; what's missing takes the shell's default.
+      properties:
+        reduceMotion: { type: boolean }
+        density: { type: string, enum: [comfortable, compact] }
+        away: { type: boolean }
+        recent:
+          type: array
+          maxItems: 12
+          description: App ids, most recent first
+          items: { type: string, minLength: 1, maxLength: 64 }

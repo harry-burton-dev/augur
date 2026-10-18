@@ -133,6 +133,7 @@ export class UiShell extends LitElement {
     findResults: { attribute: false },
     settings: { attribute: false },
     away: { type: Boolean },
+    canSwitchWorkspace: { attribute: false },
     background: { type: String, reflect: true },
     isOpen: { type: Boolean, reflect: true, attribute: 'open' },
     view: { type: String, reflect: true },
@@ -164,6 +165,8 @@ export class UiShell extends LitElement {
   declare findResults: ShellFindResult[];
   declare settings: { reduceMotion?: boolean; density?: 'comfortable' | 'compact' };
   declare away: boolean;
+  /** Whether Account offers Switch workspace; a host with one workspace turns it off. */
+  declare canSwitchWorkspace: boolean;
   /** The water's preset (Calm Tide unless a screen has a reason), or `none` for the still ground. */
   declare background: string;
   declare isOpen: boolean;
@@ -199,6 +202,7 @@ export class UiShell extends LitElement {
     this.findResults = [];
     this.settings = { reduceMotion: false, density: 'comfortable' };
     this.away = false;
+    this.canSwitchWorkspace = true;
     this.background = 'Calm Tide';
     this.isOpen = false;
     this.view = '';
@@ -785,7 +789,9 @@ export class UiShell extends LitElement {
           this.emit('ui-setting', { key: 'away', value: this.away });
         }}></button>
       </div>
-      <div class="pair"><button class="link" @click=${() => this.emit('ui-function', { id: 'switch-workspace' })}>Switch workspace</button>
+      <div class="pair">${this.canSwitchWorkspace
+          ? html`<button class="link" @click=${() => this.emit('ui-function', { id: 'switch-workspace' })}>Switch workspace</button>`
+          : html`<span></span>`}
         <button class="link" @click=${() => this.emit('ui-function', { id: 'sign-out' })}>Sign out</button></div>`;
   }
 

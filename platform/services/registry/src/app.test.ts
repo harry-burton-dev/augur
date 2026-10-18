@@ -17,9 +17,15 @@ describe('registry', () => {
   });
 
   it('hides apps that need a role the caller lacks', async () => {
-    const app = await buildApp();
+    const app = await buildApp({ serviceToken: 'local-secret' });
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, requiredRole: 'admin' } });
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).toEqual(['home']);
-    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'admin']);
+    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'library']);
+  });
+
+  it('leaves out platform apps that have not shipped, while keeping their routes', async () => {
+    const app = await buildApp();
+    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('admin');
   });
 
   it('lets an app’s service register it with the service token', async () => {

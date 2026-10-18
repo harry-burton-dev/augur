@@ -1,4 +1,5 @@
 import { LitElement, css, html, unsafeCSS } from 'lit';
+import { reducedMotion } from '../shared.js';
 
 /**
  * The water: soft navy and green bands drifting over a slate radial ground,
@@ -185,7 +186,9 @@ export class UiWaveBackground extends LitElement {
   private visible = true;
   private resizeObserver?: ResizeObserver;
   private intersection?: IntersectionObserver;
-  private readonly reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private get reduce() {
+    return reducedMotion();
+  }
 
   constructor() {
     super();

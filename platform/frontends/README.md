@@ -33,6 +33,13 @@ The shell's own navigation is the design system's centre menu, over the water.
 
 Item paths can't be `/`, since that's the Orbit itself. The water follows the screen: Minimal under Title, Deep Ocean under Orbit, Calm Tide under apps.
 
+## What the Shell offers
+
+- **Settings and Away** save to the person's account (`GET`/`PUT /api/identity/v1/me/preferences`) a moment after each change, and come back in any browser. Reduce motion sets `data-motion="reduce"` on `<html>`, which holds the water and menus still and zeroes the motion tokens; Compact sets `data-density="compact"`, which brings the larger spacing steps down a notch.
+- **Recent apps** are saved the same way, so Apps lists the current app, then the last few opened, then the rest.
+- **Find** searches apps, notifications and every page an app's `menu` offers (`findPages` in `src/host/menus.ts`); choosing a page opens it. Apps' own content joins once apps can answer searches.
+- **Agents** and **Switch workspace** are off for the alpha (`alphaFunctions` and `canSwitchWorkspace` in `App.tsx`) until they are designed. Platform apps that haven't shipped, like Admin, are left out of the manifest (`unbuiltApps` in the registry).
+
 ## Apps asking each other
 
 Apps never import or call each other. They speak in intents, a `type` such as `colour.pick` plus a payload, and an app lists the intent types it answers in its manifest's `handles`. The shell picks the app from the person's role-filtered manifest, so nobody is sent to an app they can't open.

@@ -1,5 +1,5 @@
 import type { AppManifestEntry } from '@platform/mfe-sdk';
-import type { MenuCategory, MenuItem } from '@platform/ui-kit';
+import type { MenuCategory, MenuItem, ShellFindResult } from '@platform/ui-kit';
 import { hrefFor, matchRoute } from './routes.js';
 
 /**
@@ -86,4 +86,22 @@ export function escapeIsFree(e: KeyboardEvent): boolean {
     if (node.tagName === 'DIALOG' || node.hasAttribute('open') || node.getAttribute('role') === 'dialog') return false;
   }
   return true;
+}
+
+/**
+ * Find across apps: every page an app's menu offers, matched on its label,
+ * detail, keywords and category. Each result's id is the location it opens;
+ * apps' own content joins when apps can answer searches themselves.
+ */
+export function findPages(manifest: AppManifestEntry[], q: string, limit = 12): ShellFindResult[] {
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const out: ShellFindResult[] = [];
+  for (const app of manifest)
+    for (const cat of app.menu ?? [])
+      for (const it of cat.items) {
+        const text = [it.label, it.detail, it.keywords, cat.label, app.name].join(' ').toLowerCase();
+        if (words.every((w) => text.includes(w))) out.push({ id: hrefFor(app, it.path), title: it.label, detail: `${app.name} · ${cat.label}`, kind: 'page' });
+      }
+  return out.slice(0, limit);
 }

@@ -1,6 +1,6 @@
 import Fastify, { type FastifyRequest } from 'fastify';
 import { callerFromHeaders, health, packageVersion, recordAudit, serviceFromHeaders, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
-import { appEntrySchema, conflictFor, platformApps, versionProblem, type AppEntry } from './manifest.ts';
+import { appEntrySchema, conflictFor, platformApps, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
 import { MemoryAppStore, RouteTakenError, type AppStore } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
@@ -34,7 +34,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
       // The gateway verified who is calling and passed it on.
       app.get('/manifest', async (req) => {
         const roles = callerFromHeaders(req.headers)?.roles ?? [];
-        const apps = [...platformApps, ...(await store.list())];
+        const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...(await store.list())];
         return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
       });
 
