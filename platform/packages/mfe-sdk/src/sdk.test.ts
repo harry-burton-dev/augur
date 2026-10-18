@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createEventBus, resolveIntent, type AppManifestEntry } from './index.js';
+import { createEventBus, IntentCancelled, IntentError, isIntentCancelled, resolveIntent, type AppManifestEntry } from './index.js';
 
 describe('event bus', () => {
   it('delivers to subscribers until they unsubscribe', () => {
@@ -26,5 +26,15 @@ describe('resolveIntent', () => {
 
   it('returns undefined when nothing handles it', () => {
     expect(resolveIntent(manifest, { type: 'entity.open', payload: {} })).toBeUndefined();
+  });
+});
+
+describe('isIntentCancelled', () => {
+  it('recognises a cancellation by name, even from another copy of the SDK', () => {
+    const fromAnotherBundle = Object.assign(new Error('closed'), { name: 'IntentCancelled' });
+    expect(isIntentCancelled(new IntentCancelled())).toBe(true);
+    expect(isIntentCancelled(fromAnotherBundle)).toBe(true);
+    expect(isIntentCancelled(new IntentError('No app handles it'))).toBe(false);
+    expect(isIntentCancelled('IntentCancelled')).toBe(false);
   });
 });

@@ -11,7 +11,7 @@ Architecture: [Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f
 | Path | What it is |
 | --- | --- |
 | `platform/packages/ui-kit` | Design tokens from the Claude Design system and the Lit web components rebuilt from it, Shell and Glance included |
-| `platform/packages/mfe-sdk` | The contract between the shell and apps: manifest entries, mount context, event bus, intents |
+| `platform/packages/mfe-sdk` | The contract between the shell and apps: manifest entries, mount context, event bus, and intents to open another app or ask it for an answer |
 | `platform/frontends/` | The shell host, Home and Admin; see its README for how apps are mounted |
 | `platform/services/gateway` | Public entry; checks the sign-in token, then forwards `/api/<service>/*` to platform services and each app's service with the caller attached |
 | `platform/packages/service-kit` | What a service uses to know who is calling, to call other services with the service token, register its app, notify people and write the audit log |
@@ -48,8 +48,8 @@ The platform comes first; apps come after its core integrations work.
 3. Shell host: wraps `ui-shell`, loads apps from the registry, mounts them, routes intents (done)
 4. Identity and gateway sign-in (Keycloak locally) (done)
 5. Registry on Postgres, with apps registering themselves (done)
-6. Notifications feeding the Shell's stream, plus the audit log (this step)
-7. Inter-app requests (intents) through the SDK, proven with a sample app
+6. Notifications feeding the Shell's stream, plus the audit log (done)
+7. Inter-app requests (intents) through the SDK, proven with sample apps (this step)
 8. The Library app
 9. Deploy to the org cloud
 

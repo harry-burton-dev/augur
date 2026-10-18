@@ -1,0 +1,10 @@
+{
+  "id": "sample-palette",
+  "name": "Palette",
+  "route": "/palette",
+  "entry": "/apps/sample-palette/entry.js",
+  "version": "0.1.0",
+  "description": "Sample: answers requests for a colour",
+  "icon": "apps",
+  "handles": ["colour.pick"]
+}

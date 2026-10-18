@@ -10,7 +10,8 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev --parallel",
-    "check:boundaries": "node scripts/check-boundaries.mjs"
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "register-app": "node scripts/register-app.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

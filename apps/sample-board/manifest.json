@@ -1,0 +1,9 @@
+{
+  "id": "sample-board",
+  "name": "Board",
+  "route": "/board",
+  "entry": "/apps/sample-board/entry.js",
+  "version": "0.1.0",
+  "description": "Sample: asks Palette for colours",
+  "icon": "apps"
+}

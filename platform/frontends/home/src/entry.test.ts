@@ -7,6 +7,7 @@ const ctx = (notify = vi.fn()): MountContext => ({
   getToken: async () => 't',
   bus: createEventBus(),
   raise: vi.fn(),
+  request: vi.fn(),
   notify,
   path: '/',
 });

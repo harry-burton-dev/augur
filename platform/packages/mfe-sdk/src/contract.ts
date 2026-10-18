@@ -44,13 +44,27 @@ export interface MountContext {
   /** Returns a current access token for calling the gateway. */
   getToken(): Promise<string>;
   bus: EventBus;
-  /** Ask the shell to route an intent; no app calls another directly. */
+  /** Open whichever app handles the intent, with the intent in its context. No app calls another directly. */
   raise(intent: Intent): Promise<void>;
+  /**
+   * Ask whichever app handles the intent for an answer, e.g. "pick a document".
+   * The shell opens that app over this one and resolves with what it returns.
+   * Rejects with an IntentCancelled error (see isIntentCancelled) when the
+   * person closes it, and an IntentError when no app they can open handles it.
+   */
+  request<T = unknown>(intent: Intent): Promise<T>;
   notify(message: { title: string; body?: string; needsYou?: boolean }): void;
   /** Path below the app's route prefix, e.g. "/doc/123" for "/library/doc/123". */
   path: string;
   /** Present when the app was opened to handle an intent. */
   intent?: Intent;
+  /** Present when the app was opened to answer a request: give the answer, or cancel. */
+  reply?: IntentReply;
+}
+
+export interface IntentReply {
+  respond(result: unknown): void;
+  cancel(): void;
 }
 
 export interface MicroFrontend {
