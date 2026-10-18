@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { base } from '../shared.js';
+import './icon.js';
 
 export type StatusName = 'needs' | 'running' | 'queued' | 'paused' | 'done' | 'failed' | 'warning';
 
@@ -55,7 +56,6 @@ export class UiStatus extends LitElement {
         white-space: nowrap;
       }
       .mark { position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; }
-      .mark svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
       .word { color: var(--ink); }
 
       :host([status='needs']) .mark::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
@@ -94,11 +94,11 @@ export class UiStatus extends LitElement {
   private glyph() {
     switch (this.status) {
       case 'done':
-        return html`<svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" /></svg>`;
+        return html`<ui-icon name="check" size="14"></ui-icon>`;
       case 'failed':
-        return html`<svg viewBox="0 0 16 16"><path d="M8 2l6 6-6 6-6-6z" /></svg>`;
+        return html`<ui-icon name="error" size="14"></ui-icon>`;
       case 'warning':
-        return html`<svg viewBox="0 0 16 16"><path d="M8 2.5l6 11H2z" /></svg>`;
+        return html`<ui-icon name="warning" size="14"></ui-icon>`;
       default:
         return nothing;
     }
