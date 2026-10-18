@@ -20,7 +20,7 @@ Architecture: [Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f
 | `platform/services/events` | Notifications, delivered live to the Shell's stream, and the append-only audit log, on Postgres |
 | `apps/<app>/` | One product app: its `manifest.json`, `service/` and `frontend/` |
 | `contracts/` | OpenAPI specs, the source of truth between services; each one's major version is its path prefix (`/v1`) |
-| `infra/` | Docker Compose for local dev, the service Dockerfile, later Terraform |
+| `infra/` | Docker Compose for local dev, the service and web Dockerfiles, and `deploy/` for running it on a server (see [docs/deploy.md](docs/deploy.md)) |
 
 ## Getting started
 
