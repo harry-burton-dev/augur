@@ -20,7 +20,7 @@ describe('registry', () => {
 
   it('shows role-gated apps to callers with the role', async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: 'GET', url: '/manifest', headers: { 'x-user-roles': 'editor, admin' } });
+    const res = await app.inject({ method: 'GET', url: '/manifest', headers: { 'x-user-id': 'u-1', 'x-user-roles': 'editor,admin' } });
     expect(res.json().map((a: { id: string }) => a.id)).toContain('admin');
   });
 

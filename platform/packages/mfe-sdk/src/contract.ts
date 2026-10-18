@@ -20,6 +20,7 @@ export interface AppManifestEntry {
 export interface User {
   id: string;
   name: string;
+  email?: string;
   departments: string[];
   roles: string[];
 }

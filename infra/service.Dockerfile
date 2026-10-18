@@ -5,7 +5,7 @@ ARG PACKAGE
 RUN corepack enable
 WORKDIR /repo
 COPY . .
-RUN pnpm install --frozen-lockfile && pnpm --filter ${PACKAGE} build && pnpm --filter ${PACKAGE} deploy --prod --legacy /out
+RUN pnpm install --frozen-lockfile && pnpm --filter "${PACKAGE}..." build && pnpm --filter ${PACKAGE} deploy --prod --legacy /out
 
 FROM node:22-alpine
 WORKDIR /app

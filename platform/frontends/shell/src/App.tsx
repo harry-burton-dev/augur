@@ -126,7 +126,7 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', fetchImp
     const shell = shellRef.current;
     if (!shell) return;
     shell.apps = (manifest ?? []).map(toShellApp);
-    shell.user = { name: session.user.name };
+    shell.user = { name: session.user.name, email: session.user.email };
     shell.workspace = session.workspace;
   }, [manifest, session]);
 
@@ -142,13 +142,18 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', fetchImp
       const app = byId((e as CustomEvent<{ notification: { app: string } }>).detail.notification.app);
       if (app) navigate(hrefFor(app));
     };
+    const onFunction = (e: Event) => {
+      if ((e as CustomEvent<{ id: string }>).detail.id === 'sign-out') void session.signOut();
+    };
     shell.addEventListener('ui-open-app', onOpenApp);
     shell.addEventListener('ui-open-notification', onOpenNotification);
+    shell.addEventListener('ui-function', onFunction);
     return () => {
       shell.removeEventListener('ui-open-app', onOpenApp);
       shell.removeEventListener('ui-open-notification', onOpenNotification);
+      shell.removeEventListener('ui-function', onFunction);
     };
-  }, [manifest, navigate]);
+  }, [manifest, navigate, session]);
 
   return (
     <ui-shell ref={shellRef} product="Platform">
@@ -163,5 +168,17 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', fetchImp
       )}
       {!manifest && !problem && <p className="loading">Opening…</p>}
     </ui-shell>
+  );
+}
+
+/** Shown in place of the platform when signing in did not work. */
+export function SignInProblem({ message, onSignIn }: { message: string; onSignIn: () => void }) {
+  return (
+    <main className="sign-in-problem" role="alert">
+      <ui-heading heading="You're not signed in" summary={message} size="m" />
+      <ui-button kind="primary" onClick={onSignIn}>
+        Sign in
+      </ui-button>
+    </main>
   );
 }
