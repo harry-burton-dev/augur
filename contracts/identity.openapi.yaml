@@ -1,0 +1,30 @@
+openapi: 3.1.0
+info:
+  title: Identity
+  version: 0.1.0
+  description: >
+    Who people are. Reached through the gateway, which verifies the caller's
+    sign-in token and passes the caller on in x-user-* headers.
+paths:
+  /me:
+    get:
+      summary: The signed-in caller
+      responses:
+        "200":
+          description: Who is calling, with their departments and roles
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Caller" }
+        "401":
+          description: No signed-in caller
+components:
+  schemas:
+    Caller:
+      type: object
+      required: [id, name, departments, roles]
+      properties:
+        id: { type: string, description: Stable id from the sign-in provider }
+        name: { type: string }
+        email: { type: string }
+        departments: { type: array, items: { type: string } }
+        roles: { type: array, items: { type: string } }

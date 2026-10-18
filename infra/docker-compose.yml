@@ -25,13 +25,17 @@ services:
     ports: ["9000:9000", "9001:9001"]
     volumes: [miniodata:/data]
 
+  # Sign-in. The platform realm, its shell client and test users are imported from ./keycloak.
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
-    command: start-dev
+    command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Browsers and the gateway reach Keycloak at different addresses; tokens name this one.
+      KC_HOSTNAME: http://localhost:8180
     ports: ["8180:8080"]
+    volumes: ["./keycloak:/opt/keycloak/data/import:ro"]
 
   # ---- the platform ----
   gateway:
@@ -42,6 +46,10 @@ services:
       IDENTITY_URL: http://identity:8081
       REGISTRY_URL: http://registry:8082
       EVENTS_URL: http://events:8084
+      # Tokens are issued for the browser's address; signing keys are fetched over the compose network.
+      OIDC_ISSUER: http://localhost:8180/realms/platform
+      OIDC_JWKS_URL: http://keycloak:8080/realms/platform/protocol/openid-connect/certs
+      OIDC_AUDIENCE: platform-api
       # Each app's service, name=url. The platform knows no app by name.
       APP_UPSTREAMS: library=http://library:8083
     ports: ["8080:8080"]

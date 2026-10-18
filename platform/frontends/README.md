@@ -26,4 +26,4 @@ pnpm --filter @platform/gateway dev                     # :8080
 pnpm --filter @platform/shell dev                       # :5173, proxies /api to the gateway
 ```
 
-In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=library=../../../apps/library/frontend/dist` adds more. Until Identity lands, the shell signs in a fixed local user (`src/host/session.ts`).
+In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=library=../../../apps/library/frontend/dist` adds more. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.

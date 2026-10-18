@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "fastify": "^5.6.0",
-    "@fastify/http-proxy": "^11.3.0"
+    "@fastify/http-proxy": "^11.3.0",
+    "@platform/service-kit": "workspace:*",
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

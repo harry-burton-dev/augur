@@ -64,6 +64,9 @@ importers:
       '@platform/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
+      oidc-client-ts:
+        specifier: ^3.5.0
+        version: 3.5.0
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -97,6 +100,15 @@ importers:
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
 
   platform/packages/mfe-sdk:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
+
+  platform/packages/service-kit:
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -151,9 +163,15 @@ importers:
       '@fastify/http-proxy':
         specifier: ^11.3.0
         version: 11.6.4
+      '@platform/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.12
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -167,6 +185,9 @@ importers:
 
   platform/services/identity:
     dependencies:
+      '@platform/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
@@ -183,6 +204,9 @@ importers:
 
   platform/services/registry:
     dependencies:
+      '@platform/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
@@ -1277,6 +1301,9 @@ packages:
     resolution: {integrity: sha512-e6rvdUCiQCAuumZslxRJWR/Doq4VpPR82kqclvcS0efgt430SlGIk05vdCN58+VrzgtIcfNODjozVielycD4Sw==}
     engines: {node: '>=16'}
 
+  jose@6.2.12:
+    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
+
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -1301,6 +1328,10 @@ packages:
 
   jsonc-parser@3.3.1:
     resolution: {integrity: sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ==}
+
+  jwt-decode@4.0.0:
+    resolution: {integrity: sha512-+KJGIyHgkGuIq3IEBNftfhW/LfWhXUIY6OmyVWjliu5KH1y0fw7VQ8YndE2O4qZdMSd9SqbnC8GOcZEy0Om7sA==}
+    engines: {node: '>=18'}
 
   light-my-request@6.8.0:
     resolution: {integrity: sha512-5Q8PjoSEdtGIB8fikZsTem5vgRo4F2mR6vUKTDW/H1g6MtAt8e3duQbg/QxL5yzg6BZhor2KOUm3hhWMWLTZwg==}
@@ -1341,6 +1372,10 @@ packages:
 
   node-releases@2.0.59:
     resolution: {integrity: sha512-5qr2okC4ItAI0hG5SaV0HoYMpnM/Y6+Oqr7AmPYy/2uEoGvS+GbSKLeRxSS1uAdu59yz0ouzcuXievSgg///WA==}
+    engines: {node: '>=18'}
+
+  oidc-client-ts@3.5.0:
+    resolution: {integrity: sha512-l2q8l9CTCTOlbX+AnK4p3M+4CEpKpyQhle6blQkdFhm0IsBqsxm15bYaSa11G7pWdsYr6epdsRZxJpCyCRbT8A==}
     engines: {node: '>=18'}
 
   on-exit-leak-free@2.1.2:
@@ -2655,6 +2690,8 @@ snapshots:
     dependencies:
       is-inside-container: 1.0.0
 
+  jose@6.2.12: {}
+
   js-tokens@4.0.0: {}
 
   js-tokens@9.0.1: {}
@@ -2670,6 +2707,8 @@ snapshots:
   json5@2.2.3: {}
 
   jsonc-parser@3.3.1: {}
+
+  jwt-decode@4.0.0: {}
 
   light-my-request@6.8.0:
     dependencies:
@@ -2713,6 +2752,10 @@ snapshots:
   nanoid@3.3.20: {}
 
   node-releases@2.0.59: {}
+
+  oidc-client-ts@3.5.0:
+    dependencies:
+      jwt-decode: 4.0.0
 
   on-exit-leak-free@2.1.2: {}
 
