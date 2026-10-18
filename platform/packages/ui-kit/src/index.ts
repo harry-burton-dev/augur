@@ -22,3 +22,25 @@ export {
   type ShellView,
   type ShellViewRenderer,
 } from './components/shell.js';
+export {
+  UiWaveBackground,
+  wavePresets,
+  resolveWave,
+  waveY,
+  DEFAULT_WAVE,
+  type WavePreset,
+  type WaveConfig,
+  type WaveBand,
+  type WaveColours,
+  type WaveGlobal,
+  type WaveOverrides,
+} from './components/wave.js';
+export {
+  UiCentreMenu,
+  searchMenu,
+  type MenuCategory,
+  type MenuItem,
+  type MenuOption,
+  type MenuVariant,
+  type MenuBackground,
+} from './components/centre-menu.js';

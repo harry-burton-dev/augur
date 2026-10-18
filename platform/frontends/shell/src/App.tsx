@@ -1,19 +1,25 @@
 import { createEventBus, type AppManifestEntry, type Intent, type IntentReply, type MountContext } from '@platform/mfe-sdk';
-import type { ShellApp, UiDialog, UiShell } from '@platform/ui-kit';
+import type { MenuCategory, MenuItem, ShellApp, UiCentreMenu, UiDialog, UiShell } from '@platform/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
+  backFrom,
+  escapeIsFree,
   fromServer,
   hrefFor,
   IntentError,
   loadManifest,
-  matchRoute,
   NotificationFeed,
+  orbitMenu,
   RequestBroker,
   routeIntent,
+  screenFor,
+  titleMenu,
+  titleTarget,
   toShellNotification,
   type ImportEntry,
   type OpenRequest,
+  type Screen,
   type ServerNotification,
   type Session,
 } from './host/index.js';
@@ -30,7 +36,13 @@ export interface HostProps {
 
 type Problem = { title: string; summary: string; retry: () => void };
 
-const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps' });
+const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai });
+
+/** The water for each screen: Title on Minimal, Orbit on Deep Ocean, apps on Calm Tide. */
+const waterFor = (screen: Screen | undefined) => (screen?.kind === 'title' ? 'Minimal' : screen?.kind === 'orbit' ? 'Deep Ocean' : 'Calm Tide');
+
+/** The Orbit category holding the item that opens a path, so going back lands where you came from. */
+const categoryOf = (app: AppManifestEntry, path: string) => Math.max(0, app.menu?.findIndex((c) => c.items.some((it) => it.path === path)) ?? 0);
 
 /**
  * The platform's frame. It owns the Shell, the catalogue of apps, which app is
@@ -40,6 +52,10 @@ const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name,
 export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUrl = '/api/events', fetchImpl = fetch, importEntry }: HostProps) {
   const shellRef = useRef<UiShell>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<UiCentreMenu>(null);
+  /** Where the next menu starts: Title on the app you came from, Orbit on the category you chose or came from. */
+  const lastApp = useRef<string | undefined>(undefined);
+  const orbitStart = useRef(0);
   const mounter = useRef<AppMounter | null>(null);
   const bus = useMemo(() => createEventBus(), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
@@ -86,7 +102,7 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUr
     };
   }, [session, manifestUrl, fetchImpl, attempt]);
 
-  const match = useMemo(() => (manifest ? matchRoute(manifest, pathname) : undefined), [manifest, pathname]);
+  const screen = useMemo(() => (manifest ? screenFor(manifest, pathname) : undefined), [manifest, pathname]);
 
   const raise = useCallback(
     async (intent: Intent) => {
@@ -166,17 +182,24 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUr
     return () => dialog.removeEventListener('ui-close', onClose);
   }, []);
 
-  // Mount whichever app the location points at.
+  // Mount whichever app the location points at; Title and Orbit are the shell's own.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage || !manifest) return;
     mounter.current ??= new AppMounter(stage, importEntry);
-    if (!match) {
+    if (!screen) {
       void mounter.current.unmount();
       setProblem({ title: 'Nothing here', summary: `No app you can open lives at ${pathname}.`, retry: () => navigate('/') });
       return;
     }
-    const { app, path } = match;
+    if (screen.kind !== 'app') {
+      void mounter.current.unmount();
+      setProblem(null);
+      if (screen.kind === 'orbit') shellRef.current?.setCurrent(screen.app.id);
+      return;
+    }
+    const { app, path } = screen;
+    lastApp.current = app.id;
     const intent = pendingIntent.current;
     pendingIntent.current = undefined;
     const ctx = contextFor(app, path, intent);
@@ -185,7 +208,61 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUr
     mounter.current.mount(app, ctx).catch((err: Error) => {
       setProblem({ title: `${app.name} didn't open`, summary: err.message, retry: () => setAttempt((n) => n + 1) });
     });
-  }, [manifest, match, attempt, contextFor, importEntry, navigate, pathname]);
+  }, [manifest, screen, attempt, contextFor, importEntry, navigate, pathname]);
+
+  // Title and Orbit: what they hold, where they start, and where choosing leads.
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menu || !manifest || !screen || screen.kind === 'app') return;
+    let categories: MenuCategory[];
+    if (screen.kind === 'title') {
+      categories = titleMenu(manifest);
+      menu.startCategory = Math.max(0, manifest.findIndex((a) => a.id === lastApp.current));
+    } else {
+      categories = orbitMenu(screen.app);
+      menu.startCategory = orbitStart.current;
+      orbitStart.current = 0;
+      lastApp.current = screen.app.id;
+    }
+    menu.categories = categories;
+    menu.background = shellRef.current?.waves ?? null;
+    void menu.updateComplete.then(() => menu.focus());
+    const onSelect = (e: Event) => {
+      const { item } = (e as CustomEvent<{ item: MenuItem }>).detail;
+      if (screen.kind === 'orbit') return navigate(hrefFor(screen.app, item.id));
+      const target = titleTarget(manifest, item);
+      if (!target) return;
+      lastApp.current = target.app.id;
+      orbitStart.current = target.category;
+      navigate(hrefFor(target.app));
+    };
+    const onBack = () => screen.kind === 'orbit' && navigate('/');
+    menu.addEventListener('ui-select', onSelect);
+    menu.addEventListener('ui-back', onBack);
+    return () => {
+      menu.removeEventListener('ui-select', onSelect);
+      menu.removeEventListener('ui-back', onBack);
+    };
+  }, [manifest, screen, navigate]);
+
+  // Esc that nothing else used goes back a step: from inside an app to its Orbit, then to Title.
+  useEffect(() => {
+    if (screen?.kind !== 'app') return;
+    const back = backFrom(screen);
+    if (!back) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (shellRef.current?.isOpen || broker.current.current || !escapeIsFree(e)) return;
+      e.preventDefault();
+      orbitStart.current = categoryOf(screen.app, screen.path);
+      navigate(back);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen, navigate]);
+
+  useEffect(() => {
+    if (shellRef.current) shellRef.current.background = waterFor(screen);
+  }, [screen]);
 
   useEffect(() => () => void mounter.current?.unmount(), []);
 
@@ -272,7 +349,15 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUr
 
   return (
     <ui-shell ref={shellRef} product="Platform">
-      <div ref={stageRef} className="stage" />
+      <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
+      {screen && screen.kind !== 'app' && (
+        <ui-centre-menu
+          key={screen.kind === 'orbit' ? `orbit:${screen.app.id}` : 'title'}
+          ref={menuRef}
+          variant={screen.kind}
+          label={screen.kind === 'orbit' ? `${screen.app.name} menu` : 'Apps'}
+        />
+      )}
       {problem && (
         <section className="problem" role="alert">
           <ui-heading heading={problem.title} summary={problem.summary} size="s" />

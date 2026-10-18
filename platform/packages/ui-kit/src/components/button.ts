@@ -57,7 +57,12 @@ export class UiButton extends LitElement {
     this.armed = false;
     // Registered before any consumer listener, so it can swallow presses that shouldn't act.
     this.addEventListener('click', this.guard, { capture: true });
-    this.addEventListener('keydown', (e) => e.key === 'Escape' && this.disarm());
+    // Esc that disarms is used up here, so the shell doesn't also treat it as "go back".
+    this.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !this.armed) return;
+      e.preventDefault();
+      this.disarm();
+    });
     this.addEventListener('focusout', () => this.disarm());
   }
 

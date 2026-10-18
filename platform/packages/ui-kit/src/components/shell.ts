@@ -3,6 +3,8 @@ import { base, label } from '../shared.js';
 import { statusUrgency, type StatusName } from './status.js';
 import './icon.js';
 import './status.js';
+import './wave.js';
+import type { UiWaveBackground } from './wave.js';
 
 export type NotificationLevel = 'needs' | 'info' | 'running' | 'done' | 'failed';
 
@@ -131,6 +133,7 @@ export class UiShell extends LitElement {
     findResults: { attribute: false },
     settings: { attribute: false },
     away: { type: Boolean },
+    background: { type: String, reflect: true },
     isOpen: { type: Boolean, reflect: true, attribute: 'open' },
     view: { type: String, reflect: true },
     focusIndex: { state: true },
@@ -161,6 +164,8 @@ export class UiShell extends LitElement {
   declare findResults: ShellFindResult[];
   declare settings: { reduceMotion?: boolean; density?: 'comfortable' | 'compact' };
   declare away: boolean;
+  /** The water's preset (Calm Tide unless a screen has a reason), or `none` for the still ground. */
+  declare background: string;
   declare isOpen: boolean;
   /** The function open under the dome, or '' for the dome itself. */
   declare view: string;
@@ -194,6 +199,7 @@ export class UiShell extends LitElement {
     this.findResults = [];
     this.settings = { reduceMotion: false, density: 'comfortable' };
     this.away = false;
+    this.background = 'Calm Tide';
     this.isOpen = false;
     this.view = '';
     this.focusIndex = 0;
@@ -298,6 +304,11 @@ export class UiShell extends LitElement {
 
   viewing() {
     return this.view;
+  }
+
+  /** The water under the stage, for menus to swell as you move; null when it is turned off. */
+  get waves(): UiWaveBackground | null {
+    return this.renderRoot?.querySelector('ui-wave-background') ?? null;
   }
 
   /** The element apps mount into. */
@@ -825,7 +836,7 @@ export class UiShell extends LitElement {
     const cap = this.caption();
     const capMood = !this.view || this.view === 'stream' ? mood : 'quiet';
     return html`
-      <div class="ground" part="ground"></div>
+      <div class="ground" part="ground">${this.background && this.background !== 'none' ? html`<ui-wave-background preset=${this.background}></ui-wave-background>` : nothing}</div>
       ${this.renderBand()}
       <div class="stage" part="stage"><slot></slot></div>
       <div class="sky ${mood}" role="dialog" aria-modal="true" aria-label="Shell" aria-hidden=${this.isOpen ? 'false' : 'true'} ?inert=${!this.isOpen}

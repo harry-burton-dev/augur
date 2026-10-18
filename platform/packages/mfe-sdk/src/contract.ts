@@ -15,6 +15,38 @@ export interface AppManifestEntry {
   requiredRole?: string;
   /** Intent types this app can handle, e.g. "document.open". */
   handles?: string[];
+  /** The app is an AI: the menus draw it as a bubble. */
+  ai?: boolean;
+  /**
+   * The app's menu. The shell shows it as Orbit at the app's root, and as the
+   * app's chapter in Title; choosing an item opens the app at its `path`.
+   * Without one, the app opens straight away.
+   */
+  menu?: AppMenuCategory[];
+}
+
+/** One way into an app, shown in its menu. */
+export interface AppMenuItem {
+  id?: string;
+  label: string;
+  /** A UI kit icon name. */
+  icon?: string;
+  /** One short fact ("3 unread", "Updated today"), never a sentence. */
+  detail?: string;
+  /** Extra words search should find it by. */
+  keywords?: string;
+  ai?: boolean;
+  /** Where in the app it opens, below the app's route, e.g. "/documents". */
+  path: string;
+}
+
+/** A group of an app's menu items: one stop on the Orbit ring. */
+export interface AppMenuCategory {
+  id?: string;
+  label: string;
+  icon?: string;
+  ai?: boolean;
+  items: AppMenuItem[];
 }
 
 export interface User {

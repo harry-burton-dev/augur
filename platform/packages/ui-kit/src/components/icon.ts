@@ -20,6 +20,17 @@ export const icons = {
   back: svg`<path d="M19 12H5M11 6l-6 6 6 6"/>`,
   arrow: svg`<path d="M5 12h14M13 6l6 6-6 6"/>`,
   check: svg`<path d="m5 12.5 4.5 4.5L19 7.5"/>`,
+  star: svg`<path d="M12 3l2.8 6 6.2.6-4.7 4.2 1.5 6.2-5.8-3.3-5.8 3.3 1.5-6.2L3 9.6 9.2 9z"/>`,
+  clock: svg`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`,
+  mail: svg`<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 7l9 6 9-6"/>`,
+  image: svg`<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="15.5" cy="9.5" r="1.5"/>`,
+  music: svg`<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>`,
+  video: svg`<rect x="3" y="6" width="13" height="12" rx="1"/><path d="M16 10l5-3v10l-5-3"/>`,
+  display: svg`<rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/>`,
+  network: svg`<path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r=".8"/>`,
+  download: svg`<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>`,
+  power: svg`<path d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0"/>`,
+  palette: svg`<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.2-1-1.6-1-2.6 0-.9.7-1.5 1.7-1.5h2a4 4 0 0 0 4-4c0-4-3.8-7.2-8.5-7.2z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="14.5" cy="7.5" r="1"/>`,
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;

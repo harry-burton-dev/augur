@@ -26,6 +26,8 @@ import '@platform/ui-kit';
 | `ui-dialog` | Native dialog on the veil; checks slotted fields, async submit with busy and error |
 | `ui-icon` | Line icons on a 24 grid, bare or in the bubble |
 | `ui-glance` | A quick look before you go in: veil, sheet, card, split, title; hairline or bubble; loading, error, empty |
-| `ui-shell` | The frame apps run in: the band, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
+| `ui-shell` | The frame apps run in: the band, the water, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
+| `ui-wave-background` | The water: navy and green bands over slate. Calm Tide by default; Deep Ocean, Aurora, Sonar Line, Minimal and Split Field as variants. `pulse()` swells it |
+| `ui-centre-menu` | One focal point, categories across and items down. `variant="title"` picks the app (letterbox, chapters); `variant="orbit"` is the menu inside it (a ring you can spin). Type to search, right-click for options, `ai` items are bubbles |
 
 Specs live in the design system's component READMEs.

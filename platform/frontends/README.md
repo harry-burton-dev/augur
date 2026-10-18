@@ -3,7 +3,7 @@
 | Folder | What it is |
 | --- | --- |
 | `shell/` | The host (`@platform/shell`, React + Vite). Wraps the UI kit's `ui-shell`, loads the role-filtered manifest from the registry through the gateway, mounts the app the URL points at into the Shell's stage, routes intents to the app that handles them, and turns `ctx.notify()` into notifications on the Shell's stream. |
-| `home/` | Home (`@platform/home`): where people land. Built as one ES module at `dist/entry.js`. |
+| `home/` | Home (`@platform/home`, at `/home`): what needs you. Built as one ES module at `dist/entry.js`. |
 | `admin/` | People, departments and apps (to come). |
 
 Product apps keep their own frontends under `apps/<app>/frontend`.
@@ -14,6 +14,24 @@ Product apps keep their own frontends under `apps/<app>/frontend`.
 2. The shell matches the URL to the longest route prefix and imports the app's `entry` with the browser's own dynamic `import()`.
 3. The module default-exports a `MicroFrontend` (`defineMicroFrontend` from `@platform/mfe-sdk`). The shell calls `mount(el, ctx)` on a fresh element, and calls `unmount(el)` before the next app opens.
 4. An app asks for anything outside itself through `ctx`: `raise(intent)` to open whichever app handles it, `request(intent)` to ask that app for an answer, `notify()` for the Shell's stream, `bus` for events, `getToken()` for gateway calls.
+
+## Title and Orbit
+
+The shell's own navigation is the design system's centre menu, over the water.
+
+- `/` is **Title**: every app the person can open is a chapter. A chapter's items are the app's menu categories, or the app itself when it has no menu. Enter opens it.
+- An app's root is its **Orbit** when its manifest has a `menu`: categories on a ring, each item opening the app at its `path` (for example `/board/labels`). An app without a menu opens straight away.
+- **Esc goes back a step:** from inside an app to its Orbit, from Orbit (or an app with no menu) to Title. It only does so when nothing else used the Esc, so a component that handles Esc itself (an armed button, a filter, a dialog) calls `preventDefault()`.
+
+```json
+"menu": [
+  { "label": "Labels", "icon": "star", "items": [
+    { "label": "All labels", "icon": "star", "path": "/labels", "detail": "Colours from Palette" }
+  ] }
+]
+```
+
+Item paths can't be `/`, since that's the Orbit itself. The water follows the screen: Minimal under Title, Deep Ocean under Orbit, Calm Tide under apps.
 
 ## Apps asking each other
 

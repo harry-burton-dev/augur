@@ -9,11 +9,34 @@ export interface AppEntry {
   icon?: string;
   requiredRole?: string;
   handles?: string[];
+  ai?: boolean;
+  menu?: AppMenuCategory[];
 }
 
-/** The platform's own apps. They ship with the platform, so they live in code, not in the catalogue table. */
+export interface AppMenuItem {
+  id?: string;
+  label: string;
+  icon?: string;
+  detail?: string;
+  keywords?: string;
+  ai?: boolean;
+  path: string;
+}
+
+export interface AppMenuCategory {
+  id?: string;
+  label: string;
+  icon?: string;
+  ai?: boolean;
+  items: AppMenuItem[];
+}
+
+/**
+ * The platform's own apps. They ship with the platform, so they live in code, not in the catalogue table.
+ * "/" is the shell's own: Title, where every app is a chapter.
+ */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/', entry: '/apps/home/entry.js', version: '0.1.0', icon: 'home', description: 'What needs you' },
+  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.1.0', icon: 'home', description: 'What needs you' },
   {
     id: 'admin',
     name: 'Admin',
@@ -41,6 +64,41 @@ export const appEntrySchema = {
     icon: { type: 'string', maxLength: 40 },
     requiredRole: { type: 'string', maxLength: 60 },
     handles: { type: 'array', maxItems: 50, items: { type: 'string', pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 } },
+    ai: { type: 'boolean' },
+    menu: {
+      type: 'array',
+      maxItems: 8,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['label', 'items'],
+        properties: {
+          id: { type: 'string', maxLength: 40 },
+          label: { type: 'string', minLength: 1, maxLength: 40 },
+          icon: { type: 'string', maxLength: 40 },
+          ai: { type: 'boolean' },
+          items: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 12,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['label', 'path'],
+              properties: {
+                id: { type: 'string', maxLength: 40 },
+                label: { type: 'string', minLength: 1, maxLength: 60 },
+                icon: { type: 'string', maxLength: 40 },
+                detail: { type: 'string', maxLength: 60 },
+                keywords: { type: 'string', maxLength: 140 },
+                ai: { type: 'boolean' },
+                path: { type: 'string', pattern: '^/.+', maxLength: 200 },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 } as const;
 

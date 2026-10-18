@@ -196,6 +196,7 @@ export class UiTable extends LitElement {
 
   private onFilterKey(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;
+    e.preventDefault();
     if (this.filterText) this.filterText = '';
     else this.filtering = false;
   }
