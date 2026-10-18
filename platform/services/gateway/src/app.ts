@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import proxy from '@fastify/http-proxy';
-import { callerHeaders, REGISTRATION_TOKEN_HEADER, withoutCallerHeaders, type Caller } from '@platform/service-kit';
+import { callerHeaders, withoutCallerHeaders, withoutServiceHeaders, type Caller } from '@platform/service-kit';
 import { authenticate, AuthError, authFromEnv, type AuthConfig } from './auth.ts';
 
 export type Upstreams = Record<string, string>;
@@ -61,9 +61,9 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       rewritePrefix: '',
       replyOptions: {
         rewriteRequestHeaders: (req, headers) => {
-          // Who is calling comes only from the verified token, and registering apps is for services inside.
-          const { [REGISTRATION_TOKEN_HEADER]: _, ...rest } = withoutCallerHeaders(headers);
-          return { ...rest, ...(req.caller ? callerHeaders(req.caller) : {}) };
+          // Who is calling comes only from the verified token, and nothing from outside can pose as a service.
+          const clean = withoutServiceHeaders(withoutCallerHeaders(headers));
+          return { ...clean, ...(req.caller ? callerHeaders(req.caller) : {}) };
         },
       },
     });

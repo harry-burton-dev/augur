@@ -22,7 +22,7 @@ paths:
       summary: Register an app, or update it
       description: >
         Called by an app's own service on the internal network with the
-        x-registration-token header, or by an admin through the gateway.
+        x-service-token and x-service-name headers, or by an admin through the gateway.
         Unknown fields are refused. The platform's own apps (home, admin) and
         routes another app already has cannot be taken.
       requestBody:
@@ -34,7 +34,7 @@ paths:
         "201": { description: Registered }
         "200": { description: Updated }
         "400": { description: The manifest is invalid or its id does not match the path }
-        "403": { description: Neither a valid registration token nor an admin }
+        "403": { description: Neither a service with the service token nor an admin }
         "409": { description: The id belongs to a platform app, or the route is taken }
     delete:
       summary: Remove an app (admins only)

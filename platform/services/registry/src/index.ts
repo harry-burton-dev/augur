@@ -1,4 +1,4 @@
-import { buildApp } from './app.ts';
+import { auditTo, buildApp } from './app.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
 
 const port = Number(process.env.PORT ?? 8082);
@@ -13,5 +13,9 @@ if (process.env.DATABASE_URL) {
   store = new MemoryAppStore();
 }
 
-const app = await buildApp({ store, registrationToken: process.env.REGISTRATION_TOKEN });
+const { SERVICE_TOKEN, EVENTS_URL } = process.env;
+const audit = EVENTS_URL && SERVICE_TOKEN ? auditTo(EVENTS_URL, { name: 'registry', token: SERVICE_TOKEN }) : undefined;
+if (!audit) console.warn('EVENTS_URL or SERVICE_TOKEN is not set: changes to the catalogue are not audited.');
+
+const app = await buildApp({ store, serviceToken: SERVICE_TOKEN, audit });
 await app.listen({ port, host: '0.0.0.0' });

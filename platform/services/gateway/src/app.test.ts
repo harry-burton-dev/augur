@@ -72,11 +72,13 @@ describe('gateway', () => {
         authorization: `Bearer ${await sign({ sub: 'u-2' })}`,
         'x-user-roles': 'admin',
         'x-user-id': 'someone-else',
-        'x-registration-token': 'guessed',
+        'x-service-token': 'guessed',
+        'x-service-name': 'registry',
       },
     });
     expect(res.json()['x-user-id']).toBe('u-2');
-    expect(res.json()['x-registration-token']).toBeUndefined();
+    expect(res.json()['x-service-token']).toBeUndefined();
+    expect(res.json()['x-service-name']).toBeUndefined();
     expect(res.json()['x-user-roles']).toBe('');
   });
 

@@ -1,26 +1,25 @@
-import { timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyRequest } from 'fastify';
-import { callerFromHeaders, REGISTRATION_TOKEN_HEADER } from '@platform/service-kit';
+import { callerFromHeaders, recordAudit, serviceFromHeaders, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
 import { appEntrySchema, conflictFor, platformApps, type AppEntry } from './manifest.ts';
 import { MemoryAppStore, RouteTakenError, type AppStore } from './store.ts';
 
 export interface RegistryOptions {
   store?: AppStore;
-  /** Lets apps' services register themselves. Without it only admins can change the catalogue. */
-  registrationToken?: string;
+  /** The environment's service token: lets apps' services register themselves. Without it only admins can change the catalogue. */
+  serviceToken?: string;
+  /** Where changes to the catalogue are recorded. Without it nothing is audited. */
+  audit?: (entry: NewAuditEntry) => Promise<void>;
 }
 
-const sameSecret = (given: string, expected: string) => {
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-};
+/** Records audit entries with the events service, as the registry. */
+export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry) =>
+  recordAudit({ eventsUrl, credentials, entry });
 
 /**
  * The catalogue of apps. The platform's own apps are built in; every other app
  * registers itself, and each person is shown only the apps their roles allow.
  */
-export const buildApp = async ({ store = new MemoryAppStore(), registrationToken }: RegistryOptions = {}) => {
+export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, audit }: RegistryOptions = {}) => {
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test', ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => ({ status: 'ok', service: 'registry' }));
@@ -32,13 +31,17 @@ export const buildApp = async ({ store = new MemoryAppStore(), registrationToken
     return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
   });
 
-  /** Who may change the catalogue: an app's service with the registration token, or an admin. */
-  const changedBy = (req: FastifyRequest): string | undefined => {
-    const token = req.headers[REGISTRATION_TOKEN_HEADER];
-    if (registrationToken && typeof token === 'string' && sameSecret(token, registrationToken)) return 'service';
+  /** Who may change the catalogue: an app's service with the service token, or an admin. */
+  const changedBy = (req: FastifyRequest): NewAuditEntry['actor'] | undefined => {
+    const service = serviceFromHeaders(req.headers, serviceToken);
+    if (service) return { id: service, kind: 'service' };
     const caller = callerFromHeaders(req.headers);
-    return caller?.roles.includes('admin') ? caller.id : undefined;
+    return caller?.roles.includes('admin') ? { id: caller.id, kind: 'user' } : undefined;
   };
+
+  /** The catalogue changed either way; a failed audit write is logged, not turned into a failed request. */
+  const record = (req: FastifyRequest, entry: NewAuditEntry) =>
+    audit?.(entry).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
   app.put<{ Params: { id: string }; Body: AppEntry }>(
     '/apps/:id',
@@ -51,8 +54,9 @@ export const buildApp = async ({ store = new MemoryAppStore(), registrationToken
       const conflict = conflictFor(entry, await store.list());
       if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
       try {
-        const created = await store.put(entry, by);
-        req.log.info({ app: entry.id, version: entry.version, by }, created ? 'app registered' : 'app updated');
+        const created = await store.put(entry, by.id);
+        req.log.info({ app: entry.id, version: entry.version, by: by.id }, created ? 'app registered' : 'app updated');
+        await record(req, { actor: by, app: 'registry', action: created ? 'app.registered' : 'app.updated', target: entry.id, detail: { version: entry.version } });
         return reply.code(created ? 201 : 200).send(entry);
       } catch (err) {
         if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
@@ -66,6 +70,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), registrationToken
     if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can remove apps.' });
     if (!(await store.remove(req.params.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
     req.log.info({ app: req.params.id, by: caller.id }, 'app removed');
+    await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.removed', target: req.params.id });
     return reply.code(204).send();
   });
 

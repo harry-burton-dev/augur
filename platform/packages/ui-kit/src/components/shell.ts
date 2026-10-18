@@ -101,6 +101,8 @@ const isTyping = (e: Event) => {
  * @fires ui-toggle - detail `{ open }`
  * @fires ui-open-app - detail `{ id }`
  * @fires ui-open-notification - detail `{ notification }`
+ * @fires ui-dismiss - detail `{ ids }` when notifications are dismissed or cleared; the host may mark them read
+ * @fires ui-restore - detail `{ ids }` when Undo brings them back
  * @fires ui-function - detail `{ id }` for functions without a view, and for Switch workspace and Sign out
  * @fires ui-find - detail `{ q }`; the host may set `findResults`
  * @fires ui-pick - detail `{ result }`
@@ -258,6 +260,7 @@ export class UiShell extends LitElement {
     if (!gone.length) return;
     this.notifications = this.notifications.filter((n) => n.id !== id);
     this.undo = { label: 'Dismissed.', items: gone };
+    this.emit('ui-dismiss', { ids: [id] });
   }
 
   /** Clear the quiet ones: leaves only what needs you. */
@@ -266,6 +269,7 @@ export class UiShell extends LitElement {
     if (!quiet.length) return;
     this.notifications = this.notifications.filter((n) => n.level === 'needs');
     this.undo = { label: `Cleared ${quiet.length}.`, items: quiet };
+    this.emit('ui-dismiss', { ids: quiet.map((n) => n.id) });
   }
 
   restore() {
@@ -273,6 +277,7 @@ export class UiShell extends LitElement {
     const ids = new Set(this.undo.items.map((n) => n.id));
     this.notifications = [...this.undo.items, ...this.notifications.filter((n) => !ids.has(n.id))].sort((a, b) => toTime(b.time) - toTime(a.time));
     this.undo = null;
+    this.emit('ui-restore', { ids: [...ids] });
   }
 
   setCurrent(id: string) {

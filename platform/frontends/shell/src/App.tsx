@@ -3,13 +3,16 @@ import type { ShellApp, UiShell } from '@platform/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
+  fromServer,
   hrefFor,
   IntentError,
   loadManifest,
   matchRoute,
+  NotificationFeed,
   routeIntent,
   toShellNotification,
   type ImportEntry,
+  type ServerNotification,
   type Session,
 } from './host/index.js';
 
@@ -17,6 +20,8 @@ export interface HostProps {
   session: Session;
   /** Where the registry manifest is served, through the gateway. */
   manifestUrl?: string;
+  /** Where the events service is reached, through the gateway. */
+  eventsUrl?: string;
   fetchImpl?: typeof fetch;
   importEntry?: ImportEntry;
 }
@@ -30,12 +35,15 @@ const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name,
  * open and the routing of intents between apps; it knows nothing about what
  * any app does.
  */
-export function Host({ session, manifestUrl = '/api/registry/manifest', fetchImpl = fetch, importEntry }: HostProps) {
+export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUrl = '/api/events', fetchImpl = fetch, importEntry }: HostProps) {
   const shellRef = useRef<UiShell>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const mounter = useRef<AppMounter | null>(null);
   const bus = useMemo(() => createEventBus(), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
+  const feed = useRef<NotificationFeed | null>(null);
+  /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
+  const fromEvents = useRef(new Map<string, ServerNotification>());
 
   const [manifest, setManifest] = useState<AppManifestEntry[] | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -121,6 +129,31 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', fetchImp
 
   useEffect(() => () => void mounter.current?.unmount(), []);
 
+  // The person's notifications: what is unread now, then each new one as it arrives.
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const known = fromEvents.current;
+    const f = new NotificationFeed({
+      getToken: session.getToken,
+      fetchImpl,
+      baseUrl: eventsUrl,
+      onList: (list) => {
+        list.forEach((n) => known.set(n.id, n));
+        const local = shell.notifications.filter((n) => !known.has(n.id));
+        shell.notifications = [...list.map(fromServer), ...local];
+      },
+      onNotification: (n) => {
+        known.set(n.id, n);
+        shell.notify(fromServer(n));
+      },
+      onState: (state) => shell.setStream(state),
+    });
+    feed.current = f;
+    f.start();
+    return () => f.stop();
+  }, [session, fetchImpl, eventsUrl]);
+
   // Hand the Shell its data and listen to what it asks for.
   useEffect(() => {
     const shell = shellRef.current;
@@ -139,8 +172,24 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', fetchImp
       if (app) navigate(hrefFor(app));
     };
     const onOpenNotification = (e: Event) => {
-      const app = byId((e as CustomEvent<{ notification: { app: string } }>).detail.notification.app);
-      if (app) navigate(hrefFor(app));
+      const { id, app: appId } = (e as CustomEvent<{ notification: { id: string; app: string } }>).detail.notification;
+      const server = fromEvents.current.get(id);
+      if (server) {
+        void feed.current?.setRead(id, true);
+        shell.notifications = shell.notifications.filter((n) => n.id !== id);
+      }
+      const app = byId(appId);
+      if (app) navigate(hrefFor(app, server?.link));
+    };
+    // Dismissing a notification marks it read, so it stays gone next time; Undo brings it back.
+    const onDismiss = (e: Event) => {
+      for (const id of (e as CustomEvent<{ ids: string[] }>).detail.ids) if (fromEvents.current.has(id)) void feed.current?.setRead(id, true);
+    };
+    const onRestore = (e: Event) => {
+      for (const id of (e as CustomEvent<{ ids: string[] }>).detail.ids) if (fromEvents.current.has(id)) void feed.current?.setRead(id, false);
+    };
+    const onRetry = (e: Event) => {
+      if ((e as CustomEvent<{ what: string }>).detail.what === 'stream') feed.current?.start();
     };
     const onFunction = (e: Event) => {
       if ((e as CustomEvent<{ id: string }>).detail.id === 'sign-out') void session.signOut();
@@ -148,7 +197,13 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', fetchImp
     shell.addEventListener('ui-open-app', onOpenApp);
     shell.addEventListener('ui-open-notification', onOpenNotification);
     shell.addEventListener('ui-function', onFunction);
+    shell.addEventListener('ui-dismiss', onDismiss);
+    shell.addEventListener('ui-restore', onRestore);
+    shell.addEventListener('ui-retry', onRetry);
     return () => {
+      shell.removeEventListener('ui-dismiss', onDismiss);
+      shell.removeEventListener('ui-restore', onRestore);
+      shell.removeEventListener('ui-retry', onRetry);
       shell.removeEventListener('ui-open-app', onOpenApp);
       shell.removeEventListener('ui-open-notification', onOpenNotification);
       shell.removeEventListener('ui-function', onFunction);

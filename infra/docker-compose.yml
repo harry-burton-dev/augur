@@ -5,10 +5,12 @@ name: platform
 x-service: &service
   restart: unless-stopped
 
-# Apps' services register themselves with the registry using this. Local only.
-x-registration: &registration
+# How services reach each other inside. The service token proves a call comes from
+# inside; the gateway strips it from outside requests. Local only.
+x-internal: &internal
   REGISTRY_URL: http://registry:8082
-  REGISTRATION_TOKEN: platform-local-only
+  EVENTS_URL: http://events:8084
+  SERVICE_TOKEN: platform-local-only
 
 services:
   # ---- infrastructure ----
@@ -70,13 +72,17 @@ services:
     environment:
       PORT: 8082
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
-      REGISTRATION_TOKEN: platform-local-only
+      <<: *internal
     depends_on: [postgres]
 
   events:
     <<: *service
     build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/events" } }
-    environment: { PORT: 8084 }
+    environment:
+      PORT: 8084
+      DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
+      SERVICE_TOKEN: platform-local-only
+    depends_on: [postgres]
 
   # ---- apps ----
   library:
@@ -84,7 +90,7 @@ services:
     build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/library" } }
     environment:
       PORT: 8083
-      <<: *registration
+      <<: *internal
       APP_MANIFEST: /app/manifest.json
     volumes: ["../apps/library/manifest.json:/app/manifest.json:ro"]
 
