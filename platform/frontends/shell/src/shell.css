@@ -1,0 +1,13 @@
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--slate-deep); color: var(--ink); font-family: var(--font-sans); }
+.stage { display: contents; }
+.problem, .loading {
+  max-width: var(--measure-read);
+  margin: var(--space-7) auto;
+  padding: 0 var(--edge);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+.loading { color: var(--ink-muted); }

@@ -7,6 +7,10 @@ export interface AppManifestEntry {
   /** URL of the app's ES module entry, which default-exports an MicroFrontend. */
   entry: string;
   version: string;
+  /** One line about the app, shown under its name in the Shell's Apps view. */
+  description?: string;
+  /** A UI kit icon name for the app. */
+  icon?: string;
   /** Role required to see the app; omitted means every signed-in user. */
   requiredRole?: string;
   /** Intent types this app can handle, e.g. "document.open". */

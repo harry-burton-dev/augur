@@ -26,6 +26,8 @@ components:
         route: { type: string, description: Route prefix the shell maps to this app }
         entry: { type: string, description: URL of the app's ES module entry }
         version: { type: string }
+        description: { type: string, description: One line shown under the app name in the Shell }
+        icon: { type: string, description: A UI kit icon name }
         requiredRole: { type: string }
         handles:
           type: array

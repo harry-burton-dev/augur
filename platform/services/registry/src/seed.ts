@@ -7,14 +7,25 @@ export interface AppEntry {
   route: string;
   entry: string;
   version: string;
+  description?: string;
+  icon?: string;
   requiredRole?: string;
   handles?: string[];
 }
 
 /** The platform's own apps. Product apps (the Library app and later ones) are never listed here. */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/', entry: '/apps/home/entry.js', version: '0.1.0' },
-  { id: 'admin', name: 'Admin', route: '/admin', entry: '/apps/admin/entry.js', version: '0.1.0', requiredRole: 'admin' },
+  { id: 'home', name: 'Home', route: '/', entry: '/apps/home/entry.js', version: '0.1.0', icon: 'home', description: 'What needs you' },
+  {
+    id: 'admin',
+    name: 'Admin',
+    route: '/admin',
+    entry: '/apps/admin/entry.js',
+    version: '0.1.0',
+    icon: 'admin',
+    description: 'People, departments and apps',
+    requiredRole: 'admin',
+  },
 ];
 
 /**
