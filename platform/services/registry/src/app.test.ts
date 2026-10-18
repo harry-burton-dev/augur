@@ -53,6 +53,17 @@ describe('registry', () => {
     expect((await put('/apps/other', library)).statusCode).toBe(400);
   });
 
+  it('keeps an app’s menu, and turns away items that would open its root', async () => {
+    const app = await buildApp({ serviceToken: 'local-secret' });
+    const menu = [{ label: 'Documents', icon: 'folder', items: [{ label: 'Reports', path: '/reports', detail: 'Updated today' }] }];
+    const put = (payload: object) => app.inject({ method: 'PUT', url: '/apps/library', headers: service, payload });
+    expect((await put({ ...library, ai: false, menu })).statusCode).toBe(201);
+    expect((await app.inject({ method: 'GET', url: '/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu });
+    expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'All', path: '/' }] }] })).statusCode).toBe(400);
+    expect((await put({ ...library, menu: [{ label: 'Empty', items: [] }] })).statusCode).toBe(400);
+    expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'Reports', path: '/r', colour: 'red' }] }] })).statusCode).toBe(400);
+  });
+
   it('keeps platform apps and taken routes for their owners', async () => {
     const app = await buildApp({ serviceToken: 'local-secret' });
     const put = (payload: object) => app.inject({ method: 'PUT', url: `/apps/${(payload as { id: string }).id}`, headers: service, payload });

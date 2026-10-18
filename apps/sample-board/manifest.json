@@ -5,5 +5,37 @@
   "entry": "/apps/sample-board/entry.js",
   "version": "0.1.0",
   "description": "Sample: asks Palette for colours",
-  "icon": "apps"
+  "icon": "apps",
+  "menu": [
+    {
+      "label": "Labels",
+      "icon": "star",
+      "items": [
+        {
+          "label": "All labels",
+          "icon": "star",
+          "path": "/labels",
+          "detail": "Colours from Palette"
+        },
+        {
+          "label": "Add a label",
+          "icon": "palette",
+          "path": "/labels/new",
+          "keywords": "new colour"
+        }
+      ]
+    },
+    {
+      "label": "About",
+      "icon": "document",
+      "items": [
+        {
+          "label": "How Board asks",
+          "icon": "document",
+          "path": "/about",
+          "detail": "Requests between apps"
+        }
+      ]
+    }
+  ]
 }

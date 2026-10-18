@@ -74,8 +74,13 @@ describe('ui-button', () => {
     it('disarms on Escape', async () => {
       const el = await mount('<ui-button kind="danger">Delete</ui-button>');
       el.click();
-      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      const esc = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+      el.dispatchEvent(esc);
       expect(el.armed).toBe(false);
+      expect(esc.defaultPrevented).toBe(true);
+      const again = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+      el.dispatchEvent(again);
+      expect(again.defaultPrevented).toBe(false);
     });
 
     it('acts at once with `once`, for use inside a Confirm', async () => {

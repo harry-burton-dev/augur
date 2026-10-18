@@ -1,6 +1,10 @@
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--slate-deep); color: var(--ink); font-family: var(--font-sans); }
 .stage { display: contents; }
+.stage[hidden] { display: none; }
+/* the menu goes while you look up at the Shell: two navigations never share the screen */
+ui-centre-menu { transition: opacity var(--motion-slow) var(--ease-standard); }
+ui-shell[open] ui-centre-menu { opacity: 0; pointer-events: none; }
 .problem, .loading, .sign-in-problem {
   max-width: var(--measure-read);
   margin: var(--space-7) auto;
