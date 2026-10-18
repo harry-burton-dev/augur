@@ -7,6 +7,10 @@ export { UiTextField, type FieldState, type FieldCheck } from './components/text
 export { UiTable, compareBy, type TableColumn, type TableRow, type TableSort } from './components/table.js';
 export { UiDialog, type DialogSubmit } from './components/dialog.js';
 export { UiIcon, icons, iconNames, type IconName } from './components/icon.js';
+export { UiIconButton } from './components/icon-button.js';
+export { UiKeycap, UiBack } from './components/keycap.js';
+export { UiFacts, type Fact } from './components/facts.js';
+export { UiRows, type Row } from './components/rows.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,
