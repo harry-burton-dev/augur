@@ -1,10 +1,15 @@
+import semver from 'semver';
+
 /** One app in the catalogue, as the app itself describes it in its manifest.json. */
 export interface AppEntry {
   id: string;
   name: string;
   route: string;
   entry: string;
+  /** The app's release, semver. */
   version: string;
+  /** The SDK releases the app works with, a semver range such as "^1.2.0". */
+  sdk: string;
   description?: string;
   icon?: string;
   requiredRole?: string;
@@ -36,13 +41,14 @@ export interface AppMenuCategory {
  * "/" is the shell's own: Title, where every app is a chapter.
  */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.1.0', icon: 'home', description: 'What needs you' },
+  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.1.0', sdk: '^1.0.0', icon: 'home', description: 'What needs you' },
   {
     id: 'admin',
     name: 'Admin',
     route: '/admin',
     entry: '/apps/admin/entry.js',
     version: '0.1.0',
+    sdk: '^1.0.0',
     icon: 'admin',
     description: 'People, departments and apps',
     requiredRole: 'admin',
@@ -53,13 +59,14 @@ export const platformApps: AppEntry[] = [
 export const appEntrySchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['id', 'name', 'route', 'entry', 'version'],
+  required: ['id', 'name', 'route', 'entry', 'version', 'sdk'],
   properties: {
     id: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' },
     name: { type: 'string', minLength: 1, maxLength: 60 },
     route: { type: 'string', pattern: '^/[a-z0-9][a-z0-9/-]*$', maxLength: 100 },
     entry: { type: 'string', minLength: 1, maxLength: 500 },
     version: { type: 'string', minLength: 1, maxLength: 40 },
+    sdk: { type: 'string', minLength: 1, maxLength: 100 },
     description: { type: 'string', maxLength: 140 },
     icon: { type: 'string', maxLength: 40 },
     requiredRole: { type: 'string', maxLength: 60 },
@@ -101,6 +108,13 @@ export const appEntrySchema = {
     },
   },
 } as const;
+
+/** Why an app's versions can't be read, or undefined when they can. The shell compares them with semver. */
+export const versionProblem = (entry: AppEntry): string | undefined => {
+  if (!semver.valid(entry.version)) return `"${entry.version}" is not a semver version such as 1.2.0.`;
+  if (!semver.validRange(entry.sdk)) return `"${entry.sdk}" is not a semver range of SDK versions such as ^1.0.0.`;
+  return undefined;
+};
 
 /** Why an app can't take the id or route it asked for, or undefined when it can. */
 export const conflictFor = (entry: AppEntry, others: AppEntry[]): string | undefined => {

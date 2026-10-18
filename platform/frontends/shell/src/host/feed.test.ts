@@ -80,7 +80,7 @@ describe('NotificationFeed', () => {
     } as unknown as typeof fetch;
     const feed = new NotificationFeed({ getToken: async () => 't', fetchImpl: strictFetch, onList: () => {}, onNotification: () => {}, onState: () => {} });
     await feed.setRead('abc', true);
-    expect(calls).toEqual(['/api/events/notifications/abc/read']);
+    expect(calls).toEqual(['/api/events/v1/notifications/abc/read']);
   });
 
   it('marks notifications read and unread', async () => {
@@ -89,8 +89,8 @@ describe('NotificationFeed', () => {
     await feed.setRead('abc', true);
     await feed.setRead('abc', false);
     expect(vi.mocked(fetchImpl).mock.calls.map(([url, init]) => `${init?.method} ${url}`)).toEqual([
-      'POST /api/events/notifications/abc/read',
-      'DELETE /api/events/notifications/abc/read',
+      'POST /api/events/v1/notifications/abc/read',
+      'DELETE /api/events/v1/notifications/abc/read',
     ]);
   });
 });

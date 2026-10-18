@@ -69,7 +69,7 @@ export class NotificationFeed {
     // Called unbound: the browser's fetch throws "Illegal invocation" when called as a method of another object.
     const fetchImpl = opts.fetchImpl ?? fetch;
     this.fetchImpl = (...args) => fetchImpl(...args);
-    this.baseUrl = opts.baseUrl ?? '/api/events';
+    this.baseUrl = opts.baseUrl ?? '/api/events/v1';
   }
 
   private async headers() {

@@ -1,5 +1,5 @@
 export { matchRoute, hrefFor, type RouteMatch } from './routes.js';
-export { loadManifest, ManifestError } from './manifest.js';
+export { incompatibility, loadManifest, ManifestError } from './manifest.js';
 export { AppMounter, MountError, importEntry, type ImportEntry } from './mount.js';
 export { routeIntent, IntentError, RequestBroker, type OpenRequest } from './intents.js';
 export { toShellNotification } from './notifications.js';

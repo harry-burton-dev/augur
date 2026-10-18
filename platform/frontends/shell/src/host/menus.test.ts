@@ -8,6 +8,7 @@ const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): 
   route,
   entry: `/apps/${id}/entry.js`,
   version: '0.1.0',
+  sdk: '^1.0.0',
   ...extra,
 });
 const board = app('board', '/board', {

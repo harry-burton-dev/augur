@@ -4,6 +4,7 @@
   "route": "/library",
   "entry": "/apps/library/entry.js",
   "version": "0.1.0",
+  "sdk": "^1.0.0",
   "description": "Document libraries and publishing",
   "icon": "library",
   "handles": [

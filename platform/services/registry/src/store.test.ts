@@ -2,7 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryAppStore, PgAppStore, RouteTakenError, type AppStore } from './store.ts';
 
-const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0' };
+const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0' };
 
 /** The same behaviour from every store. */
 const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = async () => {}) => {

@@ -11,9 +11,15 @@
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev --parallel",
     "check:boundaries": "node scripts/check-boundaries.mjs",
-    "register-app": "node scripts/register-app.mjs"
+    "register-app": "node scripts/register-app.mjs",
+    "check:versions": "node scripts/versions.mjs check",
+    "changeset": "changeset",
+    "version-packages": "changeset version && node scripts/versions.mjs sync",
+    "release": "changeset tag"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.1",
+    "semver": "^7.8.5",
     "turbo": "^2.5.0",
     "typescript": "^5.6.0"
   }

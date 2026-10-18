@@ -13,7 +13,7 @@ if (!SERVICE_TOKEN || !files.length) {
 let failed = false;
 for (const file of files) {
   const manifest = JSON.parse(readFileSync(file, 'utf8'));
-  const res = await fetch(`${REGISTRY_URL.replace(/\/$/, '')}/apps/${encodeURIComponent(manifest.id)}`, {
+  const res = await fetch(`${REGISTRY_URL.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(manifest.id)}`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json', 'x-service-token': SERVICE_TOKEN, 'x-service-name': 'register-app' },
     body: JSON.stringify(manifest),

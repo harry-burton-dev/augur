@@ -19,7 +19,7 @@ Architecture: [Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f
 | `platform/services/registry` | App catalogue on Postgres: apps register themselves, and each person gets the manifest their roles allow |
 | `platform/services/events` | Notifications, delivered live to the Shell's stream, and the append-only audit log, on Postgres |
 | `apps/<app>/` | One product app: its `manifest.json`, `service/` and `frontend/` |
-| `contracts/` | OpenAPI specs, the source of truth between services |
+| `contracts/` | OpenAPI specs, the source of truth between services; each one's major version is its path prefix (`/v1`) |
 | `infra/` | Docker Compose for local dev, the service Dockerfile, later Terraform |
 
 ## Getting started
@@ -34,6 +34,10 @@ pnpm check:boundaries
 Run one service with live reload: `pnpm --filter @platform/registry dev` (port 8082). Without `DATABASE_URL` the registry and events services keep their data in memory; tests for their Postgres stores run when `DATABASE_URL` is set, as in CI.
 
 Full local stack (Postgres, MinIO, Keycloak, the platform and the apps): `docker compose -f infra/docker-compose.yml up --build`, then `pnpm --filter @platform/shell dev` and open http://localhost:5173. Sign in as `alex` or `sam`; see [infra/keycloak](infra/keycloak/README.md).
+
+## Versions and releases
+
+Each package, service and app has its own semver version and releases on its own, with [Changesets](https://github.com/changesets/changesets). Add a changeset to every pull request with `pnpm changeset`; merging the **Version packages** pull request the Release workflow keeps open is how a release is cut. Service APIs live under their major version (`/api/registry/v1/...`), `/healthz` reports what is deployed, and each app's manifest says which SDK releases it works with. See [Versioning](docs/versioning.md).
 
 ## Design tokens
 

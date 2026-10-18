@@ -49,7 +49,7 @@ const categoryOf = (app: AppManifestEntry, path: string) => Math.max(0, app.menu
  * open and the routing of intents between apps; it knows nothing about what
  * any app does.
  */
-export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUrl = '/api/events', fetchImpl = fetch, importEntry }: HostProps) {
+export function Host({ session, manifestUrl = '/api/registry/v1/manifest', eventsUrl = '/api/events/v1', fetchImpl = fetch, importEntry }: HostProps) {
   const shellRef = useRef<UiShell>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<UiCentreMenu>(null);

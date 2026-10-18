@@ -13,11 +13,13 @@
   "dependencies": {
     "@platform/service-kit": "workspace:*",
     "fastify": "^5.6.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pg": "^8.23.1",
+    "@types/semver": "^7.8.0",
     "typescript": "^5.6.0",
     "vitest": "^3.2.0"
   }

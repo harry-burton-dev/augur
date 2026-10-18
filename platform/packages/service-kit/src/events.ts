@@ -38,7 +38,7 @@ interface EventsOptions {
 export async function notify({ eventsUrl, credentials, fetchImpl, notification }: EventsOptions & { notification: NewNotification }): Promise<void> {
   await callService({
     method: 'POST',
-    url: `${eventsUrl.replace(/\/$/, '')}/notifications`,
+    url: `${eventsUrl.replace(/\/$/, '')}/v1/notifications`,
     credentials,
     body: notification,
     what: `notify ${notification.recipients.length} people`,
@@ -51,7 +51,7 @@ export async function notify({ eventsUrl, credentials, fetchImpl, notification }
 export async function recordAudit({ eventsUrl, credentials, fetchImpl, entry }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
   await callService({
     method: 'POST',
-    url: `${eventsUrl.replace(/\/$/, '')}/audit`,
+    url: `${eventsUrl.replace(/\/$/, '')}/v1/audit`,
     credentials,
     body: entry,
     what: `record ${entry.action} in the audit log`,

@@ -1,10 +1,14 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 0.1.0
+  version: 1.0.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
+servers:
+  - url: /v1
 paths:
   /me:
     get:

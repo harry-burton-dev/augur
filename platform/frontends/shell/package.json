@@ -16,12 +16,14 @@
     "@platform/ui-kit": "workspace:*",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/semver": "^7.8.0",
     "@vitejs/plugin-react": "^5.2.0",
     "happy-dom": "^20.0.0",
     "typescript": "^5.6.0",

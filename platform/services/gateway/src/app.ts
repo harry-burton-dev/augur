@@ -1,7 +1,9 @@
 import Fastify from 'fastify';
 import proxy from '@fastify/http-proxy';
-import { callerHeaders, withoutCallerHeaders, withoutServiceHeaders, type Caller } from '@platform/service-kit';
+import { callerHeaders, health, packageVersion, withoutCallerHeaders, withoutServiceHeaders, type Caller } from '@platform/service-kit';
 import { authenticate, AuthError, authFromEnv, type AuthConfig } from './auth.ts';
+
+const version = packageVersion(import.meta.url);
 
 export type Upstreams = Record<string, string>;
 
@@ -41,7 +43,7 @@ export interface GatewayOptions {
  */
 export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv() }: GatewayOptions = {}) => {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
-  app.get('/healthz', async () => ({ status: 'ok', service: 'gateway' }));
+  app.get('/healthz', async () => health('gateway', version));
 
   app.addHook('onRequest', async (req, reply) => {
     if (!req.url.startsWith('/api/')) return;

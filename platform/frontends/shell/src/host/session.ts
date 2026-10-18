@@ -68,7 +68,7 @@ async function loadMe(fetchImpl: typeof fetch, url: string, token: string): Prom
  */
 export async function startSession(
   auth: Authenticator,
-  { location, history, fetchImpl = fetch, meUrl = '/api/identity/me' }: StartOptions,
+  { location, history, fetchImpl = fetch, meUrl = '/api/identity/v1/me' }: StartOptions,
 ): Promise<Session | 'redirecting'> {
   if (location.pathname === CALLBACK_PATH) {
     let signedIn: SignedIn;
