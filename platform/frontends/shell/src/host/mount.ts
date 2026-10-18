@@ -1,4 +1,5 @@
 import type { AppManifestEntry, MicroFrontend, MountContext } from '@platform/mfe-sdk';
+import { incompatibility } from './manifest.js';
 
 export type ImportEntry = (url: string) => Promise<{ default?: unknown }>;
 
@@ -36,6 +37,8 @@ export class AppMounter {
   }
 
   private resolve(app: AppManifestEntry): Promise<MicroFrontend> {
+    const unsupported = incompatibility(app);
+    if (unsupported) return Promise.reject(new MountError(app, unsupported));
     let pending = this.loads.get(app.entry);
     if (!pending) {
       pending = this.load(app.entry).then(

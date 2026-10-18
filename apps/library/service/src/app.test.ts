@@ -6,6 +6,6 @@ describe('library', () => {
     const app = await buildApp();
     const res = await app.inject({ method: 'GET', url: '/healthz' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: 'ok', service: 'library' });
+    expect(res.json()).toMatchObject({ status: 'ok', service: 'library', version: expect.stringMatching(/^\d+\.\d+\.\d+/), api: 'v1' });
   });
 });

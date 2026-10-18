@@ -18,7 +18,7 @@ export interface RegisterOptions {
 export async function registerApp({ registryUrl, credentials, manifest, attempts = 6, retryMs, fetchImpl }: RegisterOptions): Promise<void> {
   await callService({
     method: 'PUT',
-    url: `${registryUrl.replace(/\/$/, '')}/apps/${encodeURIComponent(manifest.id)}`,
+    url: `${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(manifest.id)}`,
     credentials,
     body: manifest,
     what: `register ${manifest.id} with the registry`,

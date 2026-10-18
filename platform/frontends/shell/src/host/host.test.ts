@@ -1,6 +1,6 @@
 import { createEventBus, type AppManifestEntry, type MountContext } from '@platform/mfe-sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { AppMounter, hrefFor, IntentError, loadManifest, ManifestError, matchRoute, MountError, routeIntent, toShellNotification } from './index.js';
+import { AppMounter, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, routeIntent, toShellNotification } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -8,6 +8,7 @@ const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): 
   route,
   entry: `/apps/${id}/entry.js`,
   version: '0.1.0',
+  sdk: '^1.0.0',
   ...extra,
 });
 const manifest = [app('home', '/'), app('library', '/library', { handles: ['document.open'] }), app('admin', '/admin')];
@@ -47,9 +48,9 @@ describe('matchRoute', () => {
 describe('loadManifest', () => {
   it('sends the token and keeps only well-formed entries', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify([manifest[0], { id: 'broken' }]))) as unknown as typeof fetch;
-    const apps = await loadManifest(fetchImpl, '/api/registry/manifest', 'tok');
+    const apps = await loadManifest(fetchImpl, '/api/registry/v1/manifest', 'tok');
     expect(apps.map((a) => a.id)).toEqual(['home']);
-    expect(fetchImpl).toHaveBeenCalledWith('/api/registry/manifest', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer tok' }) }));
+    expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/manifest', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer tok' }) }));
   });
 
   it('says plainly when the catalogue is unreachable or refuses', async () => {
@@ -122,6 +123,22 @@ describe('AppMounter', () => {
     await expect(m.mount(manifest[1], ctx())).rejects.toThrow(MountError);
     expect(stage.children).toHaveLength(0);
     expect(m.mounted).toBeNull();
+  });
+
+  it('refuses an app made for another version of the SDK, without loading it', async () => {
+    const load = vi.fn(async () => ({ default: mfe() }));
+    const m = new AppMounter(document.createElement('div'), load);
+    await expect(m.mount(app('old', '/old', { sdk: '^0.1.0' }), ctx())).rejects.toThrow(/made for an older version/);
+    await expect(m.mount(app('next', '/next', { sdk: '^99.0.0' }), ctx())).rejects.toThrow(/needs a newer version/);
+    await expect(m.mount(app('vague', '/vague', { sdk: undefined as unknown as string }), ctx())).rejects.toThrow(/doesn't say which versions/);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('knows which SDK ranges it satisfies', () => {
+    expect(incompatibility(app('a', '/a', { sdk: '^1.0.0' }), '1.4.2')).toBeUndefined();
+    expect(incompatibility(app('a', '/a', { sdk: '>=1.2.0 <3' }), '2.0.0')).toBeUndefined();
+    expect(incompatibility(app('a', '/a', { sdk: '^1.5.0' }), '1.4.2')).toMatch(/newer/);
+    expect(incompatibility(app('a', '/a', { sdk: '^1.0.0' }), '2.0.0')).toMatch(/older/);
   });
 
   it('refuses a module that is not an app', async () => {

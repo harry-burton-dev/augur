@@ -42,7 +42,7 @@ describe('startSession', () => {
   it('asks Identity who the person is, with their token', async () => {
     const fetchImpl = vi.fn(okFetch);
     await startSession(fakeAuth({ access_token: 'tok' }), { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl });
-    expect(fetchImpl).toHaveBeenCalledWith('/api/identity/me', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer tok' }) }));
+    expect(fetchImpl).toHaveBeenCalledWith('/api/identity/v1/me', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer tok' }) }));
   });
 
   it('renews an expired sign-in with its refresh token', async () => {

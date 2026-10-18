@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { registerApp } from './registration.js';
 import { ServiceCallError } from './service.js';
 
-const manifest = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0' };
+const manifest = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0' };
 const credentials = { name: 'library', token: 's3cret' };
 const reply = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status });
 
@@ -10,7 +10,7 @@ describe('registerApp', () => {
   it('puts the manifest to the registry as the calling service', async () => {
     const fetchImpl = vi.fn(async () => reply(201));
     await registerApp({ registryUrl: 'http://registry:8082/', credentials, manifest, fetchImpl });
-    expect(fetchImpl).toHaveBeenCalledWith('http://registry:8082/apps/library', {
+    expect(fetchImpl).toHaveBeenCalledWith('http://registry:8082/v1/apps/library', {
       method: 'PUT',
       headers: { 'content-type': 'application/json', 'x-service-token': 's3cret', 'x-service-name': 'library' },
       body: JSON.stringify(manifest),

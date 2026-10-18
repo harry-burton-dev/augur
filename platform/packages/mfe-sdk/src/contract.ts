@@ -6,7 +6,13 @@ export interface AppManifestEntry {
   route: string;
   /** URL of the app's ES module entry, which default-exports an MicroFrontend. */
   entry: string;
+  /** The app's own release, semver, e.g. "1.4.0". */
   version: string;
+  /**
+   * The SDK releases the app works with, as a semver range over SDK_VERSION,
+   * e.g. "^1.2.0". The shell won't open an app whose range its SDK doesn't satisfy.
+   */
+  sdk: string;
   /** One line about the app, shown under its name in the Shell's Apps view. */
   description?: string;
   /** A UI kit icon name for the app. */

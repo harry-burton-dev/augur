@@ -1,12 +1,16 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 0.1.0
+  version: 1.0.0
   description: >
     Notifications for the Shell's stream, and the platform's audit log.
     People reach it through the gateway, which passes the caller in x-user-*
     headers. Services call it on the internal network with the x-service-token
     and x-service-name headers (see @platform/service-kit: notify, recordAudit).
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
+servers:
+  - url: /v1
 paths:
   /notifications:
     get:

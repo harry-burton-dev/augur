@@ -3,7 +3,7 @@ import { isIntentCancelled } from '@platform/mfe-sdk';
 import { describe, expect, it } from 'vitest';
 import { IntentError, RequestBroker } from './intents.js';
 
-const app = (id: string, handles: string[] = []): AppManifestEntry => ({ id, name: id, route: `/${id}`, entry: `/apps/${id}/entry.js`, version: '0.1.0', handles });
+const app = (id: string, handles: string[] = []): AppManifestEntry => ({ id, name: id, route: `/${id}`, entry: `/apps/${id}/entry.js`, version: '0.1.0', sdk: '^1.0.0', handles });
 const manifest = [app('board'), app('palette', ['colour.pick'])];
 const pick = { type: 'colour.pick', payload: { purpose: 'a label' } };
 

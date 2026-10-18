@@ -18,6 +18,6 @@ describe('events helpers', () => {
       fetchImpl: ok,
       entry: { actor: { id: 'u-1', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-1' },
     });
-    expect(ok.mock.calls.map(([url]) => url)).toEqual(['http://events:8084/notifications', 'http://events:8084/audit']);
+    expect(ok.mock.calls.map(([url]) => url)).toEqual(['http://events:8084/v1/notifications', 'http://events:8084/v1/audit']);
   });
 });
