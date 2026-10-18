@@ -24,7 +24,7 @@ import '@platform/ui-kit';
 | `ui-text-field` | Label, hint, line; needs-you, error, warning, valid, read-only, busy; form-associated |
 | `ui-table` | Sort (status by urgency), filter, select, open, loading, empty, error |
 | `ui-dialog` | Native dialog on the veil; checks slotted fields, async submit with busy and error |
-| `ui-icon` | Line icons on a 24 grid, bare or in the bubble |
+| `ui-icon` | Line icons from [Lucide](https://lucide.dev) (ISC), under the kit's own names, bare or in the bubble. To add one, import it in `icon.ts` and name it |
 | `ui-icon-button` | A named icon in a round target; name shows on hover and focus; `ai`, `size="sm"` |
 | `ui-keycap`, `ui-back` | A key as an outlined cap; the Esc Back control |
 | `ui-facts` | Up to three values worth a glance; loading |

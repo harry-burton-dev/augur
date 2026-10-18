@@ -3,6 +3,7 @@ import { base, label } from '../shared.js';
 import { statusUrgency, type StatusName } from './status.js';
 import './status.js';
 import './button.js';
+import './icon.js';
 
 export interface TableColumn<Row = Record<string, unknown>> {
   key: string;
@@ -224,7 +225,6 @@ export class UiTable extends LitElement {
       .icon-btn { border: 0; background: none; color: var(--ink-muted); cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; }
       .icon-btn:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
       .icon-btn:focus-visible { outline: 1.5px solid var(--focus); }
-      svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
       .wrap { overflow: auto; }
       table { width: 100%; border-collapse: collapse; font-size: var(--type-body); line-height: var(--leading-body); }
       th {
@@ -254,12 +254,12 @@ export class UiTable extends LitElement {
         cursor: pointer;
       }
       th.end .sort { flex-direction: row-reverse; }
-      .sort svg { width: 14px; height: 14px; opacity: 0; transition: opacity var(--motion-quick), transform var(--motion-base); }
+      .sort ui-icon { width: 14px; height: 14px; opacity: 0; transition: opacity var(--motion-quick), transform var(--motion-base); }
       .sort:hover { color: var(--ink); }
-      .sort:hover svg { opacity: 0.5; }
+      .sort:hover ui-icon { opacity: 0.5; }
       .sort.on { color: var(--ink); }
-      .sort.on svg { opacity: 1; }
-      .sort.asc svg { transform: rotate(180deg); }
+      .sort.on ui-icon { opacity: 1; }
+      .sort.asc ui-icon { transform: rotate(180deg); }
       .sort:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-key); }
       td {
         height: 56px;
@@ -316,7 +316,7 @@ export class UiTable extends LitElement {
     if (!column.sortable) return html`<th class=${cls} scope="col">${column.label}</th>`;
     return html`<th class=${cls} scope="col" aria-sort=${ariaSort}>
       <button class="sort ${on ? 'on' : ''} ${on && this.sort!.dir === 'asc' ? 'asc' : ''}" @click=${() => this.sortBy(column.key)}>
-        ${column.label}<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" /></svg>
+        ${column.label}<ui-icon name="chevron-down" size="14"></ui-icon>
       </button>
     </th>`;
   }
@@ -383,7 +383,7 @@ export class UiTable extends LitElement {
         ${this.filterable
           ? this.filtering
             ? html`<label class="filter">
-                <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5L14 14" /></svg>
+                <ui-icon name="find" size="16"></ui-icon>
                 <input
                   type="search"
                   aria-label="Filter ${this.noun}"
@@ -393,7 +393,7 @@ export class UiTable extends LitElement {
                 />
               </label>`
             : html`<button class="icon-btn" aria-label="Filter ${this.noun}" @click=${this.openFilter}>
-                <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5L14 14" /></svg>
+                <ui-icon name="find" size="16"></ui-icon>
               </button>`
           : nothing}
       </div>

@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { base, uid } from '../shared.js';
+import './icon.js';
 
 export type FieldState = 'idle' | 'attention' | 'error' | 'warning' | 'valid';
 export interface FieldCheck {
@@ -196,10 +197,8 @@ export class UiTextField extends LitElement {
       textarea.input { overflow: hidden; }
       .input::placeholder { color: color-mix(in srgb, var(--ink-muted) 75%, transparent); }
       .icon { flex: none; display: flex; width: 16px; height: 16px; }
-      .icon svg, .msg svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
       .foot { display: flex; justify-content: space-between; gap: var(--space-3); min-height: var(--leading-small); }
       .msg { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
-      .msg svg { width: 12px; height: 12px; }
       .count { font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 
       :host([state='attention']) .box { border-bottom-color: var(--green); box-shadow: 0 1px 0 var(--green); }
@@ -238,11 +237,11 @@ export class UiTextField extends LitElement {
   private stateIcon() {
     switch (this.state) {
       case 'error':
-        return html`<svg viewBox="0 0 16 16"><path d="M8 2l6 6-6 6-6-6z" /></svg>`;
+        return html`<ui-icon name="error" size="16"></ui-icon>`;
       case 'warning':
-        return html`<svg viewBox="0 0 16 16"><path d="M8 2.5l6 11H2z" /></svg>`;
+        return html`<ui-icon name="warning" size="16"></ui-icon>`;
       case 'valid':
-        return html`<svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" /></svg>`;
+        return html`<ui-icon name="check" size="16"></ui-icon>`;
       default:
         return nothing;
     }
