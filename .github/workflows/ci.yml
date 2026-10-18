@@ -14,7 +14,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm check:boundaries
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm --filter @im/ui-kit build-storybook
+      - run: pnpm --filter @platform/ui-kit build-storybook

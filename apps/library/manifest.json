@@ -1,0 +1,8 @@
+{
+  "id": "library",
+  "name": "Library",
+  "route": "/library",
+  "entry": "/apps/library/entry.js",
+  "version": "0.1.0",
+  "handles": ["document.open"]
+}

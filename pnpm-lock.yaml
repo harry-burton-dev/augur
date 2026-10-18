@@ -15,7 +15,23 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
-  packages/mfe-sdk:
+  apps/library/service:
+    dependencies:
+      fastify:
+        specifier: ^5.6.0
+        version: 5.12.7
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
+
+  platform/packages/mfe-sdk:
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -24,7 +40,7 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
 
-  packages/ui-kit:
+  platform/packages/ui-kit:
     dependencies:
       lit:
         specifier: ^3.3.0
@@ -49,7 +65,7 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
 
-  services/events:
+  platform/services/events:
     dependencies:
       fastify:
         specifier: ^5.6.0
@@ -65,7 +81,7 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
 
-  services/gateway:
+  platform/services/gateway:
     dependencies:
       '@fastify/http-proxy':
         specifier: ^11.3.0
@@ -84,7 +100,7 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
 
-  services/identity:
+  platform/services/identity:
     dependencies:
       fastify:
         specifier: ^5.6.0
@@ -100,23 +116,7 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
 
-  services/library:
-    dependencies:
-      fastify:
-        specifier: ^5.6.0
-        version: 5.12.7
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.20.5
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
-
-  services/registry:
+  platform/services/registry:
     dependencies:
       fastify:
         specifier: ^5.6.0

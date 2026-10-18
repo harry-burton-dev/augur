@@ -1,6 +1,7 @@
 packages:
-  - "packages/*"
-  - "services/*"
-  - "frontends/*"
+  - "platform/packages/*"
+  - "platform/services/*"
+  - "platform/frontends/*"
+  - "apps/*/*"
 onlyBuiltDependencies:
   - esbuild

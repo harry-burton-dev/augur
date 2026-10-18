@@ -1,13 +1,16 @@
 {
-  "name": "im-platform",
+  "name": "platform",
   "private": true,
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "dev": "turbo run dev --parallel"
+    "dev": "turbo run dev --parallel",
+    "check:boundaries": "node scripts/check-boundaries.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.0",
