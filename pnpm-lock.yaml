@@ -113,6 +113,9 @@ importers:
 
   platform/packages/service-kit:
     devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -147,13 +150,22 @@ importers:
 
   platform/services/events:
     dependencies:
+      '@platform/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.5
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

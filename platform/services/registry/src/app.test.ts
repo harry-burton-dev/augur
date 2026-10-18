@@ -5,7 +5,7 @@ import { buildApp } from './app.ts';
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', handles: ['document.open'] };
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
-const service = { 'x-registration-token': 'local-secret' };
+const service = { 'x-service-token': 'local-secret', 'x-service-name': 'library' };
 
 const ids = (body: { id: string }[]) => body.map((a) => a.id);
 
@@ -22,8 +22,8 @@ describe('registry', () => {
     expect(ids((await app.inject({ method: 'GET', url: '/manifest', headers: admin })).json())).toEqual(['home', 'admin']);
   });
 
-  it('lets an app’s service register it with the registration token', async () => {
-    const app = await buildApp({ registrationToken: 'local-secret' });
+  it('lets an app’s service register it with the service token', async () => {
+    const app = await buildApp({ serviceToken: 'local-secret' });
     const first = await app.inject({ method: 'PUT', url: '/apps/library', headers: service, payload: library });
     const again = await app.inject({ method: 'PUT', url: '/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
     expect([first.statusCode, again.statusCode]).toEqual([201, 200]);
@@ -32,21 +32,21 @@ describe('registry', () => {
   });
 
   it('lets an admin register an app, but no one else', async () => {
-    const app = await buildApp({ registrationToken: 'local-secret' });
+    const app = await buildApp({ serviceToken: 'local-secret' });
     const byAdmin = await app.inject({ method: 'PUT', url: '/apps/library', headers: admin, payload: library });
     const byEditor = await app.inject({ method: 'PUT', url: '/apps/library', headers: editor, payload: library });
-    const wrongToken = await app.inject({ method: 'PUT', url: '/apps/library', headers: { 'x-registration-token': 'guess' }, payload: library });
+    const wrongToken = await app.inject({ method: 'PUT', url: '/apps/library', headers: { 'x-service-token': 'guess' }, payload: library });
     expect([byAdmin.statusCode, byEditor.statusCode, wrongToken.statusCode]).toEqual([201, 403, 403]);
   });
 
   it('refuses the token when none is configured', async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: 'PUT', url: '/apps/library', headers: { 'x-registration-token': '' }, payload: library });
+    const res = await app.inject({ method: 'PUT', url: '/apps/library', headers: { 'x-service-token': '' }, payload: library });
     expect(res.statusCode).toBe(403);
   });
 
   it('turns away manifests it cannot use', async () => {
-    const app = await buildApp({ registrationToken: 'local-secret' });
+    const app = await buildApp({ serviceToken: 'local-secret' });
     const put = (url: string, payload: object) => app.inject({ method: 'PUT', url, headers: service, payload });
     expect((await put('/apps/library', { ...library, route: 'library' })).statusCode).toBe(400);
     expect((await put('/apps/library', { ...library, extra: true })).statusCode).toBe(400);
@@ -54,7 +54,7 @@ describe('registry', () => {
   });
 
   it('keeps platform apps and taken routes for their owners', async () => {
-    const app = await buildApp({ registrationToken: 'local-secret' });
+    const app = await buildApp({ serviceToken: 'local-secret' });
     const put = (payload: object) => app.inject({ method: 'PUT', url: `/apps/${(payload as { id: string }).id}`, headers: service, payload });
     const home = await put({ ...library, id: 'home', route: '/home' });
     const slash = await put({ ...library, route: '/admin' });
@@ -64,8 +64,25 @@ describe('registry', () => {
     expect(clash.json().message).toBe('Library already lives at /library.');
   });
 
+  it('records who changed the catalogue in the audit log', async () => {
+    const entries: unknown[] = [];
+    const app = await buildApp({ serviceToken: 'local-secret', audit: async (e) => void entries.push(e) });
+    await app.inject({ method: 'PUT', url: '/apps/library', headers: service, payload: library });
+    await app.inject({ method: 'DELETE', url: '/apps/library', headers: admin });
+    expect(entries).toEqual([
+      { actor: { id: 'library', kind: 'service' }, app: 'registry', action: 'app.registered', target: 'library', detail: { version: '0.1.0' } },
+      { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.removed', target: 'library' },
+    ]);
+  });
+
+  it('still registers the app when the audit log cannot be reached', async () => {
+    const app = await buildApp({ serviceToken: 'local-secret', audit: async () => Promise.reject(new Error('events is down')) });
+    const res = await app.inject({ method: 'PUT', url: '/apps/library', headers: service, payload: library });
+    expect(res.statusCode).toBe(201);
+  });
+
   it('lets an admin remove an app', async () => {
-    const app = await buildApp({ registrationToken: 'local-secret' });
+    const app = await buildApp({ serviceToken: 'local-secret' });
     await app.inject({ method: 'PUT', url: '/apps/library', headers: service, payload: library });
     const byService = await app.inject({ method: 'DELETE', url: '/apps/library', headers: service });
     const byAdmin = await app.inject({ method: 'DELETE', url: '/apps/library', headers: admin });

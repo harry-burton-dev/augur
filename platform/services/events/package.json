@@ -11,10 +11,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "fastify": "^5.6.0"
+    "@platform/service-kit": "workspace:*",
+    "fastify": "^5.6.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
     "typescript": "^5.6.0",
     "vitest": "^3.2.0"
   }

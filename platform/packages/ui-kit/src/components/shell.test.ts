@@ -112,6 +112,17 @@ describe('ui-shell', () => {
     expect(el.undo?.items).toHaveLength(2);
   });
 
+  it('tells the host what was dismissed and what Undo brought back', async () => {
+    const seen: string[] = [];
+    el.addEventListener('ui-dismiss', (e) => seen.push(`dismiss ${(e as CustomEvent).detail.ids.join(',')}`));
+    el.addEventListener('ui-restore', (e) => seen.push(`restore ${(e as CustomEvent).detail.ids.join(',')}`));
+    el.notifications = [note('a', 'needs'), note('b', 'info'), note('c', 'done')];
+    el.dismiss('b');
+    el.restore();
+    el.clear();
+    expect(seen).toEqual(['dismiss b', 'restore b', 'dismiss b,c']);
+  });
+
   it('dismisses the focused notification on x', async () => {
     el.notifications = [note('a', 'info')];
     el.openView('stream');
