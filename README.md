@@ -12,7 +12,7 @@ Architecture: [Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f
 | --- | --- |
 | `platform/packages/ui-kit` | Design tokens from the Claude Design system and the Lit web components rebuilt from it, Shell and Glance included |
 | `platform/packages/mfe-sdk` | The contract between the shell and apps: manifest entries, mount context, event bus, intents |
-| `platform/frontends/` | The shell host, Home and Admin |
+| `platform/frontends/` | The shell host, Home and Admin; see its README for how apps are mounted |
 | `platform/services/gateway` | Public entry; forwards `/api/<service>/*` to platform services and to each app's service |
 | `platform/services/identity` | OIDC sign-in, users, departments, roles |
 | `platform/services/registry` | App catalogue; serves the role-filtered manifest |
@@ -43,8 +43,8 @@ Full local stack (Postgres, MinIO, Keycloak, the platform and the apps): `docker
 The platform comes first; apps come after its core integrations work.
 
 1. UI kit: tokens, core components, Shell and Glance (done)
-2. Split into `platform/` and `apps/` with the boundary check (this step)
-3. Shell host: wraps `ui-shell`, loads apps from the registry
+2. Split into `platform/` and `apps/` with the boundary check (done)
+3. Shell host: wraps `ui-shell`, loads apps from the registry, mounts them, routes intents (this step)
 4. Identity and gateway sign-in (Keycloak locally)
 5. Registry on Postgres, with apps registering themselves
 6. Notifications feeding the Shell's stream, plus the audit log
