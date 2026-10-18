@@ -1,23 +1,25 @@
-# im-platform
+# Platform
 
-An app platform for the organisation's cloud: a shell that loads independently deployed micro frontends, a shared UI kit, and small services behind one gateway. The first app is an information management platform where users and departments keep document libraries and publish them for internal distribution.
+An app platform for the organisation's cloud: a shell that loads independently deployed apps as micro frontends, a shared UI kit, and core services behind one gateway. "Platform" is a codename until it has a name.
 
-Architecture: [Information Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f817-a300-4085-aef0-cacbc25f3055).
+Information management is the first app on the platform, not the platform itself. It lives under `apps/library` and is built after the platform's shell and core integrations.
+
+Architecture: [Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f817-a300-4085-aef0-cacbc25f3055) · for server admins: [Platform: C4 Architecture](https://claude.ai/code/artifact/0c81382b-80fd-42fc-84ea-f9a977975db7).
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
-| `packages/ui-kit` | Design tokens generated from the Claude Design system's `tokens.json`, base CSS, and Lit web components rebuilt from the design |
-| `packages/mfe-sdk` | The shell/micro-frontend contract: manifest entries, mount context, event bus, intents |
-| `frontends/` | Shell and micro frontends (home, library, admin) |
-| `services/gateway` | Public entry; forwards `/api/<service>/*` |
-| `services/identity` | OIDC login, users, departments, roles |
-| `services/registry` | App catalogue; serves the role-filtered manifest |
-| `services/library` | Libraries, documents, versions, publishing |
-| `services/events` | Audit log and `document.published` style events |
+| `platform/packages/ui-kit` | Design tokens from the Claude Design system and the Lit web components rebuilt from it, Shell and Glance included |
+| `platform/packages/mfe-sdk` | The contract between the shell and apps: manifest entries, mount context, event bus, intents |
+| `platform/frontends/` | The shell host, Home and Admin |
+| `platform/services/gateway` | Public entry; forwards `/api/<service>/*` to platform services and to each app's service |
+| `platform/services/identity` | OIDC sign-in, users, departments, roles |
+| `platform/services/registry` | App catalogue; serves the role-filtered manifest |
+| `platform/services/events` | Notifications for the Shell's stream, and the audit log |
+| `apps/<app>/` | One product app: its `manifest.json`, `service/` and `frontend/` |
 | `contracts/` | OpenAPI specs, the source of truth between services |
-| `infra/` | Docker Compose for local dev, service Dockerfile, later Terraform |
+| `infra/` | Docker Compose for local dev, the service Dockerfile, later Terraform |
 
 ## Getting started
 
@@ -25,29 +27,35 @@ Architecture: [Information Platform: MVP Architecture](https://claude.ai/code/ar
 corepack enable
 pnpm install
 pnpm build && pnpm test
+pnpm check:boundaries
 ```
 
-Run one service with live reload: `pnpm --filter @im/registry dev` (port 8082).
+Run one service with live reload: `pnpm --filter @platform/registry dev` (port 8082).
 
-Full local stack (Postgres, MinIO, Keycloak and all services): `docker compose -f infra/docker-compose.yml up --build`.
+Full local stack (Postgres, MinIO, Keycloak, the platform and the apps): `docker compose -f infra/docker-compose.yml up --build`.
 
 ## Design tokens
 
-`packages/ui-kit/tokens/tokens.json` is exported from the Claude Design system and is the source of truth. `pnpm --filter @im/ui-kit tokens` regenerates `dist/tokens.css` (CSS custom properties) and a typed token map. Never edit the generated files.
+`platform/packages/ui-kit/tokens/tokens.json` is exported from the Claude Design system and is the source of truth. `pnpm --filter @platform/ui-kit tokens` regenerates `dist/tokens.css` (CSS custom properties) and a typed token map. Never edit the generated files.
 
 ## Build order
 
-1. UI kit: tokens, then components the Library app needs (Shell, Button, inputs, Table, Glance, Dialog)
-2. Shell + mfe-sdk
-3. Registry backed by Postgres
-4. Gateway token checks + Identity
-5. Library service
-6. Home and Library micro frontends
-7. Admin micro frontend + Events
-8. Deploy to the org cloud
+The platform comes first; apps come after its core integrations work.
 
-## Rules between services
+1. UI kit: tokens, core components, Shell and Glance (done)
+2. Split into `platform/` and `apps/` with the boundary check (this step)
+3. Shell host: wraps `ui-shell`, loads apps from the registry
+4. Identity and gateway sign-in (Keycloak locally)
+5. Registry on Postgres, with apps registering themselves
+6. Notifications feeding the Shell's stream, plus the audit log
+7. Inter-app requests (intents) through the SDK, proven with a sample app
+8. The Library app
+9. Deploy to the org cloud
 
+## Rules between parts
+
+- Nothing under `platform/` depends on an app, and no app depends on another app. `pnpm check:boundaries` fails the build otherwise.
+- An app reaches the platform only through `@platform/*` packages, the gateway, the registry manifest and events.
 - Services talk only through their OpenAPI contracts or events, never another service's tables.
 - Micro frontends never import each other; they raise intents to the shell or use the event bus.
-- Every visual comes from `@im/ui-kit`.
+- Every visual comes from `@platform/ui-kit`.

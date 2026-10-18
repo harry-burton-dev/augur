@@ -1,0 +1,209 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import './shell.js';
+import { ago, streamWords, type ShellNotification, type UiShell } from './shell.js';
+
+let el: UiShell;
+const now = Date.now();
+const note = (id: string, level: ShellNotification['level'], minutesAgo = 5): ShellNotification => ({
+  id,
+  app: 'library',
+  level,
+  title: `Note ${id}`,
+  time: now - minutesAgo * 60_000,
+});
+
+const root = () => el.shadowRoot!;
+const key = (target: EventTarget, k: string, extra: KeyboardEventInit = {}) =>
+  target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, composed: true, ...extra }));
+
+beforeEach(async () => {
+  document.body.innerHTML = '<ui-shell product="Platform" workspace="Finance"><main>App</main></ui-shell>';
+  el = document.querySelector('ui-shell')!;
+  el.apps = [
+    { id: 'home', name: 'Home', icon: 'home' },
+    { id: 'library', name: 'Library', icon: 'library', line: 'Your documents' },
+    { id: 'admin', name: 'Admin', icon: 'admin' },
+  ];
+  el.current = 'home';
+  el.recent = ['admin'];
+  await el.updateComplete;
+});
+
+describe('stream words', () => {
+  it('says status in words, never a point alone', () => {
+    expect(streamWords([])).toBe('All quiet');
+    expect(streamWords([note('a', 'info'), note('b', 'done')])).toBe('2 notifications');
+    expect(streamWords([note('a', 'needs'), note('b', 'info')])).toBe('1 needs you');
+    expect(streamWords([note('a', 'needs'), note('b', 'needs')])).toBe('2 need you');
+  });
+
+  it('says how long ago in the fewest words', () => {
+    expect(ago(now - 10_000, now)).toBe('now');
+    expect(ago(now - 4 * 60_000, now)).toBe('4 min');
+    expect(ago(now - 2 * 3_600_000, now)).toBe('2 h');
+    expect(ago(new Date(now - 3 * 86_400_000), now)).toBe('3 d');
+  });
+});
+
+describe('ui-shell', () => {
+  it('opens on ` and Ctrl K, and never while typing', async () => {
+    key(window, '`');
+    expect(el.isOpen).toBe(true);
+    key(window, 'k', { ctrlKey: true });
+    expect(el.isOpen).toBe(false);
+    const input = document.createElement('input');
+    document.body.append(input);
+    key(input, '`');
+    expect(el.isOpen).toBe(false);
+  });
+
+  it('makes the stage inert while open', async () => {
+    el.open();
+    await el.updateComplete;
+    expect((root().querySelector('.stage') as HTMLElement).inert).toBe(true);
+    el.close();
+    await el.updateComplete;
+    expect((root().querySelector('.stage') as HTMLElement).inert).toBe(false);
+  });
+
+  it('puts the stream at the top of the arc with focus on it', async () => {
+    el.open();
+    await el.updateComplete;
+    const buttons = [...root().querySelectorAll('.dome > button')];
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Apps', 'Find', 'Notifications: All quiet', 'Agents', 'Account', 'Settings']);
+    expect(buttons[2].getAttribute('tabindex')).toBe('0');
+  });
+
+  it('Esc goes back to the dome, then closes', async () => {
+    el.openView('settings');
+    await el.updateComplete;
+    const sky = root().querySelector('.sky')!;
+    key(sky, 'Escape');
+    expect(el.view).toBe('');
+    expect(el.isOpen).toBe(true);
+    key(sky, 'Escape');
+    expect(el.isOpen).toBe(false);
+  });
+
+  it('notifies without opening itself, and the band says it in words', async () => {
+    el.notify(note('a', 'needs'));
+    await el.updateComplete;
+    expect(el.isOpen).toBe(false);
+    expect(root().querySelector('.status')!.textContent).toContain('1 needs you');
+    expect(root().querySelector('.status')!.classList.contains('needs')).toBe(true);
+  });
+
+  it('groups the stream into needs you, today and earlier', async () => {
+    el.notifications = [note('a', 'needs'), note('b', 'info'), note('c', 'done', 60 * 48)];
+    el.openView('stream');
+    await el.updateComplete;
+    const groups = [...root().querySelectorAll('.group')].map((g) => g.textContent!.replace(/\s+/g, ' ').trim());
+    expect(groups).toEqual(['Needs you 1', 'Today 1', 'Earlier 1']);
+  });
+
+  it('dismisses with undo, and clears the quiet ones', async () => {
+    el.notifications = [note('a', 'needs'), note('b', 'info'), note('c', 'done')];
+    el.dismiss('b');
+    expect(el.notifications.map((n) => n.id)).toEqual(['a', 'c']);
+    el.restore();
+    expect(el.notifications.map((n) => n.id).sort()).toEqual(['a', 'b', 'c']);
+    el.clear();
+    expect(el.notifications.map((n) => n.id)).toEqual(['a']);
+    expect(el.undo?.items).toHaveLength(2);
+  });
+
+  it('dismisses the focused notification on x', async () => {
+    el.notifications = [note('a', 'info')];
+    el.openView('stream');
+    await el.updateComplete;
+    key(root().querySelector('.row')!, 'x');
+    expect(el.notifications).toHaveLength(0);
+  });
+
+  it('opening a notification closes the Shell and tells the host', async () => {
+    const opened = vi.fn();
+    el.addEventListener('ui-open-notification', (e) => opened((e as CustomEvent).detail.notification.id));
+    el.notifications = [note('a', 'needs')];
+    el.openView('stream');
+    await el.updateComplete;
+    (root().querySelector('.row') as HTMLElement).click();
+    expect(opened).toHaveBeenCalledWith('a');
+    expect(el.isOpen).toBe(false);
+  });
+
+  it('lists the current app first, then recent, then the rest', async () => {
+    el.openView('apps');
+    await el.updateComplete;
+    const names = [...root().querySelectorAll('.app b')].map((b) => b.textContent);
+    expect(names).toEqual(['Home', 'Admin', 'Library']);
+    expect(root().querySelector('.app em')!.textContent).toBe('Open now');
+  });
+
+  it('opening an app makes it current and recent', async () => {
+    const opened = vi.fn();
+    el.addEventListener('ui-open-app', (e) => opened((e as CustomEvent).detail.id));
+    el.openView('apps');
+    await el.updateComplete;
+    (root().querySelectorAll('.app')[2] as HTMLElement).click();
+    expect(opened).toHaveBeenCalledWith('library');
+    expect(el.current).toBe('library');
+    expect(el.recent[0]).toBe('library');
+  });
+
+  it('finds across apps and notifications', async () => {
+    el.notifications = [{ ...note('a', 'info'), title: 'Travel policy published' }];
+    el.openView('find');
+    await el.updateComplete;
+    const input = root().querySelector('input')!;
+    input.value = 'li';
+    input.dispatchEvent(new InputEvent('input'));
+    await el.updateComplete;
+    expect([...root().querySelectorAll('.view .row b')].map((b) => b.textContent)).toContain('Library');
+    input.value = 'travel';
+    input.dispatchEvent(new InputEvent('input'));
+    await el.updateComplete;
+    expect([...root().querySelectorAll('.view .row b')].map((b) => b.textContent)).toEqual(['Travel policy published']);
+  });
+
+  it('sorts agents by urgency and says when none run', async () => {
+    el.openView('agents');
+    await el.updateComplete;
+    expect(root().querySelector('.view .note')!.textContent).toBe('No agents are running.');
+    el.agents = [
+      { id: '1', name: 'Indexer', status: 'running' },
+      { id: '2', name: 'Reviewer', status: 'needs' },
+    ];
+    await el.updateComplete;
+    expect([...root().querySelectorAll('.view .row b')].map((b) => b.textContent)).toEqual(['Reviewer', 'Indexer']);
+  });
+
+  it('shows stream loading and error states', async () => {
+    el.openView('stream');
+    el.setStream({ loading: true });
+    await el.updateComplete;
+    expect(root().querySelector('.view')!.textContent).toContain('Catching up');
+    const retry = vi.fn();
+    el.addEventListener('ui-retry', retry);
+    el.setStream({ error: "Can't reach notifications. Nothing was lost." });
+    await el.updateComplete;
+    (root().querySelector('.retry') as HTMLElement).click();
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it('turns amber and says the stream is from before when offline', async () => {
+    el.online = false;
+    el.notifications = [note('a', 'info')];
+    el.openView('stream');
+    await el.updateComplete;
+    expect(root().querySelector('.status')!.classList.contains('offline')).toBe(true);
+    expect(root().querySelector('.caption')!.textContent).toContain('from before');
+  });
+
+  it('hands a function with no view to the host', async () => {
+    const fn = vi.fn();
+    el.functions = [...el.functions, { id: 'help', label: 'Help', icon: 'find' }];
+    el.addEventListener('ui-function', (e) => fn((e as CustomEvent).detail.id));
+    el.openView('help');
+    expect(fn).toHaveBeenCalledWith('help');
+  });
+});
