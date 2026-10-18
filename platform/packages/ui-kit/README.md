@@ -25,6 +25,10 @@ import '@platform/ui-kit';
 | `ui-table` | Sort (status by urgency), filter, select, open, loading, empty, error |
 | `ui-dialog` | Native dialog on the veil; checks slotted fields, async submit with busy and error |
 | `ui-icon` | Line icons on a 24 grid, bare or in the bubble |
+| `ui-icon-button` | A named icon in a round target; name shows on hover and focus; `ai`, `size="sm"` |
+| `ui-keycap`, `ui-back` | A key as an outlined cap; the Esc Back control |
+| `ui-facts` | Up to three values worth a glance; loading |
+| `ui-rows` | Up to five label and value lines; loading, empty, error |
 | `ui-glance` | A quick look before you go in: veil, sheet, card, split, title; hairline or bubble; loading, error, empty |
 | `ui-shell` | The frame apps run in: the band, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
 

@@ -3,7 +3,7 @@ import { html } from 'lit';
 import '../components/button.js';
 
 const meta: Meta = {
-  title: 'Actions/Button',
+  title: 'Primitives/Button',
   component: 'ui-button',
   args: { label: 'Publish', kind: 'primary', size: 'md', ai: false, disabled: false, busy: false, busyLabel: 'Publishing…' },
   argTypes: {
