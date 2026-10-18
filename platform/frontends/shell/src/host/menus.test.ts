@@ -1,6 +1,6 @@
 import type { AppManifestEntry } from '@platform/mfe-sdk';
 import { describe, expect, it } from 'vitest';
-import { backFrom, escapeIsFree, orbitMenu, screenFor, titleMenu, titleTarget } from './index.js';
+import { backFrom, escapeIsFree, findPages, orbitMenu, screenFor, titleMenu, titleTarget } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -86,5 +86,15 @@ describe('escapeIsFree', () => {
     const used = document.getElementById('p')!;
     used.addEventListener('keydown', (e) => e.preventDefault(), { once: true });
     expect(esc(used)).toBe(false);
+  });
+});
+
+describe('findPages', () => {
+  it('finds menu pages across apps by any of their words, each opening its location', () => {
+    expect(findPages(manifest, 'labels new')).toEqual([{ id: '/board/labels/new', title: 'New', detail: 'Board · Labels', kind: 'page' }]);
+    expect(findPages(manifest, 'PALETTE').map((r) => r.id)).toEqual(['/board/colours']);
+    expect(findPages(manifest, 'board').length).toBe(4);
+    expect(findPages(manifest, '  ')).toEqual([]);
+    expect(findPages(manifest, 'nothing like it')).toEqual([]);
   });
 });

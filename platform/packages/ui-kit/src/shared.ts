@@ -1,5 +1,14 @@
 import { css } from 'lit';
 
+/**
+ * Whether to hold still: the system asks for reduced motion, or the page does
+ * with `data-motion="reduce"` on <html> (a person's own setting, which a host
+ * applies). Read it each time; either can change while the page is open.
+ */
+export const reducedMotion = () =>
+  (typeof document !== 'undefined' && document.documentElement.dataset.motion === 'reduce') ||
+  (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
 /** Keyframes and resets every component's shadow root needs; keyframes don't cross shadow boundaries. */
 export const base = css`
   :host {

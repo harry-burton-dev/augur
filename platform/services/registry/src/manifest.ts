@@ -55,6 +55,12 @@ export const platformApps: AppEntry[] = [
   },
 ];
 
+/**
+ * Platform apps whose frontend hasn't shipped yet. Their ids and routes stay
+ * reserved, but the manifest leaves them out so no one is offered a dead end.
+ */
+export const unbuiltApps = new Set(['admin']);
+
 /** What a registering app may send. Mirrors AppManifestEntry in contracts/registry.openapi.yaml. */
 export const appEntrySchema = {
   type: 'object',

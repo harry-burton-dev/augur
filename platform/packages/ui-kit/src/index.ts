@@ -1,4 +1,5 @@
 export { tokens, token, type TokenName } from './generated/tokens.js';
+export { reducedMotion } from './shared.js';
 export { UiButton, type ButtonKind } from './components/button.js';
 export { UiSurface, type SurfaceKind } from './components/surface.js';
 export { UiHeading } from './components/heading.js';

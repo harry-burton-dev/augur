@@ -15,3 +15,11 @@ ui-shell[open] ui-centre-menu { opacity: 0; pointer-events: none; }
   gap: var(--space-5);
 }
 .loading { color: var(--ink-muted); }
+/* A person's own Reduce motion: transitions and loops hold still, as under the system setting. */
+html[data-motion='reduce'] {
+  --motion-instant: 0.01ms; --motion-quick: 0.01ms; --motion-base: 0.01ms; --motion-slow: 0.01ms; --motion-calm: 0.01ms;
+}
+/* Compact: the larger steps of the spacing scale come down one notch, so more fits on screen. */
+html[data-density='compact'] {
+  --space-5: 20px; --space-6: 28px; --space-7: 44px; --space-8: 72px;
+}

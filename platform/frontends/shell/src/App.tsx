@@ -1,16 +1,19 @@
 import { createEventBus, type AppManifestEntry, type Intent, type IntentReply, type MountContext } from '@platform/mfe-sdk';
-import type { MenuCategory, MenuItem, ShellApp, UiCentreMenu, UiDialog, UiShell } from '@platform/ui-kit';
+import { defaultFunctions, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@platform/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
+  applyPreferences,
   backFrom,
   escapeIsFree,
+  findPages,
   fromServer,
   hrefFor,
   IntentError,
   loadManifest,
   NotificationFeed,
   orbitMenu,
+  PreferenceSync,
   RequestBroker,
   routeIntent,
   screenFor,
@@ -30,6 +33,8 @@ export interface HostProps {
   manifestUrl?: string;
   /** Where the events service is reached, through the gateway. */
   eventsUrl?: string;
+  /** Where Identity keeps the person's preferences, through the gateway. */
+  preferencesUrl?: string;
   fetchImpl?: typeof fetch;
   importEntry?: ImportEntry;
 }
@@ -37,6 +42,12 @@ export interface HostProps {
 type Problem = { title: string; summary: string; retry: () => void };
 
 const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai });
+
+/**
+ * What the Shell offers in this alpha. Agents and Switch workspace stay off
+ * until they are designed and have something behind them.
+ */
+const alphaFunctions = defaultFunctions.filter((f) => f.id !== 'agents');
 
 /** The water for each screen: Title on Minimal, Orbit on Deep Ocean, apps on Calm Tide. */
 const waterFor = (screen: Screen | undefined) => (screen?.kind === 'title' ? 'Minimal' : screen?.kind === 'orbit' ? 'Deep Ocean' : 'Calm Tide');
@@ -49,7 +60,14 @@ const categoryOf = (app: AppManifestEntry, path: string) => Math.max(0, app.menu
  * open and the routing of intents between apps; it knows nothing about what
  * any app does.
  */
-export function Host({ session, manifestUrl = '/api/registry/v1/manifest', eventsUrl = '/api/events/v1', fetchImpl = fetch, importEntry }: HostProps) {
+export function Host({
+  session,
+  manifestUrl = '/api/registry/v1/manifest',
+  eventsUrl = '/api/events/v1',
+  preferencesUrl = '/api/identity/v1/me/preferences',
+  fetchImpl = fetch,
+  importEntry,
+}: HostProps) {
   const shellRef = useRef<UiShell>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<UiCentreMenu>(null);
@@ -67,6 +85,14 @@ export function Host({ session, manifestUrl = '/api/registry/v1/manifest', event
   const [answering, setAnswering] = useState<OpenRequest | null>(null);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
+  const prefs = useMemo(
+    () =>
+      new PreferenceSync(preferencesUrl, session.getToken, {
+        fetchImpl,
+        onError: (title) => shellRef.current?.notify(toShellNotification('platform', { title })),
+      }),
+    [preferencesUrl, session, fetchImpl],
+  );
 
   const [manifest, setManifest] = useState<AppManifestEntry[] | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -91,7 +117,11 @@ export function Host({ session, manifestUrl = '/api/registry/v1/manifest', event
     session
       .getToken()
       .then((token) => loadManifest(fetchImpl, manifestUrl, token))
-      .then((apps) => live && setManifest(apps))
+      .then((apps) => {
+        if (!live) return;
+        setManifest(apps);
+        if (!apps.length) setProblem({ title: 'No apps yet', summary: 'There are no apps you can open. Ask an admin to give you access to one.', retry: () => setAttempt((n) => n + 1) });
+      })
       .catch((err: Error) => {
         if (!live) return;
         setManifest(null);
@@ -187,6 +217,7 @@ export function Host({ session, manifestUrl = '/api/registry/v1/manifest', event
     const stage = stageRef.current;
     if (!stage || !manifest) return;
     mounter.current ??= new AppMounter(stage, importEntry);
+    if (!manifest.length) return;
     if (!screen) {
       void mounter.current.unmount();
       setProblem({ title: 'Nothing here', summary: `No app you can open lives at ${pathname}.`, retry: () => navigate('/') });
@@ -195,7 +226,10 @@ export function Host({ session, manifestUrl = '/api/registry/v1/manifest', event
     if (screen.kind !== 'app') {
       void mounter.current.unmount();
       setProblem(null);
-      if (screen.kind === 'orbit') shellRef.current?.setCurrent(screen.app.id);
+      if (screen.kind === 'orbit') {
+        shellRef.current?.setCurrent(screen.app.id);
+        prefs.opened(screen.app.id);
+      }
       return;
     }
     const { app, path } = screen;
@@ -205,10 +239,11 @@ export function Host({ session, manifestUrl = '/api/registry/v1/manifest', event
     const ctx = contextFor(app, path, intent);
     setProblem(null);
     shellRef.current?.setCurrent(app.id);
+    prefs.opened(app.id);
     mounter.current.mount(app, ctx).catch((err: Error) => {
       setProblem({ title: `${app.name} didn't open`, summary: err.message, retry: () => setAttempt((n) => n + 1) });
     });
-  }, [manifest, screen, attempt, contextFor, importEntry, navigate, pathname]);
+  }, [manifest, screen, attempt, contextFor, importEntry, navigate, pathname, prefs]);
 
   // Title and Orbit: what they hold, where they start, and where choosing leads.
   useEffect(() => {
@@ -298,7 +333,27 @@ export function Host({ session, manifestUrl = '/api/registry/v1/manifest', event
     shell.apps = (manifest ?? []).map(toShellApp);
     shell.user = { name: session.user.name, email: session.user.email };
     shell.workspace = session.workspace;
+    shell.functions = alphaFunctions;
+    shell.canSwitchWorkspace = false;
   }, [manifest, session]);
+
+  // What this person chose last time: motion, density, away, and the apps they used most recently.
+  useEffect(() => {
+    let live = true;
+    void prefs.load().then((p) => {
+      const shell = shellRef.current;
+      if (!live || !shell) return;
+      applyPreferences(p);
+      shell.settings = { reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable' };
+      shell.away = !!p.away;
+      shell.recent = [...new Set([...shell.recent, ...(p.recent ?? [])])].slice(0, 6);
+    });
+    return () => {
+      live = false;
+      void prefs.save();
+      prefs.stop();
+    };
+  }, [prefs]);
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -331,9 +386,25 @@ export function Host({ session, manifestUrl = '/api/registry/v1/manifest', event
     const onFunction = (e: Event) => {
       if ((e as CustomEvent<{ id: string }>).detail.id === 'sign-out') void session.signOut();
     };
+    const onSetting = (e: Event) => {
+      const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
+      if (key === 'reduceMotion' || key === 'away') prefs.set(key, !!value);
+      else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
+      applyPreferences(prefs.current);
+    };
+    const onFind = (e: Event) => {
+      shell.findResults = findPages(manifest ?? [], (e as CustomEvent<{ q: string }>).detail.q);
+    };
+    const onPick = (e: Event) => {
+      const { result } = (e as CustomEvent<{ result: ShellFindResult }>).detail;
+      if (result.kind === 'page') navigate(result.id);
+    };
     shell.addEventListener('ui-open-app', onOpenApp);
     shell.addEventListener('ui-open-notification', onOpenNotification);
     shell.addEventListener('ui-function', onFunction);
+    shell.addEventListener('ui-setting', onSetting);
+    shell.addEventListener('ui-find', onFind);
+    shell.addEventListener('ui-pick', onPick);
     shell.addEventListener('ui-dismiss', onDismiss);
     shell.addEventListener('ui-restore', onRestore);
     shell.addEventListener('ui-retry', onRetry);
@@ -344,20 +415,23 @@ export function Host({ session, manifestUrl = '/api/registry/v1/manifest', event
       shell.removeEventListener('ui-open-app', onOpenApp);
       shell.removeEventListener('ui-open-notification', onOpenNotification);
       shell.removeEventListener('ui-function', onFunction);
+      shell.removeEventListener('ui-setting', onSetting);
+      shell.removeEventListener('ui-find', onFind);
+      shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session]);
+  }, [manifest, navigate, session, prefs]);
 
   return (
     <ui-shell ref={shellRef} product="Platform">
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
-      {screen && screen.kind !== 'app' && (
+      {screen && screen.kind !== 'app' && manifest?.length ? (
         <ui-centre-menu
           key={screen.kind === 'orbit' ? `orbit:${screen.app.id}` : 'title'}
           ref={menuRef}
           variant={screen.kind}
           label={screen.kind === 'orbit' ? `${screen.app.name} menu` : 'Apps'}
         />
-      )}
+      ) : null}
       {problem && (
         <section className="problem" role="alert">
           <ui-heading heading={problem.title} summary={problem.summary} size="s" />

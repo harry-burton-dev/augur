@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from 'lit';
 import { keyed } from 'lit/directives/keyed.js';
 import { styleMap } from 'lit/directives/style-map.js';
-import { base } from '../shared.js';
+import { base, reducedMotion } from '../shared.js';
 import './icon.js';
 
 export interface MenuOption {
@@ -146,7 +146,9 @@ export class UiCentreMenu extends LitElement {
   private pressed = -1;
   private resizeObserver?: ResizeObserver;
   private lastChange = '';
-  private readonly reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private get reduce() {
+    return reducedMotion();
+  }
 
   constructor() {
     super();
