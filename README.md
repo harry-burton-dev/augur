@@ -14,9 +14,9 @@ Architecture: [Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f
 | `platform/packages/mfe-sdk` | The contract between the shell and apps: manifest entries, mount context, event bus, intents |
 | `platform/frontends/` | The shell host, Home and Admin; see its README for how apps are mounted |
 | `platform/services/gateway` | Public entry; checks the sign-in token, then forwards `/api/<service>/*` to platform services and each app's service with the caller attached |
-| `platform/packages/service-kit` | What a service uses to know who is calling: the caller the gateway verified |
+| `platform/packages/service-kit` | What a service uses to know who is calling (the caller the gateway verified) and to register its app |
 | `platform/services/identity` | Who people are: answers "who am I" for the shell; later the directory of people and departments |
-| `platform/services/registry` | App catalogue; serves the role-filtered manifest |
+| `platform/services/registry` | App catalogue on Postgres: apps register themselves, and each person gets the manifest their roles allow |
 | `platform/services/events` | Notifications for the Shell's stream, and the audit log |
 | `apps/<app>/` | One product app: its `manifest.json`, `service/` and `frontend/` |
 | `contracts/` | OpenAPI specs, the source of truth between services |
@@ -31,7 +31,7 @@ pnpm build && pnpm test
 pnpm check:boundaries
 ```
 
-Run one service with live reload: `pnpm --filter @platform/registry dev` (port 8082).
+Run one service with live reload: `pnpm --filter @platform/registry dev` (port 8082). Without `DATABASE_URL` the registry keeps registered apps in memory; tests for its Postgres store run when `DATABASE_URL` is set, as in CI.
 
 Full local stack (Postgres, MinIO, Keycloak, the platform and the apps): `docker compose -f infra/docker-compose.yml up --build`, then `pnpm --filter @platform/shell dev` and open http://localhost:5173. Sign in as `alex` or `sam`; see [infra/keycloak](infra/keycloak/README.md).
 
@@ -46,8 +46,8 @@ The platform comes first; apps come after its core integrations work.
 1. UI kit: tokens, core components, Shell and Glance (done)
 2. Split into `platform/` and `apps/` with the boundary check (done)
 3. Shell host: wraps `ui-shell`, loads apps from the registry, mounts them, routes intents (done)
-4. Identity and gateway sign-in (Keycloak locally) (this step)
-5. Registry on Postgres, with apps registering themselves
+4. Identity and gateway sign-in (Keycloak locally) (done)
+5. Registry on Postgres, with apps registering themselves (this step)
 6. Notifications feeding the Shell's stream, plus the audit log
 7. Inter-app requests (intents) through the SDK, proven with a sample app
 8. The Library app

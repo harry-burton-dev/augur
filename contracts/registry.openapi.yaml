@@ -15,15 +15,43 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AppManifestEntry" }
+  /apps/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Register an app, or update it
+      description: >
+        Called by an app's own service on the internal network with the
+        x-registration-token header, or by an admin through the gateway.
+        Unknown fields are refused. The platform's own apps (home, admin) and
+        routes another app already has cannot be taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AppManifestEntry" }
+      responses:
+        "201": { description: Registered }
+        "200": { description: Updated }
+        "400": { description: The manifest is invalid or its id does not match the path }
+        "403": { description: Neither a valid registration token nor an admin }
+        "409": { description: The id belongs to a platform app, or the route is taken }
+    delete:
+      summary: Remove an app (admins only)
+      responses:
+        "204": { description: Removed }
+        "403": { description: Not an admin }
+        "404": { description: No such app }
 components:
   schemas:
     AppManifestEntry:
       type: object
       required: [id, name, route, entry, version]
+      additionalProperties: false
       properties:
-        id: { type: string }
+        id: { type: string, pattern: "^[a-z][a-z0-9-]{1,39}$" }
         name: { type: string }
-        route: { type: string, description: Route prefix the shell maps to this app }
+        route: { type: string, pattern: "^/[a-z0-9][a-z0-9/-]*$", description: Route prefix the shell maps to this app }
         entry: { type: string, description: URL of the app's ES module entry }
         version: { type: string }
         description: { type: string, description: One line shown under the app name in the Shell }

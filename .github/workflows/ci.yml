@@ -6,6 +6,20 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    # The registry's Postgres store is tested against a real database.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform-ci-only
+          POSTGRES_DB: platform
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,4 +32,6 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+        env:
+          DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
       - run: pnpm --filter @platform/ui-kit build-storybook
