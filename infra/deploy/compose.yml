@@ -1,0 +1,127 @@
+# The whole platform on one server, reached privately over Tailscale at
+# https://<TS_HOSTNAME>.<your tailnet>.ts.net. See docs/deploy.md.
+#   cp infra/deploy/.env.example infra/deploy/.env   # then fill it in
+#   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d --build
+name: platform
+
+x-service: &service
+  restart: unless-stopped
+  environment: &env
+    NODE_ENV: production
+    SERVICE_TOKEN: ${SERVICE_TOKEN:?set SERVICE_TOKEN in .env}
+    EVENTS_URL: http://events:8084
+    DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/platform
+  depends_on:
+    postgres: { condition: service_healthy }
+
+services:
+  # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate.
+  tailscale:
+    image: tailscale/tailscale:v1.76.6
+    restart: unless-stopped
+    hostname: ${TS_HOSTNAME:-platform}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in .env}
+      TS_HOSTNAME: ${TS_HOSTNAME:-platform}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: "true"
+    volumes:
+      - tailscale:/var/lib/tailscale
+      - ./tailscale:/config:ro
+    depends_on: [web]
+
+  web:
+    build: { context: ../.., dockerfile: infra/web.Dockerfile, target: web }
+    restart: unless-stopped
+    depends_on: [gateway, keycloak]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: platform
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.8
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: platform
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: ${PLATFORM_URL:?set PLATFORM_URL in .env}/sso
+      KC_HTTP_RELATIVE_PATH: /sso
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      # One instance: no cluster to find.
+      KC_CACHE: local
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
+      # Read by the realm file on first start: who you sign in as.
+      PLATFORM_URL: ${PLATFORM_URL}
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:?set PLATFORM_ADMIN_USER in .env}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?set PLATFORM_ADMIN_PASSWORD in .env}
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:?set PLATFORM_ADMIN_EMAIL in .env}
+      PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:?set PLATFORM_ADMIN_FIRST_NAME in .env}
+      PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:?set PLATFORM_ADMIN_LAST_NAME in .env}
+      PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Platform}
+    volumes:
+      - ./keycloak/platform-realm.json:/opt/keycloak/data/import/platform-realm.json:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  gateway:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/gateway" } }
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      IDENTITY_URL: http://identity:8081
+      REGISTRY_URL: http://registry:8082
+      EVENTS_URL: http://events:8084
+      # Tokens name the platform's public address; signing keys are fetched inside the compose network.
+      OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
+      OIDC_JWKS_URL: http://keycloak:8080/sso/realms/platform/protocol/openid-connect/certs
+      OIDC_AUDIENCE: platform-api
+    depends_on: [identity, registry, events]
+
+  identity:
+    <<: *service
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/identity" } }
+    environment: { <<: *env, PORT: 8081 }
+
+  registry:
+    <<: *service
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/registry" } }
+    environment: { <<: *env, PORT: 8082 }
+
+  events:
+    <<: *service
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/events" } }
+    environment: { <<: *env, PORT: 8084 }
+
+  # Registers the sample apps once the registry is up, then exits.
+  register-samples:
+    build: { context: ../.., dockerfile: infra/web.Dockerfile, target: register }
+    restart: on-failure
+    environment:
+      REGISTRY_URL: http://registry:8082
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+    depends_on: [registry]
+
+volumes:
+  pgdata:
+  tailscale:

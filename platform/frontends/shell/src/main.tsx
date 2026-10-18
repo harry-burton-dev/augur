@@ -8,8 +8,9 @@ import { Host, SignInProblem } from './App.js';
 import { CALLBACK_PATH, startSession } from './host/index.js';
 
 // Locally this is the Keycloak realm in infra/keycloak; each deployment sets its own.
+// A path (like /sso/realms/platform) means the sign-in service is on this site, wherever it is served.
 const auth = new UserManager({
-  authority: import.meta.env.VITE_OIDC_AUTHORITY ?? 'http://localhost:8180/realms/platform',
+  authority: new URL(import.meta.env.VITE_OIDC_AUTHORITY ?? 'http://localhost:8180/realms/platform', window.location.origin).href.replace(/\/$/, ''),
   client_id: import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell',
   redirect_uri: `${window.location.origin}${CALLBACK_PATH}`,
   post_logout_redirect_uri: `${window.location.origin}/`,
