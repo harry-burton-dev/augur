@@ -1,5 +1,5 @@
-import { createEventBus, type AppManifestEntry, type Intent, type MountContext } from '@platform/mfe-sdk';
-import type { ShellApp, UiShell } from '@platform/ui-kit';
+import { createEventBus, type AppManifestEntry, type Intent, type IntentReply, type MountContext } from '@platform/mfe-sdk';
+import type { ShellApp, UiDialog, UiShell } from '@platform/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
@@ -9,9 +9,11 @@ import {
   loadManifest,
   matchRoute,
   NotificationFeed,
+  RequestBroker,
   routeIntent,
   toShellNotification,
   type ImportEntry,
+  type OpenRequest,
   type ServerNotification,
   type Session,
 } from './host/index.js';
@@ -42,6 +44,11 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUr
   const bus = useMemo(() => createEventBus(), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
   const feed = useRef<NotificationFeed | null>(null);
+  const broker = useRef(new RequestBroker());
+  const dialogRef = useRef<UiDialog>(null);
+  const requestStageRef = useRef<HTMLDivElement>(null);
+  const requestMounter = useRef<AppMounter | null>(null);
+  const [answering, setAnswering] = useState<OpenRequest | null>(null);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
 
@@ -98,6 +105,67 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUr
     [manifest, navigate],
   );
 
+  // An app asks another for an answer: the answering app opens over it in a dialog.
+  const request = useCallback(
+    <T,>(intent: Intent): Promise<T> => {
+      if (!manifest) return Promise.reject(new IntentError('Apps are still loading. Try again in a moment.'));
+      let started: ReturnType<RequestBroker['begin']>;
+      try {
+        started = broker.current.begin(manifest, intent);
+      } catch (err) {
+        if (err instanceof IntentError) shellRef.current?.notify(toShellNotification('platform', { title: err.message }));
+        return Promise.reject(err);
+      }
+      setAnswering(started.request);
+      return (started.answer as Promise<T>).finally(() => setAnswering(null));
+    },
+    [manifest],
+  );
+
+  const contextFor = useCallback(
+    (app: AppManifestEntry, path: string, intent?: Intent, reply?: IntentReply): MountContext => ({
+      user: session.user,
+      getToken: session.getToken,
+      bus,
+      raise,
+      request,
+      notify: (message) => shellRef.current?.notify(toShellNotification(app.id, message)),
+      path,
+      intent,
+      reply,
+    }),
+    [session, bus, raise, request],
+  );
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const stage = requestStageRef.current;
+    if (!dialog || !stage) return;
+    requestMounter.current ??= new AppMounter(stage, importEntry);
+    if (!answering) {
+      dialog.close();
+      void requestMounter.current.unmount();
+      return;
+    }
+    const { app, intent } = answering;
+    const reply: IntentReply = { respond: (result) => broker.current.respond(result), cancel: () => broker.current.cancel() };
+    dialog.show();
+    requestMounter.current.mount(app, contextFor(app, '/', intent, reply)).catch((err: Error) => {
+      broker.current.cancel(new IntentError(`${app.name} didn't open: ${err.message}`));
+    });
+  }, [answering, contextFor, importEntry]);
+
+  // Closing the dialog without an answer cancels the request.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const onClose = () => {
+      if (broker.current.current) broker.current.cancel();
+    };
+    dialog.addEventListener('ui-close', onClose);
+    return () => dialog.removeEventListener('ui-close', onClose);
+  }, []);
+
   // Mount whichever app the location points at.
   useEffect(() => {
     const stage = stageRef.current;
@@ -111,21 +179,13 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUr
     const { app, path } = match;
     const intent = pendingIntent.current;
     pendingIntent.current = undefined;
-    const ctx: MountContext = {
-      user: session.user,
-      getToken: session.getToken,
-      bus,
-      raise,
-      notify: (message) => shellRef.current?.notify(toShellNotification(app.id, message)),
-      path,
-      intent,
-    };
+    const ctx = contextFor(app, path, intent);
     setProblem(null);
     shellRef.current?.setCurrent(app.id);
     mounter.current.mount(app, ctx).catch((err: Error) => {
       setProblem({ title: `${app.name} didn't open`, summary: err.message, retry: () => setAttempt((n) => n + 1) });
     });
-  }, [manifest, match, attempt, bus, raise, session, importEntry, navigate, pathname]);
+  }, [manifest, match, attempt, contextFor, importEntry, navigate, pathname]);
 
   useEffect(() => () => void mounter.current?.unmount(), []);
 
@@ -222,6 +282,9 @@ export function Host({ session, manifestUrl = '/api/registry/manifest', eventsUr
         </section>
       )}
       {!manifest && !problem && <p className="loading">Opening…</p>}
+      <ui-dialog ref={dialogRef} size="read" heading={answering?.app.name ?? ''} cancelLabel="Cancel">
+        <div ref={requestStageRef} className="request-stage" />
+      </ui-dialog>
     </ui-shell>
   );
 }

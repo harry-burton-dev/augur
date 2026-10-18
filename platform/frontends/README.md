@@ -13,7 +13,16 @@ Product apps keep their own frontends under `apps/<app>/frontend`.
 1. The registry's manifest lists each app with a `route` and an `entry` URL.
 2. The shell matches the URL to the longest route prefix and imports the app's `entry` with the browser's own dynamic `import()`.
 3. The module default-exports a `MicroFrontend` (`defineMicroFrontend` from `@platform/mfe-sdk`). The shell calls `mount(el, ctx)` on a fresh element, and calls `unmount(el)` before the next app opens.
-4. An app asks for anything outside itself through `ctx`: `raise(intent)` to open whichever app handles it, `notify()` for the Shell's stream, `bus` for events, `getToken()` for gateway calls.
+4. An app asks for anything outside itself through `ctx`: `raise(intent)` to open whichever app handles it, `request(intent)` to ask that app for an answer, `notify()` for the Shell's stream, `bus` for events, `getToken()` for gateway calls.
+
+## Apps asking each other
+
+Apps never import or call each other. They speak in intents, a `type` such as `colour.pick` plus a payload, and an app lists the intent types it answers in its manifest's `handles`. The shell picks the app from the person's role-filtered manifest, so nobody is sent to an app they can't open.
+
+- `ctx.raise(intent)` opens the handling app as a page, with the intent in its `ctx.intent`.
+- `ctx.request(intent)` opens the handling app over the current one, in a dialog, with `ctx.reply` set. The handler calls `ctx.reply.respond(result)` and the asker's promise resolves with that result. If the person closes the dialog, the promise rejects with an error that `isIntentCancelled(err)` recognises; if no app handles the intent, it rejects with an `IntentError` saying so. One request is open at a time.
+
+`apps/sample-board` and `apps/sample-palette` show both sides.
 
 Each app bundles what it uses for now, the UI kit included (its elements register only once, so two apps sharing it is safe). Sharing dependencies through Module Federation or an import map is a later optimisation and doesn't change the contract.
 
@@ -26,4 +35,4 @@ pnpm --filter @platform/gateway dev                     # :8080
 pnpm --filter @platform/shell dev                       # :5173, proxies /api to the gateway
 ```
 
-In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=library=../../../apps/library/frontend/dist` adds more. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.
+In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=sample-board=../../../apps/sample-board/frontend/dist,sample-palette=../../../apps/sample-palette/frontend/dist` adds more. Apps without a service of their own are registered with `SERVICE_TOKEN=... pnpm register-app apps/sample-board/manifest.json apps/sample-palette/manifest.json`. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.
