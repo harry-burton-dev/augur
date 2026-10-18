@@ -1,0 +1,70 @@
+# Local stack. Frontends run separately with their Vite dev servers.
+name: im-platform
+
+x-service: &service
+  build:
+    context: ..
+    dockerfile: infra/service.Dockerfile
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: im
+      POSTGRES_PASSWORD: im
+      POSTGRES_DB: im
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: im
+      MINIO_ROOT_PASSWORD: im-local-only
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports: ["8180:8080"]
+
+  gateway:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { SERVICE: gateway } }
+    environment:
+      PORT: 8080
+      IDENTITY_URL: http://identity:8081
+      REGISTRY_URL: http://registry:8082
+      LIBRARY_URL: http://library:8083
+      EVENTS_URL: http://events:8084
+    ports: ["8080:8080"]
+
+  identity:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { SERVICE: identity } }
+    environment: { PORT: 8081 }
+
+  registry:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { SERVICE: registry } }
+    environment: { PORT: 8082 }
+
+  library:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { SERVICE: library } }
+    environment: { PORT: 8083 }
+
+  events:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { SERVICE: events } }
+    environment: { PORT: 8084 }
+
+volumes:
+  pgdata:
+  miniodata:
