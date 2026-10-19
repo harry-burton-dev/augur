@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.1.0
+  version: 1.2.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -49,8 +49,213 @@ paths:
           description: A field it doesn't know, or a value out of range
         "401":
           description: No signed-in caller
+  # Admin: people, departments and roles, kept in the sign-in provider (Keycloak).
+  # Every /admin path answers 403 to a caller without the admin role, and 503 when
+  # identity isn't connected to the provider. Changes are audited, never a password.
+  /admin/roles:
+    get:
+      summary: The roles an admin can give people
+      responses:
+        "200":
+          description: Roles
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Role" } }
+  /admin/people:
+    get:
+      summary: Everyone in the directory
+      responses:
+        "200":
+          description: People
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Person" } }
+    post:
+      summary: Add someone, with a one-time password they replace at first sign-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewPerson" }
+      responses:
+        "201":
+          description: Added. The password is returned once and kept nowhere it can be read again.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [person, temporaryPassword]
+                properties:
+                  person: { $ref: "#/components/schemas/Person" }
+                  temporaryPassword: { type: string }
+        "400": { description: A field is missing or wrong, or a role or department doesn't exist }
+        "409": { description: The username or email is taken }
+  /admin/people/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: One person
+      responses:
+        "200":
+          description: The person
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Person" }
+        "404": { description: No such person }
+    patch:
+      summary: Change someone's name, email, roles, departments or sign-in
+      description: >
+        Only the fields sent change. roles and departments replace the whole list.
+        An admin can't turn off their own sign-in or remove their own admin role (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonChanges" }
+      responses:
+        "200":
+          description: The person as they now are
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Person" }
+        "400": { description: A field is wrong, or a role or department doesn't exist }
+        "404": { description: No such person }
+        "409": { description: The change would lock the caller out, or the email is taken }
+  /admin/people/{id}/password:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Give someone a new one-time password
+      responses:
+        "200":
+          description: The new password, returned once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [temporaryPassword]
+                properties:
+                  temporaryPassword: { type: string }
+        "404": { description: No such person }
+  /admin/departments:
+    get:
+      summary: Every department, nested ones included
+      responses:
+        "200":
+          description: Departments
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Department" } }
+    post:
+      summary: Add a department, at the top or inside another
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 60, description: "No /" }
+                parentId: { type: string }
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Department" }
+        "400": { description: The name is empty or has a /, or the parent doesn't exist }
+        "409": { description: A department beside it already has that name }
+  /admin/departments/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    patch:
+      summary: Rename a department
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 60 }
+      responses:
+        "200":
+          description: Renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Department" }
+        "404": { description: No such department }
+        "409": { description: A department beside it already has that name }
+  /admin/departments/{id}/members/{person}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: person, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Put someone in a department
+      responses:
+        "204": { description: They're in it }
+        "404": { description: No such person or department }
+    delete:
+      summary: Take someone out of a department
+      responses:
+        "204": { description: They're out of it }
+        "404": { description: No such person or department }
 components:
   schemas:
+    Role:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    Person:
+      type: object
+      required: [id, username, firstName, lastName, enabled, invited, roles, departments]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        enabled: { type: boolean, description: False when their sign-in is turned off }
+        invited: { type: boolean, description: Still has to choose their own password }
+        roles: { type: array, items: { type: string } }
+        departments: { type: array, items: { type: string }, description: Department ids }
+        createdAt: { type: string, format: date-time }
+    NewPerson:
+      type: object
+      additionalProperties: false
+      required: [firstName, lastName, email]
+      properties:
+        username: { type: string, description: "Defaults to the part of the email before the @" }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        roles: { type: array, items: { type: string } }
+        departments: { type: array, items: { type: string } }
+    PersonChanges:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        enabled: { type: boolean }
+        roles: { type: array, items: { type: string } }
+        departments: { type: array, items: { type: string } }
+    Department:
+      type: object
+      required: [id, name, members]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        parentId: { type: string, description: The department it sits inside; absent at the top }
+        members: { type: array, items: { type: string }, description: Ids of its own members }
     Caller:
       type: object
       required: [id, name, departments, roles]

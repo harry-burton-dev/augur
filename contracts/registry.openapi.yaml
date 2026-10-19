@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.0.0
+  version: 1.1.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -13,12 +13,25 @@ paths:
       summary: Apps the caller may open
       responses:
         "200":
-          description: Manifest entries filtered by the caller's roles
+          description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AppManifestEntry" }
+  /apps:
+    get:
+      summary: The whole catalogue, for admins
+      description: Every app, the platform's own first, whether or not it is turned on.
+      responses:
+        "200":
+          description: Catalogue entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CatalogueEntry" }
+        "403": { description: Not an admin }
   /apps/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -40,6 +53,31 @@ paths:
         "400": { description: The manifest is invalid or its id does not match the path }
         "403": { description: Neither a service with the service token nor an admin }
         "409": { description: The id belongs to a platform app, or the route is taken }
+    patch:
+      summary: Turn an app on or off (admins only)
+      description: >
+        An app that is off stays registered, keeps its id and route, and stays off
+        when its service registers it again; nobody is offered it in the manifest.
+        Audited as app.enabled or app.disabled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: The app as it now is
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogueEntry" }
+        "403": { description: Not an admin }
+        "404": { description: No such app }
+        "409": { description: A platform app, which is always on }
     delete:
       summary: Remove an app (admins only)
       responses:
@@ -48,6 +86,17 @@ paths:
         "404": { description: No such app }
 components:
   schemas:
+    CatalogueEntry:
+      allOf:
+        - $ref: "#/components/schemas/AppManifestEntry"
+        - type: object
+          required: [platform, enabled]
+          properties:
+            platform: { type: boolean, description: Ships with the platform and is always on }
+            enabled: { type: boolean }
+            registeredBy: { type: string, description: The service or admin that last registered it }
+            registeredAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
     AppManifestEntry:
       type: object
       required: [id, name, route, entry, version, sdk]

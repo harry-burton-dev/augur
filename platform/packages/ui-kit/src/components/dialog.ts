@@ -175,6 +175,10 @@ export class UiDialog extends LitElement {
         width: min(var(--measure-decision), calc(100% - 2 * var(--edge)));
         max-width: none;
         margin: max(var(--space-6), calc(46vh - 180px)) auto var(--space-6);
+        /* A long form scrolls inside the dialog rather than running off the bottom of the screen. */
+        max-height: calc(100dvh - max(var(--space-6), calc(46vh - 180px)) - var(--space-6));
+        overflow: auto;
+        overscroll-behavior: contain;
         padding: var(--space-5);
         border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
         border-radius: var(--radius-card);
@@ -185,6 +189,7 @@ export class UiDialog extends LitElement {
         font-family: var(--font-sans);
       }
       dialog[open] { display: flex; flex-direction: column; gap: var(--space-4); animation: rise var(--motion-slow) var(--ease-out); }
+      dialog > * { flex-shrink: 0; }
       :host([size='glance']) dialog { width: min(var(--measure-glance), calc(100% - 2 * var(--edge))); }
       :host([size='read']) dialog { width: min(var(--measure-read), calc(100% - 2 * var(--edge))); }
       dialog::backdrop {

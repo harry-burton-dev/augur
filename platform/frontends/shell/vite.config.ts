@@ -11,6 +11,7 @@ import { defineConfig, type Plugin } from 'vite';
  */
 const appDirs: Record<string, string> = {
   home: fileURLToPath(new URL('../home/dist', import.meta.url)),
+  admin: fileURLToPath(new URL('../admin/dist', import.meta.url)),
   ...Object.fromEntries(
     (process.env.APP_DIST ?? '')
       .split(',')

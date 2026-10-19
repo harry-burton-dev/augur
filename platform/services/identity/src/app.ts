@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
-import { callerFromHeaders, health, packageVersion } from '@platform/service-kit';
+import { callerFromHeaders, health, packageVersion, recordAudit, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
+import { adminRoutes } from './admin.ts';
+import type { Directory } from './directory.ts';
 import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
@@ -20,15 +22,23 @@ export const preferencesSchema = {
 
 export interface IdentityOptions {
   store?: PreferenceStore;
+  /** Where people and departments are kept. Without it the admin API answers 503. */
+  directory?: Directory;
+  /** Where admins' changes are recorded. Without it nothing is audited. */
+  audit?: (entry: NewAuditEntry) => Promise<void>;
 }
+
+/** Records audit entries with the events service, as identity. */
+export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry) =>
+  recordAudit({ eventsUrl, credentials, entry });
 
 /**
  * Who people are. Sign-in itself is the OIDC provider's job (Keycloak locally);
  * this service answers "who am I" for the shell, keeps what each person has
- * chosen for it, and, later, holds the directory of people and departments the
- * provider does not.
+ * chosen for it, and lets admins manage people and departments in the provider
+ * (see admin.ts), so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore() }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), directory, audit }: IdentityOptions = {}) => {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test', ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('identity', version, API_VERSION));
 
@@ -47,6 +57,8 @@ export const buildApp = async ({ store = new MemoryPreferenceStore() }: Identity
         await store.put(callerFromHeaders(req.headers)!.id, req.body);
         return req.body;
       });
+
+      await app.register(adminRoutes({ directory, audit }), { prefix: '/admin' });
     },
     { prefix: `/${API_VERSION}` },
   );

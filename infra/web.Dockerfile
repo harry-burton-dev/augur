@@ -8,10 +8,11 @@ COPY . .
 # A path: the shell signs in against Keycloak on whatever address it is served from.
 ENV VITE_OIDC_AUTHORITY=/sso/realms/platform
 RUN pnpm install --frozen-lockfile \
- && pnpm --filter "@platform/shell..." --filter "@platform/home..." --filter "./apps/sample-*/frontend..." build \
+ && pnpm --filter "@platform/shell..." --filter "@platform/home..." --filter "@platform/admin..." --filter "./apps/sample-*/frontend..." build \
  && mkdir -p /site/apps \
  && cp -r platform/frontends/shell/dist/. /site/ \
  && cp -r platform/frontends/home/dist /site/apps/home \
+ && cp -r platform/frontends/admin/dist /site/apps/admin \
  && cp -r apps/sample-board/frontend/dist /site/apps/sample-board \
  && cp -r apps/sample-palette/frontend/dist /site/apps/sample-palette
 

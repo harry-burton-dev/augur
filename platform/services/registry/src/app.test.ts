@@ -20,12 +20,36 @@ describe('registry', () => {
     const app = await buildApp({ serviceToken: 'local-secret' });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, requiredRole: 'admin' } });
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).toEqual(['home']);
-    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'library']);
+    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'admin', 'library']);
   });
 
-  it('leaves out platform apps that have not shipped, while keeping their routes', async () => {
+  it('offers Admin, with its menu, to admins only', async () => {
     const app = await buildApp();
-    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('admin');
+    const forAdmin = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json();
+    expect(ids(forAdmin)).toContain('admin');
+    expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Apps']);
+    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).not.toContain('admin');
+  });
+
+  it('shows admins the whole catalogue, and lets them turn an app off and on', async () => {
+    const entries: { action: string }[] = [];
+    const app = await buildApp({ serviceToken: 'local-secret', audit: async (e) => void entries.push(e) });
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    const patch = (enabled: boolean, headers = admin, id = 'library') => app.inject({ method: 'PATCH', url: `/v1/apps/${id}`, headers, payload: { enabled } });
+    expect((await patch(false, editor)).statusCode).toBe(403);
+    expect((await patch(false)).json()).toMatchObject({ id: 'library', enabled: false, registeredBy: 'library' });
+    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('library');
+    // Registering again (as the app's service does on every start) leaves it off.
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
+    const catalogue = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json();
+    expect(catalogue).toContainEqual(expect.objectContaining({ id: 'library', version: '0.2.0', enabled: false, platform: false }));
+    expect(catalogue).toContainEqual(expect.objectContaining({ id: 'admin', platform: true, enabled: true }));
+    expect((await app.inject({ method: 'GET', url: '/v1/apps', headers: editor })).statusCode).toBe(403);
+    await patch(true);
+    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).toContain('library');
+    expect((await patch(false, admin, 'admin')).statusCode).toBe(409);
+    expect((await patch(false, admin, 'nothing')).statusCode).toBe(404);
+    expect(entries.map((e) => e.action)).toEqual(['app.registered', 'app.disabled', 'app.updated', 'app.enabled']);
   });
 
   it('lets an app’s service register it with the service token', async () => {

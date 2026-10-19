@@ -18,6 +18,18 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.list()).toEqual([{ ...library, version: '0.2.0' }]);
   });
 
+  it('turns apps off and on, and keeps them off when they register again', async () => {
+    await store.put(library, 'service');
+    expect(await store.setEnabled('library', false)).toBe(true);
+    await store.put({ ...library, version: '0.2.0' }, 'library');
+    const [record] = await store.records();
+    expect(record).toMatchObject({ entry: { version: '0.2.0' }, enabled: false, registeredBy: 'library' });
+    expect(Date.parse(record.registeredAt)).not.toBeNaN();
+    expect(await store.setEnabled('library', true)).toBe(true);
+    expect((await store.records())[0].enabled).toBe(true);
+    expect(await store.setEnabled('nothing', false)).toBe(false);
+  });
+
   it('removes apps', async () => {
     await store.put(library, 'service');
     expect(await store.remove('library')).toBe(true);
@@ -53,7 +65,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id)).toEqual(['001_apps']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

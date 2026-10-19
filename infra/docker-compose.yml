@@ -67,7 +67,12 @@ services:
     environment:
       PORT: 8081
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
-    depends_on: [postgres]
+      # Admin's people and departments: identity manages them in Keycloak's platform realm.
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      <<: *internal
+    depends_on: [postgres, keycloak]
 
   registry:
     <<: *service

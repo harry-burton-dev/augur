@@ -4,7 +4,7 @@
 | --- | --- |
 | `shell/` | The host (`@platform/shell`, React + Vite). Wraps the UI kit's `ui-shell`, loads the role-filtered manifest from the registry through the gateway, mounts the app the URL points at into the Shell's stage, routes intents to the app that handles them, and turns `ctx.notify()` into notifications on the Shell's stream. |
 | `home/` | Home (`@platform/home`, at `/home`): what needs you. Built as one ES module at `dist/entry.js`. |
-| `admin/` | People, departments and apps (to come). |
+| `admin/` | Admin (`@platform/admin`, at `/admin`, admins only): people, departments and apps. Its screens call identity's `/v1/admin/*` and the registry's `/v1/apps` through the gateway, never Keycloak. |
 
 Product apps keep their own frontends under `apps/<app>/frontend`.
 
@@ -38,7 +38,7 @@ Item paths can't be `/`, since that's the Orbit itself. The water follows the sc
 - **Settings and Away** save to the person's account (`GET`/`PUT /api/identity/v1/me/preferences`) a moment after each change, and come back in any browser. Reduce motion sets `data-motion="reduce"` on `<html>`, which holds the water and menus still and zeroes the motion tokens; Compact sets `data-density="compact"`, which brings the larger spacing steps down a notch.
 - **Recent apps** are saved the same way, so Apps lists the current app, then the last few opened, then the rest.
 - **Find** searches apps, notifications and every page an app's `menu` offers (`findPages` in `src/host/menus.ts`); choosing a page opens it. Apps' own content joins once apps can answer searches.
-- **Agents** and **Switch workspace** are off for the alpha (`alphaFunctions` and `canSwitchWorkspace` in `App.tsx`) until they are designed. Platform apps that haven't shipped, like Admin, are left out of the manifest (`unbuiltApps` in the registry).
+- **Agents** and **Switch workspace** are off for the alpha (`alphaFunctions` and `canSwitchWorkspace` in `App.tsx`) until they are designed. A platform app that hasn't shipped is left out of the manifest by listing it in `unbuiltApps` in the registry; apps an admin turns off in Admin are left out too.
 
 ## Apps asking each other
 
@@ -54,7 +54,7 @@ Each app bundles what it uses for now, the UI kit included (its elements registe
 ## Running it locally
 
 ```sh
-pnpm --filter @platform/home build                      # the app the shell will mount
+pnpm --filter @platform/home --filter @platform/admin build   # the apps the shell will mount
 pnpm --filter @platform/registry dev                    # :8082
 pnpm --filter @platform/gateway dev                     # :8080
 pnpm --filter @platform/shell dev                       # :5173, proxies /api to the gateway
