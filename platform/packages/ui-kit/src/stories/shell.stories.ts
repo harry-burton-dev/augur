@@ -41,6 +41,7 @@ const shell = (opts: { notes?: ShellNotification[]; online?: boolean; view?: str
       .notifications=${opts.notes ?? notifications}
       .agents=${agents}
       .online=${opts.online ?? true}
+      version="0.3.0 · SDK 1.0.0"
       @ui-open-app=${(e: CustomEvent) => console.info('open app', e.detail.id)}
     >
       <div style="padding:var(--space-6) var(--edge);max-width:var(--measure-wide);margin:0 auto">

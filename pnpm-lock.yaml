@@ -40,56 +40,6 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
 
-  apps/sample-board/frontend:
-    dependencies:
-      '@platform/mfe-sdk':
-        specifier: workspace:*
-        version: link:../../../platform/packages/mfe-sdk
-      '@platform/ui-kit':
-        specifier: workspace:*
-        version: link:../../../platform/packages/ui-kit
-      lit:
-        specifier: ^3.3.0
-        version: 3.3.3
-    devDependencies:
-      happy-dom:
-        specifier: ^20.0.0
-        version: 20.14.6
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vite:
-        specifier: ^7.3.7
-        version: 7.3.7(@types/node@22.20.5)
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
-
-  apps/sample-palette/frontend:
-    dependencies:
-      '@platform/mfe-sdk':
-        specifier: workspace:*
-        version: link:../../../platform/packages/mfe-sdk
-      '@platform/ui-kit':
-        specifier: workspace:*
-        version: link:../../../platform/packages/ui-kit
-      lit:
-        specifier: ^3.3.0
-        version: 3.3.3
-    devDependencies:
-      happy-dom:
-        specifier: ^20.0.0
-        version: 20.14.6
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vite:
-        specifier: ^7.3.7
-        version: 7.3.7(@types/node@22.20.5)
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
-
   platform/frontends/admin:
     dependencies:
       '@platform/mfe-sdk':

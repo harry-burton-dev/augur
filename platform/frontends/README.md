@@ -20,13 +20,13 @@ Product apps keep their own frontends under `apps/<app>/frontend`.
 The shell's own navigation is the design system's centre menu, over the water.
 
 - `/` is **Title**: every app the person can open is a chapter. A chapter's items are the app's menu categories, or the app itself when it has no menu. Enter opens it.
-- An app's root is its **Orbit** when its manifest has a `menu`: categories on a ring, each item opening the app at its `path` (for example `/board/labels`). An app without a menu opens straight away.
+- An app's root is its **Orbit** when its manifest has a `menu`: categories on a ring, each item opening the app at its `path` (for example `/library/drafts`). An app without a menu opens straight away.
 - **Esc goes back a step:** from inside an app to its Orbit, from Orbit (or an app with no menu) to Title. It only does so when nothing else used the Esc, so a component that handles Esc itself (an armed button, a filter, a dialog) calls `preventDefault()`.
 
 ```json
 "menu": [
-  { "label": "Labels", "icon": "star", "items": [
-    { "label": "All labels", "icon": "star", "path": "/labels", "detail": "Colours from Palette" }
+  { "label": "Documents", "icon": "document", "items": [
+    { "label": "Drafts", "icon": "document", "path": "/drafts", "detail": "Not published yet" }
   ] }
 ]
 ```
@@ -47,7 +47,7 @@ Apps never import or call each other. They speak in intents, a `type` such as `c
 - `ctx.raise(intent)` opens the handling app as a page, with the intent in its `ctx.intent`.
 - `ctx.request(intent)` opens the handling app over the current one, in a dialog, with `ctx.reply` set. The handler calls `ctx.reply.respond(result)` and the asker's promise resolves with that result. If the person closes the dialog, the promise rejects with an error that `isIntentCancelled(err)` recognises; if no app handles the intent, it rejects with an `IntentError` saying so. One request is open at a time.
 
-`apps/sample-board` and `apps/sample-palette` show both sides.
+`src/host/requests.test.ts` shows both sides.
 
 Each app bundles what it uses for now, the UI kit included (its elements register only once, so two apps sharing it is safe). Sharing dependencies through Module Federation or an import map is a later optimisation and doesn't change the contract.
 
@@ -60,4 +60,4 @@ pnpm --filter @platform/gateway dev                     # :8080
 pnpm --filter @platform/shell dev                       # :5173, proxies /api to the gateway
 ```
 
-In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=sample-board=../../../apps/sample-board/frontend/dist,sample-palette=../../../apps/sample-palette/frontend/dist` adds more. Apps without a service of their own are registered with `SERVICE_TOKEN=... pnpm register-app apps/sample-board/manifest.json apps/sample-palette/manifest.json`. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.
+In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=<id>=<dir>,…` adds more. Apps without a service of their own are registered with `SERVICE_TOKEN=... pnpm register-app apps/<app>/manifest.json`. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.

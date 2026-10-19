@@ -1,4 +1,4 @@
-import { createEventBus, type AppManifestEntry, type Intent, type IntentReply, type MountContext } from '@platform/mfe-sdk';
+import { createEventBus, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext } from '@platform/mfe-sdk';
 import { defaultFunctions, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@platform/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -335,6 +335,7 @@ export function Host({
     shell.workspace = session.workspace;
     shell.functions = alphaFunctions;
     shell.canSwitchWorkspace = false;
+    shell.version = `${__SHELL_VERSION__} · SDK ${SDK_VERSION}`;
   }, [manifest, session]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.

@@ -1,6 +1,5 @@
-// Registers apps that have no service of their own (frontend-only apps, like the
-// samples) by putting their manifest.json to the registry as a service would.
-//   REGISTRY_URL=http://localhost:8082 SERVICE_TOKEN=... node scripts/register-app.mjs apps/sample-palette/manifest.json [...]
+// Registers apps that have no service of their own (frontend-only apps) by putting their manifest.json to the registry as a service would.
+//   REGISTRY_URL=http://localhost:8082 SERVICE_TOKEN=... node scripts/register-app.mjs apps/<app>/manifest.json [...]
 import { readFileSync } from 'node:fs';
 
 const { REGISTRY_URL = 'http://localhost:8082', SERVICE_TOKEN } = process.env;

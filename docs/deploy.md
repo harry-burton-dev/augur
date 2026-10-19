@@ -47,15 +47,34 @@ Check on it with `docker compose -f infra/deploy/compose.yml ps` and `... logs -
 
 To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'`.
 
-- **Update**: `git pull && pc up -d --build`. Services migrate their own database schemas on start.
+- **Update**: `git pull && pc up -d --build --remove-orphans`. Services migrate their own database schemas on start.
 - **Add people**: open **Admin** (admins see it in Apps and on Title). **People** adds someone and gives you a one-time password to pass on; they choose their own when they first sign in. The same screen changes roles and departments, turns someone's sign-in off, and makes a new one-time password. **Departments** adds, renames and fills departments (one can sit inside another), and **Apps** turns an app off without removing it. Every change is in the audit log. Identity does this in Keycloak as `KEYCLOAK_ADMIN_USER`, so Keycloak's own console (`PLATFORM_URL/sso/admin`) is only needed for realm settings.
-- **Back up**: `pc exec postgres pg_dumpall -U platform > backup.sql`. Everything lives in Postgres: the platform's data, people's preferences, and Keycloak's users.
+- **Backups** happen on their own (below).
+- **Remove an app** from the catalogue (Admin's **Apps** screen only turns one off) (for example the old samples, `sample-board` and `sample-palette`):
+  ```sh
+  pc exec registry node -e "fetch('http://localhost:8082/v1/apps/' + process.argv[1], { method: 'DELETE', headers: { 'x-user-id': 'server-admin', 'x-user-name': 'Server admin', 'x-user-roles': 'admin' } }).then((r) => console.log(r.status))" sample-board
+  ```
+  `204` means it's gone. Removing it is recorded in the audit log.
 - **Stop**: `pc down`. Data stays in the `pgdata` volume; `pc down -v` deletes it.
+
+## Backups
+
+The `backup` container dumps the whole database every night at 02:00 UTC into `infra/deploy/backups/`, as `platform-YYYY-MM-DD.sql.gz`, and keeps the last 14 days. It also takes one when it first starts. Everything lives in that dump: the platform's data, people's preferences, and Keycloak's users. Change the time or how long to keep them with `BACKUP_HOUR_UTC` and `BACKUP_KEEP_DAYS` in `.env`.
+
+The backups sit on the same disk as the database, so copy `infra/deploy/backups/` somewhere else now and then (another machine, or cloud storage).
+
+- **Take one now**: `pc exec backup /bin/sh /backup/backup.sh --once` (it skips a day that already has one; delete today's file first to force it).
+- **Restore**: stop everything but Postgres, load the dump, then start again. The dump drops and recreates each database itself.
+  ```sh
+  pc stop tailscale web gateway identity registry events keycloak backup
+  gunzip -c infra/deploy/backups/platform-2026-10-18.sql.gz | pc exec -T postgres psql -U platform -d postgres
+  pc up -d
+  ```
 
 ## What's in it
 
 - **Platform services**: identity, registry, events and the gateway. Only the gateway is reachable, and only through `/api`. Services talk to each other on the compose network with `SERVICE_TOKEN`.
-- **Apps**: Home, plus the two sample apps (Board and Palette). The samples are registered by the `register-samples` job, which exits once that's done. The Library app isn't deployed while it's paused.
+- **Apps**: Home. The Library app isn't deployed while it's paused.
 - **Sign-in**: Keycloak, imported on first start from `infra/deploy/keycloak/platform-realm.json`, with no test users. Keycloak reads that file only once. If you change `PLATFORM_URL` later, update the **shell** client's redirect URIs and web origins in the admin console.
 
 ## If something's wrong

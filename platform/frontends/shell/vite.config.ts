@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
@@ -39,8 +39,12 @@ const serveApps = (): Plugin => ({
   },
 });
 
+/** The shell's release, from its package.json, shown in Settings. */
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
 export default defineConfig({
   plugins: [react(), serveApps()],
+  define: { __SHELL_VERSION__: JSON.stringify(version) },
   server: {
     port: 5173,
     proxy: { '/api': process.env.GATEWAY_URL ?? 'http://localhost:8080' },
