@@ -130,14 +130,6 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/events" } }
     environment: { <<: *env, PORT: 8084 }
 
-  # Registers the sample apps once the registry is up, then exits.
-  register-samples:
-    build: { context: ../.., dockerfile: infra/web.Dockerfile, target: register }
-    restart: on-failure
-    environment:
-      REGISTRY_URL: http://registry:8082
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
-    depends_on: [registry]
 
 volumes:
   pgdata:

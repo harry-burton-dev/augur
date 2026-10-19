@@ -23,4 +23,3 @@ An app's service tells people something with `notify` from `@platform/service-ki
 | App | What it is |
 | --- | --- |
 | `library/` | The first app (name to be decided): document libraries that users and departments publish for internal distribution, with a readable reader view. |
-| `sample-board/`, `sample-palette/` | Samples, not product apps. Board asks for a colour with the `colour.pick` intent and Palette answers it; neither knows the other exists. Frontend only, so they are registered with `pnpm register-app`. |
