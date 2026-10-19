@@ -49,13 +49,27 @@ To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml -
 
 - **Update**: `git pull && pc up -d --build --remove-orphans`. Services migrate their own database schemas on start.
 - **Add people**: Keycloak's admin console is at `PLATFORM_URL/sso/admin`. Sign in as `KEYCLOAK_ADMIN_USER` (default `keycloak-admin`), switch to the **platform** realm, and add users under **Users**. Give someone the realm role `admin` to make them an admin. Their **Groups** are their departments. The Admin app will do this later.
-- **Back up**: `pc exec postgres pg_dumpall -U platform > backup.sql`. Everything lives in Postgres: the platform's data, people's preferences, and Keycloak's users.
+- **Backups** happen on their own (below).
 - **Remove an app** from the catalogue (for example the old samples, `sample-board` and `sample-palette`):
   ```sh
   pc exec registry node -e "fetch('http://localhost:8082/v1/apps/' + process.argv[1], { method: 'DELETE', headers: { 'x-user-id': 'server-admin', 'x-user-name': 'Server admin', 'x-user-roles': 'admin' } }).then((r) => console.log(r.status))" sample-board
   ```
   `204` means it's gone. Removing it is recorded in the audit log.
 - **Stop**: `pc down`. Data stays in the `pgdata` volume; `pc down -v` deletes it.
+
+## Backups
+
+The `backup` container dumps the whole database every night at 02:00 UTC into `infra/deploy/backups/`, as `platform-YYYY-MM-DD.sql.gz`, and keeps the last 14 days. It also takes one when it first starts. Everything lives in that dump: the platform's data, people's preferences, and Keycloak's users. Change the time or how long to keep them with `BACKUP_HOUR_UTC` and `BACKUP_KEEP_DAYS` in `.env`.
+
+The backups sit on the same disk as the database, so copy `infra/deploy/backups/` somewhere else now and then (another machine, or cloud storage).
+
+- **Take one now**: `pc exec backup /bin/sh /backup/backup.sh --once` (it skips a day that already has one; delete today's file first to force it).
+- **Restore**: stop everything but Postgres, load the dump, then start again. The dump drops and recreates each database itself.
+  ```sh
+  pc stop tailscale web gateway identity registry events keycloak backup
+  gunzip -c infra/deploy/backups/platform-2026-10-18.sql.gz | pc exec -T postgres psql -U platform -d postgres
+  pc up -d
+  ```
 
 ## What's in it
 
