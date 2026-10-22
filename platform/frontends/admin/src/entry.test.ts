@@ -2,9 +2,10 @@ import { createEventBus, type MountContext } from '@platform/mfe-sdk';
 import type { UiDialog, UiTable, UiToggle } from '@platform/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
-import { AdminApi, departmentPath, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
+import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
 import { appStatus } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
+import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
 
 const finance: Department = { id: 'd-1', name: 'Finance', members: ['u-1'] };
@@ -50,6 +51,7 @@ describe('admin', () => {
     expect(screenFor('/departments/new')).toEqual({ screen: 'departments', adding: true });
     expect(screenFor('/apps')).toEqual({ screen: 'apps', adding: false });
     expect(screenFor('/status')).toEqual({ screen: 'status', adding: false });
+    expect(screenFor('/activity')).toEqual({ screen: 'activity', adding: false });
     expect(screenFor('/')).toEqual({ screen: 'people', adding: false });
   });
 
@@ -151,6 +153,53 @@ describe('admin', () => {
       const dialog = el.querySelector('ui-dialog')!;
       expect(dialog.getAttribute('summary')).toBe('It can’t be reached.');
       expect(dialog.textContent).toContain('People can’t use library while its service is down');
+      el.remove();
+    });
+  });
+
+  describe('Activity', () => {
+    const names = namesFrom([alex, sam], [finance, payroll], [{ id: 'library', name: 'Library' } as CatalogueApp]);
+    const entry = (action: string, extra: Partial<AuditEntry> = {}): AuditEntry => ({ id: '1', at: '2026-10-22T10:00:00.000Z', actor: { id: 'u-1', kind: 'user' }, app: 'identity', action, ...extra });
+
+    it('writes each change as a sentence with people’s, departments’ and apps’ names', () => {
+      expect(sentence(entry('department.member-added', { target: 'd-1', detail: { person: 'u-2' } }), names)).toBe('Alex Rivera added Sam Okafor to Finance');
+      expect(sentence(entry('person.updated', { target: 'u-2', detail: { roles: { from: [], to: ['admin'] }, firstName: {}, lastName: {} } }), names)).toBe('Alex Rivera changed Sam Okafor’s roles and name');
+      expect(sentence(entry('person.disabled', { target: 'u-2' }), names)).toBe('Alex Rivera turned off Sam Okafor’s sign-in');
+      expect(sentence(entry('app.registered', { app: 'registry', actor: { id: 'library', kind: 'service' }, target: 'library', detail: { version: '0.2.0' } }), names)).toBe('Library was registered, version 0.2.0');
+      expect(sentence(entry('app.disabled', { app: 'registry', target: 'library' }), names)).toBe('Alex Rivera turned Library off');
+      expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
+    });
+
+    it('turns a period into a time range', () => {
+      const now = new Date(2026, 9, 22, 15, 30);
+      expect(rangeFor('today', now)).toEqual({ since: new Date(2026, 9, 22).toISOString() });
+      expect(rangeFor('week', now)).toEqual({ since: new Date(2026, 9, 16).toISOString() });
+      expect(rangeFor('all', now)).toEqual({});
+      expect(rangeFor('custom', now, '2026-10-01', '2026-10-02')).toEqual({ since: new Date(2026, 9, 1).toISOString(), until: new Date(2026, 9, 3).toISOString() });
+      expect(rangeFor('custom', now, 'nonsense', '')).toEqual({});
+    });
+
+    it('asks for the last week, then pages to older changes from the oldest shown', async () => {
+      const page = (from: number, n: number) => Array.from({ length: n }, (_, i) => entry('person.password-reset', { id: String(from - i), target: 'u-2' }));
+      const urls: string[] = [];
+      const fetchImpl = vi.fn(async (url: string) => {
+        urls.push(url);
+        const body = url.includes('/audit') ? (url.includes('before=') ? page(50, 3) : page(100, 50)) : [];
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+      const el = document.createElement('admin-activity') as AdminActivity;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.entries).toHaveLength(50));
+      const first = new URL(urls.find((u) => u.includes('/audit'))!, 'http://x');
+      expect(first.pathname).toBe('/api/events/v1/audit');
+      expect(first.searchParams.get('limit')).toBe('50');
+      expect(first.searchParams.get('since')).toBeTruthy();
+      expect(el.more).toBe(true);
+      await el.loadOlder();
+      expect(urls.at(-1)).toContain('before=51');
+      expect(el.entries).toHaveLength(53);
+      expect(el.more).toBe(false);
       el.remove();
     });
   });

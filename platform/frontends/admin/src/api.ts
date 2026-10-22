@@ -48,6 +48,27 @@ export interface ComponentStatus {
   problem?: string;
 }
 
+/** One entry in the audit log (see contracts/events.openapi.yaml). */
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actor: { id: string; kind: 'user' | 'service' };
+  app: string;
+  action: string;
+  target?: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface AuditQuery {
+  actor?: string;
+  app?: string;
+  since?: string;
+  until?: string;
+  /** The id of the oldest entry already shown. */
+  before?: string;
+  limit: number;
+}
+
 export interface NewPerson {
   firstName: string;
   lastName: string;
@@ -61,7 +82,7 @@ export type PersonChanges = Partial<Pick<Person, 'firstName' | 'lastName' | 'ema
 
 /**
  * Admin's calls, all through the gateway: people and departments to identity
- * (which talks to the sign-in service), apps to the registry, status to the gateway itself. The browser never
+ * (which talks to the sign-in service), apps to the registry, activity to events, status to the gateway itself. The browser never
  * calls the sign-in service's admin API itself.
  */
 export class AdminApi {
@@ -107,6 +128,9 @@ export class AdminApi {
 
   apps = () => this.call<CatalogueApp[]>('GET', '/api/registry/v1/apps');
   setAppEnabled = (id: string, enabled: boolean) => this.call<CatalogueApp>('PATCH', `/api/registry/v1/apps/${encodeURIComponent(id)}`, { enabled });
+
+  audit = (query: AuditQuery) =>
+    this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);
 
   status = async () => (await this.call<{ components: ComponentStatus[] }>('GET', '/api/gateway/v1/status')).components;
 }

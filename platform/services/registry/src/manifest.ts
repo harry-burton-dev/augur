@@ -50,7 +50,7 @@ export const platformApps: AppEntry[] = [
     version: '0.1.0',
     sdk: '^1.0.0',
     icon: 'admin',
-    description: 'People, departments, apps and status',
+    description: 'People, departments, apps, status and activity',
     requiredRole: 'admin',
     menu: [
       {
@@ -77,7 +77,10 @@ export const platformApps: AppEntry[] = [
       {
         label: 'Platform',
         icon: 'pulse',
-        items: [{ label: 'Status', icon: 'pulse', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' }],
+        items: [
+          { label: 'Status', icon: 'pulse', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },
+          { label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' },
+        ],
       },
     ],
   },
