@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.2.0
+  version: 1.3.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -49,7 +49,27 @@ paths:
           description: A field it doesn't know, or a value out of range
         "401":
           description: No signed-in caller
-  # Admin: people, departments and roles, kept in the sign-in provider (Keycloak).
+  /me/workspaces:
+    get:
+      summary: Every floor the caller can stand on
+      description: >
+        Their own floor (made the first time they ask), the org, each team they
+        are on, and every team above those. Being on a team doesn't put you on
+        the teams below it. Ordered own floor, org, then teams in tree order.
+      responses:
+        "200":
+          description: The caller's floors
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspaces]
+                properties:
+                  workspaces: { type: array, items: { $ref: "#/components/schemas/Floor" } }
+        "401":
+          description: No signed-in caller
+  # Admin: people and roles, kept in the sign-in provider (Keycloak), and departments,
+  # which are identity's own teams (copied in once from the provider's groups).
   # Every /admin path answers 403 to a caller without the admin role, and 503 when
   # identity isn't connected to the provider. Changes are audited, never a password.
   /admin/roles:
@@ -165,7 +185,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Department" }
-        "400": { description: The name is empty or has a /, or the parent doesn't exist }
+        "400": { description: "The name is empty or has a /, the parent doesn't exist, or it would sit more than 5 deep" }
         "409": { description: A department beside it already has that name }
   /admin/departments/{id}:
     parameters:
@@ -206,6 +226,28 @@ paths:
         "404": { description: No such person or department }
 components:
   schemas:
+    WorkspaceRef:
+      type: object
+      required: [id, kind, name, slug]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [personal, team, org] }
+        name: { type: string, description: '"You" for your own floor' }
+        slug: { type: string, description: 'The word in links, /@finance/…; your own floor is always "me"' }
+    Floor:
+      allOf:
+        - { $ref: "#/components/schemas/WorkspaceRef" }
+        - type: object
+          required: [path, role, direct]
+          properties:
+            path:
+              type: array
+              description: From the org down to this floor, itself included. Your own floor is alone on its path.
+              items: { $ref: "#/components/schemas/WorkspaceRef" }
+            role: { type: string, enum: [member, lead], description: "lead on your own floor and on teams you lead" }
+            direct:
+              type: boolean
+              description: False when you're on it only through a team below it
     Role:
       type: object
       required: [name]

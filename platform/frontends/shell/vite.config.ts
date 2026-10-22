@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isSharedModule } from '@platform/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
@@ -39,11 +40,36 @@ const serveApps = (): Plugin => ({
   },
 });
 
+/**
+ * The kit and Lit come from public/shared (built by vite.shared.config.ts),
+ * named in an import map at the top of index.html. The shell's own imports of
+ * them resolve to those same files, so the shell and every app share one copy.
+ */
+const sharedModulesMap = (): Plugin => {
+  const read = () => {
+    const file = fileURLToPath(new URL('./public/shared/importmap.json', import.meta.url));
+    if (!existsSync(file)) throw new Error('public/shared is missing: run `pnpm --filter @platform/shell build:shared` first.');
+    return JSON.parse(readFileSync(file, 'utf8')) as { imports: Record<string, string> };
+  };
+  return {
+    name: 'shared-modules',
+    enforce: 'pre',
+    config: (_config, { command }) => (command === 'build' ? { build: { rollupOptions: { external: isSharedModule } } } : {}),
+    // In dev, point the shell's own imports at the served files rather than Vite's copies.
+    resolveId(id) {
+      if (this.environment.mode === 'dev' && isSharedModule(id)) return { id: read().imports[id], external: true };
+    },
+    transformIndexHtml: () => [
+      { tag: 'script', attrs: { type: 'importmap' }, children: JSON.stringify(read()), injectTo: 'head-prepend' },
+    ],
+  };
+};
+
 /** The shell's release, from its package.json, shown in Settings. */
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 export default defineConfig({
-  plugins: [react(), serveApps()],
+  plugins: [sharedModulesMap(), react(), serveApps()],
   define: { __SHELL_VERSION__: JSON.stringify(version) },
   server: {
     port: 5173,

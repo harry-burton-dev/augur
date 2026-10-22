@@ -127,10 +127,13 @@ services:
     environment:
       <<: *env
       PORT: 8081
-      # Admin's people and departments screens: identity manages them in Keycloak as its admin.
+      # Admin's People screen: identity manages people in Keycloak as its admin. Departments are
+      # identity's own teams, copied in once from Keycloak's groups.
       KEYCLOAK_URL: http://keycloak:8080/sso
       KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # What the top floor, the whole organisation, is called.
+      ORG_NAME: ${ORG_NAME:-Organisation}
 
   registry:
     <<: *service

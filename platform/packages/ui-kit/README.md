@@ -7,7 +7,7 @@ pnpm --filter @platform/ui-kit storybook        # catalogue at http://localhost:
 pnpm --filter @platform/ui-kit test
 ```
 
-Load the tokens and base styles once per page, then import components:
+Apps on the platform don't bundle the kit: the shell serves one copy for every app through an import map, so the kit follows the SDK's versioning promise ([Versioning](../../../docs/versioning.md#the-shared-kit)). Load the tokens and base styles once per page, then import components:
 
 ```ts
 import '@platform/ui-kit/tokens.css';

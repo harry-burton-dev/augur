@@ -3,6 +3,8 @@ import { callerFromHeaders, health, packageVersion, recordAudit, serviceLogging,
 import { adminRoutes } from './admin.ts';
 import type { Directory } from './directory.ts';
 import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from './store.ts';
+import { TeamDirectory } from './teams.ts';
+import { floorsFor, MemoryWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -22,7 +24,9 @@ export const preferencesSchema = {
 
 export interface IdentityOptions {
   store?: PreferenceStore;
-  /** Where people and departments are kept. Without it the admin API answers 503. */
+  /** The org, its teams and everyone's own floor. */
+  workspaces?: WorkspaceStore;
+  /** Where people are kept, and where departments were before they became teams. Without it the admin API answers 503. */
   directory?: Directory;
   /** Where admins' changes are recorded. Without it nothing is audited. */
   audit?: (entry: NewAuditEntry) => Promise<void>;
@@ -35,10 +39,12 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
 /**
  * Who people are. Sign-in itself is the OIDC provider's job (Keycloak locally);
  * this service answers "who am I" for the shell, keeps what each person has
- * chosen for it, and lets admins manage people and departments in the provider
- * (see admin.ts), so no one needs the provider's own console.
+ * chosen for it, keeps the floors people stand on (workspaces.ts), and lets
+ * admins manage people in the provider and departments as teams (admin.ts),
+ * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), directory, audit }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, audit }: IdentityOptions = {}) => {
+  const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('identity', version, API_VERSION));
 
@@ -58,7 +64,13 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), directory,
         return req.body;
       });
 
-      await app.register(adminRoutes({ directory, audit }), { prefix: '/admin' });
+      // Every floor the caller can stand on; their own is made the first time they ask.
+      app.get('/me/workspaces', async (req) => {
+        await teams?.ready();
+        return { workspaces: await floorsFor(workspaces, callerFromHeaders(req.headers)!) };
+      });
+
+      await app.register(adminRoutes({ directory: teams, audit }), { prefix: '/admin' });
     },
     { prefix: `/${API_VERSION}` },
   );

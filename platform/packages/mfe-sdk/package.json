@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "description": "The contract between the shell and micro frontends: registration, mount context, event bus and intents.",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./build": { "types": "./dist/build.d.ts", "default": "./dist/build.js" }
+  },
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
