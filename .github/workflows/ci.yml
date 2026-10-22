@@ -57,7 +57,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm create-app scaffold-check --name "Scaffold check"
-      - run: pnpm turbo run build typecheck test --filter="@apps/scaffold-check*" --filter=@platform/registry
+      - run: pnpm turbo run build --filter="@apps/scaffold-check*" --filter=@platform/registry
+      # One task at a time: on a two-core runner, tests racing builds time out on their first request.
+      - run: pnpm turbo run typecheck test --filter="@apps/scaffold-check*" --concurrency=1
       - run: pnpm check:manifest
       - run: pnpm check:boundaries
       - run: pnpm check:versions
