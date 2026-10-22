@@ -67,3 +67,31 @@ test('leaving the app unmounts it', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.referenceUnmounts ?? 0)).toBe(1);
   await expect(app(page)).toHaveCount(0);
 });
+
+/** Skips a check for frozen builds from before the SDK minor that added what it checks. */
+const since = (minor: string) => {
+  const built = /^sdk-(\d+\.\d+)$/.exec(process.env.CONTRACT_TARGET ?? '')?.[1];
+  const older = built !== undefined && built.localeCompare(minor, undefined, { numeric: true }) < 0;
+  test.skip(older, `the build from sdk-${built} predates SDK ${minor}`);
+};
+
+// SDK 1.1: the floor the app is on, and requests that name it.
+test('mounts on the person’s own floor unless the address names another', async ({ page }) => {
+  since('1.1');
+  await page.goto('/reference');
+  await expect(page).toHaveURL(/\/@me\/reference$/);
+  await expect(check(page, 'floor')).toHaveText('You (me, personal, lead) dev-me');
+  await page.goto('/@org/reference');
+  await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
+});
+
+test('fetch sends the token and the floor the app is on', async ({ page }) => {
+  since('1.1');
+  await page.route('**/api/reference/v1/floor', (route) => {
+    const h = route.request().headers();
+    return route.fulfill({ body: `${h['x-workspace-id']} ${h.authorization}` });
+  });
+  await page.goto('/@org/reference');
+  await press(page, 'fetch');
+  await expect(check(page, 'fetched')).toHaveText('dev-org Bearer dev-token');
+});

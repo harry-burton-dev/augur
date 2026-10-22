@@ -31,6 +31,7 @@ Open http://localhost:5173/expenses. This is the real shell and the real UI kit,
 Nothing else of the platform runs, so the shell stands in for it:
 
 - You are signed in as **Dev Person**, in the Development department, with the role your manifest's `requiredRole` asks for. `DEV_ROLES=admin pnpm dev:app expenses` adds roles.
+- You're on your own floor (`/@me/expenses`); `/@org/expenses` puts your app on the org's.
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
 - The catalogue is just your app. `ctx.raise` and `ctx.request` reach your app when it `handles` the intent, and otherwise fail the way they do when no app handles one.
 - Notifications from `ctx.notify` appear in the stream. Ones your service sends with `notify` from the service kit don't, because there's no events service.
@@ -63,6 +64,8 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.user` | Who is signed in: `id`, `name`, `email`, `departments`, `roles` |
 | `ctx.path` | Where in your app they are, below its route: `/reports/q3` for `/expenses/reports/q3` |
 | `ctx.getToken()` | A current token to send as `Authorization: Bearer …` to `/api/<id>/…` |
+| `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. SDK 1.1 |
+| `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on. SDK 1.1 |
 | `ctx.notify({ title, body?, needsYou? })` | A notification on the shell's stream |
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
 | `ctx.request(intent)` | Ask whichever app handles an intent for an answer; it opens over yours. Rejects with `isIntentCancelled(err)` when the person closes it |

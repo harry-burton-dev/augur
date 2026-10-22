@@ -17,7 +17,7 @@ const views = new WeakMap<HTMLElement, () => void>();
 
 export default defineMicroFrontend({
   async mount(el: HTMLElement, ctx: MountContext) {
-    const state = { token: 'waiting', answer: '', bus: '' };
+    const state = { token: 'waiting', answer: '', bus: '', fetched: '' };
     const off = ctx.bus.on<string>('reference.ping', (payload) => {
       state.bus = payload;
       draw();
@@ -33,6 +33,11 @@ export default defineMicroFrontend({
           draw();
         },
       );
+    const fetchFloor = async () => {
+      const res = await ctx.fetch('/api/reference/v1/floor');
+      state.fetched = await res.text();
+      draw();
+    };
     const draw = () =>
       render(
         html`<section data-reference style="padding:var(--space-6)">
@@ -44,6 +49,8 @@ export default defineMicroFrontend({
             <dt>Intent</dt><dd data-check="intent">${ctx.intent ? `${ctx.intent.type} ${JSON.stringify(ctx.intent.payload)}` : 'none'}</dd>
             <dt>Answer</dt><dd data-check="answer">${state.answer}</dd>
             <dt>Bus</dt><dd data-check="bus">${state.bus}</dd>
+            <dt>Floor</dt><dd data-check="floor">${ctx.workspace.name} (${ctx.workspace.slug}, ${ctx.workspace.kind}, ${ctx.workspace.role}) ${ctx.getWorkspace().id}</dd>
+            <dt>Fetched</dt><dd data-check="fetched">${state.fetched}</dd>
           </dl>
           ${ctx.reply
             ? html`<ui-button data-action="respond" @click=${() => ctx.reply!.respond({ answer: 42 })}>Answer 42</ui-button>
@@ -51,6 +58,7 @@ export default defineMicroFrontend({
             : html`<ui-button data-action="notify" @click=${() => ctx.notify({ title: 'Reference notification', body: 'From the reference app', needsYou: true })}>Notify</ui-button>
                 <ui-button data-action="raise" @click=${() => void ctx.raise({ type: 'reference.show', payload: { n: 1 } })}>Raise</ui-button>
                 <ui-button data-action="request" @click=${() => void ask()}>Request</ui-button>
+                <ui-button data-action="fetch" @click=${() => void fetchFloor()}>Fetch</ui-button>
                 <ui-button data-action="emit" @click=${() => ctx.bus.emit('reference.ping', 'pong')}>Emit</ui-button>`}
         </section>`,
         el,

@@ -1,6 +1,8 @@
-import { createEventBus, type MountContext } from '@platform/mfe-sdk';
+import { createEventBus, type MountContext, type Workspace } from '@platform/mfe-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import app from './entry.js';
+
+const floor: Workspace = { id: 'w-me', kind: 'personal', name: 'You', slug: 'me', path: [], role: 'lead' };
 
 const ctx = (notify = vi.fn()): MountContext => ({
   user: { id: 'u1', name: 'Sam Okafor', departments: ['Finance'], roles: [] },
@@ -10,6 +12,9 @@ const ctx = (notify = vi.fn()): MountContext => ({
   request: vi.fn(),
   notify,
   path: '/',
+  workspace: floor,
+  getWorkspace: () => floor,
+  fetch: vi.fn(),
 });
 
 afterEach(() => vi.unstubAllGlobals());
