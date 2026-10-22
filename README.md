@@ -64,6 +64,7 @@ The platform comes first; apps come after its core integrations work.
 - Nothing under `platform/` depends on an app, and no app depends on another app. `pnpm check:boundaries` fails the build otherwise.
 - An app reaches the platform only through `@platform/*` packages, the gateway, the registry manifest and events.
 - Services call each other only on the internal network, with the service token (`SERVICE_TOKEN`); the gateway strips it from outside requests.
+- An app names the floor a request is for with `X-Workspace-Id`; the gateway checks the caller is on it and passes it on (`caller.workspace` in `@platform/service-kit`), or answers 403. Services trust only that, never a floor the browser claims.
 - Only the gateway reads sign-in tokens. Services behind it read the caller with `@platform/service-kit` and trust nothing else a client sends about who it is.
 - Services talk only through their OpenAPI contracts or events, never another service's tables.
 - Micro frontends never import each other; they raise intents to the shell or use the event bus.

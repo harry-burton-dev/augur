@@ -9,6 +9,18 @@ export interface Caller {
   email?: string;
   departments: string[];
   roles: string[];
+  /**
+   * The floor the request is for, when the app named one (`X-Workspace-Id`)
+   * and the gateway checked the caller is on it. Absent means no floor was asked for.
+   */
+  workspace?: CallerWorkspace;
+}
+
+export interface CallerWorkspace {
+  id: string;
+  kind: 'personal' | 'team' | 'org';
+  /** The caller's role there; `lead` on their own floor. */
+  role: 'member' | 'lead';
 }
 
 export const CALLER_HEADERS = {
@@ -19,7 +31,15 @@ export const CALLER_HEADERS = {
   roles: 'x-user-roles',
 } as const;
 
-const HEADER_NAMES: readonly string[] = Object.values(CALLER_HEADERS);
+/** The floor a request is for. An app sends only the id; the gateway replaces all three once it has checked it. */
+export const WORKSPACE_HEADERS = {
+  id: 'x-workspace-id',
+  kind: 'x-workspace-kind',
+  role: 'x-workspace-role',
+} as const;
+
+const HEADER_NAMES: readonly string[] = [...Object.values(CALLER_HEADERS), ...Object.values(WORKSPACE_HEADERS)];
+const KINDS: readonly string[] = ['personal', 'team', 'org'];
 
 type Headers = Record<string, string | string[] | undefined>;
 
@@ -44,9 +64,16 @@ export const callerHeaders = (caller: Caller): Record<string, string> => ({
   ...(caller.email ? { [CALLER_HEADERS.email]: encodeURIComponent(caller.email) } : {}),
   [CALLER_HEADERS.departments]: caller.departments.map(encodeURIComponent).join(','),
   [CALLER_HEADERS.roles]: caller.roles.map(encodeURIComponent).join(','),
+  ...(caller.workspace
+    ? {
+        [WORKSPACE_HEADERS.id]: encodeURIComponent(caller.workspace.id),
+        [WORKSPACE_HEADERS.kind]: caller.workspace.kind,
+        [WORKSPACE_HEADERS.role]: caller.workspace.role,
+      }
+    : {}),
 });
 
-/** Removes any caller headers, so a client cannot claim to be someone. The gateway calls this on every request. */
+/** Removes any caller and floor headers, so a client cannot claim to be someone or to be on a floor. The gateway calls this on every request. */
 export const withoutCallerHeaders = <H extends Headers>(headers: H): H =>
   Object.fromEntries(Object.entries(headers).filter(([k]) => !HEADER_NAMES.includes(k.toLowerCase()))) as H;
 
@@ -55,11 +82,16 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
   const id = one(headers[CALLER_HEADERS.id]);
   if (!id) return undefined;
   const email = one(headers[CALLER_HEADERS.email]);
+  const floor = one(headers[WORKSPACE_HEADERS.id]);
+  const kind = one(headers[WORKSPACE_HEADERS.kind]);
   return {
     id: decode(id),
     name: decode(one(headers[CALLER_HEADERS.name]) ?? id),
     ...(email ? { email: decode(email) } : {}),
     departments: list(one(headers[CALLER_HEADERS.departments])),
     roles: list(one(headers[CALLER_HEADERS.roles])),
+    ...(floor && kind && KINDS.includes(kind)
+      ? { workspace: { id: decode(floor), kind: kind as CallerWorkspace['kind'], role: one(headers[WORKSPACE_HEADERS.role]) === 'lead' ? 'lead' : 'member' } }
+      : {}),
   };
 };

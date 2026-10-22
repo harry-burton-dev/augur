@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import proxy from '@fastify/http-proxy';
-import { callerHeaders, health, packageVersion, REQUEST_ID_HEADER, serviceLogging, withoutCallerHeaders, withoutServiceHeaders, type Caller } from '@platform/service-kit';
+import { callerHeaders, health, packageVersion, REQUEST_ID_HEADER, serviceLogging, withoutCallerHeaders, withoutServiceHeaders, WORKSPACE_HEADERS, type Caller } from '@platform/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
+import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor } from './status.ts';
 
 /** The major version of the gateway's own API (Status); see contracts/ for its full version. */
@@ -45,14 +46,21 @@ export interface GatewayOptions {
   monitor?: HealthMonitor;
   /** Where the backup container writes its results (BACKUP_DIR). Without it Status says nothing about backups. */
   backupDir?: string;
+  /** Which floors a caller is on. Defaults to asking the identity upstream. */
+  floors?: FloorLookup;
 }
 
 /**
  * Single public entry: /api/<service>/* is forwarded to that service, but only
  * for a signed-in caller. The gateway verifies the token and passes the caller
  * on in headers, so services behind it never handle tokens.
+ *
+ * An app names the floor a request is for with `X-Workspace-Id`. The gateway
+ * checks the caller is on it and passes it on with its kind and their role,
+ * or refuses the request; services never see a floor the gateway didn't check.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, backupDir = process.env.BACKUP_DIR }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR }: GatewayOptions = {}) => {
+  const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity }) : undefined);
   const app = Fastify(serviceLogging());
   // Someone reporting a problem can quote it, and it finds the request in every service's logs.
   app.addHook('onSend', async (req, reply) => {
@@ -74,6 +82,20 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       if (!(err instanceof AuthError)) throw err;
       if (err.status === 401) reply.header('www-authenticate', 'Bearer');
       return reply.code(err.status).send({ error: err.status === 401 ? 'unauthenticated' : 'unavailable', message: err.message });
+    }
+
+    const raw = req.headers[WORKSPACE_HEADERS.id];
+    const asked = Array.isArray(raw) ? raw[0] : raw;
+    if (!asked) return;
+    if (!floorsOf) return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be checked right now.' });
+    try {
+      const floor = (await floorsOf(req.caller!)).find((f) => f.id === asked);
+      if (!floor) return reply.code(403).send({ error: 'forbidden', message: 'You’re not on that floor, or it no longer exists.' });
+      req.caller = { ...req.caller!, workspace: floor };
+    } catch (err) {
+      if (!(err instanceof FloorLookupError)) throw err;
+      req.log.error({ err: err.message }, 'floor check failed');
+      return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be checked right now. Try again in a moment.' });
     }
   });
 
