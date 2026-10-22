@@ -15,7 +15,10 @@
     "check:versions": "node scripts/versions.mjs check",
     "changeset": "changeset",
     "version-packages": "changeset version && node scripts/versions.mjs sync",
-    "release": "changeset tag"
+    "release": "changeset tag",
+    "check:manifest": "node scripts/check-manifests.mjs",
+    "create-app": "node scripts/create-app.mjs",
+    "dev:app": "node scripts/dev-app.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",

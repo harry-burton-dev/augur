@@ -2,6 +2,8 @@
 
 Each folder is one product app that runs on the platform. An app owns its service, its database schema, its object storage bucket and its frontend, and ships a `manifest.json` describing it.
 
+Start a new one with `pnpm create-app <id>` and run it with `pnpm dev:app <id>`; [Build an app](../docs/build-an-app.md) goes from there to an app in the shell.
+
 An app reaches the platform only through `@platform/*` packages, the gateway, the registry manifest and events. It never imports another app, and the platform never imports an app; `pnpm check:boundaries` enforces both.
 
 ## Getting into the catalogue
