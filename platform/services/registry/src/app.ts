@@ -1,6 +1,6 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { callerFromHeaders, health, packageVersion, recordAudit, serviceFromHeaders, serviceLogging, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
-import { appEntrySchema, conflictFor, platformApps, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
+import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
 import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
@@ -20,15 +20,20 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
   recordAudit({ eventsUrl, credentials, entry });
 
 /** A registered app as admins see it in the catalogue. */
-const catalogueEntry = (r: AppRecord) => ({
-  ...r.entry,
-  platform: false,
-  enabled: r.enabled,
-  registeredBy: r.registeredBy,
-  registeredAt: r.registeredAt,
-  updatedAt: r.updatedAt,
-  ...(r.pinnedVersion ? { pinnedVersion: r.pinnedVersion } : {}),
-});
+const catalogueEntry = (r: AppRecord, allowed: string[]) => {
+  const blocked = entryOriginProblem(r.entry, allowed);
+  return {
+    ...r.entry,
+    // Registered from an origin no longer allowed: kept, but not offered.
+    ...(blocked ? { blocked } : {}),
+    platform: false,
+    enabled: r.enabled,
+    registeredBy: r.registeredBy,
+    registeredAt: r.registeredAt,
+    updatedAt: r.updatedAt,
+    ...(r.pinnedVersion ? { pinnedVersion: r.pinnedVersion } : {}),
+  };
+};
 
 /**
  * The catalogue of apps. The platform's own apps are built in; every other app
@@ -42,10 +47,14 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
   await app.register(
     async (app) => {
+      const allowedOrigins = async () => (await store.origins()).map((o) => o.origin);
+
       // The gateway verified who is calling and passed it on.
       app.get('/manifest', async (req) => {
         const roles = callerFromHeaders(req.headers)?.roles ?? [];
-        const registered = (await store.records()).filter((r) => r.enabled).map((r) => r.entry);
+        // An app whose origin an admin has stopped allowing isn't offered, even though it stays registered.
+        const allowed = await allowedOrigins();
+        const registered = (await store.records()).filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed)).map((r) => r.entry);
         const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
         return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
       });
@@ -56,7 +65,8 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
       app.get('/apps', async (req, reply) => {
         if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see the whole catalogue.' });
         const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
-        return [...platform, ...(await store.records()).map(catalogueEntry)];
+        const allowed = await allowedOrigins();
+        return [...platform, ...(await store.records()).map((r) => catalogueEntry(r, allowed))];
       });
 
       /** An app's kept versions, newest first, and which one the shell is given. */
@@ -83,7 +93,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
             target: req.params.id,
             detail: { version: changed.entry.version },
           });
-          return catalogueEntry(changed);
+          return catalogueEntry(changed, await allowedOrigins());
         } catch (err) {
           if (err instanceof UnknownVersionError) return reply.code(404).send({ error: 'not_found', message: err.message });
           if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
@@ -119,6 +129,8 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
           const badVersion = versionProblem(entry);
           if (badVersion) return reply.code(400).send({ error: 'bad_request', message: badVersion });
+          const badOrigin = entryOriginProblem(entry, await allowedOrigins());
+          if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });
           const conflict = conflictFor(entry, await store.list());
           if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
           try {
@@ -157,9 +169,40 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
             req.log.info({ app: req.params.id, enabled: req.body.enabled, by: caller.id }, req.body.enabled ? 'app turned on' : 'app turned off');
             await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: req.body.enabled ? 'app.enabled' : 'app.disabled', target: req.params.id });
           }
-          return catalogueEntry({ ...before, enabled: req.body.enabled });
+          return catalogueEntry({ ...before, enabled: req.body.enabled }, await allowedOrigins());
         },
       );
+
+      /** Where apps may load from besides the platform itself. Admins choose; every registration is checked against it. */
+      app.get('/origins', async (req, reply) => {
+        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where apps may load from.' });
+        return store.origins();
+      });
+
+      app.post<{ Body: { origin: string } }>(
+        '/origins',
+        { schema: { body: { type: 'object', additionalProperties: false, required: ['origin'], properties: { origin: { type: 'string', minLength: 1, maxLength: 200 } } } } },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where apps may load from.' });
+          const parsed = parseOrigin(req.body.origin);
+          if ('problem' in parsed) return reply.code(400).send({ error: 'bad_request', message: parsed.problem });
+          if (await store.allowOrigin(parsed.origin, caller.id)) {
+            req.log.info({ origin: parsed.origin, by: caller.id }, 'origin allowed');
+            await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'origin.allowed', target: parsed.origin });
+          }
+          return reply.code(201).send((await store.origins()).find((o) => o.origin === parsed.origin));
+        },
+      );
+
+      app.delete<{ Params: { origin: string } }>('/origins/:origin', async (req, reply) => {
+        const caller = callerFromHeaders(req.headers);
+        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where apps may load from.' });
+        if (!(await store.removeOrigin(req.params.origin))) return reply.code(404).send({ error: 'not_found', message: `${req.params.origin} isn't allowed.` });
+        req.log.info({ origin: req.params.origin, by: caller.id }, 'origin removed');
+        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'origin.removed', target: req.params.origin });
+        return reply.code(204).send();
+      });
 
       app.delete<{ Params: { id: string } }>('/apps/:id', async (req, reply) => {
         const caller = callerFromHeaders(req.headers);

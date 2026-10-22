@@ -35,6 +35,15 @@ export interface CatalogueApp extends AppManifestEntry {
   updatedAt?: string;
   /** Set when an admin holds the app at this version. */
   pinnedVersion?: string;
+  /** Set when the app loads from a site no longer allowed: why it isn't offered. */
+  blocked?: string;
+}
+
+/** A site apps may load from besides the platform itself. */
+export interface AllowedOrigin {
+  origin: string;
+  addedBy: string;
+  addedAt: string;
 }
 
 /** One kept version of an app. */
@@ -163,6 +172,10 @@ export class AdminApi {
 
   audit = (query: AuditQuery) =>
     this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);
+
+  origins = () => this.call<AllowedOrigin[]>('GET', '/api/registry/v1/origins');
+  allowOrigin = (origin: string) => this.call<AllowedOrigin>('POST', '/api/registry/v1/origins', { origin });
+  removeOrigin = (origin: string) => this.call<void>('DELETE', `/api/registry/v1/origins/${encodeURIComponent(origin)}`);
 
   status = () => this.call<PlatformStatus>('GET', '/api/gateway/v1/status');
 }

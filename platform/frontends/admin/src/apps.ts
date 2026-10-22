@@ -1,13 +1,14 @@
 import { LitElement, html, nothing } from 'lit';
 import semver from 'semver';
 import { SDK_VERSION } from '@platform/mfe-sdk';
-import type { Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@platform/ui-kit';
-import type { AdminApi, AppVersion, CatalogueApp } from './api.js';
+import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@platform/ui-kit';
+import type { AdminApi, AllowedOrigin, AppVersion, CatalogueApp } from './api.js';
 import { page } from './parts.js';
 
 /** Where an app stands: off, on, or on but unable to open in this platform. */
 export const appStatus = (app: CatalogueApp, sdkVersion = SDK_VERSION): { status: StatusName; label: string; why?: string } => {
   if (!app.enabled) return { status: 'paused', label: 'Off', why: 'Nobody is offered it until it’s turned on.' };
+  if (app.blocked) return { status: 'warning', label: 'Blocked', why: app.blocked };
   const range = semver.validRange(app.sdk);
   if (!range || !semver.satisfies(sdkVersion, range, { includePrerelease: true })) {
     return { status: 'warning', label: 'Won’t open', why: `It works with platform SDK ${app.sdk}; this platform has ${sdkVersion}.` };
@@ -39,6 +40,10 @@ export class AdminApps extends LitElement {
     choice: { state: true },
     saving: { state: true },
     saveError: { state: true },
+    origins: { state: true },
+    originsOpen: { state: true },
+    originsError: { state: true },
+    working: { state: true },
   };
 
   declare api: AdminApi;
@@ -52,6 +57,11 @@ export class AdminApps extends LitElement {
   declare choice: string;
   declare saving: boolean;
   declare saveError: string;
+  /** Sites apps may load from besides the platform itself; undefined until loaded. */
+  declare origins: AllowedOrigin[] | undefined;
+  declare originsOpen: boolean;
+  declare originsError: string;
+  declare working: boolean;
 
   constructor() {
     super();
@@ -62,6 +72,9 @@ export class AdminApps extends LitElement {
     this.choice = NEWEST;
     this.saving = false;
     this.saveError = '';
+    this.originsOpen = false;
+    this.originsError = '';
+    this.working = false;
   }
 
   override createRenderRoot() {
@@ -70,6 +83,7 @@ export class AdminApps extends LitElement {
 
   override willUpdate(changed: Map<string, unknown>) {
     if (changed.has('api') && this.api) void this.load();
+    if (changed.has('originsOpen') && this.originsOpen) void this.loadOrigins();
     if (changed.has('open')) {
       this.versions = undefined;
       this.versionsError = '';
@@ -147,6 +161,75 @@ export class AdminApps extends LitElement {
     }
   }
 
+  async loadOrigins() {
+    this.originsError = '';
+    try {
+      this.origins = await this.api.origins();
+    } catch (err) {
+      this.originsError = (err as Error).message;
+    }
+  }
+
+  /** Allows a site, then stays open with the field cleared for the next. */
+  allowOrigin: DialogSubmit = async (values, dialog) => {
+    const added = await this.api.allowOrigin(values.origin.trim());
+    this.origins = [...(this.origins ?? []).filter((o) => o.origin !== added.origin), added];
+    const field = dialog.querySelector<HTMLElement & { value: string }>('ui-text-field[name="origin"]');
+    if (field) field.value = '';
+    // An app registered from it before is offered again.
+    await this.load();
+    return false as const;
+  };
+
+  async removeOrigin(origin: string) {
+    this.working = true;
+    this.originsError = '';
+    try {
+      await this.api.removeOrigin(origin);
+      this.origins = (this.origins ?? []).filter((o) => o.origin !== origin);
+      await this.load();
+    } catch (err) {
+      this.originsError = (err as Error).message;
+    } finally {
+      this.working = false;
+    }
+  }
+
+  private originsDialog() {
+    if (!this.originsOpen) return nothing;
+    const origins = this.origins;
+    return html`<ui-dialog
+      open
+      size="glance"
+      eyebrow="Apps"
+      heading="Where apps load from"
+      summary="Apps on the platform’s own address can always load. An app whose entry is on another site can only register, and only open, if that site is here."
+      action-label="Allow"
+      busy-label="Allowing…"
+      cancel-label="Done"
+      .submit=${this.allowOrigin}
+      @ui-close=${() => (this.originsOpen = false)}
+    >
+      <div data-origins style="display:flex;flex-direction:column;gap:var(--space-2)">
+        ${this.originsError ? html`<p style="color:var(--danger)">${this.originsError}</p>` : nothing}
+        ${!origins
+          ? this.originsError
+            ? nothing
+            : html`<ui-rows loading count="2"></ui-rows>`
+          : origins.length
+            ? origins.map(
+                (o) => html`<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);min-height:40px;border-bottom:1px solid var(--hairline)">
+                  <span style="color:var(--ink)">${o.origin}<span style="color:var(--ink-muted);font-size:var(--type-small)"> since ${day(o.addedAt)}</span></span>
+                  <ui-button kind="tertiary" size="sm" ?disabled=${this.working} @click=${() => this.removeOrigin(o.origin)}>Remove</ui-button>
+                </div>`,
+              )
+            : html`<p>No other sites yet, so apps can only load from the platform itself.</p>`}
+      </div>
+      <p>The server must allow a site too, so the browser will run its code; see Deploy in the platform’s guides.</p>
+      <ui-text-field slot="fields" name="origin" label="Allow a site" placeholder="https://apps.example.org" required></ui-text-field>
+    </ui-dialog>`;
+  }
+
   private readonly columns: TableColumn[] = [
     { key: 'name', label: 'App', sortable: true },
     { key: 'version', label: 'Version', sortable: true },
@@ -163,6 +246,7 @@ export class AdminApps extends LitElement {
       { label: 'Version', value: app.pinnedVersion ? `${app.version}, held` : app.version },
       { label: 'Platform SDK', value: app.sdk },
       { label: 'Address', value: app.route },
+      ...(app.entry.startsWith('/') && !app.entry.startsWith('//') ? [] : [{ label: 'Loads from', value: app.entry }]),
       ...(app.requiredRole ? [{ label: 'Only for', value: app.requiredRole }] : []),
     ];
     return html`<ui-dialog
@@ -219,8 +303,10 @@ export class AdminApps extends LitElement {
           empty="No apps are registered."
           @ui-open=${(e: CustomEvent<{ row: TableRow }>) => (this.open = e.detail.row.id)}
           @ui-retry=${() => this.load()}
-        ></ui-table>
-        ${this.details()}`,
+        >
+          <ui-button slot="actions" kind="secondary" size="sm" @click=${() => (this.originsOpen = true)}>Where apps load from</ui-button>
+        </ui-table>
+        ${this.details()} ${this.originsDialog()}`,
     );
   }
 }

@@ -177,6 +177,7 @@ describe('admin', () => {
       expect(sentence(entry('app.updated', { app: 'registry', target: 'library', detail: { version: '0.3.0', heldAt: '0.1.0' } }), names)).toBe(
         'Library registered version 0.3.0, kept but not used while it’s held at 0.1.0',
       );
+      expect(sentence(entry('origin.allowed', { app: 'registry', target: 'https://apps.example.org' }), names)).toBe('Alex Rivera let apps load from https://apps.example.org');
       expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
     });
 
@@ -210,6 +211,49 @@ describe('admin', () => {
       expect(urls.at(-1)).toContain('before=51');
       expect(el.entries).toHaveLength(53);
       expect(el.more).toBe(false);
+      el.remove();
+    });
+  });
+
+  describe('Where apps load from', () => {
+    const app: CatalogueApp = { id: 'maps', name: 'Maps', route: '/maps', entry: 'https://apps.example.org/maps/entry.js', version: '0.1.0', sdk: '^1.0.0', platform: false, enabled: true };
+
+    it('marks an app blocked when its site is no longer allowed', () => {
+      expect(appStatus({ ...app, blocked: 'Maps loads from https://apps.example.org, which isn’t a place apps are allowed to load from.' })).toMatchObject({ status: 'warning', label: 'Blocked' });
+      expect(appStatus({ ...app, enabled: false, blocked: 'x' }).label).toBe('Off');
+    });
+
+    it('allows a site, lists it, and removes it again', async () => {
+      const calls: [string, string, unknown][] = [];
+      let origins: { origin: string; addedBy: string; addedAt: string }[] = [];
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+        const method = init.method ?? 'GET';
+        const body = init.body ? JSON.parse(String(init.body)) : undefined;
+        calls.push([method, url, body]);
+        if (url.endsWith('/origins') && method === 'POST') {
+          origins = [{ origin: body.origin, addedBy: 'u-1', addedAt: '2026-10-22T10:00:00.000Z' }];
+          return new Response(JSON.stringify(origins[0]), { status: 201 });
+        }
+        if (url.includes('/origins/') && method === 'DELETE') {
+          origins = [];
+          return new Response(null, { status: 204 });
+        }
+        return new Response(JSON.stringify(url.endsWith('/origins') ? origins : [app]), { status: 200 });
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.apps).toHaveLength(1));
+      el.originsOpen = true;
+      await vi.waitFor(() => expect(el.origins).toEqual([]));
+      await el.updateComplete;
+      const dialog = el.querySelector('ui-dialog') as UiDialog;
+      expect(await el.allowOrigin({ origin: ' https://apps.example.org ' }, dialog)).toBe(false);
+      expect(calls).toContainEqual(['POST', '/api/registry/v1/origins', { origin: 'https://apps.example.org' }]);
+      expect(el.origins?.map((o) => o.origin)).toEqual(['https://apps.example.org']);
+      await el.removeOrigin('https://apps.example.org');
+      expect(calls).toContainEqual(['DELETE', '/api/registry/v1/origins/https%3A%2F%2Fapps.example.org', undefined]);
+      expect(el.origins).toEqual([]);
       el.remove();
     });
   });

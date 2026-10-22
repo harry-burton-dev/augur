@@ -93,6 +93,14 @@ jobs:
       - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@platform/identity -t platform-identity .
       - name: The front door's nginx config loads
         run: docker run --rm --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 platform-web nginx -t
+      - name: The shell's page carries its Content Security Policy
+        run: |
+          docker run -d --name web --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 \
+            -e APP_ORIGINS=https://apps.example.org -p 8088:80 platform-web
+          for i in $(seq 1 20); do curl -fsI http://localhost:8088/admin > /tmp/headers && break; sleep 1; done
+          cat /tmp/headers
+          grep -iE "^content-security-policy: default-src 'self'; script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https://apps.example.org;" /tmp/headers
+          docker rm -f web
       - name: The nightly backup writes a restorable dump
         run: |
           docker run -d --name pg -e POSTGRES_PASSWORD=ci postgres:16-alpine

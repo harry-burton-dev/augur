@@ -60,6 +60,15 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.pin('nothing', '0.1.0')).toBeUndefined();
   });
 
+  it('keeps the origins apps may load from', async () => {
+    expect(await store.allowOrigin('https://apps.example.org', 'u-1')).toBe(true);
+    expect(await store.allowOrigin('https://apps.example.org', 'u-2')).toBe(false);
+    expect(await store.origins()).toEqual([{ origin: 'https://apps.example.org', addedBy: 'u-1', addedAt: expect.any(String) }]);
+    expect(await store.removeOrigin('https://apps.example.org')).toBe(true);
+    expect(await store.removeOrigin('https://apps.example.org')).toBe(false);
+    expect(await store.origins()).toEqual([]);
+  });
+
   it('removes apps', async () => {
     await store.put(library, 'service');
     expect(await store.remove('library')).toBe(true);
@@ -88,14 +97,14 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate registry.apps cascade');
+      await admin.query('truncate registry.apps, registry.allowed_origins cascade');
     },
   );
 
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

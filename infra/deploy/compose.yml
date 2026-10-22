@@ -34,6 +34,9 @@ services:
   web:
     build: { context: ../.., dockerfile: infra/web.Dockerfile, target: web }
     restart: unless-stopped
+    environment:
+      # Other sites apps may load from, space separated (also allow each in Admin, Apps).
+      APP_ORIGINS: ${APP_ORIGINS:-}
     depends_on: [gateway, keycloak]
 
   postgres:

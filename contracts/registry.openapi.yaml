@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.2.0
+  version: 1.3.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -43,7 +43,9 @@ paths:
         Unknown fields are refused. The platform's own apps (home, admin) and
         routes another app already has cannot be taken. Every version is kept
         (the last 5, plus a pinned one); an app an admin has pinned keeps
-        serving its pinned version.
+        serving its pinned version. An entry that is a full address must be on
+        an origin an admin has allowed (see /origins); a path is served by the
+        platform itself and always may.
       requestBody:
         required: true
         content:
@@ -52,7 +54,7 @@ paths:
       responses:
         "201": { description: Registered }
         "200": { description: Updated }
-        "400": { description: The manifest is invalid or its id does not match the path }
+        "400": { description: "The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed" }
         "403": { description: Neither a service with the service token nor an admin }
         "409": { description: The id belongs to a platform app, or the route is taken }
     patch:
@@ -145,6 +147,46 @@ paths:
         "403": { description: Not an admin }
         "404": { description: No such app }
         "409": { description: A platform app }
+  /origins:
+    get:
+      summary: Where apps may load from besides the platform itself (admins only)
+      responses:
+        "200":
+          description: Allowed origins
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AllowedOrigin" }
+        "403": { description: Not an admin }
+    post:
+      summary: Allow apps to load from an origin (admins only)
+      description: HTTPS only, except http://localhost for development. Audited as origin.allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [origin], properties: { origin: { type: string, example: "https://apps.example.org" } } }
+      responses:
+        "201":
+          description: Allowed (also when it already was)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AllowedOrigin" }
+        "400": { description: Not an HTTPS origin, or has a path }
+        "403": { description: Not an admin }
+  /origins/{origin}:
+    parameters:
+      - { name: origin, in: path, required: true, schema: { type: string }, description: The origin, URL-encoded }
+    delete:
+      summary: Stop allowing an origin (admins only)
+      description: >
+        Apps already registered from it stay in the catalogue, marked blocked,
+        and are left out of the manifest until it is allowed again. Audited as origin.removed.
+      responses:
+        "204": { description: Removed }
+        "403": { description: Not an admin }
+        "404": { description: Not an allowed origin }
 components:
   schemas:
     CatalogueEntry:
@@ -159,6 +201,14 @@ components:
             registeredAt: { type: string, format: date-time }
             updatedAt: { type: string, format: date-time }
             pinnedVersion: { type: string, description: Set when an admin holds the app at this version }
+            blocked: { type: string, description: "Set when the app's entry is on an origin no longer allowed: why it isn't offered" }
+    AllowedOrigin:
+      type: object
+      required: [origin, addedBy, addedAt]
+      properties:
+        origin: { type: string }
+        addedBy: { type: string }
+        addedAt: { type: string, format: date-time }
     AppManifestEntry:
       type: object
       required: [id, name, route, entry, version, sdk]
