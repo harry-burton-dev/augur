@@ -1,7 +1,11 @@
 import Fastify from 'fastify';
 import proxy from '@fastify/http-proxy';
 import { callerHeaders, health, packageVersion, withoutCallerHeaders, withoutServiceHeaders, type Caller } from '@platform/service-kit';
-import { authenticate, AuthError, authFromEnv, type AuthConfig } from './auth.ts';
+import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
+import { HealthMonitor, probesFor } from './status.ts';
+
+/** The major version of the gateway's own API (Status); see contracts/ for its full version. */
+export const API_VERSION = 'v1';
 
 const version = packageVersion(import.meta.url);
 
@@ -16,6 +20,9 @@ export const parseUpstreams = (spec = ''): Upstreams =>
       .filter(([name, url]) => name && url)
       .map(([name, url]) => [name.trim(), url.trim()]),
   );
+
+/** The platform's own services, by the name they are reached at. */
+export const PLATFORM_SERVICES = ['identity', 'registry', 'events'];
 
 /** The platform's own services, then each app's service from APP_UPSTREAMS. The gateway knows no app by name. */
 export const defaultUpstreams = (): Upstreams => ({
@@ -34,6 +41,8 @@ declare module 'fastify' {
 export interface GatewayOptions {
   upstreams?: Upstreams;
   auth?: AuthConfig;
+  /** Checks every upstream for Status. By default one is made for the upstreams and started. */
+  monitor?: HealthMonitor;
 }
 
 /**
@@ -41,9 +50,15 @@ export interface GatewayOptions {
  * for a signed-in caller. The gateway verifies the token and passes the caller
  * on in headers, so services behind it never handle tokens.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv() }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor }: GatewayOptions = {}) => {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
-  app.get('/healthz', async () => health('gateway', version));
+  app.get('/healthz', async () => health('gateway', version, API_VERSION));
+
+  const statusMonitor = monitor ?? new HealthMonitor({ probes: probesFor(upstreams, PLATFORM_SERVICES, signInKeysUrl(auth)) });
+  if (!monitor) {
+    statusMonitor.start();
+    app.addHook('onClose', async () => statusMonitor.stop());
+  }
 
   app.addHook('onRequest', async (req, reply) => {
     if (!req.url.startsWith('/api/')) return;
@@ -54,6 +69,12 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       if (err.status === 401) reply.header('www-authenticate', 'Bearer');
       return reply.code(err.status).send({ error: err.status === 401 ? 'unauthenticated' : 'unavailable', message: err.message });
     }
+  });
+
+  // The gateway's own API: whether every part of the platform is answering, for admins.
+  app.get(`/api/gateway/${API_VERSION}/status`, async (req, reply) => {
+    if (!req.caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only admins can see the platform’s status.' });
+    return { components: statusMonitor.snapshot({ version, api: API_VERSION }) };
   });
 
   for (const [name, upstream] of Object.entries(upstreams)) {

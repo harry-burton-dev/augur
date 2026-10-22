@@ -8,6 +8,8 @@ export interface AuthConfig {
   audience: string;
   /** Where the issuer's signing keys come from. */
   keys: JWTVerifyGetKey;
+  /** The address `keys` come from, when they come from the network; Status checks it. */
+  keysUrl?: string;
 }
 
 /**
@@ -17,8 +19,11 @@ export interface AuthConfig {
 export const authFromEnv = (env = process.env): AuthConfig => {
   const issuer = env.OIDC_ISSUER ?? 'http://localhost:8180/realms/platform';
   const jwks = env.OIDC_JWKS_URL ?? `${issuer}/protocol/openid-connect/certs`;
-  return { issuer, audience: env.OIDC_AUDIENCE ?? 'platform-api', keys: createRemoteJWKSet(new URL(jwks)) };
+  return { issuer, audience: env.OIDC_AUDIENCE ?? 'platform-api', keys: createRemoteJWKSet(new URL(jwks)), keysUrl: jwks };
 };
+
+/** Where the gateway fetches signing keys from, which is the sign-in service as the gateway reaches it. */
+export const signInKeysUrl = (config: AuthConfig): string | undefined => config.keysUrl;
 
 export class AuthError extends Error {
   constructor(

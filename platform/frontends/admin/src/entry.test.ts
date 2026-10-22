@@ -2,8 +2,9 @@ import { createEventBus, type MountContext } from '@platform/mfe-sdk';
 import type { UiDialog, UiTable, UiToggle } from '@platform/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
-import { AdminApi, departmentPath, type CatalogueApp, type Department, type Person } from './api.js';
+import { AdminApi, departmentPath, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
 import { appStatus } from './apps.js';
+import { headline, stateOf, type AdminStatus } from './status.js';
 import type { AdminPeople } from './people.js';
 
 const finance: Department = { id: 'd-1', name: 'Finance', members: ['u-1'] };
@@ -48,6 +49,7 @@ describe('admin', () => {
     expect(screenFor('/people/new')).toEqual({ screen: 'people', adding: true });
     expect(screenFor('/departments/new')).toEqual({ screen: 'departments', adding: true });
     expect(screenFor('/apps')).toEqual({ screen: 'apps', adding: false });
+    expect(screenFor('/status')).toEqual({ screen: 'status', adding: false });
     expect(screenFor('/')).toEqual({ screen: 'people', adding: false });
   });
 
@@ -119,5 +121,37 @@ describe('admin', () => {
 
   it('names a department with the ones it sits inside', () => {
     expect(departmentPath('d-2', [finance, payroll])).toBe('Finance / Payroll');
+  });
+
+  describe('Status', () => {
+    const part = (name: string, state: ComponentStatus['state'], extra: Partial<ComponentStatus> = {}): ComponentStatus => ({ name, kind: 'service', state, ...extra });
+
+    it('heads the screen with what needs a look first', () => {
+      expect(headline([part('gateway', 'up'), part('registry', 'up')]).heading).toBe('Everything is running');
+      expect(headline([part('gateway', 'up'), part('events', 'slow')]).heading).toBe('1 part is slow');
+      expect(headline([part('events', 'slow'), part('registry', 'down'), part('sign-in', 'down')]).heading).toBe('2 parts are down');
+    });
+
+    it('marks each state with a word that doesn’t rely on colour', () => {
+      expect(['up', 'slow', 'down', 'checking'].map((state) => stateOf({ state: state as ComponentStatus['state'] }).label)).toEqual(['Running', 'Slow', 'Down', 'Checking']);
+    });
+
+    it('shows every part from the gateway, and what to check for one that’s down', async () => {
+      const components = [part('gateway', 'up', { kind: 'gateway', version: '0.2.0' }), part('library', 'down', { kind: 'app', problem: 'It can’t be reached.' })];
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ components }), { status: 200 }));
+      const el = document.createElement('admin-status') as AdminStatus;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.components).toHaveLength(2));
+      await el.updateComplete;
+      expect(fetchImpl).toHaveBeenCalledWith('/api/gateway/v1/status', expect.anything());
+      expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('1 part is down');
+      el.open = 'library';
+      await el.updateComplete;
+      const dialog = el.querySelector('ui-dialog')!;
+      expect(dialog.getAttribute('summary')).toBe('It can’t be reached.');
+      expect(dialog.textContent).toContain('People can’t use library while its service is down');
+      el.remove();
+    });
   });
 });

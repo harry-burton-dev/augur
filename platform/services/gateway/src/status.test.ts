@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest';
+import { HealthMonitor, probesFor } from './status.ts';
+
+const gateway = { version: '0.2.0', api: 'v1' };
+
+/** A fetch that answers each URL from the table after `ms` of real time, moving the test clock on 10 ms. */
+const fakeFetch = (clock: { t: number }, answers: Record<string, { status?: number; body?: unknown; ms?: number } | 'unreachable'>) =>
+  (async (url: string | URL | Request) => {
+    const a = answers[String(url)];
+    await new Promise((resolve) => setTimeout(resolve, typeof a === 'object' ? (a.ms ?? 0) : 0));
+    if (!a || a === 'unreachable') throw new TypeError('fetch failed');
+    clock.t += 10;
+    return new Response(JSON.stringify(a.body ?? {}), { status: a.status ?? 200 });
+  }) as typeof fetch;
+
+describe('probesFor', () => {
+  it('checks each upstream’s /healthz, telling platform services from apps, and the sign-in keys', () => {
+    expect(probesFor({ registry: 'http://registry:8082/', library: 'http://library:8083' }, ['registry'], 'http://kc/certs')).toEqual([
+      { name: 'registry', kind: 'service', url: 'http://registry:8082/healthz' },
+      { name: 'library', kind: 'app', url: 'http://library:8083/healthz' },
+      { name: 'sign-in', kind: 'sign-in', url: 'http://kc/certs' },
+    ]);
+  });
+});
+
+describe('HealthMonitor', () => {
+  const probes = probesFor({ registry: 'http://registry', events: 'http://events', library: 'http://library' }, ['registry', 'events']);
+
+  it('reads every component from its last answer, the gateway first', async () => {
+    const clock = { t: 1_000_000 };
+    const monitor = new HealthMonitor({
+      probes,
+      slowMs: 40,
+      fetchImpl: fakeFetch(clock, {
+        'http://registry/healthz': { body: { status: 'ok', version: '0.4.0', api: 'v1' } },
+        'http://events/healthz': { body: { version: '0.3.0' }, ms: 80 },
+        'http://library/healthz': 'unreachable',
+      }),
+    });
+    await monitor.checkAll();
+    const rows = monitor.snapshot(gateway);
+    expect(rows.map((r) => [r.name, r.state])).toEqual([
+      ['gateway', 'up'],
+      ['registry', 'up'],
+      ['events', 'slow'],
+      ['library', 'down'],
+    ]);
+    expect(rows[1]).toMatchObject({ kind: 'service', version: '0.4.0', api: 'v1' });
+    expect(rows[3]).toMatchObject({ kind: 'app', problem: 'It can’t be reached.' });
+    expect(rows[3].seenAt).toBeUndefined();
+  });
+
+  it('says what an error answer was, and keeps when it was last seen', async () => {
+    const clock = { t: 0 };
+    const answers: Parameters<typeof fakeFetch>[1] = { 'http://registry/healthz': { body: { version: '1.0.0' } } };
+    const monitor = new HealthMonitor({ probes: probes.slice(0, 1), now: () => clock.t, fetchImpl: fakeFetch(clock, answers) });
+    await monitor.checkAll();
+    answers['http://registry/healthz'] = { status: 503 };
+    await monitor.checkAll();
+    const [, registry] = monitor.snapshot(gateway);
+    expect(registry).toMatchObject({ state: 'down', problem: 'It answered 503.', version: '1.0.0' });
+    expect(registry.seenAt).toBe(new Date(10).toISOString());
+  });
+
+  it('shows checking before the first answer, and down once two minutes pass with none', () => {
+    const clock = { t: 0 };
+    const monitor = new HealthMonitor({ probes: probes.slice(0, 1), now: () => clock.t, fetchImpl: fakeFetch(clock, {}) });
+    expect(monitor.snapshot(gateway)[1].state).toBe('checking');
+    clock.t = 120_000;
+    expect(monitor.snapshot(gateway)[1]).toMatchObject({ state: 'down', problem: 'It hasn’t answered for 2 minutes.' });
+  });
+
+  it('turns a component down when it goes quiet, even while a check hangs', async () => {
+    const clock = { t: 0 };
+    const monitor = new HealthMonitor({ probes: probes.slice(0, 1), now: () => clock.t, fetchImpl: fakeFetch(clock, { 'http://registry/healthz': {} }) });
+    await monitor.checkAll();
+    clock.t += 119_000;
+    expect(monitor.snapshot(gateway)[1].state).toBe('up');
+    clock.t += 2_000;
+    expect(monitor.snapshot(gateway)[1].state).toBe('down');
+  });
+});
