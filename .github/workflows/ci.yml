@@ -64,6 +64,22 @@ jobs:
       - run: pnpm check:boundaries
       - run: pnpm check:versions
 
+  # The shell keeps its promise to apps: the reference app, as built today and
+  # as built against each earlier SDK minor, mounted by the real shell.
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=@platform/contract-tests...
+      - run: pnpm --filter @platform/contract-tests exec playwright install --with-deps chromium
+      - run: pnpm --filter @platform/contract-tests test:contract
+
   # The server setup in infra/deploy: the compose file is valid and the images build.
   deploy-images:
     runs-on: ubuntu-latest

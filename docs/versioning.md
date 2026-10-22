@@ -39,6 +39,8 @@ Merging that pull request is the release. The workflow then tags each released p
 
 Two GitHub settings the workflow needs: Settings → Actions → General → Workflow permissions must allow **Read and write**, and **Allow GitHub Actions to create and approve pull requests** must be on. GitHub doesn't run CI on a pull request the workflow opens itself, so CI runs on the Version packages PR once you push to it or close and reopen it; a token with more reach (a GitHub App or a personal access token in `GITHUB_TOKEN`) removes that step.
 
+When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @platform/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)).
+
 To do the same by hand: `pnpm version-packages`, review, commit, merge, then `pnpm release && git push --follow-tags`.
 
 ## HTTP APIs
@@ -74,3 +76,4 @@ Apps don't bundle the UI kit or Lit: the shell serves one copy of each through a
 - Within SDK 1.x the shell serves `@platform/ui-kit` 1.x and Lit 3.x. A kit minor adds components, attributes or icons; it never removes or renames one, or changes what an existing attribute means.
 - A breaking kit change is a kit major, and it ships with an SDK major, so the shell refuses apps that haven't been updated for it instead of breaking them.
 - Moving the shared Lit to a new major is a kit major too.
+- The contract tests in `platform/contract` hold the shell to this: they mount a reference app built against each earlier SDK minor, and fail CI when the shell breaks one.

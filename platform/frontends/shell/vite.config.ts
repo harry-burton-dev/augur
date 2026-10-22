@@ -85,7 +85,8 @@ const devApp = (dir: string | undefined) => {
   if (!dir) return undefined;
   const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; [key: string]: unknown };
   const roles = (process.env.DEV_ROLES ?? '').split(',').map((r) => r.trim()).filter(Boolean);
-  const app = { ...manifest, entry: `/@fs${resolve(dir, 'frontend/src/entry.ts')}` };
+  // DEV_APP_ENTRY serves a built entry instead of the source (the contract tests mount frozen builds).
+  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs${resolve(dir, 'frontend/src/entry.ts')}` };
   const caller = {
     'x-user-id': 'dev-person',
     'x-user-name': encodeURIComponent('Dev Person'),
