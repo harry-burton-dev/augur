@@ -1,9 +1,11 @@
-import type { User } from '@platform/mfe-sdk';
+import type { User, Workspace } from '@platform/mfe-sdk';
+import { FloorsError, loadFloors } from './floors.js';
 
-/** Who is signed in, and how to get a current token for calling the gateway. */
+/** Who is signed in, the floors they can stand on, and how to get a current token for calling the gateway. */
 export interface Session {
   user: User;
-  workspace: string;
+  /** Their own floor first, then the org, then their teams. */
+  floors: Workspace[];
   getToken(): Promise<string>;
   signOut(): Promise<void>;
 }
@@ -35,6 +37,8 @@ export interface StartOptions {
   fetchImpl?: typeof fetch;
   /** Where Identity answers "who am I", through the gateway. */
   meUrl?: string;
+  /** Where Identity lists the person's floors, through the gateway. */
+  floorsUrl?: string;
 }
 
 /** Only a path on this site is a safe place to return to after signing in. */
@@ -68,7 +72,7 @@ async function loadMe(fetchImpl: typeof fetch, url: string, token: string): Prom
  */
 export async function startSession(
   auth: Authenticator,
-  { location, history, fetchImpl = fetch, meUrl = '/api/identity/v1/me' }: StartOptions,
+  { location, history, fetchImpl = fetch, meUrl = '/api/identity/v1/me', floorsUrl = '/api/identity/v1/me/workspaces' }: StartOptions,
 ): Promise<Session | 'redirecting'> {
   if (location.pathname === CALLBACK_PATH) {
     let signedIn: SignedIn;
@@ -88,10 +92,16 @@ export async function startSession(
     if (!signedIn) throw new SessionError('Your session has ended. Sign in again.');
     return signedIn.access_token;
   };
-  const user = await loadMe(fetchImpl, meUrl, await getToken());
+  const token = await getToken();
+  const [me, mine] = await Promise.allSettled([loadMe(fetchImpl, meUrl, token), loadFloors(fetchImpl, floorsUrl, token)]);
+  // Who they are matters more: its problem is the one to show.
+  if (me.status === 'rejected') throw me.reason;
+  if (mine.status === 'rejected') throw mine.reason instanceof FloorsError ? new SessionError(mine.reason.message) : mine.reason;
+  const user = me.value;
+  const floors = mine.value;
   return {
     user,
-    workspace: user.departments[0] ?? 'Platform',
+    floors,
     getToken,
     signOut: () => auth.signoutRedirect(),
   };

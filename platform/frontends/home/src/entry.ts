@@ -8,9 +8,11 @@ const greeting = (hour: number) => (hour < 12 ? 'Good morning' : hour < 18 ? 'Go
 export default defineMicroFrontend({
   mount(el: HTMLElement, ctx: MountContext) {
     const first = ctx.user.name.split(' ')[0];
+    // The floor's name over the greeting, except on the person's own. A shell older than SDK 1.1 sends no floor.
+    const floor = ctx.workspace?.kind === 'personal' ? '' : (ctx.workspace?.name ?? '');
     render(
       html`<div style="max-width:var(--measure-read);margin:0 auto;padding:var(--space-7) var(--edge);display:flex;flex-direction:column;gap:var(--space-6)">
-        <ui-heading eyebrow=${ctx.user.departments[0] ?? ''} heading=${`${greeting(new Date().getHours())}, ${first}`} summary="Nothing needs you right now."></ui-heading>
+        <ui-heading eyebrow=${floor} heading=${`${greeting(new Date().getHours())}, ${first}`} summary="Nothing needs you right now."></ui-heading>
         <div>
           <ui-button kind="secondary" @click=${() => ctx.notify({ title: 'This is a test notification', body: 'Sent from Home', needsYou: true })}>
             Send a test notification

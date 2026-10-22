@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createEventBus, IntentCancelled, IntentError, isIntentCancelled, resolveIntent, type AppManifestEntry } from './index.js';
+import { createEventBus, floorFetch, IntentCancelled, IntentError, isIntentCancelled, resolveIntent, type AppManifestEntry, type Workspace } from './index.js';
 
 describe('event bus', () => {
   it('delivers to subscribers until they unsubscribe', () => {
@@ -36,5 +36,30 @@ describe('isIntentCancelled', () => {
     expect(isIntentCancelled(fromAnotherBundle)).toBe(true);
     expect(isIntentCancelled(new IntentError('No app handles it'))).toBe(false);
     expect(isIntentCancelled('IntentCancelled')).toBe(false);
+  });
+});
+
+describe('floorFetch', () => {
+  const finance: Workspace = { id: 'w-fin', kind: 'team', name: 'Finance', slug: 'finance', path: [], role: 'member' };
+
+  it('adds the token and the current floor, read at call time', async () => {
+    let floor = finance;
+    const fetchImpl = vi.fn(async () => new Response('ok'));
+    const call = floorFetch(async () => 'tok', () => floor, fetchImpl as unknown as typeof fetch);
+    await call('/api/library/v1/docs', { method: 'POST' });
+    floor = { ...finance, id: 'w-org' };
+    await call('/api/library/v1/docs');
+    const sent = fetchImpl.mock.calls.map((c) => (c as unknown as [string, RequestInit])[1]);
+    expect(sent[0].method).toBe('POST');
+    expect(new Headers(sent[0].headers).get('authorization')).toBe('Bearer tok');
+    expect(new Headers(sent[0].headers).get('x-workspace-id')).toBe('w-fin');
+    expect(new Headers(sent[1].headers).get('x-workspace-id')).toBe('w-org');
+  });
+
+  it('leaves headers the app set itself', async () => {
+    const fetchImpl = vi.fn(async () => new Response('ok'));
+    await floorFetch(async () => 'tok', () => finance, fetchImpl as unknown as typeof fetch)('/x', { headers: { 'X-Workspace-Id': 'w-other', Authorization: 'Bearer mine' } });
+    const headers = new Headers((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].headers);
+    expect([headers.get('x-workspace-id'), headers.get('authorization')]).toEqual(['w-other', 'Bearer mine']);
   });
 });

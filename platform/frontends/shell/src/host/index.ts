@@ -7,3 +7,4 @@ export { startSession, CALLBACK_PATH, SessionError, type Authenticator, type Ses
 export { NotificationFeed, fromServer, parseEvents, type ServerNotification } from './feed.js';
 export { screenFor, titleMenu, titleTarget, orbitMenu, backFrom, escapeIsFree, findPages, type Screen } from './menus.js';
 export { PreferenceSync, applyPreferences, type Preferences } from './preferences.js';
+export { floorFromPath, floorHref, floorBySlug, ownFloor, loadFloors, FloorsError, type FloorLocation } from './floors.js';

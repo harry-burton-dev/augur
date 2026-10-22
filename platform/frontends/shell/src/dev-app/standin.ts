@@ -1,4 +1,4 @@
-import type { AppManifestEntry, User } from '@platform/mfe-sdk';
+import type { AppManifestEntry, User, Workspace, WorkspaceRef } from '@platform/mfe-sdk';
 import type { Session } from '../host/index.js';
 
 /**
@@ -13,10 +13,19 @@ export const devUser = (app: AppManifestEntry, roles: string[] = []): User => ({
   roles: [...new Set([...roles, ...(app.requiredRole ? [app.requiredRole] : [])])],
 });
 
+const me: WorkspaceRef = { id: 'dev-me', kind: 'personal', name: 'You', slug: 'me' };
+const org: WorkspaceRef = { id: 'dev-org', kind: 'org', name: 'Organisation', slug: 'org' };
+
+/** Their own floor and the org's, so an app can be tried on both. */
+export const devFloors: Workspace[] = [
+  { ...me, path: [me], role: 'lead' },
+  { ...org, path: [org], role: 'member' },
+];
+
 /** Signed in already, with a token the stand-in's own proxy accepts in place of the gateway. */
 export const devSession = (user: User): Session => ({
   user,
-  workspace: user.departments[0] ?? 'Platform',
+  floors: devFloors,
   getToken: async () => 'dev-token',
   signOut: async () => window.location.assign('/'),
 });

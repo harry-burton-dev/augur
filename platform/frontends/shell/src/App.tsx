@@ -1,4 +1,4 @@
-import { createEventBus, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext } from '@platform/mfe-sdk';
+import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@platform/mfe-sdk';
 import { defaultFunctions, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@platform/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -7,12 +7,16 @@ import {
   backFrom,
   escapeIsFree,
   findPages,
+  floorBySlug,
+  floorFromPath,
+  floorHref,
   fromServer,
   hrefFor,
   IntentError,
   loadManifest,
   NotificationFeed,
   orbitMenu,
+  ownFloor,
   PreferenceSync,
   RequestBroker,
   routeIntent,
@@ -39,7 +43,7 @@ export interface HostProps {
   importEntry?: ImportEntry;
 }
 
-type Problem = { title: string; summary: string; retry: () => void };
+type Problem = { title: string; summary: string; retry: () => void; action?: string };
 
 const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai });
 
@@ -96,19 +100,37 @@ export function Host({
 
   const [manifest, setManifest] = useState<AppManifestEntry[] | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [pathname, setPathname] = useState(() => window.location.pathname);
+  const home = ownFloor(session.floors)!;
+  /** Every location names its floor: one that doesn't is on the person's own, and the address says so. */
+  const settled = useCallback(() => {
+    const { slug, path } = floorFromPath(window.location.pathname);
+    if (!slug) window.history.replaceState(window.history.state, '', `${floorHref(home.slug, path)}${window.location.search}`);
+    return window.location.pathname;
+  }, [home]);
+  const [pathname, setPathname] = useState(settled);
   const [attempt, setAttempt] = useState(0);
 
-  const navigate = useCallback((href: string) => {
-    if (href !== window.location.pathname) window.history.pushState(null, '', href);
-    setPathname(window.location.pathname);
-  }, []);
+  /** The floor the location names, and where on it. An unknown floor is undefined. */
+  const where = useMemo(() => floorFromPath(pathname), [pathname]);
+  const floor = floorBySlug(session.floors, where.slug);
+  const floorRef = useRef<Workspace>(floor ?? home);
+  floorRef.current = floor ?? home;
+
+  /** Goes to a path on the current floor; `to` goes to another floor instead. */
+  const navigate = useCallback(
+    (href: string, to: Workspace = floorRef.current) => {
+      const target = floorHref(to.slug, href);
+      if (target !== window.location.pathname) window.history.pushState(null, '', target);
+      setPathname(window.location.pathname);
+    },
+    [],
+  );
 
   useEffect(() => {
-    const onPop = () => setPathname(window.location.pathname);
+    const onPop = () => setPathname(settled());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  }, [settled]);
 
   // The catalogue: which apps this person can open.
   useEffect(() => {
@@ -132,7 +154,7 @@ export function Host({
     };
   }, [session, manifestUrl, fetchImpl, attempt]);
 
-  const screen = useMemo(() => (manifest ? screenFor(manifest, pathname) : undefined), [manifest, pathname]);
+  const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path) : undefined), [manifest, floor, where]);
 
   const raise = useCallback(
     async (intent: Intent) => {
@@ -168,6 +190,7 @@ export function Host({
     [manifest],
   );
 
+  // A new floor makes a new context, so the open app is mounted again on it.
   const contextFor = useCallback(
     (app: AppManifestEntry, path: string, intent?: Intent, reply?: IntentReply): MountContext => ({
       user: session.user,
@@ -176,11 +199,14 @@ export function Host({
       raise,
       request,
       notify: (message) => shellRef.current?.notify(toShellNotification(app.id, message)),
+      workspace: floor ?? home,
+      getWorkspace: () => floorRef.current,
+      fetch: floorFetch(session.getToken, () => floorRef.current, fetchImpl),
       path,
       intent,
       reply,
     }),
-    [session, bus, raise, request],
+    [session, bus, raise, request, floor, home, fetchImpl],
   );
 
   useEffect(() => {
@@ -218,9 +244,19 @@ export function Host({
     if (!stage || !manifest) return;
     mounter.current ??= new AppMounter(stage, importEntry);
     if (!manifest.length) return;
+    if (!floor) {
+      void mounter.current.unmount();
+      setProblem({
+        title: 'You’re not on that floor',
+        summary: `There’s no @${where.slug} you can go to. It may have been renamed, or you may not be on that team.`,
+        retry: () => navigate('/', home),
+        action: 'Go to your own floor',
+      });
+      return;
+    }
     if (!screen) {
       void mounter.current.unmount();
-      setProblem({ title: 'Nothing here', summary: `No app you can open lives at ${pathname}.`, retry: () => navigate('/') });
+      setProblem({ title: 'Nothing here', summary: `No app you can open lives at ${where.path}.`, retry: () => navigate('/') });
       return;
     }
     if (screen.kind !== 'app') {
@@ -243,7 +279,7 @@ export function Host({
     mounter.current.mount(app, ctx).catch((err: Error) => {
       setProblem({ title: `${app.name} didn't open`, summary: err.message, retry: () => setAttempt((n) => n + 1) });
     });
-  }, [manifest, screen, attempt, contextFor, importEntry, navigate, pathname, prefs]);
+  }, [manifest, floor, home, where, screen, attempt, contextFor, importEntry, navigate, prefs]);
 
   // Title and Orbit: what they hold, where they start, and where choosing leads.
   useEffect(() => {
@@ -332,11 +368,11 @@ export function Host({
     if (!shell) return;
     shell.apps = (manifest ?? []).map(toShellApp);
     shell.user = { name: session.user.name, email: session.user.email };
-    shell.workspace = session.workspace;
+    shell.workspace = floor?.name ?? '';
     shell.functions = alphaFunctions;
     shell.canSwitchWorkspace = false;
     shell.version = `${__SHELL_VERSION__} · SDK ${SDK_VERSION}`;
-  }, [manifest, session]);
+  }, [manifest, session, floor]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.
   useEffect(() => {
@@ -437,7 +473,7 @@ export function Host({
         <section className="problem" role="alert">
           <ui-heading heading={problem.title} summary={problem.summary} size="s" />
           <ui-button kind="secondary" onClick={problem.retry}>
-            Try again
+            {problem.action ?? 'Try again'}
           </ui-button>
         </section>
       )}

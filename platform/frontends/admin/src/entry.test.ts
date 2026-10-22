@@ -60,7 +60,8 @@ describe('admin', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[]', { status: 200 }));
     const el = document.createElement('div');
     document.body.append(el);
-    const ctx: MountContext = { user: { id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] }, getToken, bus: createEventBus(), raise: vi.fn(), request: vi.fn(), notify: vi.fn(), path: '/apps' };
+    const own = { id: 'w-me', kind: 'personal' as const, name: 'You', slug: 'me', path: [], role: 'lead' as const };
+    const ctx: MountContext = { user: { id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] }, getToken, bus: createEventBus(), raise: vi.fn(), request: vi.fn(), notify: vi.fn(), workspace: own, getWorkspace: () => own, fetch: vi.fn(), path: '/apps' };
     await admin.mount(el, ctx);
     await settle(el);
     expect(el.querySelector('admin-apps')).not.toBeNull();
