@@ -6,16 +6,19 @@ import './people.js';
 import './departments.js';
 import './apps.js';
 import './status.js';
+import './activity.js';
+
+const screens = ['people', 'departments', 'apps', 'status', 'activity'] as const;
 
 /** Which screen a path inside Admin opens. Its Orbit lives at "/", so anything else falls back to People. */
-export const screenFor = (path: string): { screen: 'people' | 'departments' | 'apps' | 'status'; adding: boolean } => {
+export const screenFor = (path: string): { screen: (typeof screens)[number]; adding: boolean } => {
   const [first, second] = path.split('/').filter(Boolean);
-  const screen = first === 'departments' || first === 'apps' || first === 'status' ? first : 'people';
+  const screen = screens.find((s) => s === first) ?? 'people';
   return { screen, adding: second === 'new' };
 };
 
 /**
- * Admin: people, departments, apps and the platform's status, so nobody needs
+ * Admin: people, departments, apps, and the platform's status and activity, so nobody needs
  * the sign-in service's own console or the command line. Every change goes through the platform's services, which check
  * the caller is an admin and record it in the audit log.
  */
@@ -30,7 +33,9 @@ export default defineMicroFrontend({
           ? html`<admin-departments .api=${api} ?adding=${adding}></admin-departments>`
           : screen === 'apps'
             ? html`<admin-apps .api=${api}></admin-apps>`
-            : html`<admin-status .api=${api}></admin-status>`,
+            : screen === 'status'
+              ? html`<admin-status .api=${api}></admin-status>`
+              : html`<admin-activity .api=${api}></admin-activity>`,
       el,
     );
   },

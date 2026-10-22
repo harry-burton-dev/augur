@@ -2,9 +2,10 @@ import { createEventBus, type MountContext } from '@platform/mfe-sdk';
 import type { UiDialog, UiTable, UiToggle } from '@platform/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
-import { AdminApi, departmentPath, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
-import { appStatus } from './apps.js';
+import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
+import { appStatus, rollbackNote, type AdminApps } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
+import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
 
 const finance: Department = { id: 'd-1', name: 'Finance', members: ['u-1'] };
@@ -50,6 +51,7 @@ describe('admin', () => {
     expect(screenFor('/departments/new')).toEqual({ screen: 'departments', adding: true });
     expect(screenFor('/apps')).toEqual({ screen: 'apps', adding: false });
     expect(screenFor('/status')).toEqual({ screen: 'status', adding: false });
+    expect(screenFor('/activity')).toEqual({ screen: 'activity', adding: false });
     expect(screenFor('/')).toEqual({ screen: 'people', adding: false });
   });
 
@@ -130,6 +132,9 @@ describe('admin', () => {
       expect(headline([part('gateway', 'up'), part('registry', 'up')]).heading).toBe('Everything is running');
       expect(headline([part('gateway', 'up'), part('events', 'slow')]).heading).toBe('1 part is slow');
       expect(headline([part('events', 'slow'), part('registry', 'down'), part('sign-in', 'down')]).heading).toBe('2 parts are down');
+      const stale = { state: 'attention' as const, problem: 'No backup has been test-restored yet.' };
+      expect(headline([part('gateway', 'up')], stale)).toEqual({ heading: 'Backups need a look', summary: 'No backup has been test-restored yet.' });
+      expect(headline([part('registry', 'down')], stale).heading).toBe('1 part is down');
     });
 
     it('marks each state with a word that doesn’t rely on colour', () => {
@@ -138,7 +143,8 @@ describe('admin', () => {
 
     it('shows every part from the gateway, and what to check for one that’s down', async () => {
       const components = [part('gateway', 'up', { kind: 'gateway', version: '0.2.0' }), part('library', 'down', { kind: 'app', problem: 'It can’t be reached.' })];
-      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ components }), { status: 200 }));
+      const backups = { state: 'ok', lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 }, lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, people: 3 } };
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ components, backups }), { status: 200 }));
       const el = document.createElement('admin-status') as AdminStatus;
       document.body.append(el);
       el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
@@ -146,11 +152,101 @@ describe('admin', () => {
       await el.updateComplete;
       expect(fetchImpl).toHaveBeenCalledWith('/api/gateway/v1/status', expect.anything());
       expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('1 part is down');
+      expect(el.querySelector('ui-status[label="Backups restore cleanly"]')).not.toBeNull();
       el.open = 'library';
       await el.updateComplete;
       const dialog = el.querySelector('ui-dialog')!;
       expect(dialog.getAttribute('summary')).toBe('It can’t be reached.');
       expect(dialog.textContent).toContain('People can’t use library while its service is down');
+      el.remove();
+    });
+  });
+
+  describe('Activity', () => {
+    const names = namesFrom([alex, sam], [finance, payroll], [{ id: 'library', name: 'Library' } as CatalogueApp]);
+    const entry = (action: string, extra: Partial<AuditEntry> = {}): AuditEntry => ({ id: '1', at: '2026-10-22T10:00:00.000Z', actor: { id: 'u-1', kind: 'user' }, app: 'identity', action, ...extra });
+
+    it('writes each change as a sentence with people’s, departments’ and apps’ names', () => {
+      expect(sentence(entry('department.member-added', { target: 'd-1', detail: { person: 'u-2' } }), names)).toBe('Alex Rivera added Sam Okafor to Finance');
+      expect(sentence(entry('person.updated', { target: 'u-2', detail: { roles: { from: [], to: ['admin'] }, firstName: {}, lastName: {} } }), names)).toBe('Alex Rivera changed Sam Okafor’s roles and name');
+      expect(sentence(entry('person.disabled', { target: 'u-2' }), names)).toBe('Alex Rivera turned off Sam Okafor’s sign-in');
+      expect(sentence(entry('app.registered', { app: 'registry', actor: { id: 'library', kind: 'service' }, target: 'library', detail: { version: '0.2.0' } }), names)).toBe('Library was registered, version 0.2.0');
+      expect(sentence(entry('app.disabled', { app: 'registry', target: 'library' }), names)).toBe('Alex Rivera turned Library off');
+      expect(sentence(entry('app.pinned', { app: 'registry', target: 'library', detail: { version: '0.1.0' } }), names)).toBe('Alex Rivera held Library at version 0.1.0');
+      expect(sentence(entry('app.updated', { app: 'registry', target: 'library', detail: { version: '0.3.0', heldAt: '0.1.0' } }), names)).toBe(
+        'Library registered version 0.3.0, kept but not used while it’s held at 0.1.0',
+      );
+      expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
+    });
+
+    it('turns a period into a time range', () => {
+      const now = new Date(2026, 9, 22, 15, 30);
+      expect(rangeFor('today', now)).toEqual({ since: new Date(2026, 9, 22).toISOString() });
+      expect(rangeFor('week', now)).toEqual({ since: new Date(2026, 9, 16).toISOString() });
+      expect(rangeFor('all', now)).toEqual({});
+      expect(rangeFor('custom', now, '2026-10-01', '2026-10-02')).toEqual({ since: new Date(2026, 9, 1).toISOString(), until: new Date(2026, 9, 3).toISOString() });
+      expect(rangeFor('custom', now, 'nonsense', '')).toEqual({});
+    });
+
+    it('asks for the last week, then pages to older changes from the oldest shown', async () => {
+      const page = (from: number, n: number) => Array.from({ length: n }, (_, i) => entry('person.password-reset', { id: String(from - i), target: 'u-2' }));
+      const urls: string[] = [];
+      const fetchImpl = vi.fn(async (url: string) => {
+        urls.push(url);
+        const body = url.includes('/audit') ? (url.includes('before=') ? page(50, 3) : page(100, 50)) : [];
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+      const el = document.createElement('admin-activity') as AdminActivity;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.entries).toHaveLength(50));
+      const first = new URL(urls.find((u) => u.includes('/audit'))!, 'http://x');
+      expect(first.pathname).toBe('/api/events/v1/audit');
+      expect(first.searchParams.get('limit')).toBe('50');
+      expect(first.searchParams.get('since')).toBeTruthy();
+      expect(el.more).toBe(true);
+      await el.loadOlder();
+      expect(urls.at(-1)).toContain('before=51');
+      expect(el.entries).toHaveLength(53);
+      expect(el.more).toBe(false);
+      el.remove();
+    });
+  });
+
+  describe('App versions', () => {
+    const app: CatalogueApp = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.2.0', sdk: '^1.0.0', platform: false, enabled: true };
+    const kept = (version: string, entry = app.entry, serving = false) => ({ version, entry: { ...app, version, entry }, registeredBy: 'library', registeredAt: '2026-10-20T10:00:00.000Z', serving });
+
+    it('warns when going back changes the manifest but not the code', () => {
+      expect(rollbackNote(app, kept('0.1.0'))).toMatch(/loads from the same address as 0.2.0/);
+      expect(rollbackNote(app, kept('0.1.0', '/apps/library/0.1.0/entry.js'))).toBe('');
+      expect(rollbackNote(app, kept('0.2.0'))).toBe('');
+    });
+
+    it('lists an app’s kept versions and holds it at the one picked', async () => {
+      const calls: [string, string][] = [];
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+        calls.push([init.method ?? 'GET', url]);
+        const body = url.endsWith('/versions')
+          ? [kept('0.2.0', app.entry, true), kept('0.1.0', '/apps/library/0.1.0/entry.js')]
+          : url.endsWith('/pin')
+            ? { ...app, version: '0.1.0', pinnedVersion: '0.1.0' }
+            : [app];
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.apps).toHaveLength(1));
+      el.open = 'library';
+      await vi.waitFor(() => expect(el.versions).toHaveLength(2));
+      el.choice = '0.1.0';
+      await el.useChoice(app);
+      expect(calls).toContainEqual(['PUT', '/api/registry/v1/apps/library/pin']);
+      expect(el.apps[0]).toMatchObject({ version: '0.1.0', pinnedVersion: '0.1.0' });
+      el.choice = '';
+      await el.useChoice(el.apps[0]);
+      expect(calls).toContainEqual(['DELETE', '/api/registry/v1/apps/library/pin']);
       el.remove();
     });
   });

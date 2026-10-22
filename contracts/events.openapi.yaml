@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Notifications for the Shell's stream, and the platform's audit log.
     People reach it through the gateway, which passes the caller in x-user-*
@@ -61,9 +61,15 @@ paths:
   /audit:
     get:
       summary: The audit log, newest first (admins only)
+      description: >
+        To page, ask again with `before` set to the id of the oldest entry
+        already shown; a page shorter than `limit` is the last one.
       parameters:
         - { name: app, in: query, schema: { type: string } }
         - { name: actor, in: query, schema: { type: string } }
+        - { name: since, in: query, schema: { type: string, format: date-time }, description: Only entries at or after this time }
+        - { name: until, in: query, schema: { type: string, format: date-time }, description: Only entries before this time }
+        - { name: before, in: query, schema: { type: string, pattern: "^[0-9]+$" }, description: An entry's id; only entries older than it }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
       responses:
         "200":

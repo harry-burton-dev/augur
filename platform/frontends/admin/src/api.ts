@@ -33,6 +33,18 @@ export interface CatalogueApp extends AppManifestEntry {
   registeredBy?: string;
   registeredAt?: string;
   updatedAt?: string;
+  /** Set when an admin holds the app at this version. */
+  pinnedVersion?: string;
+}
+
+/** One kept version of an app. */
+export interface AppVersion {
+  version: string;
+  entry: AppManifestEntry;
+  registeredBy: string;
+  registeredAt: string;
+  /** The one the shell is given now. */
+  serving: boolean;
 }
 
 /** One part of the platform as the gateway last saw it (see contracts/gateway.openapi.yaml). */
@@ -48,6 +60,41 @@ export interface ComponentStatus {
   problem?: string;
 }
 
+/** One entry in the audit log (see contracts/events.openapi.yaml). */
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actor: { id: string; kind: 'user' | 'service' };
+  app: string;
+  action: string;
+  target?: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface AuditQuery {
+  actor?: string;
+  app?: string;
+  since?: string;
+  until?: string;
+  /** The id of the oldest entry already shown. */
+  before?: string;
+  limit: number;
+}
+
+/** What the backup container last reported (see contracts/gateway.openapi.yaml). */
+export interface BackupStatus {
+  state: 'ok' | 'attention';
+  problem?: string;
+  lastBackup?: { at: string; ok: boolean; file?: string; bytes?: number; problem?: string };
+  lastRestoreTest?: { at: string; ok: boolean; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
+}
+
+export interface PlatformStatus {
+  components: ComponentStatus[];
+  /** Absent when the gateway isn't told where backups are. */
+  backups?: BackupStatus;
+}
+
 export interface NewPerson {
   firstName: string;
   lastName: string;
@@ -61,7 +108,7 @@ export type PersonChanges = Partial<Pick<Person, 'firstName' | 'lastName' | 'ema
 
 /**
  * Admin's calls, all through the gateway: people and departments to identity
- * (which talks to the sign-in service), apps to the registry, status to the gateway itself. The browser never
+ * (which talks to the sign-in service), apps to the registry, activity to events, status to the gateway itself. The browser never
  * calls the sign-in service's admin API itself.
  */
 export class AdminApi {
@@ -107,8 +154,17 @@ export class AdminApi {
 
   apps = () => this.call<CatalogueApp[]>('GET', '/api/registry/v1/apps');
   setAppEnabled = (id: string, enabled: boolean) => this.call<CatalogueApp>('PATCH', `/api/registry/v1/apps/${encodeURIComponent(id)}`, { enabled });
+  appVersions = (id: string) => this.call<AppVersion[]>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/versions`);
+  /** Serve one kept version and hold the app there; `null` follows new versions again. */
+  pinApp = (id: string, version: string | null) =>
+    version === null
+      ? this.call<CatalogueApp>('DELETE', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`)
+      : this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`, { version });
 
-  status = async () => (await this.call<{ components: ComponentStatus[] }>('GET', '/api/gateway/v1/status')).components;
+  audit = (query: AuditQuery) =>
+    this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);
+
+  status = () => this.call<PlatformStatus>('GET', '/api/gateway/v1/status');
 }
 
 export const fullName = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => `${p.firstName} ${p.lastName}`.trim() || p.username;

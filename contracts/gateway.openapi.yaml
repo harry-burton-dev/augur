@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gateway
-  version: 1.0.0
+  version: 1.1.0
   description: >
     The gateway's own API, beside the services it forwards to. Reached at
     /api/gateway/v1 by a signed-in caller. Everything else under /api/<service>
@@ -18,7 +18,8 @@ paths:
         The gateway checks every service's /healthz and the sign-in service's
         signing keys every 30 seconds and keeps the last answer, so this never
         waits on a slow service. A component that failed its last check, or has
-        not answered for 2 minutes, is down.
+        not answered for 2 minutes, is down. `backups` is present when the
+        gateway is told where the backup container writes (BACKUP_DIR).
       responses:
         "200":
           description: Every component, the gateway first
@@ -29,6 +30,7 @@ paths:
                 required: [components]
                 properties:
                   components: { type: array, items: { $ref: "#/components/schemas/ComponentStatus" } }
+                  backups: { $ref: "#/components/schemas/BackupStatus" }
         "401": { description: No signed-in caller }
         "403": { description: Not an admin }
 components:
@@ -46,3 +48,28 @@ components:
         checkedAt: { type: string, format: date-time }
         seenAt: { type: string, format: date-time, description: When it last answered }
         problem: { type: string, description: Why it is down, in words an admin can act on }
+    BackupRun:
+      type: object
+      required: [at, ok]
+      properties:
+        at: { type: string, format: date-time }
+        ok: { type: boolean }
+        file: { type: string }
+        bytes: { type: integer }
+        problem: { type: string }
+    BackupStatus:
+      type: object
+      required: [state]
+      properties:
+        state: { enum: [ok, attention], description: '"attention" when backups cannot be relied on right now' }
+        problem: { type: string, description: Why, in words an admin can act on }
+        lastBackup: { $ref: "#/components/schemas/BackupRun" }
+        lastRestoreTest:
+          allOf:
+            - $ref: "#/components/schemas/BackupRun"
+            - type: object
+              properties:
+                seconds: { type: integer }
+                people: { type: integer, description: People in the restored sign-in realm }
+                apps: { type: integer }
+                auditEntries: { type: integer }

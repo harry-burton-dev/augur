@@ -23,6 +23,11 @@ export interface AuditEntry extends NewAuditEntry {
 export interface AuditFilter {
   app?: string;
   actor?: string;
+  /** Only entries at or after this time, and before this one. */
+  since?: string;
+  until?: string;
+  /** The id of the oldest entry already shown: only entries older than it, for the next page. */
+  before?: string;
   limit: number;
 }
 
@@ -88,9 +93,11 @@ export class MemoryEventStore implements EventStore {
     return e;
   }
 
-  async audit({ app, actor, limit }: AuditFilter) {
+  async audit({ app, actor, since, until, before, limit }: AuditFilter) {
+    const cursor = before === undefined ? this.entries.length : this.entries.findIndex((e) => e.id === before);
     return this.entries
-      .filter((e) => (!app || e.app === app) && (!actor || e.actor.id === actor))
+      .slice(0, cursor < 0 ? 0 : cursor)
+      .filter((e) => (!app || e.app === app) && (!actor || e.actor.id === actor) && (!since || e.at >= since) && (!until || e.at < until))
       .reverse()
       .slice(0, limit);
   }
@@ -281,11 +288,15 @@ export class PgEventStore implements EventStore {
     return fromAuditRow(rows[0]);
   }
 
-  async audit({ app, actor, limit }: AuditFilter) {
+  async audit({ app, actor, since, until, before, limit }: AuditFilter) {
+    // The cursor is an entry's id; a page continues from that entry's place in (at, id) order.
     const { rows } = await this.pool.query<AuditRow>(
-      `select * from events.audit where ($1::text is null or app = $1) and ($2::text is null or actor_id = $2)
-       order by at desc, id desc limit $3`,
-      [app ?? null, actor ?? null, limit],
+      `select * from events.audit
+       where ($1::text is null or app = $1) and ($2::text is null or actor_id = $2)
+         and ($3::timestamptz is null or at >= $3) and ($4::timestamptz is null or at < $4)
+         and ($5::bigint is null or (at, id) < (select at, id from events.audit where id = $5))
+       order by at desc, id desc limit $6`,
+      [app ?? null, actor ?? null, since ?? null, until ?? null, before ?? null, limit],
     );
     return rows.map(fromAuditRow);
   }

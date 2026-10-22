@@ -84,5 +84,8 @@ describe('events', () => {
     expect((await app.inject({ method: 'GET', url: '/v1/audit', headers: sam })).statusCode).toBe(403);
     const log = (await app.inject({ method: 'GET', url: '/v1/audit?app=library', headers: alex })).json();
     expect(log).toMatchObject([entry]);
+    const page = await app.inject({ method: 'GET', url: `/v1/audit?since=2000-01-01T00:00:00Z&before=${log[0].id}&limit=50`, headers: alex });
+    expect([page.statusCode, page.json()]).toEqual([200, []]);
+    expect((await app.inject({ method: 'GET', url: '/v1/audit?since=yesterday', headers: alex })).statusCode).toBe(400);
   });
 });

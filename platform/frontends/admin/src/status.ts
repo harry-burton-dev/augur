@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import type { Fact, StatusName, TableColumn, TableRow } from '@platform/ui-kit';
-import type { AdminApi, ComponentStatus } from './api.js';
+import type { AdminApi, BackupStatus, ComponentStatus } from './api.js';
 import { page } from './parts.js';
 
 /** How often the screen asks the gateway again while it is open. The gateway itself checks every 30 seconds. */
@@ -18,13 +18,14 @@ export const stateOf = (c: Pick<ComponentStatus, 'state'>): { status: StatusName
         ? { status: 'running', label: 'Checking' }
         : { status: 'failed', label: 'Down' };
 
-/** The heading: everything's fine, or how many parts need a look. */
-export const headline = (components: ComponentStatus[]): { heading: string; summary: string } => {
+/** The heading: everything's fine, or how many parts need a look, then backups. */
+export const headline = (components: ComponentStatus[], backups?: BackupStatus): { heading: string; summary: string } => {
   const down = components.filter((c) => c.state === 'down').length;
   const slow = components.filter((c) => c.state === 'slow').length;
   if (!components.length) return { heading: 'Status', summary: 'Whether every part of the platform is answering.' };
   if (down) return { heading: `${down === 1 ? '1 part is' : `${down} parts are`} down`, summary: 'People may not be able to use what depends on it. Open a row to see what to check.' };
   if (slow) return { heading: `${slow === 1 ? '1 part is' : `${slow} parts are`} slow`, summary: 'Everything is answering, but not all of it quickly.' };
+  if (backups?.state === 'attention') return { heading: 'Backups need a look', summary: backups.problem ?? 'Everything is running, but backups can’t be relied on right now.' };
   return { heading: 'Everything is running', summary: 'Every part of the platform answered its last check.' };
 };
 
@@ -42,12 +43,14 @@ export class AdminStatus extends LitElement {
     api: { attribute: false },
     components: { state: true },
     loading: { state: true },
+    backups: { state: true },
     error: { state: true },
     open: { state: true },
   };
 
   declare api: AdminApi;
   declare components: ComponentStatus[];
+  declare backups: BackupStatus | undefined;
   declare loading: boolean;
   declare error: string;
   declare open: string | undefined;
@@ -86,7 +89,9 @@ export class AdminStatus extends LitElement {
       this.error = '';
     }
     try {
-      this.components = await this.api.status();
+      const { components, backups } = await this.api.status();
+      this.components = components;
+      this.backups = backups;
       this.error = '';
     } catch (err) {
       if (!quiet || !this.components.length) this.error = (err as Error).message;
@@ -130,12 +135,32 @@ export class AdminStatus extends LitElement {
     </ui-dialog>`;
   }
 
+  /** Last night's backup and the last restore test, when the gateway knows about them. */
+  private backupFacts() {
+    const b = this.backups;
+    if (!b) return nothing;
+    const when = (iso?: string) => (iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never');
+    const size = (bytes?: number) => (bytes === undefined ? '' : bytes > 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+    const r = b.lastRestoreTest;
+    const facts: Fact[] = [
+      { label: 'Last backup', value: b.lastBackup ? (b.lastBackup.ok ? when(b.lastBackup.at) : 'Failed') : 'Never' },
+      ...(b.lastBackup?.ok && b.lastBackup.bytes !== undefined ? [{ label: 'Size', value: size(b.lastBackup.bytes) }] : []),
+      { label: 'Last restore test', value: r ? when(r.at) : 'Never' },
+      ...(r ? [{ label: 'Result', value: r.ok ? `Restored, ${r.people ?? 0} people` : 'Failed' }] : []),
+    ];
+    return html`<div style="padding:var(--space-5) var(--space-4) var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)">
+      <ui-status status=${b.state === 'ok' ? 'done' : 'warning'} label=${b.state === 'ok' ? 'Backups restore cleanly' : 'Backups need a look'}></ui-status>
+      <ui-facts .items=${facts}></ui-facts>
+      ${b.problem ? html`<p style="margin:0">${b.problem}</p>` : nothing}
+    </div>`;
+  }
+
   override render() {
     const rows: TableRow[] = this.components.map((c) => {
       const state = stateOf(c);
       return { id: c.name, name: c.name, kind: kindWords[c.kind], version: c.version ?? '', state: state.label, stateStatus: state.status, seenAt: c.seenAt ?? '' };
     });
-    const { heading, summary } = this.error ? { heading: 'Status', summary: 'Whether every part of the platform is answering.' } : headline(this.components);
+    const { heading, summary } = this.error ? { heading: 'Status', summary: 'Whether every part of the platform is answering.' } : headline(this.components, this.backups);
     return page(
       'Admin',
       heading,
@@ -150,7 +175,7 @@ export class AdminStatus extends LitElement {
           @ui-open=${(e: CustomEvent<{ row: TableRow }>) => (this.open = e.detail.row.id)}
           @ui-retry=${() => this.load()}
         ></ui-table>
-        ${this.details()}`,
+        ${this.backupFacts()} ${this.details()}`,
     );
   }
 }

@@ -47,6 +47,19 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect(await store.audit({ app: 'library', limit: 10 })).toMatchObject([{ actor: { id: 'u-2', kind: 'user' }, detail: { title: 'Budget' } }]);
     expect(await store.audit({ actor: 'library', limit: 10 })).toMatchObject([{ action: 'app.registered' }]);
   });
+
+  it('pages through the audit log from the oldest entry shown, and keeps to a date range', async () => {
+    for (const n of [1, 2, 3, 4, 5]) await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: `u-${n}` });
+    const first = await store.audit({ limit: 2 });
+    expect(first.map((e) => e.target)).toEqual(['u-5', 'u-4']);
+    const second = await store.audit({ limit: 2, before: first.at(-1)!.id });
+    expect(second.map((e) => e.target)).toEqual(['u-3', 'u-2']);
+    expect((await store.audit({ limit: 10, before: second.at(-1)!.id })).map((e) => e.target)).toEqual(['u-1']);
+    expect(await store.audit({ limit: 10, before: '999999' })).toEqual([]);
+    expect(await store.audit({ limit: 10, since: '2999-01-01T00:00:00.000Z' })).toEqual([]);
+    expect(await store.audit({ limit: 10, until: '2000-01-01T00:00:00.000Z' })).toEqual([]);
+    expect(await store.audit({ limit: 10, since: '2000-01-01T00:00:00.000Z', until: '2999-01-01T00:00:00.000Z' })).toHaveLength(5);
+  });
 };
 
 describe('MemoryEventStore', () => behavesLikeAStore(() => new MemoryEventStore()));
