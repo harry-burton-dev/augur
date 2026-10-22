@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { callerHeaders, serviceHeaders } from '@platform/service-kit';
+import { callerHeaders, GrantsUnavailable, serviceHeaders } from '@platform/service-kit';
 import { buildApp } from './app.ts';
 
 const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const sam = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
-const library = serviceHeaders({ name: 'library', token: 'local-secret' });
+const library = await serviceHeaders({ name: 'library', token: 'local-secret' });
 const review = { app: 'library', recipients: ['u-1', 'u-2'], level: 'needs', title: 'Review the budget paper', link: '/doc/7' };
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -87,5 +87,47 @@ describe('events', () => {
     const page = await app.inject({ method: 'GET', url: `/v1/audit?since=2000-01-01T00:00:00Z&before=${log[0].id}&limit=50`, headers: alex });
     expect([page.statusCode, page.json()]).toEqual([200, []]);
     expect((await app.inject({ method: 'GET', url: '/v1/audit?since=yesterday', headers: alex })).statusCode).toBe(400);
+  });
+
+  describe('apps signed in as themselves', () => {
+    // Stands in for Keycloak: "Bearer app-<id>" is that app's token.
+    const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
+      const app = /^Bearer app-(\S+)$/.exec(String(headers.authorization ?? ''))?.[1];
+      return app ? { kind: 'app' as const, app } : undefined;
+    };
+    const as = (app: string, workspace?: string) => ({ authorization: `Bearer app-${app}`, ...(workspace ? { 'x-workspace-id': workspace } : {}) });
+    const asked: [string, string | undefined][] = [];
+    // Library may notify on every floor but write the audit log only on w-finance; Board is granted nothing.
+    const grants = async (app: string, workspace?: string) => {
+      asked.push([app, workspace]);
+      if (app !== 'library') return [];
+      return workspace === 'w-finance' ? (['notifications:send', 'audit:write'] as const) : (['notifications:send'] as const);
+    };
+
+    it('lets an app notify with the scope, only for itself', async () => {
+      const app = await buildApp({ verifyService, grants });
+      const post = (headers: Record<string, string>, payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers, payload });
+      expect((await post(as('library', 'w-me'), review)).statusCode).toBe(202);
+      expect(asked.at(-1)).toEqual(['library', 'w-me']);
+      const posing = await post(as('board'), review);
+      expect([posing.statusCode, posing.json().message]).toEqual([403, 'board can only send for itself, not for "library".']);
+      const ungranted = await post(as('board'), { ...review, app: 'board' });
+      expect([ungranted.statusCode, ungranted.json().message]).toEqual([403, 'board isn’t granted notifications:send.']);
+    });
+
+    it('checks the scope on the floor the call names', async () => {
+      const app = await buildApp({ verifyService, grants });
+      const entry = { actor: { id: 'u-1', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' };
+      expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: as('library', 'w-finance'), payload: entry })).statusCode).toBe(201);
+      const elsewhere = await app.inject({ method: 'POST', url: '/v1/audit', headers: as('library', 'w-legal'), payload: entry });
+      expect([elsewhere.statusCode, elsewhere.json().message]).toEqual([403, 'library isn’t granted audit:write on that floor.']);
+    });
+
+    it('refuses for now when what an app may do can’t be checked', async () => {
+      const app = await buildApp({ verifyService, grants: async () => Promise.reject(new GrantsUnavailable('down')) });
+      expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: as('library'), payload: review })).statusCode).toBe(503);
+      const unchecked = await buildApp({ verifyService });
+      expect((await unchecked.inject({ method: 'POST', url: '/v1/notifications', headers: as('library'), payload: review })).statusCode).toBe(503);
+    });
   });
 });

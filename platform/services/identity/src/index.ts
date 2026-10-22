@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
+import { KeycloakAppClients, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
@@ -30,8 +31,11 @@ if (process.env.DATABASE_URL) {
 const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEYCLOAK_ADMIN_USER = production ? undefined : 'admin' } = process.env;
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD ?? (production ? undefined : 'admin');
 let directory: Directory | undefined;
+let appClients: AppClients | undefined;
 if (KEYCLOAK_ADMIN_USER && KEYCLOAK_ADMIN_PASSWORD) {
-  directory = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, adminUser: KEYCLOAK_ADMIN_USER, adminPassword: KEYCLOAK_ADMIN_PASSWORD });
+  const keycloak = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, adminUser: KEYCLOAK_ADMIN_USER, adminPassword: KEYCLOAK_ADMIN_PASSWORD });
+  directory = keycloak;
+  appClients = new KeycloakAppClients(keycloak);
 } else {
   console.warn('KEYCLOAK_ADMIN_USER or KEYCLOAK_ADMIN_PASSWORD is not set: admins cannot manage people and departments.');
 }
@@ -40,5 +44,5 @@ const { SERVICE_TOKEN, EVENTS_URL } = process.env;
 const audit = EVENTS_URL && SERVICE_TOKEN ? auditTo(EVENTS_URL, { name: 'identity', token: SERVICE_TOKEN }) : undefined;
 if (!audit) console.warn('EVENTS_URL or SERVICE_TOKEN is not set: admins’ changes to people and departments are not audited.');
 
-const app = await buildApp({ store, workspaces, directory, audit });
+const app = await buildApp({ store, workspaces, directory, appClients, audit });
 await app.listen({ port, host: '0.0.0.0' });

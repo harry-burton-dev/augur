@@ -1,4 +1,5 @@
 import semver from 'semver';
+import { SCOPES, type Scope } from '@platform/service-kit';
 
 /** One app in the catalogue, as the app itself describes it in its manifest.json. */
 export interface AppEntry {
@@ -16,6 +17,8 @@ export interface AppEntry {
   handles?: string[];
   ai?: boolean;
   menu?: AppMenuCategory[];
+  /** What the app's service asks to do on the platform, such as "notifications:send". */
+  scopes?: Scope[];
 }
 
 export interface AppMenuItem {
@@ -109,6 +112,7 @@ export const appEntrySchema = {
     requiredRole: { type: 'string', maxLength: 60 },
     handles: { type: 'array', maxItems: 50, items: { type: 'string', pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 } },
     ai: { type: 'boolean' },
+    scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } },
     menu: {
       type: 'array',
       maxItems: 8,

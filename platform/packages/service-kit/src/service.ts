@@ -1,4 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
+import { WORKSPACE_HEADERS } from './caller.js';
+import { type ServiceIdentity, type ServiceVerifier, type TokenSource } from './apps.js';
 
 /**
  * How platform and app services prove to each other that a call comes from
@@ -8,16 +10,22 @@ import { timingSafeEqual } from 'node:crypto';
 export const SERVICE_TOKEN_HEADER = 'x-service-token';
 export const SERVICE_NAME_HEADER = 'x-service-name';
 
-export interface ServiceCredentials {
-  /** The calling service, e.g. "library"; recorded as the actor in the audit log. */
-  name: string;
-  token: string;
-}
+/**
+ * How a service proves who it is: its own sign-in (`getToken`, see apps.ts),
+ * or the environment's shared service token, which is on its way out.
+ */
+export type ServiceCredentials =
+  | {
+      /** The calling service, e.g. "library"; recorded as the actor in the audit log. */
+      name: string;
+      token: string;
+    }
+  | { name: string; getToken: TokenSource };
 
-export const serviceHeaders = ({ name, token }: ServiceCredentials): Record<string, string> => ({
-  [SERVICE_TOKEN_HEADER]: token,
-  [SERVICE_NAME_HEADER]: name,
-});
+export const serviceHeaders = async (credentials: ServiceCredentials): Promise<Record<string, string>> =>
+  'getToken' in credentials
+    ? { authorization: `Bearer ${await credentials.getToken()}` }
+    : { [SERVICE_TOKEN_HEADER]: credentials.token, [SERVICE_NAME_HEADER]: credentials.name };
 
 /** Removes service headers, so a client cannot pose as a service. The gateway calls this on every request. */
 export const withoutServiceHeaders = <H extends Record<string, unknown>>(headers: H): H =>
@@ -39,6 +47,24 @@ export const serviceFromHeaders = (headers: Record<string, string | string[] | u
   return typeof name === 'string' && name ? name : 'service';
 };
 
+export interface ServiceCheck {
+  /** Checks an app's or platform service's own token. */
+  verify?: ServiceVerifier;
+  /** The environment's shared service token; whoever has it counts as a platform service. */
+  token?: string;
+}
+
+/**
+ * Who sent a service call: an app or platform service by its own token, or a
+ * holder of the shared service token (as a platform service), else undefined.
+ * Throws ServiceAuthUnavailable when a token can't be checked right now.
+ */
+export const identifyService = async (headers: Record<string, string | string[] | undefined>, { verify, token }: ServiceCheck): Promise<ServiceIdentity | undefined> => {
+  const legacy = serviceFromHeaders(headers, token);
+  if (legacy) return { kind: 'platform', name: legacy };
+  return verify ? verify(headers) : undefined;
+};
+
 export class ServiceCallError extends Error {}
 
 export interface CallOptions {
@@ -48,6 +74,8 @@ export interface CallOptions {
   body: unknown;
   /** What is being done, for the error message: "register library". */
   what: string;
+  /** The floor the call is for, sent as X-Workspace-Id. */
+  workspace?: string;
   attempts?: number;
   /** Delay before the first retry; doubles after each. */
   retryMs?: number;
@@ -58,13 +86,13 @@ export interface CallOptions {
  * Calls another service, retrying while it is unreachable or failing. A refusal
  * (4xx: bad input, wrong token, a conflict) is not retried.
  */
-export async function callService({ method, url, credentials, body, what, attempts = 1, retryMs = 500, fetchImpl = fetch }: CallOptions): Promise<unknown> {
+export async function callService({ method, url, credentials, body, what, workspace, attempts = 1, retryMs = 500, fetchImpl = fetch }: CallOptions): Promise<unknown> {
   let lastError = '';
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const res = await fetchImpl(url, {
         method,
-        headers: { 'content-type': 'application/json', ...serviceHeaders(credentials) },
+        headers: { 'content-type': 'application/json', ...(workspace ? { [WORKSPACE_HEADERS.id]: encodeURIComponent(workspace) } : {}), ...(await serviceHeaders(credentials)) },
         body: JSON.stringify(body),
       });
       const reply = (await res.json().catch(() => ({}))) as { message?: string };

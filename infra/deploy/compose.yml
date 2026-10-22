@@ -10,6 +10,10 @@ x-service: &service
     NODE_ENV: production
     SERVICE_TOKEN: ${SERVICE_TOKEN:?set SERVICE_TOKEN in .env}
     EVENTS_URL: http://events:8084
+    REGISTRY_URL: http://registry:8082
+    # Apps' services sign in as themselves; their tokens name the public address and are checked over the compose network.
+    OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
+    OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
     DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/platform
   depends_on:
     postgres: { condition: service_healthy }

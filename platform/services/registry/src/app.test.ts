@@ -225,4 +225,43 @@ describe('registry', () => {
       expect((await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: admin })).statusCode).toBe(404);
     });
   });
+
+  describe('apps signed in as themselves', () => {
+    // Stands in for Keycloak: "Bearer app-<id>" is that app's token, "Bearer platform-<name>" a platform service's.
+    const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
+      const m = /^Bearer (app|platform)-(\S+)$/.exec(String(headers.authorization ?? ''));
+      return m ? (m[1] === 'app' ? { kind: 'app' as const, app: m[2] } : { kind: 'platform' as const, name: m[2] }) : undefined;
+    };
+    const as = (client: string) => ({ authorization: `Bearer ${client}` });
+
+    it('lets an app register itself, recorded as itself, and nothing else', async () => {
+      const entries: { actor: { id: string } }[] = [];
+      const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+      expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: library })).statusCode).toBe(201);
+      expect(entries.at(-1)?.actor).toEqual({ id: 'library', kind: 'service' });
+      const other = await app.inject({ method: 'PUT', url: '/v1/apps/board', headers: as('app-library'), payload: { ...library, id: 'board', route: '/board' } });
+      expect(other.statusCode).toBe(403);
+      expect(other.json().message).toMatch(/library can only register itself/);
+    });
+
+    it('takes the scopes an app asks for, and refuses ones that don’t exist', async () => {
+      const app = await buildApp({ verifyService });
+      const bad = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['people:delete'] } });
+      expect(bad.statusCode).toBe(400);
+      const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
+      expect(res.statusCode).toBe(201);
+    });
+
+    it('tells platform services what an app is granted, and nothing once it is off', async () => {
+      const app = await buildApp({ verifyService });
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
+      const grants = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w-1', headers });
+      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w-1', scopes: ['notifications:send'] });
+      expect((await grants(as('app-library'))).statusCode).toBe(403);
+      expect((await grants(admin)).statusCode).toBe(403);
+      await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } });
+      expect((await grants(as('platform-events'))).json().scopes).toEqual([]);
+      expect((await app.inject({ method: 'GET', url: '/v1/apps/nope/grants', headers: as('platform-events') })).statusCode).toBe(404);
+    });
+  });
 });

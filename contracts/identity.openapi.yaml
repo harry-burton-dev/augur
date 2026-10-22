@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.3.0
+  version: 1.4.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -81,6 +81,31 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/Role" } }
+  /admin/apps/{id}/credential:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9-]{1,39}$" } }
+    post:
+      summary: Issue an app's own sign-in, or replace its secret (admins only)
+      description: >
+        Makes the app's Keycloak client (app-<id>: client credentials only,
+        5-minute tokens for the platform-services audience), or gives it a new
+        secret, after which the old one stops working. The secret is in this
+        answer only; the app's service is given it as SERVICE_CLIENT_SECRET.
+        Audited as app.credential-issued, without the secret.
+      responses:
+        "201":
+          description: The app's client and its secret
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clientId, secret]
+                properties:
+                  clientId: { type: string, example: app-library }
+                  secret: { type: string }
+        "400": { description: Not an app id }
+        "403": { description: Not an admin }
+        "503": { description: Identity isn't connected to the sign-in service }
   /admin/people:
     get:
       summary: Everyone in the directory

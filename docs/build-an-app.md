@@ -106,6 +106,7 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
   "icon": "apps",
   "requiredRole": "finance",
   "handles": ["expense.open"],
+  "scopes": ["notifications:send"],
   "menu": [
     { "label": "Claims", "icon": "document", "items": [
       { "label": "Mine", "path": "/mine", "detail": "Drafts and sent" }
@@ -118,6 +119,7 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 - `sdk` is the range of SDK releases the app works with. The shell refuses an app outside it.
 - `icon` and menu `icon`s are the kit's icon names (see Storybook's Icons).
 - `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit; see [platform/frontends](../platform/frontends/README.md#title-and-orbit).
+- `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`). An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope.
 
 `pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
 
@@ -136,7 +138,17 @@ CI runs all of these, and fails a pull request without a changeset.
 
 ## 7. Putting it on the platform
 
-The registry lists an app once its service registers it, which it does when it starts with `REGISTRY_URL` and `SERVICE_TOKEN` set. The gateway sends `/api/<id>/…` to the services in `APP_UPSTREAMS`.
+The registry lists an app once its service registers it, which it does when it starts with `REGISTRY_URL` set and a way to sign in. The gateway sends `/api/<id>/…` to the services in `APP_UPSTREAMS`.
+
+The app's service signs in to the platform as itself. An admin issues its sign-in once, and again whenever the secret may have leaked (the old one stops working):
+
+```sh
+# through the gateway, as an admin
+curl -X POST https://<platform>/api/identity/v1/admin/apps/expenses/credential -H "authorization: Bearer <admin token>"
+# {"clientId":"app-expenses","secret":"…"}
+```
+
+Give the service that secret as `SERVICE_CLIENT_SECRET`. It gets 5-minute tokens for its Keycloak client `app-expenses`, and the platform checks each call against the scopes the registry grants it on the floor the call names. Until every service has its own sign-in, a service with only the shared `SERVICE_TOKEN` still registers.
 
 In `infra/docker-compose.yml` (and `infra/deploy/compose.yml` for the server), add the service and its upstream:
 

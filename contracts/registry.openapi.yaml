@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.3.0
+  version: 1.4.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -38,8 +38,11 @@ paths:
     put:
       summary: Register an app, or update it
       description: >
-        Called by an app's own service on the internal network with the
-        x-service-token and x-service-name headers, or by an admin through the gateway.
+        Called by an app's own service on the internal network, signed in as
+        itself (a bearer token for its Keycloak client app-<id>, audience
+        platform-services), which may register only its own id; by a platform
+        service with the x-service-token and x-service-name headers; or by an
+        admin through the gateway.
         Unknown fields are refused. The platform's own apps (home, admin) and
         routes another app already has cannot be taken. Every version is kept
         (the last 5, plus a pinned one); an app an admin has pinned keeps
@@ -55,8 +58,9 @@ paths:
         "201": { description: Registered }
         "200": { description: Updated }
         "400": { description: "The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed" }
-        "403": { description: Neither a service with the service token nor an admin }
+        "403": { description: "Neither the app itself, a platform service nor an admin" }
         "409": { description: The id belongs to a platform app, or the route is taken }
+        "503": { description: The sign-in service can't be reached to check the app's token }
     patch:
       summary: Turn an app on or off (admins only)
       description: >
@@ -88,6 +92,32 @@ paths:
         "204": { description: Removed }
         "403": { description: Not an admin }
         "404": { description: No such app }
+  /apps/{id}/grants:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: What an app may do on a floor (platform services only)
+      description: >
+        The platform's services check an app's calls against this, and keep
+        each answer for up to 30 seconds. An app on the catalogue is granted the
+        scopes its manifest asks for, on every floor; one that is turned off is
+        granted nothing.
+      parameters:
+        - { name: workspace, in: query, required: false, schema: { type: string }, description: The floor the call is for }
+      responses:
+        "200":
+          description: The app's grants
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [app, scopes]
+                properties:
+                  app: { type: string }
+                  workspace: { type: string }
+                  scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+        "403": { description: Not a platform service }
+        "404": { description: No such app is registered }
   /apps/{id}/versions:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -228,11 +258,20 @@ components:
           items: { type: string }
           description: Intent types this app handles, e.g. document.open
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
+        scopes:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Scope" }
+          description: What the app's service asks to do on the platform. An app may always register itself.
         menu:
           type: array
           maxItems: 8
           description: The app's menu, shown by the shell as Orbit at the app's root and as its chapter in Title
           items: { $ref: "#/components/schemas/AppMenuCategory" }
+    Scope:
+      type: string
+      enum: [notifications:send, audit:write]
+      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log."
     AppMenuCategory:
       type: object
       required: [label, items]

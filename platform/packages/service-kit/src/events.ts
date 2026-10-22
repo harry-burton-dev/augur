@@ -31,30 +31,34 @@ interface EventsOptions {
   /** The events service's internal address, e.g. http://events:8084. */
   eventsUrl: string;
   credentials: ServiceCredentials;
+  /** The floor it happened on; an app's grants are checked there. */
+  workspace?: string;
   fetchImpl?: typeof fetch;
 }
 
 /** Tells people something through the Shell's stream. */
-export async function notify({ eventsUrl, credentials, fetchImpl, notification }: EventsOptions & { notification: NewNotification }): Promise<void> {
+export async function notify({ eventsUrl, credentials, workspace, fetchImpl, notification }: EventsOptions & { notification: NewNotification }): Promise<void> {
   await callService({
     method: 'POST',
     url: `${eventsUrl.replace(/\/$/, '')}/v1/notifications`,
     credentials,
     body: notification,
     what: `notify ${notification.recipients.length} people`,
+    workspace,
     attempts: 3,
     fetchImpl,
   });
 }
 
 /** Adds an entry to the platform's audit log. */
-export async function recordAudit({ eventsUrl, credentials, fetchImpl, entry }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
+export async function recordAudit({ eventsUrl, credentials, workspace, fetchImpl, entry }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
   await callService({
     method: 'POST',
     url: `${eventsUrl.replace(/\/$/, '')}/v1/audit`,
     credentials,
     body: entry,
     what: `record ${entry.action} in the audit log`,
+    workspace,
     attempts: 3,
     fetchImpl,
   });

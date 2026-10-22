@@ -1,5 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { callerFromHeaders, health, packageVersion, recordAudit, serviceFromHeaders, serviceLogging, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
+import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type ServiceCredentials, type ServiceIdentity, type ServiceVerifier } from '@platform/service-kit';
 import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
 import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore } from './store.ts';
 
@@ -11,6 +11,8 @@ export interface RegistryOptions {
   store?: AppStore;
   /** The environment's service token: lets apps' services register themselves. Without it only admins can change the catalogue. */
   serviceToken?: string;
+  /** Checks apps' and platform services' own sign-in tokens. Without it only the service token is trusted. */
+  verifyService?: ServiceVerifier;
   /** Where changes to the catalogue are recorded. Without it nothing is audited. */
   audit?: (entry: NewAuditEntry) => Promise<void>;
 }
@@ -39,7 +41,7 @@ const catalogueEntry = (r: AppRecord, allowed: string[]) => {
  * The catalogue of apps. The platform's own apps are built in; every other app
  * registers itself, and each person is shown only the apps their roles allow.
  */
-export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, audit }: RegistryOptions = {}) => {
+export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, verifyService, audit }: RegistryOptions = {}) => {
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('registry', version, API_VERSION));
@@ -107,13 +109,50 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
       );
       app.delete<{ Params: { id: string } }>('/apps/:id/pin', (req, reply) => pin(req, reply, null));
 
-      /** Who may change the catalogue: an app's service with the service token, or an admin. */
-      const changedBy = (req: FastifyRequest): NewAuditEntry['actor'] | undefined => {
-        const service = serviceFromHeaders(req.headers, serviceToken);
-        if (service) return { id: service, kind: 'service' };
-        const caller = callerFromHeaders(req.headers);
-        return caller?.roles.includes('admin') ? { id: caller.id, kind: 'user' } : undefined;
+      /** Which app or platform service sent this call, if any; undefined when the sign-in service can't say right now. */
+      const serviceOf = async (req: FastifyRequest, reply: FastifyReply): Promise<ServiceIdentity | null | undefined> => {
+        try {
+          return (await identifyService(req.headers, { token: serviceToken, verify: verifyService })) ?? null;
+        } catch (err) {
+          if (!(err instanceof ServiceAuthUnavailable)) throw err;
+          void reply.code(503).send({ error: 'unavailable', message: err.message });
+          return undefined;
+        }
       };
+
+      /** Who may change an app's entry: that app's own service, a platform service, or an admin. */
+      const changedBy = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply): Promise<NewAuditEntry['actor'] | undefined> => {
+        const service = await serviceOf(req, reply);
+        if (service === undefined) return undefined;
+        if (service?.kind === 'app') {
+          if (service.app === req.params.id) return { id: service.app, kind: 'service' };
+          void reply.code(403).send({ error: 'forbidden', message: `${service.app} can only register itself, not "${req.params.id}".` });
+          return undefined;
+        }
+        if (service) return { id: service.name, kind: 'service' };
+        const caller = callerFromHeaders(req.headers);
+        if (caller?.roles.includes('admin')) return { id: caller.id, kind: 'user' };
+        void reply.code(403).send({ error: 'forbidden', message: 'Only an app’s own service or an admin can register apps.' });
+        return undefined;
+      };
+
+      /**
+       * What an app may do on a floor, for the platform's services to check its
+       * calls against. Today an app on the catalogue is granted what its manifest
+       * asks for, on every floor; one that is off is granted nothing.
+       */
+      app.get<{ Params: { id: string }; Querystring: { workspace?: string } }>(
+        '/apps/:id/grants',
+        { schema: { querystring: { type: 'object', properties: { workspace: { type: 'string', maxLength: 100 } } } } },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can read what an app is granted.' });
+          const found = (await store.records()).find((r) => r.entry.id === req.params.id);
+          if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          return { app: found.entry.id, ...(req.query.workspace ? { workspace: req.query.workspace } : {}), scopes: found.enabled ? (found.entry.scopes ?? []) : [] };
+        },
+      );
 
       /** The catalogue changed either way; a failed audit write is logged, not turned into a failed request. */
       const record = (req: FastifyRequest, entry: NewAuditEntry) =>
@@ -123,8 +162,8 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
         '/apps/:id',
         { schema: { body: appEntrySchema } },
         async (req, reply) => {
-          const by = changedBy(req);
-          if (!by) return reply.code(403).send({ error: 'forbidden', message: 'Only an app’s own service or an admin can register apps.' });
+          const by = await changedBy(req, reply);
+          if (!by) return reply;
           const entry = req.body;
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
           const badVersion = versionProblem(entry);
