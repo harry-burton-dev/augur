@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { workspaceMigrations } from './workspaces.ts';
 
 /** What someone has chosen for the shell. Every field is optional: what's missing takes the shell's default. */
 export interface Preferences {
@@ -44,6 +45,7 @@ export const migrations: { id: string; sql: string }[] = [
         updated_at timestamptz not null default now()
       );`,
   },
+  ...workspaceMigrations,
 ];
 
 export class PgPreferenceStore implements PreferenceStore {

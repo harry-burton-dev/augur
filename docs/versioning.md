@@ -66,3 +66,11 @@ Each service serves its API under its major version: the registry's manifest is 
 The registry refuses a manifest without a semver `version` and a valid `sdk` range. The shell compares the range with the SDK it was built with (`SDK_VERSION`) and won't open an app outside it: it says the app was made for an older platform, or needs a newer one, instead of mounting it with a context it doesn't expect.
 
 When the SDK makes a breaking change it goes to `2.0.0`. Apps keep `^1.0.0` and the new shell refuses them until each app's team updates the app and widens its range (`^1.0.0 || ^2.0.0` while it works with both). `pnpm check:versions` fails if any app in this repo has a range the current SDK doesn't satisfy, so a breaking SDK change and the apps' updates land together here.
+
+## The shared kit
+
+Apps don't bundle the UI kit or Lit: the shell serves one copy of each through an import map, and every app on the page uses it (see [platform/frontends](../platform/frontends/README.md#one-kit-for-everyone)). So the kit is part of the contract an app's `sdk` range covers, and it keeps the same promise as the SDK:
+
+- Within SDK 1.x the shell serves `@platform/ui-kit` 1.x and Lit 3.x. A kit minor adds components, attributes or icons; it never removes or renames one, or changes what an existing attribute means.
+- A breaking kit change is a kit major, and it ships with an SDK major, so the shell refuses apps that haven't been updated for it instead of breaking them.
+- Moving the shared Lit to a new major is a kit major too.

@@ -15,7 +15,7 @@ Architecture: [Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f
 | `platform/frontends/` | The shell host, Home and Admin; see its README for how apps are mounted |
 | `platform/services/gateway` | Public entry; checks the sign-in token, then forwards `/api/<service>/*` to platform services and each app's service with the caller attached |
 | `platform/packages/service-kit` | What a service uses to know who is calling, to call other services with the service token, register its app, notify people and write the audit log |
-| `platform/services/identity` | Who people are: answers "who am I" for the shell; later the directory of people and departments |
+| `platform/services/identity` | Who people are: answers "who am I" for the shell, keeps the floors people stand on (the org, its teams, everyone's own), and lets admins manage people and departments |
 | `platform/services/registry` | App catalogue on Postgres: apps register themselves, and each person gets the manifest their roles allow |
 | `platform/services/events` | Notifications, delivered live to the Shell's stream, and the append-only audit log, on Postgres |
 | `apps/<app>/` | One product app: its `manifest.json`, `service/` and `frontend/` |
