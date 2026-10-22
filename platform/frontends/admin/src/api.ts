@@ -81,6 +81,20 @@ export interface AuditQuery {
   limit: number;
 }
 
+/** What the backup container last reported (see contracts/gateway.openapi.yaml). */
+export interface BackupStatus {
+  state: 'ok' | 'attention';
+  problem?: string;
+  lastBackup?: { at: string; ok: boolean; file?: string; bytes?: number; problem?: string };
+  lastRestoreTest?: { at: string; ok: boolean; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
+}
+
+export interface PlatformStatus {
+  components: ComponentStatus[];
+  /** Absent when the gateway isn't told where backups are. */
+  backups?: BackupStatus;
+}
+
 export interface NewPerson {
   firstName: string;
   lastName: string;
@@ -150,7 +164,7 @@ export class AdminApi {
   audit = (query: AuditQuery) =>
     this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);
 
-  status = async () => (await this.call<{ components: ComponentStatus[] }>('GET', '/api/gateway/v1/status')).components;
+  status = () => this.call<PlatformStatus>('GET', '/api/gateway/v1/status');
 }
 
 export const fullName = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => `${p.firstName} ${p.lastName}`.trim() || p.username;

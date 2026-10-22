@@ -61,9 +61,12 @@ To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml -
 
 The `backup` container dumps the whole database every night at 02:00 UTC into `infra/deploy/backups/`, as `platform-YYYY-MM-DD.sql.gz`, and keeps the last 14 days. It also takes one when it first starts. Everything lives in that dump: the platform's data, people's preferences, and Keycloak's users. Change the time or how long to keep them with `BACKUP_HOUR_UTC` and `BACKUP_KEEP_DAYS` in `.env`.
 
+Once a week (Sunday, after the backup; `RESTORE_TEST_WEEKDAY` changes the day) it also **tests a restore**: it loads the newest backup into a throwaway database inside the backup container, checks the platform's tables and Keycloak's people came back, then throws it away. The live database is never touched. It runs once on first start too. **Admin → Status** shows the last backup and the last restore test, and its heading says "Backups need a look" when the last backup failed or is over a day old, or the last restore test failed or is over a week old.
+
 The backups sit on the same disk as the database, so copy `infra/deploy/backups/` somewhere else now and then (another machine, or cloud storage).
 
 - **Take one now**: `pc exec backup /bin/sh /backup/backup.sh --once` (it skips a day that already has one; delete today's file first to force it).
+- **Test a restore now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test`. The result is in `infra/deploy/backups/restore-test.json`.
 - **Restore**: stop everything but Postgres, load the dump, then start again. The dump drops and recreates each database itself.
   ```sh
   pc stop tailscale web gateway identity registry events keycloak backup
@@ -76,6 +79,10 @@ The backups sit on the same disk as the database, so copy `infra/deploy/backups/
 - **Platform services**: identity, registry, events and the gateway. Only the gateway is reachable, and only through `/api`. Services talk to each other on the compose network with `SERVICE_TOKEN`.
 - **Apps**: Home. The Library app isn't deployed while it's paused.
 - **Sign-in**: Keycloak, imported on first start from `infra/deploy/keycloak/platform-realm.json`, with no test users. Keycloak reads that file only once. If you change `PLATFORM_URL` later, update the **shell** client's redirect URIs and web origins in the admin console.
+
+## Upgrading
+
+See [upgrade.md](upgrade.md) for moving from one release to the next.
 
 ## If something's wrong
 

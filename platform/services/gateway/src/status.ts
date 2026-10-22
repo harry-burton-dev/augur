@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Upstreams } from './app.ts';
 
 /** What the platform is made of, as admins see it on Status. */
@@ -147,3 +149,62 @@ export class HealthMonitor {
     return [{ name: 'gateway', kind: 'gateway', state: 'up', version: gateway.version, api: gateway.api, checkedAt: iso(now), seenAt: iso(now) }, ...rows];
   }
 }
+
+/** One run of the nightly backup, as the backup container wrote it. */
+export interface BackupRun {
+  at: string;
+  ok: boolean;
+  file?: string;
+  bytes?: number;
+  problem?: string;
+}
+
+/** One weekly restore test: the newest backup loaded into a throwaway database and checked. */
+export interface RestoreTest extends BackupRun {
+  seconds?: number;
+  people?: number;
+  apps?: number;
+  auditEntries?: number;
+}
+
+export interface BackupStatus {
+  /** `attention` when backups can't be relied on right now; `problem` says why. */
+  state: 'ok' | 'attention';
+  problem?: string;
+  lastBackup?: BackupRun;
+  lastRestoreTest?: RestoreTest;
+}
+
+const DAY = 86_400_000;
+
+const readJson = async <T>(path: string): Promise<T | undefined> => {
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as T;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * What the backup container last wrote beside the backups: the night's dump
+ * (expected within a day) and the weekly restore test (expected within 8 days).
+ */
+export const backupStatus = async (dir: string, now = Date.now()): Promise<BackupStatus> => {
+  const lastBackup = await readJson<BackupRun>(join(dir, 'last-backup.json'));
+  const lastRestoreTest = await readJson<RestoreTest>(join(dir, 'restore-test.json'));
+  const age = (run?: BackupRun) => (run ? now - Date.parse(run.at) : Infinity);
+  const problem = !lastBackup
+    ? 'No backup has been taken yet.'
+    : !lastBackup.ok
+      ? (lastBackup.problem ?? 'The last backup failed.')
+      : age(lastBackup) > DAY + 2 * 3_600_000
+        ? 'The last backup is more than a day old. Check the backup container is running.'
+        : !lastRestoreTest
+          ? 'No backup has been test-restored yet.'
+          : !lastRestoreTest.ok
+            ? `The last restore test failed: ${lastRestoreTest.problem ?? 'it didn’t say why.'}`
+            : age(lastRestoreTest) > 8 * DAY
+              ? 'No restore test has run for over a week. Check the backup container is running.'
+              : undefined;
+  return { state: problem ? 'attention' : 'ok', ...(problem ? { problem } : {}), ...(lastBackup ? { lastBackup } : {}), ...(lastRestoreTest ? { lastRestoreTest } : {}) };
+};

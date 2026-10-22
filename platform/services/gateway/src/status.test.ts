@@ -1,5 +1,8 @@
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { HealthMonitor, probesFor } from './status.ts';
+import { backupStatus, HealthMonitor, probesFor } from './status.ts';
 
 const gateway = { version: '0.2.0', api: 'v1' };
 
@@ -78,5 +81,33 @@ describe('HealthMonitor', () => {
     expect(monitor.snapshot(gateway)[1].state).toBe('up');
     clock.t += 2_000;
     expect(monitor.snapshot(gateway)[1].state).toBe('down');
+  });
+});
+
+describe('backupStatus', () => {
+  const now = Date.parse('2026-10-22T12:00:00Z');
+  const folder = async (files: Record<string, object>) => {
+    const dir = await mkdtemp(join(tmpdir(), 'backups-'));
+    for (const [name, body] of Object.entries(files)) await writeFile(join(dir, name), JSON.stringify(body));
+    return dir;
+  };
+  const backup = { at: '2026-10-22T02:00:00Z', ok: true, file: 'platform-2026-10-22.sql.gz', bytes: 52_000 };
+  const restored = { at: '2026-10-19T02:01:00Z', ok: true, file: 'platform-2026-10-19.sql.gz', seconds: 4, people: 3, apps: 1, auditEntries: 120 };
+
+  it('is fine with last night’s backup and a restore test this week', async () => {
+    const status = await backupStatus(await folder({ 'last-backup.json': backup, 'restore-test.json': restored }), now);
+    expect(status).toEqual({ state: 'ok', lastBackup: backup, lastRestoreTest: restored });
+  });
+
+  it('needs a look with no backup, a failed or stale one, or no recent good restore', async () => {
+    const problem = async (files: Record<string, object>) => (await backupStatus(await folder(files), now)).problem;
+    expect(await problem({})).toBe('No backup has been taken yet.');
+    expect(await problem({ 'last-backup.json': { ...backup, ok: false, problem: 'The database could not be dumped. Earlier backups are kept.' } })).toMatch(/could not be dumped/);
+    expect(await problem({ 'last-backup.json': { ...backup, at: '2026-10-20T02:00:00Z' }, 'restore-test.json': restored })).toMatch(/more than a day old/);
+    expect(await problem({ 'last-backup.json': backup })).toBe('No backup has been test-restored yet.');
+    expect(await problem({ 'last-backup.json': backup, 'restore-test.json': { ...restored, ok: false, problem: 'Sign-in came back with nobody in it.' } })).toBe(
+      'The last restore test failed: Sign-in came back with nobody in it.',
+    );
+    expect(await problem({ 'last-backup.json': backup, 'restore-test.json': { ...restored, at: '2026-10-12T02:00:00Z' } })).toMatch(/over a week/);
   });
 });

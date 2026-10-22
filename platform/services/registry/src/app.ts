@@ -1,5 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { callerFromHeaders, health, packageVersion, recordAudit, serviceFromHeaders, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
+import { callerFromHeaders, health, packageVersion, recordAudit, serviceFromHeaders, serviceLogging, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
 import { appEntrySchema, conflictFor, platformApps, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
 import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore } from './store.ts';
 
@@ -36,7 +36,7 @@ const catalogueEntry = (r: AppRecord) => ({
  */
 export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, audit }: RegistryOptions = {}) => {
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
-  const app = Fastify({ logger: process.env.NODE_ENV !== 'test', ajv: { customOptions: { removeAdditional: false } } });
+  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('registry', version, API_VERSION));
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
