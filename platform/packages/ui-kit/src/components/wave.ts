@@ -144,12 +144,18 @@ export function waveY(w: WaveBand, x: number, t: number, width: number, height: 
   );
 }
 
-const rgb = (hex: string) => {
+const channels = (hex: string): [number, number, number] => {
   let h = hex.trim().replace(/^#/, '');
   if (h.length === 3) h = h.replace(/./g, (c) => c + c);
   const n = parseInt(h.slice(0, 6), 16) || 0;
-  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
+
+/** How a change of floor moves the water: the bands come in from above when you go up, from below when you go down. */
+export type WaveMove = 'up' | 'down' | 'across';
+
+/** How far the bands start from where they settle on a move, as a fraction of the height. */
+const MOVE_SHIFT = 0.45;
 
 /**
  * The water, filling its positioned parent behind everything else. Use Calm
@@ -166,6 +172,7 @@ export class UiWaveBackground extends LitElement {
     global: { attribute: false },
     waves: { attribute: false },
     paused: { type: Boolean, reflect: true },
+    level: { type: Number },
   };
 
   declare preset: string;
@@ -173,6 +180,12 @@ export class UiWaveBackground extends LitElement {
   declare global: Partial<WaveGlobal> | undefined;
   declare waves: WaveBand[] | undefined;
   declare paused: boolean;
+  /**
+   * Where the bands sit, as a fraction of the height added to each band's
+   * `y`: negative is higher, positive lower. Floors use it so the org's water
+   * sits low and your own sits high. A change glides there.
+   */
+  declare level: number;
 
   private config: WaveConfig = resolveWave();
   private ctx: CanvasRenderingContext2D | null = null;
@@ -184,6 +197,8 @@ export class UiWaveBackground extends LitElement {
   private last: number | null = null;
   private raf = 0;
   private visible = true;
+  /** What is drawn now, gliding towards the config and `level`: colours by channel, then the bands' offset. */
+  private shown?: { navy: number[]; green: number[]; level: number; shift: number };
   private resizeObserver?: ResizeObserver;
   private intersection?: IntersectionObserver;
   private get reduce() {
@@ -194,6 +209,7 @@ export class UiWaveBackground extends LitElement {
     super();
     this.preset = DEFAULT_WAVE;
     this.paused = false;
+    this.level = 0;
   }
 
   static override styles = css`
@@ -228,6 +244,16 @@ export class UiWaveBackground extends LitElement {
   /** A swell: the bands speed up and brighten, then settle over about a second. */
   pulse(amount = 1) {
     if (!this.reduce) this.boost = Math.min(2.5, this.boost + amount);
+  }
+
+  /**
+   * Plays a change of floor: the bands start above (going up) or below (going
+   * down) and glide into place while the colours fade across. Set the new
+   * `colors` and `level` first. Under reduced motion it is a plain cross-fade.
+   */
+  move(direction: WaveMove) {
+    if (!this.shown || this.reduce) return;
+    this.shown.shift = direction === 'up' ? -MOVE_SHIFT : direction === 'down' ? MOVE_SHIFT : 0;
   }
 
   /** Read the colour tokens again, after a theme change. */
@@ -317,16 +343,49 @@ export class UiWaveBackground extends LitElement {
     this.raf = requestAnimationFrame(this.frame);
     const dt = this.last == null ? 0 : Math.min(50, now - this.last); // clamped, so a tab switch doesn't jump
     this.last = now;
-    if (this.paused || this.reduce) return;
-    this.t += dt * 0.0012 * this.config.global.speed * (1 + 2.4 * this.boost);
-    this.boost *= Math.exp(-dt / 650);
-    if (this.boost < 0.002) this.boost = 0;
+    const gliding = this.glide(dt);
+    if ((this.paused || this.reduce) && !gliding) return;
+    if (!this.paused && !this.reduce) {
+      this.t += dt * 0.0012 * this.config.global.speed * (1 + 2.4 * this.boost);
+      this.boost *= Math.exp(-dt / 650);
+      if (this.boost < 0.002) this.boost = 0;
+    }
     if (this.visible && !document.hidden) this.draw();
   };
+
+  /** Moves what is drawn a step towards the config; true while it is still on its way. About 600 ms to settle. */
+  private glide(dt: number): boolean {
+    const target = this.config.colors;
+    const want = { navy: channels(target.navy), green: channels(target.green) };
+    if (!this.shown) {
+      this.shown = { ...want, level: this.level, shift: 0 };
+      return false;
+    }
+    const s = this.shown;
+    const k = 1 - Math.exp(-dt / 140);
+    let moving = false;
+    const near = (a: number, b: number, eps: number) => Math.abs(a - b) < eps;
+    for (const g of ['navy', 'green'] as const) {
+      s[g] = s[g].map((v, i) => {
+        const next = v + (want[g][i] - v) * k;
+        if (near(next, want[g][i], 0.5)) return want[g][i];
+        moving = true;
+        return next;
+      });
+    }
+    s.level += (this.level - s.level) * k;
+    s.shift -= s.shift * k;
+    if (near(s.level, this.level, 0.0005)) s.level = this.level;
+    else moving = true;
+    if (near(s.shift, 0, 0.0005)) s.shift = 0;
+    else moving = true;
+    return moving;
+  }
 
   private draw() {
     const ctx = this.ctx;
     if (!ctx) return;
+    if (!this.shown) this.glide(0);
     ctx.clearRect(0, 0, this.w, this.h);
     ctx.globalCompositeOperation = 'lighter';
     for (const w of this.config.waves) this.drawBand(ctx, w);
@@ -339,12 +398,14 @@ export class UiWaveBackground extends LitElement {
     const half = Math.max(0.5, H * w.thick * 0.5);
     const b = this.config.global.breathe;
     const a = Math.max(0, w.alpha * (1 - b + b * Math.sin(t * 0.7 + w.phase)) * (1 + 0.55 * this.boost));
-    const colour = rgb(this.config.colors[w.group] ?? '#ffffff');
+    const shown = this.shown!;
+    const colour = shown[w.group].map(Math.round).join(',');
+    const off = H * (shown.level + shown.shift);
     ctx.beginPath();
-    for (let x = -step; x <= W + step; x += step) ctx.lineTo(x, waveY(w, x, t, W, H) - half);
-    for (let x = W + step; x >= -step; x -= step) ctx.lineTo(x, waveY(w, x, t, W, H) + half);
+    for (let x = -step; x <= W + step; x += step) ctx.lineTo(x, waveY(w, x, t, W, H) + off - half);
+    for (let x = W + step; x >= -step; x -= step) ctx.lineTo(x, waveY(w, x, t, W, H) + off + half);
     ctx.closePath();
-    const cy = H * w.y;
+    const cy = H * w.y + off;
     const ext = half + H * w.amp * 1.5;
     const g = ctx.createLinearGradient(0, cy - ext, 0, cy + ext);
     g.addColorStop(0, `rgba(${colour},0)`);

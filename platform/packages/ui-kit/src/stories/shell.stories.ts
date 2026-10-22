@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import '../components/shell.js';
 import '../components/heading.js';
+import type { ShellFloor } from '../components/floors.js';
 import type { ShellAgent, ShellApp, ShellNotification, UiShell } from '../components/shell.js';
 
 const meta: Meta = { title: 'Frame/Shell', component: 'ui-shell', parameters: { layout: 'fullscreen' } };
@@ -29,7 +30,20 @@ const agents: ShellAgent[] = [
   { id: 'c', name: 'Indexer', detail: 'Next run at 02:00', status: 'queued' },
 ];
 
-const shell = (opts: { notes?: ShellNotification[]; online?: boolean; view?: string; open?: boolean } = {}) => html`
+const acme = { id: 'org', kind: 'org' as const, name: 'Acme' };
+const fin = { id: 'fin', kind: 'team' as const, name: 'Finance' };
+const floors: ShellFloor[] = [
+  { id: 'me', kind: 'personal', name: 'You', path: [{ id: 'me', kind: 'personal', name: 'You' }] },
+  { ...acme, path: [acme] },
+  { ...fin, path: [acme, fin] },
+  { id: 'pay', kind: 'team', name: 'Payroll', path: [acme, fin, { id: 'pay', kind: 'team', name: 'Payroll' }] },
+  { id: 'leg', kind: 'team', name: 'Legal', path: [acme, { id: 'leg', kind: 'team', name: 'Legal' }] },
+];
+
+/** Floors in a story: the host's part, going wherever the shell asks. */
+const goTo = (e: CustomEvent<{ id: string }>) => ((e.currentTarget as UiShell).floor = e.detail.id);
+
+const shell = (opts: { notes?: ShellNotification[]; online?: boolean; view?: string; open?: boolean; floor?: string } = {}) => html`
   <div style="height:100vh;min-height:620px">
     <ui-shell
       product="Platform"
@@ -42,6 +56,9 @@ const shell = (opts: { notes?: ShellNotification[]; online?: boolean; view?: str
       .agents=${agents}
       .online=${opts.online ?? true}
       version="0.3.0 · SDK 1.0.0"
+      .floors=${opts.floor ? floors : []}
+      floor=${opts.floor ?? ''}
+      @ui-floor=${goTo}
       @ui-open-app=${(e: CustomEvent) => console.info('open app', e.detail.id)}
     >
       <div style="padding:var(--space-6) var(--edge);max-width:var(--measure-wide);margin:0 auto">
@@ -70,3 +87,8 @@ export const Find: Story = { render: () => shell(), ...opened('find') };
 export const Agents: Story = { render: () => shell(), ...opened('agents') };
 export const Account: Story = { render: () => shell(), ...opened('account') };
 export const Settings: Story = { render: () => shell(), ...opened('settings') };
+/** Floors: the breadcrumb top left, the gauge at the edge, each kind of floor's water. Page Up and Page Down move; so do the notches. */
+export const FloorYou: Story = { render: () => shell({ floor: 'me' }) };
+export const FloorTeam: Story = { render: () => shell({ floor: 'pay' }) };
+export const FloorOrg: Story = { render: () => shell({ floor: 'org' }) };
+export const FloorsInAccount: Story = { render: () => shell({ floor: 'fin' }), ...opened('account') };

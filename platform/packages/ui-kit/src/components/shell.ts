@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { base, label } from '../shared.js';
+import { floorBeside, floorDirection, floorIcon, floorLevel, floorStack, type ShellFloor } from './floors.js';
 import { statusUrgency, type StatusName } from './status.js';
 import './icon.js';
 import './status.js';
@@ -91,7 +92,7 @@ const isTyping = (e: Event) => {
 };
 
 /**
- * The frame every app runs inside. It holds who you are, the workspace,
+ * The frame every app runs inside. It holds who you are, the floor you're on,
  * system status, the apps and the notification stream, and nothing about any
  * app's domain. Apps go in the default slot (the stage).
  *
@@ -106,6 +107,7 @@ const isTyping = (e: Event) => {
  * @fires ui-dismiss - detail `{ ids }` when notifications are dismissed or cleared; the host may mark them read
  * @fires ui-restore - detail `{ ids }` when Undo brings them back
  * @fires ui-function - detail `{ id }` for functions without a view, and for Switch workspace and Sign out
+ * @fires ui-floor - detail `{ id, direction }` when the person asks to go to another floor; the host goes there and sets `floor`
  * @fires ui-find - detail `{ q }`; the host may set `findResults`
  * @fires ui-pick - detail `{ result }`
  * @fires ui-setting - detail `{ key, value }`
@@ -134,6 +136,9 @@ export class UiShell extends LitElement {
     settings: { attribute: false },
     away: { type: Boolean },
     canSwitchWorkspace: { attribute: false },
+    floors: { attribute: false },
+    floor: { type: String },
+    arrival: { state: true },
     version: { type: String },
     background: { type: String, reflect: true },
     isOpen: { type: Boolean, reflect: true, attribute: 'open' },
@@ -166,8 +171,19 @@ export class UiShell extends LitElement {
   declare findResults: ShellFindResult[];
   declare settings: { reduceMotion?: boolean; density?: 'comfortable' | 'compact' };
   declare away: boolean;
-  /** Whether Account offers Switch workspace; a host with one workspace turns it off. */
+  /** Whether Account offers Switch workspace; a host with one workspace turns it off. Floors replace it. */
   declare canSwitchWorkspace: boolean;
+  /**
+   * Every floor the person can stand on. With floors, the top left shows the
+   * current one's icon and breadcrumb instead of the product, a gauge at the
+   * edge shows the floors above and below, Account lists them all, and each
+   * kind of floor gives the water its own colours and height.
+   */
+  declare floors: ShellFloor[];
+  /** The id of the floor the person is on. Setting a new one plays the move. */
+  declare floor: string;
+  /** The floor just arrived on, shown for a moment like a lift's display. */
+  declare arrival: { name: string; words: string } | null;
   /** What's running, shown in Settings; the host sets it. */
   declare version: string;
   /** The water's preset (Calm Tide unless a screen has a reason), or `none` for the still ground. */
@@ -183,6 +199,9 @@ export class UiShell extends LitElement {
   private returnFocus: HTMLElement | null = null;
   private clock: ReturnType<typeof setInterval> | undefined;
   private arriveTimer: ReturnType<typeof setTimeout> | undefined;
+  private arrivalTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The team last stood on, so going up from your own floor goes back there. */
+  private lastTeam: string | undefined;
 
   constructor() {
     super();
@@ -206,6 +225,9 @@ export class UiShell extends LitElement {
     this.settings = { reduceMotion: false, density: 'comfortable' };
     this.away = false;
     this.canSwitchWorkspace = true;
+    this.floors = [];
+    this.floor = '';
+    this.arrival = null;
     this.version = '';
     this.background = 'Calm Tide';
     this.isOpen = false;
@@ -314,6 +336,25 @@ export class UiShell extends LitElement {
     return this.view;
   }
 
+  /** The floor the person is on, when floors are set. */
+  get currentFloor(): ShellFloor | undefined {
+    return this.floors.find((f) => f.id === this.floor);
+  }
+
+  /** Asks the host to go one floor up or down the gauge. False when there is no floor that way. */
+  moveFloor(direction: 'up' | 'down'): boolean {
+    const to = floorBeside(this.floors, this.floor, direction, this.lastTeam);
+    if (!to) return false;
+    this.goToFloor(to.id);
+    return true;
+  }
+
+  private goToFloor(id: string) {
+    const to = this.floors.find((f) => f.id === id);
+    if (!to || id === this.floor) return;
+    this.emit('ui-floor', { id, direction: floorDirection(this.currentFloor, to) });
+  }
+
   /** The water under the stage, for menus to swell as you move; null when it is turned off. */
   get waves(): UiWaveBackground | null {
     return this.renderRoot?.querySelector('ui-wave-background') ?? null;
@@ -331,6 +372,14 @@ export class UiShell extends LitElement {
     if (summon) {
       e.preventDefault();
       this.toggle();
+      return;
+    }
+    // Page Up and Page Down scroll the app first; at its top or bottom they go up or down a floor. With Alt they always do.
+    if ((e.key === 'PageUp' || e.key === 'PageDown') && this.floors.length && !this.isOpen && !e.defaultPrevented && !isTyping(e)) {
+      const up = e.key === 'PageUp';
+      const stage = this.renderRoot.querySelector<HTMLElement>('.stage');
+      const atEnd = !stage || (up ? stage.scrollTop <= 0 : stage.scrollTop + stage.clientHeight >= stage.scrollHeight - 1);
+      if ((e.altKey || atEnd) && this.moveFloor(up ? 'up' : 'down')) e.preventDefault();
     }
   };
 
@@ -345,6 +394,29 @@ export class UiShell extends LitElement {
     window.removeEventListener('keydown', this.onWindowKey);
     clearInterval(this.clock);
     clearTimeout(this.arriveTimer);
+    clearTimeout(this.arrivalTimer);
+  }
+
+  override willUpdate(changed: Map<string, unknown>) {
+    if (!changed.has('floor')) return;
+    const here = this.currentFloor;
+    // Remember the deepest team on your way, so going up and back down retraces it.
+    const last = this.floors.find((f) => f.id === this.lastTeam);
+    if (here?.kind === 'team' && !last?.path.some((p) => p.id === here.id)) this.lastTeam = here.id;
+    const before = changed.get('floor') as string | undefined;
+    const from = this.floors.find((f) => f.id === before);
+    if (!here || !before || !from) return;
+    // A move between floors: the water travels, the app fades in on the new floor, and the floor's name shows for a moment.
+    const direction = floorDirection(from, here);
+    const words = direction === 'up' ? `Up to ${here.name}` : direction === 'down' ? (here.kind === 'personal' ? 'Down to you' : `Down to ${here.name}`) : here.name;
+    this.arrival = { name: here.name, words };
+    this.toggleAttribute('moving', true);
+    clearTimeout(this.arrivalTimer);
+    this.arrivalTimer = setTimeout(() => {
+      this.arrival = null;
+      this.removeAttribute('moving');
+    }, 1400);
+    void this.updateComplete.then(() => this.waves?.move(direction));
   }
 
   override async updated(changed: Map<string, unknown>) {
@@ -613,12 +685,39 @@ export class UiShell extends LitElement {
       .skel { display: block; height: 10px; width: 46%; margin: var(--space-5) var(--space-4); border-radius: var(--radius-pill); background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 6%, transparent), color-mix(in srgb, var(--ink) 14%, transparent), color-mix(in srgb, var(--ink) 6%, transparent)); background-size: 200% 100%; animation: skel var(--motion-shimmer) var(--ease-standard) infinite; }
       @keyframes skel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 
-      @media (max-width: 640px) { .mark span { display: none; } .dome > button { left: calc(50% + var(--x) * 0.6); } }
+      /* floors: where you are, top left; the gauge at the edge; the floor's name as you arrive */
+      .where { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
+      .where ui-icon { color: var(--floor-mark, var(--ink)); flex: none; }
+      .where ol { display: flex; align-items: center; gap: var(--space-2); list-style: none; margin: 0; padding: 0; min-width: 0; }
+      .where li { display: flex; align-items: center; gap: var(--space-2); min-width: 0; white-space: nowrap; }
+      .where li + li::before { content: '/'; color: var(--hairline-strong); }
+      .where li[aria-current] { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+      .where button:hover { color: var(--ink); }
+      :host { --floor-mark: var(--floor-you-high); }
+      :host([floor-kind='team']) { --floor-mark: var(--floor-team-high); }
+      :host([floor-kind='org']) { --floor-mark: var(--floor-org-high); }
+      .gauge { position: absolute; z-index: 3; right: var(--space-3); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; transition: opacity var(--motion-slow) var(--ease-standard); }
+      .gauge::before { content: ''; position: absolute; top: var(--space-4); bottom: var(--space-4); left: 50%; width: 1px; background: var(--hairline); z-index: -1; }
+      :host([open]) .gauge { opacity: 0; pointer-events: none; }
+      .gauge button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: var(--ink-muted); background: var(--slate-deep); border: 1px solid var(--hairline); transition: color var(--motion-quick), border-color var(--motion-quick); }
+      .gauge button:hover { color: var(--ink); }
+      .gauge button[aria-current] { color: var(--floor-mark); border-color: var(--floor-mark); box-shadow: 0 0 12px color-mix(in srgb, var(--floor-mark) 45%, transparent); }
+      .lift { position: absolute; z-index: 5; left: 50%; top: calc(var(--band-top) + var(--space-5)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border-radius: var(--radius-pill); background: var(--surface-overlay); border: 1px solid var(--hairline); color: var(--ink); font-size: var(--type-small); letter-spacing: var(--tracking-mark); text-transform: uppercase; pointer-events: none; animation: lift var(--motion-calm) var(--s-ease); }
+      .lift ui-icon { color: var(--floor-mark); }
+      @keyframes lift { from { opacity: 0; transform: translate(-50%, -8px); } }
+      :host([moving]) .stage { animation: arrive var(--motion-calm) var(--s-ease); }
+      @keyframes arrive { from { opacity: 0; } }
+      .floors { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+      .floors .row[aria-current] { color: var(--ink); }
+      .floors .row ui-icon { color: var(--ink-muted); }
+      .floors .row[aria-current] ui-icon { color: var(--floor-mark); }
+      @media (max-width: 640px) { .mark span { display: none; } .where li:not([aria-current]) { display: none; } .where li + li::before { content: none; } .dome > button { left: calc(50% + var(--x) * 0.6); } }
       @media (prefers-reduced-motion: reduce) {
         :host([open]) .stage, :host([open]) .ground, .fade, :host([open]) .fade { transform: none; }
         .dome > button, :host([open]) .dome > button { transform: translate(-50%, -50%); transition: opacity var(--motion-base); }
         .thread::after, .orb.needs::after { animation: none; }
         .view { animation: none; }
+        .lift, :host([moving]) .stage { animation: none; }
       }
     `,
   ];
@@ -631,13 +730,53 @@ export class UiShell extends LitElement {
     const time = new Date(this.now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const tab = this.isOpen ? '-1' : '0';
     return html`<header class="band" ?inert=${this.isOpen}>
-      <div class="mark"><b>${this.product}</b>${this.workspace ? html`<span>${this.workspace}</span>` : nothing}</div>
+      ${this.renderWhere(tab)}
       <button class="handle" aria-label="Open the shell" tabindex=${tab} @click=${() => this.open()}><i></i></button>
       <div class="right">
         <button class="status ${mood}" tabindex=${tab} aria-label=${`${words}. Open notifications.`} @click=${() => this.openView('stream')}><i class="point"></i>${words}</button>
         <span class="clock">${time}</span>
       </div>
     </header>`;
+  }
+
+  /** Top left: the product, or with floors the current floor's icon and its path from the org, each step a way up. */
+  private renderWhere(tab: string) {
+    const here = this.currentFloor;
+    if (!here) return html`<div class="mark"><b>${this.product}</b>${this.workspace ? html`<span>${this.workspace}</span>` : nothing}</div>`;
+    return html`<nav class="where" aria-label="Where you are">
+      <ui-icon name=${floorIcon[here.kind]} size="16"></ui-icon>
+      <ol>
+        ${here.path.map((p) =>
+          p.id === here.id
+            ? html`<li aria-current="location">${here.name}</li>`
+            : html`<li><button tabindex=${tab} @click=${() => this.goToFloor(p.id)}>${p.name}</button></li>`,
+        )}
+      </ol>
+    </nav>`;
+  }
+
+  /** The edge gauge: one notch per floor from yours to the org, the one you're on lit in its colour. */
+  private renderGauge() {
+    if (!this.currentFloor) return nothing;
+    const stack = floorStack(this.floors, this.floor, this.lastTeam).reverse();
+    const tab = this.isOpen ? '-1' : '0';
+    return html`<nav class="gauge" aria-label="Floors" ?inert=${this.isOpen}>
+      ${stack.map(
+        (f) => html`<button tabindex=${tab} aria-label=${f.kind === 'personal' ? 'Your own floor' : f.name} title=${f.name} aria-current=${f.id === this.floor ? 'location' : nothing}
+          @click=${() => this.goToFloor(f.id)}><ui-icon name=${floorIcon[f.kind]} size="14"></ui-icon></button>`,
+      )}
+    </nav>`;
+  }
+
+  /** The water's colours on this floor: your own keeps the screen's own palette; teams and the org bring theirs. */
+  private floorWater(): { colors?: { navy: string; green: string }; level: number } {
+    const here = this.currentFloor;
+    if (!here) return { level: 0 };
+    if (here.kind === 'personal' || !this.isConnected) return { level: floorLevel[here.kind] };
+    const cs = getComputedStyle(this);
+    const navy = cs.getPropertyValue(`--floor-${here.kind}-low`).trim();
+    const green = cs.getPropertyValue(`--floor-${here.kind}-high`).trim();
+    return { colors: navy && green ? { navy, green } : undefined, level: floorLevel[here.kind] };
   }
 
   private renderDome() {
@@ -786,15 +925,27 @@ export class UiShell extends LitElement {
   }
 
   private renderAccount() {
+    const here = this.currentFloor;
     return html`<div class="who"><b>${this.user?.name ?? 'Signed in'}</b>${this.user?.email ? html`<span>${this.user.email}</span>` : nothing}</div>
-      <div class="pair"><span>Workspace</span><b>${this.workspace || '—'}</b></div>
+      ${here
+        ? html`<div class="group label">Floors</div>
+            <ul class="floors">
+              ${this.floors.map(
+                (f) => html`<li><button class="row" aria-current=${f.id === this.floor ? 'location' : nothing} @click=${() => (this.goToFloor(f.id), this.close())}>
+                  <ui-icon name=${floorIcon[f.kind]}></ui-icon>
+                  <span class="text"><b>${f.kind === 'personal' ? 'Your own floor' : f.name}</b>${f.path.length > 1 ? html`<span>${f.path.slice(0, -1).map((p) => p.name).join(' / ')}</span>` : nothing}</span>
+                  ${f.id === this.floor ? html`<span class="meta">You’re here</span>` : nothing}
+                </button></li>`,
+              )}
+            </ul>`
+        : html`<div class="pair"><span>Workspace</span><b>${this.workspace || '—'}</b></div>`}
       <div class="pair"><span id="away">Show me as away</span>
         <button class="switch" role="switch" aria-labelledby="away" aria-checked=${this.away ? 'true' : 'false'} @click=${() => {
           this.away = !this.away;
           this.emit('ui-setting', { key: 'away', value: this.away });
         }}></button>
       </div>
-      <div class="pair">${this.canSwitchWorkspace
+      <div class="pair">${this.canSwitchWorkspace && !here
           ? html`<button class="link" @click=${() => this.emit('ui-function', { id: 'switch-workspace' })}>Switch workspace</button>`
           : html`<span></span>`}
         <button class="link" @click=${() => this.emit('ui-function', { id: 'sign-out' })}>Sign out</button></div>`;
@@ -823,6 +974,7 @@ export class UiShell extends LitElement {
         <kbd>Enter</kbd><span>Open</span>
         <kbd>x</kbd><span>Dismiss a notification</span>
         <kbd>Esc</kbd><span>Back, then close</span>
+        ${this.floors.length ? html`<kbd>PgUp PgDn</kbd><span>Up or down a floor, once the page is at its top or bottom (with Alt, at once)</span>` : nothing}
       </div>`;
   }
 
@@ -847,9 +999,17 @@ export class UiShell extends LitElement {
     const mood = this.mood;
     const cap = this.caption();
     const capMood = !this.view || this.view === 'stream' ? mood : 'quiet';
+    const water = this.floorWater();
+    const kind = this.currentFloor?.kind;
+    if (kind) this.setAttribute('floor-kind', kind);
+    else this.removeAttribute('floor-kind');
     return html`
-      <div class="ground" part="ground">${this.background && this.background !== 'none' ? html`<ui-wave-background preset=${this.background}></ui-wave-background>` : nothing}</div>
+      <div class="ground" part="ground">${this.background && this.background !== 'none'
+        ? html`<ui-wave-background preset=${this.background} .colors=${water.colors} .level=${water.level}></ui-wave-background>`
+        : nothing}</div>
       ${this.renderBand()}
+      ${this.renderGauge()}
+      ${this.arrival ? html`<div class="lift" aria-hidden="true"><ui-icon name=${floorIcon[this.currentFloor?.kind ?? 'personal']} size="16"></ui-icon>${this.arrival.name}</div>` : nothing}
       <div class="stage" part="stage"><slot></slot></div>
       <div class="sky ${mood}" role="dialog" aria-modal="true" aria-label="Shell" aria-hidden=${this.isOpen ? 'false' : 'true'} ?inert=${!this.isOpen}
         @keydown=${this.onSkyKey}
@@ -865,7 +1025,7 @@ export class UiShell extends LitElement {
           : nothing}
         <button class="esc" tabindex="-1" @click=${() => (this.view ? this.closeView() : this.close())}><kbd>Esc</kbd>${this.view ? 'Back' : 'Close'}</button>
       </div>
-      <div class="live" aria-live="polite">${this.isOpen ? `${cap.title}. ${cap.line}` : ''}</div>
+      <div class="live" aria-live="polite">${this.isOpen ? `${cap.title}. ${cap.line}` : (this.arrival?.words ?? '')}</div>
     `;
   }
 }
