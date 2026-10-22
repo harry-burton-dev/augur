@@ -59,7 +59,8 @@ jobs:
       - name: The nightly backup writes a restorable dump
         run: |
           docker run -d --name pg -e POSTGRES_PASSWORD=ci postgres:16-alpine
-          until docker exec pg pg_isready -U postgres; do sleep 1; done
+          # Over TCP: during first start Postgres answers on its socket before its real start.
+          until docker exec pg pg_isready -h 127.0.0.1 -U postgres; do sleep 1; done
           mkdir -p /tmp/backups
           docker run --rm --link pg -e PGHOST=pg -e PGUSER=postgres -e PGPASSWORD=ci \
             -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
