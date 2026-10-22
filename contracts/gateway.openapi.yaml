@@ -1,0 +1,48 @@
+openapi: 3.1.0
+info:
+  title: Gateway
+  version: 1.0.0
+  description: >
+    The gateway's own API, beside the services it forwards to. Reached at
+    /api/gateway/v1 by a signed-in caller. Everything else under /api/<service>
+    is forwarded to that service with the caller in x-user-* headers.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
+servers:
+  - url: /v1
+paths:
+  /status:
+    get:
+      summary: Whether every part of the platform is answering (admins only)
+      description: >
+        The gateway checks every service's /healthz and the sign-in service's
+        signing keys every 30 seconds and keeps the last answer, so this never
+        waits on a slow service. A component that failed its last check, or has
+        not answered for 2 minutes, is down.
+      responses:
+        "200":
+          description: Every component, the gateway first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [components]
+                properties:
+                  components: { type: array, items: { $ref: "#/components/schemas/ComponentStatus" } }
+        "401": { description: No signed-in caller }
+        "403": { description: Not an admin }
+components:
+  schemas:
+    ComponentStatus:
+      type: object
+      required: [name, kind, state]
+      properties:
+        name: { type: string, description: 'The name it is reached at, e.g. "registry" or "sign-in"' }
+        kind: { enum: [gateway, service, app, sign-in], description: A platform service, or an app's own service }
+        state: { enum: [up, slow, down, checking], description: '"slow" answered in more than 2 seconds; "checking" has not been checked yet' }
+        version: { type: string, description: The release its /healthz reports }
+        api: { type: string, description: 'The API major it serves, e.g. "v1"' }
+        latencyMs: { type: integer, description: How long the last answer took }
+        checkedAt: { type: string, format: date-time }
+        seenAt: { type: string, format: date-time, description: When it last answered }
+        problem: { type: string, description: Why it is down, in words an admin can act on }

@@ -3,6 +3,7 @@ import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTPayload
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp, parseUpstreams } from './app.ts';
 import type { AuthConfig } from './auth.ts';
+import { HealthMonitor } from './status.ts';
 
 const issuer = 'http://sign-in.test/realms/platform';
 const audience = 'platform-api';
@@ -28,6 +29,7 @@ describe('gateway', () => {
 
     upstream = Fastify();
     upstream.get('/echo', async (req) => req.headers);
+    upstream.get('/healthz', async () => ({ status: 'ok', service: 'registry', version: '0.4.0', api: 'v1' }));
     url = await upstream.listen({ port: 0, host: '127.0.0.1' });
   });
   afterAll(() => upstream.close());
@@ -109,5 +111,24 @@ describe('gateway', () => {
       sample: 'http://sample:8090',
     });
     expect(parseUpstreams('')).toEqual({});
+  });
+
+  it('shows admins whether every part of the platform is answering', async () => {
+    const monitor = new HealthMonitor({ probes: [{ name: 'registry', kind: 'service', url: `${url}/healthz` }] });
+    await monitor.checkAll();
+    const app = await buildApp({ upstreams: { registry: url }, auth, monitor });
+    const res = await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${await sign(ada)}` } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().components.map((c: { name: string; state: string; version: string }) => [c.name, c.state, c.version])).toEqual([
+      ['gateway', 'up', expect.any(String)],
+      ['registry', 'up', '0.4.0'],
+    ]);
+  });
+
+  it('keeps the platform’s status from people who aren’t admins, and from nobody signed in', async () => {
+    const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }) });
+    const sam = await sign({ ...ada, sub: 'u-2', roles: [] });
+    expect((await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${sam}` } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/api/gateway/v1/status' })).statusCode).toBe(401);
   });
 });

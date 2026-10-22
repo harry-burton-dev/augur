@@ -50,7 +50,7 @@ export const platformApps: AppEntry[] = [
     version: '0.1.0',
     sdk: '^1.0.0',
     icon: 'admin',
-    description: 'People, departments and apps',
+    description: 'People, departments, apps and status',
     requiredRole: 'admin',
     menu: [
       {
@@ -73,6 +73,11 @@ export const platformApps: AppEntry[] = [
         label: 'Apps',
         icon: 'apps',
         items: [{ label: 'All apps', icon: 'apps', path: '/apps', detail: 'Versions, on or off', keywords: 'catalogue registry enable disable' }],
+      },
+      {
+        label: 'Platform',
+        icon: 'pulse',
+        items: [{ label: 'Status', icon: 'pulse', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' }],
       },
     ],
   },

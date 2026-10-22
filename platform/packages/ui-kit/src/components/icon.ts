@@ -1,7 +1,7 @@
 import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
-  ArrowLeft, ArrowRight, Bell, Building2, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes,
+  Activity, ArrowLeft, ArrowRight, Bell, Building2, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes,
   FileText, Folder, House, Image, KeyRound, LayoutGrid, Library, Mail, Monitor, Palette, Plus, Power, Search,
   ShieldCheck, SlidersHorizontal, Sparkles, Star, Triangle, UserPlus, UserRound, UsersRound, Video, Wifi, X,
   type IconNode,
@@ -59,6 +59,7 @@ export const icons = {
   download: draw(Download),
   power: draw(Power),
   palette: draw(Palette),
+  pulse: draw(Activity),
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;
