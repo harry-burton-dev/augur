@@ -33,6 +33,18 @@ export interface CatalogueApp extends AppManifestEntry {
   registeredBy?: string;
   registeredAt?: string;
   updatedAt?: string;
+  /** Set when an admin holds the app at this version. */
+  pinnedVersion?: string;
+}
+
+/** One kept version of an app. */
+export interface AppVersion {
+  version: string;
+  entry: AppManifestEntry;
+  registeredBy: string;
+  registeredAt: string;
+  /** The one the shell is given now. */
+  serving: boolean;
 }
 
 /** One part of the platform as the gateway last saw it (see contracts/gateway.openapi.yaml). */
@@ -128,6 +140,12 @@ export class AdminApi {
 
   apps = () => this.call<CatalogueApp[]>('GET', '/api/registry/v1/apps');
   setAppEnabled = (id: string, enabled: boolean) => this.call<CatalogueApp>('PATCH', `/api/registry/v1/apps/${encodeURIComponent(id)}`, { enabled });
+  appVersions = (id: string) => this.call<AppVersion[]>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/versions`);
+  /** Serve one kept version and hold the app there; `null` follows new versions again. */
+  pinApp = (id: string, version: string | null) =>
+    version === null
+      ? this.call<CatalogueApp>('DELETE', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`)
+      : this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`, { version });
 
   audit = (query: AuditQuery) =>
     this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);

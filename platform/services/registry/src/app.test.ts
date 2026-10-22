@@ -132,6 +132,43 @@ describe('registry', () => {
     ]);
   });
 
+  it('lets admins see an app’s versions, roll it back and hold it there, then let it go', async () => {
+    const entries: { action: string; detail?: unknown }[] = [];
+    const app = await buildApp({ serviceToken: 'local-secret', audit: async (e) => void entries.push(e) });
+    const register = (version: string) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version } });
+    await register('0.1.0');
+    await register('0.2.0');
+    const versions = await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: admin });
+    expect(versions.json().map((v: { version: string; serving: boolean }) => [v.version, v.serving])).toEqual([
+      ['0.2.0', true],
+      ['0.1.0', false],
+    ]);
+    const back = await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '0.1.0' } });
+    expect(back.json()).toMatchObject({ version: '0.1.0', pinnedVersion: '0.1.0', platform: false });
+    await register('0.3.0');
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library').version).toBe('0.1.0');
+    const free = await app.inject({ method: 'DELETE', url: '/v1/apps/library/pin', headers: admin });
+    expect(free.json()).toMatchObject({ version: '0.3.0' });
+    expect(free.json().pinnedVersion).toBeUndefined();
+    expect(entries.map((e) => [e.action, e.detail])).toEqual([
+      ['app.registered', { version: '0.1.0' }],
+      ['app.updated', { version: '0.2.0' }],
+      ['app.pinned', { version: '0.1.0' }],
+      ['app.updated', { version: '0.3.0', heldAt: '0.1.0' }],
+      ['app.unpinned', { version: '0.3.0' }],
+    ]);
+  });
+
+  it('keeps versions to admins, and platform apps out of it', async () => {
+    const app = await buildApp({ serviceToken: 'local-secret' });
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    expect((await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: editor })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: editor, payload: { version: '0.1.0' } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '7.0.0' } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/home/pin', headers: admin, payload: { version: '0.1.0' } })).statusCode).toBe(409);
+    expect((await app.inject({ method: 'GET', url: '/v1/apps/nothing/versions', headers: admin })).statusCode).toBe(404);
+  });
+
   it('still registers the app when the audit log cannot be reached', async () => {
     const app = await buildApp({ serviceToken: 'local-secret', audit: async () => Promise.reject(new Error('events is down')) });
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });

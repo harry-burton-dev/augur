@@ -3,7 +3,7 @@ import type { UiDialog, UiTable, UiToggle } from '@platform/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
-import { appStatus } from './apps.js';
+import { appStatus, rollbackNote, type AdminApps } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
 import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
@@ -167,6 +167,10 @@ describe('admin', () => {
       expect(sentence(entry('person.disabled', { target: 'u-2' }), names)).toBe('Alex Rivera turned off Sam Okafor’s sign-in');
       expect(sentence(entry('app.registered', { app: 'registry', actor: { id: 'library', kind: 'service' }, target: 'library', detail: { version: '0.2.0' } }), names)).toBe('Library was registered, version 0.2.0');
       expect(sentence(entry('app.disabled', { app: 'registry', target: 'library' }), names)).toBe('Alex Rivera turned Library off');
+      expect(sentence(entry('app.pinned', { app: 'registry', target: 'library', detail: { version: '0.1.0' } }), names)).toBe('Alex Rivera held Library at version 0.1.0');
+      expect(sentence(entry('app.updated', { app: 'registry', target: 'library', detail: { version: '0.3.0', heldAt: '0.1.0' } }), names)).toBe(
+        'Library registered version 0.3.0, kept but not used while it’s held at 0.1.0',
+      );
       expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
     });
 
@@ -200,6 +204,44 @@ describe('admin', () => {
       expect(urls.at(-1)).toContain('before=51');
       expect(el.entries).toHaveLength(53);
       expect(el.more).toBe(false);
+      el.remove();
+    });
+  });
+
+  describe('App versions', () => {
+    const app: CatalogueApp = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.2.0', sdk: '^1.0.0', platform: false, enabled: true };
+    const kept = (version: string, entry = app.entry, serving = false) => ({ version, entry: { ...app, version, entry }, registeredBy: 'library', registeredAt: '2026-10-20T10:00:00.000Z', serving });
+
+    it('warns when going back changes the manifest but not the code', () => {
+      expect(rollbackNote(app, kept('0.1.0'))).toMatch(/loads from the same address as 0.2.0/);
+      expect(rollbackNote(app, kept('0.1.0', '/apps/library/0.1.0/entry.js'))).toBe('');
+      expect(rollbackNote(app, kept('0.2.0'))).toBe('');
+    });
+
+    it('lists an app’s kept versions and holds it at the one picked', async () => {
+      const calls: [string, string][] = [];
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+        calls.push([init.method ?? 'GET', url]);
+        const body = url.endsWith('/versions')
+          ? [kept('0.2.0', app.entry, true), kept('0.1.0', '/apps/library/0.1.0/entry.js')]
+          : url.endsWith('/pin')
+            ? { ...app, version: '0.1.0', pinnedVersion: '0.1.0' }
+            : [app];
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.apps).toHaveLength(1));
+      el.open = 'library';
+      await vi.waitFor(() => expect(el.versions).toHaveLength(2));
+      el.choice = '0.1.0';
+      await el.useChoice(app);
+      expect(calls).toContainEqual(['PUT', '/api/registry/v1/apps/library/pin']);
+      expect(el.apps[0]).toMatchObject({ version: '0.1.0', pinnedVersion: '0.1.0' });
+      el.choice = '';
+      await el.useChoice(el.apps[0]);
+      expect(calls).toContainEqual(['DELETE', '/api/registry/v1/apps/library/pin']);
       el.remove();
     });
   });

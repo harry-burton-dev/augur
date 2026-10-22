@@ -54,7 +54,13 @@ export const describe = (e: AuditEntry, names: Names): string => {
     case 'app.registered':
       return `${names.app(target)} was registered${d.version ? `, version ${String(d.version)}` : ''}`;
     case 'app.updated':
-      return `${names.app(target)} was updated${d.version ? ` to version ${String(d.version)}` : ''}`;
+      return d.heldAt
+        ? `${names.app(target)} registered version ${String(d.version)}, kept but not used while it’s held at ${String(d.heldAt)}`
+        : `${names.app(target)} was updated${d.version ? ` to version ${String(d.version)}` : ''}`;
+    case 'app.pinned':
+      return `${who} held ${names.app(target)} at version ${String(d.version)}`;
+    case 'app.unpinned':
+      return `${who} let ${names.app(target)} follow new versions again, now ${String(d.version)}`;
     case 'app.enabled':
       return `${who} turned ${names.app(target)} on`;
     case 'app.disabled':
