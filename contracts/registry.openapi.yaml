@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.1.0
+  version: 1.2.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -41,7 +41,9 @@ paths:
         Called by an app's own service on the internal network with the
         x-service-token and x-service-name headers, or by an admin through the gateway.
         Unknown fields are refused. The platform's own apps (home, admin) and
-        routes another app already has cannot be taken.
+        routes another app already has cannot be taken. Every version is kept
+        (the last 5, plus a pinned one); an app an admin has pinned keeps
+        serving its pinned version.
       requestBody:
         required: true
         content:
@@ -84,6 +86,65 @@ paths:
         "204": { description: Removed }
         "403": { description: Not an admin }
         "404": { description: No such app }
+  /apps/{id}/versions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: An app's kept versions, newest first (admins only)
+      responses:
+        "200":
+          description: Kept versions; `serving` marks the one the shell is given
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [version, entry, registeredBy, registeredAt, serving]
+                  properties:
+                    version: { type: string }
+                    entry: { $ref: "#/components/schemas/AppManifestEntry" }
+                    registeredBy: { type: string }
+                    registeredAt: { type: string, format: date-time }
+                    serving: { type: boolean }
+        "403": { description: Not an admin }
+        "404": { description: No such app }
+  /apps/{id}/pin:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Serve one kept version and hold the app there (admins only)
+      description: >
+        Rolls an app back, or holds it at its current version. Registrations
+        after this are kept in its history but not served until it is
+        unpinned. Changes the manifest the shell is given, not the code an
+        app's service serves at its entry URL. Audited as app.pinned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [version], properties: { version: { type: string } } }
+      responses:
+        "200":
+          description: The app as it now is
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogueEntry" }
+        "403": { description: Not an admin }
+        "404": { description: No such app, or no such version kept }
+        "409": { description: A platform app, or another app now has that version's route }
+    delete:
+      summary: Let go of a pin and serve the newest version (admins only)
+      description: Audited as app.unpinned.
+      responses:
+        "200":
+          description: The app as it now is
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogueEntry" }
+        "403": { description: Not an admin }
+        "404": { description: No such app }
+        "409": { description: A platform app }
 components:
   schemas:
     CatalogueEntry:
@@ -97,6 +158,7 @@ components:
             registeredBy: { type: string, description: The service or admin that last registered it }
             registeredAt: { type: string, format: date-time }
             updatedAt: { type: string, format: date-time }
+            pinnedVersion: { type: string, description: Set when an admin holds the app at this version }
     AppManifestEntry:
       type: object
       required: [id, name, route, entry, version, sdk]

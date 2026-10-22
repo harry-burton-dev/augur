@@ -122,15 +122,29 @@ export const buildApp = async ({ store = new MemoryEventStore(), serviceToken, h
         return reply.code(201).send(await store.appendAudit(req.body));
       });
 
-      app.get<{ Querystring: { app?: string; actor?: string; limit?: number } }>(
+      app.get<{ Querystring: { app?: string; actor?: string; since?: string; until?: string; before?: string; limit?: number } }>(
         '/audit',
-        { schema: { querystring: { type: 'object', properties: { app: { type: 'string' }, actor: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 500 } } } } },
+        {
+          schema: {
+            querystring: {
+              type: 'object',
+              properties: {
+                app: { type: 'string' },
+                actor: { type: 'string' },
+                since: { type: 'string', format: 'date-time' },
+                until: { type: 'string', format: 'date-time' },
+                before: { type: 'string', pattern: '^[0-9]+$', maxLength: 19 },
+                limit: { type: 'integer', minimum: 1, maximum: 500 },
+              },
+            },
+          },
+        },
         async (req, reply) => {
           const caller = signedIn(req, reply);
           if (!caller) return reply;
           if (!caller.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can read the audit log.' });
-          const { app: forApp, actor, limit = 100 } = req.query;
-          return store.audit({ app: forApp, actor, limit });
+          const { app: forApp, actor, since, until, before, limit = 100 } = req.query;
+          return store.audit({ app: forApp, actor, since, until, before, limit });
         },
       );
     },

@@ -12,7 +12,23 @@ export interface AppRecord {
   registeredBy: string;
   registeredAt: string;
   updatedAt: string;
+  /** Set when an admin has held the app at this version: registering again records the new version but doesn't serve it. */
+  pinnedVersion?: string;
 }
+
+/** One version of an app as it registered, kept so an admin can go back to it. */
+export interface AppVersion {
+  version: string;
+  entry: AppEntry;
+  registeredBy: string;
+  registeredAt: string;
+}
+
+/** How many versions of each app are kept. A pinned version is kept even when older. */
+export const KEPT_VERSIONS = 5;
+
+/** The admin asked for a version the registry doesn't have. */
+export class UnknownVersionError extends Error {}
 
 /** Where registered apps are kept. */
 export interface AppStore {
@@ -21,8 +37,18 @@ export interface AppStore {
   records(): Promise<AppRecord[]>;
   /** Turns an app on or off. Re-registering doesn't change it. False when there is no such app. */
   setEnabled(id: string, enabled: boolean): Promise<boolean>;
-  /** Adds or replaces an app; true when it was new. */
+  /**
+   * Adds or replaces an app and records the version in its history; true when it was new.
+   * A pinned app keeps serving its pinned version.
+   */
   put(entry: AppEntry, registeredBy: string): Promise<boolean>;
+  /** An app's kept versions, newest first. */
+  versions(id: string): Promise<AppVersion[]>;
+  /**
+   * Serves one of an app's kept versions and holds it there, or with `null` lets go and serves
+   * the newest. Undefined when there is no such app; UnknownVersionError when it has no such version.
+   */
+  pin(id: string, version: string | null): Promise<AppRecord | undefined>;
   /** Removes an app; false when there was none. */
   remove(id: string): Promise<boolean>;
 }
@@ -30,6 +56,7 @@ export interface AppStore {
 /** For tests, and for running the registry locally without Postgres. Forgets everything on restart. */
 export class MemoryAppStore implements AppStore {
   private apps = new Map<string, AppRecord>();
+  private history = new Map<string, AppVersion[]>();
 
   async list() {
     return (await this.records()).map((r) => r.entry);
@@ -42,8 +69,29 @@ export class MemoryAppStore implements AppStore {
   async put(entry: AppEntry, registeredBy: string) {
     const now = new Date().toISOString();
     const before = this.apps.get(entry.id);
+    const kept = (this.history.get(entry.id) ?? []).filter((v) => v.version !== entry.version);
+    kept.unshift({ version: entry.version, entry, registeredBy, registeredAt: now });
+    this.history.set(entry.id, trim(kept, before?.pinnedVersion));
+    if (before?.pinnedVersion) return false;
     this.apps.set(entry.id, { entry, enabled: before?.enabled ?? true, registeredBy, registeredAt: before?.registeredAt ?? now, updatedAt: now });
     return !before;
+  }
+
+  async versions(id: string) {
+    return structuredClone(this.history.get(id) ?? []);
+  }
+
+  async pin(id: string, version: string | null) {
+    const record = this.apps.get(id);
+    if (!record) return undefined;
+    const kept = this.history.get(id) ?? [];
+    const target = version === null ? kept[0] : kept.find((v) => v.version === version);
+    if (!target) throw new UnknownVersionError(`${record.entry.name} has no version ${version} kept.`);
+    record.entry = target.entry;
+    record.updatedAt = new Date().toISOString();
+    if (version === null) delete record.pinnedVersion;
+    else record.pinnedVersion = version;
+    return structuredClone(record);
   }
 
   async setEnabled(id: string, enabled: boolean) {
@@ -53,9 +101,14 @@ export class MemoryAppStore implements AppStore {
   }
 
   async remove(id: string) {
+    this.history.delete(id);
     return this.apps.delete(id);
   }
 }
+
+/** Newest first, the newest KEPT_VERSIONS plus the pinned one wherever it is. */
+const trim = (versions: AppVersion[], pinned?: string) =>
+  versions.filter((v, i) => i < KEPT_VERSIONS || v.version === pinned);
 
 /**
  * Schema changes, applied in order and recorded so each runs once. The registry
@@ -78,7 +131,34 @@ export const migrations: { id: string; sql: string }[] = [
     id: '002_enabled',
     sql: 'alter table registry.apps add column enabled boolean not null default true;',
   },
+  {
+    id: '003_versions',
+    sql: `
+      alter table registry.apps add column pinned_version text;
+      create table registry.app_versions (
+        app_id text not null references registry.apps (id) on delete cascade,
+        version text not null,
+        manifest jsonb not null,
+        registered_by text not null,
+        registered_at timestamptz not null default now(),
+        primary key (app_id, version)
+      );
+      -- Every app already registered starts its history with the version it serves.
+      insert into registry.app_versions (app_id, version, manifest, registered_by, registered_at)
+        select id, manifest->>'version', manifest, registered_by, updated_at from registry.apps;`,
+  },
 ];
+
+type AppRow = { manifest: AppEntry; enabled: boolean; registered_by: string; registered_at: Date; updated_at: Date; pinned_version: string | null };
+
+const fromAppRow = (r: AppRow): AppRecord => ({
+  entry: r.manifest,
+  enabled: r.enabled,
+  registeredBy: r.registered_by,
+  registeredAt: r.registered_at.toISOString(),
+  updatedAt: r.updated_at.toISOString(),
+  ...(r.pinned_version ? { pinnedVersion: r.pinned_version } : {}),
+});
 
 export class PgAppStore implements AppStore {
   constructor(private readonly pool: pg.Pool) {}
@@ -118,16 +198,8 @@ export class PgAppStore implements AppStore {
   }
 
   async records() {
-    const { rows } = await this.pool.query<{ manifest: AppEntry; enabled: boolean; registered_by: string; registered_at: Date; updated_at: Date }>(
-      'select manifest, enabled, registered_by, registered_at, updated_at from registry.apps order by id',
-    );
-    return rows.map((r) => ({
-      entry: r.manifest,
-      enabled: r.enabled,
-      registeredBy: r.registered_by,
-      registeredAt: r.registered_at.toISOString(),
-      updatedAt: r.updated_at.toISOString(),
-    }));
+    const { rows } = await this.pool.query<AppRow>('select * from registry.apps order by id');
+    return rows.map(fromAppRow);
   }
 
   async setEnabled(id: string, enabled: boolean) {
@@ -136,18 +208,83 @@ export class PgAppStore implements AppStore {
   }
 
   async put(entry: AppEntry, registeredBy: string) {
-    const { rows } = await this.pool
-      .query<{ created: boolean }>(
-        `insert into registry.apps (id, route, manifest, registered_by) values ($1, $2, $3, $4)
-         on conflict (id) do update set route = excluded.route, manifest = excluded.manifest,
-           registered_by = excluded.registered_by, updated_at = now()
-         returning (xmax = 0) as created`,
-        [entry.id, entry.route, entry, registeredBy],
-      )
-      .catch((err: { code?: string }) => {
-        throw err.code === '23505' ? new RouteTakenError(`Another app already lives at ${entry.route}.`) : err;
-      });
-    return rows[0].created;
+    return this.transaction(async (client) => {
+      // A pinned app keeps what it serves; only its history learns the new version.
+      const { rows } = await client
+        .query<{ created: boolean; pinned_version: string | null }>(
+          `insert into registry.apps (id, route, manifest, registered_by) values ($1, $2, $3, $4)
+           on conflict (id) do update set
+             route = case when registry.apps.pinned_version is null then excluded.route else registry.apps.route end,
+             manifest = case when registry.apps.pinned_version is null then excluded.manifest else registry.apps.manifest end,
+             registered_by = case when registry.apps.pinned_version is null then excluded.registered_by else registry.apps.registered_by end,
+             updated_at = case when registry.apps.pinned_version is null then now() else registry.apps.updated_at end
+           returning (xmax = 0) as created, pinned_version`,
+          [entry.id, entry.route, entry, registeredBy],
+        )
+        .catch((err: { code?: string }) => {
+          throw err.code === '23505' ? new RouteTakenError(`Another app already lives at ${entry.route}.`) : err;
+        });
+      await client.query(
+        `insert into registry.app_versions (app_id, version, manifest, registered_by) values ($1, $2, $3, $4)
+         on conflict (app_id, version) do update set manifest = excluded.manifest, registered_by = excluded.registered_by, registered_at = now()`,
+        [entry.id, entry.version, entry, registeredBy],
+      );
+      await client.query(
+        `delete from registry.app_versions v where v.app_id = $1
+           and v.version is distinct from (select pinned_version from registry.apps where id = $1)
+           and v.version not in (select version from registry.app_versions where app_id = $1 order by registered_at desc, version desc limit $2)`,
+        [entry.id, KEPT_VERSIONS],
+      );
+      return rows[0].created;
+    });
+  }
+
+  async versions(id: string) {
+    const { rows } = await this.pool.query<{ version: string; manifest: AppEntry; registered_by: string; registered_at: Date }>(
+      'select version, manifest, registered_by, registered_at from registry.app_versions where app_id = $1 order by registered_at desc, version desc',
+      [id],
+    );
+    return rows.map((r) => ({ version: r.version, entry: r.manifest, registeredBy: r.registered_by, registeredAt: r.registered_at.toISOString() }));
+  }
+
+  async pin(id: string, version: string | null) {
+    return this.transaction(async (client) => {
+      const { rows: apps } = await client.query<AppRow>('select * from registry.apps where id = $1 for update', [id]);
+      if (!apps.length) return undefined;
+      const { rows } = await client.query<{ manifest: AppEntry }>(
+        version === null
+          ? 'select manifest from registry.app_versions where app_id = $1 order by registered_at desc, version desc limit 1'
+          : 'select manifest from registry.app_versions where app_id = $1 and version = $2',
+        version === null ? [id] : [id, version],
+      );
+      if (!rows.length) throw new UnknownVersionError(`${apps[0].manifest.name} has no version ${version} kept.`);
+      const { rows: updated } = await client
+        .query<AppRow>('update registry.apps set manifest = $2, route = $3, pinned_version = $4, updated_at = now() where id = $1 returning *', [
+          id,
+          rows[0].manifest,
+          rows[0].manifest.route,
+          version,
+        ])
+        .catch((err: { code?: string }) => {
+          throw err.code === '23505' ? new RouteTakenError(`Another app now lives at ${rows[0].manifest.route}.`) : err;
+        });
+      return fromAppRow(updated[0]);
+    });
+  }
+
+  private async transaction<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const result = await work(client);
+      await client.query('commit');
+      return result;
+    } catch (err) {
+      await client.query('rollback');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async remove(id: string) {

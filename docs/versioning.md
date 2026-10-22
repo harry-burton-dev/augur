@@ -74,3 +74,12 @@ Apps don't bundle the UI kit or Lit: the shell serves one copy of each through a
 - Within SDK 1.x the shell serves `@platform/ui-kit` 1.x and Lit 3.x. A kit minor adds components, attributes or icons; it never removes or renames one, or changes what an existing attribute means.
 - A breaking kit change is a kit major, and it ships with an SDK major, so the shell refuses apps that haven't been updated for it instead of breaking them.
 - Moving the shared Lit to a new major is a kit major too.
+
+## Going back to an earlier app version
+
+The registry keeps the last 5 versions each app registered (and any version an admin is holding it at). In **Admin → Apps**, open an app and choose what to give the shell:
+
+- **A kept version, and hold it.** The shell is given that version's manifest straight away, and the app stays there: when its service registers a newer version, the registry keeps it in the history but doesn't use it. The audit log records `app.pinned`, and each held registration as `app.updated` with `heldAt`.
+- **The newest, as it registers.** Lets go of the hold and gives the shell the newest kept version (`app.unpinned`).
+
+Going back changes the manifest the shell loads: the app's menu, route, SDK range and entry address. It brings back the old code only if each release serves its entry at its own address, such as `/apps/library/0.1.0/entry.js`. When two versions share an entry address, Admin says so, and the older code needs the older service redeployed.
