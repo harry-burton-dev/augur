@@ -11,4 +11,4 @@ Departments are Keycloak groups. Tokens for the shell carry `roles`, `department
 
 Keycloak only imports a realm that does not exist yet. After changing this file, reset it with `docker compose -f infra/docker-compose.yml rm -sf keycloak` and start the stack again.
 
-The admin console is at http://localhost:8180 (admin / admin). None of this is for anywhere but your machine.
+People, departments and roles are managed in the platform's Admin app, which reaches Keycloak through the identity service as admin / admin (`KEYCLOAK_ADMIN_USER` and `KEYCLOAK_ADMIN_PASSWORD`). The admin console is at http://localhost:8180 (admin / admin) for anything else. None of this is for anywhere but your machine.

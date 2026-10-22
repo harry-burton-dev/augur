@@ -34,8 +34,26 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
       // The gateway verified who is calling and passed it on.
       app.get('/manifest', async (req) => {
         const roles = callerFromHeaders(req.headers)?.roles ?? [];
-        const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...(await store.list())];
+        const registered = (await store.records()).filter((r) => r.enabled).map((r) => r.entry);
+        const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
         return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
+      });
+
+      const isAdmin = (req: FastifyRequest) => callerFromHeaders(req.headers)?.roles.includes('admin') ?? false;
+
+      /** The whole catalogue for admins: every app, on or off, with who registered it and when. */
+      app.get('/apps', async (req, reply) => {
+        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see the whole catalogue.' });
+        const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
+        const registered = (await store.records()).map((r) => ({
+          ...r.entry,
+          platform: false,
+          enabled: r.enabled,
+          registeredBy: r.registeredBy,
+          registeredAt: r.registeredAt,
+          updatedAt: r.updatedAt,
+        }));
+        return [...platform, ...registered];
       });
 
       /** Who may change the catalogue: an app's service with the service token, or an admin. */
@@ -71,6 +89,26 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, aud
             if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
             throw err;
           }
+        },
+      );
+
+      app.patch<{ Params: { id: string }; Body: { enabled: boolean } }>(
+        '/apps/:id',
+        { schema: { body: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' } } } } },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can turn apps on or off.' });
+          const platform = platformApps.find((a) => a.id === req.params.id);
+          if (platform) return reply.code(409).send({ error: 'conflict', message: `${platform.name} is part of the platform and can’t be turned off.` });
+          const before = (await store.records()).find((r) => r.entry.id === req.params.id);
+          if (!before || !(await store.setEnabled(req.params.id, req.body.enabled))) {
+            return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          }
+          if (before.enabled !== req.body.enabled) {
+            req.log.info({ app: req.params.id, enabled: req.body.enabled, by: caller.id }, req.body.enabled ? 'app turned on' : 'app turned off');
+            await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: req.body.enabled ? 'app.enabled' : 'app.disabled', target: req.params.id });
+          }
+          return { ...before.entry, platform: false, enabled: req.body.enabled, registeredBy: before.registeredBy, registeredAt: before.registeredAt, updatedAt: before.updatedAt };
         },
       );
 

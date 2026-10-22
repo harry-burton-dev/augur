@@ -52,6 +52,29 @@ export const platformApps: AppEntry[] = [
     icon: 'admin',
     description: 'People, departments and apps',
     requiredRole: 'admin',
+    menu: [
+      {
+        label: 'People',
+        icon: 'people',
+        items: [
+          { label: 'Everyone', icon: 'people', path: '/people', detail: 'Roles, departments, sign-in', keywords: 'users accounts roles disable' },
+          { label: 'Add a person', icon: 'user-plus', path: '/people/new', keywords: 'invite create user' },
+        ],
+      },
+      {
+        label: 'Departments',
+        icon: 'department',
+        items: [
+          { label: 'All departments', icon: 'department', path: '/departments', detail: 'Names and members', keywords: 'groups teams' },
+          { label: 'New department', icon: 'plus', path: '/departments/new', keywords: 'create group team' },
+        ],
+      },
+      {
+        label: 'Apps',
+        icon: 'apps',
+        items: [{ label: 'All apps', icon: 'apps', path: '/apps', detail: 'Versions, on or off', keywords: 'catalogue registry enable disable' }],
+      },
+    ],
   },
 ];
 
@@ -59,7 +82,7 @@ export const platformApps: AppEntry[] = [
  * Platform apps whose frontend hasn't shipped yet. Their ids and routes stay
  * reserved, but the manifest leaves them out so no one is offered a dead end.
  */
-export const unbuiltApps = new Set(['admin']);
+export const unbuiltApps = new Set<string>();
 
 /** What a registering app may send. Mirrors AppManifestEntry in contracts/registry.openapi.yaml. */
 export const appEntrySchema = {

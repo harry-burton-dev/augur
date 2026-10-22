@@ -48,9 +48,9 @@ Check on it with `docker compose -f infra/deploy/compose.yml ps` and `... logs -
 To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'`.
 
 - **Update**: `git pull && pc up -d --build --remove-orphans`. Services migrate their own database schemas on start.
-- **Add people**: Keycloak's admin console is at `PLATFORM_URL/sso/admin`. Sign in as `KEYCLOAK_ADMIN_USER` (default `keycloak-admin`), switch to the **platform** realm, and add users under **Users**. Give someone the realm role `admin` to make them an admin. Their **Groups** are their departments. The Admin app will do this later.
+- **Add people**: open **Admin** (admins see it in Apps and on Title). **People** adds someone and gives you a one-time password to pass on; they choose their own when they first sign in. The same screen changes roles and departments, turns someone's sign-in off, and makes a new one-time password. **Departments** adds, renames and fills departments (one can sit inside another), and **Apps** turns an app off without removing it. Every change is in the audit log. Identity does this in Keycloak as `KEYCLOAK_ADMIN_USER`, so Keycloak's own console (`PLATFORM_URL/sso/admin`) is only needed for realm settings.
 - **Backups** happen on their own (below).
-- **Remove an app** from the catalogue (for example the old samples, `sample-board` and `sample-palette`):
+- **Remove an app** from the catalogue, rather than turning it off in Admin's **Apps** screen (for example the old samples, `sample-board` and `sample-palette`):
   ```sh
   pc exec registry node -e "fetch('http://localhost:8082/v1/apps/' + process.argv[1], { method: 'DELETE', headers: { 'x-user-id': 'server-admin', 'x-user-name': 'Server admin', 'x-user-roles': 'admin' } }).then((r) => console.log(r.status))" sample-board
   ```

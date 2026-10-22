@@ -46,3 +46,39 @@ export const label = css`
 let counter = 0;
 /** Unique ids for aria wiring inside a shadow root. */
 export const uid = (prefix: string) => `${prefix}-${++counter}`;
+
+/**
+ * The parts every field shares with TextField: the label row with its Required
+ * or Optional flag, the hint, and the message line under the control. States
+ * colour them through the host's `state` attribute.
+ */
+export const fieldParts = css`
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); font-size: var(--type-meta); line-height: var(--leading-meta); }
+  .head label, .head .name { color: var(--ink); font-weight: 500; }
+  .flag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--type-label);
+    line-height: var(--leading-label);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .dot { position: relative; width: 6px; height: 6px; border-radius: 50%; border: 1px solid currentColor; }
+  .hint { margin: 0; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
+  .msg { display: flex; align-items: center; gap: var(--space-2); margin: 0; min-height: var(--leading-small); font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
+  :host([state='attention']) .flag, :host([state='attention']) .msg { color: var(--green); }
+  :host([state='attention']) .dot { background: var(--green); border-color: var(--green); }
+  :host([state='attention']) .dot::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    border: 1px solid var(--green);
+    animation: ui-ping var(--motion-ping) var(--ease-ping) infinite;
+  }
+  :host([state='error']) .msg { color: var(--danger); }
+  :host([state='warning']) .msg { color: var(--warning); }
+`;

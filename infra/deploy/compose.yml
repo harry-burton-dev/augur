@@ -118,7 +118,13 @@ services:
   identity:
     <<: *service
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/identity" } }
-    environment: { <<: *env, PORT: 8081 }
+    environment:
+      <<: *env
+      PORT: 8081
+      # Admin's people and departments screens: identity manages them in Keycloak as its admin.
+      KEYCLOAK_URL: http://keycloak:8080/sso
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
 
   registry:
     <<: *service

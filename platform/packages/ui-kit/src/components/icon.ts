@@ -1,9 +1,9 @@
 import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
-  ArrowLeft, ArrowRight, Bell, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes,
-  FileText, Folder, House, Image, LayoutGrid, Library, Mail, Monitor, Palette, Power, Search,
-  ShieldCheck, SlidersHorizontal, Sparkles, Star, Triangle, UserRound, UsersRound, Video, Wifi, X,
+  ArrowLeft, ArrowRight, Bell, Building2, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes,
+  FileText, Folder, House, Image, KeyRound, LayoutGrid, Library, Mail, Monitor, Palette, Plus, Power, Search,
+  ShieldCheck, SlidersHorizontal, Sparkles, Star, Triangle, UserPlus, UserRound, UsersRound, Video, Wifi, X,
   type IconNode,
 } from 'lucide';
 import { base } from '../shared.js';
@@ -33,6 +33,10 @@ export const icons = {
   folder: draw(Folder),
   admin: draw(ShieldCheck),
   people: draw(UsersRound),
+  'user-plus': draw(UserPlus),
+  department: draw(Building2),
+  key: draw(KeyRound),
+  plus: draw(Plus),
   bell: draw(Bell),
   chart: draw(ChartColumn),
   close: draw(X),
