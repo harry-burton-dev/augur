@@ -105,6 +105,20 @@ describe('gateway', () => {
     expect(res.statusCode).toBe(503);
   });
 
+  it('gives every request an id, passes it on, and hands it back', async () => {
+    const app = await buildApp({ upstreams: { registry: url }, auth, monitor: new HealthMonitor({ probes: [] }) });
+    const token = `Bearer ${await sign(ada)}`;
+    const res = await app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: token } });
+    expect(res.json()['x-request-id']).toBe(res.headers['x-request-id']);
+    expect(res.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('adds backups to the status when it knows where they are', async () => {
+    const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }), backupDir: '/nowhere' });
+    const res = await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${await sign(ada)}` } });
+    expect(res.json().backups).toEqual({ state: 'attention', problem: 'No backup has been taken yet.' });
+  });
+
   it('reads app services from a name=url list', () => {
     expect(parseUpstreams('library=http://library:8083, sample=http://sample:8090')).toEqual({
       library: 'http://library:8083',

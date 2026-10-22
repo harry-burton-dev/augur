@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { callerFromHeaders, health, packageVersion, recordAudit, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
+import { callerFromHeaders, health, packageVersion, recordAudit, serviceLogging, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
 import { adminRoutes } from './admin.ts';
 import type { Directory } from './directory.ts';
 import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from './store.ts';
@@ -45,7 +45,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  */
 export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, audit }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
-  const app = Fastify({ logger: process.env.NODE_ENV !== 'test', ajv: { customOptions: { removeAdditional: false } } });
+  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('identity', version, API_VERSION));
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.

@@ -82,8 +82,27 @@ jobs:
           docker run -d --name pg -e POSTGRES_PASSWORD=ci postgres:16-alpine
           # Over TCP: during first start Postgres answers on its socket before its real start.
           until docker exec pg pg_isready -h 127.0.0.1 -U postgres; do sleep 1; done
+          # Just enough of the platform's and Keycloak's tables for the restore test to look for.
+          docker exec -i pg psql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+          create database platform;
+          create database keycloak;
+          \c platform
+          create schema registry; create table registry.apps (id text);
+          create schema events; create table events.audit (id int); create table events.notifications (id int);
+          create schema identity; create table identity.preferences (id text);
+          \c keycloak
+          create table realm (id text, name text); insert into realm values ('r1', 'platform');
+          create table user_entity (id text, realm_id text); insert into user_entity values ('u1', 'r1');
+          SQL
           mkdir -p /tmp/backups
           docker run --rm --link pg -e PGHOST=pg -e PGUSER=postgres -e PGPASSWORD=ci \
             -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
             postgres:16-alpine /bin/sh /backup/backup.sh --once
           zcat /tmp/backups/platform-*.sql.gz | grep -q "PostgreSQL database cluster dump complete"
+          grep -q '"ok":true' /tmp/backups/last-backup.json
+      - name: The weekly restore test restores the newest backup and checks it
+        run: |
+          docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
+            postgres:16-alpine /bin/sh /backup/backup.sh --restore-test
+          cat /tmp/backups/restore-test.json
+          grep -q '"ok":true' /tmp/backups/restore-test.json

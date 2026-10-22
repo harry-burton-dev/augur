@@ -132,6 +132,9 @@ describe('admin', () => {
       expect(headline([part('gateway', 'up'), part('registry', 'up')]).heading).toBe('Everything is running');
       expect(headline([part('gateway', 'up'), part('events', 'slow')]).heading).toBe('1 part is slow');
       expect(headline([part('events', 'slow'), part('registry', 'down'), part('sign-in', 'down')]).heading).toBe('2 parts are down');
+      const stale = { state: 'attention' as const, problem: 'No backup has been test-restored yet.' };
+      expect(headline([part('gateway', 'up')], stale)).toEqual({ heading: 'Backups need a look', summary: 'No backup has been test-restored yet.' });
+      expect(headline([part('registry', 'down')], stale).heading).toBe('1 part is down');
     });
 
     it('marks each state with a word that doesn’t rely on colour', () => {
@@ -140,7 +143,8 @@ describe('admin', () => {
 
     it('shows every part from the gateway, and what to check for one that’s down', async () => {
       const components = [part('gateway', 'up', { kind: 'gateway', version: '0.2.0' }), part('library', 'down', { kind: 'app', problem: 'It can’t be reached.' })];
-      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ components }), { status: 200 }));
+      const backups = { state: 'ok', lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 }, lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, people: 3 } };
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ components, backups }), { status: 200 }));
       const el = document.createElement('admin-status') as AdminStatus;
       document.body.append(el);
       el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
@@ -148,6 +152,7 @@ describe('admin', () => {
       await el.updateComplete;
       expect(fetchImpl).toHaveBeenCalledWith('/api/gateway/v1/status', expect.anything());
       expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('1 part is down');
+      expect(el.querySelector('ui-status[label="Backups restore cleanly"]')).not.toBeNull();
       el.open = 'library';
       await el.updateComplete;
       const dialog = el.querySelector('ui-dialog')!;

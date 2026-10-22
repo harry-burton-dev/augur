@@ -1,5 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { callerFromHeaders, health, packageVersion, serviceFromHeaders, type Caller, type NewAuditEntry, type NewNotification } from '@platform/service-kit';
+import { callerFromHeaders, health, packageVersion, serviceFromHeaders, serviceLogging, type Caller, type NewAuditEntry, type NewNotification } from '@platform/service-kit';
 import { MemoryEventStore, type EventStore, type Notification } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
@@ -55,7 +55,7 @@ const forCaller = ({ recipient: _, ...n }: Notification) => n;
  * live, and admins read the audit log.
  */
 export const buildApp = async ({ store = new MemoryEventStore(), serviceToken, heartbeatMs = 25_000 }: EventsOptions = {}) => {
-  const app = Fastify({ logger: process.env.NODE_ENV !== 'test', ajv: { customOptions: { removeAdditional: false } } });
+  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('events', version, API_VERSION));
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.

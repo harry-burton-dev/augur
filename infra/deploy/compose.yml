@@ -52,7 +52,8 @@ services:
       timeout: 5s
       retries: 20
 
-  # A dump of the whole database every night into infra/deploy/backups, keeping 14 days.
+  # A dump of the whole database every night into infra/deploy/backups, keeping 14 days,
+  # and once a week a test restore of the newest into a throwaway database.
   backup:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -63,6 +64,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-2}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      RESTORE_TEST_WEEKDAY: ${RESTORE_TEST_WEEKDAY:-0}
     volumes:
       - ./backup:/backup:ro
       - ./backups:/backups
@@ -113,6 +115,10 @@ services:
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/sso/realms/platform/protocol/openid-connect/certs
       OIDC_AUDIENCE: platform-api
+      # Admin's Status reads what the backup container last wrote here.
+      BACKUP_DIR: /backups
+    volumes:
+      - ./backups:/backups:ro
     depends_on: [identity, registry, events]
 
   identity:
