@@ -33,10 +33,10 @@ describe('HealthMonitor', () => {
     const clock = { t: 1_000_000 };
     const monitor = new HealthMonitor({
       probes,
-      slowMs: 40,
+      slowMs: 500,
       fetchImpl: fakeFetch(clock, {
         'http://registry/healthz': { body: { status: 'ok', version: '0.4.0', api: 'v1' } },
-        'http://events/healthz': { body: { version: '0.3.0' }, ms: 80 },
+        'http://events/healthz': { body: { version: '0.3.0' }, ms: 1_000 },
         'http://library/healthz': 'unreachable',
       }),
     });
