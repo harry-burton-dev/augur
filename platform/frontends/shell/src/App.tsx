@@ -48,8 +48,8 @@ type Problem = { title: string; summary: string; retry: () => void; action?: str
 const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai });
 
 /**
- * What the Shell offers in this alpha. Agents and Switch workspace stay off
- * until they are designed and have something behind them.
+ * What the Shell offers. Agents stay off until they are designed and have
+ * something behind them; floors replace Switch workspace.
  */
 const alphaFunctions = defaultFunctions.filter((f) => f.id !== 'agents');
 
@@ -368,7 +368,8 @@ export function Host({
     if (!shell) return;
     shell.apps = (manifest ?? []).map(toShellApp);
     shell.user = { name: session.user.name, email: session.user.email };
-    shell.workspace = floor?.name ?? '';
+    shell.floors = session.floors;
+    shell.floor = floor?.id ?? '';
     shell.functions = alphaFunctions;
     shell.canSwitchWorkspace = false;
     shell.version = `${__SHELL_VERSION__} · SDK ${SDK_VERSION}`;
@@ -429,6 +430,12 @@ export function Host({
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       applyPreferences(prefs.current);
     };
+    // Going to another floor keeps you in the same app, at its start; its menu or Title stay as they were.
+    const onFloor = (e: Event) => {
+      const to = session.floors.find((f) => f.id === (e as CustomEvent<{ id: string }>).detail.id);
+      if (!to) return;
+      navigate(screen && screen.kind !== 'title' ? hrefFor(screen.app) : '/', to);
+    };
     const onFind = (e: Event) => {
       shell.findResults = findPages(manifest ?? [], (e as CustomEvent<{ q: string }>).detail.q);
     };
@@ -441,6 +448,7 @@ export function Host({
     shell.addEventListener('ui-function', onFunction);
     shell.addEventListener('ui-setting', onSetting);
     shell.addEventListener('ui-find', onFind);
+    shell.addEventListener('ui-floor', onFloor);
     shell.addEventListener('ui-pick', onPick);
     shell.addEventListener('ui-dismiss', onDismiss);
     shell.addEventListener('ui-restore', onRestore);
@@ -454,9 +462,10 @@ export function Host({
       shell.removeEventListener('ui-function', onFunction);
       shell.removeEventListener('ui-setting', onSetting);
       shell.removeEventListener('ui-find', onFind);
+      shell.removeEventListener('ui-floor', onFloor);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs]);
+  }, [manifest, navigate, session, prefs, screen]);
 
   return (
     <ui-shell ref={shellRef} product="Platform">

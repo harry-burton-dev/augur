@@ -237,3 +237,67 @@ describe('ui-shell', () => {
     expect(root().querySelector('.version')!.textContent).toContain('0.3.0 · SDK 1.0.0');
   });
 });
+
+describe('floors', () => {
+  const org = { id: 'org', kind: 'org' as const, name: 'Acme', path: [{ id: 'org', kind: 'org' as const, name: 'Acme' }] };
+  const finance = { id: 'fin', kind: 'team' as const, name: 'Finance', path: [org.path[0], { id: 'fin', kind: 'team' as const, name: 'Finance' }] };
+  const me = { id: 'me', kind: 'personal' as const, name: 'You', path: [{ id: 'me', kind: 'personal' as const, name: 'You' }] };
+
+  beforeEach(async () => {
+    el.floors = [me, org, finance];
+    el.floor = 'fin';
+    await el.updateComplete;
+  });
+
+  it('shows where you are top left, each step above a way up', async () => {
+    const crumbs = [...root().querySelectorAll('.where li')].map((li) => li.textContent!.trim());
+    expect(crumbs).toEqual(['Acme', 'Finance']);
+    expect(root().querySelector('.where [aria-current]')!.textContent).toBe('Finance');
+    expect(root().querySelector('.mark')).toBeNull();
+    const go = vi.fn();
+    el.addEventListener('ui-floor', (e) => go((e as CustomEvent).detail));
+    root().querySelector<HTMLButtonElement>('.where button')!.click();
+    expect(go).toHaveBeenCalledWith({ id: 'org', direction: 'up' });
+    expect(el.getAttribute('floor-kind')).toBe('team');
+  });
+
+  it('draws the gauge from the org down to your own floor, lit where you are', () => {
+    const notches = [...root().querySelectorAll('.gauge button')];
+    expect(notches.map((b) => b.getAttribute('aria-label'))).toEqual(['Acme', 'Finance', 'Your own floor']);
+    expect(notches[1].getAttribute('aria-current')).toBe('location');
+  });
+
+  it('goes up or down a floor with Page Up and Page Down', () => {
+    const go = vi.fn();
+    el.addEventListener('ui-floor', (e) => go((e as CustomEvent).detail));
+    key(window, 'PageUp');
+    key(window, 'PageDown', { altKey: true });
+    expect(go.mock.calls.map(([d]) => d)).toEqual([
+      { id: 'org', direction: 'up' },
+      { id: 'me', direction: 'down' },
+    ]);
+  });
+
+  it('says where you arrived, then stops saying it', async () => {
+    vi.useFakeTimers();
+    el.floor = 'org';
+    await el.updateComplete;
+    expect(root().querySelector('.lift')!.textContent).toContain('Acme');
+    expect(root().querySelector('.live')!.textContent).toBe('Up to Acme');
+    expect(el.hasAttribute('moving')).toBe(true);
+    vi.advanceTimersByTime(1500);
+    await el.updateComplete;
+    expect(root().querySelector('.lift')).toBeNull();
+    expect(el.hasAttribute('moving')).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('lists every floor in Account in place of Switch workspace', async () => {
+    el.openView('account');
+    await el.updateComplete;
+    const rows = [...root().querySelectorAll('.floors .row')];
+    expect(rows.map((r) => r.querySelector('b')!.textContent)).toEqual(['Your own floor', 'Acme', 'Finance']);
+    expect(rows[2].getAttribute('aria-current')).toBe('location');
+    expect([...root().querySelectorAll('.view .link')].map((b) => b.textContent!.trim())).toEqual(['Sign out']);
+  });
+});

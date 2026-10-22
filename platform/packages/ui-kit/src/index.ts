@@ -30,6 +30,7 @@ export {
   type ShellView,
   type ShellViewRenderer,
 } from './components/shell.js';
+export { floorStack, floorBeside, floorDirection, floorIcon, floorLevel, type ShellFloor, type ShellFloorRef, type FloorKind } from './components/floors.js';
 export {
   UiWaveBackground,
   wavePresets,
@@ -38,6 +39,7 @@ export {
   DEFAULT_WAVE,
   type WavePreset,
   type WaveConfig,
+  type WaveMove,
   type WaveBand,
   type WaveColours,
   type WaveGlobal,
