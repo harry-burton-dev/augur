@@ -22,13 +22,24 @@ const appOf = (path) => {
   return parts[0] === 'apps' ? parts[1] : null;
 };
 
+/** Which app each @apps/* package belongs to: an app's frontend and service are both its own. */
+const appOfPackage = new Map();
+for (const app of readdirSync(join(root, 'apps'), { withFileTypes: true }).filter((d) => d.isDirectory())) {
+  for (const part of readdirSync(join(root, 'apps', app.name), { withFileTypes: true }).filter((d) => d.isDirectory())) {
+    const pkg = join(root, 'apps', app.name, part.name, 'package.json');
+    try {
+      appOfPackage.set(JSON.parse(readFileSync(pkg, 'utf8')).name, app.name);
+    } catch {}
+  }
+}
+
 for (const top of ['platform', 'apps']) {
   walk(join(root, top), (path) => {
     const text = readFileSync(path, 'utf8');
     const rel = relative(root, path);
     const app = appOf(path);
     for (const [, name] of text.matchAll(/["'](@apps\/[\w-]+)/g)) {
-      const target = name.slice('@apps/'.length);
+      const target = appOfPackage.get(name) ?? name.slice('@apps/'.length);
       if (!app) problems.push(`${rel}: the platform must not depend on ${name}`);
       else if (target !== app) problems.push(`${rel}: app "${app}" must not depend on another app (${name})`);
     }

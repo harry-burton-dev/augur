@@ -75,14 +75,52 @@ const sharedModulesMap = (): Plugin => {
   };
 };
 
+/**
+ * `pnpm dev:app <id>` sets DEV_APP to the app's folder: the shell opens with
+ * src/dev-app.tsx instead of main.tsx, signed in as a stand-in person, with the
+ * app's source as its entry. Calls to /api/<id> go to the app's service (at
+ * APP_SERVICE_URL) carrying that person, as the gateway would send them.
+ */
+const devApp = (dir: string | undefined) => {
+  if (!dir) return undefined;
+  const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; [key: string]: unknown };
+  const roles = (process.env.DEV_ROLES ?? '').split(',').map((r) => r.trim()).filter(Boolean);
+  const app = { ...manifest, entry: `/@fs${resolve(dir, 'frontend/src/entry.ts')}` };
+  const caller = {
+    'x-user-id': 'dev-person',
+    'x-user-name': encodeURIComponent('Dev Person'),
+    'x-user-email': encodeURIComponent('dev.person@example.test'),
+    'x-user-departments': 'Development',
+    'x-user-roles': [...roles, ...(typeof manifest.requiredRole === 'string' ? [manifest.requiredRole] : [])].map(encodeURIComponent).join(','),
+  };
+  const plugin: Plugin = {
+    name: 'dev-app',
+    apply: 'serve',
+    transformIndexHtml: (html) => html.replace('/src/main.tsx', '/src/dev-app.tsx'),
+  };
+  return {
+    plugin,
+    define: { __DEV_APP__: JSON.stringify(app), __DEV_ROLES__: JSON.stringify(roles) },
+    proxy: {
+      [`/api/${manifest.id}`]: {
+        target: process.env.APP_SERVICE_URL ?? 'http://localhost:8090',
+        rewrite: (path: string) => path.slice(`/api/${manifest.id}`.length) || '/',
+        headers: caller,
+      },
+    },
+  };
+};
+
 /** The shell's release, from its package.json, shown in Settings. */
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+const dev = devApp(process.env.DEV_APP);
 
 export default defineConfig({
-  plugins: [sharedModulesMap(), react(), serveApps()],
-  define: { __SHELL_VERSION__: JSON.stringify(version) },
+  plugins: [sharedModulesMap(), react(), serveApps(), dev?.plugin],
+  define: { __SHELL_VERSION__: JSON.stringify(version), ...dev?.define },
   server: {
     port: 5173,
-    proxy: { '/api': process.env.GATEWAY_URL ?? 'http://localhost:8080' },
+    // The app's own service first: the first matching prefix wins.
+    proxy: { ...dev?.proxy, '/api': process.env.GATEWAY_URL ?? 'http://localhost:8080' },
   },
 });

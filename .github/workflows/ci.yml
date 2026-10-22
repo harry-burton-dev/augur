@@ -37,11 +37,30 @@ jobs:
         if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
         run: pnpm changeset status --since=origin/${{ github.base_ref }}
       - run: pnpm build
+      # Every app's manifest, against the registry's own rules.
+      - run: pnpm check:manifest
       - run: pnpm typecheck
       - run: pnpm test
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
       - run: pnpm --filter @platform/ui-kit build-storybook
+
+  # The developer kit still makes an app that builds, passes its tests and is accepted by the registry.
+  app-scaffold:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm create-app scaffold-check --name "Scaffold check"
+      - run: pnpm turbo run build typecheck test --filter="@apps/scaffold-check*" --filter=@platform/registry
+      - run: pnpm check:manifest
+      - run: pnpm check:boundaries
+      - run: pnpm check:versions
 
   # The server setup in infra/deploy: the compose file is valid and the images build.
   deploy-images:

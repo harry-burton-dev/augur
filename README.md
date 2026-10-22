@@ -33,6 +33,8 @@ pnpm check:boundaries
 
 Run one service with live reload: `pnpm --filter @platform/registry dev` (port 8082). Without `DATABASE_URL` the registry and events services keep their data in memory; tests for their Postgres stores run when `DATABASE_URL` is set, as in CI.
 
+Build an app: `pnpm create-app <id>`, then `pnpm dev:app <id>` runs it in a stand-in shell with no other setup. See [Build an app](docs/build-an-app.md).
+
 Full local stack (Postgres, MinIO, Keycloak, the platform and the apps): `docker compose -f infra/docker-compose.yml up --build`, then `pnpm --filter @platform/shell dev` and open http://localhost:5173. Sign in as `alex` or `sam`; see [infra/keycloak](infra/keycloak/README.md).
 
 ## Versions and releases

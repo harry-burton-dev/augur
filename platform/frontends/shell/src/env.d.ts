@@ -9,3 +9,8 @@ declare const __SHELL_VERSION__: string;
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Set only under `pnpm dev:app`: the app being developed, its entry pointing at its source. */
+declare const __DEV_APP__: import('@platform/mfe-sdk').AppManifestEntry;
+/** Set only under `pnpm dev:app`: extra roles for the stand-in person, from DEV_ROLES. */
+declare const __DEV_ROLES__: string[];
