@@ -3,9 +3,9 @@ import { defineConfig, type Plugin } from 'vite';
 
 /**
  * The modules the shell serves once for itself and every app (the kit and
- * Lit), built into public/shared with an import map naming each one. The
- * shell's own build inlines that map into index.html, so a bare `import 'lit'`
- * in the shell or in any app resolves to the same file.
+ * Lit), built into shared-build/ with an import map naming each one. The
+ * shell serves them at /shared/ and inlines that map into index.html, so a
+ * bare `import 'lit'` in the shell or in any app resolves to the same file.
  */
 const fileName = (specifier: string) => specifier.replace(/^@platform\//, '').replace(/\.js$/, '').replace(/\//g, '-');
 
@@ -23,7 +23,7 @@ export default defineConfig({
   plugins: [importMap()],
   publicDir: false,
   build: {
-    outDir: 'public/shared',
+    outDir: 'shared-build',
     emptyOutDir: true,
     target: 'es2022',
     rollupOptions: {
