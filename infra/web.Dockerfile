@@ -12,8 +12,12 @@ RUN pnpm install --frozen-lockfile \
  && mkdir -p /site/apps \
  && cp -r platform/frontends/shell/dist/. /site/ \
  && cp -r platform/frontends/home/dist /site/apps/home \
- && cp -r platform/frontends/admin/dist /site/apps/admin
+ && cp -r platform/frontends/admin/dist /site/apps/admin \
+ && node infra/deploy/csp.mjs /site/index.html infra/deploy/nginx.conf > /default.conf.template
 
 FROM nginx:1.27-alpine AS web
-COPY infra/deploy/nginx.conf /etc/nginx/conf.d/default.conf
+# Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
+ENV APP_ORIGINS=""
+# nginx fills in ${APP_ORIGINS} from the environment when the container starts.
+COPY --from=build /default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /site /usr/share/nginx/html

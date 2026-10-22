@@ -67,6 +67,10 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} turned ${names.app(target)} off`;
     case 'app.removed':
       return `${who} removed ${names.app(target)} from the catalogue`;
+    case 'origin.allowed':
+      return `${who} let apps load from ${target}`;
+    case 'origin.removed':
+      return `${who} stopped apps loading from ${target}`;
     default:
       return `${who}: ${e.action}${target ? ` (${target})` : ''}`;
   }

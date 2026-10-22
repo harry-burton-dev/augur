@@ -183,4 +183,46 @@ describe('registry', () => {
     const gone = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
     expect([byService.statusCode, byAdmin.statusCode, gone.statusCode]).toEqual([403, 204, 404]);
   });
+
+  describe('where apps may load from', () => {
+    const elsewhere = { ...library, entry: 'https://apps.example.org/library/entry.js' };
+    const register = (app: Awaited<ReturnType<typeof buildApp>>, payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
+    const allow = (app: Awaited<ReturnType<typeof buildApp>>, origin: string, headers = admin) => app.inject({ method: 'POST', url: '/v1/origins', headers, payload: { origin } });
+
+    it('takes an entry on the platform itself, and refuses one from an origin nobody allowed', async () => {
+      const app = await buildApp({ serviceToken: 'local-secret' });
+      expect((await register(app, library)).statusCode).toBe(201);
+      const refused = await register(app, elsewhere);
+      expect(refused.statusCode).toBe(400);
+      expect(refused.json().message).toMatch(/loads from https:\/\/apps\.example\.org, which isn't a place apps are allowed/);
+      expect((await register(app, { ...library, entry: '//apps.example.org/x.js' })).statusCode).toBe(400);
+      expect((await register(app, { ...library, entry: 'javascript:alert(1)' })).statusCode).toBe(400);
+    });
+
+    it('takes an entry from an origin an admin allowed, and audits the choice', async () => {
+      const entries: { action: string; target?: string }[] = [];
+      const app = await buildApp({ serviceToken: 'local-secret', audit: async (e) => void entries.push(e) });
+      expect((await allow(app, 'https://apps.example.org', editor)).statusCode).toBe(403);
+      expect((await allow(app, 'http://apps.example.org')).json().message).toMatch(/HTTPS/);
+      expect((await allow(app, 'https://apps.example.org/library')).json().message).toMatch(/without a path/);
+      const added = await allow(app, 'https://apps.example.org/');
+      expect(added.statusCode).toBe(201);
+      expect(added.json()).toMatchObject({ origin: 'https://apps.example.org', addedBy: 'u-1' });
+      expect((await app.inject({ method: 'GET', url: '/v1/origins', headers: admin })).json().map((o: { origin: string }) => o.origin)).toEqual(['https://apps.example.org']);
+      expect((await register(app, elsewhere)).statusCode).toBe(201);
+      expect(entries.filter((e) => e.action.startsWith('origin.'))).toEqual([expect.objectContaining({ action: 'origin.allowed', target: 'https://apps.example.org' })]);
+    });
+
+    it('stops offering apps from an origin that is no longer allowed', async () => {
+      const app = await buildApp({ serviceToken: 'local-secret' });
+      await allow(app, 'https://apps.example.org');
+      await register(app, elsewhere);
+      const removed = await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: admin });
+      expect(removed.statusCode).toBe(204);
+      expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('library');
+      const catalogue = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json();
+      expect(catalogue.find((a: { id: string }) => a.id === 'library').blocked).toMatch(/isn't a place apps are allowed/);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: admin })).statusCode).toBe(404);
+    });
+  });
 });

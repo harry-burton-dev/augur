@@ -161,3 +161,40 @@ export const conflictFor = (entry: AppEntry, others: AppEntry[]): string | undef
   if (sameRoute) return `${sameRoute.name} already lives at ${entry.route}.`;
   return undefined;
 };
+
+/**
+ * The origin of an address an admin wants apps to load from, such as
+ * "https://apps.example.org", or why it can't be one. Only HTTPS, except
+ * http://localhost for development.
+ */
+export const parseOrigin = (input: string): { origin: string } | { problem: string } => {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    return { problem: `"${input}" isn't a web address such as https://apps.example.org.` };
+  }
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) return { problem: 'Apps can only load over HTTPS.' };
+  if (url.username || url.password || (url.pathname !== '/' && url.pathname !== '') || url.search || url.hash) {
+    return { problem: `Give just the site, such as ${url.origin}, without a path.` };
+  }
+  return { origin: url.origin };
+};
+
+/**
+ * Why an app may not load from where its entry is, or undefined when it may.
+ * A path ("/apps/x/entry.js") is served by the platform itself and always may;
+ * a full address must be on an origin an admin has allowed.
+ */
+export const entryOriginProblem = (entry: Pick<AppEntry, 'name' | 'entry'>, allowed: string[]): string | undefined => {
+  if (entry.entry.startsWith('/') && !entry.entry.startsWith('//')) return undefined;
+  let url: URL;
+  try {
+    url = new URL(entry.entry);
+  } catch {
+    return `${entry.name}'s entry "${entry.entry}" is neither a path on the platform nor a full web address.`;
+  }
+  if (allowed.includes(url.origin)) return undefined;
+  return `${entry.name} loads from ${url.origin}, which isn't a place apps are allowed to load from. An admin can allow it in Admin, Apps.`;
+};

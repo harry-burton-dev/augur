@@ -30,8 +30,21 @@ export const KEPT_VERSIONS = 5;
 /** The admin asked for a version the registry doesn't have. */
 export class UnknownVersionError extends Error {}
 
+/** An origin an admin has allowed apps to load from. */
+export interface AllowedOrigin {
+  origin: string;
+  addedBy: string;
+  addedAt: string;
+}
+
 /** Where registered apps are kept. */
 export interface AppStore {
+  /** Origins apps may load their entry from, besides the platform itself. */
+  origins(): Promise<AllowedOrigin[]>;
+  /** Allows an origin; false when it already was. */
+  allowOrigin(origin: string, addedBy: string): Promise<boolean>;
+  /** Stops allowing an origin; false when it wasn't. */
+  removeOrigin(origin: string): Promise<boolean>;
   list(): Promise<AppEntry[]>;
   /** Every registered app with its state, by id. */
   records(): Promise<AppRecord[]>;
@@ -57,6 +70,21 @@ export interface AppStore {
 export class MemoryAppStore implements AppStore {
   private apps = new Map<string, AppRecord>();
   private history = new Map<string, AppVersion[]>();
+  private allowed = new Map<string, AllowedOrigin>();
+
+  async origins() {
+    return [...this.allowed.values()].sort((a, b) => a.origin.localeCompare(b.origin)).map((o) => ({ ...o }));
+  }
+
+  async allowOrigin(origin: string, addedBy: string) {
+    if (this.allowed.has(origin)) return false;
+    this.allowed.set(origin, { origin, addedBy, addedAt: new Date().toISOString() });
+    return true;
+  }
+
+  async removeOrigin(origin: string) {
+    return this.allowed.delete(origin);
+  }
 
   async list() {
     return (await this.records()).map((r) => r.entry);
@@ -147,6 +175,15 @@ export const migrations: { id: string; sql: string }[] = [
       insert into registry.app_versions (app_id, version, manifest, registered_by, registered_at)
         select id, manifest->>'version', manifest, registered_by, updated_at from registry.apps;`,
   },
+  {
+    id: '004_origins',
+    sql: `
+      create table registry.allowed_origins (
+        origin text primary key,
+        added_by text not null,
+        added_at timestamptz not null default now()
+      );`,
+  },
 ];
 
 type AppRow = { manifest: AppEntry; enabled: boolean; registered_by: string; registered_at: Date; updated_at: Date; pinned_version: string | null };
@@ -190,6 +227,21 @@ export class PgAppStore implements AppStore {
     } finally {
       client.release();
     }
+  }
+
+  async origins() {
+    const { rows } = await this.pool.query<{ origin: string; added_by: string; added_at: Date }>('select * from registry.allowed_origins order by origin');
+    return rows.map((r) => ({ origin: r.origin, addedBy: r.added_by, addedAt: r.added_at.toISOString() }));
+  }
+
+  async allowOrigin(origin: string, addedBy: string) {
+    const { rowCount } = await this.pool.query('insert into registry.allowed_origins (origin, added_by) values ($1, $2) on conflict do nothing', [origin, addedBy]);
+    return rowCount === 1;
+  }
+
+  async removeOrigin(origin: string) {
+    const { rowCount } = await this.pool.query('delete from registry.allowed_origins where origin = $1', [origin]);
+    return rowCount === 1;
   }
 
   async list() {
