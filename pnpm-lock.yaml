@@ -104,6 +104,9 @@ importers:
       '@platform/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
+      lit:
+        specifier: ^3.3.0
+        version: 3.3.3
       oidc-client-ts:
         specifier: ^3.5.0
         version: 3.5.0
