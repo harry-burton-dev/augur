@@ -13,7 +13,13 @@ Product apps keep their own frontends under `apps/<app>/frontend`.
 1. The registry's manifest lists each app with a `route`, an `entry` URL and the `sdk` range it works with. An app whose range doesn't include the shell's `SDK_VERSION` isn't opened; the shell says why instead.
 2. The shell matches the URL to the longest route prefix and imports the app's `entry` with the browser's own dynamic `import()`.
 3. The module default-exports a `MicroFrontend` (`defineMicroFrontend` from `@platform/mfe-sdk`). The shell calls `mount(el, ctx)` on a fresh element, and calls `unmount(el)` before the next app opens.
-4. An app asks for anything outside itself through `ctx`: `raise(intent)` to open whichever app handles it, `request(intent)` to ask that app for an answer, `notify()` for the Shell's stream, `bus` for events, `getToken()` for gateway calls.
+4. An app asks for anything outside itself through `ctx`: `raise(intent)` to open whichever app handles it, `request(intent)` to ask that app for an answer, `notify()` for the Shell's stream, `bus` for events, `fetch(path)` for gateway calls on the current floor (`getToken()` when it needs the token itself).
+
+## Floors
+
+Every location starts with the floor it's on: `/@me/library/doc/1` on the person's own floor, `/@finance/library` on the Finance team's, `/@org/home` on the org's. A location without one, such as an old bookmark, opens on the person's own floor and the address is corrected to say so. The shell loads the person's floors from identity (`/api/identity/v1/me/workspaces`) at sign-in; a floor they aren't on shows "You're not on that floor" with a way back to their own.
+
+Apps read the floor from `ctx.workspace` (its kind, name, slug, path from the org, and the person's role there) and call their service with `ctx.fetch`, which adds the person's token and `X-Workspace-Id`. The gateway checks that header against the person's floors and refuses the call when they aren't on it. Changing floor unmounts the open app and mounts it again with the new floor, so no app keeps one floor's data on screen on another. Apps built for SDK 1.0 mount on whatever floor the person is on and ignore it.
 
 ## Title and Orbit
 

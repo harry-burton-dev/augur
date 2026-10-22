@@ -59,8 +59,33 @@ export interface User {
   id: string;
   name: string;
   email?: string;
+  /** The sign-in service's old department names. Read `ctx.workspace` for where the person is. */
   departments: string[];
   roles: string[];
+}
+
+export type WorkspaceKind = 'personal' | 'team' | 'org';
+
+/** A floor as a link or breadcrumb draws it. */
+export interface WorkspaceRef {
+  id: string;
+  kind: WorkspaceKind;
+  /** What people see: "You" for their own floor, a team's name, the org's name. */
+  name: string;
+  /** The word in links, `/@finance/…`; the person's own floor is always `me`. */
+  slug: string;
+}
+
+/**
+ * The floor the person is standing on: their own, a team, or the org. The
+ * shell owns it and apps only read it; backends never trust it from the
+ * browser, as the gateway checks it on every `ctx.fetch`.
+ */
+export interface Workspace extends WorkspaceRef {
+  /** From the org down to this floor, itself included. The person's own floor is alone on its path. */
+  path: WorkspaceRef[];
+  /** `lead` on their own floor and on teams they lead. */
+  role: 'member' | 'lead';
 }
 
 /** A request to do something, routed by the shell to whichever app handles it. */
@@ -92,6 +117,19 @@ export interface MountContext {
    */
   request<T = unknown>(intent: Intent): Promise<T>;
   notify(message: { title: string; body?: string; needsYou?: boolean }): void;
+  /**
+   * The floor the app was mounted on (SDK 1.1). Changing floor unmounts the
+   * app and mounts it again with the new one, so an app never shows one
+   * floor's data on another.
+   */
+  workspace: Workspace;
+  /** The current floor, for code that runs later than mount and shouldn't trust a copy it kept (SDK 1.1). */
+  getWorkspace(): Workspace;
+  /**
+   * Calls the gateway for this floor (SDK 1.1): `fetch` with the person's
+   * token and the floor's `X-Workspace-Id` added, e.g. `ctx.fetch('/api/library/v1/docs')`.
+   */
+  fetch(path: string, init?: RequestInit): Promise<Response>;
   /** Path below the app's route prefix, e.g. "/doc/123" for "/library/doc/123". */
   path: string;
   /** Present when the app was opened to handle an intent. */

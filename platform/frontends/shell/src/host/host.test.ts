@@ -13,6 +13,7 @@ const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): 
 });
 const manifest = [app('home', '/'), app('library', '/library', { handles: ['document.open'] }), app('admin', '/admin')];
 
+const own = { id: 'w-me', kind: 'personal' as const, name: 'You', slug: 'me', path: [], role: 'lead' as const };
 const ctx = (): MountContext => ({
   user: { id: 'u', name: 'U', departments: [], roles: [] },
   getToken: async () => 't',
@@ -20,6 +21,9 @@ const ctx = (): MountContext => ({
   raise: vi.fn(),
   request: vi.fn(),
   notify: vi.fn(),
+  workspace: own,
+  getWorkspace: () => own,
+  fetch: vi.fn(),
   path: '/',
 });
 

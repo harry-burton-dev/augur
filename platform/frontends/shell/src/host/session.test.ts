@@ -12,7 +12,11 @@ const fakeAuth = (user: SignedIn | null, over: Partial<Authenticator> = {}): Aut
   ...over,
 });
 
-const okFetch = vi.fn(async () => new Response(JSON.stringify(me), { status: 200 })) as unknown as typeof fetch;
+const own = { id: 'w-me', kind: 'personal', name: 'You', slug: 'me', path: [{ id: 'w-me', kind: 'personal', name: 'You', slug: 'me' }], role: 'lead' };
+const org = { id: 'w-org', kind: 'org', name: 'Acme', slug: 'org', path: [{ id: 'w-org', kind: 'org', name: 'Acme', slug: 'org' }], role: 'member' };
+const okFetch = vi.fn(async (url: string) =>
+  Response.json(url.endsWith('/me/workspaces') ? { workspaces: [{ ...own, direct: true }, org] } : me),
+) as unknown as typeof fetch;
 const at = (pathname: string, search = '') => ({ pathname, search, href: `http://localhost:5173${pathname}${search}` });
 
 describe('startSession', () => {
@@ -29,7 +33,7 @@ describe('startSession', () => {
     auth.getUser = vi.fn(async () => ({ access_token: 'fresh' }));
     const session = await startSession(auth, { location: at('/auth/callback', '?code=c&state=s'), history, fetchImpl: okFetch });
     expect(history.replaceState).toHaveBeenCalledWith(null, '', '/library/doc/1?x=1');
-    expect(session).toMatchObject({ user: me, workspace: 'Finance' });
+    expect(session).toMatchObject({ user: me, floors: [own, org] });
   });
 
   it('never returns to another site after signing in', async () => {
@@ -57,6 +61,11 @@ describe('startSession', () => {
     await expect(startSession(fakeAuth({ access_token: 't' }), { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: denied })).rejects.toThrow(
       new SessionError('The platform did not accept your sign-in. Sign in again.'),
     );
+  });
+
+  it('can’t start without the person’s floors', async () => {
+    const noFloors = vi.fn(async (url: string) => (url.endsWith('/me/workspaces') ? new Response('', { status: 502 }) : Response.json(me))) as unknown as typeof fetch;
+    await expect(startSession(fakeAuth({ access_token: 't' }), { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: noFloors })).rejects.toThrow(/answered 502/);
   });
 
   it('signs out through the sign-in service', async () => {
