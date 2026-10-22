@@ -51,7 +51,7 @@ Apps never import or call each other. They speak in intents, a `type` such as `c
 
 ## One kit for everyone
 
-The shell serves the UI kit and Lit once, and the shell and every app use that copy. `vite.shared.config.ts` builds them into `public/shared/` with an import map, and the shell inlines the map at the top of `index.html`, so a bare `import 'lit'` or `import '@platform/ui-kit'` anywhere on the page resolves to the same file. An app's build leaves those imports alone:
+The shell serves the UI kit and Lit once, and the shell and every app use that copy. `vite.shared.config.ts` builds them into `shared-build/` with an import map; the shell serves them at `/shared/` and inlines the map at the top of `index.html`, so a bare `import 'lit'` or `import '@platform/ui-kit'` anywhere on the page resolves to the same file. An app's build leaves those imports alone:
 
 ```ts
 import { isSharedModule } from '@platform/mfe-sdk/build';
@@ -70,4 +70,4 @@ pnpm --filter @platform/gateway dev                     # :8080
 pnpm --filter @platform/shell dev                       # :5173, proxies /api to the gateway
 ```
 
-`pnpm --filter @platform/shell dev` builds `public/shared/` first; run `pnpm --filter @platform/shell build:shared` again after changing the kit. In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=<id>=<dir>,…` adds more. Apps without a service of their own are registered with `SERVICE_TOKEN=... pnpm register-app apps/<app>/manifest.json`. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.
+`pnpm --filter @platform/shell dev` builds `shared-build/` first; run `pnpm --filter @platform/shell build:shared` again after changing the kit. In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=<id>=<dir>,…` adds more. Apps without a service of their own are registered with `SERVICE_TOKEN=... pnpm register-app apps/<app>/manifest.json`. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.
