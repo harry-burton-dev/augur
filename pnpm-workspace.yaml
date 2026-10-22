@@ -2,6 +2,7 @@ packages:
   - "platform/packages/*"
   - "platform/services/*"
   - "platform/frontends/*"
+  - "platform/contract"
   - "apps/*/*"
 onlyBuiltDependencies:
   - esbuild
