@@ -1,9 +1,10 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildApp, parseUpstreams } from './app.ts';
 import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
+import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 
 const issuer = 'http://sign-in.test/realms/platform';
 const audience = 'platform-api';
@@ -117,6 +118,59 @@ describe('gateway', () => {
     const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }), backupDir: '/nowhere' });
     const res = await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${await sign(ada)}` } });
     expect(res.json().backups).toEqual({ state: 'attention', problem: 'No backup has been taken yet.' });
+  });
+
+  describe('floors', () => {
+    const finance = { id: 'w-finance', kind: 'team' as const, role: 'lead' as const };
+    const floors: FloorLookup = async (caller) => (caller.id === 'u-1' ? [{ id: 'w-me', kind: 'personal', role: 'lead' }, finance] : []);
+    const echo = async (app: FastifyInstance, headers: Record<string, string>) =>
+      app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: `Bearer ${await sign(ada)}`, ...headers } });
+
+    it('passes on a floor the caller is on, with its kind and their role', async () => {
+      const app = await buildApp({ upstreams: { registry: url }, auth, floors, monitor: new HealthMonitor({ probes: [] }) });
+      const res = await echo(app, { 'x-workspace-id': 'w-finance', 'x-workspace-role': 'member', 'x-workspace-kind': 'org' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ 'x-workspace-id': 'w-finance', 'x-workspace-kind': 'team', 'x-workspace-role': 'lead' });
+    });
+
+    it('refuses a floor the caller is not on', async () => {
+      const app = await buildApp({ upstreams: { registry: url }, auth, floors, monitor: new HealthMonitor({ probes: [] }) });
+      const res = await echo(app, { 'x-workspace-id': 'w-legal' });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('never passes on floor headers a client sent without an id', async () => {
+      const app = await buildApp({ upstreams: { registry: url }, auth, floors, monitor: new HealthMonitor({ probes: [] }) });
+      const res = await echo(app, { 'x-workspace-kind': 'org', 'x-workspace-role': 'lead' });
+      expect(res.json()['x-workspace-kind']).toBeUndefined();
+      expect(res.json()['x-workspace-role']).toBeUndefined();
+    });
+
+    it('says floors are unavailable when identity cannot say', async () => {
+      const app = await buildApp({ upstreams: { registry: url }, auth, floors: async () => Promise.reject(new FloorLookupError('down')), monitor: new HealthMonitor({ probes: [] }) });
+      expect((await echo(app, { 'x-workspace-id': 'w-finance' })).statusCode).toBe(503);
+      expect((await echo(app, {})).statusCode).toBe(200);
+    });
+
+    it('asks identity once per person while the answer is fresh, and again after a failure', async () => {
+      let t = 0;
+      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        expect((init?.headers as Record<string, string>)['x-user-id']).toBe('u-1');
+        return Response.json({ workspaces: [{ ...finance, name: 'Finance', slug: 'finance', path: [], direct: true }] });
+      });
+      const lookup = identityFloors({ identityUrl: 'http://identity', ttlMs: 1000, fetchImpl: fetchImpl as typeof fetch, now: () => t });
+      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [] };
+      expect(await lookup(alex)).toEqual([finance]);
+      await lookup(alex);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      t = 1001;
+      await lookup(alex);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      fetchImpl.mockRejectedValueOnce(new TypeError('fetch failed'));
+      t = 3000;
+      await expect(lookup(alex)).rejects.toBeInstanceOf(FloorLookupError);
+      expect(await lookup(alex)).toEqual([finance]);
+    });
   });
 
   it('reads app services from a name=url list', () => {

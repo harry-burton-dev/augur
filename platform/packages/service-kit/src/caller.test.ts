@@ -14,11 +14,17 @@ describe('caller headers', () => {
     expect(callerFromHeaders(callerHeaders(caller))).toEqual(caller);
   });
 
+  it('round-trips the floor a request is for', () => {
+    const onFinance: Caller = { ...caller, workspace: { id: 'w1', kind: 'team', role: 'lead' } };
+    expect(callerFromHeaders(callerHeaders(onFinance))).toEqual(onFinance);
+    expect(callerFromHeaders({ ...callerHeaders(caller), 'x-workspace-id': 'w1', 'x-workspace-kind': 'cellar' })?.workspace).toBeUndefined();
+  });
+
   it('reads no caller from a request without one', () => {
     expect(callerFromHeaders({ accept: 'application/json' })).toBeUndefined();
   });
 
   it('strips caller headers whatever their case', () => {
-    expect(withoutCallerHeaders({ 'X-User-Id': 'me', 'x-user-roles': 'admin', accept: '*/*' })).toEqual({ accept: '*/*' });
+    expect(withoutCallerHeaders({ 'X-User-Id': 'me', 'x-user-roles': 'admin', 'X-Workspace-Id': 'w1', 'x-workspace-role': 'lead', accept: '*/*' })).toEqual({ accept: '*/*' });
   });
 });
