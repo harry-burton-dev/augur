@@ -5,15 +5,17 @@
   "type": "module",
   "description": "The shell host: wraps ui-shell, loads apps from the registry manifest, mounts the current app and routes intents.",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "dev": "vite build -c vite.shared.config.ts && vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build -c vite.shared.config.ts && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:shared": "vite build -c vite.shared.config.ts"
   },
   "dependencies": {
     "@platform/mfe-sdk": "workspace:*",
     "@platform/ui-kit": "workspace:*",
+    "lit": "^3.3.0",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
