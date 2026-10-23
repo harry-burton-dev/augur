@@ -211,6 +211,8 @@ describe('gateway', () => {
   it('refuses an app service named like a platform service', () => {
     expect(() => defaultUpstreams({ APP_UPSTREAMS: 'identity=http://elsewhere:9000' })).toThrow(/can't name identity/);
     expect(defaultUpstreams({ APP_UPSTREAMS: 'library=http://library:8083' }).library).toBe('http://library:8083');
+    expect(() => defaultUpstreams({ APP_UPSTREAMS: 'models=http://elsewhere:9000' })).toThrow(/can't name models/);
+    expect(defaultUpstreams({ MODELS_URL: 'http://models:8085' }).models).toBe('http://models:8085');
   });
 
   it('shows admins whether every part of the platform is answering', async () => {

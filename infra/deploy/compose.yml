@@ -12,6 +12,7 @@ x-service: &service
     IDENTITY_URL: http://identity:8081
     EVENTS_URL: http://events:8084
     REGISTRY_URL: http://registry:8082
+    MODELS_URL: http://models:8085
     # Every service signs in as itself (its own Keycloak client and SERVICE_CLIENT_SECRET); tokens name the
     # public address and are fetched and checked over the compose network.
     OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
@@ -120,6 +121,7 @@ services:
       IDENTITY_URL: http://identity:8081
       REGISTRY_URL: http://registry:8082
       EVENTS_URL: http://events:8084
+      MODELS_URL: http://models:8085
       # Tokens name the platform's public address; signing keys are fetched inside the compose network.
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/sso/realms/platform/protocol/openid-connect/certs
@@ -128,7 +130,7 @@ services:
       BACKUP_DIR: /backups
     volumes:
       - ./backups:/backups:ro
-    depends_on: [identity, registry, events]
+    depends_on: [identity, registry, events, models]
 
   identity:
     <<: *service
@@ -145,7 +147,7 @@ services:
       ORG_NAME: ${ORG_NAME:-Organisation}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Identity makes each platform service's sign-in in Keycloak with these secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-}
 
   registry:
     <<: *service
@@ -156,6 +158,19 @@ services:
     <<: *service
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
     environment: { <<: *env, PORT: 8084, SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}" }
+
+  # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
+  # no model and Agents stay off; with one, an admin turns models on in Admin. See docs/agents.md.
+  models:
+    <<: *service
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/models" } }
+    environment:
+      <<: *env
+      PORT: 8085
+      SERVICE_CLIENT_SECRET: "${MODELS_CLIENT_SECRET:-}"
+      MODEL_API_URL: "${MODEL_API_URL:-}"
+      MODEL_API_KEY: "${MODEL_API_KEY:-}"
+      MODEL_NAME: "${MODEL_NAME:-}"
 
 
 volumes:

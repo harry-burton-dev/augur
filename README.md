@@ -7,7 +7,7 @@ AUGUR is an app platform for the organisation's cloud. A **shell** in the browse
 ```
 browser ── shell (frontends/shell) ── mounts an app's entry.js from the registry manifest
    │
-   └── /api/<service>/v1/...  ──►  gateway ──►  identity · registry · events · <app services>
+   └── /api/<service>/v1/...  ──►  gateway ──►  identity · registry · events · models · <app services>
                                      │                    │
                                   checks sign-in       Postgres (one schema per service)
                                   (Keycloak) and the
@@ -33,6 +33,7 @@ platform/                 everything the platform owns; never imports from apps/
     identity/             people, teams, floors, preferences
     registry/             the app catalogue
     events/               notifications + audit log
+    models/               the model gateway: the only holder of an AI provider's key
   contract/               browser tests proving old app builds still work in today's shell
 apps/
   library/                the Library app (manifest + service stub; frontend to come)
@@ -76,6 +77,7 @@ Home and Admin are built like any app: one ES module the shell imports.
 | `identity` | 8081 | Who you are (`/me`), your floors, your preferences, and the admin side of people, roles and departments (stored in Keycloak behind its own layer). |
 | `registry` | 8082 | The app catalogue on Postgres. Apps register themselves on start; each person gets the manifest their roles allow; admins can turn apps off and allow app origins. |
 | `events` | 8084 | Notifications (streamed live to the shell) and the append-only audit log, on Postgres. Only services can write; people read their own notifications. |
+| `models` | 8085 | The model gateway. Holds the AI provider's key (any OpenAI-style API: OpenRouter, LiteLLM, or the stand-in model), records every call in the audit log before making it, and gives each app a number of calls a day. Off until an admin turns it on. |
 | `@apps/library` | 8083 | The Library app's service. Currently a stub that registers the app. |
 
 Keycloak handles sign-in, Postgres holds data (a schema per service), and MinIO is the local object store for the Library later. Each API is described in `contracts/<service>.openapi.yaml`, and its major version is its path prefix (`/v1`).
@@ -117,6 +119,7 @@ pnpm check:boundaries
 | [Build an app](docs/build-an-app.md) | From `create-app` to an app in the shell |
 | [Deploy](docs/deploy.md) | Running the stack on a server with Docker Compose and Tailscale |
 | [Upgrade](docs/upgrade.md) | Updating a running server, backups and rollback |
+| [Agents and models](docs/agents.md) | Setting up the model behind Agents, and an app's service asking it |
 | [Versioning](docs/versioning.md) | Changesets, releases, API and SDK versions |
 | [apps/](apps/README.md) | How apps register and ask each other for things |
 | [platform/contract](platform/contract/README.md) | The shell's promise to apps and the frozen SDK builds |

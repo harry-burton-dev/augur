@@ -1,0 +1,29 @@
+import { platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { auditTo, buildApp } from './app.ts';
+import { providerFromEnv } from './config.ts';
+import { MemoryModelStore, PgModelStore, type ModelStore } from './store.ts';
+
+const port = Number(process.env.PORT ?? 8085);
+
+let store: ModelStore;
+if (process.env.DATABASE_URL) {
+  store = await PgModelStore.connect(process.env.DATABASE_URL);
+} else if (process.env.NODE_ENV === 'production') {
+  throw new Error('DATABASE_URL is not set: the model gateway needs Postgres for its settings and each app’s use.');
+} else {
+  console.warn('DATABASE_URL is not set: keeping the settings and use in memory until the service restarts.');
+  store = new MemoryModelStore();
+}
+
+const provider = providerFromEnv();
+if (!provider) console.warn('MODEL_API_URL is not set: there is no model, so models can’t be turned on.');
+
+// The gateway signs in as itself (platform-models) to check apps' grants and write the audit log.
+const { REGISTRY_URL = 'http://localhost:8082', EVENTS_URL = 'http://localhost:8084' } = process.env;
+const credentials = platformCredentialsFromEnv('models');
+if (!credentials) console.warn('SERVICE_CLIENT_SECRET is not set: calls can’t be recorded, so none are made.');
+const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
+const audit = credentials ? auditTo(EVENTS_URL, credentials) : undefined;
+
+const app = await buildApp({ store, provider, verifyService: serviceVerifierFromEnv(), grants, audit });
+await app.listen({ port, host: '0.0.0.0' });

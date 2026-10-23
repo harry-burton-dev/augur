@@ -29,6 +29,7 @@ export const rollbackNote = (current: CatalogueApp, target?: AppVersion): string
 export const SCOPE_WORDS: Record<string, string> = {
   'notifications:send': 'Notify people',
   'audit:write': 'Write to the activity log',
+  'models:use': 'Use AI models',
 };
 
 /** What an app may do on the platform, as a fact's value. */

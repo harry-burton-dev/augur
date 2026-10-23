@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.7.0
+  version: 1.8.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -414,8 +414,8 @@ components:
         rollup: { type: boolean, description: Shows the floor and the teams below it the person is on (identity's roll-up) }
     Scope:
       type: string
-      enum: [notifications:send, audit:write]
-      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log."
+      enum: [notifications:send, audit:write, models:use]
+      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit)."
     AppMenuCategory:
       type: object
       required: [label, items]

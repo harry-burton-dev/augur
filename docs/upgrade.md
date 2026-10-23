@@ -41,6 +41,15 @@ Images are rebuilt from the repo, each service migrates its own tables as it sta
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### The model gateway
+
+A new service, `models`, starts with the upgrade. Nothing changes until you want Agents: models are off, and stay off until an admin turns them on in Admin. To get it ready, add to `.env`:
+
+- `MODELS_CLIENT_SECRET` (`openssl rand -hex 32`): its own sign-in, which identity makes in Keycloak on the next start. Without it no model calls are made, because none could be recorded.
+- `MODEL_API_URL`, `MODEL_API_KEY` and `MODEL_NAME` for the model to use, or `MODEL_API_URL=stand-in` to try it with a model that doesn't think. See [Agents and models](agents.md).
+
+Then `pc up -d --build` as usual.
+
 ### Renamed to AUGUR
 
 Nothing to do: the upgrade is the usual `git pull` and `pc up -d --build`. The shell, page title and Admin say AUGUR, and packages are `@augur/*`. Your server's identifiers are left alone so nobody is signed out and no data moves: the Keycloak realm is still `platform`, the database and Compose project are still `platform`, the `.env` keys keep their `PLATFORM_` names, and your address stays `https://platform.<tailnet>.ts.net`.
