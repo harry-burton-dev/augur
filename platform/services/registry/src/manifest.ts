@@ -218,10 +218,20 @@ export const surfaceProblem = (entry: AppEntry): string | undefined => {
 export const conflictFor = (entry: AppEntry, others: AppEntry[]): string | undefined => {
   const platform = platformApps.find((a) => a.id === entry.id);
   if (platform) return `"${entry.id}" is one of the platform's own apps.`;
-  const sameRoute = [...platformApps, ...others].find((a) => a.id !== entry.id && a.route === entry.route);
+  const route = trimRoute(entry.route);
+  const all = [...platformApps, ...others].filter((a) => a.id !== entry.id);
+  const sameRoute = all.find((a) => trimRoute(a.route) === route);
   if (sameRoute) return `${sameRoute.name} already lives at ${entry.route}.`;
+  // The shell opens the app with the longest matching route, so a route inside another
+  // app's would take over those pages: an app at /admin/people would be what admins see.
+  const inside = all.find((a) => route.startsWith(`${trimRoute(a.route)}/`));
+  if (inside) return `${entry.route} is inside ${inside.name}'s pages at ${inside.route}. Choose a route of its own.`;
+  const around = all.find((a) => trimRoute(a.route).startsWith(`${route}/`));
+  if (around) return `${entry.route} would hold ${around.name}'s pages at ${around.route}. Choose a route of its own.`;
   return undefined;
 };
+
+const trimRoute = (route: string) => route.replace(/\/+$/, '') || '/';
 
 /**
  * The origin of an address an admin wants apps to load from, such as

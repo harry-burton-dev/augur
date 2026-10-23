@@ -188,7 +188,7 @@ CI runs all of these, and fails a pull request without a changeset.
 
 ## 7. Putting it on the platform
 
-The registry lists an app once its service registers it, which it does when it starts with `REGISTRY_URL` set and a way to sign in. The gateway sends `/api/<id>/…` to the services in `APP_UPSTREAMS`.
+The registry lists an app once its service registers it, which it does when it starts with `REGISTRY_URL` set and a way to sign in. The gateway sends `/api/<id>/…` to the services in `APP_UPSTREAMS`. It checks the person's sign-in first and passes them on in `x-user-*` headers (read them with the service kit's `callerFromHeaders`); it never passes on their token. The names `identity`, `registry`, `events` and `gateway` belong to the platform. An app's `route` must be its own: not one another app has, and not inside or around another app's, `/admin` and `/home` included.
 
 The app's service signs in to the platform as itself. An admin issues its sign-in once, and again whenever the secret may have leaked (the old one stops working):
 
