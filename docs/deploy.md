@@ -8,11 +8,12 @@ your laptop ──tailnet──▶ tailscale ──▶ web (nginx) ─┬─ /  
                                                     └─ /sso/  ──▶ keycloak (sign-in) ──────────────────────▶ postgres
 ```
 
-The setup is in `infra/deploy/`. Each service image is built from this repo on the server, so there's no registry to push to.
+The setup is in `infra/deploy/`. The server runs images CI built and signed for an AUGUR release, pulled from GitHub's container registry (`ghcr.io/harry-burton-dev/im-platform/<part>:<version>`); nothing is built on the server. They run as unprivileged users.
 
 ## Before you start
 
-- On the server: Docker with the Compose plugin (`docker compose version` should work), and git access to this repo.
+- On the server: Docker with the Compose plugin (`docker compose version` should work), and git access to this repo for the deploy files.
+- While the repository is private, its images are too. Make a [classic personal access token](https://github.com/settings/tokens/new?scopes=read:packages) with only **read:packages**, and sign the server in once: `docker login ghcr.io -u <your GitHub login>`, pasting the token as the password.
 - In the [Tailscale admin console](https://login.tailscale.com/admin):
   - **DNS**: turn on MagicDNS and **HTTPS Certificates**. Note your tailnet name, for example `tail1234.ts.net`.
   - **Settings → Keys**: generate an auth key. A reusable key is easiest. Tag it if you use ACL tags.
@@ -23,11 +24,13 @@ The server doesn't need Tailscale installed itself. The `tailscale` container jo
 
 ```sh
 git clone https://github.com/harry-burton-dev/im-platform.git platform && cd platform
+git checkout augur@0.1.1        # the release you'll run: the newest augur@ under Releases
 cp infra/deploy/.env.example infra/deploy/.env
 ```
 
 Fill in `infra/deploy/.env`:
 
+- `PLATFORM_VERSION`: the same release, without `augur@`, for example `0.1.1`.
 - `PLATFORM_URL`: `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`.
 - `TS_AUTHKEY`: the key from the admin console.
 - `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`: long random strings, each different. `openssl rand -hex 32` makes one.
@@ -36,10 +39,10 @@ Fill in `infra/deploy/.env`:
 Then:
 
 ```sh
-docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d --build
+docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
 ```
 
-The first build takes a few minutes. Keycloak needs about a minute to start, and Tailscale fetches its certificate on the first request, so the first page can be slow. Open `PLATFORM_URL` from any device on your tailnet and sign in.
+The first pull takes a minute or two. Keycloak needs about a minute to start, and Tailscale fetches its certificate on the first request, so the first page can be slow. Open `PLATFORM_URL` from any device on your tailnet and sign in.
 
 Check on it with `docker compose -f infra/deploy/compose.yml ps` and `... logs -f <service>`.
 
@@ -47,7 +50,8 @@ Check on it with `docker compose -f infra/deploy/compose.yml ps` and `... logs -
 
 To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'`.
 
-- **Update**: `git pull && pc up -d --build --remove-orphans`. Services migrate their own database schemas on start.
+- **Update** to a new release: see [upgrade.md](upgrade.md). In short, check out its `augur@<version>` tag, set `PLATFORM_VERSION` to it, then `pc pull && pc up -d --remove-orphans`. Services migrate their own database schemas on start.
+- **Try a change before it's released**: build the images from your checkout with `pc -f infra/deploy/compose.build.yml up -d --build`, with `PLATFORM_VERSION=local` so a later pull doesn't mistake them for a release.
 - **Add people**: open **Admin** (admins see it in Apps and on Title). **People** adds someone and gives you a one-time password to pass on; they choose their own when they first sign in. The same screen changes roles and departments, turns someone's sign-in off, and makes a new one-time password. **Departments** adds, renames and fills departments (one can sit inside another), and **Apps** turns an app off without removing it. Every change is in the audit log. Identity manages people in Keycloak as `KEYCLOAK_ADMIN_USER` and keeps departments in its own tables (the first start copies Keycloak's groups in once), so Keycloak's own console (`PLATFORM_URL/sso/admin`) is only needed for realm settings.
 - **Backups** happen on their own (below).
 - **Remove an app** from the catalogue, rather than turning it off in Admin's **Apps** screen (for example the old samples, `sample-board` and `sample-palette`):

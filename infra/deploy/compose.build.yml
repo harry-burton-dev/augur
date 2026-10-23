@@ -1,0 +1,18 @@
+# Builds the platform's images from this checkout instead of pulling a release's, for trying
+# a change on a server before it's released. Use it on top of compose.yml:
+#   docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file infra/deploy/.env up -d --build
+# The images are tagged with PLATFORM_VERSION as usual, so set it to something that isn't a
+# release, such as `local`, or a later pull will replace them.
+services:
+  web:
+    build: { context: ../.., dockerfile: infra/web.Dockerfile, target: web }
+  gateway:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/gateway" } }
+  identity:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/identity" } }
+  registry:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/registry" } }
+  events:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
+  models:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/models" } }

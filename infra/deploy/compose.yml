@@ -1,7 +1,9 @@
 # The whole platform on one server, reached privately over Tailscale at
 # https://<TS_HOSTNAME>.<your tailnet>.ts.net. See docs/deploy.md.
 #   cp infra/deploy/.env.example infra/deploy/.env   # then fill it in
-#   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d --build
+#   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
+# Runs the images CI built for the platform release PLATFORM_VERSION. To build them from this
+# checkout instead, add -f infra/deploy/compose.build.yml (and --build).
 # Keeps the old codename: Docker names the data volumes after the project, so renaming it would start empty.
 name: platform
 
@@ -39,7 +41,7 @@ services:
     depends_on: [web]
 
   web:
-    build: { context: ../.., dockerfile: infra/web.Dockerfile, target: web }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/web:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     restart: unless-stopped
     environment:
       # Other sites apps may load from, space separated (also allow each in Admin, Apps).
@@ -114,7 +116,7 @@ services:
       postgres: { condition: service_healthy }
 
   gateway:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/gateway" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/gateway:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -134,7 +136,7 @@ services:
 
   identity:
     <<: *service
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/identity" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/identity:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     environment:
       <<: *env
       PORT: 8081
@@ -151,19 +153,19 @@ services:
 
   registry:
     <<: *service
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/registry" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/registry:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     environment: { <<: *env, PORT: 8082, SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}" }
 
   events:
     <<: *service
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/events:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     environment: { <<: *env, PORT: 8084, SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}" }
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
   # no model and Agents stay off; with one, an admin turns models on in Admin. See docs/agents.md.
   models:
     <<: *service
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/models" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/models:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     environment:
       <<: *env
       PORT: 8085
