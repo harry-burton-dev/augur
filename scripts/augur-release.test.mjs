@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { nextRelease } from './augur-release.mjs';
+import { nextRelease, versionModule } from './augur-release.mjs';
 
 const settings = { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL'] };
 const first = nextRelease(undefined, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-10-23');
@@ -51,4 +51,8 @@ test('new and removed settings are listed, and a settings change alone is a rele
   assert.equal(next.version, '0.1.1');
   assert.deepEqual(next.settings.added, ['OBJECT_STORE_URL']);
   assert.deepEqual(next.settings.removed, ['APP_ORIGINS']);
+});
+
+test('the registry is told which release it ships in', () => {
+  assert.match(versionModule({ version: '0.4.0', channel: 'stable' }), /export const AUGUR_RELEASE = \{ version: '0\.4\.0', channel: 'stable' \} as const;/);
 });

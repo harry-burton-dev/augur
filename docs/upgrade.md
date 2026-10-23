@@ -8,6 +8,8 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 
 ## Before you start
 
+**Admin → Updates** shows whether a newer release is out, what changes in each part, and a **Needs you first** list: a release you have to go through first, settings to add, breaking changes, and apps that won't open on the new SDK. It fills in the version for the steps below. The registry checks once a day; **Check now** checks straight away.
+
 1. **Read what changed.** The GitHub release for the AUGUR version you're moving to, `augur@<version>` under Releases, gathers every part's changes, any breaking change and any new setting, and says which versions it upgrades from. If you're more than one release behind and it lists a breaking change, go to the release before it first. Each package's `CHANGELOG.md` has the detail. Look for these, which mean you have something to do:
    - **major** on a service or contract: a caller has to change. The platform's own frontends move with it, but anything you've built against that API needs checking ([versioning.md](versioning.md)).
    - a new or renamed setting in `infra/deploy/.env.example`: copy it into your `.env` before starting.
@@ -47,6 +49,21 @@ The pull fetches that release's images before anything stops. Each service migra
 ## Release notes that need you
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
+
+### The Updates page
+
+Admin gets an **Updates** page, under AUGUR. It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. Once:
+
+1. In GitHub, **Settings → Developer settings → Fine-grained tokens**, make a token for this repository only, with **Contents: Read-only** and nothing else. (The `read:packages` token you sign Docker in with can't read releases.)
+2. Save it where only the registry reads it, then upgrade as usual:
+   ```sh
+   mkdir -p infra/deploy/secrets
+   printf '%s' '<the token>' > infra/deploy/secrets/release-feed-token
+   sudo chown 1000 infra/deploy/secrets/release-feed-token && chmod 600 infra/deploy/secrets/release-feed-token
+   ```
+   The registry runs as user 1000. Without the token, Updates says the release feed refused it.
+
+Optional, in `.env`: `RELEASE_CHANNEL=stable` or `beta` (by default, the channel of the release you run), and `RELEASE_FEED_URL` for a mirror, or `off` to check nothing.
 
 ### Images from releases (the first `augur@` release)
 

@@ -14,6 +14,7 @@ The setup is in `infra/deploy/`. The server runs images CI built and signed for 
 
 - On the server: Docker with the Compose plugin (`docker compose version` should work), and git access to this repo for the deploy files.
 - While the repository is private, its images are too. Make a [classic personal access token](https://github.com/settings/tokens/new?scopes=read:packages) with only **read:packages**, and sign the server in once: `docker login ghcr.io -u <your GitHub login>`, pasting the token as the password.
+- For Admin → Updates to see new releases of a private repository, a second token: a fine-grained one for this repository with only **Contents: Read-only**, saved as `infra/deploy/secrets/release-feed-token` and owned by user 1000 (the registry). See [upgrade.md](upgrade.md#the-updates-page).
 - In the [Tailscale admin console](https://login.tailscale.com/admin):
   - **DNS**: turn on MagicDNS and **HTTPS Certificates**. Note your tailnet name, for example `tail1234.ts.net`.
   - **Settings → Keys**: generate an auth key. A reusable key is easiest. Tag it if you use ACL tags.

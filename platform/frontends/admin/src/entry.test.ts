@@ -2,9 +2,10 @@ import { createEventBus, type MountContext } from '@augur/mfe-sdk';
 import type { UiDialog, UiTable, UiToggle } from '@augur/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
-import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
+import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person, type PlatformUpdates } from './api.js';
 import { appStatus, floorStatus, floorTree, rollbackNote, scopeWords, type AdminApps } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
+import { headline as updatesHeadline, type AdminUpdates } from './updates.js';
 import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
 
@@ -52,6 +53,7 @@ describe('admin', () => {
     expect(screenFor('/apps')).toEqual({ screen: 'apps', adding: false });
     expect(screenFor('/status')).toEqual({ screen: 'status', adding: false });
     expect(screenFor('/activity')).toEqual({ screen: 'activity', adding: false });
+    expect(screenFor('/updates')).toEqual({ screen: 'updates', adding: false });
     expect(screenFor('/')).toEqual({ screen: 'people', adding: false });
   });
 
@@ -159,6 +161,58 @@ describe('admin', () => {
       const dialog = el.querySelector('ui-dialog')!;
       expect(dialog.getAttribute('summary')).toBe('It can’t be reached.');
       expect(dialog.textContent).toContain('People can’t use library while its service is down');
+      el.remove();
+    });
+  });
+
+  describe('Updates', () => {
+    const running = { version: '0.2.0', channel: 'beta' as const };
+    const out: PlatformUpdates = {
+      running,
+      channel: 'beta',
+      feed: 'on',
+      checkedAt: '2026-10-30T09:00:00Z',
+      available: { version: '0.4.0', channel: 'beta', breaking: [], notesUrl: 'https://github.com/o/r/releases/tag/augur@0.4.0', parts: [{ name: '@augur/registry', from: '0.2.0', to: '0.4.0' }] },
+      newer: [
+        { version: '0.4.0', channel: 'beta', breaking: [] },
+        { version: '0.3.0', channel: 'beta', breaking: ['@augur/identity 0.3.0 → 1.0.0'] },
+      ],
+      next: '0.4.0',
+      needsYou: [{ kind: 'setting', key: 'OBJECT_STORE_URL', required: true, message: 'Set OBJECT_STORE_URL in .env: 0.4.0 won’t start without it.' }],
+    };
+
+    it('heads the screen with what’s out, or that all is current', () => {
+      expect(updatesHeadline(out)).toEqual({ heading: 'AUGUR 0.4.0 is out', summary: 'You’re on 0.2.0. 1 thing needs you before upgrading.' });
+      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, newer: [], needsYou: [] }).heading).toBe('You’re up to date');
+      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, problem: 'The release feed answered 502.', newer: [], needsYou: [] }).heading).toBe('Updates can’t be checked');
+      expect(updatesHeadline({ running, channel: 'stable', feed: 'off', newer: [], needsYou: [] }).summary).toContain('RELEASE_FEED_URL is off');
+    });
+
+    it('shows what needs doing first, what changes, and checks again when asked', async () => {
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify(out), { status: 200 }));
+      const el = document.createElement('admin-updates') as AdminUpdates;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.updates).toBeDefined());
+      await el.updateComplete;
+      expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/platform/updates', expect.anything());
+      expect(el.querySelector('[data-needs]')!.textContent).toContain('Set OBJECT_STORE_URL in .env');
+      expect(el.querySelector('[data-parts]')!.textContent).toContain('0.2.0 → 0.4.0');
+      expect(el.querySelector('[data-releases]')!.textContent).toContain('Breaking');
+      expect(el.textContent).toContain('PLATFORM_VERSION=0.4.0');
+      (el.querySelector('ui-button') as HTMLElement).click();
+      await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/platform/updates/check', expect.objectContaining({ method: 'POST' })));
+      el.remove();
+    });
+
+    it('puts a mark on Status when a release is out', async () => {
+      const fetchImpl = vi.fn(async (url: string) => new Response(JSON.stringify(url.includes('updates') ? out : { components: [] }), { status: 200 }));
+      const el = document.createElement('admin-status') as AdminStatus;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.updates).toBeDefined());
+      await el.updateComplete;
+      expect(el.querySelector('[data-update] ui-status')!.getAttribute('label')).toContain('AUGUR 0.4.0 is out');
       el.remove();
     });
   });

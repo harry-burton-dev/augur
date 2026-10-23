@@ -19,6 +19,8 @@ import {
 } from '@augur/service-kit';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, surfaceProblem, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
+import { AUGUR_RELEASE } from './augur-version.ts';
+import { UpdateChecker, updatesView } from './updates.ts';
 import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore, type FloorRule } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
@@ -33,6 +35,8 @@ export interface RegistryOptions {
   audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
   /** Where a floor sits, from identity. Without it nothing can be answered for a floor (503). */
   floors?: FloorLookup;
+  /** What the release feed says is out. Without it the Updates page says the feed is off. */
+  updates?: UpdateChecker;
 }
 
 /** Records audit entries with the events service, as the registry. */
@@ -64,7 +68,13 @@ const RULE_ACTIONS: Record<FloorRule['state'] | 'inherit', string> = { on: 'app.
  * The catalogue of apps. The platform's own apps are built in; every other app
  * registers itself, and each person is shown only the apps their roles allow.
  */
-export const buildApp = async ({ store = new MemoryAppStore(), verifyService, audit, floors }: RegistryOptions = {}) => {
+export const buildApp = async ({
+  store = new MemoryAppStore(),
+  verifyService,
+  audit,
+  floors,
+  updates = new UpdateChecker({ running: AUGUR_RELEASE }),
+}: RegistryOptions = {}) => {
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('registry', version, API_VERSION));
@@ -381,6 +391,32 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
         req.log.info({ origin: req.params.origin, by: caller.id }, 'origin removed');
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'origin.removed', target: req.params.origin });
         return reply.code(204).send();
+      });
+
+      /**
+       * Whether a newer AUGUR release is out, and what upgrading to it needs first. Read-only: the
+       * registry never restarts anything; the deployment's updater (or a person) does.
+       */
+      app.get('/platform/updates', async (req, reply) => {
+        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what updates are out.' });
+        return updatesView({ checker: updates, apps: await store.records() });
+      });
+
+      /** Checks the release feed now rather than waiting for the daily check. */
+      app.post('/platform/updates/check', async (req, reply) => {
+        const caller = callerFromHeaders(req.headers);
+        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can check for updates.' });
+        await updates.check();
+        const view = updatesView({ checker: updates, apps: await store.records() });
+        req.log.info({ by: caller.id, available: view.available?.version, problem: view.problem }, 'updates checked');
+        await record(req, {
+          actor: { id: caller.id, kind: 'user' },
+          app: 'registry',
+          action: 'platform.updates-checked',
+          target: view.running.version,
+          detail: { ...(view.available ? { available: view.available.version } : {}), ...(view.problem ? { problem: view.problem } : {}) },
+        });
+        return view;
       });
 
       app.delete<{ Params: { id: string } }>('/apps/:id', async (req, reply) => {

@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import type { Fact, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
-import type { AdminApi, BackupStatus, ComponentStatus } from './api.js';
+import type { AdminApi, BackupStatus, ComponentStatus, PlatformUpdates } from './api.js';
 import { page } from './parts.js';
 
 /** How often the screen asks the gateway again while it is open. The gateway itself checks every 30 seconds. */
@@ -44,6 +44,7 @@ export class AdminStatus extends LitElement {
     components: { state: true },
     loading: { state: true },
     backups: { state: true },
+    updates: { state: true },
     error: { state: true },
     open: { state: true },
   };
@@ -51,6 +52,7 @@ export class AdminStatus extends LitElement {
   declare api: AdminApi;
   declare components: ComponentStatus[];
   declare backups: BackupStatus | undefined;
+  declare updates: PlatformUpdates | undefined;
   declare loading: boolean;
   declare error: string;
   declare open: string | undefined;
@@ -78,7 +80,11 @@ export class AdminStatus extends LitElement {
   }
 
   override willUpdate(changed: Map<string, unknown>) {
-    if (changed.has('api') && this.api) void this.load();
+    if (changed.has('api') && this.api) {
+      void this.load();
+      // Only to say an update is out; Status works the same without it.
+      this.api.updates().then((u) => (this.updates = u), () => undefined);
+    }
   }
 
   /** A quiet reload keeps the table as it is while it asks, and keeps the last answer if the ask fails. */
@@ -135,6 +141,15 @@ export class AdminStatus extends LitElement {
     </ui-dialog>`;
   }
 
+  /** A newer AUGUR release is out: the dot that sends an admin to Updates. */
+  private updateNote() {
+    const v = this.updates?.available?.version;
+    if (!v) return nothing;
+    return html`<div data-update style="padding:var(--space-4) var(--space-4) 0">
+      <ui-status status="needs" label=${`AUGUR ${v} is out. You’re on ${this.updates!.running.version}: see Admin, Updates.`}></ui-status>
+    </div>`;
+  }
+
   /** Last night's backup and the last restore test, when the gateway knows about them. */
   private backupFacts() {
     const b = this.backups;
@@ -175,7 +190,7 @@ export class AdminStatus extends LitElement {
           @ui-open=${(e: CustomEvent<{ row: TableRow }>) => (this.open = e.detail.row.id)}
           @ui-retry=${() => this.load()}
         ></ui-table>
-        ${this.backupFacts()} ${this.details()}`,
+        ${this.updateNote()} ${this.backupFacts()} ${this.details()}`,
     );
   }
 }

@@ -86,7 +86,7 @@ export const platformApps: AppEntry[] = [
     version: PLATFORM_APP_VERSIONS.admin,
     sdk: '^1.0.0',
     icon: 'admin',
-    description: 'People, departments, apps, status and activity',
+    description: 'People, departments, apps, status, updates and activity',
     requiredRole: 'admin',
     menu: [
       {
@@ -115,6 +115,7 @@ export const platformApps: AppEntry[] = [
         icon: 'pulse',
         items: [
           { label: 'Status', icon: 'pulse', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },
+          { label: 'Updates', icon: 'download', path: '/updates', detail: 'New AUGUR releases', keywords: 'upgrade release version new' },
           { label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' },
         ],
       },

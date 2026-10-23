@@ -82,6 +82,12 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} let apps load from ${target}`;
     case 'origin.removed':
       return `${who} stopped apps loading from ${target}`;
+    case 'platform.updates-checked':
+      return d.available
+        ? `${who} checked for updates: AUGUR ${String(d.available)} is out`
+        : d.problem
+          ? `${who} checked for updates, but the release feed couldn’t be read`
+          : `${who} checked for updates: AUGUR ${target} is the newest`;
     default:
       return `${who}: ${e.action}${target ? ` (${target})` : ''}`;
   }
