@@ -1,5 +1,14 @@
 # @apps/library
 
+## 0.1.3
+
+### Patch Changes
+
+- 1622cd9: The platform is now called AUGUR. Packages move from `@platform/*` to `@augur/*`, and the shell's title, `<ui-shell>`'s default product name, Admin and new sign-in realms say AUGUR. Running servers keep their realm, database, Compose project and `.env` names; see docs/upgrade.md. The shell's import map still answers to `@platform/ui-kit`, so apps built before the rename keep loading.
+- Updated dependencies [f090793]
+- Updated dependencies [1622cd9]
+  - @augur/service-kit@0.4.0
+
 ## 0.1.2
 
 ### Patch Changes
