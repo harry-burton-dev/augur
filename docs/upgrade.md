@@ -8,7 +8,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 
 ## Before you start
 
-1. **Read what changed.** Each package's `CHANGELOG.md` says what its release does; the root of a release PR lists them all. Look for these words, which mean you have something to do:
+1. **Read what changed.** The GitHub release for the platform version you're moving to, `platform@<version>` under Releases, gathers every part's changes, any breaking change and any new setting, and says which versions it upgrades from. If you're more than one release behind and it lists a breaking change, go to the release before it first. Each package's `CHANGELOG.md` has the detail. Look for these, which mean you have something to do:
    - **major** on a service or contract: a caller has to change. The platform's own frontends move with it, but anything you've built against that API needs checking ([versioning.md](versioning.md)).
    - a new or renamed setting in `infra/deploy/.env.example`: copy it into your `.env` before starting.
    - "migration" on a service: it changes its database tables when it starts. Migrations only add; none removes data.

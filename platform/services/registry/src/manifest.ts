@@ -1,5 +1,6 @@
 import semver from 'semver';
 import { SCOPES, type Scope } from '@platform/service-kit';
+import { PLATFORM_APP_VERSIONS } from './platform-app-versions.js';
 
 /** One app in the catalogue, as the app itself describes it in its manifest.json. */
 export interface AppEntry {
@@ -76,13 +77,13 @@ export interface AppMenuCategory {
  * "/" is the shell's own: Title, where every app is a chapter.
  */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.1.0', sdk: '^1.0.0', icon: 'home', description: 'What needs you' },
+  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0', icon: 'home', description: 'What needs you' },
   {
     id: 'admin',
     name: 'Admin',
     route: '/admin',
     entry: '/apps/admin/entry.js',
-    version: '0.1.0',
+    version: PLATFORM_APP_VERSIONS.admin,
     sdk: '^1.0.0',
     icon: 'admin',
     description: 'People, departments, apps, status and activity',

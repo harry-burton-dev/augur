@@ -26,6 +26,7 @@ jobs:
       # versions and writes changelogs. Merging that PR tags each released package
       # (e.g. @platform/registry@0.2.0) and makes a GitHub release for it.
       - uses: changesets/action@v1
+        id: changesets
         with:
           title: Version packages
           commit: Version packages
@@ -34,3 +35,11 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      # Once nothing is waiting (the Version packages PR just merged), tags the platform release that PR
+      # wrote to release/platform-release.json and makes its GitHub release, with the file attached.
+      # Does nothing when that version is already released.
+      - name: Platform release
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: node scripts/platform-release.mjs publish
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}

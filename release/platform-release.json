@@ -1,0 +1,92 @@
+{
+  "platform": "0.1.0",
+  "channel": "beta",
+  "released": "2026-10-23",
+  "upgradeFrom": ">=0.1.0",
+  "changed": [
+    "@platform/mfe-sdk",
+    "@platform/service-kit",
+    "@platform/ui-kit",
+    "@platform/events",
+    "@platform/gateway",
+    "@platform/identity",
+    "@platform/registry",
+    "@platform/admin",
+    "@platform/home",
+    "@platform/shell"
+  ],
+  "breaking": [],
+  "settings": {
+    "all": [
+      "PLATFORM_URL",
+      "TS_HOSTNAME",
+      "TS_AUTHKEY",
+      "POSTGRES_PASSWORD",
+      "KEYCLOAK_ADMIN_PASSWORD",
+      "IDENTITY_CLIENT_SECRET",
+      "REGISTRY_CLIENT_SECRET",
+      "EVENTS_CLIENT_SECRET",
+      "PLATFORM_ADMIN_USER",
+      "PLATFORM_ADMIN_PASSWORD",
+      "PLATFORM_ADMIN_EMAIL",
+      "PLATFORM_ADMIN_FIRST_NAME",
+      "PLATFORM_ADMIN_LAST_NAME",
+      "PLATFORM_ADMIN_DEPARTMENT",
+      "ORG_NAME",
+      "BACKUP_HOUR_UTC",
+      "BACKUP_KEEP_DAYS",
+      "RESTORE_TEST_WEEKDAY",
+      "APP_ORIGINS"
+    ],
+    "required": [
+      "PLATFORM_URL",
+      "TS_HOSTNAME",
+      "TS_AUTHKEY",
+      "POSTGRES_PASSWORD",
+      "KEYCLOAK_ADMIN_PASSWORD",
+      "IDENTITY_CLIENT_SECRET",
+      "REGISTRY_CLIENT_SECRET",
+      "EVENTS_CLIENT_SECRET",
+      "PLATFORM_ADMIN_USER",
+      "PLATFORM_ADMIN_PASSWORD",
+      "PLATFORM_ADMIN_EMAIL",
+      "PLATFORM_ADMIN_FIRST_NAME",
+      "PLATFORM_ADMIN_LAST_NAME",
+      "PLATFORM_ADMIN_DEPARTMENT"
+    ],
+    "added": [],
+    "removed": []
+  },
+  "parts": {
+    "@platform/mfe-sdk": {
+      "version": "1.1.0"
+    },
+    "@platform/service-kit": {
+      "version": "0.3.0"
+    },
+    "@platform/ui-kit": {
+      "version": "1.0.0"
+    },
+    "@platform/events": {
+      "version": "0.3.0"
+    },
+    "@platform/gateway": {
+      "version": "0.2.0"
+    },
+    "@platform/identity": {
+      "version": "0.3.0"
+    },
+    "@platform/registry": {
+      "version": "0.3.0"
+    },
+    "@platform/admin": {
+      "version": "0.2.0"
+    },
+    "@platform/home": {
+      "version": "0.2.0"
+    },
+    "@platform/shell": {
+      "version": "0.3.0"
+    }
+  }
+}
