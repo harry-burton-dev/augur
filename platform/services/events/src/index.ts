@@ -1,4 +1,4 @@
-import { registryGrants, serviceVerifierFromEnv } from '@platform/service-kit';
+import { platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@platform/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
 
@@ -14,8 +14,10 @@ if (process.env.DATABASE_URL) {
   store = new MemoryEventStore();
 }
 
-const { SERVICE_TOKEN, REGISTRY_URL = 'http://localhost:8082' } = process.env;
-// Apps sign in as themselves and are held to what the registry grants them. The shared service token still works until every service has its own.
-const grants = SERVICE_TOKEN ? registryGrants({ registryUrl: REGISTRY_URL, credentials: { name: 'events', token: SERVICE_TOKEN } }) : undefined;
-const app = await buildApp({ store, serviceToken: SERVICE_TOKEN, verifyService: serviceVerifierFromEnv(), grants });
+// Apps sign in as themselves and are held to what the registry grants them; events asks the registry as itself (platform-events).
+const { REGISTRY_URL = 'http://localhost:8082' } = process.env;
+const credentials = platformCredentialsFromEnv('events');
+if (!credentials) console.warn('SERVICE_CLIENT_SECRET is not set: apps’ grants can’t be checked, so only platform services can notify or write the audit log.');
+const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
+const app = await buildApp({ store, verifyService: serviceVerifierFromEnv(), grants });
 await app.listen({ port, host: '0.0.0.0' });

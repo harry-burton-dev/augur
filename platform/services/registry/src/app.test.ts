@@ -5,7 +5,13 @@ import { buildApp } from './app.ts';
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0', handles: ['document.open'] };
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
-const service = { 'x-service-token': 'local-secret', 'x-service-name': 'library' };
+// Stands in for Keycloak: "Bearer app-<id>" is that app's token, "Bearer platform-<name>" a platform service's.
+const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
+  const m = /^Bearer (app|platform)-(\S+)$/.exec(String(headers.authorization ?? ''));
+  return m ? (m[1] === 'app' ? { kind: 'app' as const, app: m[2] } : { kind: 'platform' as const, name: m[2] }) : undefined;
+};
+const as = (client: string) => ({ authorization: `Bearer ${client}` });
+const service = as('app-library');
 
 const ids = (body: { id: string }[]) => body.map((a) => a.id);
 
@@ -17,7 +23,7 @@ describe('registry', () => {
   });
 
   it('hides apps that need a role the caller lacks', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, requiredRole: 'admin' } });
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).toEqual(['home']);
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'admin', 'library']);
@@ -33,7 +39,7 @@ describe('registry', () => {
 
   it('shows admins the whole catalogue, and lets them turn an app off and on', async () => {
     const entries: { action: string }[] = [];
-    const app = await buildApp({ serviceToken: 'local-secret', audit: async (e) => void entries.push(e) });
+    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const patch = (enabled: boolean, headers = admin, id = 'library') => app.inject({ method: 'PATCH', url: `/v1/apps/${id}`, headers, payload: { enabled } });
     expect((await patch(false, editor)).statusCode).toBe(403);
@@ -52,8 +58,8 @@ describe('registry', () => {
     expect(entries.map((e) => e.action)).toEqual(['app.registered', 'app.disabled', 'app.updated', 'app.enabled']);
   });
 
-  it('lets an app’s service register it with the service token', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+  it('lets an app’s service register it, signed in as itself', async () => {
+    const app = await buildApp({ verifyService });
     const first = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const again = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
     expect([first.statusCode, again.statusCode]).toEqual([201, 200]);
@@ -62,29 +68,30 @@ describe('registry', () => {
   });
 
   it('lets an admin register an app, but no one else', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     const byAdmin = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: admin, payload: library });
     const byEditor = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: editor, payload: library });
-    const wrongToken = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: { 'x-service-token': 'guess' }, payload: library });
-    expect([byAdmin.statusCode, byEditor.statusCode, wrongToken.statusCode]).toEqual([201, 403, 403]);
+    const notAToken = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: { authorization: 'Bearer guess' }, payload: library });
+    expect([byAdmin.statusCode, byEditor.statusCode, notAToken.statusCode]).toEqual([201, 403, 403]);
   });
 
-  it('refuses the token when none is configured', async () => {
+  it('trusts no service token when it has no way to check one', async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: { 'x-service-token': '' }, payload: library });
+    const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect(res.statusCode).toBe(403);
   });
 
   it('turns away manifests it cannot use', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     const put = (url: string, payload: object) => app.inject({ method: 'PUT', url, headers: service, payload });
     expect((await put('/v1/apps/library', { ...library, route: 'library' })).statusCode).toBe(400);
     expect((await put('/v1/apps/library', { ...library, extra: true })).statusCode).toBe(400);
-    expect((await put('/v1/apps/other', library)).statusCode).toBe(400);
+    const mismatched = await app.inject({ method: 'PUT', url: '/v1/apps/other', headers: admin, payload: library });
+    expect(mismatched.statusCode).toBe(400);
   });
 
   it('needs a semver version and the SDK range the app works with', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
     const { sdk: _, ...noSdk } = library;
     expect((await put(noSdk)).statusCode).toBe(400);
@@ -100,7 +107,7 @@ describe('registry', () => {
   });
 
   it('keeps an app’s menu, and turns away items that would open its root', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     const menu = [{ label: 'Documents', icon: 'folder', items: [{ label: 'Reports', path: '/reports', detail: 'Updated today' }] }];
     const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
     expect((await put({ ...library, ai: false, menu })).statusCode).toBe(201);
@@ -111,8 +118,8 @@ describe('registry', () => {
   });
 
   it('keeps platform apps and taken routes for their owners', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
-    const put = (payload: object) => app.inject({ method: 'PUT', url: `/v1/apps/${(payload as { id: string }).id}`, headers: service, payload });
+    const app = await buildApp({ verifyService });
+    const put = (payload: object) => app.inject({ method: 'PUT', url: `/v1/apps/${(payload as { id: string }).id}`, headers: as(`app-${(payload as { id: string }).id}`), payload });
     const home = await put({ ...library, id: 'home', route: '/home' });
     const slash = await put({ ...library, route: '/admin' });
     await put(library);
@@ -123,7 +130,7 @@ describe('registry', () => {
 
   it('records who changed the catalogue in the audit log', async () => {
     const entries: unknown[] = [];
-    const app = await buildApp({ serviceToken: 'local-secret', audit: async (e) => void entries.push(e) });
+    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
     expect(entries).toEqual([
@@ -134,7 +141,7 @@ describe('registry', () => {
 
   it('lets admins see an app’s versions, roll it back and hold it there, then let it go', async () => {
     const entries: { action: string; detail?: unknown }[] = [];
-    const app = await buildApp({ serviceToken: 'local-secret', audit: async (e) => void entries.push(e) });
+    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
     const register = (version: string) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version } });
     await register('0.1.0');
     await register('0.2.0');
@@ -160,7 +167,7 @@ describe('registry', () => {
   });
 
   it('keeps versions to admins, and platform apps out of it', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect((await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: editor })).statusCode).toBe(403);
     expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: editor, payload: { version: '0.1.0' } })).statusCode).toBe(403);
@@ -170,13 +177,13 @@ describe('registry', () => {
   });
 
   it('still registers the app when the audit log cannot be reached', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret', audit: async () => Promise.reject(new Error('events is down')) });
+    const app = await buildApp({ verifyService, audit: async () => Promise.reject(new Error('events is down')) });
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect(res.statusCode).toBe(201);
   });
 
   it('lets an admin remove an app', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const byService = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: service });
     const byAdmin = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
@@ -190,7 +197,7 @@ describe('registry', () => {
     const allow = (app: Awaited<ReturnType<typeof buildApp>>, origin: string, headers = admin) => app.inject({ method: 'POST', url: '/v1/origins', headers, payload: { origin } });
 
     it('takes an entry on the platform itself, and refuses one from an origin nobody allowed', async () => {
-      const app = await buildApp({ serviceToken: 'local-secret' });
+      const app = await buildApp({ verifyService });
       expect((await register(app, library)).statusCode).toBe(201);
       const refused = await register(app, elsewhere);
       expect(refused.statusCode).toBe(400);
@@ -201,7 +208,7 @@ describe('registry', () => {
 
     it('takes an entry from an origin an admin allowed, and audits the choice', async () => {
       const entries: { action: string; target?: string }[] = [];
-      const app = await buildApp({ serviceToken: 'local-secret', audit: async (e) => void entries.push(e) });
+      const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
       expect((await allow(app, 'https://apps.example.org', editor)).statusCode).toBe(403);
       expect((await allow(app, 'http://apps.example.org')).json().message).toMatch(/HTTPS/);
       expect((await allow(app, 'https://apps.example.org/library')).json().message).toMatch(/without a path/);
@@ -214,7 +221,7 @@ describe('registry', () => {
     });
 
     it('stops offering apps from an origin that is no longer allowed', async () => {
-      const app = await buildApp({ serviceToken: 'local-secret' });
+      const app = await buildApp({ verifyService });
       await allow(app, 'https://apps.example.org');
       await register(app, elsewhere);
       const removed = await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: admin });
@@ -227,13 +234,6 @@ describe('registry', () => {
   });
 
   describe('apps signed in as themselves', () => {
-    // Stands in for Keycloak: "Bearer app-<id>" is that app's token, "Bearer platform-<name>" a platform service's.
-    const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
-      const m = /^Bearer (app|platform)-(\S+)$/.exec(String(headers.authorization ?? ''));
-      return m ? (m[1] === 'app' ? { kind: 'app' as const, app: m[2] } : { kind: 'platform' as const, name: m[2] }) : undefined;
-    };
-    const as = (client: string) => ({ authorization: `Bearer ${client}` });
-
     it('lets an app register itself, recorded as itself, and nothing else', async () => {
       const entries: { actor: { id: string } }[] = [];
       const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });

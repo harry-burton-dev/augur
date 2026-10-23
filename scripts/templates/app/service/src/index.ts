@@ -7,7 +7,7 @@ const app = await buildApp();
 await app.listen({ port, host: '0.0.0.0' });
 
 // Put __NAME__ in the platform's catalogue, so the shell can offer it.
-// It signs in as itself with SERVICE_CLIENT_SECRET (issued for it by an admin), or with the shared SERVICE_TOKEN while that still works.
+// It signs in as itself with SERVICE_CLIENT_SECRET (issued for it by an admin in Admin, Apps).
 const { REGISTRY_URL, APP_MANIFEST } = process.env;
 const credentials = appCredentialsFromEnv('__ID__');
 if (REGISTRY_URL && credentials) {

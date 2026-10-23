@@ -14,7 +14,7 @@ Architecture: [Platform: MVP Architecture](https://claude.ai/code/artifact/bb16f
 | `platform/packages/mfe-sdk` | The contract between the shell and apps: manifest entries, mount context, event bus, and intents to open another app or ask it for an answer |
 | `platform/frontends/` | The shell host, Home and Admin; see its README for how apps are mounted |
 | `platform/services/gateway` | Public entry; checks the sign-in token, then forwards `/api/<service>/*` to platform services and each app's service with the caller attached |
-| `platform/packages/service-kit` | What a service uses to know who is calling, to call other services with the service token, register its app, notify people and write the audit log |
+| `platform/packages/service-kit` | What a service uses to know who is calling, to sign in as itself and call other services, register its app, notify people and write the audit log |
 | `platform/services/identity` | Who people are: answers "who am I" for the shell, keeps the floors people stand on (the org, its teams, everyone's own), and lets admins manage people and departments |
 | `platform/services/registry` | App catalogue on Postgres: apps register themselves, and each person gets the manifest their roles allow |
 | `platform/services/events` | Notifications, delivered live to the Shell's stream, and the append-only audit log, on Postgres |
@@ -63,7 +63,7 @@ The platform comes first; apps come after its core integrations work.
 
 - Nothing under `platform/` depends on an app, and no app depends on another app. `pnpm check:boundaries` fails the build otherwise.
 - An app reaches the platform only through `@platform/*` packages, the gateway, the registry manifest and events.
-- Services call each other only on the internal network, with the service token (`SERVICE_TOKEN`); the gateway strips it from outside requests.
+- Services call each other only on the internal network. Each app and platform service signs in as itself (its own Keycloak client and secret, `SERVICE_CLIENT_SECRET`), and an app may do only what the registry grants it on the floor a call is for. The gateway refuses service tokens from outside.
 - An app names the floor a request is for with `X-Workspace-Id`; the gateway checks the caller is on it and passes it on (`caller.workspace` in `@platform/service-kit`), or answers 403. Services trust only that, never a floor the browser claims.
 - Only the gateway reads sign-in tokens. Services behind it read the caller with `@platform/service-kit` and trust nothing else a client sends about who it is.
 - Services talk only through their OpenAPI contracts or events, never another service's tables.

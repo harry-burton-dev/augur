@@ -9,9 +9,7 @@ const version = packageVersion(import.meta.url);
 
 export interface RegistryOptions {
   store?: AppStore;
-  /** The environment's service token: lets apps' services register themselves. Without it only admins can change the catalogue. */
-  serviceToken?: string;
-  /** Checks apps' and platform services' own sign-in tokens. Without it only the service token is trusted. */
+  /** Checks apps' and platform services' own sign-in tokens. Without it only admins can change the catalogue. */
   verifyService?: ServiceVerifier;
   /** Where changes to the catalogue are recorded. Without it nothing is audited. */
   audit?: (entry: NewAuditEntry) => Promise<void>;
@@ -41,7 +39,7 @@ const catalogueEntry = (r: AppRecord, allowed: string[]) => {
  * The catalogue of apps. The platform's own apps are built in; every other app
  * registers itself, and each person is shown only the apps their roles allow.
  */
-export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, verifyService, audit }: RegistryOptions = {}) => {
+export const buildApp = async ({ store = new MemoryAppStore(), verifyService, audit }: RegistryOptions = {}) => {
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('registry', version, API_VERSION));
@@ -112,7 +110,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), serviceToken, ver
       /** Which app or platform service sent this call, if any; undefined when the sign-in service can't say right now. */
       const serviceOf = async (req: FastifyRequest, reply: FastifyReply): Promise<ServiceIdentity | null | undefined> => {
         try {
-          return (await identifyService(req.headers, { token: serviceToken, verify: verifyService })) ?? null;
+          return (await identifyService(req.headers, verifyService)) ?? null;
         } catch (err) {
           if (!(err instanceof ServiceAuthUnavailable)) throw err;
           void reply.code(503).send({ error: 'unavailable', message: err.message });

@@ -30,7 +30,7 @@ Fill in `infra/deploy/.env`:
 
 - `PLATFORM_URL`: `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`.
 - `TS_AUTHKEY`: the key from the admin console.
-- `POSTGRES_PASSWORD`, `SERVICE_TOKEN`, `KEYCLOAK_ADMIN_PASSWORD`: long random strings. `openssl rand -hex 32` makes one.
+- `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`: long random strings, each different. `openssl rand -hex 32` makes one.
 - `PLATFORM_ADMIN_*`: you. This is the first person who can sign in, as an admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one.
 
 Then:
@@ -77,7 +77,7 @@ The backups sit on the same disk as the database, so copy `infra/deploy/backups/
 
 ## What's in it
 
-- **Platform services**: identity, registry, events and the gateway. Only the gateway is reachable, and only through `/api`. Services talk to each other on the compose network with `SERVICE_TOKEN`.
+- **Platform services**: identity, registry, events and the gateway. Only the gateway is reachable, and only through `/api`. Services talk to each other on the compose network, each signed in as itself: identity makes each platform service's Keycloak client from its `*_CLIENT_SECRET` when it starts.
 - **Apps**: Home. The Library app isn't deployed while it's paused.
 - **The front door** (`web`): nginx serving the shell and the apps' frontends, with `/api` and `/sso` behind it. The shell's page has a Content Security Policy: the browser runs only scripts from the platform's own address, the shell's import map, and the sites in `APP_ORIGINS`, and the page talks only to the platform (plus those sites). Fonts come from Google Fonts.
 - **Sign-in**: Keycloak, imported on first start from `infra/deploy/keycloak/platform-realm.json`, with no test users. Keycloak reads that file only once. If you change `PLATFORM_URL` later, update the **shell** client's redirect URIs and web origins in the admin console.

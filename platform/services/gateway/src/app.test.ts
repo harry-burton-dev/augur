@@ -14,9 +14,11 @@ describe('gateway', () => {
   let url: string;
   let auth: AuthConfig;
   let sign: (claims: JWTPayload, opts?: { expiresIn?: string; issuer?: string }) => Promise<string>;
+  let signingKey: CryptoKey;
 
   beforeAll(async () => {
     const { publicKey, privateKey } = await generateKeyPair('RS256');
+    signingKey = privateKey;
     const jwk = { ...(await exportJWK(publicKey)), kid: 'k1', alg: 'RS256' };
     auth = { issuer, audience, keys: createLocalJWKSet({ keys: [jwk] }) };
     sign = (claims, opts = {}) =>
@@ -75,14 +77,22 @@ describe('gateway', () => {
         authorization: `Bearer ${await sign({ sub: 'u-2' })}`,
         'x-user-roles': 'admin',
         'x-user-id': 'someone-else',
-        'x-service-token': 'guessed',
-        'x-service-name': 'registry',
       },
     });
     expect(res.json()['x-user-id']).toBe('u-2');
-    expect(res.json()['x-service-token']).toBeUndefined();
-    expect(res.json()['x-service-name']).toBeUndefined();
     expect(res.json()['x-user-roles']).toBe('');
+  });
+
+  it('turns away an app’s own service token: services are reached only inside', async () => {
+    const app = await buildApp({ upstreams: { registry: url }, auth });
+    const appToken = await new SignJWT({ azp: 'app-library' })
+      .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+      .setIssuer(issuer)
+      .setAudience('platform-services')
+      .setExpirationTime('5m')
+      .sign(signingKey);
+    const res = await app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: `Bearer ${appToken}` } });
+    expect(res.statusCode).toBe(401);
   });
 
   it('rejects expired tokens and tokens from another issuer', async () => {

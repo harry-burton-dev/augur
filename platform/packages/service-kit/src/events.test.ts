@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { notify, recordAudit } from './events.js';
 
-const credentials = { name: 'library', token: 't' };
+const credentials = { name: 'library', getToken: async () => 't' };
 const ok = vi.fn(async () => new Response('{}', { status: 202 }));
 
 describe('events helpers', () => {

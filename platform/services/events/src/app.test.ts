@@ -4,7 +4,12 @@ import { buildApp } from './app.ts';
 
 const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const sam = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
-const library = await serviceHeaders({ name: 'library', token: 'local-secret' });
+// Stands in for Keycloak: "Bearer app-<id>" is that app's token, "Bearer platform-<name>" a platform service's.
+const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
+  const m = /^Bearer (app|platform)-(\S+)$/.exec(String(headers.authorization ?? ''));
+  return m ? (m[1] === 'app' ? { kind: 'app' as const, app: m[2] } : { kind: 'platform' as const, name: m[2] }) : undefined;
+};
+const platform = await serviceHeaders({ name: 'identity', getToken: async () => 'platform-identity' });
 const review = { app: 'library', recipients: ['u-1', 'u-2'], level: 'needs', title: 'Review the budget paper', link: '/doc/7' };
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -22,8 +27,8 @@ describe('events', () => {
   });
 
   it('lets a service notify people, who each see only their own', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
-    const sent = await app.inject({ method: 'POST', url: '/v1/notifications', headers: library, payload: review });
+    const app = await buildApp({ verifyService });
+    const sent = await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
     expect([sent.statusCode, sent.json()]).toEqual([202, { sent: 2 }]);
     const mine = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
     expect(mine).toMatchObject([{ app: 'library', level: 'needs', title: 'Review the budget paper', link: '/doc/7' }]);
@@ -31,17 +36,17 @@ describe('events', () => {
   });
 
   it('turns away notifications from anyone but a service, and ones it cannot use', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     const post = (headers: Record<string, string>, payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers, payload });
     expect((await post(alex, review)).statusCode).toBe(403);
-    expect((await post(library, { ...review, level: 'urgent' })).statusCode).toBe(400);
-    expect((await post(library, { ...review, recipients: [] })).statusCode).toBe(400);
-    expect((await post(library, { ...review, link: 'https://elsewhere.example' })).statusCode).toBe(400);
+    expect((await post(platform, { ...review, level: 'urgent' })).statusCode).toBe(400);
+    expect((await post(platform, { ...review, recipients: [] })).statusCode).toBe(400);
+    expect((await post(platform, { ...review, link: 'https://elsewhere.example' })).statusCode).toBe(400);
   });
 
   it('marks a notification read, and unread again', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
-    await app.inject({ method: 'POST', url: '/v1/notifications', headers: library, payload: review });
+    const app = await buildApp({ verifyService });
+    await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
     const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
     expect((await app.inject({ method: 'POST', url: `/v1/notifications/${n.id}/read`, headers: sam })).statusCode).toBe(204);
     expect((await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json()).toEqual([]);
@@ -50,15 +55,15 @@ describe('events', () => {
   });
 
   it('never lets someone touch another person’s notification', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
-    await app.inject({ method: 'POST', url: '/v1/notifications', headers: library, payload: { ...review, recipients: ['u-1'] } });
+    const app = await buildApp({ verifyService });
+    await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...review, recipients: ['u-1'] } });
     const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: alex })).json();
     expect((await app.inject({ method: 'POST', url: `/v1/notifications/${n.id}/read`, headers: sam })).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/v1/notifications' })).statusCode).toBe(401);
   });
 
   it('streams each new notification to its recipient as it happens', async () => {
-    const app = (open = await buildApp({ serviceToken: 'local-secret', heartbeatMs: 50 }));
+    const app = (open = await buildApp({ verifyService, heartbeatMs: 50 }));
     const url = await app.listen({ port: 0, host: '127.0.0.1' });
     const controller = new AbortController();
     const res = await fetch(`${url}/v1/notifications/stream`, { headers: sam, signal: controller.signal });
@@ -66,8 +71,8 @@ describe('events', () => {
     const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
     expect((await reader.read()).value).toContain(': connected');
 
-    await app.inject({ method: 'POST', url: '/v1/notifications', headers: library, payload: { ...review, recipients: ['u-1'] } });
-    await app.inject({ method: 'POST', url: '/v1/notifications', headers: library, payload: { ...review, recipients: ['u-2'], title: 'For Sam' } });
+    await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...review, recipients: ['u-1'] } });
+    await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...review, recipients: ['u-2'], title: 'For Sam' } });
     let text = '';
     while (!text.includes('event: notification')) text += (await reader.read()).value;
     expect(text).toContain('"title":"For Sam"');
@@ -76,11 +81,11 @@ describe('events', () => {
   });
 
   it('keeps an audit log that services write and only admins read', async () => {
-    const app = await buildApp({ serviceToken: 'local-secret' });
+    const app = await buildApp({ verifyService });
     const entry = { actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' };
-    expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: library, payload: entry })).statusCode).toBe(201);
+    expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: entry })).statusCode).toBe(201);
     expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: alex, payload: entry })).statusCode).toBe(403);
-    expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: library, payload: { ...entry, action: 'Published!' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: { ...entry, action: 'Published!' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'GET', url: '/v1/audit', headers: sam })).statusCode).toBe(403);
     const log = (await app.inject({ method: 'GET', url: '/v1/audit?app=library', headers: alex })).json();
     expect(log).toMatchObject([entry]);
@@ -90,11 +95,6 @@ describe('events', () => {
   });
 
   describe('apps signed in as themselves', () => {
-    // Stands in for Keycloak: "Bearer app-<id>" is that app's token.
-    const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
-      const app = /^Bearer app-(\S+)$/.exec(String(headers.authorization ?? ''))?.[1];
-      return app ? { kind: 'app' as const, app } : undefined;
-    };
     const as = (app: string, workspace?: string) => ({ authorization: `Bearer app-${app}`, ...(workspace ? { 'x-workspace-id': workspace } : {}) });
     const asked: [string, string | undefined][] = [];
     // Library may notify on every floor but write the audit log only on w-finance; Board is granted nothing.

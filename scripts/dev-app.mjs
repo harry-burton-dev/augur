@@ -33,7 +33,7 @@ const servicePkg = join(dir, 'service/package.json');
 if (existsSync(servicePkg)) {
   const { name } = JSON.parse(readFileSync(servicePkg, 'utf8'));
   // No REGISTRY_URL or sign-in: the stand-in shell lists the app itself.
-  run(['--filter', name, 'dev'], { PORT: port, REGISTRY_URL: '', SERVICE_TOKEN: '', SERVICE_CLIENT_SECRET: '' });
+  run(['--filter', name, 'dev'], { PORT: port, REGISTRY_URL: '', SERVICE_CLIENT_SECRET: '' });
 }
 run(['--filter', '@platform/shell', 'dev'], { DEV_APP: dir, APP_SERVICE_URL: `http://localhost:${port}` });
 process.on('SIGINT', () => children.forEach((c) => c.kill('SIGINT')));

@@ -25,9 +25,7 @@ const version = packageVersion(import.meta.url);
 
 export interface EventsOptions {
   store?: EventStore;
-  /** The environment's service token: lets services send notifications and write the audit log. */
-  serviceToken?: string;
-  /** Checks apps' and platform services' own sign-in tokens. */
+  /** Checks apps' and platform services' own sign-in tokens: only services send notifications and write the audit log. */
   verifyService?: ServiceVerifier;
   /** What an app is granted on a floor; an app's calls are checked against it. */
   grants?: GrantLookup;
@@ -75,7 +73,7 @@ const forCaller = ({ recipient: _, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store = new MemoryEventStore(), serviceToken, verifyService, grants, heartbeatMs = 25_000 }: EventsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, heartbeatMs = 25_000 }: EventsOptions = {}) => {
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('events', version, API_VERSION));
 
@@ -94,7 +92,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), serviceToken, v
       const fromService = async (req: FastifyRequest, reply: FastifyReply, forApp: string, scope: Scope): Promise<ServiceIdentity | undefined> => {
         let service: ServiceIdentity | undefined;
         try {
-          service = await identifyService(req.headers, { token: serviceToken, verify: verifyService });
+          service = await identifyService(req.headers, verifyService);
         } catch (err) {
           if (!(err instanceof ServiceAuthUnavailable)) throw err;
           void reply.code(503).send({ error: 'unavailable', message: err.message });

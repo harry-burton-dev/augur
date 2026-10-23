@@ -37,6 +37,10 @@ Images are rebuilt from the repo, each service migrates its own tables as it sta
 - Sign in as yourself and as someone without the admin role, and open an app or two.
 - `pc logs --since 10m gateway identity registry events` shouldn't show errors. Every log line carries a `requestId`; the same id is in the `x-request-id` header of the response, so a problem someone reports can be found across every service's logs.
 
+## Release notes that need you
+
+- **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
+
 ## Going back
 
 Code and data are separate, so going back is two steps, and the second is only needed if the new release migrated data:

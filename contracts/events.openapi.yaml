@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.2.0
+  version: 1.3.0
   description: >
     Notifications for the Shell's stream, and the platform's audit log.
     People reach it through the gateway, which passes the caller in x-user-*
@@ -10,8 +10,8 @@ info:
     for its Keycloak client app-<id>, audience platform-services), may send only
     for itself, and needs the scope (notifications:send, audit:write) that the
     registry grants it on the floor named by x-workspace-id; otherwise 403, or
-    503 while that can't be checked. Platform services use the x-service-token
-    and x-service-name headers.
+    503 while that can't be checked. Platform services sign in the same way as
+    their own clients (platform-<name>).
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
 servers:
@@ -37,7 +37,7 @@ paths:
       responses:
         "202": { description: "Sent, one notification per recipient: { sent: number }" }
         "400": { description: Invalid notification }
-        "403": { description: Not a service with the service token }
+        "403": { description: Not a signed-in service, or not granted this }
   /notifications/stream:
     get:
       summary: Each new notification for the caller, as server-sent events
@@ -93,7 +93,7 @@ paths:
       responses:
         "201": { description: Recorded }
         "400": { description: Invalid entry }
-        "403": { description: Not a service with the service token }
+        "403": { description: Not a signed-in service, or not granted this }
 components:
   schemas:
     NewNotification:

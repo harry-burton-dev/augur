@@ -37,6 +37,14 @@ export interface CatalogueApp extends AppManifestEntry {
   pinnedVersion?: string;
   /** Set when the app loads from a site no longer allowed: why it isn't offered. */
   blocked?: string;
+  /** What the app's service asks to do on the platform. */
+  scopes?: string[];
+}
+
+/** An app's own sign-in, straight after it is issued: the secret is shown this once. */
+export interface IssuedSignIn {
+  clientId: string;
+  secret: string;
 }
 
 /** A site apps may load from besides the platform itself. */
@@ -169,6 +177,9 @@ export class AdminApi {
     version === null
       ? this.call<CatalogueApp>('DELETE', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`)
       : this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`, { version });
+
+  /** A new secret for the app's own sign-in; the old one stops working. */
+  issueSignIn = (id: string) => this.call<IssuedSignIn>('POST', `/api/identity/v1/admin/apps/${encodeURIComponent(id)}/credential`);
 
   audit = (query: AuditQuery) =>
     this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);

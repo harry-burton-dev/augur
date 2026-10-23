@@ -3,7 +3,7 @@ import type { UiDialog, UiTable, UiToggle } from '@platform/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
-import { appStatus, rollbackNote, type AdminApps } from './apps.js';
+import { appStatus, rollbackNote, scopeWords, type AdminApps } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
 import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
@@ -292,6 +292,41 @@ describe('admin', () => {
       el.choice = '';
       await el.useChoice(el.apps[0]);
       expect(calls).toContainEqual(['DELETE', '/api/registry/v1/apps/library/pin']);
+      el.remove();
+    });
+  });
+
+  describe('App sign-ins', () => {
+    const app: CatalogueApp = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.2.0', sdk: '^1.0.0', platform: false, enabled: true, scopes: ['notifications:send'] };
+
+    it('says what an app may do in words', () => {
+      expect(scopeWords(['notifications:send', 'audit:write'])).toBe('Notify people, Write to the activity log');
+      expect(scopeWords([])).toBe('Nothing beyond registering itself');
+      expect(scopeWords(undefined)).toBe('Nothing beyond registering itself');
+    });
+
+    it('issues a new sign-in and shows its secret once', async () => {
+      const calls: [string, string][] = [];
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+        calls.push([init.method ?? 'GET', url]);
+        const body = url.endsWith('/credential') ? { app: 'library', clientId: 'app-library', secret: 's3cret-value' } : url.endsWith('/versions') ? [] : [app];
+        return new Response(JSON.stringify(body), { status: url.endsWith('/credential') ? 201 : 200 });
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.apps).toHaveLength(1));
+      el.open = 'library';
+      await settle(el);
+      expect((el.querySelector('ui-facts') as unknown as { items: { label: string; value: string }[] }).items).toContainEqual({ label: 'May', value: 'Notify people' });
+      el.issuing = app;
+      await el.issueSignIn({}, document.createElement('ui-dialog') as UiDialog);
+      expect(calls).toContainEqual(['POST', '/api/identity/v1/admin/apps/library/credential']);
+      await settle(el);
+      expect(el.querySelector('[data-secret]')?.textContent).toBe('s3cret-value');
+      el.issued = undefined;
+      await settle(el);
+      expect(el.querySelector('[data-secret]')).toBeNull();
       el.remove();
     });
   });

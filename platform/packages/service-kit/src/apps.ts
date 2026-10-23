@@ -133,13 +133,14 @@ export const serviceVerifier =
 
 export type ServiceVerifier = ReturnType<typeof serviceVerifier>;
 
-/**
- * How an app's service signs in, from its environment: its own client secret
- * (SERVICE_CLIENT_SECRET, issued in Admin) when it has one, else the shared
- * SERVICE_TOKEN while that still works. Undefined when it has neither.
- */
-export const appCredentialsFromEnv = (app: string, env = process.env): { name: string; getToken: TokenSource } | { name: string; token: string } | undefined => {
+/** How an app's service signs in, from its environment (SERVICE_CLIENT_SECRET, issued by an admin); undefined without it. */
+export const appCredentialsFromEnv = (app: string, env = process.env): { name: string; getToken: TokenSource } | undefined => {
   const getToken = tokenSourceFromEnv(appClientId(app), env);
-  if (getToken) return { name: app, getToken };
-  return env.SERVICE_TOKEN ? { name: app, token: env.SERVICE_TOKEN } : undefined;
+  return getToken ? { name: app, getToken } : undefined;
+};
+
+/** How a platform service signs in, from its environment (SERVICE_CLIENT_SECRET); undefined without it. */
+export const platformCredentialsFromEnv = (service: string, env = process.env): { name: string; getToken: TokenSource } | undefined => {
+  const getToken = tokenSourceFromEnv(platformClientId(service), env);
+  return getToken ? { name: service, getToken } : undefined;
 };
