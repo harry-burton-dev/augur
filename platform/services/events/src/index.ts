@@ -1,4 +1,4 @@
-import { floorMembers, floorPlaces, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, floorMembers, floorPlaces, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
 
@@ -22,7 +22,7 @@ const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credent
 // Where floors sit, and who is on a team, come from identity, asked as events.
 const floors = credentials ? floorPlaces({ identityUrl: IDENTITY_URL, credentials }) : undefined;
 const members = credentials ? floorMembers({ identityUrl: IDENTITY_URL, credentials }) : undefined;
-const app = await buildApp({ store, verifyService: serviceVerifierFromEnv(), grants, floors, members });
+const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members });
 await app.listen({ port, host: '0.0.0.0' });
 
 // Domain events are for followers to catch up on, not a record: they're kept DOMAIN_EVENTS_KEEP_DAYS (30) days.

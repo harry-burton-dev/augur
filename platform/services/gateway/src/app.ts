@@ -1,6 +1,20 @@
 import Fastify from 'fastify';
 import proxy from '@fastify/http-proxy';
-import { callerHeaders, health, packageVersion, REQUEST_ID_HEADER, serviceLogging, withoutCallerHeaders, WORKSPACE_HEADERS, type Caller } from '@augur/service-kit';
+import {
+  CALLER_KEYS_PATH,
+  CALLER_TOKEN_HEADER,
+  callerHeaders,
+  callerSignerFromEnv,
+  health,
+  packageVersion,
+  REQUEST_ID_HEADER,
+  serviceLogging,
+  signedCallerHeaders,
+  withoutCallerHeaders,
+  WORKSPACE_HEADERS,
+  type Caller,
+  type CallerSigner,
+} from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor } from './status.ts';
@@ -41,11 +55,12 @@ export const defaultUpstreams = (env = process.env): Upstreams => {
 };
 
 /** The only routes anyone may reach without signing in. Everything else, including anything unmatched, needs a token. */
-const PUBLIC_ROUTES = new Set(['/healthz']);
+const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH]);
 
 declare module 'fastify' {
   interface FastifyRequest {
     caller?: Caller;
+    signedCaller?: Record<string, string>;
   }
 }
 
@@ -58,6 +73,8 @@ export interface GatewayOptions {
   backupDir?: string;
   /** Which floors a caller is on. Defaults to asking the identity upstream. */
   floors?: FloorLookup;
+  /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY, or a new key each start. */
+  signer?: CallerSigner;
 }
 
 /**
@@ -68,15 +85,21 @@ export interface GatewayOptions {
  * An app names the floor a request is for with `X-Workspace-Id`. The gateway
  * checks the caller is on it and passes it on with its kind and their role,
  * or refuses the request; services never see a floor the gateway didn't check.
+ *
+ * The caller also goes in one signed header (`x-augur-caller`) that only the
+ * service it is sent to accepts, so a service can tell the gateway's word from
+ * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR }: GatewayOptions = {}) => {
-  const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity }) : undefined);
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, signer = callerSignerFromEnv() }: GatewayOptions = {}) => {
+  const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
   const app = Fastify(serviceLogging());
   // Someone reporting a problem can quote it, and it finds the request in every service's logs.
   app.addHook('onSend', async (req, reply) => {
     reply.header(REQUEST_ID_HEADER, req.id);
   });
   app.get('/healthz', async () => health('gateway', version, API_VERSION));
+  // The public key services check signed callers with. It is public, so anyone may fetch it.
+  app.get(CALLER_KEYS_PATH, async () => signer.keys());
 
   const statusMonitor = monitor ?? new HealthMonitor({ probes: probesFor(upstreams, PLATFORM_SERVICES, signInKeysUrl(auth)) });
   if (!monitor) {
@@ -125,12 +148,17 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       upstream,
       prefix: `/api/${name}`,
       rewritePrefix: '',
+      // The signed caller is made before the request goes on, since signing is asynchronous.
+      preHandler: async (req) => {
+        req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
+      },
       replyOptions: {
         rewriteRequestHeaders: (req, headers) => {
           // Who is calling comes only from the verified token. A service's own token is refused above: its audience isn't this one.
           // The token itself stays here: it works on every platform API, so no service, an app's least of all, is handed it.
-          const { authorization: _, ...clean } = withoutCallerHeaders(headers);
-          return { ...clean, [REQUEST_ID_HEADER]: req.id, ...(req.caller ? callerHeaders(req.caller) : {}) };
+          // The plain caller headers stay for apps that don't check the signed one yet.
+          const { authorization: _, [CALLER_TOKEN_HEADER]: __, ...clean } = withoutCallerHeaders(headers);
+          return { ...clean, [REQUEST_ID_HEADER]: req.id, ...(req.caller ? { ...callerHeaders(req.caller), ...req.signedCaller } : {}) };
         },
       },
     });

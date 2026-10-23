@@ -15,6 +15,8 @@ x-service: &service
     EVENTS_URL: http://events:8084
     REGISTRY_URL: http://registry:8082
     MODELS_URL: http://models:8085
+    # Services believe a person is calling only when the gateway signed it; they fetch its key here.
+    GATEWAY_URL: http://gateway:8080
     # Every service signs in as itself (its own Keycloak client and SERVICE_CLIENT_SECRET); tokens name the
     # public address and are fetched and checked over the compose network.
     OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform

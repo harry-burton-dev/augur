@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callerHeaders } from '@augur/service-kit';
+import { callerCheckFor, callerHeaders, callerSigner, signedCallerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryWorkspaceStore } from './workspaces.ts';
 
@@ -16,6 +16,18 @@ describe('identity', () => {
     const caller = { id: 'u-1', name: 'Alex Rivera', departments: ['Finance'], roles: ['admin'] };
     const res = await app.inject({ method: 'GET', url: '/v1/me', headers: callerHeaders(caller) });
     expect(res.json()).toEqual(caller);
+  });
+
+  it('believes only the caller the gateway signed, once it checks callers', async () => {
+    const gateway = callerSigner();
+    const app = await buildApp({ callers: callerCheckFor(gateway, 'identity') });
+    const caller = { id: 'u-1', name: 'Alex Rivera', departments: ['Finance'], roles: ['admin'] };
+    // Anyone on the network could send these; without the gateway's signature they name nobody.
+    expect((await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/me', headers: callerHeaders(caller) })).statusCode).toBe(401);
+    const signed = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/me', headers: await signedCallerHeaders(gateway, caller, 'identity') });
+    expect(signed.json()).toEqual(caller);
+    // One signed for an app can't be replayed here.
+    expect((await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/me', headers: await signedCallerHeaders(gateway, caller, 'folio') })).statusCode).toBe(401);
   });
 
   it('turns away a request that reached it without a caller', async () => {

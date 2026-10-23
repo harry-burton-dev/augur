@@ -1,4 +1,4 @@
-import { floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { DEFAULT_FEED_URL, feedTokenFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
@@ -38,5 +38,5 @@ const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel });
 updates.start();
 
 // Apps and platform services sign in as themselves (their Keycloak clients).
-const app = await buildApp({ store, verifyService: serviceVerifierFromEnv(), audit, floors, updates });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates });
 await app.listen({ port, host: '0.0.0.0' });

@@ -14,6 +14,8 @@ import {
   type NewAuditEntry,
   type ServiceCredentials,
   type ServiceVerifier,
+  signedCallers,
+  type CallerCheck,
 } from '@augur/service-kit';
 import { ProviderError, type ChatRequest, type ModelProvider } from './provider.ts';
 import { MemoryModelStore, type ModelSettings, type ModelStore } from './store.ts';
@@ -39,6 +41,8 @@ export interface ModelsOptions {
    */
   audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
   now?: () => Date;
+  /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
+  callers?: CallerCheck;
 }
 
 /** Records audit entries with the events service, as the model gateway. */
@@ -117,8 +121,10 @@ type Asker = { app: string; actor: NewAuditEntry['actor']; workspace?: string };
  * call in the audit log before making it, and holds each app to a number of
  * calls a day. It is off until an admin turns it on.
  */
-export const buildApp = async ({ store = new MemoryModelStore(), provider, verifyService, grants, audit, now = () => new Date() }: ModelsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryModelStore(), provider, verifyService, grants, audit, now = () => new Date(), callers }: ModelsOptions = {}) => {
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  // Before anything reads the caller: only the gateway's signed word says who is calling.
+  app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', async () => health('models', version, API_VERSION));
 
   const today = () => now().toISOString().slice(0, 10);

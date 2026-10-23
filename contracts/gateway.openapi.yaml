@@ -1,16 +1,20 @@
 openapi: 3.1.0
 info:
   title: Gateway
-  version: 1.2.0
+  version: 1.3.0
   description: >
     The gateway's own API, beside the services it forwards to. Reached at
     /api/gateway/v1 by a signed-in caller. Everything else under /api/<service>
-    is forwarded to that service with the caller in x-user-* headers, and
-    without the caller's Authorization header. Every path but /healthz needs
-    a signed-in caller, however it is spelt. x-user-signed-in-at carries when
-    the caller last entered their password (the token's auth_time, ISO 8601),
-    for a service that wants a fresh sign-in for something drastic; the
-    shell's /auth/again?return=<path> asks for the password and comes back.
+    is forwarded to that service with the caller in x-user-* headers and in
+    x-augur-caller, a token the gateway signs (EdDSA, one minute) for that
+    service alone (its `aud` is the service's name), and without the caller's
+    Authorization header. Services that check callers believe only the signed
+    one. Every path but /healthz and /caller-keys needs a signed-in caller,
+    however it is spelt. x-user-signed-in-at (and the token's `signedInAt`)
+    carries when the caller last entered their password (the token's
+    auth_time, ISO 8601), for a service that wants a fresh sign-in for
+    something drastic; the shell's /auth/again?return=<path> asks for the
+    password and comes back.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
 servers:
@@ -38,6 +42,34 @@ paths:
                   backups: { $ref: "#/components/schemas/BackupStatus" }
         "401": { description: No signed-in caller }
         "403": { description: Not an admin }
+  /caller-keys:
+    get:
+      summary: The public key signed callers are checked with
+      description: >
+        A JSON Web Key Set with the gateway's Ed25519 key. No sign-in is needed.
+        The key is new each time the gateway starts unless CALLER_SIGNING_KEY is
+        set, so fetch it again when a token names a key id you don't have.
+      responses:
+        "200":
+          description: The keys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      required: [kty, crv, x, kid, alg]
+                      properties:
+                        kty: { const: OKP }
+                        crv: { const: Ed25519 }
+                        x: { type: string }
+                        kid: { type: string }
+                        alg: { const: EdDSA }
+                        use: { const: sig }
 components:
   schemas:
     ComponentStatus:

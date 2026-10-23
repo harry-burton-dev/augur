@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
-import { platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { ensureClients, KeycloakAppClients, parseClientSecrets, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
@@ -56,5 +56,5 @@ const credentials = platformCredentialsFromEnv('identity');
 const audit = EVENTS_URL && credentials ? auditTo(EVENTS_URL, credentials) : undefined;
 if (!audit) console.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: admins’ changes to people and departments are not audited.');
 
-const app = await buildApp({ store, workspaces, directory, appClients, audit, verifyService: serviceVerifierFromEnv() });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, appClients, audit, verifyService: serviceVerifierFromEnv() });
 await app.listen({ port, host: '0.0.0.0' });
