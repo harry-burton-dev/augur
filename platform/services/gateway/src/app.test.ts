@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { CALLER_KEYS_PATH, callerCheckFor, callerSigner } from '@augur/service-kit';
 import { buildApp, defaultUpstreams, parseUpstreams } from './app.ts';
 import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
@@ -79,6 +80,30 @@ describe('gateway', () => {
     expect(res.json()['x-user-signed-in-at']).toBe(new Date(1_793_000_000_000).toISOString());
     const without = await app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: `Bearer ${await sign(ada)}`, 'x-user-signed-in-at': '2099-01-01T00:00:00Z' } });
     expect(without.json()['x-user-signed-in-at']).toBeUndefined();
+  });
+
+  it('signs the caller for the one service the request goes to', async () => {
+    const signer = callerSigner();
+    const app = await buildApp({ upstreams: { registry: url }, auth, signer });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/registry/echo',
+      headers: { authorization: `Bearer ${await sign(ada)}`, 'x-augur-caller': 'forged' },
+    });
+    const token = res.json()['x-augur-caller'];
+    expect(token).not.toBe('forged');
+    expect(await callerCheckFor(signer, 'registry')(token)).toEqual({ id: 'u-1', name: 'Alex Rivera', email: 'alex@example.org', roles: ['admin'], departments: ['Finance'] });
+    await expect(callerCheckFor(signer, 'identity')(token)).rejects.toThrow(/not valid/);
+  });
+
+  it('publishes the key it signs callers with, to anyone', async () => {
+    const signer = callerSigner();
+    const app = await buildApp({ upstreams: {}, auth, signer, monitor: new HealthMonitor({ probes: [] }) });
+    const res = await app.inject({ method: 'GET', url: CALLER_KEYS_PATH });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(await signer.keys());
+    expect(res.json().keys[0]).toMatchObject({ kty: 'OKP', crv: 'Ed25519', alg: 'EdDSA' });
+    expect(res.json().keys[0].d).toBeUndefined();
   });
 
   it('never passes on caller headers a client sent itself', async () => {
@@ -190,6 +215,17 @@ describe('gateway', () => {
       const app = await buildApp({ upstreams: { registry: url }, auth, floors: async () => Promise.reject(new FloorLookupError('down')), monitor: new HealthMonitor({ probes: [] }) });
       expect((await echo(app, { 'x-workspace-id': 'w-finance' })).statusCode).toBe(503);
       expect((await echo(app, {})).statusCode).toBe(200);
+    });
+
+    it('signs the person for identity when it asks for their floors', async () => {
+      const signer = callerSigner();
+      let token = '';
+      const fetchImpl = async (_url: string | URL | Request, init?: RequestInit) => {
+        token = (init?.headers as Record<string, string>)['x-augur-caller'];
+        return Response.json({ workspaces: [] });
+      };
+      await identityFloors({ identityUrl: 'http://identity', signer, fetchImpl: fetchImpl as typeof fetch })({ id: 'u-1', name: 'Alex', departments: [], roles: [] });
+      expect((await callerCheckFor(signer, 'identity')(token)).id).toBe('u-1');
     });
 
     it('asks identity once per person while the answer is fresh, and again after a failure', async () => {

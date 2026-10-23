@@ -17,6 +17,8 @@ import {
   type ServiceCredentials,
   type ServiceIdentity,
   type ServiceVerifier,
+  signedCallers,
+  type CallerCheck,
 } from '@augur/service-kit';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, surfaceProblem, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
@@ -50,6 +52,8 @@ export interface RegistryOptions {
   floors?: FloorLookup;
   /** What the release feed says is out. Without it the Updates page says the feed is off. */
   updates?: UpdateChecker;
+  /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
+  callers?: CallerCheck;
 }
 
 /** Records audit entries with the events service, as the registry. */
@@ -96,9 +100,12 @@ export const buildApp = async ({
   audit,
   floors,
   updates = new UpdateChecker({ running: AUGUR_RELEASE }),
+  callers,
 }: RegistryOptions = {}) => {
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  // Before anything reads the caller: only the gateway's signed word says who is calling.
+  app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', async () => health('registry', version, API_VERSION));
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.

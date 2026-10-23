@@ -1,4 +1,4 @@
-import { callerHeaders, type Caller, type CallerWorkspace } from '@augur/service-kit';
+import { callerHeaders, signedCallerHeaders, type Caller, type CallerSigner, type CallerWorkspace } from '@augur/service-kit';
 
 /** A floor the caller can stand on, as identity's `GET /v1/me/workspaces` lists it. */
 export type FloorAccess = CallerWorkspace;
@@ -10,6 +10,8 @@ export class FloorLookupError extends Error {}
 
 export interface IdentityFloorsOptions {
   identityUrl: string;
+  /** Signs the caller for identity, which believes no other. */
+  signer?: CallerSigner;
   /** How long one person's floors are trusted before identity is asked again. */
   ttlMs?: number;
   fetchImpl?: typeof fetch;
@@ -24,7 +26,7 @@ const MAX_REMEMBERED = 5000;
  * short while so most requests cost nothing. Taking someone off a team
  * therefore reaches the gateway within `ttlMs`.
  */
-export const identityFloors = ({ identityUrl, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: IdentityFloorsOptions): FloorLookup => {
+export const identityFloors = ({ identityUrl, signer, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: IdentityFloorsOptions): FloorLookup => {
   const remembered = new Map<string, { floors: Promise<FloorAccess[]>; until: number }>();
   return (caller) => {
     const hit = remembered.get(caller.id);
@@ -32,7 +34,9 @@ export const identityFloors = ({ identityUrl, ttlMs = 30_000, fetchImpl = fetch,
     const floors = (async () => {
       let res: Response;
       try {
-        res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/me/workspaces`, { headers: callerHeaders({ ...caller, workspace: undefined }) });
+        const asked = { ...caller, workspace: undefined };
+        const headers = { ...callerHeaders(asked), ...(signer ? await signedCallerHeaders(signer, asked, 'identity') : {}) };
+        res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/me/workspaces`, { headers });
       } catch (err) {
         throw new FloorLookupError(`identity could not be reached (${(err as Error).message})`);
       }

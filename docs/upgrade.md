@@ -86,6 +86,10 @@ A new service, `models`, starts with the upgrade. Nothing changes until you want
 
 Then upgrade as usual.
 
+### Signed caller
+
+The gateway now signs the person it passes on, and the platform's services believe only the signed caller (see [Signed caller](signed-caller.md)). Nothing to add to `.env`: the gateway makes its key when it starts and services fetch it from the gateway. Upgrade as usual. An app with its own service should add the service kit's `signedCallers` hook; until it does, it keeps working on the plain headers.
+
 ### App storage
 
 Apps can now keep their own database schema and files (see [App storage](app-storage.md)). Two new containers start: `garage`, the object store, and `storage`, which sets up each app's storage and stops. Postgres moves to the same version with pgvector added (`pgvector/pgvector:0.8.0-pg16`), so the data carries over as it is. Before upgrading, add to `.env` (`openssl rand -hex 32` for each):

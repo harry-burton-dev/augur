@@ -19,6 +19,8 @@ import {
   type Scope,
   type ServiceIdentity,
   type ServiceVerifier,
+  signedCallers,
+  type CallerCheck,
 } from '@augur/service-kit';
 import { MemoryEventStore, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
@@ -38,6 +40,8 @@ export interface EventsOptions {
   members?: MemberLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
+  /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
+  callers?: CallerCheck;
 }
 
 const notificationSchema = {
@@ -160,8 +164,10 @@ const forCaller = ({ recipient: _, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, heartbeatMs = 25_000 }: EventsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  // Before anything reads the caller: only the gateway's signed word says who is calling.
+  app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', async () => health('events', version, API_VERSION));
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.

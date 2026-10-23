@@ -1,4 +1,4 @@
-import { platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { providerFromEnv } from './config.ts';
 import { MemoryModelStore, PgModelStore, type ModelStore } from './store.ts';
@@ -25,5 +25,5 @@ if (!credentials) console.warn('SERVICE_CLIENT_SECRET is not set: calls can’t 
 const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 const audit = credentials ? auditTo(EVENTS_URL, credentials) : undefined;
 
-const app = await buildApp({ store, provider, verifyService: serviceVerifierFromEnv(), grants, audit });
+const app = await buildApp({ callers: callerCheckFromEnv('models'), store, provider, verifyService: serviceVerifierFromEnv(), grants, audit });
 await app.listen({ port, host: '0.0.0.0' });

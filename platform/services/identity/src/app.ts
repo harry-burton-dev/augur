@@ -1,5 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type ServiceCredentials, type ServiceVerifier } from '@augur/service-kit';
+import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
 import { appClientRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
@@ -36,6 +36,8 @@ export interface IdentityOptions {
   audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
   /** Checks platform services' own sign-in tokens, for the floor lookups only they may make. */
   verifyService?: ServiceVerifier;
+  /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
+  callers?: CallerCheck;
 }
 
 /** Records audit entries with the events service, as identity. */
@@ -49,9 +51,11 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit, verifyService }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit, verifyService, callers }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  // Before anything reads the caller: only the gateway's signed word says who is calling.
+  app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', async () => health('identity', version, API_VERSION));
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
