@@ -1,5 +1,15 @@
 # @augur/contract-tests
 
+## 0.1.1
+
+### Patch Changes
+
+- ab0c210: The contract tests run every build of the reference app side by side, each on its own port, instead of one after another.
+- ddaf9f9: Keep the reference app built against SDK 1.1.0 (`frozen/sdk-1.1`), so every later shell is tested against apps built for 1.1 as well as 1.0.
+- Updated dependencies [1622cd9]
+  - @augur/ui-kit@1.1.0
+  - @augur/mfe-sdk@1.1.1
+
 ## 0.1.0
 
 ### Minor Changes

@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "channel": "beta",
   "released": "2026-10-23",
   "upgradeFrom": ">=0.1.0",
@@ -10,6 +10,7 @@
     "@augur/events",
     "@augur/gateway",
     "@augur/identity",
+    "@augur/models",
     "@augur/registry",
     "@augur/admin",
     "@augur/home",
@@ -18,6 +19,8 @@
   "breaking": [],
   "settings": {
     "all": [
+      "PLATFORM_VERSION",
+      "PLATFORM_IMAGES",
       "PLATFORM_URL",
       "TS_HOSTNAME",
       "TS_AUTHKEY",
@@ -26,6 +29,7 @@
       "IDENTITY_CLIENT_SECRET",
       "REGISTRY_CLIENT_SECRET",
       "EVENTS_CLIENT_SECRET",
+      "MODELS_CLIENT_SECRET",
       "PLATFORM_ADMIN_USER",
       "PLATFORM_ADMIN_PASSWORD",
       "PLATFORM_ADMIN_EMAIL",
@@ -36,9 +40,13 @@
       "BACKUP_HOUR_UTC",
       "BACKUP_KEEP_DAYS",
       "RESTORE_TEST_WEEKDAY",
+      "MODEL_API_URL",
+      "MODEL_API_KEY",
+      "MODEL_NAME",
       "APP_ORIGINS"
     ],
     "required": [
+      "PLATFORM_VERSION",
       "PLATFORM_URL",
       "TS_HOSTNAME",
       "TS_AUTHKEY",
@@ -47,6 +55,7 @@
       "IDENTITY_CLIENT_SECRET",
       "REGISTRY_CLIENT_SECRET",
       "EVENTS_CLIENT_SECRET",
+      "MODELS_CLIENT_SECRET",
       "PLATFORM_ADMIN_USER",
       "PLATFORM_ADMIN_PASSWORD",
       "PLATFORM_ADMIN_EMAIL",
@@ -54,39 +63,49 @@
       "PLATFORM_ADMIN_LAST_NAME",
       "PLATFORM_ADMIN_DEPARTMENT"
     ],
-    "added": [],
+    "added": [
+      "PLATFORM_VERSION",
+      "PLATFORM_IMAGES",
+      "MODELS_CLIENT_SECRET",
+      "MODEL_API_URL",
+      "MODEL_API_KEY",
+      "MODEL_NAME"
+    ],
     "removed": []
   },
   "parts": {
     "@augur/mfe-sdk": {
-      "version": "1.1.0"
+      "version": "1.1.1"
     },
     "@augur/service-kit": {
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     "@augur/ui-kit": {
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "@augur/events": {
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     "@augur/gateway": {
-      "version": "0.2.0"
+      "version": "0.3.0"
     },
     "@augur/identity": {
-      "version": "0.3.0"
+      "version": "0.3.1"
+    },
+    "@augur/models": {
+      "version": "0.1.0"
     },
     "@augur/registry": {
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     "@augur/admin": {
-      "version": "0.2.0"
+      "version": "0.3.0"
     },
     "@augur/home": {
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     "@augur/shell": {
-      "version": "0.3.0"
+      "version": "0.4.0"
     }
   }
 }
