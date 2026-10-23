@@ -1,5 +1,5 @@
-import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@platform/mfe-sdk';
-import { defaultFunctions, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@platform/ui-kit';
+import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { defaultFunctions, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@augur/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
@@ -591,7 +591,7 @@ export function Host({
   }, [manifest, navigate, session, prefs, screen, raise, search]);
 
   return (
-    <ui-shell ref={shellRef} product="Platform">
+    <ui-shell ref={shellRef} product="AUGUR">
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
       {screen && screen.kind !== 'app' && manifest?.length ? (
         <ui-centre-menu

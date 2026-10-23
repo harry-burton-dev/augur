@@ -1,4 +1,4 @@
-import { createEventBus, type AppManifestEntry, type MountContext } from '@platform/mfe-sdk';
+import { createEventBus, type AppManifestEntry, type MountContext } from '@augur/mfe-sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { AppMounter, fromServer, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, NotificationActions, routeIntent, toShellNotification } from './index.js';
 

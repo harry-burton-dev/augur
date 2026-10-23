@@ -1,5 +1,5 @@
-import { createEventBus, type AppManifestEntry, type MountContext, type Workspace } from '@platform/mfe-sdk';
-import type { ShellNotification } from '@platform/ui-kit';
+import { createEventBus, type AppManifestEntry, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import type { ShellNotification } from '@augur/ui-kit';
 import { describe, expect, it, vi } from 'vitest';
 import { cardOf, cardsFor, needsFor, SurfaceMounter } from './home.js';
 

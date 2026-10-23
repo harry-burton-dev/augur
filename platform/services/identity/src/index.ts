@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
-import { platformCredentialsFromEnv, serviceVerifierFromEnv } from '@platform/service-kit';
+import { platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { ensureClients, KeycloakAppClients, parseClientSecrets, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';

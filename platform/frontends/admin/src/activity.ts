@@ -1,5 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
-import type { Fact, SelectOption, TableColumn, TableRow } from '@platform/ui-kit';
+import type { Fact, SelectOption, TableColumn, TableRow } from '@augur/ui-kit';
 import { fullName, type AdminApi, type AuditEntry, type AuditQuery, type CatalogueApp, type Department, type Person } from './api.js';
 import { floorTree } from './apps.js';
 import { page } from './parts.js';

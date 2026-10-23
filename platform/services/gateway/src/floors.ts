@@ -1,4 +1,4 @@
-import { callerHeaders, type Caller, type CallerWorkspace } from '@platform/service-kit';
+import { callerHeaders, type Caller, type CallerWorkspace } from '@augur/service-kit';
 
 /** A floor the caller can stand on, as identity's `GET /v1/me/workspaces` lists it. */
 export type FloorAccess = CallerWorkspace;

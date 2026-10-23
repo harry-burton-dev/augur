@@ -1,5 +1,5 @@
-import { createEventBus, type MountContext } from '@platform/mfe-sdk';
-import type { UiDialog, UiTable, UiToggle } from '@platform/ui-kit';
+import { createEventBus, type MountContext } from '@augur/mfe-sdk';
+import type { UiDialog, UiTable, UiToggle } from '@augur/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';

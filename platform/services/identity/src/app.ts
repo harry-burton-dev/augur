@@ -1,5 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type ServiceCredentials, type ServiceVerifier } from '@platform/service-kit';
+import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type ServiceCredentials, type ServiceVerifier } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
 import { appClientRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';

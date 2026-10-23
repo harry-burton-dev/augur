@@ -1,19 +1,19 @@
 {
-  "platform": "0.1.0",
+  "version": "0.1.0",
   "channel": "beta",
   "released": "2026-10-23",
   "upgradeFrom": ">=0.1.0",
   "changed": [
-    "@platform/mfe-sdk",
-    "@platform/service-kit",
-    "@platform/ui-kit",
-    "@platform/events",
-    "@platform/gateway",
-    "@platform/identity",
-    "@platform/registry",
-    "@platform/admin",
-    "@platform/home",
-    "@platform/shell"
+    "@augur/mfe-sdk",
+    "@augur/service-kit",
+    "@augur/ui-kit",
+    "@augur/events",
+    "@augur/gateway",
+    "@augur/identity",
+    "@augur/registry",
+    "@augur/admin",
+    "@augur/home",
+    "@augur/shell"
   ],
   "breaking": [],
   "settings": {
@@ -58,34 +58,34 @@
     "removed": []
   },
   "parts": {
-    "@platform/mfe-sdk": {
+    "@augur/mfe-sdk": {
       "version": "1.1.0"
     },
-    "@platform/service-kit": {
+    "@augur/service-kit": {
       "version": "0.3.0"
     },
-    "@platform/ui-kit": {
+    "@augur/ui-kit": {
       "version": "1.0.0"
     },
-    "@platform/events": {
+    "@augur/events": {
       "version": "0.3.0"
     },
-    "@platform/gateway": {
+    "@augur/gateway": {
       "version": "0.2.0"
     },
-    "@platform/identity": {
+    "@augur/identity": {
       "version": "0.3.0"
     },
-    "@platform/registry": {
+    "@augur/registry": {
       "version": "0.3.0"
     },
-    "@platform/admin": {
+    "@augur/admin": {
       "version": "0.2.0"
     },
-    "@platform/home": {
+    "@augur/home": {
       "version": "0.2.0"
     },
-    "@platform/shell": {
+    "@augur/shell": {
       "version": "0.3.0"
     }
   }

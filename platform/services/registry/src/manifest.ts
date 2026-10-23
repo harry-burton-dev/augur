@@ -1,5 +1,5 @@
 import semver from 'semver';
-import { SCOPES, type Scope } from '@platform/service-kit';
+import { SCOPES, type Scope } from '@augur/service-kit';
 import { PLATFORM_APP_VERSIONS } from './platform-app-versions.js';
 
 /** One app in the catalogue, as the app itself describes it in its manifest.json. */
@@ -111,7 +111,7 @@ export const platformApps: AppEntry[] = [
         items: [{ label: 'All apps', icon: 'apps', path: '/apps', detail: 'Versions, on or off', keywords: 'catalogue registry enable disable' }],
       },
       {
-        label: 'Platform',
+        label: 'AUGUR',
         icon: 'pulse',
         items: [
           { label: 'Status', icon: 'pulse', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },

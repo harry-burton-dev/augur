@@ -1,12 +1,12 @@
 import { LitElement, html, nothing } from 'lit';
-import type { Fact, StatusName, TableColumn, TableRow } from '@platform/ui-kit';
+import type { Fact, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
 import type { AdminApi, BackupStatus, ComponentStatus } from './api.js';
 import { page } from './parts.js';
 
 /** How often the screen asks the gateway again while it is open. The gateway itself checks every 30 seconds. */
 const REFRESH_MS = 15_000;
 
-const kindWords: Record<ComponentStatus['kind'], string> = { gateway: 'Platform', service: 'Platform', app: 'App', 'sign-in': 'Sign-in' };
+const kindWords: Record<ComponentStatus['kind'], string> = { gateway: 'AUGUR', service: 'AUGUR', app: 'App', 'sign-in': 'Sign-in' };
 
 /** A component's state as a status mark and its word. */
 export const stateOf = (c: Pick<ComponentStatus, 'state'>): { status: StatusName; label: string } =>

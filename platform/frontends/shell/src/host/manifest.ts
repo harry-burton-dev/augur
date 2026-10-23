@@ -1,4 +1,4 @@
-import { SDK_VERSION, type AppManifestEntry } from '@platform/mfe-sdk';
+import { SDK_VERSION, type AppManifestEntry } from '@augur/mfe-sdk';
 import semver from 'semver';
 
 export class ManifestError extends Error {}

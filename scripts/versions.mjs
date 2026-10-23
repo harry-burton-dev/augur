@@ -73,7 +73,7 @@ for (const app of readdirSync(join(root, 'apps'), { withFileTypes: true }).filte
       expectFile(`${dir}/manifest.json`, `${JSON.stringify({ ...manifest, version }, null, 2)}\n`, `version is ${manifest.version}, but ${pkgPath} is ${version}`);
     }
   }
-  if (!semver.validRange(manifest.sdk ?? '')) problems.push(`${dir}/manifest.json: sdk must be a semver range of @platform/mfe-sdk versions, such as ^${semver.major(sdkVersion)}.0.0`);
+  if (!semver.validRange(manifest.sdk ?? '')) problems.push(`${dir}/manifest.json: sdk must be a semver range of @augur/mfe-sdk versions, such as ^${semver.major(sdkVersion)}.0.0`);
   else if (!semver.satisfies(sdkVersion, manifest.sdk, { includePrerelease: true }))
     problems.push(`${dir}/manifest.json: sdk "${manifest.sdk}" doesn't include the current SDK ${sdkVersion}, so the shell would refuse the app. Update the app for this SDK, then widen its range.`);
 }

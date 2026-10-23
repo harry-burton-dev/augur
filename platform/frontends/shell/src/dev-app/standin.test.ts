@@ -1,4 +1,4 @@
-import type { AppManifestEntry } from '@platform/mfe-sdk';
+import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { devHome, devUser, standInFetch } from './standin.js';
 

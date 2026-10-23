@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { floorBySlug, floorFromPath, floorHref, ownFloor } from './floors.js';
-import type { Workspace } from '@platform/mfe-sdk';
+import type { Workspace } from '@augur/mfe-sdk';
 
 const floors: Workspace[] = [
   { id: 'w-me', kind: 'personal', name: 'You', slug: 'me', path: [], role: 'lead' },

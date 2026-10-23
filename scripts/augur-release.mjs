@@ -1,16 +1,16 @@
-// The platform release: one version over every part of the platform, so a deployment can say
-// "we're on platform 0.2.0" and an updater knows exactly what that means.
-//   node scripts/platform-release.mjs version   after `changeset version`: writes release/platform-release.json
-//   node scripts/platform-release.mjs check     in CI: fails when the release file is out of step with the parts
-//   node scripts/platform-release.mjs publish   in the Release workflow: makes the GitHub release platform@<version>, which tags it
+// The AUGUR release: one version over every part of the platform, so a deployment can say
+// "we're on AUGUR 0.2.0" and an updater knows exactly what that means.
+//   node scripts/augur-release.mjs version   after `changeset version`: writes release/augur-release.json
+//   node scripts/augur-release.mjs check     in CI: fails when the release file is out of step with the parts
+//   node scripts/augur-release.mjs publish   in the Release workflow: makes the GitHub release augur@<version>, which tags it
 //
 // Parts are the packages under platform/ (services, frontends, packages). Each keeps its own version and
-// changelog; the platform version moves when any of them does:
-//   - a part's major bump (or a part removed) is breaking: deployments must be on the previous platform
+// changelog; the AUGUR version moves when any of them does:
+//   - a part's major bump (or a part removed) is breaking: deployments must be on the previous AUGUR
 //     release before taking this one (`upgradeFrom`), and the release lists why under `breaking`
 //   - any other new feature (a minor bump, or a new part) is a feature
 //   - anything else is a fix
-// While the platform is 0.x (the beta channel), breaking changes and features both bump the minor and fixes
+// While AUGUR is 0.x (the beta channel), breaking changes and features both bump the minor and fixes
 // the patch, as semver allows before 1.0. From 1.0 on: major, minor, patch.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import semver from 'semver';
 
 const root = new URL('..', import.meta.url).pathname;
-const RELEASE_FILE = 'release/platform-release.json';
+const RELEASE_FILE = 'release/augur-release.json';
 const ENV_EXAMPLE = 'infra/deploy/.env.example';
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 
@@ -68,20 +68,20 @@ export const nextRelease = (previous, parts, settings, today) => {
 
   const shape = Object.fromEntries(Object.entries(parts).map(([name, { version }]) => [name, { version }]));
   if (!previous) {
-    return { platform: '0.1.0', channel: 'beta', released: today, upgradeFrom: '>=0.1.0', changed: Object.keys(parts), breaking: [], settings: { ...settings, added: [], removed: [] }, parts: shape };
+    return { version: '0.1.0', channel: 'beta', released: today, upgradeFrom: '>=0.1.0', changed: Object.keys(parts), breaking: [], settings: { ...settings, added: [], removed: [] }, parts: shape };
   }
   const settingsAdded = settings.all.filter((k) => !previous.settings.all.includes(k));
   const settingsRemoved = previous.settings.all.filter((k) => !settings.all.includes(k));
   if (!changed.length && !breaking.length && !settingsAdded.length && !settingsRemoved.length) return previous;
 
-  const beta = semver.major(previous.platform) === 0;
+  const beta = semver.major(previous.version) === 0;
   const bump = breaking.length ? (beta ? 'minor' : 'major') : feature ? 'minor' : 'patch';
   return {
-    platform: semver.inc(previous.platform, bump),
+    version: semver.inc(previous.version, bump),
     channel: beta ? 'beta' : 'stable',
     released: today,
     // Breaking: go through the previous release first. Otherwise, whatever could reach the previous one can reach this one.
-    upgradeFrom: breaking.length ? `>=${previous.platform}` : previous.upgradeFrom,
+    upgradeFrom: breaking.length ? `>=${previous.version}` : previous.upgradeFrom,
     changed,
     breaking,
     settings: { ...settings, added: settingsAdded, removed: settingsRemoved },
@@ -107,8 +107,8 @@ export const changelogFor = (path, version) => {
 };
 
 export const notes = (release, parts) => {
-  const lines = [`Platform ${release.platform} (${release.channel}).`, ''];
-  if (release.upgradeFrom) lines.push(`Upgrades from platform ${release.upgradeFrom.replace('>=', '')} or later.`, '');
+  const lines = [`AUGUR ${release.version} (${release.channel}).`, ''];
+  if (release.upgradeFrom) lines.push(`Upgrades from AUGUR ${release.upgradeFrom.replace('>=', '')} or later.`, '');
   if (release.breaking.length) lines.push('### Breaking', '', ...release.breaking.map((b) => `- ${b}`), '');
   if (release.settings.added.length) lines.push('### New settings', '', `Add to your \`.env\` before upgrading (see \`${ENV_EXAMPLE}\`):`, '', ...release.settings.added.map((k) => `- \`${k}\`${release.settings.required.includes(k) ? ' (required)' : ''}`), '');
   if (release.settings.removed.length) lines.push('### Removed settings', '', ...release.settings.removed.map((k) => `- \`${k}\``), '');
@@ -128,12 +128,12 @@ const main = () => {
 
   if (mode === 'version') {
     const next = nextRelease(previous, parts, readSettings(), new Date().toISOString().slice(0, 10));
-    if (next === previous) return console.log(`Platform stays at ${previous.platform}: no part changed.`);
+    if (next === previous) return console.log(`AUGUR stays at ${previous.version}: no part changed.`);
     write(next);
-    console.log(`Platform ${previous?.platform ?? '(none)'} → ${next.platform}${next.breaking.length ? ' (breaking)' : ''}.`);
+    console.log(`AUGUR ${previous?.version ?? '(none)'} → ${next.version}${next.breaking.length ? ' (breaking)' : ''}.`);
   } else if (mode === 'check') {
     const problems = [];
-    if (!previous) problems.push(`${RELEASE_FILE} is missing. Run: node scripts/platform-release.mjs version`);
+    if (!previous) problems.push(`${RELEASE_FILE} is missing. Run: node scripts/augur-release.mjs version`);
     else {
       for (const [name, { version }] of Object.entries(parts)) {
         if (previous.parts[name]?.version !== version) problems.push(`${name} is ${version}, but ${RELEASE_FILE} says ${previous.parts[name]?.version ?? 'nothing'}`);
@@ -141,25 +141,25 @@ const main = () => {
       for (const name of Object.keys(previous.parts)) if (!parts[name]) problems.push(`${RELEASE_FILE} lists ${name}, which is gone`);
     }
     if (problems.length) {
-      console.error(problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/platform-release.mjs version`).join('\n'));
+      console.error(problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`).join('\n'));
       process.exit(1);
     }
-    console.log(`Platform release ${previous.platform} is in step.`);
+    console.log(`AUGUR release ${previous.version} is in step.`);
   } else if (mode === 'publish') {
     if (!previous) throw new Error(`${RELEASE_FILE} is missing.`);
-    const tag = `platform@${previous.platform}`;
+    const tag = `augur@${previous.version}`;
     const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
     if (git('ls-remote', '--tags', 'origin', `refs/tags/${tag}`)) return console.log(`${tag} is already released.`);
     const notesFile = join(tmpdir(), `${tag.replace('@', '-')}-notes.md`);
     writeFileSync(notesFile, notes(previous, parts));
     execFileSync(
       'gh',
-      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `Platform ${previous.platform}${previous.channel === 'beta' ? ' (beta)' : ''}`, '--notes-file', notesFile, ...(previous.channel === 'beta' ? ['--prerelease'] : ['--latest']), `${join(root, RELEASE_FILE)}#platform-release.json`],
+      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${previous.version}${previous.channel === 'beta' ? ' (beta)' : ''}`, '--notes-file', notesFile, ...(previous.channel === 'beta' ? ['--prerelease'] : ['--latest']), `${join(root, RELEASE_FILE)}#augur-release.json`],
       { cwd: root, stdio: 'inherit' },
     );
     console.log(`Released ${tag}.`);
   } else {
-    console.error('Usage: node scripts/platform-release.mjs version|check|publish');
+    console.error('Usage: node scripts/augur-release.mjs version|check|publish');
     process.exit(2);
   }
 };

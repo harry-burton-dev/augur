@@ -1,18 +1,18 @@
-# @platform/ui-kit
+# @augur/ui-kit
 
 The platform's UI kit: design tokens generated from the Claude Design system (working name Wave) and Lit web components rebuilt from its specs. Works in any framework.
 
 ```sh
-pnpm --filter @platform/ui-kit storybook        # catalogue at http://localhost:6006
-pnpm --filter @platform/ui-kit test
+pnpm --filter @augur/ui-kit storybook        # catalogue at http://localhost:6006
+pnpm --filter @augur/ui-kit test
 ```
 
 Apps on the platform don't bundle the kit: the shell serves one copy for every app through an import map, so the kit follows the SDK's versioning promise ([Versioning](../../../docs/versioning.md#the-shared-kit)). Load the tokens and base styles once per page, then import components:
 
 ```ts
-import '@platform/ui-kit/tokens.css';
-import '@platform/ui-kit/base.css';
-import '@platform/ui-kit';
+import '@augur/ui-kit/tokens.css';
+import '@augur/ui-kit/base.css';
+import '@augur/ui-kit';
 ```
 
 | Element | What it is |

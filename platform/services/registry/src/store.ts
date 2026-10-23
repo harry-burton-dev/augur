@@ -1,5 +1,5 @@
 import pg from 'pg';
-import type { Scope } from '@platform/service-kit';
+import type { Scope } from '@augur/service-kit';
 import type { AppEntry } from './manifest.ts';
 
 /** Another app took the route first (two registrations racing). */

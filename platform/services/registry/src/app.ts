@@ -16,7 +16,7 @@ import {
   type ServiceCredentials,
   type ServiceIdentity,
   type ServiceVerifier,
-} from '@platform/service-kit';
+} from '@augur/service-kit';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, surfaceProblem, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
 import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore, type FloorRule } from './store.ts';
@@ -138,7 +138,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
       const pin = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply, version: string | null) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose an app’s version.' });
-        if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: 'Platform apps change with the platform’s own release.' });
+        if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: 'Built-in apps change with AUGUR’s own release.' });
         try {
           const changed = await store.pin(req.params.id, version);
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
@@ -306,7 +306,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where an app is on.' });
-          if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: 'Platform apps are on everywhere.' });
+          if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: 'Built-in apps are on everywhere.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const place = await placeOf(reply, req.params.workspace);

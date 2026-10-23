@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { callerHeaders } from '@platform/service-kit';
+import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryDirectory } from './directory.ts';
 import { PgPreferenceStore } from './store.ts';

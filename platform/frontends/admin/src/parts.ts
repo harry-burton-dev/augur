@@ -1,5 +1,5 @@
 import { html, type TemplateResult } from 'lit';
-import type { StatusName } from '@platform/ui-kit';
+import type { StatusName } from '@augur/ui-kit';
 import type { Person } from './api.js';
 
 /** One admin screen: a heading over a pane at the wide measure. */

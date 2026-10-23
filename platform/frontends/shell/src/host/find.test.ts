@@ -1,4 +1,4 @@
-import type { AppManifestEntry } from '@platform/mfe-sdk';
+import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppSearch, readAnswer, type FindUpdate } from './find.js';
 

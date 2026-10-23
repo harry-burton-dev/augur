@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "fastify": "^5.6.0",
-    "@platform/service-kit": "workspace:*"
+    "@augur/service-kit": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

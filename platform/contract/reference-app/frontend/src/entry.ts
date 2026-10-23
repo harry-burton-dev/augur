@@ -1,6 +1,6 @@
-import { defineMicroFrontend, isIntentCancelled, type MountContext } from '@platform/mfe-sdk';
+import { defineMicroFrontend, isIntentCancelled, type MountContext } from '@augur/mfe-sdk';
 import { html, render } from 'lit';
-import '@platform/ui-kit';
+import '@augur/ui-kit';
 
 /**
  * Uses every part of the mount context the SDK promises, and shows what it got

@@ -1,5 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
-import type { DialogSubmit, TableColumn, TableRow, UiDialog } from '@platform/ui-kit';
+import type { DialogSubmit, TableColumn, TableRow, UiDialog } from '@augur/ui-kit';
 import { departmentPath, fullName, type AdminApi, type Department, type Person, type Role } from './api.js';
 import { page, passwordNote, statusOf } from './parts.js';
 

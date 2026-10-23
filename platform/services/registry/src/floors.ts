@@ -1,4 +1,4 @@
-import { ruleChain, type FloorPlace, type Scope } from '@platform/service-kit';
+import { ruleChain, type FloorPlace, type Scope } from '@augur/service-kit';
 import { floorKindsOf } from './manifest.ts';
 import type { AppRecord, FloorRule } from './store.ts';
 

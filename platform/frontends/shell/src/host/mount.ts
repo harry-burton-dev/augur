@@ -1,4 +1,4 @@
-import type { AppManifestEntry, MicroFrontend, MountContext } from '@platform/mfe-sdk';
+import type { AppManifestEntry, MicroFrontend, MountContext } from '@augur/mfe-sdk';
 import { incompatibility } from './manifest.js';
 
 export type ImportEntry = (url: string) => Promise<{ default?: unknown }>;

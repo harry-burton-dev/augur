@@ -1,4 +1,4 @@
-# Upgrading the platform
+# Upgrading AUGUR
 
 Moving a running server from one release to the next. Commands use the `pc` alias from [deploy.md](deploy.md):
 
@@ -8,7 +8,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 
 ## Before you start
 
-1. **Read what changed.** The GitHub release for the platform version you're moving to, `platform@<version>` under Releases, gathers every part's changes, any breaking change and any new setting, and says which versions it upgrades from. If you're more than one release behind and it lists a breaking change, go to the release before it first. Each package's `CHANGELOG.md` has the detail. Look for these, which mean you have something to do:
+1. **Read what changed.** The GitHub release for the AUGUR version you're moving to, `augur@<version>` under Releases, gathers every part's changes, any breaking change and any new setting, and says which versions it upgrades from. If you're more than one release behind and it lists a breaking change, go to the release before it first. Each package's `CHANGELOG.md` has the detail. Look for these, which mean you have something to do:
    - **major** on a service or contract: a caller has to change. The platform's own frontends move with it, but anything you've built against that API needs checking ([versioning.md](versioning.md)).
    - a new or renamed setting in `infra/deploy/.env.example`: copy it into your `.env` before starting.
    - "migration" on a service: it changes its database tables when it starts. Migrations only add; none removes data.
@@ -40,6 +40,15 @@ Images are rebuilt from the repo, each service migrates its own tables as it sta
 ## Release notes that need you
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
+
+### Renamed to AUGUR
+
+Nothing to do: the upgrade is the usual `git pull` and `pc up -d --build`. The shell, page title and Admin say AUGUR, and packages are `@augur/*`. Your server's identifiers are left alone so nobody is signed out and no data moves: the Keycloak realm is still `platform`, the database and Compose project are still `platform`, the `.env` keys keep their `PLATFORM_` names, and your address stays `https://platform.<tailnet>.ts.net`.
+
+Two optional touches:
+
+- **Sign-in page title**: Keycloak only reads the realm file on first start, so your sign-in page still says "Platform". In the Keycloak console (`PLATFORM_URL/sso/admin`), open the `platform` realm, **Realm settings**, and set **Display name** to `AUGUR`.
+- **Address**: to be at `https://augur.<tailnet>.ts.net`, set `TS_HOSTNAME=augur` and change `PLATFORM_URL` to match in `.env`, then in the Keycloak console update the **shell** client's redirect URIs and web origins to the new address before `pc up -d`. Everyone signs in again.
 
 ## Going back
 

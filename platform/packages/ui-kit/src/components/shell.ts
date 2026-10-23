@@ -239,7 +239,7 @@ export class UiShell extends LitElement {
 
   constructor() {
     super();
-    this.product = 'Platform';
+    this.product = 'AUGUR';
     this.workspace = '';
     this.user = undefined;
     this.online = true;

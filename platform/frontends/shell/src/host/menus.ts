@@ -1,5 +1,5 @@
-import type { AppManifestEntry } from '@platform/mfe-sdk';
-import type { MenuCategory, MenuItem, ShellFindResult } from '@platform/ui-kit';
+import type { AppManifestEntry } from '@augur/mfe-sdk';
+import type { MenuCategory, MenuItem, ShellFindResult } from '@augur/ui-kit';
 import { hrefFor, matchRoute } from './routes.js';
 
 /**

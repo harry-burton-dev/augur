@@ -17,7 +17,7 @@ export default defineConfig({
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {},
   },
   webServer: {
-    command: `pnpm --filter @platform/shell dev --port ${port} --strictPort`,
+    command: `pnpm --filter @augur/shell dev --port ${port} --strictPort`,
     url: `http://localhost:${port}/`,
     reuseExistingServer: false,
     timeout: 120_000,

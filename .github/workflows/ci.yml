@@ -45,7 +45,7 @@ jobs:
       - run: pnpm test
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
-      - run: pnpm --filter @platform/ui-kit build-storybook
+      - run: pnpm --filter @augur/ui-kit build-storybook
 
   # The developer kit still makes an app that builds, passes its tests and is accepted by the registry.
   app-scaffold:
@@ -59,7 +59,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm create-app scaffold-check --name "Scaffold check"
-      - run: pnpm turbo run build --filter="@apps/scaffold-check*" --filter=@platform/registry
+      - run: pnpm turbo run build --filter="@apps/scaffold-check*" --filter=@augur/registry
       # One task at a time: on a two-core runner, tests racing builds time out on their first request.
       - run: pnpm turbo run typecheck test --filter="@apps/scaffold-check*" --concurrency=1
       - run: pnpm check:manifest
@@ -78,9 +78,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run build --filter=@platform/contract-tests... --filter=@platform/home
-      - run: pnpm --filter @platform/contract-tests exec playwright install --with-deps chromium
-      - run: pnpm --filter @platform/contract-tests test:contract
+      - run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home
+      - run: pnpm --filter @augur/contract-tests exec playwright install --with-deps chromium
+      - run: pnpm --filter @augur/contract-tests test:contract
 
   # The server setup in infra/deploy: the compose file is valid and the images build.
   deploy-images:
@@ -92,7 +92,7 @@ jobs:
           sed -e 's/=$/=ci-placeholder/' infra/deploy/.env.example > /tmp/ci.env
           docker compose -f infra/deploy/compose.yml --env-file /tmp/ci.env config -q
       - run: docker build -f infra/web.Dockerfile --target web -t platform-web .
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@platform/identity -t platform-identity .
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity -t platform-identity .
       - name: The front door's nginx config loads
         run: docker run --rm --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 platform-web nginx -t
       - name: The shell's page carries its Content Security Policy

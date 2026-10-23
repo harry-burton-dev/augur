@@ -2,9 +2,9 @@
 
 | Folder | What it is |
 | --- | --- |
-| `shell/` | The host (`@platform/shell`, React + Vite). Wraps the UI kit's `ui-shell`, loads the role-filtered manifest from the registry through the gateway, mounts the app the URL points at into the Shell's stage, routes intents to the app that handles them, and turns `ctx.notify()` into notifications on the Shell's stream. |
-| `home/` | Home (`@platform/home`, at `/home`): what needs you, and apps' glance cards. Built as one ES module at `dist/entry.js`. |
-| `admin/` | Admin (`@platform/admin`, at `/admin`, admins only): people, departments and apps. Its screens call identity's `/v1/admin/*` and the registry's `/v1/apps` and `/v1/origins` through the gateway, never Keycloak. |
+| `shell/` | The host (`@augur/shell`, React + Vite). Wraps the UI kit's `ui-shell`, loads the role-filtered manifest from the registry through the gateway, mounts the app the URL points at into the Shell's stage, routes intents to the app that handles them, and turns `ctx.notify()` into notifications on the Shell's stream. |
+| `home/` | Home (`@augur/home`, at `/home`): what needs you, and apps' glance cards. Built as one ES module at `dist/entry.js`. |
+| `admin/` | Admin (`@augur/admin`, at `/admin`, admins only): people, departments and apps. Its screens call identity's `/v1/admin/*` and the registry's `/v1/apps` and `/v1/origins` through the gateway, never Keycloak. |
 
 Product apps keep their own frontends under `apps/<app>/frontend`.
 
@@ -12,7 +12,7 @@ Product apps keep their own frontends under `apps/<app>/frontend`.
 
 1. The registry's manifest lists each app with a `route`, an `entry` URL and the `sdk` range it works with. An app whose range doesn't include the shell's `SDK_VERSION` isn't opened; the shell says why instead.
 2. The shell matches the URL to the longest route prefix and imports the app's `entry` with the browser's own dynamic `import()`.
-3. The module default-exports a `MicroFrontend` (`defineMicroFrontend` from `@platform/mfe-sdk`). The shell calls `mount(el, ctx)` on a fresh element, and calls `unmount(el)` before the next app opens.
+3. The module default-exports a `MicroFrontend` (`defineMicroFrontend` from `@augur/mfe-sdk`). The shell calls `mount(el, ctx)` on a fresh element, and calls `unmount(el)` before the next app opens.
 4. An app asks for anything outside itself through `ctx`: `raise(intent)` to open whichever app handles it, `request(intent)` to ask that app for an answer, `notify()` for the Shell's stream, `bus` for events, `fetch(path)` for gateway calls on the current floor (`getToken()` when it needs the token itself).
 
 ## Floors
@@ -61,23 +61,23 @@ Apps never import or call each other. They speak in intents, a `type` such as `c
 
 ## One kit for everyone
 
-The shell serves the UI kit and Lit once, and the shell and every app use that copy. `vite.shared.config.ts` builds them into `shared-build/` with an import map; the shell serves them at `/shared/` and inlines the map at the top of `index.html`, so a bare `import 'lit'` or `import '@platform/ui-kit'` anywhere on the page resolves to the same file. An app's build leaves those imports alone:
+The shell serves the UI kit and Lit once, and the shell and every app use that copy. `vite.shared.config.ts` builds them into `shared-build/` with an import map; the shell serves them at `/shared/` and inlines the map at the top of `index.html`, so a bare `import 'lit'` or `import '@augur/ui-kit'` anywhere on the page resolves to the same file. An app's build leaves those imports alone:
 
 ```ts
-import { isSharedModule } from '@platform/mfe-sdk/build';
+import { isSharedModule } from '@augur/mfe-sdk/build';
 // in vite.config.ts
 build: { rollupOptions: { external: isSharedModule } }
 ```
 
-`sharedModules` in `@platform/mfe-sdk` lists exactly what the shell provides: `lit`, its decorators and every directive under `lit/directives/`, and `@platform/ui-kit`. Anything else an app imports, it bundles itself. Because every app gets the shell's kit, the kit keeps the SDK's promise: see [Versioning](../../docs/versioning.md#the-shared-kit).
+`sharedModules` in `@augur/mfe-sdk` lists exactly what the shell provides: `lit`, its decorators and every directive under `lit/directives/`, and `@augur/ui-kit`. Anything else an app imports, it bundles itself. Because every app gets the shell's kit, the kit keeps the SDK's promise: see [Versioning](../../docs/versioning.md#the-shared-kit).
 
 ## Running it locally
 
 ```sh
-pnpm --filter @platform/home --filter @platform/admin build   # the apps the shell will mount
-pnpm --filter @platform/registry dev                    # :8082
-pnpm --filter @platform/gateway dev                     # :8080
-pnpm --filter @platform/shell dev                       # :5173, proxies /api to the gateway
+pnpm --filter @augur/home --filter @augur/admin build   # the apps the shell will mount
+pnpm --filter @augur/registry dev                    # :8082
+pnpm --filter @augur/gateway dev                     # :8080
+pnpm --filter @augur/shell dev                       # :5173, proxies /api to the gateway
 ```
 
-`pnpm --filter @platform/shell dev` builds `shared-build/` first; run `pnpm --filter @platform/shell build:shared` again after changing the kit. In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=<id>=<dir>,…` adds more. Apps without a service of their own are registered with `SERVICE_CLIENT_SECRET=... pnpm register-app apps/<app>/manifest.json`, using the secret Admin, Apps issues for the app. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.
+`pnpm --filter @augur/shell dev` builds `shared-build/` first; run `pnpm --filter @augur/shell build:shared` again after changing the kit. In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=<id>=<dir>,…` adds more. Apps without a service of their own are registered with `SERVICE_CLIENT_SECRET=... pnpm register-app apps/<app>/manifest.json`, using the secret Admin, Apps issues for the app. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.

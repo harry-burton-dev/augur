@@ -1,4 +1,4 @@
-import type { Workspace } from '@platform/mfe-sdk';
+import type { Workspace } from '@augur/mfe-sdk';
 
 /** Where a location is: the floor its `/@slug` names, if any, and the path on that floor. */
 export interface FloorLocation {

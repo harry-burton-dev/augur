@@ -1,6 +1,6 @@
-import { defineMicroFrontend, type MountContext } from '@platform/mfe-sdk';
+import { defineMicroFrontend, type MountContext } from '@augur/mfe-sdk';
 import { html, render } from 'lit';
-import '@platform/ui-kit';
+import '@augur/ui-kit';
 import { AdminApi } from './api.js';
 import './people.js';
 import './departments.js';

@@ -1,5 +1,5 @@
-import type { Intent, NotificationAction, NotifyMessage } from '@platform/mfe-sdk';
-import type { ShellNotification } from '@platform/ui-kit';
+import type { Intent, NotificationAction, NotifyMessage } from '@augur/mfe-sdk';
+import type { ShellNotification } from '@augur/ui-kit';
 
 let seq = 0;
 
