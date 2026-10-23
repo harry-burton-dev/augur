@@ -10,6 +10,8 @@ export interface ServerNotification {
   /** Path inside the app to open. */
   link?: string;
   createdAt: string;
+  /** The floor it's from, with its path from the root. */
+  workspace?: { id: string; path: string[] };
 }
 
 export const fromServer = (n: ServerNotification): ShellNotification => ({
@@ -19,6 +21,7 @@ export const fromServer = (n: ServerNotification): ShellNotification => ({
   title: n.title,
   detail: n.detail,
   time: n.createdAt,
+  ...(n.workspace ? { floor: n.workspace.id } : {}),
 });
 
 export interface FeedOptions {

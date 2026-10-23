@@ -105,6 +105,8 @@ export interface AuditEntry {
   action: string;
   target?: string;
   detail?: Record<string, unknown>;
+  /** The floor it happened on, with its path from the org as it stood then. */
+  workspace?: { id: string; path: string[] };
 }
 
 export interface AuditQuery {
@@ -114,6 +116,8 @@ export interface AuditQuery {
   until?: string;
   /** The id of the oldest entry already shown. */
   before?: string;
+  /** Only what happened on this floor and the floors below it. */
+  workspace?: string;
   limit: number;
 }
 

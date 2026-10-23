@@ -1,6 +1,7 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import {
   callerFromHeaders,
+  FloorsUnavailable,
   GrantsUnavailable,
   health,
   identifyService,
@@ -10,14 +11,16 @@ import {
   serviceName,
   WORKSPACE_HEADERS,
   type Caller,
+  type FloorLookup,
   type GrantLookup,
+  type MemberLookup,
   type NewAuditEntry,
   type NewNotification,
   type Scope,
   type ServiceIdentity,
   type ServiceVerifier,
 } from '@platform/service-kit';
-import { MemoryEventStore, type EventStore, type Notification } from './store.ts';
+import { MemoryEventStore, type EventFloor, type EventStore, type Notification } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -29,6 +32,10 @@ export interface EventsOptions {
   verifyService?: ServiceVerifier;
   /** What an app is granted on a floor; an app's calls are checked against it. */
   grants?: GrantLookup;
+  /** Where a floor sits, from identity: notifications and audit entries record their floor's path. */
+  floors?: FloorLookup;
+  /** Who is on a team now, from identity, for team notices. */
+  members?: MemberLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
 }
@@ -39,7 +46,8 @@ const notificationSchema = {
   required: ['app', 'recipients', 'level', 'title'],
   properties: {
     app: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' },
-    recipients: { type: 'array', minItems: 1, maxItems: 500, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 100 } },
+    recipients: { type: 'array', maxItems: 500, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 100 } },
+    toTeam: { type: 'boolean' },
     level: { enum: ['needs', 'info', 'done', 'failed'] },
     title: { type: 'string', minLength: 1, maxLength: 200 },
     detail: { type: 'string', maxLength: 2000 },
@@ -73,7 +81,7 @@ const forCaller = ({ recipient: _, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, heartbeatMs = 25_000 }: EventsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, heartbeatMs = 25_000 }: EventsOptions = {}) => {
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('events', version, API_VERSION));
 
@@ -124,15 +132,85 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         return service;
       };
 
+      /**
+       * The floor a service call names, with its path as it stands now; null
+       * for none. Undefined when the reply has been sent: an unknown floor, or
+       * identity out of reach.
+       */
+      const floorOf = async (req: FastifyRequest, reply: FastifyReply): Promise<(EventFloor & { kind: string }) | null | undefined> => {
+        const raw = req.headers[WORKSPACE_HEADERS.id];
+        const id = typeof raw === 'string' && raw ? decodeURIComponent(raw) : undefined;
+        if (!id) return null;
+        try {
+          if (!floors) throw new FloorsUnavailable('The events service has no way to reach identity.');
+          const place = await floors(id);
+          if (place) return { id: place.id, path: place.path, kind: place.kind };
+          void reply.code(400).send({ error: 'bad_request', message: 'There is no such floor.' });
+        } catch (err) {
+          if (!(err instanceof FloorsUnavailable)) throw err;
+          req.log.error({ err: err.message }, 'floor lookup failed');
+          void reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now. Try again in a moment.' });
+        }
+        return undefined;
+      };
+
       // ---- notifications ----
 
       app.post<{ Body: NewNotification }>('/notifications', { schema: { body: notificationSchema } }, async (req, reply) => {
         const service = await fromService(req, reply, req.body.app, 'notifications:send');
         if (!service) return reply;
-        const added = await store.addNotifications(req.body);
-        req.log.info({ service: serviceName(service), app: req.body.app, count: added.length }, 'notifications sent');
+        const floor = await floorOf(req, reply);
+        if (floor === undefined) return reply;
+        const { toTeam, ...notification } = req.body;
+        if (!toTeam && !notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Name the recipients, or send to the team.' });
+        if (toTeam) {
+          if (notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Send to the team or to recipients, not both.' });
+          if (floor?.kind !== 'team') return reply.code(400).send({ error: 'bad_request', message: 'Team notices go to the team the call’s floor names.' });
+          if (!(await store.teamNotices(floor.id))) return reply.code(403).send({ error: 'forbidden', message: 'That team hasn’t turned team notices on.' });
+          try {
+            // Who is on the team is asked as it's sent, never remembered: someone who has left isn't told.
+            if (!members) throw new FloorsUnavailable('The events service has no way to reach identity.');
+            notification.recipients = await members(floor.id);
+          } catch (err) {
+            if (!(err instanceof FloorsUnavailable)) throw err;
+            return reply.code(503).send({ error: 'unavailable', message: 'Who is on the team can’t be checked right now.' });
+          }
+        }
+        const added = notification.recipients.length ? await store.addNotifications(notification, floor ? { id: floor.id, path: floor.path } : undefined) : [];
+        req.log.info({ service: serviceName(service), app: req.body.app, count: added.length, workspace: floor?.id, team: !!toTeam }, 'notifications sent');
         return reply.code(202).send({ sent: added.length });
       });
+
+      /** Who may change a team's settings: an admin, or a lead standing on that team (as the gateway checked). */
+      const leadsOrAdmin = (caller: Caller, workspace: string) => caller.roles.includes('admin') || (caller.workspace?.id === workspace && caller.workspace.role === 'lead');
+
+      // Team notices are off until a team's lead (or an admin) turns them on.
+      app.get<{ Params: { workspace: string } }>('/team-notices/:workspace', async (req, reply) => {
+        const caller = signedIn(req, reply);
+        if (!caller) return reply;
+        if (!leadsOrAdmin(caller, req.params.workspace)) return reply.code(403).send({ error: 'forbidden', message: 'Only the team’s leads or an admin can see this.' });
+        return { workspace: req.params.workspace, on: await store.teamNotices(req.params.workspace) };
+      });
+
+      app.put<{ Params: { workspace: string }; Body: { on: boolean } }>(
+        '/team-notices/:workspace',
+        { schema: { body: { type: 'object', additionalProperties: false, required: ['on'], properties: { on: { type: 'boolean' } } } } },
+        async (req, reply) => {
+          const caller = signedIn(req, reply);
+          if (!caller) return reply;
+          if (!leadsOrAdmin(caller, req.params.workspace)) return reply.code(403).send({ error: 'forbidden', message: 'Only the team’s leads or an admin can turn team notices on or off.' });
+          const before = await store.teamNotices(req.params.workspace);
+          await store.setTeamNotices(req.params.workspace, req.body.on, caller.id);
+          if (before !== req.body.on) {
+            const floor = floors ? await floors(req.params.workspace).catch(() => undefined) : undefined;
+            await store.appendAudit(
+              { actor: { id: caller.id, kind: 'user' }, app: 'events', action: req.body.on ? 'team-notices.on' : 'team-notices.off', target: req.params.workspace },
+              floor ? { id: floor.id, path: floor.path } : { id: req.params.workspace, path: [req.params.workspace] },
+            );
+          }
+          return { workspace: req.params.workspace, on: req.body.on };
+        },
+      );
 
       app.get('/notifications', async (req, reply) => {
         const caller = signedIn(req, reply);
@@ -171,10 +249,12 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
 
       app.post<{ Body: NewAuditEntry }>('/audit', { schema: { body: auditSchema } }, async (req, reply) => {
         if (!(await fromService(req, reply, req.body.app, 'audit:write'))) return reply;
-        return reply.code(201).send(await store.appendAudit(req.body));
+        const floor = await floorOf(req, reply);
+        if (floor === undefined) return reply;
+        return reply.code(201).send(await store.appendAudit(req.body, floor ? { id: floor.id, path: floor.path } : undefined));
       });
 
-      app.get<{ Querystring: { app?: string; actor?: string; since?: string; until?: string; before?: string; limit?: number } }>(
+      app.get<{ Querystring: { app?: string; actor?: string; since?: string; until?: string; before?: string; workspace?: string; limit?: number } }>(
         '/audit',
         {
           schema: {
@@ -186,6 +266,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
                 since: { type: 'string', format: 'date-time' },
                 until: { type: 'string', format: 'date-time' },
                 before: { type: 'string', pattern: '^[0-9]+$', maxLength: 19 },
+                workspace: { type: 'string', maxLength: 100 },
                 limit: { type: 'integer', minimum: 1, maximum: 500 },
               },
             },
@@ -194,9 +275,12 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         async (req, reply) => {
           const caller = signedIn(req, reply);
           if (!caller) return reply;
-          if (!caller.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can read the audit log.' });
-          const { app: forApp, actor, since, until, before, limit = 100 } = req.query;
-          return store.audit({ app: forApp, actor, since, until, before, limit });
+          const { app: forApp, actor, since, until, before, workspace, limit = 100 } = req.query;
+          // Admins read the whole log; a lead reads their own floor's, and the floors below it.
+          if (!caller.roles.includes('admin') && !(workspace && leadsOrAdmin(caller, workspace))) {
+            return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can read the whole audit log; a lead can read their own floor’s.' });
+          }
+          return store.audit({ app: forApp, actor, since, until, before, workspace, limit });
         },
       );
     },

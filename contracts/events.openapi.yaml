@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.3.0
+  version: 1.4.0
   description: >
     Notifications for the Shell's stream, and the platform's audit log.
     People reach it through the gateway, which passes the caller in x-user-*
@@ -11,7 +11,10 @@ info:
     for itself, and needs the scope (notifications:send, audit:write) that the
     registry grants it on the floor named by x-workspace-id; otherwise 403, or
     503 while that can't be checked. Platform services sign in the same way as
-    their own clients (platform-<name>).
+    their own clients (platform-<name>). A service call that names a floor
+    (x-workspace-id) records it, with the floor's path from the root as it
+    stands then (asked of identity), on each notification and audit entry: 400
+    for a floor that doesn't exist, 503 while identity can't be reached.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
 servers:
@@ -34,10 +37,48 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/NewNotification" }
+      description: >
+        With toTeam and no recipients, to everyone on the team the call's floor
+        names (its members and those of the teams below), asked of identity as
+        it's sent. Only a team that has turned team notices on (403 otherwise).
       responses:
         "202": { description: "Sent, one notification per recipient: { sent: number }" }
-        "400": { description: Invalid notification }
-        "403": { description: Not a signed-in service, or not granted this }
+        "400": { description: Invalid notification, an unknown floor, or toTeam not on a team }
+        "403": { description: Not a signed-in service, not granted this, or team notices are off }
+        "503": { description: Floors or grants can't be checked right now }
+  /team-notices/{workspace}:
+    parameters:
+      - { name: workspace, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Whether a team has turned team notices on (its leads and admins)
+      description: A lead must be standing on the team (x-workspace-id, checked by the gateway).
+      responses:
+        "200":
+          description: The setting
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeamNotices" }
+        "403": { description: Not a lead standing on that team, nor an admin }
+    put:
+      summary: Turn team notices on or off for a team (its leads and admins)
+      description: Audited as team-notices.on or team-notices.off, on that floor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [on]
+              properties:
+                on: { type: boolean }
+      responses:
+        "200":
+          description: The setting now
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeamNotices" }
+        "403": { description: Not a lead standing on that team, nor an admin }
   /notifications/stream:
     get:
       summary: Each new notification for the caller, as server-sent events
@@ -65,16 +106,21 @@ paths:
         "404": { description: The caller has no such notification }
   /audit:
     get:
-      summary: The audit log, newest first (admins only)
+      summary: The audit log, newest first (admins; leads for their own floor)
       description: >
         To page, ask again with `before` set to the id of the oldest entry
-        already shown; a page shorter than `limit` is the last one.
+        already shown; a page shorter than `limit` is the last one. With
+        `workspace`, only entries on that floor or a floor below it, as the
+        tree stood when each was written. Admins read the whole log; a lead
+        standing on a floor (x-workspace-id, checked by the gateway) reads that
+        floor's with `workspace` set to it.
       parameters:
         - { name: app, in: query, schema: { type: string } }
         - { name: actor, in: query, schema: { type: string } }
         - { name: since, in: query, schema: { type: string, format: date-time }, description: Only entries at or after this time }
         - { name: until, in: query, schema: { type: string, format: date-time }, description: Only entries before this time }
         - { name: before, in: query, schema: { type: string, pattern: "^[0-9]+$" }, description: An entry's id; only entries older than it }
+        - { name: workspace, in: query, schema: { type: string }, description: Only entries on this floor or below it }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
       responses:
         "200":
@@ -82,7 +128,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
-        "403": { description: Not an admin }
+        "403": { description: Not an admin, nor a lead asking for their own floor }
     post:
       summary: Record an audit entry (services only). Entries are never changed or removed.
       requestBody:
@@ -92,8 +138,9 @@ paths:
             schema: { $ref: "#/components/schemas/NewAuditEntry" }
       responses:
         "201": { description: Recorded }
-        "400": { description: Invalid entry }
+        "400": { description: Invalid entry, or an unknown floor }
         "403": { description: Not a signed-in service, or not granted this }
+        "503": { description: Floors or grants can't be checked right now }
 components:
   schemas:
     NewNotification:
@@ -102,7 +149,8 @@ components:
       required: [app, recipients, level, title]
       properties:
         app: { type: string, description: The app it is about; the Shell opens it }
-        recipients: { type: array, minItems: 1, maxItems: 500, items: { type: string }, description: User ids }
+        recipients: { type: array, maxItems: 500, items: { type: string }, description: User ids; empty only with toTeam }
+        toTeam: { type: boolean, description: To everyone on the team the call's floor names, instead of recipients }
         level: { enum: [needs, info, done, failed], description: '"needs" when the person has to act' }
         title: { type: string, maxLength: 200 }
         detail: { type: string, maxLength: 2000 }
@@ -119,6 +167,7 @@ components:
         link: { type: string }
         createdAt: { type: string, format: date-time }
         readAt: { type: string, format: date-time }
+        workspace: { $ref: "#/components/schemas/EventFloor" }
     NewAuditEntry:
       type: object
       additionalProperties: false
@@ -142,3 +191,17 @@ components:
           properties:
             id: { type: string }
             at: { type: string, format: date-time }
+            workspace: { $ref: "#/components/schemas/EventFloor" }
+    EventFloor:
+      type: object
+      required: [id, path]
+      description: The floor it happened on, and its path from the root as it stood then
+      properties:
+        id: { type: string }
+        path: { type: array, items: { type: string } }
+    TeamNotices:
+      type: object
+      required: [workspace, on]
+      properties:
+        workspace: { type: string }
+        on: { type: boolean }

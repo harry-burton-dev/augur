@@ -28,6 +28,10 @@ describe('fromServer', () => {
   it('becomes a Shell notification', () => {
     expect(fromServer(n('1'))).toEqual({ id: '1', app: 'library', level: 'needs', title: 'Note 1', detail: undefined, time: '2026-10-18T19:00:00.000Z' });
   });
+
+  it('keeps the floor it came from, for the gauge and its tag', () => {
+    expect(fromServer({ ...n('2'), workspace: { id: 'fin', path: ['org', 'fin'] } }).floor).toBe('fin');
+  });
 });
 
 describe('NotificationFeed', () => {

@@ -63,6 +63,16 @@ describe('identity', () => {
       expect((await look(payroll.id)).statusCode).toBe(403);
     });
 
+    it('tells the platform’s services who can stand on a team', async () => {
+      const { app, finance, payroll, legal } = await tree();
+      const people = (id: string, authorization = 'Bearer registry') => app.inject({ method: 'GET', url: `/v1/workspaces/${id}/people`, headers: { authorization } });
+      expect((await people(finance.id)).json()).toEqual({ workspace: finance.id, people: ['u-1'] });
+      expect((await people(payroll.id)).json().people).toEqual(['u-1']);
+      expect((await people(legal.id)).json().people).toEqual(['u-2']);
+      expect((await people('nope')).statusCode).toBe(404);
+      expect((await people(legal.id, 'Bearer app')).statusCode).toBe(403);
+    });
+
     it('rolls up a floor to the teams below it that the caller is on', async () => {
       const { app, org, finance, payroll, legal } = await tree();
       const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: [] });

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.5.0
+  version: 1.6.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -114,6 +114,25 @@ paths:
         "403": { description: Not a platform service }
         "404": { description: No such floor }
         "503": { description: The caller's token can't be checked right now }
+  /workspaces/{id}/people:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Everyone who can stand on a team (platform services only)
+      description: Its members and those of the teams below it. Events asks this as each team notice is sent.
+      responses:
+        "200":
+          description: Person ids, sorted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace, people]
+                properties:
+                  workspace: { type: string }
+                  people: { type: array, items: { type: string } }
+        "403": { description: Not a platform service }
+        "404": { description: No such team }
   # Admin: people and roles, kept in the sign-in provider (Keycloak), and departments,
   # which are identity's own teams (copied in once from the provider's groups).
   # Every /admin path answers 403 to a caller without the admin role, and 503 when

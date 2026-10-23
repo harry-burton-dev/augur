@@ -2,6 +2,12 @@ import { EventEmitter } from 'node:events';
 import pg from 'pg';
 import type { NewAuditEntry, NewNotification, NotificationLevel } from '@platform/service-kit';
 
+/** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
+export interface EventFloor {
+  id: string;
+  path: string[];
+}
+
 /** One notification for one person. */
 export interface Notification {
   id: string;
@@ -13,11 +19,14 @@ export interface Notification {
   link?: string;
   createdAt: string;
   readAt?: string;
+  /** The floor it's from; none for one about the platform as a whole. */
+  workspace?: EventFloor;
 }
 
 export interface AuditEntry extends NewAuditEntry {
   id: string;
   at: string;
+  workspace?: EventFloor;
 }
 
 export interface AuditFilter {
@@ -28,6 +37,8 @@ export interface AuditFilter {
   until?: string;
   /** The id of the oldest entry already shown: only entries older than it, for the next page. */
   before?: string;
+  /** Only entries on this floor or a floor below it, as they stood when written. */
+  workspace?: string;
   limit: number;
 }
 
@@ -35,18 +46,21 @@ export type Listener = (n: Notification) => void;
 
 export interface EventStore {
   /** Adds one notification per recipient and tells every listener, on every instance. */
-  addNotifications(n: NewNotification): Promise<Notification[]>;
+  addNotifications(n: NewNotification, floor?: EventFloor): Promise<Notification[]>;
   /** A person's unread notifications, newest first. */
   unread(recipient: string, limit: number): Promise<Notification[]>;
   /** Marks a person's notification read or unread; false when they have no such notification. */
   setRead(recipient: string, id: string, read: boolean): Promise<boolean>;
-  appendAudit(entry: NewAuditEntry): Promise<AuditEntry>;
+  appendAudit(entry: NewAuditEntry, floor?: EventFloor): Promise<AuditEntry>;
   /** Newest first. */
   audit(filter: AuditFilter): Promise<AuditEntry[]>;
   subscribe(listener: Listener): () => void;
+  /** Whether a team has turned team notices on. */
+  teamNotices(workspace: string): Promise<boolean>;
+  setTeamNotices(workspace: string, on: boolean, by: string): Promise<void>;
 }
 
-const fromInput = (n: NewNotification, recipient: string, id: string, createdAt: string): Notification => ({
+const fromInput = (n: NewNotification, recipient: string, id: string, createdAt: string, floor?: EventFloor): Notification => ({
   id,
   recipient,
   app: n.app,
@@ -55,7 +69,10 @@ const fromInput = (n: NewNotification, recipient: string, id: string, createdAt:
   ...(n.detail ? { detail: n.detail } : {}),
   ...(n.link ? { link: n.link } : {}),
   createdAt,
+  ...(floor ? { workspace: floor } : {}),
 });
+
+const under = (floor: EventFloor | undefined, workspace: string) => !!floor?.path.includes(workspace);
 
 /** For tests, and for running locally without Postgres. Forgets everything on restart. */
 export class MemoryEventStore implements EventStore {
@@ -63,10 +80,11 @@ export class MemoryEventStore implements EventStore {
   private entries: AuditEntry[] = [];
   private emitter = new EventEmitter().setMaxListeners(0);
   private seq = 0;
+  private teams = new Set<string>();
 
-  async addNotifications(n: NewNotification) {
+  async addNotifications(n: NewNotification, floor?: EventFloor) {
     const now = new Date().toISOString();
-    const added = n.recipients.map((r) => fromInput(n, r, String(++this.seq), now));
+    const added = n.recipients.map((r) => fromInput(n, r, String(++this.seq), now, floor));
     this.notifications.push(...added);
     for (const a of added) this.emitter.emit('notification', a);
     return added;
@@ -87,17 +105,17 @@ export class MemoryEventStore implements EventStore {
     return true;
   }
 
-  async appendAudit(entry: NewAuditEntry) {
-    const e = { ...entry, id: String(++this.seq), at: new Date().toISOString() };
+  async appendAudit(entry: NewAuditEntry, floor?: EventFloor) {
+    const e = { ...entry, id: String(++this.seq), at: new Date().toISOString(), ...(floor ? { workspace: floor } : {}) };
     this.entries.push(e);
     return e;
   }
 
-  async audit({ app, actor, since, until, before, limit }: AuditFilter) {
+  async audit({ app, actor, since, until, before, workspace, limit }: AuditFilter) {
     const cursor = before === undefined ? this.entries.length : this.entries.findIndex((e) => e.id === before);
     return this.entries
       .slice(0, cursor < 0 ? 0 : cursor)
-      .filter((e) => (!app || e.app === app) && (!actor || e.actor.id === actor) && (!since || e.at >= since) && (!until || e.at < until))
+      .filter((e) => (!app || e.app === app) && (!actor || e.actor.id === actor) && (!since || e.at >= since) && (!until || e.at < until) && (!workspace || under(e.workspace, workspace)))
       .reverse()
       .slice(0, limit);
   }
@@ -105,6 +123,15 @@ export class MemoryEventStore implements EventStore {
   subscribe(listener: Listener) {
     this.emitter.on('notification', listener);
     return () => void this.emitter.off('notification', listener);
+  }
+
+  async teamNotices(workspace: string) {
+    return this.teams.has(workspace);
+  }
+
+  async setTeamNotices(workspace: string, on: boolean) {
+    if (on) this.teams.add(workspace);
+    else this.teams.delete(workspace);
   }
 }
 
@@ -140,6 +167,20 @@ export const migrations: { id: string; sql: string }[] = [
       create index audit_app on events.audit (app, at desc);
       create index audit_actor on events.audit (actor_id, at desc);`,
   },
+  {
+    id: '002_floors',
+    sql: `
+      -- The floor each one happened on, and its path from the root as it stood then.
+      alter table events.notifications add column workspace_id text, add column workspace_path text[];
+      alter table events.audit add column workspace_id text, add column workspace_path text[];
+      create index audit_workspace_path on events.audit using gin (workspace_path);
+      -- Teams that have turned team notices on.
+      create table events.team_notices (
+        workspace_id text primary key,
+        set_by text not null,
+        set_at timestamptz not null default now()
+      );`,
+  },
 ];
 
 const CHANNEL = 'events_notification';
@@ -154,7 +195,11 @@ type NotificationRow = {
   link: string | null;
   created_at: Date;
   read_at: Date | null;
+  workspace_id: string | null;
+  workspace_path: string[] | null;
 };
+
+const floorFrom = (id: string | null, path: string[] | null) => (id ? { workspace: { id, path: path ?? [id] } } : {});
 
 const fromRow = (r: NotificationRow): Notification => ({
   id: r.id,
@@ -166,6 +211,7 @@ const fromRow = (r: NotificationRow): Notification => ({
   ...(r.link ? { link: r.link } : {}),
   createdAt: r.created_at.toISOString(),
   ...(r.read_at ? { readAt: r.read_at.toISOString() } : {}),
+  ...floorFrom(r.workspace_id, r.workspace_path),
 });
 
 type AuditRow = {
@@ -177,6 +223,8 @@ type AuditRow = {
   action: string;
   target: string | null;
   detail: Record<string, unknown> | null;
+  workspace_id: string | null;
+  workspace_path: string[] | null;
 };
 
 const fromAuditRow = (r: AuditRow): AuditEntry => ({
@@ -187,6 +235,7 @@ const fromAuditRow = (r: AuditRow): AuditEntry => ({
   action: r.action,
   ...(r.target ? { target: r.target } : {}),
   ...(r.detail ? { detail: r.detail } : {}),
+  ...floorFrom(r.workspace_id, r.workspace_path),
 });
 
 /**
@@ -238,15 +287,15 @@ export class PgEventStore implements EventStore {
     await this.listening.query(`listen ${CHANNEL}`);
   }
 
-  async addNotifications(n: NewNotification) {
+  async addNotifications(n: NewNotification, floor?: EventFloor) {
     const client = await this.pool.connect();
     try {
       await client.query('begin');
       const { rows } = await client.query<NotificationRow>(
-        `insert into events.notifications (recipient, app, level, title, detail, link)
-         select r, $2, $3, $4, $5, $6 from unnest($1::text[]) as r
+        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path)
+         select r, $2, $3, $4, $5, $6, $7, $8 from unnest($1::text[]) as r
          returning *`,
-        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null],
+        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null],
       );
       const added = rows.map(fromRow);
       // Delivered when the transaction commits; validation keeps each well under the 8000-byte payload limit.
@@ -280,23 +329,24 @@ export class PgEventStore implements EventStore {
     return rowCount === 1;
   }
 
-  async appendAudit(e: NewAuditEntry) {
+  async appendAudit(e: NewAuditEntry, floor?: EventFloor) {
     const { rows } = await this.pool.query<AuditRow>(
-      `insert into events.audit (actor_id, actor_kind, app, action, target, detail) values ($1, $2, $3, $4, $5, $6) returning *`,
-      [e.actor.id, e.actor.kind, e.app, e.action, e.target ?? null, e.detail ?? null],
+      `insert into events.audit (actor_id, actor_kind, app, action, target, detail, workspace_id, workspace_path) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+      [e.actor.id, e.actor.kind, e.app, e.action, e.target ?? null, e.detail ?? null, floor?.id ?? null, floor?.path ?? null],
     );
     return fromAuditRow(rows[0]);
   }
 
-  async audit({ app, actor, since, until, before, limit }: AuditFilter) {
+  async audit({ app, actor, since, until, before, workspace, limit }: AuditFilter) {
     // The cursor is an entry's id; a page continues from that entry's place in (at, id) order.
     const { rows } = await this.pool.query<AuditRow>(
       `select * from events.audit
        where ($1::text is null or app = $1) and ($2::text is null or actor_id = $2)
          and ($3::timestamptz is null or at >= $3) and ($4::timestamptz is null or at < $4)
          and ($5::bigint is null or (at, id) < (select at, id from events.audit where id = $5))
+         and ($7::text is null or workspace_path @> array[$7::text])
        order by at desc, id desc limit $6`,
-      [app ?? null, actor ?? null, since ?? null, until ?? null, before ?? null, limit],
+      [app ?? null, actor ?? null, since ?? null, until ?? null, before ?? null, limit, workspace ?? null],
     );
     return rows.map(fromAuditRow);
   }
@@ -304,6 +354,18 @@ export class PgEventStore implements EventStore {
   subscribe(listener: Listener) {
     this.emitter.on('notification', listener);
     return () => void this.emitter.off('notification', listener);
+  }
+
+  async teamNotices(workspace: string) {
+    const { rowCount } = await this.pool.query('select 1 from events.team_notices where workspace_id = $1', [workspace]);
+    return !!rowCount;
+  }
+
+  async setTeamNotices(workspace: string, on: boolean, by: string) {
+    await this.pool.query(
+      on ? 'insert into events.team_notices (workspace_id, set_by) values ($1, $2) on conflict do nothing' : 'delete from events.team_notices where workspace_id = $1',
+      on ? [workspace, by] : [workspace],
+    );
   }
 
   async close() {

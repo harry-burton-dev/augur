@@ -181,6 +181,30 @@ describe('admin', () => {
       expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
     });
 
+    it('says which floor an app was turned on, off or blocked for', () => {
+      expect(sentence(entry('app.disabled', { app: 'registry', target: 'library', detail: { workspace: 'd-1' } }), names)).toBe('Alex Rivera turned Library off for Finance');
+      expect(sentence(entry('app.blocked', { app: 'registry', target: 'library', detail: { workspace: 'd-1' } }), names)).toBe('Alex Rivera blocked Library for Finance and every team below it');
+      expect(sentence(entry('team-notices.on', { app: 'events', target: 'd-2' }), names)).toBe('Alex Rivera turned on team notices for Payroll');
+    });
+
+    it('filters by floor, offering the org and every team', async () => {
+      const urls: string[] = [];
+      const fetchImpl = vi.fn(async (url: string) => {
+        urls.push(url);
+        if (url.endsWith('/me/workspaces')) return Response.json({ workspaces: [{ id: 'o', kind: 'org', name: 'Acme' }] });
+        if (url.endsWith('/admin/departments')) return Response.json([finance, payroll]);
+        return Response.json([]);
+      });
+      const el = document.createElement('admin-activity') as AdminActivity;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.filterOptions.floors.map((o) => o.label)).toEqual(['Any floor', 'Acme', 'Acme / Finance', 'Acme / Finance / Payroll']));
+      el.floor = 'd-1';
+      await el.load();
+      expect(new URL(urls.filter((u) => u.includes('/audit')).at(-1)!, 'http://x').searchParams.get('workspace')).toBe('d-1');
+      el.remove();
+    });
+
     it('turns a period into a time range', () => {
       const now = new Date(2026, 9, 22, 15, 30);
       expect(rangeFor('today', now)).toEqual({ since: new Date(2026, 9, 22).toISOString() });

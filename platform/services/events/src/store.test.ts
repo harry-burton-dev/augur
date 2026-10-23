@@ -19,6 +19,28 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect(await store.unread('u-1', 50)).toMatchObject([{ recipient: 'u-1', link: '/doc/7' }]);
   });
 
+  it('keeps the floor and its path, and finds audit entries under a floor', async () => {
+    const [n] = await store.addNotifications({ ...review, recipients: ['u-1'] }, { id: 'p', path: ['o', 'f', 'p'] });
+    expect(n.workspace).toEqual({ id: 'p', path: ['o', 'f', 'p'] });
+    expect((await store.unread('u-1', 50))[0].workspace).toEqual({ id: 'p', path: ['o', 'f', 'p'] });
+    const entry = (action: string) => ({ actor: { id: 'u-1', kind: 'user' as const }, app: 'library', action });
+    await store.appendAudit(entry('a.payroll'), { id: 'p', path: ['o', 'f', 'p'] });
+    await store.appendAudit(entry('a.legal'), { id: 'l', path: ['o', 'l'] });
+    await store.appendAudit(entry('a.nowhere'));
+    expect((await store.audit({ workspace: 'f', limit: 10 })).map((e) => e.action)).toEqual(['a.payroll']);
+    expect((await store.audit({ workspace: 'o', limit: 10 })).map((e) => e.action)).toEqual(['a.legal', 'a.payroll']);
+    expect((await store.audit({ limit: 10 })).map((e) => e.action)).toEqual(['a.nowhere', 'a.legal', 'a.payroll']);
+  });
+
+  it('keeps which teams turned team notices on', async () => {
+    expect(await store.teamNotices('f')).toBe(false);
+    await store.setTeamNotices('f', true, 'u-1');
+    await store.setTeamNotices('f', true, 'u-1');
+    expect(await store.teamNotices('f')).toBe(true);
+    await store.setTeamNotices('f', false, 'u-1');
+    expect(await store.teamNotices('f')).toBe(false);
+  });
+
   it('marks read and unread, only for the recipient', async () => {
     const [forAlex] = await store.addNotifications({ ...review, recipients: ['u-1'] });
     expect(await store.setRead('u-2', forAlex.id, true)).toBe(false);
@@ -85,7 +107,7 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate events.notifications, events.audit');
+      await admin.query('truncate events.notifications, events.audit, events.team_notices');
     },
   );
 

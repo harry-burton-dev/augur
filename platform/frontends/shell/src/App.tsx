@@ -410,7 +410,10 @@ export function Host({
         shell.notifications = shell.notifications.filter((n) => n.id !== id);
       }
       const app = byId(appId);
-      if (app) navigate(hrefFor(app, server?.link));
+      // One from another floor opens there, with the same move up or down; its app may not be on this floor's catalogue yet.
+      const there = server?.workspace ? session.floors.find((f) => f.id === server.workspace!.id) : undefined;
+      if (there && there.id !== floorRef.current.id) navigate(app ? hrefFor(app, server?.link) : '/', there);
+      else if (app) navigate(hrefFor(app, server?.link));
     };
     // Dismissing a notification marks it read, so it stays gone next time; Undo brings it back.
     const onDismiss = (e: Event) => {

@@ -19,8 +19,8 @@ const apps: ShellApp[] = [
 const min = 60_000;
 const now = Date.now();
 const notifications: ShellNotification[] = [
-  { id: '1', app: 'library', level: 'needs', title: 'Approve the travel policy', detail: 'Sam asked for your review', time: now - 4 * min },
-  { id: '2', app: 'library', level: 'needs', title: 'Procurement is due for review', detail: 'Review by Friday', time: now - 50 * min },
+  { id: '1', app: 'library', level: 'needs', title: 'Approve the travel policy', detail: 'Sam asked for your review', time: now - 4 * min, floor: 'org' },
+  { id: '2', app: 'library', level: 'needs', title: 'Procurement is due for review', detail: 'Review by Friday', time: now - 50 * min, floor: 'pay' },
   { id: '3', app: 'library', level: 'done', title: 'Expenses guide published', detail: 'Finance', time: now - 3 * 60 * min },
   { id: '4', app: 'admin', level: 'info', title: 'Two people joined HR', time: now - 30 * 60 * min },
 ];

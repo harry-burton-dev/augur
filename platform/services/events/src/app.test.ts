@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { callerHeaders, GrantsUnavailable, serviceHeaders } from '@platform/service-kit';
+import { callerHeaders, FloorsUnavailable, GrantsUnavailable, serviceHeaders, type FloorPlace } from '@platform/service-kit';
 import { buildApp } from './app.ts';
 
 const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
@@ -11,6 +11,16 @@ const verifyService = async (headers: Record<string, string | string[] | undefin
 };
 const platform = await serviceHeaders({ name: 'identity', getToken: async () => 'platform-identity' });
 const review = { app: 'library', recipients: ['u-1', 'u-2'], level: 'needs', title: 'Review the budget paper', link: '/doc/7' };
+
+// The org, Finance with Payroll below it, Legal, and someone's own floor.
+const places: Record<string, FloorPlace> = {
+  'w-org': { id: 'w-org', kind: 'org', path: ['w-org'], org: 'w-org' },
+  'w-finance': { id: 'w-finance', kind: 'team', path: ['w-org', 'w-finance'], org: 'w-org' },
+  'w-payroll': { id: 'w-payroll', kind: 'team', path: ['w-org', 'w-finance', 'w-payroll'], org: 'w-org' },
+  'w-legal': { id: 'w-legal', kind: 'team', path: ['w-org', 'w-legal'], org: 'w-org' },
+  'w-me': { id: 'w-me', kind: 'personal', path: ['w-me'], org: 'w-org' },
+};
+const floors = async (id: string) => places[id];
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 let open: App | undefined;
@@ -105,7 +115,7 @@ describe('events', () => {
     };
 
     it('lets an app notify with the scope, only for itself', async () => {
-      const app = await buildApp({ verifyService, grants });
+      const app = await buildApp({ verifyService, grants, floors });
       const post = (headers: Record<string, string>, payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers, payload });
       expect((await post(as('library', 'w-me'), review)).statusCode).toBe(202);
       expect(asked.at(-1)).toEqual(['library', 'w-me']);
@@ -116,7 +126,7 @@ describe('events', () => {
     });
 
     it('checks the scope on the floor the call names', async () => {
-      const app = await buildApp({ verifyService, grants });
+      const app = await buildApp({ verifyService, grants, floors });
       const entry = { actor: { id: 'u-1', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' };
       expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: as('library', 'w-finance'), payload: entry })).statusCode).toBe(201);
       const elsewhere = await app.inject({ method: 'POST', url: '/v1/audit', headers: as('library', 'w-legal'), payload: entry });
@@ -128,6 +138,60 @@ describe('events', () => {
       expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: as('library'), payload: review })).statusCode).toBe(503);
       const unchecked = await buildApp({ verifyService });
       expect((await unchecked.inject({ method: 'POST', url: '/v1/notifications', headers: as('library'), payload: review })).statusCode).toBe(503);
+    });
+  });
+
+  describe('floor by floor', () => {
+    const on = (workspace: string, role: 'member' | 'lead' = 'member', roles: string[] = []) =>
+      callerHeaders({ id: 'u-3', name: 'Jo', departments: [], roles, workspace: { id: workspace, kind: places[workspace].kind, role } });
+    const onFloor = (workspace: string) => ({ ...platform, 'x-workspace-id': workspace });
+    const entry = (action: string) => ({ actor: { id: 'u-1', kind: 'user' }, app: 'library', action, target: 'doc-7' });
+
+    it('records the floor and its path on notifications and audit entries', async () => {
+      const app = await buildApp({ verifyService, floors });
+      await app.inject({ method: 'POST', url: '/v1/notifications', headers: onFloor('w-payroll'), payload: review });
+      const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
+      expect(n.workspace).toEqual({ id: 'w-payroll', path: ['w-org', 'w-finance', 'w-payroll'] });
+      const audited = await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-legal'), payload: entry('document.published') });
+      expect(audited.json().workspace).toEqual({ id: 'w-legal', path: ['w-org', 'w-legal'] });
+      expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-gone'), payload: entry('document.published') })).statusCode).toBe(400);
+      const down = await buildApp({ verifyService, floors: async () => Promise.reject(new FloorsUnavailable('down')) });
+      expect((await down.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-legal'), payload: entry('document.published') })).statusCode).toBe(503);
+    });
+
+    it('filters the audit log to a floor and the floors below it', async () => {
+      const app = await buildApp({ verifyService, floors });
+      for (const [w, action] of [['w-finance', 'a.finance'], ['w-payroll', 'a.payroll'], ['w-legal', 'a.legal']]) {
+        await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor(w), payload: entry(action) });
+      }
+      await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: entry('a.nowhere') });
+      const actions = async (query: string, headers = alex) => (await app.inject({ method: 'GET', url: `/v1/audit${query}`, headers })).json().map((e: { action: string }) => e.action);
+      expect(await actions('?workspace=w-finance')).toEqual(['a.payroll', 'a.finance']);
+      expect(await actions('?workspace=w-org')).toEqual(['a.legal', 'a.payroll', 'a.finance']);
+      expect(await actions('')).toEqual(['a.nowhere', 'a.legal', 'a.payroll', 'a.finance']);
+      // A lead reads their own floor's log, and nothing wider.
+      expect(await actions('?workspace=w-finance', on('w-finance', 'lead'))).toEqual(['a.payroll', 'a.finance']);
+      expect((await app.inject({ method: 'GET', url: '/v1/audit?workspace=w-finance', headers: on('w-finance') })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/audit?workspace=w-org', headers: on('w-finance', 'lead') })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/audit', headers: on('w-finance', 'lead') })).statusCode).toBe(403);
+    });
+
+    it('sends team notices only to a team that turned them on, to who is on it now', async () => {
+      let team = ['u-1', 'u-2'];
+      const app = await buildApp({ verifyService, floors, members: async () => team });
+      const notice = { ...review, recipients: [], toTeam: true };
+      const send = (workspace: string) => app.inject({ method: 'POST', url: '/v1/notifications', headers: onFloor(workspace), payload: notice });
+      expect((await send('w-finance')).statusCode).toBe(403);
+      expect((await app.inject({ method: 'PUT', url: '/v1/team-notices/w-finance', headers: on('w-finance'), payload: { on: true } })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'PUT', url: '/v1/team-notices/w-finance', headers: on('w-finance', 'lead'), payload: { on: true } })).json()).toEqual({ workspace: 'w-finance', on: true });
+      expect((await send('w-finance')).json()).toEqual({ sent: 2 });
+      team = ['u-2'];
+      expect((await send('w-finance')).json()).toEqual({ sent: 1 });
+      expect((await send('w-org')).statusCode).toBe(400);
+      expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: onFloor('w-finance'), payload: { ...notice, recipients: ['u-1'] } })).statusCode).toBe(400);
+      expect((await app.inject({ method: 'GET', url: '/v1/team-notices/w-finance', headers: alex })).json().on).toBe(true);
+      const log = (await app.inject({ method: 'GET', url: '/v1/audit?workspace=w-finance', headers: alex })).json();
+      expect(log[0]).toMatchObject({ action: 'team-notices.on', actor: { id: 'u-3' }, workspace: { id: 'w-finance' } });
     });
   });
 });
