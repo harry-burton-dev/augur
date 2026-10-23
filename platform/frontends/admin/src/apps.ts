@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import semver from 'semver';
 import { SDK_VERSION } from '@platform/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@platform/ui-kit';
-import type { AdminApi, AllowedOrigin, AppVersion, CatalogueApp } from './api.js';
+import type { AdminApi, AllowedOrigin, AppVersion, CatalogueApp, IssuedSignIn } from './api.js';
 import { page } from './parts.js';
 
 /** Where an app stands: off, on, or on but unable to open in this platform. */
@@ -25,6 +25,16 @@ export const rollbackNote = (current: CatalogueApp, target?: AppVersion): string
     ? `Version ${target.version} loads from the same address as ${current.version}, so the shell gets that version’s menu and settings but runs whatever code is there now. Redeploy that version’s service to run its code too.`
     : '';
 
+/** What each scope lets an app's service do, in words. */
+export const SCOPE_WORDS: Record<string, string> = {
+  'notifications:send': 'Notify people',
+  'audit:write': 'Write to the activity log',
+};
+
+/** What an app may do on the platform, as a fact's value. */
+export const scopeWords = (scopes: string[] | undefined) =>
+  scopes?.length ? scopes.map((s) => SCOPE_WORDS[s] ?? s).join(', ') : 'Nothing beyond registering itself';
+
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 /** Every app in the catalogue with its version, a switch to stop offering one, and its kept versions to go back to. */
@@ -44,6 +54,8 @@ export class AdminApps extends LitElement {
     originsOpen: { state: true },
     originsError: { state: true },
     working: { state: true },
+    issuing: { state: true },
+    issued: { state: true },
   };
 
   declare api: AdminApi;
@@ -62,6 +74,10 @@ export class AdminApps extends LitElement {
   declare originsOpen: boolean;
   declare originsError: string;
   declare working: boolean;
+  /** The app whose sign-in is about to be replaced, while the admin confirms. */
+  declare issuing: CatalogueApp | undefined;
+  /** The secret just issued, shown once. */
+  declare issued: (IssuedSignIn & { name: string }) | undefined;
 
   constructor() {
     super();
@@ -230,6 +246,55 @@ export class AdminApps extends LitElement {
     </ui-dialog>`;
   }
 
+  /** Replaces the app's secret, then shows the new one once. */
+  issueSignIn: DialogSubmit = async () => {
+    const app = this.issuing!;
+    const issued = await this.api.issueSignIn(app.id);
+    this.issued = { ...issued, name: app.name };
+  };
+
+  private issueDialog() {
+    const app = this.issuing;
+    if (!app) return nothing;
+    return html`<ui-dialog
+      open
+      size="glance"
+      danger
+      eyebrow=${app.name}
+      heading="Issue a new sign-in?"
+      summary="The app’s service signs in to the platform with a secret. A new one stops the old one working straight away, so the service can’t register, notify or write to the log until it’s given the new one."
+      action-label="Issue a new sign-in"
+      busy-label="Issuing…"
+      cancel-label="Keep the old one"
+      .submit=${this.issueSignIn}
+      @ui-close=${() => (this.issuing = undefined)}
+    ></ui-dialog>`;
+  }
+
+  /** Shown once, straight after it is made: it isn't kept anywhere the admin can see it again. */
+  private secretNote() {
+    const issued = this.issued;
+    if (!issued) return nothing;
+    return html`<ui-dialog
+      open
+      size="glance"
+      eyebrow="New sign-in"
+      heading=${`Give ${issued.name}’s service this secret`}
+      summary=${`Set it as SERVICE_CLIENT_SECRET where the service runs, then restart it. It signs in as ${issued.clientId}.`}
+      cancel-label="Done"
+      @ui-close=${() => (this.issued = undefined)}
+    >
+      <p
+        data-secret
+        style="margin:0;padding:var(--space-4);border-radius:var(--radius-inset);background:color-mix(in srgb, var(--ink) 6%, transparent);font-family:var(--font-mono, monospace);font-size:var(--type-body);color:var(--ink);word-break:break-all;user-select:all"
+      >${issued.secret}</p>
+      <p>It won’t be shown again. If it’s lost, issue a new one.</p>
+      <div>
+        <ui-button kind="secondary" size="sm" @click=${() => navigator.clipboard?.writeText(issued.secret).catch(() => undefined)}>Copy it</ui-button>
+      </div>
+    </ui-dialog>`;
+  }
+
   private readonly columns: TableColumn[] = [
     { key: 'name', label: 'App', sortable: true },
     { key: 'version', label: 'Version', sortable: true },
@@ -248,6 +313,7 @@ export class AdminApps extends LitElement {
       { label: 'Address', value: app.route },
       ...(app.entry.startsWith('/') && !app.entry.startsWith('//') ? [] : [{ label: 'Loads from', value: app.entry }]),
       ...(app.requiredRole ? [{ label: 'Only for', value: app.requiredRole }] : []),
+      ...(app.platform ? [] : [{ label: 'May', value: scopeWords(app.scopes) }]),
     ];
     return html`<ui-dialog
       open
@@ -273,6 +339,11 @@ export class AdminApps extends LitElement {
           ></ui-toggle>`}
       ${app.handles?.length ? html`<p>Answers ${app.handles.join(', ')}.</p>` : nothing}
       ${app.platform ? nothing : this.history(app)}
+      ${app.platform
+        ? nothing
+        : html`<div>
+            <ui-button kind="tertiary" size="sm" @click=${() => (this.issuing = app)}>Issue a new sign-in</ui-button>
+          </div>`}
       ${app.updatedAt ? html`<p>Registered ${day(app.registeredAt)}, last updated ${day(app.updatedAt)}.</p>` : nothing}
     </ui-dialog>`;
   }
@@ -306,7 +377,7 @@ export class AdminApps extends LitElement {
         >
           <ui-button slot="actions" kind="secondary" size="sm" @click=${() => (this.originsOpen = true)}>Where apps load from</ui-button>
         </ui-table>
-        ${this.details()} ${this.originsDialog()}`,
+        ${this.details()} ${this.originsDialog()} ${this.issueDialog()} ${this.secretNote()}`,
     );
   }
 }

@@ -1,69 +1,27 @@
-import { timingSafeEqual } from 'node:crypto';
 import { WORKSPACE_HEADERS } from './caller.js';
 import { type ServiceIdentity, type ServiceVerifier, type TokenSource } from './apps.js';
 
 /**
- * How platform and app services prove to each other that a call comes from
- * inside: the environment's service token, plus the calling service's name.
- * The gateway strips both headers, so they cannot be sent from outside.
+ * How a service proves who it is to another: its own sign-in, a short-lived
+ * token for its Keycloak client (see apps.ts), sent as a bearer token.
  */
-export const SERVICE_TOKEN_HEADER = 'x-service-token';
-export const SERVICE_NAME_HEADER = 'x-service-name';
-
-/**
- * How a service proves who it is: its own sign-in (`getToken`, see apps.ts),
- * or the environment's shared service token, which is on its way out.
- */
-export type ServiceCredentials =
-  | {
-      /** The calling service, e.g. "library"; recorded as the actor in the audit log. */
-      name: string;
-      token: string;
-    }
-  | { name: string; getToken: TokenSource };
-
-export const serviceHeaders = async (credentials: ServiceCredentials): Promise<Record<string, string>> =>
-  'getToken' in credentials
-    ? { authorization: `Bearer ${await credentials.getToken()}` }
-    : { [SERVICE_TOKEN_HEADER]: credentials.token, [SERVICE_NAME_HEADER]: credentials.name };
-
-/** Removes service headers, so a client cannot pose as a service. The gateway calls this on every request. */
-export const withoutServiceHeaders = <H extends Record<string, unknown>>(headers: H): H =>
-  Object.fromEntries(
-    Object.entries(headers).filter(([k]) => ![SERVICE_TOKEN_HEADER, SERVICE_NAME_HEADER].includes(k.toLowerCase())),
-  ) as H;
-
-const sameSecret = (given: string, expected: string) => {
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-};
-
-/** The calling service's name when the request carries the right token, else undefined. No token configured means no service is trusted. */
-export const serviceFromHeaders = (headers: Record<string, string | string[] | undefined>, expectedToken: string | undefined): string | undefined => {
-  const token = headers[SERVICE_TOKEN_HEADER];
-  if (!expectedToken || typeof token !== 'string' || !sameSecret(token, expectedToken)) return undefined;
-  const name = headers[SERVICE_NAME_HEADER];
-  return typeof name === 'string' && name ? name : 'service';
-};
-
-export interface ServiceCheck {
-  /** Checks an app's or platform service's own token. */
-  verify?: ServiceVerifier;
-  /** The environment's shared service token; whoever has it counts as a platform service. */
-  token?: string;
+export interface ServiceCredentials {
+  /** The calling service, e.g. "library"; recorded as the actor in the audit log. */
+  name: string;
+  getToken: TokenSource;
 }
 
+export const serviceHeaders = async (credentials: ServiceCredentials): Promise<Record<string, string>> => ({
+  authorization: `Bearer ${await credentials.getToken()}`,
+});
+
 /**
- * Who sent a service call: an app or platform service by its own token, or a
- * holder of the shared service token (as a platform service), else undefined.
- * Throws ServiceAuthUnavailable when a token can't be checked right now.
+ * Who sent a service call: an app or platform service, by its own token; else
+ * undefined (a person's token is neither). Throws ServiceAuthUnavailable when
+ * the token can't be checked right now.
  */
-export const identifyService = async (headers: Record<string, string | string[] | undefined>, { verify, token }: ServiceCheck): Promise<ServiceIdentity | undefined> => {
-  const legacy = serviceFromHeaders(headers, token);
-  if (legacy) return { kind: 'platform', name: legacy };
-  return verify ? verify(headers) : undefined;
-};
+export const identifyService = async (headers: Record<string, string | string[] | undefined>, verify: ServiceVerifier | undefined): Promise<ServiceIdentity | undefined> =>
+  verify ? verify(headers) : undefined;
 
 export class ServiceCallError extends Error {}
 

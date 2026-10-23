@@ -148,7 +148,7 @@ curl -X POST https://<platform>/api/identity/v1/admin/apps/expenses/credential -
 # {"clientId":"app-expenses","secret":"…"}
 ```
 
-Give the service that secret as `SERVICE_CLIENT_SECRET`. It gets 5-minute tokens for its Keycloak client `app-expenses`, and the platform checks each call against the scopes the registry grants it on the floor the call names. Until every service has its own sign-in, a service with only the shared `SERVICE_TOKEN` still registers.
+Give the service that secret as `SERVICE_CLIENT_SECRET`. It gets 5-minute tokens for its Keycloak client `app-expenses`, and the platform checks each call against the scopes the registry grants it on the floor the call names. An admin can do the same from Admin, Apps: open the app and choose **Issue a new sign-in**. The secret is shown once.
 
 In `infra/docker-compose.yml` (and `infra/deploy/compose.yml` for the server), add the service and its upstream:
 

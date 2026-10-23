@@ -5,14 +5,12 @@ name: platform
 x-service: &service
   restart: unless-stopped
 
-# How services reach each other inside. An app's service signs in as itself
-# (SERVICE_CLIENT_SECRET, issued by an admin); the service token still proves a
-# call comes from inside until every service has its own. The gateway strips it
-# from outside requests. Local only.
+# How services reach each other inside. Each service signs in as itself with
+# its own Keycloak client and SERVICE_CLIENT_SECRET (identity makes the clients
+# from SERVICE_CLIENT_SECRETS). Local only.
 x-internal: &internal
   REGISTRY_URL: http://registry:8082
   EVENTS_URL: http://events:8084
-  SERVICE_TOKEN: platform-local-only
   # Services' tokens name the browser's address; they are fetched and checked over the compose network.
   OIDC_ISSUER: http://localhost:8180/realms/platform
   OIDC_INTERNAL_URL: http://keycloak:8080/realms/platform
@@ -76,6 +74,9 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      SERVICE_CLIENT_SECRET: platform-local-only-identity
+      # The clients identity makes for the platform's services and the sample app, with their secrets.
+      SERVICE_CLIENT_SECRETS: platform-identity=platform-local-only-identity,platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,app-library=platform-local-only-library
       <<: *internal
     depends_on: [postgres, keycloak]
 
@@ -85,6 +86,7 @@ services:
     environment:
       PORT: 8082
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
+      SERVICE_CLIENT_SECRET: platform-local-only-registry
       <<: *internal
     depends_on: [postgres]
 
@@ -94,6 +96,7 @@ services:
     environment:
       PORT: 8084
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
+      SERVICE_CLIENT_SECRET: platform-local-only-events
       <<: *internal
     depends_on: [postgres]
 
@@ -104,6 +107,7 @@ services:
     environment:
       PORT: 8083
       <<: *internal
+      SERVICE_CLIENT_SECRET: platform-local-only-library
       APP_MANIFEST: /app/manifest.json
     volumes: ["../apps/library/manifest.json:/app/manifest.json:ro"]
 

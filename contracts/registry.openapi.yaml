@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.4.0
+  version: 1.5.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -41,8 +41,8 @@ paths:
         Called by an app's own service on the internal network, signed in as
         itself (a bearer token for its Keycloak client app-<id>, audience
         platform-services), which may register only its own id; by a platform
-        service with the x-service-token and x-service-name headers; or by an
-        admin through the gateway.
+        service signed in as its own client (platform-<name>); or by an admin
+        through the gateway.
         Unknown fields are refused. The platform's own apps (home, admin) and
         routes another app already has cannot be taken. Every version is kept
         (the last 5, plus a pinned one); an app an admin has pinned keeps

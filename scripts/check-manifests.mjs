@@ -13,7 +13,8 @@ if (!existsSync(built)) {
 }
 const { buildApp } = await import(built);
 const { appEntrySchema } = await import(join(root, 'platform/services/registry/dist/manifest.js'));
-const registry = await buildApp({ serviceToken: 'check-manifests' });
+// Each app registers as itself, as its service would once signed in.
+const registry = await buildApp({ verifyService: async (headers) => ({ kind: 'app', app: String(headers['x-check-app']) }) });
 
 const problems = [];
 let checked = 0;
@@ -33,7 +34,7 @@ for (const app of readdirSync(join(root, 'apps'), { withFileTypes: true }).filte
   const res = await registry.inject({
     method: 'PUT',
     url: `/v1/apps/${encodeURIComponent(manifest.id ?? app.name)}`,
-    headers: { 'x-service-token': 'check-manifests', 'x-service-name': app.name },
+    headers: { 'x-check-app': manifest.id ?? app.name },
     payload: manifest,
   });
   if (res.statusCode >= 300) {

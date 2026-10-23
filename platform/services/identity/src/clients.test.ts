@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { callerHeaders } from '@platform/service-kit';
 import { buildApp } from './app.ts';
-import { KeycloakAppClients, MemoryAppClients } from './clients.ts';
+import { ensureClients, KeycloakAppClients, MemoryAppClients, parseClientSecrets } from './clients.ts';
 import type { KeycloakDirectory } from './directory.ts';
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
@@ -42,5 +42,42 @@ describe('apps’ sign-ins', () => {
     exists = true;
     expect(await clients.issue('library')).toEqual({ clientId: 'app-library', secret: 'rotated' });
     expect(calls.at(-1)?.slice(0, 2)).toEqual(['POST', '/clients/kc-1/client-secret']);
+  });
+});
+
+describe('the server’s own sign-ins', () => {
+  it('reads them from the settings', () => {
+    expect(parseClientSecrets(' platform-registry=a=b , app-library=c,,broken=')).toEqual([
+      ['platform-registry', 'a=b'],
+      ['app-library', 'c'],
+    ]);
+    expect(parseClientSecrets(undefined)).toEqual([]);
+  });
+
+  it('keeps trying while the sign-in service starts', async () => {
+    let up = false;
+    const ensured: string[] = [];
+    const clients = { issue: vi.fn(), ensure: vi.fn(async (id: string) => (up ? void ensured.push(id) : Promise.reject(new Error('down')))) };
+    setTimeout(() => (up = true), 5);
+    await ensureClients(clients, [['platform-events', 's']], () => undefined, 2);
+    expect(ensured).toEqual(['platform-events']);
+  });
+
+  it('gives an existing client its secret back and the audience it needs', async () => {
+    const calls: [string, string, unknown][] = [];
+    const call = vi.fn(async (method: string, path: string, body?: unknown) => {
+      calls.push([method, path, body]);
+      if (path.startsWith('/clients?')) return { data: [{ id: 'kc-2', clientId: 'platform-events' }] };
+      if (path.endsWith('/models') && method === 'GET') return { data: [] };
+      return { data: undefined };
+    });
+    await new KeycloakAppClients({ call } as unknown as KeycloakDirectory).ensure('platform-events', 's3cret');
+    expect(calls.map(([m, p]) => `${m} ${p}`)).toEqual([
+      'GET /clients?clientId=platform-events',
+      'PUT /clients/kc-2',
+      'GET /clients/kc-2/protocol-mappers/models',
+      'POST /clients/kc-2/protocol-mappers/models',
+    ]);
+    expect(calls[1][2]).toMatchObject({ secret: 's3cret', serviceAccountsEnabled: true, name: 'events (platform service)' });
   });
 });

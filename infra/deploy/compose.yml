@@ -8,10 +8,10 @@ x-service: &service
   restart: unless-stopped
   environment: &env
     NODE_ENV: production
-    SERVICE_TOKEN: ${SERVICE_TOKEN:?set SERVICE_TOKEN in .env}
     EVENTS_URL: http://events:8084
     REGISTRY_URL: http://registry:8082
-    # Apps' services sign in as themselves; their tokens name the public address and are checked over the compose network.
+    # Every service signs in as itself (its own Keycloak client and SERVICE_CLIENT_SECRET); tokens name the
+    # public address and are fetched and checked over the compose network.
     OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
     OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
     DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/platform
@@ -141,16 +141,19 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # What the top floor, the whole organisation, is called.
       ORG_NAME: ${ORG_NAME:-Organisation}
+      SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
+      # Identity makes each platform service's sign-in in Keycloak with these secrets.
+      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env}
 
   registry:
     <<: *service
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/registry" } }
-    environment: { <<: *env, PORT: 8082 }
+    environment: { <<: *env, PORT: 8082, SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}" }
 
   events:
     <<: *service
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/events" } }
-    environment: { <<: *env, PORT: 8084 }
+    environment: { <<: *env, PORT: 8084, SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}" }
 
 
 volumes:
