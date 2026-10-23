@@ -32,18 +32,22 @@ export const devSession = (user: User): Session => ({
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 
+/** Home, from its build in `frontends/home/dist`, so an app's glance card can be seen where it goes. */
+export const devHome: AppManifestEntry = { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.0.0', sdk: '^1.0.0', icon: 'home', description: 'What needs you' };
+
 /**
  * Answers the platform's own endpoints for the shell, so the real shell runs
- * with no platform behind it: the catalogue is just this app, nothing is in the
- * stream, and preferences last until the page reloads. Anything else (the
- * app's own service) goes to `real`.
+ * with no platform behind it: the catalogue is Home and this app, nothing is
+ * in the stream but what the app sends, and preferences last until the page
+ * reloads. Anything else (the app's own service) goes to `real`.
  */
 export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...args) => fetch(...args)): typeof fetch => {
   let preferences: unknown = {};
+  const catalogue = app.id === devHome.id ? [app] : [devHome, app];
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://stand-in');
     const path = url.pathname;
-    if (path === '/api/registry/v1/manifest') return json([app]);
+    if (path === '/api/registry/v1/manifest') return json(catalogue);
     if (path === '/api/identity/v1/me/preferences') {
       if (init?.method !== 'PUT') return json(preferences);
       preferences = JSON.parse(String(init.body ?? '{}'));

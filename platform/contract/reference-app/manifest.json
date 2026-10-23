@@ -7,5 +7,6 @@
   "sdk": "^1.0.0",
   "description": "Uses every part of the mount context, for the contract tests",
   "icon": "apps",
-  "handles": ["reference.show", "reference.answer"]
+  "handles": ["reference.show", "reference.answer"],
+  "surfaces": [{ "floor": "personal", "slot": "card", "module": "./Glance" }]
 }

@@ -11,8 +11,13 @@ import {
   floorFromPath,
   floorHref,
   fromServer,
+  HOME_CHANNEL,
+  cardsFor,
   hrefFor,
   IntentError,
+  needsFor,
+  SurfaceMounter,
+  type HomeState,
   loadManifest,
   NotificationActions,
   NotificationFeed,
@@ -96,6 +101,9 @@ export function Host({
   const raiseOnArrival = useRef<{ floor: string; intent: Intent } | null>(null);
   /** Which floor the loaded catalogue is for. */
   const manifestFloor = useRef<string | undefined>(undefined);
+  /** What Home can ask for: the same as pressing a row or an action in the stream. */
+  const homeAsks = useRef<{ open(id: string): void; act(id: string, index: number): void } | null>(null);
+  const cards = useRef<SurfaceMounter | null>(null);
   const prefs = useMemo(
     () =>
       new PreferenceSync(preferencesUrl, session.getToken, {
@@ -358,6 +366,36 @@ export function Host({
 
   useEffect(() => () => void mounter.current?.unmount(), []);
 
+  // Home hears from the shell on the bus: what needs you and the cards for this floor; the shell does what Home asks.
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell || !manifest) return;
+    const here = floor ?? home;
+    cards.current ??= new SurfaceMounter(importEntry);
+    const send = () =>
+      bus.emit<HomeState>(HOME_CHANNEL.state, {
+        needs: needsFor(shell.notifications, { muted: shell.muted, apps: manifest, floors: session.floors, here: here.id }),
+        cards: cardsFor(manifest, here, shell.recent),
+      });
+    const offs = [
+      bus.on(HOME_CHANNEL.ready, send),
+      bus.on<{ id: string }>(HOME_CHANNEL.open, ({ id }) => homeAsks.current?.open(id)),
+      bus.on<{ id: string; index: number }>(HOME_CHANNEL.act, ({ id, index }) => homeAsks.current?.act(id, index)),
+      bus.on<{ el: HTMLElement; app: string; done?: (shown: boolean) => void }>(HOME_CHANNEL.mountCard, ({ el, app, done }) => {
+        const entry = manifest.find((a) => a.id === app);
+        if (!entry) return done?.(false);
+        void cards.current!.mount(el, entry, here, contextFor(entry, '/')).then((shown) => done?.(shown));
+      }),
+      bus.on<{ el: HTMLElement }>(HOME_CHANNEL.unmountCard, ({ el }) => void cards.current?.unmount(el)),
+    ];
+    shell.addEventListener('ui-notifications', send);
+    send();
+    return () => {
+      offs.forEach((off) => off());
+      shell.removeEventListener('ui-notifications', send);
+    };
+  }, [bus, manifest, floor, home, session, contextFor, importEntry]);
+
   // The person's notifications: what is unread now, then each new one as it arrives.
   useEffect(() => {
     const shell = shellRef.current;
@@ -427,34 +465,39 @@ export function Host({
       const app = byId((e as CustomEvent<{ id: string }>).detail.id);
       if (app) navigate(hrefFor(app));
     };
-    const onOpenNotification = (e: Event) => {
-      const { id, app: appId } = (e as CustomEvent<{ notification: { id: string; app: string } }>).detail.notification;
+    const openNotification = (id: string) => {
       const server = fromEvents.current.get(id);
+      const appId = server?.app ?? shell.notifications.find((n) => n.id === id)?.app;
       if (server) {
         void feed.current?.setRead(id, true);
         shell.notifications = shell.notifications.filter((n) => n.id !== id);
       }
-      const app = byId(appId);
+      const app = appId ? byId(appId) : undefined;
       // One from another floor opens there, with the same move up or down; its app may not be on this floor's catalogue yet.
       const there = server?.workspace ? session.floors.find((f) => f.id === server.workspace!.id) : undefined;
       if (there && there.id !== floorRef.current.id) navigate(app ? hrefFor(app, server?.link) : '/', there);
       else if (app) navigate(hrefFor(app, server?.link));
     };
     // A button on a notification raises its intent, as the app would itself, and the notification is done with.
-    const onAction = (e: Event) => {
-      const { notification, index } = (e as CustomEvent<{ notification: { id: string }; index: number }>).detail;
-      const intent = actions.current.intentFor(notification.id, index);
+    const actOn = (id: string, index: number) => {
+      const intent = actions.current.intentFor(id, index);
       if (!intent) return;
-      const server = fromEvents.current.get(notification.id);
-      if (server) void feed.current?.setRead(notification.id, true);
-      shell.notifications = shell.notifications.filter((n) => n.id !== notification.id);
-      actions.current.forget(notification.id);
+      const server = fromEvents.current.get(id);
+      if (server) void feed.current?.setRead(id, true);
+      shell.notifications = shell.notifications.filter((n) => n.id !== id);
+      actions.current.forget(id);
       // One from another floor is done there, like opening it: the intent waits for that floor's apps.
       const there = server?.workspace ? session.floors.find((f) => f.id === server.workspace!.id) : undefined;
       if (there && there.id !== floorRef.current.id) {
         raiseOnArrival.current = { floor: there.id, intent };
         navigate('/', there);
       } else raise(intent).catch(() => undefined);
+    };
+    homeAsks.current = { open: openNotification, act: actOn };
+    const onOpenNotification = (e: Event) => openNotification((e as CustomEvent<{ notification: { id: string } }>).detail.notification.id);
+    const onAction = (e: Event) => {
+      const { notification, index } = (e as CustomEvent<{ notification: { id: string }; index: number }>).detail;
+      actOn(notification.id, index);
     };
     const onMute = () => prefs.set('muted', [...shell.muted]);
     // Dismissing a notification marks it read, so it stays gone next time; Undo brings it back.

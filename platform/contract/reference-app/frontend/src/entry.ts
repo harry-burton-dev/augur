@@ -75,4 +75,19 @@ export default defineMicroFrontend({
     render(html``, el);
     window.referenceUnmounts = (window.referenceUnmounts ?? 0) + 1;
   },
+  // SDK 1.2: a glance card, which Home places on the person's own floor.
+  surfaces: {
+    './Glance': {
+      mount(el: HTMLElement, ctx: MountContext) {
+        render(
+          html`<p data-check="card">Reference card on ${ctx.workspace.slug}</p>
+            <ui-button data-action="card-raise" @click=${() => void ctx.raise({ type: 'reference.show', payload: { n: 3 } })}>Show</ui-button>`,
+          el,
+        );
+      },
+      unmount(el: HTMLElement) {
+        render(html``, el);
+      },
+    },
+  },
 });

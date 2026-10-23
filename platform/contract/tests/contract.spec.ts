@@ -107,3 +107,30 @@ test('a notification’s action raises its intent through the shell', async ({ p
   const left = await page.evaluate(() => (document.querySelector('ui-shell') as unknown as { notifications: { title: string }[] }).notifications.map((n) => n.title));
   expect(left).not.toContain('Reference action');
 });
+
+// SDK 1.2: Home lists what needs you with its actions, and places apps' glance cards.
+const goTo = (page: Page, path: string) =>
+  page.evaluate((to) => {
+    window.history.pushState(null, '', to);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+
+test('Home lists what needs you, and its actions raise their intents', async ({ page }) => {
+  since('1.2');
+  await page.goto('/reference/somewhere');
+  await press(page, 'notify-action');
+  await goTo(page, '/@me/home');
+  const row = page.locator('[data-app="home"] ui-list .row', { hasText: 'Reference action' });
+  await expect(row).toBeVisible();
+  await page.locator('[data-app="home"] ui-list .act', { hasText: 'Show' }).click();
+  await expect(check(page, 'intent')).toHaveText('reference.show {"n":2}');
+});
+
+test('Home places the app’s glance card for the floor, with a working context', async ({ page }) => {
+  since('1.2');
+  await page.goto('/@me/home');
+  const card = page.locator('[data-app="home"] [data-card="reference"]');
+  await expect(card.locator('[data-check="card"]')).toHaveText('Reference card on me');
+  await card.locator('[data-action="card-raise"]').click();
+  await expect(check(page, 'intent')).toHaveText('reference.show {"n":3}');
+});

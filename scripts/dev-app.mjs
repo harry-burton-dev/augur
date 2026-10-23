@@ -15,8 +15,8 @@ if (!dir || !existsSync(join(dir, 'manifest.json')) || !existsSync(join(dir, 'fr
   process.exit(1);
 }
 
-// What the shell is built from (the SDK, the kit), so the stand-in uses the real thing.
-execFileSync('pnpm', ['turbo', 'run', 'build', '--filter=@platform/shell^...', '--output-logs=errors-only'], { cwd: root, stdio: 'inherit' });
+// What the shell is built from (the SDK, the kit), so the stand-in uses the real thing, and Home, where the app's glance card goes.
+execFileSync('pnpm', ['turbo', 'run', 'build', '--filter=@platform/shell^...', '--filter=@platform/home', '--output-logs=errors-only'], { cwd: root, stdio: 'inherit' });
 
 const port = process.env.APP_SERVICE_PORT ?? '8090';
 const children = [];
