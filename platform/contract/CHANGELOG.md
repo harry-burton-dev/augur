@@ -1,5 +1,12 @@
 # @augur/contract-tests
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [972d0ed]
+  - @augur/mfe-sdk@1.2.0
+
 ## 0.1.1
 
 ### Patch Changes

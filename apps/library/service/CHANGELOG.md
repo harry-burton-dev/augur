@@ -1,5 +1,15 @@
 # @apps/library
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [ebb8b97]
+- Updated dependencies [a3ba7ef]
+- Updated dependencies [a09b413]
+- Updated dependencies [b90f63b]
+  - @augur/service-kit@0.5.0
+
 ## 0.1.3
 
 ### Patch Changes

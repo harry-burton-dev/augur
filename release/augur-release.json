@@ -1,17 +1,18 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "channel": "beta",
   "released": "2026-10-23",
   "upgradeFrom": ">=0.1.0",
   "changed": [
     "@augur/mfe-sdk",
     "@augur/service-kit",
-    "@augur/ui-kit",
     "@augur/events",
     "@augur/gateway",
     "@augur/identity",
     "@augur/models",
     "@augur/registry",
+    "@augur/storage",
+    "@augur/updater",
     "@augur/admin",
     "@augur/home",
     "@augur/shell"
@@ -26,6 +27,8 @@
       "TS_AUTHKEY",
       "POSTGRES_PASSWORD",
       "KEYCLOAK_ADMIN_PASSWORD",
+      "GARAGE_RPC_SECRET",
+      "GARAGE_ADMIN_TOKEN",
       "IDENTITY_CLIENT_SECRET",
       "REGISTRY_CLIENT_SECRET",
       "EVENTS_CLIENT_SECRET",
@@ -43,7 +46,16 @@
       "MODEL_API_URL",
       "MODEL_API_KEY",
       "MODEL_NAME",
-      "APP_ORIGINS"
+      "APP_STORAGE",
+      "NOTES_DATABASE_PASSWORD",
+      "NOTES_BUCKET_SECRET",
+      "APP_ORIGINS",
+      "RELEASE_FEED_URL",
+      "RELEASE_CHANNEL",
+      "COMPOSE_PROFILES",
+      "PLATFORM_DIR",
+      "UPDATER_CLIENT_SECRET",
+      "IMAGE_PULL_USER"
     ],
     "required": [
       "PLATFORM_VERSION",
@@ -52,6 +64,8 @@
       "TS_AUTHKEY",
       "POSTGRES_PASSWORD",
       "KEYCLOAK_ADMIN_PASSWORD",
+      "GARAGE_RPC_SECRET",
+      "GARAGE_ADMIN_TOKEN",
       "IDENTITY_CLIENT_SECRET",
       "REGISTRY_CLIENT_SECRET",
       "EVENTS_CLIENT_SECRET",
@@ -64,48 +78,59 @@
       "PLATFORM_ADMIN_DEPARTMENT"
     ],
     "added": [
-      "PLATFORM_VERSION",
-      "PLATFORM_IMAGES",
-      "MODELS_CLIENT_SECRET",
-      "MODEL_API_URL",
-      "MODEL_API_KEY",
-      "MODEL_NAME"
+      "GARAGE_RPC_SECRET",
+      "GARAGE_ADMIN_TOKEN",
+      "APP_STORAGE",
+      "NOTES_DATABASE_PASSWORD",
+      "NOTES_BUCKET_SECRET",
+      "RELEASE_FEED_URL",
+      "RELEASE_CHANNEL",
+      "COMPOSE_PROFILES",
+      "PLATFORM_DIR",
+      "UPDATER_CLIENT_SECRET",
+      "IMAGE_PULL_USER"
     ],
     "removed": []
   },
   "parts": {
     "@augur/mfe-sdk": {
-      "version": "1.1.1"
+      "version": "1.2.0"
     },
     "@augur/service-kit": {
-      "version": "0.4.0"
+      "version": "0.5.0"
     },
     "@augur/ui-kit": {
       "version": "1.1.0"
     },
     "@augur/events": {
-      "version": "0.3.1"
+      "version": "0.4.0"
     },
     "@augur/gateway": {
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     "@augur/identity": {
-      "version": "0.3.1"
+      "version": "0.4.0"
     },
     "@augur/models": {
-      "version": "0.1.0"
+      "version": "0.2.0"
     },
     "@augur/registry": {
-      "version": "0.4.0"
+      "version": "0.5.0"
+    },
+    "@augur/storage": {
+      "version": "0.1.0"
+    },
+    "@augur/updater": {
+      "version": "0.1.0"
     },
     "@augur/admin": {
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     "@augur/home": {
-      "version": "0.2.1"
+      "version": "0.2.2"
     },
     "@augur/shell": {
-      "version": "0.4.0"
+      "version": "0.5.0"
     }
   }
 }
