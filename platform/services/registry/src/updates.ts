@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import semver from 'semver';
 import type { AppRecord } from './store.ts';
 
@@ -19,6 +21,8 @@ export interface ReleaseManifest {
   images?: Record<string, string>;
   /** The release's files in infra/deploy, by path inside it, as sha256; the Release workflow adds it too. */
   deploy?: Record<string, string>;
+  /** Where its notes are; a mirror's feed adds it (scripts/mirror-release.mjs). */
+  notesUrl?: string;
 }
 
 /** One release in the feed. Its manifest is absent when it couldn't be read (or wasn't needed). */
@@ -58,12 +62,23 @@ interface GitHubRelease {
 /**
  * Reads releases from `url`: GitHub's releases API (the `augur@<version>` ones, with their
  * augur-release.json asset) or a mirror's JSON, which is a list of release files or `{ releases: [...] }`.
+ * A mirror's feed can be a file on the server too (`file:///…`), for one that can't reach any web server.
  * On GitHub a release marked pre-release is beta; promoting it to stable is unticking that.
  */
 export const releaseFeed =
   ({ url, token, fetchImpl = (...args) => fetch(...args) }: { url: string; token?: string; fetchImpl?: typeof fetch }): ReleaseFeed =>
   async (running) => {
     const get = async (target: string, accept: string) => {
+      if (target.startsWith('file:')) {
+        const text = await readFile(fileURLToPath(target), 'utf8').catch(() => {
+          throw new FeedProblem(`The release feed file ${fileURLToPath(target)} can’t be read. Check RELEASE_FEED_URL and that it’s mounted (docs/mirror.md).`);
+        });
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
+          throw new FeedProblem('The release feed file isn’t JSON. Check RELEASE_FEED_URL.');
+        }
+      }
       let res: Response;
       try {
         res = await fetchImpl(target, {
@@ -94,7 +109,7 @@ export const releaseFeed =
 
     if (items.some(isManifest)) {
       // A mirror: the release files themselves.
-      return items.filter(isManifest).map((m) => ({ version: m.version, channel: m.channel === 'stable' ? 'stable' : 'beta', released: m.released, manifest: m }));
+      return items.filter(isManifest).map((m) => ({ version: m.version, channel: m.channel === 'stable' ? 'stable' : 'beta', released: m.released, ...(m.notesUrl ? { notesUrl: m.notesUrl } : {}), manifest: m }));
     }
 
     const releases = (items as GitHubRelease[])

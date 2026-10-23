@@ -8,3 +8,4 @@ coverage/
 !.env.example
 infra/deploy/backups/
 infra/deploy/secrets/
+infra/deploy/releases/

@@ -1,3 +1,7 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
@@ -77,6 +81,14 @@ describe('the release feed', () => {
       ['0.3.0', 'stable'],
       ['0.2.0', 'beta'],
     ]);
+  });
+
+  it('reads a mirror’s feed from a file on the server, with each release’s notes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'feed-'));
+    writeFileSync(join(dir, 'releases.json'), JSON.stringify({ releases: [manifest('0.3.0', { notesUrl: 'https://github.com/o/r/releases/tag/augur@0.3.0' })] }));
+    const releases = await releaseFeed({ url: pathToFileURL(join(dir, 'releases.json')).href })('0.2.0');
+    expect(releases).toMatchObject([{ version: '0.3.0', notesUrl: 'https://github.com/o/r/releases/tag/augur@0.3.0' }]);
+    await expect(releaseFeed({ url: pathToFileURL(join(dir, 'missing.json')).href })('0.2.0')).rejects.toThrow(/can’t be read/);
   });
 
   it('says what to do when a private feed refuses it', async () => {

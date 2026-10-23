@@ -197,6 +197,8 @@ services:
     volumes:
       # A read-only token for a private release feed, as secrets/release-feed-token (docs/upgrade.md).
       - ./secrets:/run/secrets/augur:ro
+      # A mirror's feed kept on this server, for RELEASE_FEED_URL=file:///run/augur/releases/releases.json (docs/mirror.md).
+      - ./releases:/run/augur/releases:ro
 
   events:
     <<: *service
