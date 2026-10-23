@@ -1,6 +1,6 @@
 import type { AppManifestEntry } from '@platform/mfe-sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { devUser, standInFetch } from './standin.js';
+import { devHome, devUser, standInFetch } from './standin.js';
 
 const app: AppManifestEntry = { id: 'hello', name: 'Hello', route: '/hello', entry: '/@fs/apps/hello/frontend/src/entry.ts', version: '0.0.0', sdk: '^1.0.0', requiredRole: 'editor' };
 
@@ -10,9 +10,10 @@ describe('the stand-in platform', () => {
     expect(devUser({ ...app, requiredRole: undefined }).roles).toEqual([]);
   });
 
-  it('lists only the app being developed', async () => {
+  it('lists Home and the app being developed', async () => {
     const res = await standInFetch(app)('/api/registry/v1/manifest');
-    expect(await res.json()).toEqual([app]);
+    expect(await res.json()).toEqual([devHome, app]);
+    expect(await (await standInFetch(devHome)('/api/registry/v1/manifest')).json()).toEqual([devHome]);
   });
 
   it('keeps preferences until the page reloads', async () => {

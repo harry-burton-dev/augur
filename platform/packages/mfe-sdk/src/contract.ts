@@ -29,6 +29,29 @@ export interface AppManifestEntry {
    * Without one, the app opens straight away.
    */
   menu?: AppMenuCategory[];
+  /** The kinds of floor the app works on. Without it, every kind. */
+  floors?: WorkspaceKind[];
+  /**
+   * What the app shows on each kind of floor, for the shell to place. Each
+   * names a `module`: a key of the entry's `surfaces` (SDK 1.2).
+   */
+  surfaces?: ManifestSurface[];
+}
+
+/**
+ * One thing an app shows on one kind of floor. The shell places `card`s on
+ * Home (SDK 1.2); the other slots are declared and checked, and placed later.
+ */
+export interface ManifestSurface {
+  /** "team" means any team, at any depth. */
+  floor: WorkspaceKind;
+  slot: 'page' | 'card' | 'panel' | 'settings' | 'admin';
+  /** The key in the entry's `surfaces` that draws it, e.g. "./TeamClaims". */
+  module: string;
+  /** Only for people with this role on the floor. */
+  role?: 'member' | 'lead';
+  /** Shows this floor and the teams below it that the person is on. */
+  rollup?: boolean;
 }
 
 /** One way into an app, shown in its menu. */
@@ -166,6 +189,23 @@ export interface IntentReply {
 }
 
 export interface MicroFrontend {
+  mount(el: HTMLElement, ctx: MountContext): void | Promise<void>;
+  unmount?(el: HTMLElement): void | Promise<void>;
+  /**
+   * The app's smaller pieces the shell places outside the app itself, by the
+   * `module` its manifest's `surfaces` name (SDK 1.2): a glance card on Home,
+   * for one. Each is mounted with the same context as the app, at path `/`.
+   */
+  surfaces?: Record<string, Surface>;
+}
+
+/**
+ * Something an app draws in a place the shell owns. A `card` fills a tile of
+ * about 320 by 200 pixels: a few facts and one way in (`ctx.raise` or a link),
+ * never a whole screen. It must render quickly and never block: Home mounts
+ * up to six at once.
+ */
+export interface Surface {
   mount(el: HTMLElement, ctx: MountContext): void | Promise<void>;
   unmount?(el: HTMLElement): void | Promise<void>;
 }

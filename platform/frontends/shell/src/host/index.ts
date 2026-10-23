@@ -8,3 +8,4 @@ export { NotificationFeed, fromServer, parseEvents, type ServerNotification } fr
 export { screenFor, titleMenu, titleTarget, orbitMenu, backFrom, escapeIsFree, findPages, type Screen } from './menus.js';
 export { PreferenceSync, applyPreferences, type Preferences } from './preferences.js';
 export { floorFromPath, floorHref, floorBySlug, ownFloor, loadFloors, FloorsError, type FloorLocation } from './floors.js';
+export { HOME_CHANNEL, MAX_CARDS, needsFor, cardOf, cardsFor, SurfaceMounter, type HomeNeed, type HomeCard, type HomeState } from './home.js';

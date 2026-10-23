@@ -115,6 +115,7 @@ const isTyping = (e: Event) => {
  * @fires ui-open-app - detail `{ id }`
  * @fires ui-open-notification - detail `{ notification }`
  * @fires ui-notification-action - detail `{ notification, index }` when one of its actions is pressed; the Shell closes and the host does it
+ * @fires ui-notifications - detail `{ notifications, muted }` after either changed, however it changed, for a host that shows them elsewhere too
  * @fires ui-mute - detail `{ app, muted }` when an app's group is muted or unmuted; the Shell has updated `muted`
  * @fires ui-dismiss - detail `{ ids }` when notifications are dismissed or cleared; the host may mark them read
  * @fires ui-restore - detail `{ ids }` when Undo brings them back
@@ -448,6 +449,7 @@ export class UiShell extends LitElement {
   }
 
   override async updated(changed: Map<string, unknown>) {
+    if (changed.has('notifications') || changed.has('muted')) this.emit('ui-notifications', { notifications: this.notifications, muted: this.muted });
     const stage = this.renderRoot.querySelector<HTMLElement>('.stage');
     if (stage) stage.inert = this.isOpen;
     if (changed.has('isOpen') && this.isOpen && !this.view) {

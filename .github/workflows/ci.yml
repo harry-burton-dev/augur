@@ -76,7 +76,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run build --filter=@platform/contract-tests...
+      - run: pnpm turbo run build --filter=@platform/contract-tests... --filter=@platform/home
       - run: pnpm --filter @platform/contract-tests exec playwright install --with-deps chromium
       - run: pnpm --filter @platform/contract-tests test:contract
 

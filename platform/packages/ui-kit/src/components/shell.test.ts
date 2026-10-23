@@ -132,6 +132,18 @@ describe('ui-shell', () => {
     expect(root().querySelector('.status')!.textContent).toContain('All quiet');
   });
 
+  it('says when its notifications or mutes change, however they changed', async () => {
+    const seen: number[] = [];
+    el.addEventListener('ui-notifications', (e) => seen.push((e as CustomEvent).detail.notifications.length));
+    el.notify(note('a', 'info'));
+    await el.updateComplete;
+    el.dismiss('a');
+    await el.updateComplete;
+    el.setMuted('library', true);
+    await el.updateComplete;
+    expect(seen).toEqual([1, 0, 0]);
+  });
+
   it('mutes and unmutes an app from its group menu', async () => {
     const seen: string[] = [];
     el.addEventListener('ui-mute', (e) => seen.push(`${(e as CustomEvent).detail.app} ${(e as CustomEvent).detail.muted}`));
