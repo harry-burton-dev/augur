@@ -9,7 +9,7 @@ import { createRemoteJWKSet, errors, jwtVerify, type JWTVerifyGetKey } from 'jos
  */
 
 /** What an app can be granted. An app always may register itself; everything else it asks for in its manifest's `scopes`. */
-export const SCOPES = ['notifications:send', 'audit:write', 'models:use'] as const;
+export const SCOPES = ['notifications:send', 'audit:write', 'models:use', 'events:publish', 'events:subscribe'] as const;
 export type Scope = (typeof SCOPES)[number];
 
 /** The audience every app and platform service token is issued for. */

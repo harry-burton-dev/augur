@@ -91,6 +91,26 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect(await store.audit({ limit: 10, until: '2000-01-01T00:00:00.000Z' })).toEqual([]);
     expect(await store.audit({ limit: 10, since: '2000-01-01T00:00:00.000Z', until: '2999-01-01T00:00:00.000Z' })).toHaveLength(5);
   });
+
+  it('keeps domain events once per publisher id, and hands them out in order by topic', async () => {
+    const finance = { id: 'w-finance', path: ['w-org', 'w-finance'] };
+    expect(await store.publish('folio', [
+      { topic: 'folio.document.published', id: 'e1', payload: { document: 'd1' }, floor: finance },
+      { topic: 'folio.document.withdrawn', id: 'e2', payload: { document: 'd1' } },
+    ])).toEqual({ added: 2, repeated: 0 });
+    expect(await store.publish('folio', [{ topic: 'folio.document.published', id: 'e1', payload: {} }])).toEqual({ added: 0, repeated: 1 });
+    await store.publish('notes', [{ topic: 'notes.note.added', id: 'e1', payload: null }]);
+    // In Postgres an event shows once every transaction older than it has finished, which other tests' may not have yet.
+    await expect.poll(async () => (await store.readEvents({ topics: ['folio.*', 'notes.note.added'], limit: 10 })).length).toBe(3);
+    const all = await store.readEvents({ topics: ['folio.*', 'notes.note.added'], limit: 10 });
+    expect(all.map((e) => [e.publisher, e.id])).toEqual([['folio', 'e1'], ['folio', 'e2'], ['notes', 'e1']]);
+    expect(all[0]).toMatchObject({ topic: 'folio.document.published', payload: { document: 'd1' }, workspace: finance, at: expect.any(String) });
+    expect((await store.readEvents({ topics: ['folio.document.published'], limit: 10 })).map((e) => e.id)).toEqual(['e1']);
+    expect((await store.readEvents({ topics: ['folio.*'], after: all[0].seq, limit: 10 })).map((e) => e.id)).toEqual(['e2']);
+    expect(await store.readEvents({ topics: ['folio.*'], after: all[2].seq, limit: 10 })).toEqual([]);
+    expect(await store.pruneEvents(30)).toBe(0);
+    expect(await store.pruneEvents(-1)).toBe(3);
+  });
 };
 
 describe('MemoryEventStore', () => behavesLikeAStore(() => new MemoryEventStore()));
@@ -116,7 +136,7 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate events.notifications, events.audit, events.team_notices');
+      await admin.query('truncate events.notifications, events.audit, events.team_notices, events.domain_events');
     },
   );
 
@@ -134,5 +154,20 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
     await store.addNotifications({ ...review, recipients: ['u-9'] });
     await expect.poll(() => heard.map((n) => n.recipient)).toEqual(['u-9']);
     stop();
+  });
+
+  it('never hands out an event while an earlier one could still commit below it', async () => {
+    const slow = await admin.connect();
+    try {
+      // A publisher's transaction takes a seq and stays open, as a slow outbox relay's might.
+      await slow.query('begin');
+      await slow.query(`insert into events.domain_events (topic, id, publisher, payload) values ('folio.document.published', 'slow', 'folio', '{}')`);
+      await store.publish('folio', [{ topic: 'folio.document.published', id: 'fast', payload: {} }]);
+      expect(await store.readEvents({ topics: ['folio.*'], limit: 10 })).toEqual([]);
+      await slow.query('commit');
+      await expect.poll(async () => (await store.readEvents({ topics: ['folio.*'], limit: 10 })).map((e) => e.id)).toEqual(['slow', 'fast']);
+    } finally {
+      slow.release();
+    }
   });
 });

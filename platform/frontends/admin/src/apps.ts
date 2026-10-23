@@ -30,6 +30,8 @@ export const SCOPE_WORDS: Record<string, string> = {
   'notifications:send': 'Notify people',
   'audit:write': 'Write to the activity log',
   'models:use': 'Use AI models',
+  'events:publish': 'Tell other services what happened',
+  'events:subscribe': 'Hear what other services did',
 };
 
 /** What an app may do on the platform, as a fact's value. */

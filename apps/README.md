@@ -14,6 +14,10 @@ A manifest carries two versions. `version` is the app's release; don't edit it, 
 
 An app without a service (frontend only) is registered by `pnpm register-app <manifest.json>`, which does the same with `REGISTRY_URL`, `OIDC_TOKEN_URL` and the app's `SERVICE_CLIENT_SECRET`.
 
+## Telling other services
+
+When something happens that other services may care about (a document published), an app's service publishes a domain event on its own topic, and follows the platform's (`platform.team.member-removed`) to keep up. See [Domain events](../docs/domain-events.md).
+
 ## Asking another app
 
 To get something from another app, such as a document picked from the Library, an app raises an intent through its mount context rather than calling that app. See [platform/frontends](../platform/frontends/README.md#apps-asking-each-other).

@@ -20,7 +20,7 @@ import {
   type ServiceIdentity,
   type ServiceVerifier,
 } from '@augur/service-kit';
-import { MemoryEventStore, type EventFloor, type EventStore, type Notification } from './store.ts';
+import { MemoryEventStore, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -94,6 +94,53 @@ const auditSchema = {
   },
 } as const;
 
+/** A topic: the publisher's id, then what happened, dotted: "folio.document.published". */
+const TOPIC = '^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$';
+/** Each event carries ids and a little context; anything bigger is fetched from the publisher's API. */
+const EVENT_PAYLOAD_BYTES = 16 * 1024;
+
+const publishSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['events'],
+  properties: {
+    events: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 100,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['topic', 'id', 'payload'],
+        properties: {
+          topic: { type: 'string', pattern: TOPIC, maxLength: 120 },
+          id: { type: 'string', minLength: 1, maxLength: 100 },
+          workspace: { type: 'string', minLength: 1, maxLength: 100 },
+          payload: {},
+        },
+      },
+    },
+  },
+} as const;
+
+type PublishBody = { events: { topic: string; id: string; workspace?: string; payload: unknown }[] };
+
+/**
+ * The platform's own domain events, published as identity and the registry record
+ * the change in the audit log, so the two can't disagree. Keyed by "<service> <action>".
+ */
+const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntry) => Record<string, unknown> }> = {
+  'identity person.disabled': { topic: 'platform.person.disabled', payload: (e) => ({ person: e.target }) },
+  'identity person.enabled': { topic: 'platform.person.enabled', payload: (e) => ({ person: e.target }) },
+  'identity department.created': { topic: 'platform.team.created', payload: (e) => ({ team: e.target, name: e.detail?.name }) },
+  'identity department.renamed': { topic: 'platform.team.renamed', payload: (e) => ({ team: e.target, name: e.detail?.to }) },
+  'identity department.member-added': { topic: 'platform.team.member-added', payload: (e) => ({ team: e.target, person: e.detail?.person }) },
+  'identity department.member-removed': { topic: 'platform.team.member-removed', payload: (e) => ({ team: e.target, person: e.detail?.person }) },
+  'registry app.disabled': { topic: 'platform.app.turned-off', payload: (e) => ({ app: e.target }) },
+  'registry app.enabled': { topic: 'platform.app.turned-on', payload: (e) => ({ app: e.target }) },
+  'registry app.removed': { topic: 'platform.app.removed', payload: (e) => ({ app: e.target }) },
+};
+
 /** The floor a service call names in X-Workspace-Id, URI-decoded; a value that won't decode is kept as sent, and fails as an unknown floor. */
 const workspaceOf = (req: FastifyRequest) => {
   const raw = req.headers[WORKSPACE_HEADERS.id];
@@ -129,7 +176,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
        * The service sending this, when it may: a platform service always; an
        * app only for itself, and only with the scope on the floor it names.
        */
-      const fromService = async (req: FastifyRequest, reply: FastifyReply, forApp: string, scope: Scope): Promise<ServiceIdentity | undefined> => {
+      const fromService = async (req: FastifyRequest, reply: FastifyReply, forApp: string | undefined, scope: Scope): Promise<ServiceIdentity | undefined> => {
         let service: ServiceIdentity | undefined;
         try {
           service = await identifyService(req.headers, verifyService);
@@ -143,7 +190,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
           return undefined;
         }
         if (service.kind === 'platform') return service;
-        if (service.app !== forApp) {
+        if (forApp !== undefined && service.app !== forApp) {
           void reply.code(403).send({ error: 'forbidden', message: `${service.app} can only send for itself, not for "${forApp}".` });
           return undefined;
         }
@@ -277,13 +324,79 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         });
       });
 
+      // ---- domain events: what services tell each other ----
+
+      // A service publishes on its own topics only: an app on "<its id>.*", platform services on "platform.*".
+      app.post<{ Body: PublishBody }>('/domain-events', { schema: { body: publishSchema } }, async (req, reply) => {
+        const owner = req.body.events[0].topic.split('.')[0];
+        const stray = req.body.events.find((e) => !e.topic.startsWith(`${owner}.`));
+        if (stray) return reply.code(400).send({ error: 'bad_request', message: `Every event in one call is on the same publisher's topics; "${stray.topic}" isn't under "${owner}.".` });
+        const big = req.body.events.find((e) => Buffer.byteLength(JSON.stringify(e.payload ?? null)) > EVENT_PAYLOAD_BYTES);
+        if (big) return reply.code(400).send({ error: 'bad_request', message: `The payload of event ${big.id} is over ${EVENT_PAYLOAD_BYTES} bytes. Send ids and let followers ask for the rest.` });
+        const service = await fromService(req, reply, owner === 'platform' ? undefined : owner, 'events:publish');
+        if (!service) return reply;
+        if ((service.kind === 'platform') !== (owner === 'platform')) {
+          return reply.code(403).send({ error: 'forbidden', message: service.kind === 'platform' ? 'Platform services publish on "platform." topics.' : '"platform." topics belong to the platform.' });
+        }
+        const places = new Map<string, EventFloor>();
+        for (const id of new Set(req.body.events.flatMap((e) => (e.workspace ? [e.workspace] : [])))) {
+          try {
+            if (!floors) throw new FloorsUnavailable('The events service has no way to reach identity.');
+            const place = await floors(id);
+            if (!place) return reply.code(400).send({ error: 'bad_request', message: `There is no floor ${id}.` });
+            places.set(id, { id: place.id, path: place.path });
+          } catch (err) {
+            if (!(err instanceof FloorsUnavailable)) throw err;
+            return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now. Try again in a moment.' });
+          }
+        }
+        const events: NewDomainEvent[] = req.body.events.map((e) => ({ topic: e.topic, id: e.id, payload: e.payload, floor: e.workspace ? places.get(e.workspace) : undefined }));
+        const result = await store.publish(serviceName(service), events);
+        req.log.info({ service: serviceName(service), ...result }, 'domain events published');
+        return reply.code(202).send(result);
+      });
+
+      // Followers read in seq order from where they left off, and keep their own place: at least once, in order.
+      app.get<{ Querystring: { topics: string; after?: string; limit?: number } }>(
+        '/domain-events',
+        {
+          schema: {
+            querystring: {
+              type: 'object',
+              required: ['topics'],
+              properties: {
+                topics: { type: 'string', minLength: 1, maxLength: 2000 },
+                after: { type: 'string', pattern: '^[0-9]+$', maxLength: 19 },
+                limit: { type: 'integer', minimum: 1, maximum: 500 },
+              },
+            },
+          },
+        },
+        async (req, reply) => {
+          const topics = req.query.topics.split(',').map((t) => t.trim()).filter(Boolean);
+          const bad = topics.find((t) => !new RegExp(TOPIC).test(t.endsWith('.*') ? `${t.slice(0, -2)}.x` : t));
+          if (bad) return reply.code(400).send({ error: 'bad_request', message: `"${bad}" is not a topic, or a family of topics such as "folio.*".` });
+          if (!(await fromService(req, reply, undefined, 'events:subscribe'))) return reply;
+          const limit = req.query.limit ?? 100;
+          const events = await store.readEvents({ topics, after: req.query.after, limit });
+          return { events, next: events.at(-1)?.seq ?? req.query.after ?? '0' };
+        },
+      );
+
       // ---- audit log ----
 
       app.post<{ Body: NewAuditEntry }>('/audit', { schema: { body: auditSchema } }, async (req, reply) => {
-        if (!(await fromService(req, reply, req.body.app, 'audit:write'))) return reply;
+        const service = await fromService(req, reply, req.body.app, 'audit:write');
+        if (!service) return reply;
         const floor = await floorOf(req, reply);
         if (floor === undefined) return reply;
-        return reply.code(201).send(await store.appendAudit(req.body, floor ? { id: floor.id, path: floor.path } : undefined));
+        const place = floor ? { id: floor.id, path: floor.path } : undefined;
+        const entry = await store.appendAudit(req.body, place);
+        const platformEvent = service.kind === 'platform' ? PLATFORM_EVENTS[`${req.body.app} ${req.body.action}`] : undefined;
+        if (platformEvent) {
+          await store.publish(req.body.app, [{ topic: platformEvent.topic, id: `audit-${entry.id}`, payload: platformEvent.payload(req.body), floor: place }]);
+        }
+        return reply.code(201).send(entry);
       });
 
       app.get<{ Querystring: { app?: string; actor?: string; since?: string; until?: string; before?: string; workspace?: string; limit?: number } }>(

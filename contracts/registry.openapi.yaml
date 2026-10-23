@@ -598,8 +598,8 @@ components:
         rollup: { type: boolean, description: Shows the floor and the teams below it the person is on (identity's roll-up) }
     Scope:
       type: string
-      enum: [notifications:send, audit:write, models:use]
-      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit)."
+      enum: [notifications:send, audit:write, models:use, events:publish, events:subscribe]
+      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic."
     AppMenuCategory:
       type: object
       required: [label, items]

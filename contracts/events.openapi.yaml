@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.5.0
+  version: 1.6.0
   description: >
     Notifications for the Shell's stream, and the platform's audit log.
     People reach it through the gateway, which passes the caller in x-user-*
@@ -141,6 +141,61 @@ paths:
         "400": { description: Invalid entry, or an unknown floor }
         "403": { description: Not a signed-in service, or not granted this }
         "503": { description: Floors or grants can't be checked right now }
+  /domain-events:
+    post:
+      summary: Publish domain events (services only)
+      description: >
+        An app publishes on its own topics ("<app id>.<what happened>") with the
+        events:publish scope; platform services on "platform.*". Every event in
+        one call is on the same publisher's topics. An event whose id the
+        publisher already sent is kept once. Payloads are at most 16 KB: ids and a
+        little context, never content a follower might not be allowed to see.
+        The events service itself publishes platform.person.*, platform.team.*
+        and platform.app.* as identity and the registry record those changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { $ref: "#/components/schemas/NewDomainEvent" }
+      responses:
+        "202":
+          description: Kept
+          content:
+            application/json:
+              schema: { type: object, properties: { added: { type: integer }, repeated: { type: integer } } }
+        "400": { description: "A topic outside the publisher's, an unknown floor, or a payload over 16 KB" }
+        "403": { description: "Not a service, not this publisher's topics, or no events:publish scope" }
+    get:
+      summary: Read domain events in order (services only, events:subscribe)
+      description: >
+        Events on the topics asked for, in the one order every follower reads
+        in. Keep the last `seq` handled and pass it as `after`: delivery is at
+        least once, never with a gap. Events are kept 30 days
+        (DOMAIN_EVENTS_KEEP_DAYS).
+      parameters:
+        - { name: topics, in: query, required: true, schema: { type: string }, description: "Comma separated topics, or families such as folio.*" }
+        - { name: after, in: query, schema: { type: string, pattern: "^[0-9]+$" } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200":
+          description: The next events, and the cursor after them
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events: { type: array, items: { $ref: "#/components/schemas/DomainEvent" } }
+                  next: { type: string }
+        "403": { description: "Not a service, or no events:subscribe scope" }
 components:
   schemas:
     NewNotification:
@@ -224,3 +279,23 @@ components:
       properties:
         workspace: { type: string }
         on: { type: boolean }
+    NewDomainEvent:
+      type: object
+      additionalProperties: false
+      required: [topic, id, payload]
+      properties:
+        topic: { type: string, pattern: "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$", example: folio.document.published }
+        id: { type: string, maxLength: 100, description: "The publisher's own id for it" }
+        workspace: { type: string, description: The floor it happened on }
+        payload: {}
+    DomainEvent:
+      type: object
+      required: [seq, topic, id, publisher, at, payload]
+      properties:
+        seq: { type: string }
+        topic: { type: string }
+        id: { type: string }
+        publisher: { type: string }
+        at: { type: string, format: date-time }
+        workspace: { type: object, properties: { id: { type: string }, path: { type: array, items: { type: string } } } }
+        payload: {}
