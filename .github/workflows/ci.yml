@@ -33,6 +33,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:boundaries
       - run: pnpm check:versions
+      - run: pnpm check:release
+      - run: pnpm test:scripts
       - name: Every change says how it is released
         if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
         run: pnpm changeset status --since=origin/${{ github.base_ref }}

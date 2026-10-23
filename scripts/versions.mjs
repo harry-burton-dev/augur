@@ -6,6 +6,7 @@
 // What this covers:
 //   - the SDK's SDK_VERSION constant (platform/packages/mfe-sdk/src/version.ts)
 //   - each app's manifest.json `version`, from its frontend package (or its service when it has no frontend)
+//   - the platform's own apps' versions in the registry (Home and Admin), from their frontend packages
 //   - each app's manifest `sdk` range, which must be valid and include the current SDK
 //   - each OpenAPI contract: its info.version major is its server path (/v1) and the service's API_VERSION
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -44,6 +45,19 @@ expectFile(
 export const SDK_VERSION = '${sdkVersion}';
 `,
   `SDK_VERSION is not ${sdkVersion}`,
+);
+
+// ---- the platform's own apps, which the registry lists from code ----
+
+const platformAppVersions = Object.fromEntries(['home', 'admin'].map((id) => [id, readJson(`platform/frontends/${id}/package.json`).version]));
+expectFile(
+  'platform/services/registry/src/platform-app-versions.ts',
+  `// Written by scripts/versions.mjs from each frontend's package.json; don't edit by hand.
+
+/** The releases of the platform's own apps, which ship with the platform rather than registering themselves. */
+export const PLATFORM_APP_VERSIONS = { ${Object.entries(platformAppVersions).map(([id, v]) => `${id}: '${v}'`).join(', ')} } as const;
+`,
+  `the platform apps' versions are not ${JSON.stringify(platformAppVersions)}`,
 );
 
 // ---- apps' manifests ----

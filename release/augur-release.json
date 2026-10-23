@@ -1,0 +1,92 @@
+{
+  "version": "0.1.0",
+  "channel": "beta",
+  "released": "2026-10-23",
+  "upgradeFrom": ">=0.1.0",
+  "changed": [
+    "@augur/mfe-sdk",
+    "@augur/service-kit",
+    "@augur/ui-kit",
+    "@augur/events",
+    "@augur/gateway",
+    "@augur/identity",
+    "@augur/registry",
+    "@augur/admin",
+    "@augur/home",
+    "@augur/shell"
+  ],
+  "breaking": [],
+  "settings": {
+    "all": [
+      "PLATFORM_URL",
+      "TS_HOSTNAME",
+      "TS_AUTHKEY",
+      "POSTGRES_PASSWORD",
+      "KEYCLOAK_ADMIN_PASSWORD",
+      "IDENTITY_CLIENT_SECRET",
+      "REGISTRY_CLIENT_SECRET",
+      "EVENTS_CLIENT_SECRET",
+      "PLATFORM_ADMIN_USER",
+      "PLATFORM_ADMIN_PASSWORD",
+      "PLATFORM_ADMIN_EMAIL",
+      "PLATFORM_ADMIN_FIRST_NAME",
+      "PLATFORM_ADMIN_LAST_NAME",
+      "PLATFORM_ADMIN_DEPARTMENT",
+      "ORG_NAME",
+      "BACKUP_HOUR_UTC",
+      "BACKUP_KEEP_DAYS",
+      "RESTORE_TEST_WEEKDAY",
+      "APP_ORIGINS"
+    ],
+    "required": [
+      "PLATFORM_URL",
+      "TS_HOSTNAME",
+      "TS_AUTHKEY",
+      "POSTGRES_PASSWORD",
+      "KEYCLOAK_ADMIN_PASSWORD",
+      "IDENTITY_CLIENT_SECRET",
+      "REGISTRY_CLIENT_SECRET",
+      "EVENTS_CLIENT_SECRET",
+      "PLATFORM_ADMIN_USER",
+      "PLATFORM_ADMIN_PASSWORD",
+      "PLATFORM_ADMIN_EMAIL",
+      "PLATFORM_ADMIN_FIRST_NAME",
+      "PLATFORM_ADMIN_LAST_NAME",
+      "PLATFORM_ADMIN_DEPARTMENT"
+    ],
+    "added": [],
+    "removed": []
+  },
+  "parts": {
+    "@augur/mfe-sdk": {
+      "version": "1.1.0"
+    },
+    "@augur/service-kit": {
+      "version": "0.3.0"
+    },
+    "@augur/ui-kit": {
+      "version": "1.0.0"
+    },
+    "@augur/events": {
+      "version": "0.3.0"
+    },
+    "@augur/gateway": {
+      "version": "0.2.0"
+    },
+    "@augur/identity": {
+      "version": "0.3.0"
+    },
+    "@augur/registry": {
+      "version": "0.3.0"
+    },
+    "@augur/admin": {
+      "version": "0.2.0"
+    },
+    "@augur/home": {
+      "version": "0.2.0"
+    },
+    "@augur/shell": {
+      "version": "0.3.0"
+    }
+  }
+}
