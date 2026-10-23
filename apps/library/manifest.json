@@ -3,7 +3,7 @@
   "name": "Library",
   "route": "/library",
   "entry": "/apps/library/entry.js",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "sdk": "^1.0.0",
   "description": "Document libraries and publishing",
   "icon": "library",
