@@ -61,6 +61,15 @@ When the release bumps the SDK's minor, keep the reference app built against it 
 
 To do the same by hand: `pnpm version-packages`, review, commit, merge, then `pnpm release && git push --follow-tags`.
 
+### Database migrations
+
+A server can always go back to the release before the one it's on, so its tables must still work for that release. Two rules, checked in CI by `pnpm check:migrations` (after `pnpm build`):
+
+- **A migration that shipped in a release never changes and is never removed.** Servers have run it. Fix forward with a new migration.
+- **Within a major version, migrations only add**: new tables, new columns with a default, new indexes. A migration that drops, renames, truncates, deletes rows, changes a column's type or makes a column required needs a **major** changeset for its service. That makes the AUGUR release breaking, so nobody skips the release before it. The usual way is to expand, then contract: add the new column and use it in one release, then remove the old one in a later major.
+
+Each service's migrations are the `migrations` export of its `src/store.ts`. After adding one, run `pnpm build && pnpm sync:migrations` and commit `release/migrations.lock.json`, which records each migration's fingerprint; the released one is compared against it.
+
 ## HTTP APIs
 
 Each service serves its API under its major version: the registry's manifest is `GET /v1/manifest`, or `GET /api/registry/v1/manifest` through the gateway. The contract in `contracts/` says the same in `servers: [{ url: /v1 }]` and `info.version: 1.x.y`, and the service's `API_VERSION` constant is `'v1'`. `pnpm check:versions` fails if the three disagree.

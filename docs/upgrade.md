@@ -11,22 +11,27 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 1. **Read what changed.** The GitHub release for the AUGUR version you're moving to, `augur@<version>` under Releases, gathers every part's changes, any breaking change and any new setting, and says which versions it upgrades from. If you're more than one release behind and it lists a breaking change, go to the release before it first. Each package's `CHANGELOG.md` has the detail. Look for these, which mean you have something to do:
    - **major** on a service or contract: a caller has to change. The platform's own frontends move with it, but anything you've built against that API needs checking ([versioning.md](versioning.md)).
    - a new or renamed setting in `infra/deploy/.env.example`: copy it into your `.env` before starting.
-   - "migration" on a service: it changes its database tables when it starts. Migrations only add; none removes data.
-2. **Check Admin → Status.** Everything should be Running and the heading shouldn't say "Backups need a look". Fix that first, so a problem afterwards is clearly the upgrade's.
-3. **Take a backup and test it**, so you can go back:
+   - "migration" on a service: it changes its database tables when it starts. Within a major version migrations only add (CI holds every change to that), so the release before still runs on them.
+2. **Check the server can take it.** Check out the release's deploy files and run its preflight, which needs nothing installed but Docker:
+   ```sh
+   git fetch --tags && git checkout augur@<version>
+   docker run --rm -v "$PWD:/augur:ro" -w /augur node:22-alpine node scripts/preflight.mjs
+   ```
+   It reads your `.env`. It stops you if your version can't upgrade straight to this one (and names the release to go through first) or a setting this release needs isn't set, and it lists what the release breaks. Run it again until it says **Ready**.
+3. **Check Admin → Status.** Everything should be Running and the heading shouldn't say "Backups need a look". Fix that first, so a problem afterwards is clearly the upgrade's.
+4. **Take a backup and test it**, so you can go back:
    ```sh
    rm -f infra/deploy/backups/platform-$(date -u +%Y-%m-%d).sql.gz   # today's, so a fresh one is taken
    pc exec backup /bin/sh /backup/backup.sh --once
    pc exec backup /bin/sh /backup/backup.sh --restore-test
    ```
    The last line ends with `restored and checked`. If it says FAILED, stop and look at why before upgrading.
-4. **Note where you are**: the `PLATFORM_VERSION` in your `.env`. That's what you'd go back to.
+5. **Note where you are**: the `PLATFORM_VERSION` in your `.env`. That's what you'd go back to.
 
 ## Upgrade
 
 ```sh
-v=0.1.2                                   # the release you're moving to
-git fetch --tags && git checkout augur@$v  # its deploy files
+v=0.1.2                                   # the release you checked out for the preflight
 sed -i "s/^PLATFORM_VERSION=.*/PLATFORM_VERSION=$v/" infra/deploy/.env
 pc pull && pc up -d --remove-orphans
 ```

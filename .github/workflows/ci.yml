@@ -41,6 +41,7 @@ jobs:
       - run: pnpm build
       # Every app's manifest, against the registry's own rules.
       - run: pnpm check:manifest
+      - run: pnpm check:migrations
       - run: pnpm typecheck
       - run: pnpm test
         env:
