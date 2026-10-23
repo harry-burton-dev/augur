@@ -1,5 +1,19 @@
 # @augur/models
 
+## 0.2.0
+
+### Minor Changes
+
+- b90f63b: Signed caller: the gateway signs the person it passes on (`x-augur-caller`, Ed25519, one minute, one service as audience) and publishes its key at `/api/gateway/v1/caller-keys`. The service kit's `signedCallers` hook drops unsigned `x-user-*` headers and puts back only the signed caller; the platform's services and new apps use it.
+
+### Patch Changes
+
+- Updated dependencies [ebb8b97]
+- Updated dependencies [a3ba7ef]
+- Updated dependencies [a09b413]
+- Updated dependencies [b90f63b]
+  - @augur/service-kit@0.5.0
+
 ## 0.1.0
 
 ### Minor Changes

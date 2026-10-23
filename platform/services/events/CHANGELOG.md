@@ -1,5 +1,20 @@
 # @augur/events
 
+## 0.4.0
+
+### Minor Changes
+
+- a09b413: Domain events: services tell each other what happened. The events service keeps events on topics (`folio.document.published`), which an app publishes on its own topics with the new `events:publish` scope, and hands them out in one order, never with a gap, to services with `events:subscribe`. It publishes the platform's own (`platform.person.disabled`, `platform.team.member-added`, `platform.app.turned-off` and more) as identity and the registry record those changes. The service kit adds an outbox (`OUTBOX_TABLE_SQL`, `addToOutbox`, `outboxRelay`) so an event is sent if and only if its change commits, `followEvents` for followers, `publishEvents` and `PLATFORM_TOPICS`. Admin names the two new scopes. Events are kept 30 days. See docs/domain-events.md.
+- b90f63b: Signed caller: the gateway signs the person it passes on (`x-augur-caller`, Ed25519, one minute, one service as audience) and publishes its key at `/api/gateway/v1/caller-keys`. The service kit's `signedCallers` hook drops unsigned `x-user-*` headers and puts back only the signed caller; the platform's services and new apps use it.
+
+### Patch Changes
+
+- Updated dependencies [ebb8b97]
+- Updated dependencies [a3ba7ef]
+- Updated dependencies [a09b413]
+- Updated dependencies [b90f63b]
+  - @augur/service-kit@0.5.0
+
 ## 0.3.1
 
 ### Patch Changes
