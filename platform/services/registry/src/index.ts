@@ -1,3 +1,4 @@
+import { serviceVerifierFromEnv } from '@platform/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
 
@@ -17,5 +18,6 @@ const { SERVICE_TOKEN, EVENTS_URL } = process.env;
 const audit = EVENTS_URL && SERVICE_TOKEN ? auditTo(EVENTS_URL, { name: 'registry', token: SERVICE_TOKEN }) : undefined;
 if (!audit) console.warn('EVENTS_URL or SERVICE_TOKEN is not set: changes to the catalogue are not audited.');
 
-const app = await buildApp({ store, serviceToken: SERVICE_TOKEN, audit });
+// Apps sign in as themselves (their Keycloak client); the shared service token still works until every service has its own.
+const app = await buildApp({ store, serviceToken: SERVICE_TOKEN, verifyService: serviceVerifierFromEnv(), audit });
 await app.listen({ port, host: '0.0.0.0' });

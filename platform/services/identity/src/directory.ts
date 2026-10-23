@@ -258,8 +258,8 @@ export class KeycloakDirectory implements Directory {
     return this.token.value;
   }
 
-  /** One admin API call. `notFound` names what a 404 means. */
-  private async call<T = unknown>(method: string, path: string, body?: unknown, notFound = 'That isn’t in the directory any more.'): Promise<{ data: T; location?: string }> {
+  /** One admin API call. `notFound` names what a 404 means. Also used for apps' clients (clients.ts). */
+  async call<T = unknown>(method: string, path: string, body?: unknown, notFound = 'That isn’t in the directory any more.'): Promise<{ data: T; location?: string }> {
     const token = await this.accessToken();
     let res: Response;
     try {

@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { callerFromHeaders, health, packageVersion, recordAudit, serviceLogging, type NewAuditEntry, type ServiceCredentials } from '@platform/service-kit';
 import { adminRoutes } from './admin.ts';
+import { appClientRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
 import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from './store.ts';
 import { TeamDirectory } from './teams.ts';
@@ -28,6 +29,8 @@ export interface IdentityOptions {
   workspaces?: WorkspaceStore;
   /** Where people are kept, and where departments were before they became teams. Without it the admin API answers 503. */
   directory?: Directory;
+  /** Where apps' own sign-ins are made. Without it issuing one answers 503. */
+  appClients?: AppClients;
   /** Where admins' changes are recorded. Without it nothing is audited. */
   audit?: (entry: NewAuditEntry) => Promise<void>;
 }
@@ -43,7 +46,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, audit }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('identity', version, API_VERSION));
@@ -71,6 +74,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       });
 
       await app.register(adminRoutes({ directory: teams, audit }), { prefix: '/admin' });
+      await app.register(appClientRoutes({ clients: appClients, audit }), { prefix: '/admin/apps' });
     },
     { prefix: `/${API_VERSION}` },
   );

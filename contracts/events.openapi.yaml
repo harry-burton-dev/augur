@@ -1,12 +1,17 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.1.0
+  version: 1.2.0
   description: >
     Notifications for the Shell's stream, and the platform's audit log.
     People reach it through the gateway, which passes the caller in x-user-*
-    headers. Services call it on the internal network with the x-service-token
-    and x-service-name headers (see @platform/service-kit: notify, recordAudit).
+    headers. Services call it on the internal network (see @platform/service-kit:
+    notify, recordAudit). An app's service signs in as itself (a bearer token
+    for its Keycloak client app-<id>, audience platform-services), may send only
+    for itself, and needs the scope (notifications:send, audit:write) that the
+    registry grants it on the floor named by x-workspace-id; otherwise 403, or
+    503 while that can't be checked. Platform services use the x-service-token
+    and x-service-name headers.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
 servers:

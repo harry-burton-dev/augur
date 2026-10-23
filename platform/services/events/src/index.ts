@@ -1,3 +1,4 @@
+import { registryGrants, serviceVerifierFromEnv } from '@platform/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
 
@@ -13,5 +14,8 @@ if (process.env.DATABASE_URL) {
   store = new MemoryEventStore();
 }
 
-const app = await buildApp({ store, serviceToken: process.env.SERVICE_TOKEN });
+const { SERVICE_TOKEN, REGISTRY_URL = 'http://localhost:8082' } = process.env;
+// Apps sign in as themselves and are held to what the registry grants them. The shared service token still works until every service has its own.
+const grants = SERVICE_TOKEN ? registryGrants({ registryUrl: REGISTRY_URL, credentials: { name: 'events', token: SERVICE_TOKEN } }) : undefined;
+const app = await buildApp({ store, serviceToken: SERVICE_TOKEN, verifyService: serviceVerifierFromEnv(), grants });
 await app.listen({ port, host: '0.0.0.0' });
