@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { appClientId, callerFromHeaders, SERVICES_AUDIENCE, type NewAuditEntry } from '@platform/service-kit';
+import { appClientId, callerFromHeaders, SERVICES_AUDIENCE, type NewAuditEntry } from '@augur/service-kit';
 import { DirectoryError, type KeycloakDirectory } from './directory.ts';
 
 /**

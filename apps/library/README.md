@@ -1,6 +1,6 @@
 # Library app
 
-The first app on the platform (working name). Users and departments keep document libraries and publish them for internal distribution, with a normalised reader view.
+The first app on AUGUR (working name). Users and departments keep document libraries and publish them for internal distribution, with a normalised reader view.
 
 | Path | What it is |
 | --- | --- |

@@ -1,4 +1,4 @@
-import { IntentCancelled, IntentError, resolveIntent, type AppManifestEntry, type Intent } from '@platform/mfe-sdk';
+import { IntentCancelled, IntentError, resolveIntent, type AppManifestEntry, type Intent } from '@augur/mfe-sdk';
 
 export { IntentError };
 

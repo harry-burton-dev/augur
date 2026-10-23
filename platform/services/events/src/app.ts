@@ -19,7 +19,7 @@ import {
   type Scope,
   type ServiceIdentity,
   type ServiceVerifier,
-} from '@platform/service-kit';
+} from '@augur/service-kit';
 import { MemoryEventStore, type EventFloor, type EventStore, type Notification } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */

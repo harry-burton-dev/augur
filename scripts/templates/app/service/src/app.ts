@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { callerFromHeaders, health, packageVersion } from '@platform/service-kit';
+import { callerFromHeaders, health, packageVersion } from '@augur/service-kit';
 
 /** The major version of the API this service serves. Its routes go under /v1, as the platform's do. */
 export const API_VERSION = 'v1';

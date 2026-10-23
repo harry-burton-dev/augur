@@ -1,5 +1,5 @@
-import { createEventBus, type EventBus, type MountContext } from '@platform/mfe-sdk';
-import type { UiList } from '@platform/ui-kit';
+import { createEventBus, type EventBus, type MountContext } from '@augur/mfe-sdk';
+import type { UiList } from '@augur/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import home, { HOME_CHANNEL, needsWords, type HomeState } from './entry.js';
 

@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { callerFromHeaders, type NewAuditEntry } from '@platform/service-kit';
+import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
 import { DirectoryError, type Directory, type NewPerson, type PersonChanges } from './directory.ts';
 
 /** Easy to read out or type: no 0/O, 1/l/I. */

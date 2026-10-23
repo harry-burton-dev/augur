@@ -24,7 +24,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # While changesets are waiting, keeps one "Version packages" PR open that bumps
       # versions and writes changelogs. Merging that PR tags each released package
-      # (e.g. @platform/registry@0.2.0) and makes a GitHub release for it.
+      # (e.g. @augur/registry@0.2.0) and makes a GitHub release for it.
       - uses: changesets/action@v1
         with:
           title: Version packages

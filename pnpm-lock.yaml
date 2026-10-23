@@ -23,7 +23,7 @@ importers:
 
   apps/library/service:
     dependencies:
-      '@platform/service-kit':
+      '@augur/service-kit':
         specifier: workspace:*
         version: link:../../../platform/packages/service-kit
       fastify:
@@ -42,10 +42,10 @@ importers:
 
   platform/contract:
     dependencies:
-      '@platform/mfe-sdk':
+      '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../packages/mfe-sdk
-      '@platform/ui-kit':
+      '@augur/ui-kit':
         specifier: workspace:*
         version: link:../packages/ui-kit
       lit:
@@ -67,10 +67,10 @@ importers:
 
   platform/frontends/admin:
     dependencies:
-      '@platform/mfe-sdk':
+      '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
-      '@platform/ui-kit':
+      '@augur/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
       lit:
@@ -98,10 +98,10 @@ importers:
 
   platform/frontends/home:
     dependencies:
-      '@platform/mfe-sdk':
+      '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
-      '@platform/ui-kit':
+      '@augur/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
       lit:
@@ -123,10 +123,10 @@ importers:
 
   platform/frontends/shell:
     dependencies:
-      '@platform/mfe-sdk':
+      '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
-      '@platform/ui-kit':
+      '@augur/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
       lit:
@@ -231,7 +231,7 @@ importers:
 
   platform/services/events:
     dependencies:
-      '@platform/service-kit':
+      '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
       fastify:
@@ -259,7 +259,7 @@ importers:
       '@fastify/http-proxy':
         specifier: ^11.3.0
         version: 11.6.4
-      '@platform/service-kit':
+      '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
       fastify:
@@ -281,7 +281,7 @@ importers:
 
   platform/services/identity:
     dependencies:
-      '@platform/service-kit':
+      '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
       fastify:
@@ -306,7 +306,7 @@ importers:
 
   platform/services/registry:
     dependencies:
-      '@platform/service-kit':
+      '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
       fastify:

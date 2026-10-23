@@ -1,5 +1,5 @@
-import type { AppManifestEntry } from '@platform/mfe-sdk';
-import { isIntentCancelled } from '@platform/mfe-sdk';
+import type { AppManifestEntry } from '@augur/mfe-sdk';
+import { isIntentCancelled } from '@augur/mfe-sdk';
 import { describe, expect, it } from 'vitest';
 import { IntentError, RequestBroker } from './intents.js';
 

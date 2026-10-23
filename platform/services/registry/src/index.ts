@@ -1,4 +1,4 @@
-import { floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@platform/service-kit';
+import { floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
 

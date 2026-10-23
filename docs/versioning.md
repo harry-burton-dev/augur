@@ -6,7 +6,7 @@ Every package, service and app in the monorepo has its own [semver](https://semv
 | --- | --- | --- |
 | Release | each `package.json`, bumped by [Changesets](https://github.com/changesets/changesets) | Which build of this service, package or app is deployed? |
 | API | each `contracts/<service>.openapi.yaml` `info.version`; its major is the path prefix (`/v1`) and the service's `API_VERSION` | Can a caller keep calling this service the way it does? |
-| SDK range | each app's `manifest.json` `sdk`, a range over `@platform/mfe-sdk` releases | Can this shell open this app? |
+| SDK range | each app's `manifest.json` `sdk`, a range over `@augur/mfe-sdk` releases | Can this shell open this app? |
 
 ## Releases
 
@@ -35,11 +35,11 @@ Commit the file it writes under `.changeset/` with the change.
 
 You don't run anything locally. When changesets reach `main`, the Release workflow opens (and keeps up to date) a pull request called **Version packages**. It bumps every affected package, writes each one's `CHANGELOG.md`, and syncs the manifests and `SDK_VERSION`.
 
-Merging that pull request is the release. The workflow then tags each released package as `<name>@<version>`, for example `@platform/registry@0.2.0`, and makes a GitHub release for each tag. Deploy pipelines build from those tags.
+Merging that pull request is the release. The workflow then tags each released package as `<name>@<version>`, for example `@augur/registry@0.2.0`, and makes a GitHub release for each tag. Deploy pipelines build from those tags.
 
 Two GitHub settings the workflow needs: Settings → Actions → General → Workflow permissions must allow **Read and write**, and **Allow GitHub Actions to create and approve pull requests** must be on. GitHub doesn't start other workflows from anything done with the workflow's built-in token, so the Release workflow uses a `RELEASE_TOKEN` secret instead; with it, CI runs on the Version packages PR by itself. To set it up, create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) for this repository only, with **Contents: Read and write** and **Pull requests: Read and write**, and save it under Settings → Secrets and variables → Actions as `RELEASE_TOKEN`. Renew it before it expires. Without the secret the workflow falls back to the built-in token, and CI on the Version packages PR only starts once you push a commit to its branch.
 
-When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @platform/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)).
+When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @augur/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)).
 
 To do the same by hand: `pnpm version-packages`, review, commit, merge, then `pnpm release && git push --follow-tags`.
 
@@ -59,7 +59,7 @@ Each service serves its API under its major version: the registry's manifest is 
 
 ## Apps and the SDK
 
-`@platform/mfe-sdk` is the contract between the shell and apps: the manifest entry, the mount context, intents and the event bus. Each app's `manifest.json` says which SDK releases it works with:
+`@augur/mfe-sdk` is the contract between the shell and apps: the manifest entry, the mount context, intents and the event bus. Each app's `manifest.json` says which SDK releases it works with:
 
 ```json
 { "id": "library", "version": "0.1.1", "sdk": "^1.0.0", "...": "..." }
@@ -73,7 +73,7 @@ When the SDK makes a breaking change it goes to `2.0.0`. Apps keep `^1.0.0` and 
 
 Apps don't bundle the UI kit or Lit: the shell serves one copy of each through an import map, and every app on the page uses it (see [platform/frontends](../platform/frontends/README.md#one-kit-for-everyone)). So the kit is part of the contract an app's `sdk` range covers, and it keeps the same promise as the SDK:
 
-- Within SDK 1.x the shell serves `@platform/ui-kit` 1.x and Lit 3.x. A kit minor adds components, attributes or icons; it never removes or renames one, or changes what an existing attribute means.
+- Within SDK 1.x the shell serves `@augur/ui-kit` 1.x and Lit 3.x. A kit minor adds components, attributes or icons; it never removes or renames one, or changes what an existing attribute means.
 - A breaking kit change is a kit major, and it ships with an SDK major, so the shell refuses apps that haven't been updated for it instead of breaking them.
 - Moving the shared Lit to a new major is a kit major too.
 - The contract tests in `platform/contract` hold the shell to this: they mount a reference app built against each earlier SDK minor, and fail CI when the shell breaks one.

@@ -1,4 +1,4 @@
-import { sharedModules } from '@platform/mfe-sdk/build';
+import { sharedModules } from '@augur/mfe-sdk/build';
 import { defineConfig, type Plugin } from 'vite';
 
 /**
@@ -7,7 +7,7 @@ import { defineConfig, type Plugin } from 'vite';
  * shell serves them at /shared/ and inlines that map into index.html, so a
  * bare `import 'lit'` in the shell or in any app resolves to the same file.
  */
-const fileName = (specifier: string) => specifier.replace(/^@platform\//, '').replace(/\.js$/, '').replace(/\//g, '-');
+const fileName = (specifier: string) => specifier.replace(/^@augur\//, '').replace(/\.js$/, '').replace(/\//g, '-');
 
 const importMap = (): Plugin => ({
   name: 'shared-import-map',
@@ -15,6 +15,8 @@ const importMap = (): Plugin => ({
     const files = new Map<string, string>();
     for (const chunk of Object.values(bundle)) if (chunk.type === 'chunk' && chunk.isEntry) files.set(chunk.name, chunk.fileName);
     const imports = Object.fromEntries(sharedModules.map((s) => [s, `/shared/${files.get(fileName(s))}`]));
+    // Apps built before the rename import @platform/*: point those at the same files through SDK 1.x.
+    for (const s of sharedModules) if (s.startsWith('@augur/')) imports[s.replace(/^@augur\//, '@platform/')] = imports[s];
     this.emitFile({ type: 'asset', fileName: 'importmap.json', source: `${JSON.stringify({ imports }, null, 2)}\n` });
   },
 });

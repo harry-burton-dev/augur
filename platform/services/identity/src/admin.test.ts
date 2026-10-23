@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callerHeaders, type NewAuditEntry } from '@platform/service-kit';
+import { callerHeaders, type NewAuditEntry } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryDirectory } from './directory.ts';
 import { temporaryPassword, usernameFrom } from './admin.ts';

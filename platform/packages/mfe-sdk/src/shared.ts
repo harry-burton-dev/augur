@@ -22,7 +22,7 @@ export const sharedModules: readonly string[] = [
   'lit/html.js',
   'lit/static-html.js',
   ...litDirectives.map((d) => `lit/directives/${d}.js`),
-  '@platform/ui-kit',
+  '@augur/ui-kit',
 ];
 
 /** Whether the shell provides this import, so an app's build should leave it external. */

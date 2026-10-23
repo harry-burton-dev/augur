@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isSharedModule } from '@platform/mfe-sdk/build';
+import { isSharedModule } from '@augur/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 
@@ -52,7 +52,7 @@ const sharedModulesMap = (): Plugin => {
   let dev = false;
   const read = () => {
     const file = join(dir, 'importmap.json');
-    if (!existsSync(file)) throw new Error('shared-build/ is missing: run `pnpm --filter @platform/shell build:shared` first.');
+    if (!existsSync(file)) throw new Error('shared-build/ is missing: run `pnpm --filter @augur/shell build:shared` first.');
     const { imports } = JSON.parse(readFileSync(file, 'utf8')) as { imports: Record<string, string> };
     return dev ? { imports: Object.fromEntries(Object.entries(imports).map(([s, url]) => [s, url.replace(/^\/shared\//, '/shared-build/')])) } : { imports };
   };

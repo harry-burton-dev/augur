@@ -1,7 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import semver from 'semver';
-import { SDK_VERSION } from '@platform/mfe-sdk';
-import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@platform/ui-kit';
+import { SDK_VERSION } from '@augur/mfe-sdk';
+import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
 import type { AdminApi, AllowedOrigin, AppVersion, CatalogueApp, Department, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
 import { page } from './parts.js';
 
@@ -430,7 +430,7 @@ export class AdminApps extends LitElement {
     const state = appStatus(app);
     const facts: Fact[] = [
       { label: 'Version', value: app.pinnedVersion ? `${app.version}, held` : app.version },
-      { label: 'Platform SDK', value: app.sdk },
+      { label: 'AUGUR SDK', value: app.sdk },
       { label: 'Address', value: app.route },
       ...(app.entry.startsWith('/') && !app.entry.startsWith('//') ? [] : [{ label: 'Loads from', value: app.entry }]),
       ...(app.requiredRole ? [{ label: 'Only for', value: app.requiredRole }] : []),
@@ -448,7 +448,7 @@ export class AdminApps extends LitElement {
     >
       <ui-facts .items=${facts}></ui-facts>
       ${app.platform
-        ? html`<p>Platform apps are always on.</p>`
+        ? html`<p>Built-in apps are always on.</p>`
         : html`<ui-toggle
             label="Offered to people"
             hint=${state.why ?? 'Everyone it’s meant for sees it in Apps and Title.'}
@@ -484,7 +484,7 @@ export class AdminApps extends LitElement {
         route: a.route,
         state: state.label,
         stateStatus: state.status,
-        source: a.platform ? 'Platform' : (a.registeredBy ?? ''),
+        source: a.platform ? 'AUGUR' : (a.registeredBy ?? ''),
       };
     });
     return page(

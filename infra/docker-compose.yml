@@ -1,5 +1,6 @@
 # Local stack. Frontends run separately with their Vite dev servers.
 # "platform" is a codename until the platform has a name.
+# Keeps the old codename so local data volumes carry over (see README, Names that still say "platform").
 name: platform
 
 x-service: &service
@@ -51,7 +52,7 @@ services:
   # ---- the platform ----
   gateway:
     <<: *service
-    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/gateway" } }
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/gateway" } }
     environment:
       PORT: 8080
       IDENTITY_URL: http://identity:8081
@@ -67,7 +68,7 @@ services:
 
   identity:
     <<: *service
-    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/identity" } }
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/identity" } }
     environment:
       PORT: 8081
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
@@ -83,7 +84,7 @@ services:
 
   registry:
     <<: *service
-    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/registry" } }
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/registry" } }
     environment:
       PORT: 8082
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
@@ -93,7 +94,7 @@ services:
 
   events:
     <<: *service
-    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/events" } }
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
     environment:
       PORT: 8084
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform

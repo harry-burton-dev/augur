@@ -1,4 +1,4 @@
-# @platform/registry
+# @augur/registry
 
 ## 0.3.0
 
@@ -27,7 +27,7 @@
 - Updated dependencies [94ea6cc]
 - Updated dependencies [0295651]
 - Updated dependencies [4c96907]
-  - @platform/service-kit@0.3.0
+  - @augur/service-kit@0.3.0
 
 ## 0.2.0
 
@@ -38,4 +38,4 @@
 ### Patch Changes
 
 - Updated dependencies [b705f16]
-  - @platform/service-kit@0.2.0
+  - @augur/service-kit@0.2.0

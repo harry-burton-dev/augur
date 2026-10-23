@@ -1,4 +1,4 @@
-# @platform/contract-tests
+# @augur/contract-tests
 
 ## 0.1.0
 
@@ -22,5 +22,5 @@
 - Updated dependencies [bffdd14]
 - Updated dependencies [9681bff]
 - Updated dependencies [778157a]
-  - @platform/ui-kit@1.0.0
-  - @platform/mfe-sdk@1.1.0
+  - @augur/ui-kit@1.0.0
+  - @augur/mfe-sdk@1.1.0

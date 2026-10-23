@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { callerHeaders, FloorsUnavailable, GrantsUnavailable, serviceHeaders, type FloorPlace } from '@platform/service-kit';
+import { callerHeaders, FloorsUnavailable, GrantsUnavailable, serviceHeaders, type FloorPlace } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 
 const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });

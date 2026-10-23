@@ -1,4 +1,4 @@
-import { isSharedModule } from '@platform/mfe-sdk/build';
+import { isSharedModule } from '@augur/mfe-sdk/build';
 import { defineConfig } from 'vite';
 
 // The reference app, built the way every app is: one ES module, the kit and Lit left to the shell.

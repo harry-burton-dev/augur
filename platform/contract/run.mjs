@@ -1,6 +1,6 @@
 // Runs the contract tests against each build of the reference app: its source
 // (today's SDK), then every frozen build from an earlier SDK release.
-//   pnpm --filter @platform/contract-tests test:contract
+//   pnpm --filter @augur/contract-tests test:contract
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';

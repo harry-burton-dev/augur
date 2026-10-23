@@ -1,6 +1,6 @@
-import { defineMicroFrontend, type MountContext } from '@platform/mfe-sdk';
+import { defineMicroFrontend, type MountContext } from '@augur/mfe-sdk';
 import { html, render } from 'lit';
-import '@platform/ui-kit';
+import '@augur/ui-kit';
 
 /** Asks the app's own service, through the gateway, with the person's token. */
 const greeting = async (ctx: MountContext) => {
