@@ -10,6 +10,11 @@ export interface Caller {
   departments: string[];
   roles: string[];
   /**
+   * When they last entered their password (the token's `auth_time`). A service that needs a
+   * fresh sign-in for something drastic, such as an upgrade, checks it is recent.
+   */
+  signedInAt?: string;
+  /**
    * The floor the request is for, when the app named one (`X-Workspace-Id`)
    * and the gateway checked the caller is on it. Absent means no floor was asked for.
    */
@@ -29,6 +34,7 @@ export const CALLER_HEADERS = {
   email: 'x-user-email',
   departments: 'x-user-departments',
   roles: 'x-user-roles',
+  signedInAt: 'x-user-signed-in-at',
 } as const;
 
 /** The floor a request is for. An app sends only the id; the gateway replaces all three once it has checked it. */
@@ -64,6 +70,7 @@ export const callerHeaders = (caller: Caller): Record<string, string> => ({
   ...(caller.email ? { [CALLER_HEADERS.email]: encodeURIComponent(caller.email) } : {}),
   [CALLER_HEADERS.departments]: caller.departments.map(encodeURIComponent).join(','),
   [CALLER_HEADERS.roles]: caller.roles.map(encodeURIComponent).join(','),
+  ...(caller.signedInAt ? { [CALLER_HEADERS.signedInAt]: caller.signedInAt } : {}),
   ...(caller.workspace
     ? {
         [WORKSPACE_HEADERS.id]: encodeURIComponent(caller.workspace.id),
@@ -82,6 +89,7 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
   const id = one(headers[CALLER_HEADERS.id]);
   if (!id) return undefined;
   const email = one(headers[CALLER_HEADERS.email]);
+  const signedInAt = one(headers[CALLER_HEADERS.signedInAt]);
   const floor = one(headers[WORKSPACE_HEADERS.id]);
   const kind = one(headers[WORKSPACE_HEADERS.kind]);
   return {
@@ -90,8 +98,13 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
     ...(email ? { email: decode(email) } : {}),
     departments: list(one(headers[CALLER_HEADERS.departments])),
     roles: list(one(headers[CALLER_HEADERS.roles])),
+    ...(signedInAt && !Number.isNaN(Date.parse(signedInAt)) ? { signedInAt } : {}),
     ...(floor && kind && KINDS.includes(kind)
       ? { workspace: { id: decode(floor), kind: kind as CallerWorkspace['kind'], role: one(headers[WORKSPACE_HEADERS.role]) === 'lead' ? 'lead' : 'member' } }
       : {}),
   };
 };
+
+/** Whether the caller entered their password within `withinMs`; false when the gateway didn't say. */
+export const signedInRecently = (caller: Pick<Caller, 'signedInAt'> | undefined, withinMs: number, now = Date.now()) =>
+  caller?.signedInAt !== undefined && now - Date.parse(caller.signedInAt) <= withinMs;

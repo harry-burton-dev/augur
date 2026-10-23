@@ -200,8 +200,53 @@ describe('admin', () => {
       expect(el.querySelector('[data-parts]')!.textContent).toContain('0.2.0 → 0.4.0');
       expect(el.querySelector('[data-releases]')!.textContent).toContain('Breaking');
       expect(el.textContent).toContain('PLATFORM_VERSION=0.4.0');
-      (el.querySelector('ui-button') as HTMLElement).click();
+      (el.querySelector('[data-check]') as HTMLElement).click();
       await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/platform/updates/check', expect.objectContaining({ method: 'POST' })));
+      el.remove();
+    });
+
+    it('asks for the password again before an upgrade, then asks for it', async () => {
+      const assign = vi.fn();
+      vi.stubGlobal('location', { ...window.location, pathname: '/admin/updates', search: '', assign });
+      const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === 'PUT' ? new Response(JSON.stringify({ error: 'sign_in_again', message: 'Enter your password again to upgrade.' }), { status: 401 }) : new Response(JSON.stringify(out), { status: 200 }),
+      );
+      const el = document.createElement('admin-updates') as AdminUpdates;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.updates).toBeDefined());
+      await el.updateComplete;
+      (el.querySelector('[data-upgrade]') as HTMLElement).click();
+      await el.updateComplete;
+      const dialog = el.querySelector('ui-dialog') as UiDialog;
+      expect(dialog.getAttribute('heading')).toBe('Upgrade to AUGUR 0.4.0?');
+      expect(dialog.textContent).toContain('Set OBJECT_STORE_URL in .env');
+      await dialog.confirm();
+      expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/platform/upgrade', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ version: '0.4.0' }) }));
+      expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/admin/updates?upgrade=0.4.0')}`);
+      el.remove();
+      vi.unstubAllGlobals();
+    });
+
+    it('follows an upgrade step by step, and says how it ended', async () => {
+      const steps = [
+        { step: 'preflight', state: 'done', at: '2026-10-30T09:00:00Z' },
+        { step: 'roll-forward', state: 'failed', at: '2026-10-30T09:02:00Z', message: 'identity didn’t get ready' },
+        { step: 'roll-back', state: 'done', at: '2026-10-30T09:03:00Z' },
+      ];
+      const upgrade = { id: 'up-1', from: '0.2.0', version: '0.4.0', requestedBy: 'u-1', requestedAt: '2026-10-30T08:59:00Z', state: 'rolled-back', steps, message: 'identity didn’t get ready in 120 s' };
+      expect(updatesHeadline({ ...out, upgrade: { ...upgrade, state: 'running' } } as PlatformUpdates).heading).toBe('Upgrading to 0.4.0');
+      expect(updatesHeadline({ ...out, upgrade } as PlatformUpdates)).toEqual({ heading: 'Back on 0.2.0', summary: 'identity didn’t get ready in 120 s' });
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ...out, upgrade }), { status: 200 }));
+      const el = document.createElement('admin-updates') as AdminUpdates;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.updates).toBeDefined());
+      await el.updateComplete;
+      const progress = el.querySelector('[data-progress]')!.textContent!;
+      expect(progress).toContain('Start each part on the new version: identity didn’t get ready');
+      expect(progress).toContain('Go back to the old version');
+      expect(el.querySelector('ui-status[status="warning"]')!.getAttribute('label')).toBe('Back on 0.2.0: identity didn’t get ready in 120 s');
       el.remove();
     });
 

@@ -66,6 +66,19 @@ describe('gateway', () => {
     expect(headers['x-user-name']).toBe('Alex%20Rivera');
     expect(headers['x-user-roles']).toBe('admin');
     expect(headers['x-user-departments']).toBe('Finance');
+    expect(headers['x-user-signed-in-at']).toBeUndefined();
+  });
+
+  it('passes on when the caller last entered their password, and never a client’s claim to it', async () => {
+    const app = await buildApp({ upstreams: { registry: url }, auth });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/registry/echo',
+      headers: { authorization: `Bearer ${await sign({ ...ada, auth_time: 1_793_000_000 })}`, 'x-user-signed-in-at': '2099-01-01T00:00:00Z' },
+    });
+    expect(res.json()['x-user-signed-in-at']).toBe(new Date(1_793_000_000_000).toISOString());
+    const without = await app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: `Bearer ${await sign(ada)}`, 'x-user-signed-in-at': '2099-01-01T00:00:00Z' } });
+    expect(without.json()['x-user-signed-in-at']).toBeUndefined();
   });
 
   it('never passes on caller headers a client sent itself', async () => {

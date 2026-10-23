@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.9.0
+  version: 1.10.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -345,8 +345,114 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PlatformUpdates" }
         "403": { description: Not an admin }
+  /platform/upgrade:
+    put:
+      summary: Ask the deployment's updater to upgrade AUGUR (admins only)
+      description: >
+        `version` must be the `next` release Updates shows. Needs an admin who entered their
+        password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again.
+        Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as
+        platform.upgrade-requested.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [version], properties: { version: { type: string } } }
+      responses:
+        "202":
+          description: Waiting for the updater
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformUpdates" }
+        "401": { description: "sign_in_again: enter the password again first" }
+        "403": { description: Not an admin }
+        "409": { description: Not the next release, its release file names no images, or an upgrade is already waiting or under way }
+    delete:
+      summary: Take back an upgrade the updater hasn't started (admins only)
+      description: Audited as platform.upgrade-cancelled.
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformUpdates" }
+        "403": { description: Not an admin }
+        "404": { description: No upgrade is waiting }
+        "409": { description: It has started; it finishes or rolls back by itself }
+  /platform/upgrade/target:
+    get:
+      summary: The upgrade to run (the deployment's updater only)
+      description: Signed in as the platform-updater client. Each call counts as the updater being seen.
+      responses:
+        "200":
+          description: The open upgrade, with each part's image by digest
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, from, version, images, state]
+                properties:
+                  id: { type: string }
+                  from: { type: string }
+                  version: { type: string }
+                  images: { type: object, additionalProperties: { type: string } }
+                  state: { type: string, enum: [requested, running] }
+        "204": { description: Nothing to do }
+        "403": { description: Not the updater }
+  /platform/upgrade/progress:
+    post:
+      summary: Report a step of the open upgrade (the deployment's updater only)
+      description: >
+        The first report starts it. With `outcome` it ends, audited as platform.upgraded,
+        platform.upgrade-rolled-back or platform.upgrade-failed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, step, state]
+              properties:
+                id: { type: string }
+                step: { $ref: "#/components/schemas/UpgradeStep" }
+                state: { type: string, enum: [running, done, failed] }
+                message: { type: string }
+                outcome: { type: string, enum: [done, rolled-back, failed] }
+      responses:
+        "200":
+          description: The upgrade as it stands
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Upgrade" }
+        "403": { description: Not the updater }
+        "404": { description: Not the open upgrade }
 components:
   schemas:
+    Upgrade:
+      type: object
+      required: [id, from, version, images, requestedBy, requestedAt, state, steps]
+      properties:
+        id: { type: string }
+        from: { type: string }
+        version: { type: string }
+        images: { type: object, additionalProperties: { type: string } }
+        requestedBy: { type: string }
+        requestedAt: { type: string, format: date-time }
+        state: { type: string, enum: [requested, running, done, rolled-back, failed, cancelled] }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [step, state, at]
+            properties:
+              step: { $ref: "#/components/schemas/UpgradeStep" }
+              state: { type: string, enum: [running, done, failed] }
+              at: { type: string, format: date-time }
+              message: { type: string }
+        message: { type: string }
+        finishedAt: { type: string, format: date-time }
+    UpgradeStep: { type: string, enum: [preflight, backup, pull, roll-forward, verify, roll-back] }
     PlatformUpdates:
       type: object
       required: [running, channel, feed, newer, needsYou]
@@ -369,6 +475,8 @@ components:
         newer: { type: array, items: { $ref: "#/components/schemas/ReleaseSummary" }, description: Every release on the channel newer than the running one, newest first }
         beta: { $ref: "#/components/schemas/ReleaseSummary", description: "On stable: a beta newer than anything stable" }
         next: { type: string, description: The release to upgrade to next; one on the way when the newest can't be reached straight }
+        upgrade: { $ref: "#/components/schemas/Upgrade", description: The upgrade asked for, while it's open and for a week after }
+        updaterSeenAt: { type: string, format: date-time, description: When the updater last asked for work, since the registry started }
         needsYou:
           type: array
           items:

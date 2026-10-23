@@ -1,13 +1,16 @@
 openapi: 3.1.0
 info:
   title: Gateway
-  version: 1.1.0
+  version: 1.2.0
   description: >
     The gateway's own API, beside the services it forwards to. Reached at
     /api/gateway/v1 by a signed-in caller. Everything else under /api/<service>
     is forwarded to that service with the caller in x-user-* headers, and
     without the caller's Authorization header. Every path but /healthz needs
-    a signed-in caller, however it is spelt.
+    a signed-in caller, however it is spelt. x-user-signed-in-at carries when
+    the caller last entered their password (the token's auth_time, ISO 8601),
+    for a service that wants a fresh sign-in for something drastic; the
+    shell's /auth/again?return=<path> asks for the password and comes back.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
 servers:

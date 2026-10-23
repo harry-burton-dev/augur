@@ -10,6 +10,8 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 
 **Admin → Updates** shows whether a newer release is out, what changes in each part, and a **Needs you first** list: a release you have to go through first, settings to add, breaking changes, and apps that won't open on the new SDK. It fills in the version for the steps below. The registry checks once a day; **Check now** checks straight away.
 
+**Upgrade to …** on that page asks the deployment's updater to run these steps for you: it asks for your password again, then the updater takes a backup, pulls, restarts each part and goes back by itself if anything fails, and the page follows each step. Until the updater is part of your deployment, an upgrade you ask for just waits; cancel it there and use the steps below.
+
 1. **Read what changed.** The GitHub release for the AUGUR version you're moving to, `augur@<version>` under Releases, gathers every part's changes, any breaking change and any new setting, and says which versions it upgrades from. If you're more than one release behind and it lists a breaking change, go to the release before it first. Each package's `CHANGELOG.md` has the detail. Look for these, which mean you have something to do:
    - **major** on a service or contract: a caller has to change. The platform's own frontends move with it, but anything you've built against that API needs checking ([versioning.md](versioning.md)).
    - a new or renamed setting in `infra/deploy/.env.example`: copy it into your `.env` before starting.

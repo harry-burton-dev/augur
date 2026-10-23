@@ -155,6 +155,27 @@ export interface NeedsYou {
 }
 
 /** What the registry last found in the release feed, against the running release. */
+/** One step the updater took (see contracts/registry.openapi.yaml). */
+export interface UpgradeStepState {
+  step: 'preflight' | 'backup' | 'pull' | 'roll-forward' | 'verify' | 'roll-back';
+  state: 'running' | 'done' | 'failed';
+  at: string;
+  message?: string;
+}
+
+/** An upgrade an admin asked for, and how the deployment's updater is getting on. */
+export interface Upgrade {
+  id: string;
+  from: string;
+  version: string;
+  requestedBy: string;
+  requestedAt: string;
+  state: 'requested' | 'running' | 'done' | 'rolled-back' | 'failed' | 'cancelled';
+  steps: UpgradeStepState[];
+  message?: string;
+  finishedAt?: string;
+}
+
 export interface PlatformUpdates {
   running: { version: string; channel: 'stable' | 'beta' };
   channel: 'stable' | 'beta';
@@ -167,6 +188,10 @@ export interface PlatformUpdates {
   beta?: ReleaseSummary;
   next?: string;
   needsYou: NeedsYou[];
+  /** The upgrade asked for, while it's waiting or under way, and for a week after. */
+  upgrade?: Upgrade;
+  /** When the deployment's updater last asked for work, since the registry started. */
+  updaterSeenAt?: string;
 }
 
 export interface NewPerson {
@@ -179,6 +204,17 @@ export interface NewPerson {
 }
 
 export type PersonChanges = Partial<Pick<Person, 'firstName' | 'lastName' | 'email' | 'enabled' | 'roles' | 'departments'>>;
+
+/** A call the platform turned down; `code` is its `error`, such as `sign_in_again`. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
 
 /**
  * Admin's calls, all through the gateway: people and departments to identity
@@ -207,7 +243,7 @@ export class AdminApi {
     }
     if (res.status === 204) return undefined as T;
     const data = (await res.json().catch(() => ({}))) as T & { message?: string };
-    if (!res.ok) throw new Error(data.message ?? `That didn’t work (${res.status}). Nothing was changed.`);
+    if (!res.ok) throw new ApiError(data.message ?? `That didn’t work (${res.status}). Nothing was changed.`, res.status, (data as { error?: string }).error);
     return data;
   }
 
@@ -261,6 +297,10 @@ export class AdminApi {
   updates = () => this.call<PlatformUpdates>('GET', '/api/registry/v1/platform/updates');
   /** Reads the release feed now rather than waiting for the daily check. */
   checkUpdates = () => this.call<PlatformUpdates>('POST', '/api/registry/v1/platform/updates/check');
+  /** Asks the updater to move to `version`. Turned down with `sign_in_again` unless the admin just entered their password. */
+  upgrade = (version: string) => this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/upgrade', { version });
+  /** Takes back an upgrade the updater hasn't started. */
+  cancelUpgrade = () => this.call<PlatformUpdates>('DELETE', '/api/registry/v1/platform/upgrade');
 }
 
 export const fullName = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => `${p.firstName} ${p.lastName}`.trim() || p.username;

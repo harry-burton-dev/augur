@@ -59,6 +59,39 @@ export interface AllowedOrigin {
   addedAt: string;
 }
 
+/** The steps an updater takes, in order; `roll-back` only when one fails. */
+export const UPGRADE_STEPS = ['preflight', 'backup', 'pull', 'roll-forward', 'verify', 'roll-back'] as const;
+export type UpgradeStep = (typeof UPGRADE_STEPS)[number];
+
+/** Where one step of an upgrade stands. */
+export interface UpgradeStepState {
+  step: UpgradeStep;
+  state: 'running' | 'done' | 'failed';
+  at: string;
+  message?: string;
+}
+
+/**
+ * An upgrade an admin asked for. It waits (`requested`) until the deployment's updater picks it
+ * up (`running`), and ends `done`, `rolled-back` (back on the old version), `failed` (it needs a
+ * person) or `cancelled` (an admin took it back before it started).
+ */
+export interface Upgrade {
+  id: string;
+  from: string;
+  version: string;
+  /** Each part's image by digest, from the release file: all the updater will run. */
+  images: Record<string, string>;
+  requestedBy: string;
+  requestedAt: string;
+  state: 'requested' | 'running' | 'done' | 'rolled-back' | 'failed' | 'cancelled';
+  steps: UpgradeStepState[];
+  message?: string;
+  finishedAt?: string;
+}
+
+export type UpgradeOutcome = 'done' | 'rolled-back' | 'failed';
+
 /** Where registered apps are kept. */
 export interface AppStore {
   /** Origins apps may load their entry from, besides the platform itself. */
@@ -94,7 +127,22 @@ export interface AppStore {
   setRule(rule: Omit<FloorRule, 'setAt'>): Promise<FloorRule>;
   /** Takes a floor's rule away, so the app does what the floors above say; false when there was none. */
   clearRule(app: string, workspace: string): Promise<boolean>;
+  /** The latest upgrade asked for, whatever its state. */
+  upgrade(): Promise<Upgrade | undefined>;
+  /** Records an upgrade to run; false when one is already waiting or under way. */
+  requestUpgrade(upgrade: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy'>): Promise<boolean>;
+  /**
+   * Records a step of the open upgrade `id`, which starts it, and with `outcome` ends it.
+   * Undefined when `id` isn't the open upgrade.
+   */
+  progressUpgrade(id: string, step: Omit<UpgradeStepState, 'at'>, outcome?: { state: UpgradeOutcome; message?: string }): Promise<Upgrade | undefined>;
+  /** Takes back an upgrade nothing has started yet; false when there is none waiting. */
+  cancelUpgrade(id: string): Promise<boolean>;
 }
+
+/** A step's new state replaces its last one, so each step shows once. */
+const withStep = (steps: UpgradeStepState[], step: UpgradeStepState) => [...steps.filter((s) => s.step !== step.step), step];
+const isOpen = (u?: Upgrade) => u?.state === 'requested' || u?.state === 'running';
 
 /** For tests, and for running the registry locally without Postgres. Forgets everything on restart. */
 export class MemoryAppStore implements AppStore {
@@ -102,6 +150,39 @@ export class MemoryAppStore implements AppStore {
   private history = new Map<string, AppVersion[]>();
   private allowed = new Map<string, AllowedOrigin>();
   private floorRules: FloorRule[] = [];
+  private upgrades: Upgrade[] = [];
+
+  async upgrade() {
+    const last = this.upgrades.at(-1);
+    return last && structuredClone(last);
+  }
+
+  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy'>) {
+    if (isOpen(this.upgrades.at(-1))) return false;
+    this.upgrades.push({ ...u, requestedAt: new Date().toISOString(), state: 'requested', steps: [] });
+    return true;
+  }
+
+  async progressUpgrade(id: string, step: Omit<UpgradeStepState, 'at'>, outcome?: { state: UpgradeOutcome; message?: string }) {
+    const u = this.upgrades.at(-1);
+    if (!u || u.id !== id || !isOpen(u)) return undefined;
+    const at = new Date().toISOString();
+    u.steps = withStep(u.steps, { ...step, at });
+    u.state = outcome?.state ?? 'running';
+    if (outcome) {
+      u.finishedAt = at;
+      if (outcome.message) u.message = outcome.message;
+    }
+    return structuredClone(u);
+  }
+
+  async cancelUpgrade(id: string) {
+    const u = this.upgrades.at(-1);
+    if (!u || u.id !== id || u.state !== 'requested') return false;
+    u.state = 'cancelled';
+    u.finishedAt = new Date().toISOString();
+    return true;
+  }
 
   async origins() {
     return [...this.allowed.values()].sort((a, b) => a.origin.localeCompare(b.origin)).map((o) => ({ ...o }));
@@ -270,6 +351,25 @@ export const migrations: { id: string; sql: string }[] = [
         set_at timestamptz not null default now(),
         primary key (app_id, workspace_id)
       );`,
+  },
+  {
+    id: '006_upgrades',
+    sql: `
+      -- Upgrades admins asked for, and how the deployment's updater got on with each.
+      create table registry.upgrades (
+        id text primary key,
+        from_version text not null,
+        version text not null,
+        images jsonb not null,
+        requested_by text not null,
+        requested_at timestamptz not null default now(),
+        state text not null default 'requested',
+        steps jsonb not null default '[]',
+        message text,
+        finished_at timestamptz
+      );
+      -- At most one waiting or under way, however many admins press Upgrade at once.
+      create unique index upgrades_one_open on registry.upgrades ((true)) where state in ('requested', 'running');`,
   },
 ];
 
@@ -470,7 +570,66 @@ export class PgAppStore implements AppStore {
     });
   }
 
+  async upgrade() {
+    const { rows } = await this.pool.query<UpgradeRow>('select * from registry.upgrades order by requested_at desc limit 1');
+    return rows[0] && fromUpgradeRow(rows[0]);
+  }
+
+  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy'>) {
+    const { rowCount } = await this.pool.query(
+      'insert into registry.upgrades (id, from_version, version, images, requested_by) values ($1, $2, $3, $4, $5) on conflict do nothing',
+      [u.id, u.from, u.version, JSON.stringify(u.images), u.requestedBy],
+    );
+    return rowCount === 1;
+  }
+
+  async progressUpgrade(id: string, step: Omit<UpgradeStepState, 'at'>, outcome?: { state: UpgradeOutcome; message?: string }) {
+    return this.transaction(async (client) => {
+      const { rows } = await client.query<UpgradeRow>("select * from registry.upgrades where id = $1 and state in ('requested', 'running') for update", [id]);
+      if (!rows[0]) return undefined;
+      const at = new Date().toISOString();
+      const steps = withStep(fromUpgradeRow(rows[0]).steps, { ...step, at });
+      const { rows: updated } = await client.query<UpgradeRow>(
+        `update registry.upgrades set steps = $2, state = $3, message = coalesce($4, message), finished_at = case when $5 then now() else finished_at end
+         where id = $1 returning *`,
+        [id, JSON.stringify(steps), outcome?.state ?? 'running', outcome?.message ?? null, Boolean(outcome)],
+      );
+      return fromUpgradeRow(updated[0]);
+    });
+  }
+
+  async cancelUpgrade(id: string) {
+    const { rowCount } = await this.pool.query("update registry.upgrades set state = 'cancelled', finished_at = now() where id = $1 and state = 'requested'", [id]);
+    return rowCount === 1;
+  }
+
   close() {
     return this.pool.end();
   }
 }
+
+type UpgradeRow = {
+  id: string;
+  from_version: string;
+  version: string;
+  images: Record<string, string>;
+  requested_by: string;
+  requested_at: Date;
+  state: Upgrade['state'];
+  steps: UpgradeStepState[];
+  message: string | null;
+  finished_at: Date | null;
+};
+
+const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
+  id: r.id,
+  from: r.from_version,
+  version: r.version,
+  images: r.images,
+  requestedBy: r.requested_by,
+  requestedAt: r.requested_at.toISOString(),
+  state: r.state,
+  steps: r.steps,
+  ...(r.message ? { message: r.message } : {}),
+  ...(r.finished_at ? { finishedAt: r.finished_at.toISOString() } : {}),
+});

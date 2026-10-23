@@ -13,12 +13,18 @@ export interface Session {
 /** Where the sign-in service sends people back to after they sign in. */
 export const CALLBACK_PATH = '/auth/callback';
 
+/**
+ * Asks the person for their password again, then returns to `?return=` (a path on this site).
+ * For what an app wants a fresh sign-in for, such as Admin starting an upgrade.
+ */
+export const SIGN_IN_AGAIN_PATH = '/auth/again';
+
 export class SessionError extends Error {}
 
 /** The parts of an OIDC client the shell uses; oidc-client-ts's UserManager fits it. */
 export interface Authenticator {
   getUser(): Promise<SignedIn | null>;
-  signinRedirect(args?: { state?: unknown }): Promise<void>;
+  signinRedirect(args?: { state?: unknown; prompt?: string; max_age?: number }): Promise<void>;
   signinRedirectCallback(url?: string): Promise<SignedIn>;
   signinSilent(): Promise<SignedIn | null>;
   signoutRedirect(): Promise<void>;
@@ -82,6 +88,9 @@ export async function startSession(
       throw new SessionError('Signing in did not finish. Sign in again.');
     }
     history.replaceState(null, '', returnPath(signedIn.state));
+  } else if (location.pathname === SIGN_IN_AGAIN_PATH) {
+    await auth.signinRedirect({ state: returnPath(new URLSearchParams(location.search).get('return')), prompt: 'login', max_age: 0 });
+    return 'redirecting';
   } else if (!(await current(auth))) {
     await auth.signinRedirect({ state: location.pathname + location.search });
     return 'redirecting';

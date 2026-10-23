@@ -9,6 +9,7 @@ import {
   SCOPES,
   ServiceAuthUnavailable,
   serviceLogging,
+  signedInRecently,
   type FloorLookup,
   type FloorPlace,
   type NewAuditEntry,
@@ -21,7 +22,19 @@ import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, surfaceProblem, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { UpdateChecker, updatesView } from './updates.ts';
-import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore, type FloorRule } from './store.ts';
+import { randomUUID } from 'node:crypto';
+import {
+  MemoryAppStore,
+  RouteTakenError,
+  UnknownVersionError,
+  UPGRADE_STEPS,
+  type AppRecord,
+  type AppStore,
+  type FloorRule,
+  type Upgrade,
+  type UpgradeOutcome,
+  type UpgradeStepState,
+} from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -60,6 +73,15 @@ const catalogueEntry = (r: AppRecord, allowed: string[]) => {
     ...(awaitingScopes(r).length ? { awaitingScopes: awaitingScopes(r) } : {}),
   };
 };
+
+/** How recently an admin must have entered their password to start an upgrade. */
+export const UPGRADE_SIGN_IN_MS = 10 * 60 * 1000;
+/** A finished upgrade stays on the Updates page this long. */
+const UPGRADE_SHOWN_MS = 7 * 24 * 60 * 60 * 1000;
+/** The platform service that applies upgrades on a Compose deployment (its Keycloak client is platform-updater). */
+const UPDATER = 'updater';
+
+const OUTCOME_ACTIONS: Record<UpgradeOutcome, string> = { done: 'platform.upgraded', 'rolled-back': 'platform.upgrade-rolled-back', failed: 'platform.upgrade-failed' };
 
 /** What one floor's rule changes, as the activity log names it. */
 const RULE_ACTIONS: Record<FloorRule['state'] | 'inherit', string> = { on: 'app.enabled', off: 'app.disabled', blocked: 'app.blocked', inherit: 'app.inherited' };
@@ -399,7 +421,7 @@ export const buildApp = async ({
        */
       app.get('/platform/updates', async (req, reply) => {
         if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what updates are out.' });
-        return updatesView({ checker: updates, apps: await store.records() });
+        return updatesPage();
       });
 
       /** Checks the release feed now rather than waiting for the daily check. */
@@ -407,7 +429,7 @@ export const buildApp = async ({
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can check for updates.' });
         await updates.check();
-        const view = updatesView({ checker: updates, apps: await store.records() });
+        const view = await updatesPage();
         req.log.info({ by: caller.id, available: view.available?.version, problem: view.problem }, 'updates checked');
         await record(req, {
           actor: { id: caller.id, kind: 'user' },
@@ -418,6 +440,115 @@ export const buildApp = async ({
         });
         return view;
       });
+
+      /** When the deployment's updater last asked what to do; it lives only as long as this process. */
+      let updaterSeenAt: string | undefined;
+
+      /** The Updates page: the feed against the running release, and the upgrade asked for, while it matters. */
+      const updatesPage = async () => {
+        const view = updatesView({ checker: updates, apps: await store.records() });
+        const upgrade = await store.upgrade();
+        const shown = upgrade && (!upgrade.finishedAt || Date.now() - Date.parse(upgrade.finishedAt) < UPGRADE_SHOWN_MS);
+        return { ...view, ...(shown ? { upgrade } : {}), ...(updaterSeenAt ? { updaterSeenAt } : {}) };
+      };
+
+      /**
+       * Asks the deployment's updater to move to `version`, which must be the release Updates says
+       * is next. Needs an admin who entered their password in the last few minutes. Nothing
+       * restarts here: the updater picks it up and reports each step.
+       */
+      app.put<{ Body: { version: string } }>(
+        '/platform/upgrade',
+        { schema: { body: { type: 'object', additionalProperties: false, required: ['version'], properties: { version: { type: 'string', minLength: 1, maxLength: 64 } } } } },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can upgrade AUGUR.' });
+          if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
+            return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to upgrade. It’s asked for anything this drastic.' });
+          }
+          const view = updatesView({ checker: updates, apps: await store.records() });
+          if (view.next !== req.body.version) {
+            return reply.code(409).send({ error: 'conflict', message: view.next ? `Upgrade to ${view.next} next, not ${req.body.version}.` : `There’s no release to upgrade to from ${view.running.version} right now.` });
+          }
+          const images = updates.result.releases.find((r) => r.version === view.next)?.manifest?.images ?? {};
+          if (!Object.keys(images).length) return reply.code(409).send({ error: 'conflict', message: `AUGUR ${view.next}’s release file names no images, so it can’t be applied.` });
+          const id = randomUUID();
+          if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: caller.id }))) {
+            return reply.code(409).send({ error: 'conflict', message: 'An upgrade is already waiting or under way.' });
+          }
+          req.log.info({ by: caller.id, from: view.running.version, to: view.next }, 'upgrade requested');
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.upgrade-requested', target: view.next, detail: { from: view.running.version } });
+          return reply.code(202).send(await updatesPage());
+        },
+      );
+
+      /** Takes back an upgrade the updater hasn't started. One under way can't be stopped halfway. */
+      app.delete('/platform/upgrade', async (req, reply) => {
+        const caller = callerFromHeaders(req.headers);
+        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can upgrade AUGUR.' });
+        const upgrade = await store.upgrade();
+        if (upgrade?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes or rolls back by itself.' });
+        if (!upgrade || !(await store.cancelUpgrade(upgrade.id))) return reply.code(404).send({ error: 'not_found', message: 'No upgrade is waiting.' });
+        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.upgrade-cancelled', target: upgrade.version });
+        return updatesPage();
+      });
+
+      /** Only the deployment's own updater may read the target and report on it. */
+      const isUpdater = async (req: FastifyRequest, reply: FastifyReply) => {
+        const service = await serviceOf(req, reply);
+        if (service === undefined) return false;
+        if (service?.kind === 'platform' && service.name === UPDATER) return true;
+        void reply.code(403).send({ error: 'forbidden', message: 'Only the deployment’s updater can do this.' });
+        return false;
+      };
+
+      /** What the updater should run: the open upgrade, by digest, or nothing (204). */
+      app.get('/platform/upgrade/target', async (req, reply) => {
+        if (!(await isUpdater(req, reply))) return reply;
+        updaterSeenAt = new Date().toISOString();
+        const upgrade = await store.upgrade();
+        if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') return reply.code(204).send();
+        const { id, from, version, images, state } = upgrade;
+        return { id, from, version, images, state };
+      });
+
+      /** One step of the open upgrade, from the updater; with `outcome`, how it ended. */
+      app.post<{ Body: Omit<UpgradeStepState, 'at'> & { id: string; outcome?: UpgradeOutcome } }>(
+        '/platform/upgrade/progress',
+        {
+          schema: {
+            body: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'step', 'state'],
+              properties: {
+                id: { type: 'string', maxLength: 64 },
+                step: { enum: [...UPGRADE_STEPS] },
+                state: { enum: ['running', 'done', 'failed'] },
+                message: { type: 'string', maxLength: 2000 },
+                outcome: { enum: ['done', 'rolled-back', 'failed'] },
+              },
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!(await isUpdater(req, reply))) return reply;
+          const { id, outcome, message, ...step } = req.body;
+          const upgrade: Upgrade | undefined = await store.progressUpgrade(id, { ...step, ...(message ? { message } : {}) }, outcome ? { state: outcome, ...(message ? { message } : {}) } : undefined);
+          if (!upgrade) return reply.code(404).send({ error: 'not_found', message: 'That isn’t the upgrade under way.' });
+          req.log.info({ upgrade: id, step: step.step, state: step.state, outcome }, 'upgrade progress');
+          if (outcome) {
+            await record(req, {
+              actor: { id: UPDATER, kind: 'service' },
+              app: 'registry',
+              action: OUTCOME_ACTIONS[outcome],
+              target: upgrade.version,
+              detail: { from: upgrade.from, requestedBy: upgrade.requestedBy, ...(message ? { message } : {}) },
+            });
+          }
+          return upgrade;
+        },
+      );
 
       app.delete<{ Params: { id: string } }>('/apps/:id', async (req, reply) => {
         const caller = callerFromHeaders(req.headers);

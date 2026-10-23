@@ -15,6 +15,8 @@ export interface ReleaseManifest {
   breaking: string[];
   settings: { all: string[]; required: string[]; added: string[]; removed: string[] };
   parts: Record<string, { version: string }>;
+  /** Each part's image by digest; the Release workflow adds it to the attached file. */
+  images?: Record<string, string>;
 }
 
 /** One release in the feed. Its manifest is absent when it couldn't be read (or wasn't needed). */
@@ -224,7 +226,10 @@ export interface UpdatesView {
   newer: ReleaseSummary[];
   /** On stable: a beta newer than anything stable, for those who'd rather follow beta. */
   beta?: ReleaseSummary;
-  /** The release to upgrade to next: the available one, or one on the way when it can't be reached straight. */
+  /**
+   * The release to upgrade to next: the available one, or one on the way when it can't be reached
+   * straight. Absent when none can be reached, or its release file couldn't be read.
+   */
   next?: string;
   needsYou: NeedsYou[];
 }
@@ -303,7 +308,7 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
     available: { ...summary(available), parts },
     newer: newer.map(summary),
     ...(beta ? { beta } : {}),
-    next: next.version,
+    ...(next.manifest && reachable(next, running.version) ? { next: next.version } : {}),
     needsYou,
   };
 };

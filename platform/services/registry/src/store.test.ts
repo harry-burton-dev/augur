@@ -12,6 +12,24 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     store = make();
   });
 
+  it('keeps one upgrade open at a time, with each step it took', async () => {
+    const ask = (id: string) => store.requestUpgrade({ id, from: '0.2.0', version: '0.3.0', images: { web: 'web@sha256:aa' }, requestedBy: 'u-1' });
+    expect(await store.upgrade()).toBeUndefined();
+    expect(await ask('up-1')).toBe(true);
+    expect(await ask('up-2')).toBe(false);
+    expect(await store.progressUpgrade('up-2', { step: 'preflight', state: 'done' })).toBeUndefined();
+    expect((await store.progressUpgrade('up-1', { step: 'preflight', state: 'running' }))?.state).toBe('running');
+    expect(await store.cancelUpgrade('up-1')).toBe(false);
+    await store.progressUpgrade('up-1', { step: 'preflight', state: 'done' });
+    const done = await store.progressUpgrade('up-1', { step: 'verify', state: 'done' }, { state: 'done', message: 'Running 0.3.0' });
+    expect(done).toMatchObject({ id: 'up-1', state: 'done', message: 'Running 0.3.0', images: { web: 'web@sha256:aa' } });
+    expect(done?.steps.map((s) => `${s.step} ${s.state}`)).toEqual(['preflight done', 'verify done']);
+    expect(done?.finishedAt).toBeDefined();
+    expect(await ask('up-3')).toBe(true);
+    expect(await store.cancelUpgrade('up-3')).toBe(true);
+    expect((await store.upgrade())?.state).toBe('cancelled');
+  });
+
   it('grants what an app first asks for, and only what an admin grants after', async () => {
     await store.put({ ...library, scopes: ['notifications:send'] }, 'library');
     await store.put({ ...library, version: '0.2.0', scopes: ['notifications:send', 'audit:write'] }, 'library');
@@ -122,14 +140,14 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate registry.apps, registry.allowed_origins cascade');
+      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades cascade');
     },
   );
 
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

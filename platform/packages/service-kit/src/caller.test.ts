@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callerFromHeaders, callerHeaders, withoutCallerHeaders, type Caller } from './caller.js';
+import { callerFromHeaders, callerHeaders, signedInRecently, withoutCallerHeaders, type Caller } from './caller.js';
 
 const caller: Caller = {
   id: 'f3a1',
@@ -18,6 +18,15 @@ describe('caller headers', () => {
     const onFinance: Caller = { ...caller, workspace: { id: 'w1', kind: 'team', role: 'lead' } };
     expect(callerFromHeaders(callerHeaders(onFinance))).toEqual(onFinance);
     expect(callerFromHeaders({ ...callerHeaders(caller), 'x-workspace-id': 'w1', 'x-workspace-kind': 'cellar' })?.workspace).toBeUndefined();
+  });
+
+  it('carries when they last entered their password, so a service can ask for a fresh sign-in', () => {
+    const fresh: Caller = { ...caller, signedInAt: '2026-10-30T09:00:00.000Z' };
+    expect(callerFromHeaders(callerHeaders(fresh))).toEqual(fresh);
+    expect(signedInRecently(fresh, 5 * 60_000, Date.parse('2026-10-30T09:04:00Z'))).toBe(true);
+    expect(signedInRecently(fresh, 5 * 60_000, Date.parse('2026-10-30T09:06:00Z'))).toBe(false);
+    expect(signedInRecently(caller, 5 * 60_000)).toBe(false);
+    expect(withoutCallerHeaders({ 'x-user-signed-in-at': fresh.signedInAt, accept: '*/*' })).toEqual({ accept: '*/*' });
   });
 
   it('reads no caller from a request without one', () => {
