@@ -6,6 +6,8 @@ import { buildApp, defaultUpstreams, parseUpstreams } from './app.ts';
 import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
+import { registryUploadLimits, UploadLimitsUnavailable } from './uploads.ts';
+import { Readable } from 'node:stream';
 
 const issuer = 'http://sign-in.test/realms/platform';
 const audience = 'platform-api';
@@ -33,6 +35,13 @@ describe('gateway', () => {
 
     upstream = Fastify();
     upstream.get('/echo', async (req) => req.headers);
+    // Counts what it was sent, as it arrives.
+    upstream.addContentTypeParser('*', (_req, payload, done) => done(null, payload));
+    upstream.post('/upload', async (req) => {
+      let bytes = 0;
+      for await (const chunk of req.body as Readable) bytes += (chunk as Buffer).length;
+      return { bytes };
+    });
     upstream.get('/healthz', async () => ({ status: 'ok', service: 'registry', version: '0.4.0', api: 'v1' }));
     url = await upstream.listen({ port: 0, host: '127.0.0.1' });
   });
@@ -183,6 +192,59 @@ describe('gateway', () => {
     const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }), backupDir: '/nowhere' });
     const res = await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${await sign(ada)}` } });
     expect(res.json().backups).toEqual({ state: 'attention', problem: 'No backup has been taken yet.' });
+  });
+
+  describe('uploads', () => {
+    const MB = 1024 * 1024;
+    const limits = async () => new Map([['folio', 2]]);
+    const upload = async (app: FastifyInstance, to: string, payload: Buffer | Readable) =>
+      app.inject({ method: 'POST', url: `/api/${to}/upload`, headers: { authorization: `Bearer ${await sign(ada)}`, 'content-type': 'application/octet-stream' }, payload });
+    const gateway = (uploads = limits) => buildApp({ upstreams: { folio: url, other: url, registry: url }, auth, uploads, monitor: new HealthMonitor({ probes: [] }) });
+
+    it('passes a body up to the app’s limit on to it whole', async () => {
+      const res = await upload(await gateway(), 'folio', Buffer.alloc(MB + 5));
+      expect(res.json()).toEqual({ bytes: MB + 5 });
+    });
+
+    it('refuses a body past the app’s limit before sending it on', async () => {
+      const res = await upload(await gateway(), 'folio', Buffer.alloc(2 * MB + 1));
+      expect(res.statusCode).toBe(413);
+      expect(res.json()).toEqual({ error: 'too_large', message: 'This is more than folio takes at once (2 MB).' });
+    });
+
+    it('cuts off a streamed body once it passes the limit', async () => {
+      const chunks = function* () {
+        for (let i = 0; i < 6; i++) yield Buffer.alloc(MB / 2);
+      };
+      const res = await upload(await gateway(), 'folio', Readable.from(chunks()));
+      expect(res.statusCode).toBe(413);
+      const fits = await upload(await gateway(), 'folio', Readable.from([Buffer.alloc(MB), Buffer.alloc(MB)]));
+      expect(fits.json()).toEqual({ bytes: 2 * MB });
+    });
+
+    it('holds an app without a limit of its own to 10 MB, and leaves the platform’s services to theirs', async () => {
+      expect((await upload(await gateway(), 'other', Buffer.alloc(10 * MB + 1))).statusCode).toBe(413);
+      expect((await upload(await gateway(), 'registry', Buffer.alloc(10 * MB + 1))).json()).toEqual({ bytes: 10 * MB + 1 });
+    });
+
+    it('says so when the limit can’t be checked', async () => {
+      const res = await upload(await gateway(async () => Promise.reject(new UploadLimitsUnavailable('down'))), 'folio', Buffer.alloc(10));
+      expect(res.statusCode).toBe(503);
+    });
+
+    it('reads limits from the catalogue the registry gives the person, signed for the registry', async () => {
+      const signer = callerSigner();
+      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const caller = await callerCheckFor(signer, 'registry')((init?.headers as Record<string, string>)['x-augur-caller']);
+        expect(caller.id).toBe('u-1');
+        return Response.json([{ id: 'folio', maxUpload: 200 }, { id: 'home' }]);
+      });
+      const lookup = registryUploadLimits({ registryUrl: 'http://registry', signer, fetchImpl: fetchImpl as typeof fetch });
+      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [] };
+      expect(await lookup(alex)).toEqual(new Map([['folio', 200]]));
+      await lookup(alex);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('floors', () => {

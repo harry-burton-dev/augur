@@ -1,5 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createEventBus, floorFetch, IntentCancelled, IntentError, isIntentCancelled, resolveIntent, type AppManifestEntry, type Workspace } from './index.js';
+import {
+  createEventBus,
+  floorFetch,
+  IntentCancelled,
+  IntentError,
+  isDocumentRef,
+  isIntentCancelled,
+  openDocument,
+  pickDocument,
+  resolveIntent,
+  type AppManifestEntry,
+  type DocumentRef,
+  type MountContext,
+  type Workspace,
+} from './index.js';
 
 describe('event bus', () => {
   it('delivers to subscribers until they unsubscribe', () => {
@@ -61,5 +75,30 @@ describe('floorFetch', () => {
     await floorFetch(async () => 'tok', () => finance, fetchImpl as unknown as typeof fetch)('/x', { headers: { 'X-Workspace-Id': 'w-other', Authorization: 'Bearer mine' } });
     const headers = new Headers((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].headers);
     expect([headers.get('x-workspace-id'), headers.get('authorization')]).toEqual(['w-other', 'Bearer mine']);
+  });
+});
+
+describe('document intents', () => {
+  const ref: DocumentRef = { app: 'folio', id: 'd-1', version: '3', title: 'Travel policy' };
+
+  it('opens a document through whichever app handles document.open', async () => {
+    const raise = vi.fn(async () => undefined);
+    await openDocument({ raise }, ref);
+    expect(raise).toHaveBeenCalledWith({ type: 'document.open', payload: ref });
+  });
+
+  it('asks for a document and checks the answer is one', async () => {
+    const request = vi.fn(async () => ref as unknown);
+    await expect(pickDocument({ request: request as MountContext['request'] }, { purpose: 'Attach a policy' })).resolves.toEqual(ref);
+    expect(request).toHaveBeenCalledWith({ type: 'document.pick', payload: { purpose: 'Attach a policy' } });
+    request.mockResolvedValueOnce({ id: 'd-1' });
+    await expect(pickDocument({ request: request as MountContext['request'] })).rejects.toMatchObject({ name: 'IntentError' });
+  });
+
+  it('knows a DocumentRef when it sees one', () => {
+    expect(isDocumentRef(ref)).toBe(true);
+    expect(isDocumentRef({ app: 'folio', id: 'd-1' })).toBe(false);
+    expect(isDocumentRef({ ...ref, version: 3 })).toBe(false);
+    expect(isDocumentRef(null)).toBe(false);
   });
 });

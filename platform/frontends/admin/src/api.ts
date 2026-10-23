@@ -45,6 +45,10 @@ export interface CatalogueApp extends AppManifestEntry {
   awaitingScopes?: string[];
   /** The kinds of floor it works on; every kind when absent. */
   floors?: ('personal' | 'team' | 'org')[];
+  /** What the gateway lets through to its service in one request, in MB. */
+  uploadLimit?: number;
+  /** Set when an admin has lowered that below what the app asks. */
+  uploadLimitLowered?: boolean;
 }
 
 /** What one floor says about an app: on or off there and below, or blocked for it and every floor below. */
@@ -267,6 +271,8 @@ export class AdminApi {
   appFloors = (id: string) => this.call<FloorRule[]>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/floors`);
   setAppFloor = (id: string, workspace: string, state: FloorChoice) =>
     this.call<{ rules: FloorRule[] }>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/floors/${encodeURIComponent(workspace)}`, { state });
+  /** Lowers how much an app may be sent at once, in MB, or with `null` gives it what it asks again. */
+  limitUploads = (id: string, mb: number | null) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/upload-limit`, { mb });
   grantScopes = (id: string, scopes: string[]) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/scopes`, { scopes });
   /** The org's own floor, which every app rule starts from. */
   org = async () => {

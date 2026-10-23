@@ -103,6 +103,10 @@ A new service, `models`, starts with the upgrade. Nothing changes until you want
 
 Then upgrade as usual.
 
+### Upload limits
+
+Uploads now stream through the front door and the gateway without being held, and the gateway holds each app to its own limit: its manifest's `maxUpload`, or less where an admin lowered it in Admin, Apps. An app that doesn't say gets 10 MB at once, where everything got 50 MB before; the platform's own services keep their own limits. Nothing to add to `.env`. Upgrade as usual.
+
 ### Signed caller
 
 The gateway now signs the person it passes on, and the platform's services believe only the signed caller (see [Signed caller](signed-caller.md)). Nothing to add to `.env`: the gateway makes its key when it starts and services fetch it from the gateway. Upgrade as usual. An app with its own service should add the service kit's `signedCallers` hook; until it does, it keeps working on the plain headers.

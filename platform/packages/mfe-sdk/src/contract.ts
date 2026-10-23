@@ -42,6 +42,12 @@ export interface AppManifestEntry {
    * they type (SDK 1.3).
    */
   search?: boolean;
+  /**
+   * The largest request the gateway lets through to the app's service, in MB
+   * (SDK 1.4): what its manifest asks, or less where an admin lowered it. The
+   * registry always fills it in; an app checks a file against it before sending.
+   */
+  maxUpload?: number;
 }
 
 /**

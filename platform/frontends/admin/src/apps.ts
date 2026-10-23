@@ -79,6 +79,19 @@ export const floorStatus = (app: CatalogueApp, floor: AppFloor, rules: FloorRule
   return { on: true, words: 'On' };
 };
 
+/** What an admin can lower an app's upload limit to: what it asks, or any of these below that. */
+const UPLOAD_STEPS = [500, 200, 100, 50, 25, 10, 5, 1];
+const DEFAULT_UPLOAD_MB = 10;
+
+/** The choices for an app's upload limit, its own first. */
+export const uploadChoices = (app: Pick<CatalogueApp, 'maxUpload' | 'uploadLimit' | 'uploadLimitLowered'>): SelectOption[] => {
+  const asked = app.maxUpload ?? DEFAULT_UPLOAD_MB;
+  // A limit set another way than this list still shows as chosen.
+  const steps = new Set(UPLOAD_STEPS.filter((mb) => mb < asked));
+  if (app.uploadLimitLowered && app.uploadLimit) steps.add(app.uploadLimit);
+  return [{ value: 'asked', label: `${asked} MB, as it asks` }, ...[...steps].sort((a, b) => b - a).map((mb) => ({ value: String(mb), label: `${mb} MB` }))];
+};
+
 const FLOOR_CHOICES: SelectOption[] = [
   { value: 'inherit', label: 'As the floor above' },
   { value: 'on', label: 'On here and below' },
@@ -193,6 +206,16 @@ export class AdminApps extends LitElement {
     try {
       const { rules } = await this.api.setAppFloor(app.id, floor.id, state);
       if (this.open === app.id) this.floorRules = rules;
+    } catch (err) {
+      this.floorsError = (err as Error).message;
+    }
+  }
+
+  async limitUploads(app: CatalogueApp, choice: string) {
+    this.floorsError = '';
+    try {
+      const updated = await this.api.limitUploads(app.id, choice === 'asked' ? null : Number(choice));
+      this.apps = this.apps.map((a) => (a.id === updated.id ? updated : a));
     } catch (err) {
       this.floorsError = (err as Error).message;
     }
@@ -465,6 +488,16 @@ export class AdminApps extends LitElement {
         ? html`<p>Version ${app.version} also asks to: ${scopeWords(app.awaitingScopes)}. It runs without that until you allow it.</p>
             <div><ui-button kind="secondary" size="sm" @click=${() => this.allowScopes(app)}>Allow it</ui-button></div>`
         : nothing}
+      ${app.platform
+        ? nothing
+        : html`<ui-select
+            data-upload-limit
+            label="Largest upload"
+            hint="What one request to its service may carry. You can lower what it asks for, not raise it."
+            .options=${uploadChoices(app)}
+            .value=${app.uploadLimitLowered ? String(app.uploadLimit) : 'asked'}
+            @ui-change=${(e: CustomEvent<{ value: string }>) => this.limitUploads(app, e.detail.value)}
+          ></ui-select>`}
       ${app.platform ? nothing : this.floors(app)}
       ${app.handles?.length ? html`<p>Answers ${app.handles.join(', ')}.</p>` : nothing}
       ${app.platform ? nothing : this.history(app)}
