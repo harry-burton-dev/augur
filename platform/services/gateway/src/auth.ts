@@ -41,12 +41,15 @@ const strings = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string =>
 export const callerFromClaims = (claims: JWTPayload): Caller => {
   const id = String(claims.sub);
   const email = str(claims.email);
+  const authTime = typeof claims.auth_time === 'number' ? new Date(claims.auth_time * 1000).toISOString() : undefined;
   return {
     id,
     name: str(claims.name) ?? str(claims.preferred_username) ?? id,
     ...(email ? { email } : {}),
     departments: strings(claims.departments),
     roles: strings(claims.roles),
+    // When they last entered their password, for what needs a fresh sign-in.
+    ...(authTime ? { signedInAt: authTime } : {}),
   };
 };
 

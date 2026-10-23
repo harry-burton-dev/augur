@@ -161,3 +161,70 @@ describe('the Updates page', () => {
     expect((await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json()).toMatchObject({ feed: 'off', newer: [] });
   });
 });
+
+describe('upgrading', () => {
+  const images = { registry: 'ghcr.io/o/r/registry@sha256:aa', web: 'ghcr.io/o/r/web@sha256:bb' };
+  const fresh = (at = new Date()) => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'], signedInAt: at.toISOString() });
+  const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
+    const m = /^Bearer platform-(\S+)$/.exec(String(headers.authorization ?? ''));
+    return m ? { kind: 'platform' as const, name: m[1] } : undefined;
+  };
+  const updater = { authorization: 'Bearer platform-updater' };
+  const setup = async () => {
+    const entries: { action: string; target?: string; actor: { id: string } }[] = [];
+    const server = await buildApp({ verifyService, updates: await checked([release('0.3.0', 'beta', { images }), release('0.2.0')]), audit: async (e) => void entries.push(e) });
+    return { server, entries };
+  };
+
+  it('needs an admin who has just entered their password, and only the next release', async () => {
+    const { server } = await setup();
+    const ask = (headers: Record<string, string>, version = '0.3.0') => server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers, payload: { version } });
+    expect((await ask(editor)).statusCode).toBe(403);
+    expect((await ask(admin)).json()).toMatchObject({ error: 'sign_in_again' });
+    expect((await ask(fresh(new Date(Date.now() - 11 * 60_000)))).statusCode).toBe(401);
+    expect((await ask(fresh(), '0.9.0')).json().message).toBe('Upgrade to 0.3.0 next, not 0.9.0.');
+    const asked = await ask(fresh());
+    expect(asked.statusCode).toBe(202);
+    expect(asked.json().upgrade).toMatchObject({ from: '0.2.0', version: '0.3.0', state: 'requested', requestedBy: 'u-1' });
+    expect((await ask(fresh())).json().message).toBe('An upgrade is already waiting or under way.');
+  });
+
+  it('gives the updater, and only the updater, the images to run, and records how it went', async () => {
+    const { server, entries } = await setup();
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
+    await server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0' } });
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: { authorization: 'Bearer platform-gateway' } })).statusCode).toBe(403);
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: admin })).statusCode).toBe(403);
+    const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
+    expect(target).toMatchObject({ version: '0.3.0', from: '0.2.0', images, state: 'requested' });
+
+    const report = (payload: Record<string, unknown>) => server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, ...payload } });
+    expect((await report({ step: 'preflight', state: 'done' })).json()).toMatchObject({ state: 'running' });
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).statusCode).toBe(409);
+    await report({ step: 'roll-forward', state: 'failed', message: 'identity didn’t get ready in 120 s' });
+    const ended = (await report({ step: 'roll-back', state: 'done', outcome: 'rolled-back', message: 'Back on 0.2.0: identity didn’t get ready in 120 s' })).json();
+    expect(ended).toMatchObject({ state: 'rolled-back', message: 'Back on 0.2.0: identity didn’t get ready in 120 s' });
+    expect(ended.steps.map((s: { step: string; state: string }) => `${s.step} ${s.state}`)).toEqual(['preflight done', 'roll-forward failed', 'roll-back done']);
+    expect((await report({ step: 'verify', state: 'done' })).statusCode).toBe(404);
+
+    const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
+    expect(page.upgrade.state).toBe('rolled-back');
+    expect(page.updaterSeenAt).toBeDefined();
+    expect(entries.map((e) => `${e.action} ${e.target} by ${e.actor.id}`)).toEqual(['platform.upgrade-requested 0.3.0 by u-1', 'platform.upgrade-rolled-back 0.3.0 by updater']);
+  });
+
+  it('lets an admin take back an upgrade nothing has started', async () => {
+    const { server, entries } = await setup();
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).statusCode).toBe(404);
+    await server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0' } });
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).json().upgrade.state).toBe('cancelled');
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
+    expect(entries.map((e) => e.action)).toEqual(['platform.upgrade-requested', 'platform.upgrade-cancelled']);
+  });
+
+  it('won’t upgrade to a release whose file names no images', async () => {
+    const server = await buildApp({ updates: await checked([release('0.3.0'), release('0.2.0')]) });
+    const res = await server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0' } });
+    expect(res.json().message).toBe('AUGUR 0.3.0’s release file names no images, so it can’t be applied.');
+  });
+});

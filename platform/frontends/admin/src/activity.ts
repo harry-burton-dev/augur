@@ -82,6 +82,16 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} let apps load from ${target}`;
     case 'origin.removed':
       return `${who} stopped apps loading from ${target}`;
+    case 'platform.upgrade-requested':
+      return `${who} asked to upgrade AUGUR from ${String(d.from)} to ${target}`;
+    case 'platform.upgrade-cancelled':
+      return `${who} cancelled the upgrade to AUGUR ${target}`;
+    case 'platform.upgraded':
+      return `AUGUR was upgraded from ${String(d.from)} to ${target}`;
+    case 'platform.upgrade-rolled-back':
+      return `The upgrade to AUGUR ${target} didn’t finish and went back to ${String(d.from)}`;
+    case 'platform.upgrade-failed':
+      return `The upgrade to AUGUR ${target} stopped partway and needs a person`;
     case 'platform.updates-checked':
       return d.available
         ? `${who} checked for updates: AUGUR ${String(d.available)} is out`

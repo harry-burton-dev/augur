@@ -27,6 +27,16 @@ describe('startSession', () => {
     expect(auth.signinRedirect).toHaveBeenCalledWith({ state: '/library?q=1' });
   });
 
+  it('asks for the password again when an app wants a fresh sign-in, then goes back', async () => {
+    const auth = fakeAuth({ access_token: 'current' });
+    const result = await startSession(auth, { location: at('/auth/again', '?return=%2Fadmin%2Fupdates%3Fupgrade%3D0.3.0'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
+    expect(result).toBe('redirecting');
+    expect(auth.signinRedirect).toHaveBeenCalledWith({ state: '/admin/updates?upgrade=0.3.0', prompt: 'login', max_age: 0 });
+    const elsewhere = fakeAuth({ access_token: 'current' });
+    await startSession(elsewhere, { location: at('/auth/again', '?return=https://evil.example'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
+    expect(elsewhere.signinRedirect).toHaveBeenCalledWith(expect.objectContaining({ state: '/' }));
+  });
+
   it('finishes signing in on the callback and returns to where they were', async () => {
     const auth = fakeAuth(null);
     const history = { replaceState: vi.fn() };
