@@ -9,3 +9,4 @@ export { screenFor, titleMenu, titleTarget, orbitMenu, backFrom, escapeIsFree, f
 export { PreferenceSync, applyPreferences, type Preferences } from './preferences.js';
 export { floorFromPath, floorHref, floorBySlug, ownFloor, loadFloors, FloorsError, type FloorLocation } from './floors.js';
 export { HOME_CHANNEL, MAX_CARDS, needsFor, cardOf, cardsFor, SurfaceMounter, type HomeNeed, type HomeCard, type HomeState } from './home.js';
+export { AppSearch, readAnswer, SEARCH_BUDGET_MS, RESULTS_PER_APP, MIN_QUERY, type FoundIn, type FindUpdate } from './find.js';

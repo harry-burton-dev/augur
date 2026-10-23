@@ -31,6 +31,7 @@ export {
   type ShellAgent,
   type ShellFunction,
   type ShellFindResult,
+  type ShellFindGroup,
   type ShellView,
   type ShellViewRenderer,
 } from './components/shell.js';

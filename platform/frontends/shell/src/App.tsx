@@ -11,6 +11,7 @@ import {
   floorFromPath,
   floorHref,
   fromServer,
+  AppSearch,
   HOME_CHANNEL,
   cardsFor,
   hrefFor,
@@ -104,6 +105,19 @@ export function Host({
   /** What Home can ask for: the same as pressing a row or an action in the stream. */
   const homeAsks = useRef<{ open(id: string): void; act(id: string, index: number): void } | null>(null);
   const cards = useRef<SurfaceMounter | null>(null);
+  /** Find over apps' content, asked a moment after the person stops typing. */
+  const search = useMemo(
+    () =>
+      new AppSearch(floorFetch(session.getToken, () => floorRef.current, fetchImpl), {
+        floorName: (id) => {
+          const f = session.floors.find((x) => x.id === id);
+          return f && (f.kind === 'personal' ? 'your own floor' : f.name);
+        },
+      }),
+    [session, fetchImpl],
+  );
+  const findTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => search.stop(), [search]);
   const prefs = useMemo(
     () =>
       new PreferenceSync(preferencesUrl, session.getToken, {
@@ -525,12 +539,28 @@ export function Host({
       if (!to) return;
       navigate(screen && screen.kind !== 'title' ? hrefFor(screen.app) : '/', to);
     };
+    // Find: the shell's own pages at once, then each app's content as it answers.
     const onFind = (e: Event) => {
-      shell.findResults = findPages(manifest ?? [], (e as CustomEvent<{ q: string }>).detail.q);
+      const { q } = (e as CustomEvent<{ q: string }>).detail;
+      const pages = findPages(manifest ?? [], q);
+      shell.findResults = pages;
+      shell.findGroups = [];
+      search.stop();
+      clearTimeout(findTimer.current);
+      findTimer.current = setTimeout(() => {
+        void search.run(manifest ?? [], q, floorRef.current.id, ({ results, groups }) => {
+          shell.findResults = [...pages, ...results];
+          shell.findGroups = groups;
+        });
+      }, 150);
     };
     const onPick = (e: Event) => {
       const { result } = (e as CustomEvent<{ result: ShellFindResult }>).detail;
-      if (result.kind === 'page') navigate(result.id);
+      if (result.kind === 'page') return navigate(result.id);
+      const found = result.kind === 'content' ? search.foundIn(result.id) : undefined;
+      if (!found) return;
+      const there = found.workspace ? session.floors.find((f) => f.id === found.workspace) : undefined;
+      navigate(hrefFor(found.app, found.path), there);
     };
     shell.addEventListener('ui-open-app', onOpenApp);
     shell.addEventListener('ui-open-notification', onOpenNotification);
@@ -558,7 +588,7 @@ export function Host({
       shell.removeEventListener('ui-floor', onFloor);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs, screen, raise]);
+  }, [manifest, navigate, session, prefs, screen, raise, search]);
 
   return (
     <ui-shell ref={shellRef} product="Platform">

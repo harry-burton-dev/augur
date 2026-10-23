@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.6.0
+  version: 1.7.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -373,6 +373,7 @@ components:
           items: { type: string }
           description: Intent types this app handles, e.g. document.open
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
+        search: { type: boolean, description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it" }
         scopes:
           type: array
           uniqueItems: true

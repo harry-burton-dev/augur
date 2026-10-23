@@ -134,3 +134,38 @@ test('Home places the app’s glance card for the floor, with a working context'
   await card.locator('[data-action="card-raise"]').click();
   await expect(check(page, 'intent')).toHaveText('reference.show {"n":3}');
 });
+
+// Find over apps' content: the shell asks each app that declares `search`, on the person's floor.
+const find = async (page: Page, q: string) => {
+  await page.evaluate(() => (document.querySelector('ui-shell') as unknown as { openView(id: string): void }).openView('find'));
+  await page.locator('ui-shell .search input').fill(q);
+};
+
+test('Find asks the app’s service, on the floor, and opens a result where it says', async ({ page }) => {
+  await page.route('**/api/reference/v1/search?*', (route) => {
+    const url = new URL(route.request().url());
+    return route.fulfill({
+      json: { results: [{ id: 'c42', title: `Claim matching ${url.searchParams.get('q')}`, detail: route.request().headers()['x-workspace-id'], path: '/claims/42' }] },
+    });
+  });
+  await page.goto('/@org/reference/somewhere');
+  await find(page, 'travel');
+  const result = page.locator('ui-shell .view ul[aria-label="Reference"] .row');
+  await expect(result).toContainText('Claim matching travel');
+  await expect(result).toContainText('dev-org');
+  await result.click();
+  await expect(check(page, 'path')).toHaveText('/claims/42');
+  await expect(page).toHaveURL(/\/@org\/reference\/claims\/42$/);
+});
+
+test('Find doesn’t wait for a slow app: it says so, and lets go after the budget', async ({ page }) => {
+  await page.route('**/api/reference/v1/search?*', async (route) => {
+    await new Promise((r) => setTimeout(r, 4000));
+    await route.fulfill({ json: { results: [] } }).catch(() => undefined);
+  });
+  await page.goto('/reference');
+  await find(page, 'reference');
+  await expect(page.locator('ui-shell .view .row', { hasText: 'Reference' }).first()).toBeVisible();
+  await expect(page.locator('ui-shell .view .note.small')).toHaveText('Still looking…');
+  await expect(page.locator('ui-shell .view .note.small')).toHaveText('Didn’t answer in time.', { timeout: 3000 });
+});

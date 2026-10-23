@@ -60,6 +60,18 @@ export interface ShellFindResult {
   title: string;
   detail?: string;
   kind: 'app' | 'notification' | 'agent' | string;
+  /** The name of the group it's listed under, such as the app it came from; ungrouped ones come first. */
+  group?: string;
+}
+
+/**
+ * A group of Find results the host is still gathering, such as one app's
+ * content: `looking` says "Still looking…" until its results arrive, `late`
+ * and `failed` say it didn't answer. A group that's `done` with no results isn't shown.
+ */
+export interface ShellFindGroup {
+  name: string;
+  state: 'looking' | 'done' | 'late' | 'failed';
 }
 
 export type ShellView = 'stream' | 'apps' | 'find' | 'agents' | 'account' | 'settings';
@@ -121,7 +133,7 @@ const isTyping = (e: Event) => {
  * @fires ui-restore - detail `{ ids }` when Undo brings them back
  * @fires ui-function - detail `{ id }` for functions without a view, and for Switch workspace and Sign out
  * @fires ui-floor - detail `{ id, direction }` when the person asks to go to another floor; the host goes there and sets `floor`
- * @fires ui-find - detail `{ q }`; the host may set `findResults`
+ * @fires ui-find - detail `{ q }`; the host may set `findResults` and `findGroups`
  * @fires ui-pick - detail `{ result }`
  * @fires ui-setting - detail `{ key, value }`
  * @fires ui-retry - detail `{ what: 'stream' | 'agents' }`
@@ -147,6 +159,7 @@ export class UiShell extends LitElement {
     streamLoading: { type: Boolean, attribute: 'stream-loading' },
     streamError: { type: String, attribute: 'stream-error' },
     findResults: { attribute: false },
+    findGroups: { attribute: false },
     settings: { attribute: false },
     away: { type: Boolean },
     canSwitchWorkspace: { attribute: false },
@@ -188,6 +201,8 @@ export class UiShell extends LitElement {
   declare streamLoading: boolean;
   declare streamError: string;
   declare findResults: ShellFindResult[];
+  /** The groups of `findResults` in the order they're shown, each with whether it's still coming. */
+  declare findGroups: ShellFindGroup[];
   declare settings: { reduceMotion?: boolean; density?: 'comfortable' | 'compact' };
   declare away: boolean;
   /** Whether Account offers Switch workspace; a host with one workspace turns it off. Floors replace it. */
@@ -242,6 +257,7 @@ export class UiShell extends LitElement {
     this.streamLoading = false;
     this.streamError = '';
     this.findResults = [];
+    this.findGroups = [];
     this.settings = { reduceMotion: false, density: 'comfortable' };
     this.away = false;
     this.canSwitchWorkspace = true;
@@ -701,6 +717,8 @@ export class UiShell extends LitElement {
       .x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
       .note { margin: 0; padding: var(--space-6) var(--space-4); text-align: center; color: var(--ink-muted); }
       .note.error { color: var(--danger); }
+      .note.small { padding: var(--space-2) var(--space-4) var(--space-4); text-align: left; font-size: var(--type-small); line-height: var(--leading-small); }
+      .note.small.failed { color: var(--danger); }
       .tools { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-4); padding: var(--space-4) var(--space-4) 0; font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); }
       .link { color: var(--ink-muted); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--hairline-strong); }
       .link:hover { color: var(--ink); }
@@ -996,7 +1014,14 @@ export class UiShell extends LitElement {
   }
 
   private renderFind() {
-    const results = this.query ? [...this.findLocal(this.query), ...this.findResults] : [];
+    const loose = this.query ? [...this.findLocal(this.query), ...this.findResults.filter((r) => !r.group)] : [];
+    const grouped = this.query ? this.findGroups : [];
+    const inGroup = (name: string) => this.findResults.filter((r) => r.group === name);
+    const results = [...loose, ...grouped.flatMap((g) => inGroup(g.name))];
+    const waiting = grouped.some((g) => g.state === 'looking');
+    const row = (r: ShellFindResult) =>
+      html`<li><button class="row" @click=${() => this.pick(r)}><span class="text"><b>${r.title}</b><span>${r.detail ?? r.kind}</span></span></button></li>`;
+    const said = { looking: 'Still looking…', late: 'Didn’t answer in time.', failed: 'Couldn’t search right now.' } as const;
     return html`<div class="search">
         <ui-icon name="find" size="20"></ui-icon>
         <input type="search" aria-label="Find across apps, notifications and agents" placeholder="Find apps, notifications, agents…" .value=${this.query}
@@ -1006,10 +1031,17 @@ export class UiShell extends LitElement {
           }}
           @keydown=${(e: KeyboardEvent) => e.key === 'Enter' && results[0] && this.pick(results[0])} />
       </div>
-      ${this.query && !results.length ? html`<p class="note">Nothing matches "${this.query}".</p>` : nothing}
-      <ul>${results.map(
-        (r) => html`<li><button class="row" @click=${() => this.pick(r)}><span class="text"><b>${r.title}</b><span>${r.detail ?? r.kind}</span></span></button></li>`,
-      )}</ul>`;
+      ${this.query && !results.length && !waiting ? html`<p class="note">Nothing matches "${this.query}".</p>` : nothing}
+      <ul>${loose.map(row)}</ul>
+      ${grouped.map((g) => {
+        const found = inGroup(g.name);
+        if (!found.length && g.state === 'done') return nothing;
+        return html`<div class="group label">${g.name}${found.length ? html` <b>${found.length}</b>` : nothing}</div>
+          ${found.length
+            ? html`<ul aria-label=${g.name}>${found.map(row)}</ul>`
+            : html`<p class="note small ${g.state}" aria-busy=${g.state === 'looking' ? 'true' : nothing}>${said[g.state as keyof typeof said]}</p>`}`;
+      })}
+      <div class="live" aria-live="polite">${this.query && !waiting ? `${results.length} found` : ''}</div>`;
   }
 
   private renderAgents() {
