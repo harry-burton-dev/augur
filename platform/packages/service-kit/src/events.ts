@@ -5,8 +5,14 @@ export type NotificationLevel = 'needs' | 'info' | 'done' | 'failed';
 export interface NewNotification {
   /** The app it is about; the Shell opens this app when the person opens the notification. */
   app: string;
-  /** User ids of the people to tell. */
+  /** User ids of the people to tell. Empty with `toTeam`. */
   recipients: string[];
+  /**
+   * Tells everyone on the team the call's floor names, instead of
+   * `recipients`. Only on a team that has turned team notices on; who is on
+   * it is checked as it's sent.
+   */
+  toTeam?: boolean;
   /** "needs" when the person has to do something. */
   level: NotificationLevel;
   title: string;
@@ -43,7 +49,7 @@ export async function notify({ eventsUrl, credentials, workspace, fetchImpl, not
     url: `${eventsUrl.replace(/\/$/, '')}/v1/notifications`,
     credentials,
     body: notification,
-    what: `notify ${notification.recipients.length} people`,
+    what: notification.toTeam ? 'notify the team' : `notify ${notification.recipients.length} people`,
     workspace,
     attempts: 3,
     fetchImpl,

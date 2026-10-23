@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type ServiceCredentials, type ServiceVerifier } from '@platform/service-kit';
 import { adminRoutes } from './admin.ts';
 import { appClientRoutes, type AppClients } from './clients.ts';
@@ -31,15 +31,15 @@ export interface IdentityOptions {
   directory?: Directory;
   /** Where apps' own sign-ins are made. Without it issuing one answers 503. */
   appClients?: AppClients;
-  /** Where admins' changes are recorded. Without it nothing is audited. */
-  audit?: (entry: NewAuditEntry) => Promise<void>;
+  /** Where admins' changes are recorded, with the floor they're about. Without it nothing is audited. */
+  audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
   /** Checks platform services' own sign-in tokens, for the floor lookups only they may make. */
   verifyService?: ServiceVerifier;
 }
 
 /** Records audit entries with the events service, as identity. */
-export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry) =>
-  recordAudit({ eventsUrl, credentials, entry });
+export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry, workspace?: string) =>
+  recordAudit({ eventsUrl, credentials, entry, workspace });
 
 /**
  * Who people are. Sign-in itself is the OIDC provider's job (Keycloak locally);
@@ -56,6 +56,18 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
   await app.register(
     async (app) => {
+      /** True for the platform's own services; otherwise the reply is sent. */
+      const platformOnly = async (req: FastifyRequest, reply: FastifyReply) => {
+        try {
+          if ((await identifyService(req.headers, verifyService))?.kind === 'platform') return true;
+          void reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can look floors up.' });
+        } catch (err) {
+          if (!(err instanceof ServiceAuthUnavailable)) throw err;
+          void reply.code(503).send({ error: 'unavailable', message: err.message });
+        }
+        return false;
+      };
+
       /**
        * Where a floor sits, for the platform's own services: its kind and the
        * ids from its root down to it. The registry and events store only a
@@ -63,18 +75,23 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
        * starts from, a personal floor included.
        */
       app.get<{ Params: { id: string } }>('/workspaces/:id', async (req, reply) => {
-        let service;
-        try {
-          service = await identifyService(req.headers, verifyService);
-        } catch (err) {
-          if (!(err instanceof ServiceAuthUnavailable)) throw err;
-          return reply.code(503).send({ error: 'unavailable', message: err.message });
-        }
-        if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can look floors up.' });
+        if (!(await platformOnly(req, reply))) return reply;
         await teams?.ready();
         const [floor, org] = await Promise.all([workspaces.workspace(req.params.id), workspaces.org()]);
         if (!floor) return reply.code(404).send({ error: 'not_found', message: 'There is no such floor.' });
         return { id: floor.id, kind: floor.kind, path: floor.path, org: org.id, ...(floor.archivedAt ? { archivedAt: floor.archivedAt } : {}) };
+      });
+
+      // Everyone who can stand on a team: its members and those of the teams below it. For team notices.
+      app.get<{ Params: { id: string } }>('/workspaces/:id/people', async (req, reply) => {
+        if (!(await platformOnly(req, reply))) return reply;
+        await teams?.ready();
+        const all = await workspaces.teams();
+        const team = all.find((t) => t.id === req.params.id);
+        if (!team) return reply.code(404).send({ error: 'not_found', message: 'There is no such team.' });
+        const below = new Set(all.filter((t) => t.path.includes(team.id)).map((t) => t.id));
+        const people = new Set((await workspaces.memberships()).filter((m) => below.has(m.workspace)).map((m) => m.person));
+        return { workspace: team.id, people: [...people].sort() };
       });
     },
     { prefix: `/${API_VERSION}` },

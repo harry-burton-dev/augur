@@ -59,7 +59,7 @@ export const usernameFrom = (address: string) =>
 
 interface AdminOptions {
   directory?: Directory;
-  audit?: (entry: NewAuditEntry) => Promise<void>;
+  audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
 }
 
 /**
@@ -95,8 +95,9 @@ export const adminRoutes =
     const actorOf = (req: FastifyRequest) => ({ id: callerFromHeaders(req.headers)!.id, kind: 'user' as const });
 
     /** The change happened either way; a failed audit write is logged, not turned into a failed request. */
+    // A department is a team: its changes are recorded on its floor.
     const record = (req: FastifyRequest, action: string, target: string, detail?: Record<string, unknown>) =>
-      audit?.({ actor: actorOf(req), app: 'identity', action, target, ...(detail ? { detail } : {}) }).catch((err: Error) =>
+      audit?.({ actor: actorOf(req), app: 'identity', action, target, ...(detail ? { detail } : {}) }, action.startsWith('department.') ? target : undefined).catch((err: Error) =>
         req.log.error({ err: err.message, action }, 'audit entry not recorded'),
       );
 

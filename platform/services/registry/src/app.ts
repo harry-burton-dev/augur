@@ -29,15 +29,15 @@ export interface RegistryOptions {
   store?: AppStore;
   /** Checks apps' and platform services' own sign-in tokens. Without it only admins can change the catalogue. */
   verifyService?: ServiceVerifier;
-  /** Where changes to the catalogue are recorded. Without it nothing is audited. */
-  audit?: (entry: NewAuditEntry) => Promise<void>;
+  /** Where changes to the catalogue are recorded, with the floor a change is about. Without it nothing is audited. */
+  audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
   /** Where a floor sits, from identity. Without it nothing can be answered for a floor (503). */
   floors?: FloorLookup;
 }
 
 /** Records audit entries with the events service, as the registry. */
-export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry) =>
-  recordAudit({ eventsUrl, credentials, entry });
+export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry, workspace?: string) =>
+  recordAudit({ eventsUrl, credentials, entry, workspace });
 
 /** A registered app as admins see it in the catalogue. */
 const catalogueEntry = (r: AppRecord, allowed: string[]) => {
@@ -222,8 +222,8 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
       );
 
       /** The catalogue changed either way; a failed audit write is logged, not turned into a failed request. */
-      const record = (req: FastifyRequest, entry: NewAuditEntry) =>
-        audit?.(entry).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
+      const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
+        audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(
         '/apps/:id',
@@ -322,7 +322,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
               action: RULE_ACTIONS[state],
               target: found.entry.id,
               detail: { workspace: place.id, ...(state === 'on' || state === 'off' ? { carriesOn } : {}) },
-            });
+            }, place.id);
           }
           return { rules: await store.rules(found.entry.id), state: floorState(found, place, await store.rules(found.entry.id)) };
         },

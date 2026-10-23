@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import type { Fact, SelectOption, TableColumn, TableRow } from '@platform/ui-kit';
 import { fullName, type AdminApi, type AuditEntry, type AuditQuery, type CatalogueApp, type Department, type Person } from './api.js';
+import { floorTree } from './apps.js';
 import { page } from './parts.js';
 
 const PAGE = 50;
@@ -62,9 +63,19 @@ export const describe = (e: AuditEntry, names: Names): string => {
     case 'app.unpinned':
       return `${who} let ${names.app(target)} follow new versions again, now ${String(d.version)}`;
     case 'app.enabled':
-      return `${who} turned ${names.app(target)} on`;
+      return `${who} turned ${names.app(target)} on${d.workspace ? ` for ${names.department(String(d.workspace))}` : ''}`;
     case 'app.disabled':
-      return `${who} turned ${names.app(target)} off`;
+      return `${who} turned ${names.app(target)} off${d.workspace ? ` for ${names.department(String(d.workspace))}` : ''}`;
+    case 'app.blocked':
+      return `${who} blocked ${names.app(target)} for ${names.department(String(d.workspace))} and every team below it`;
+    case 'app.inherited':
+      return `${who} let ${names.app(target)} follow the floor above on ${names.department(String(d.workspace))}`;
+    case 'app.scopes-granted':
+      return `${who} changed what ${names.app(target)} may do`;
+    case 'team-notices.on':
+      return `${who} turned on team notices for ${names.department(target)}`;
+    case 'team-notices.off':
+      return `${who} turned off team notices for ${names.department(target)}`;
     case 'app.removed':
       return `${who} removed ${names.app(target)} from the catalogue`;
     case 'origin.allowed':
@@ -122,6 +133,7 @@ export class AdminActivity extends LitElement {
     open: { state: true },
     who: { state: true },
     area: { state: true },
+    floor: { state: true },
     period: { state: true },
     from: { state: true },
     to: { state: true },
@@ -130,7 +142,7 @@ export class AdminActivity extends LitElement {
   declare api: AdminApi;
   declare entries: AuditEntry[];
   declare names: Names;
-  declare filterOptions: { people: SelectOption[]; areas: SelectOption[] };
+  declare filterOptions: { people: SelectOption[]; areas: SelectOption[]; floors: SelectOption[] };
   declare loading: boolean;
   declare more: boolean;
   declare loadingMore: boolean;
@@ -138,6 +150,8 @@ export class AdminActivity extends LitElement {
   declare open: string | undefined;
   declare who: string;
   declare area: string;
+  /** Only this floor and the floors below it. */
+  declare floor: string;
   declare period: Period;
   declare from: string;
   declare to: string;
@@ -148,13 +162,14 @@ export class AdminActivity extends LitElement {
     super();
     this.entries = [];
     this.names = namesFrom([], [], []);
-    this.filterOptions = { people: [], areas: [] };
+    this.filterOptions = { people: [], areas: [], floors: [] };
     this.loading = true;
     this.more = false;
     this.loadingMore = false;
     this.error = '';
     this.who = ANYONE;
     this.area = ANYONE;
+    this.floor = ANYONE;
     this.period = 'week';
     this.from = '';
     this.to = '';
@@ -173,12 +188,15 @@ export class AdminActivity extends LitElement {
 
   /** Names for the sentences and the filters. Without them the log still shows, with ids. */
   async loadNames() {
-    const [people, departments, apps] = await Promise.all([
+    const [people, departments, apps, org] = await Promise.all([
       this.api.people().catch(() => [] as Person[]),
       this.api.departments().catch(() => [] as Department[]),
       this.api.apps().catch(() => [] as CatalogueApp[]),
+      this.api.org().catch(() => undefined),
     ]);
-    this.names = namesFrom(people, departments, apps);
+    // The org's name reads like a department's in sentences about floors.
+    this.names = namesFrom(people, org ? [...departments, { id: org.id, name: org.name, members: [] }] : departments, apps);
+    const floors = org ? floorTree(org, departments) : [];
     this.filterOptions = {
       people: [{ value: ANYONE, label: 'Anyone' }, ...people.map((p) => ({ value: p.id, label: fullName(p) })).sort((a, b) => a.label.localeCompare(b.label))],
       areas: [
@@ -187,6 +205,10 @@ export class AdminActivity extends LitElement {
         { value: 'registry', label: 'App catalogue' },
         ...apps.filter((a) => !a.platform).map((a) => ({ value: a.id, label: a.name })),
       ],
+      floors: [
+        { value: ANYONE, label: 'Any floor' },
+        ...floors.map((f) => ({ value: f.id, label: f.path.map((id) => floors.find((x) => x.id === id)?.name ?? '').join(' / '), detail: f.path.length > 1 ? 'and below' : 'everything on a floor' })),
+      ],
     };
   }
 
@@ -194,6 +216,7 @@ export class AdminActivity extends LitElement {
     return {
       ...(this.who !== ANYONE ? { actor: this.who } : {}),
       ...(this.area !== ANYONE ? { app: this.area } : {}),
+      ...(this.floor !== ANYONE ? { workspace: this.floor } : {}),
       ...rangeFor(this.period, new Date(), this.from, this.to),
       ...(before ? { before } : {}),
       limit: PAGE,
@@ -234,7 +257,7 @@ export class AdminActivity extends LitElement {
     }
   }
 
-  private set(key: 'who' | 'area' | 'period' | 'from' | 'to', value: string) {
+  private set(key: 'who' | 'area' | 'floor' | 'period' | 'from' | 'to', value: string) {
     (this as Record<typeof key, string>)[key] = value;
     if (this.period === 'custom' && (key === 'from' || key === 'to' || key === 'period') && !this.from && !this.to) return;
     void this.load();
@@ -247,10 +270,11 @@ export class AdminActivity extends LitElement {
   ];
 
   private filters() {
-    const on = (key: 'who' | 'area' | 'period' | 'from' | 'to') => (e: CustomEvent<{ value: string }>) => this.set(key, e.detail.value);
+    const on = (key: 'who' | 'area' | 'floor' | 'period' | 'from' | 'to') => (e: CustomEvent<{ value: string }>) => this.set(key, e.detail.value);
     return html`<div style="display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:flex-end;padding:var(--space-4) var(--space-4) 0">
       <ui-select label="Who" .options=${this.filterOptions.people} .value=${this.who} @ui-change=${on('who')} style="min-width:12rem"></ui-select>
       <ui-select label="Where" .options=${this.filterOptions.areas} .value=${this.area} @ui-change=${on('area')} style="min-width:12rem"></ui-select>
+      <ui-select label="Floor" .options=${this.filterOptions.floors} .value=${this.floor} @ui-change=${on('floor')} style="min-width:12rem"></ui-select>
       <ui-select label="When" .options=${periods} .value=${this.period} @ui-change=${on('period')} style="min-width:10rem"></ui-select>
       ${this.period === 'custom'
         ? html`<ui-text-field label="From" type="date" .value=${this.from} @ui-change=${on('from')}></ui-text-field>
@@ -268,6 +292,7 @@ export class AdminActivity extends LitElement {
       { label: 'Where', value: areaName(e.app, this.names) },
       { label: 'Action', value: e.action },
       ...(e.target ? [{ label: 'About', value: e.target }] : []),
+      ...(e.workspace ? [{ label: 'Floor', value: e.workspace.path.map((id) => this.names.department(id)).join(' / ') }] : []),
       ...Object.entries(e.detail ?? {}).map(([k, v]) => ({ label: k, value: typeof v === 'string' ? v : JSON.stringify(v) })),
     ];
     return html`<ui-dialog

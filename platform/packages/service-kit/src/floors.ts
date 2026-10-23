@@ -54,3 +54,18 @@ export const floorPlaces = ({ identityUrl, credentials, ttlMs = 30_000, fetchImp
 
 /** The floors a rule can come from for this one, from the org down to it: a personal floor sits under the org for rules, though nobody else stands on it. */
 export const ruleChain = (place: FloorPlace) => (place.kind === 'personal' ? [place.org, place.id] : place.path);
+
+/** Everyone who can stand on a team, asked fresh each time: team notices go only to who is on it now. */
+export type MemberLookup = (team: string) => Promise<string[]>;
+
+export const floorMembers = ({ identityUrl, credentials, fetchImpl = fetch }: Omit<FloorPlacesOptions, 'ttlMs' | 'now'>): MemberLookup => async (team) => {
+  let res: Response;
+  try {
+    res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(team)}/people`, { headers: await serviceHeaders(credentials) });
+  } catch (err) {
+    throw new FloorsUnavailable(`Identity could not be reached (${(err as Error).message}).`);
+  }
+  if (res.status === 404) return [];
+  if (!res.ok) throw new FloorsUnavailable(`Identity answered ${res.status}.`);
+  return ((await res.json()) as { people: string[] }).people;
+};

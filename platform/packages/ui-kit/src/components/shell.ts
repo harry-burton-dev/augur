@@ -18,6 +18,8 @@ export interface ShellNotification {
   detail?: string;
   /** When it happened: a Date, epoch ms or an ISO string. */
   time: Date | number | string;
+  /** The floor it's from, by id: tagged with that floor's name, and a dot on the gauge until it's dealt with. */
+  floor?: string;
 }
 
 export interface ShellApp {
@@ -701,6 +703,8 @@ export class UiShell extends LitElement {
       :host([open]) .gauge { opacity: 0; pointer-events: none; }
       .gauge button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: var(--ink-muted); background: var(--slate-deep); border: 1px solid var(--hairline); transition: color var(--motion-quick), border-color var(--motion-quick); }
       .gauge button:hover { color: var(--ink); }
+      .gauge button { position: relative; }
+      .gauge .dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--floor-mark, var(--green)); border: 2px solid var(--slate-deep); }
       .gauge button[aria-current] { color: var(--floor-mark); border-color: var(--floor-mark); box-shadow: 0 0 12px color-mix(in srgb, var(--floor-mark) 45%, transparent); }
       .lift { position: absolute; z-index: 5; left: 50%; top: calc(var(--band-top) + var(--space-5)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border-radius: var(--radius-pill); background: var(--surface-overlay); border: 1px solid var(--hairline); color: var(--ink); font-size: var(--type-small); letter-spacing: var(--tracking-mark); text-transform: uppercase; pointer-events: none; animation: lift var(--motion-calm) var(--s-ease); }
       .lift ui-icon { color: var(--floor-mark); }
@@ -755,16 +759,33 @@ export class UiShell extends LitElement {
     </nav>`;
   }
 
-  /** The edge gauge: one notch per floor from yours to the org, the one you're on lit in its colour. */
+  /** How many notifications wait on each floor. */
+  private waitingByFloor() {
+    const counts = new Map<string, number>();
+    for (const n of this.notifications) if (n.floor) counts.set(n.floor, (counts.get(n.floor) ?? 0) + 1);
+    return counts;
+  }
+
+  /** "On Finance" for a notification from another floor; nothing for one from here or from no floor. */
+  private floorTag(n: ShellNotification) {
+    if (!n.floor || n.floor === this.floor) return '';
+    const f = this.floors.find((x) => x.id === n.floor);
+    return f ? ` · ${f.kind === 'personal' ? 'On your own floor' : `On ${f.name}`}` : '';
+  }
+
+  /** The edge gauge: one notch per floor from yours to the org, the one you're on lit in its colour, with a dot where something waits. */
   private renderGauge() {
     if (!this.currentFloor) return nothing;
     const stack = floorStack(this.floors, this.floor, this.lastTeam).reverse();
     const tab = this.isOpen ? '-1' : '0';
+    const waiting = this.waitingByFloor();
     return html`<nav class="gauge" aria-label="Floors" ?inert=${this.isOpen}>
-      ${stack.map(
-        (f) => html`<button tabindex=${tab} aria-label=${f.kind === 'personal' ? 'Your own floor' : f.name} title=${f.name} aria-current=${f.id === this.floor ? 'location' : nothing}
-          @click=${() => this.goToFloor(f.id)}><ui-icon name=${floorIcon[f.kind]} size="14"></ui-icon></button>`,
-      )}
+      ${stack.map((f) => {
+        const count = waiting.get(f.id) ?? 0;
+        const name = f.kind === 'personal' ? 'Your own floor' : f.name;
+        return html`<button tabindex=${tab} aria-label=${count ? `${name}, ${count} waiting` : name} title=${f.name} aria-current=${f.id === this.floor ? 'location' : nothing}
+          ?data-waiting=${count > 0} @click=${() => this.goToFloor(f.id)}><ui-icon name=${floorIcon[f.kind]} size="14"></ui-icon>${count ? html`<span class="dot"></span>` : nothing}</button>`;
+      })}
     </nav>`;
   }
 
@@ -833,7 +854,7 @@ export class UiShell extends LitElement {
                 @click=${() => this.openNotification(n)}
                 @keydown=${(e: KeyboardEvent) => e.key.toLowerCase() === 'x' && (e.preventDefault(), this.dismiss(n.id))}>
                 <span class="lead"></span>
-                <span class="text"><b>${n.title}</b><span>${this.appName(n.app)}${n.detail ? ` · ${n.detail}` : ''}</span></span>
+                <span class="text"><b>${n.title}</b><span>${this.appName(n.app)}${this.floorTag(n)}${n.detail ? ` · ${n.detail}` : ''}</span></span>
                 <span class="meta">${ago(n.time, this.now)}</span>
               </button>
               <button class="x" aria-label=${`Dismiss ${n.title}`} @click=${() => this.dismiss(n.id)}><ui-icon name="close" size="16"></ui-icon></button>
@@ -926,6 +947,7 @@ export class UiShell extends LitElement {
 
   private renderAccount() {
     const here = this.currentFloor;
+    const waiting = this.waitingByFloor();
     return html`<div class="who"><b>${this.user?.name ?? 'Signed in'}</b>${this.user?.email ? html`<span>${this.user.email}</span>` : nothing}</div>
       ${here
         ? html`<div class="group label">Floors</div>
@@ -934,7 +956,7 @@ export class UiShell extends LitElement {
                 (f) => html`<li><button class="row" aria-current=${f.id === this.floor ? 'location' : nothing} @click=${() => (this.goToFloor(f.id), this.close())}>
                   <ui-icon name=${floorIcon[f.kind]}></ui-icon>
                   <span class="text"><b>${f.kind === 'personal' ? 'Your own floor' : f.name}</b>${f.path.length > 1 ? html`<span>${f.path.slice(0, -1).map((p) => p.name).join(' / ')}</span>` : nothing}</span>
-                  ${f.id === this.floor ? html`<span class="meta">You’re here</span>` : nothing}
+                  ${f.id === this.floor ? html`<span class="meta">You’re here</span>` : waiting.get(f.id) ? html`<span class="meta">${waiting.get(f.id)} waiting</span>` : nothing}
                 </button></li>`,
               )}
             </ul>`

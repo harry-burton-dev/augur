@@ -67,7 +67,7 @@ jobs:
   # The shell keeps its promise to apps: the reference app, as built today and
   # as built against each earlier SDK minor, mounted by the real shell.
   contract:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Playwright 1.56 has no browsers for ubuntu-latest (26.04) yet
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

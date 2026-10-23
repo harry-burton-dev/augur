@@ -292,6 +292,24 @@ describe('floors', () => {
     vi.useRealTimers();
   });
 
+  it('marks the gauge where something waits, and tags notifications from other floors', async () => {
+    el.notify({ id: 'n1', app: 'home', level: 'needs', title: 'Approve the budget', time: Date.now(), floor: 'org' });
+    el.notify({ id: 'n2', app: 'home', level: 'info', title: 'Filed', time: Date.now(), floor: 'fin' });
+    el.notify({ id: 'n3', app: 'home', level: 'info', title: 'Plain', time: Date.now() });
+    await el.updateComplete;
+    const notches = [...root().querySelectorAll('.gauge button')];
+    expect(notches.map((b) => b.getAttribute('aria-label'))).toEqual(['Acme, 1 waiting', 'Finance, 1 waiting', 'Your own floor']);
+    expect(notches.map((b) => !!b.querySelector('.dot'))).toEqual([true, true, false]);
+    el.openView('stream');
+    await el.updateComplete;
+    const lines = [...root().querySelectorAll('.item .text span')].map((x) => x.textContent);
+    expect(lines.some((l) => l?.includes('On Acme'))).toBe(true);
+    expect(lines.filter((l) => l?.includes(' · On ')).length).toBe(1);
+    el.openView('account');
+    await el.updateComplete;
+    expect(root().querySelector('.floors li:nth-child(2) .meta')!.textContent).toBe('1 waiting');
+  });
+
   it('lists every floor in Account in place of Switch workspace', async () => {
     el.openView('account');
     await el.updateComplete;

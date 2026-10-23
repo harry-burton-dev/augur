@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { floorPlaces, FloorsUnavailable, ruleChain } from './floors.js';
+import { floorMembers, floorPlaces, FloorsUnavailable, ruleChain } from './floors.js';
 
 const credentials = { name: 'registry', getToken: async () => 'registry-token' };
 
@@ -30,5 +30,16 @@ describe('floor places', () => {
   it('puts a personal floor under the org for rules', () => {
     expect(ruleChain({ id: 'me', kind: 'personal', path: ['me'], org: 'o' })).toEqual(['o', 'me']);
     expect(ruleChain({ id: 'p', kind: 'team', path: ['o', 'f', 'p'], org: 'o' })).toEqual(['o', 'f', 'p']);
+  });
+
+  it('asks who is on a team every time', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => (String(url).endsWith('/f/people') ? Response.json({ people: ['u-1', 'u-2'] }) : new Response(null, { status: 404 })));
+    const members = floorMembers({ identityUrl: 'http://identity', credentials, fetchImpl: fetchImpl as typeof fetch });
+    expect(await members('f')).toEqual(['u-1', 'u-2']);
+    expect(await members('f')).toEqual(['u-1', 'u-2']);
+    expect(await members('gone')).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    const down = floorMembers({ identityUrl: 'http://identity', credentials, fetchImpl: (async () => new Response(null, { status: 500 })) as typeof fetch });
+    await expect(down('f')).rejects.toBeInstanceOf(FloorsUnavailable);
   });
 });
