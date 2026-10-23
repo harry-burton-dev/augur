@@ -1,0 +1,21 @@
+{
+  "@augur/events": {
+    "001_notifications_and_audit": "62fdade734f4be4c",
+    "002_floors": "c36a7776c92a73b8",
+    "003_actions": "c244a195f2f90de2"
+  },
+  "@augur/identity": {
+    "001_preferences": "148165f8cbddebab",
+    "002_workspaces": "54f71c8c9cc46c8c"
+  },
+  "@augur/models": {
+    "001-settings-and-usage": "87d553574bfafe1d"
+  },
+  "@augur/registry": {
+    "001_apps": "2ba5efd9c0ea7950",
+    "002_enabled": "82a8d499a58bc896",
+    "003_versions": "f190e5371ffc0882",
+    "004_origins": "0d2752cb8d019082",
+    "005_floors": "e10a98ac5da61b71"
+  }
+}

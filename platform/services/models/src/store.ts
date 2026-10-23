@@ -73,7 +73,7 @@ export class MemoryModelStore implements ModelStore {
   }
 }
 
-const migrations: { id: string; sql: string }[] = [
+export const migrations: { id: string; sql: string }[] = [
   {
     id: '001-settings-and-usage',
     sql: `
