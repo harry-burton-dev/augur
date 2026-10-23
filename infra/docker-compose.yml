@@ -20,8 +20,9 @@ x-internal: &internal
 
 services:
   # ---- infrastructure ----
+  # Postgres with pgvector, for apps' embeddings.
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:0.8.0-pg17
     environment:
       POSTGRES_USER: platform
       POSTGRES_PASSWORD: platform-local-only
@@ -29,14 +30,25 @@ services:
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address :9001
+  # Apps' files: S3's API at http://localhost:3900 (region "garage"), admin API at :3903.
+  garage:
+    image: dxflrs/garage:v2.4.1
     environment:
-      MINIO_ROOT_USER: platform
-      MINIO_ROOT_PASSWORD: platform-local-only
-    ports: ["9000:9000", "9001:9001"]
-    volumes: [miniodata:/data]
+      GARAGE_RPC_SECRET: 0000000000000000000000000000000000000000000000000000000000000000
+      GARAGE_ADMIN_TOKEN: platform-local-only
+    ports: ["3900:3900", "3903:3903"]
+    volumes: ["./garage/garage.toml:/etc/garage.toml:ro", "garagemeta:/var/lib/garage/meta", "garagedata:/var/lib/garage/data"]
+
+  # Each app's own database login and schema, and its own bucket and key, then stops. See docs/app-storage.md.
+  storage:
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/storage" } }
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
+      GARAGE_ADMIN_URL: http://garage:3903
+      GARAGE_ADMIN_TOKEN: platform-local-only
+      APP_STORAGE: ""
+    depends_on: [postgres, garage]
 
   # Sign-in. The platform realm, its shell client and test users are imported from ./keycloak.
   keycloak:
@@ -130,4 +142,5 @@ services:
 
 volumes:
   pgdata:
-  miniodata:
+  garagemeta:
+  garagedata:

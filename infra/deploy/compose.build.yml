@@ -16,3 +16,5 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
   models:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/models" } }
+  storage:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/storage" } }

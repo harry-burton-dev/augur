@@ -1,0 +1,19 @@
+# Garage, AUGUR's object store: S3's API on one node. Its two secrets come from .env
+# (GARAGE_RPC_SECRET and GARAGE_ADMIN_TOKEN), so nothing secret is in this file.
+# The storage service gives the node its layout and each app its bucket. See docs/app-storage.md.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+# A consistent copy of the metadata every hour, which the nightly backup takes.
+metadata_auto_snapshot_interval = "1h"
+replication_factor = 1
+
+rpc_bind_addr = "0.0.0.0:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "0.0.0.0:3900"
+
+[admin]
+api_bind_addr = "0.0.0.0:3903"

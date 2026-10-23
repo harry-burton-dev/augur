@@ -48,8 +48,9 @@ services:
       APP_ORIGINS: ${APP_ORIGINS:-}
     depends_on: [gateway, keycloak]
 
+  # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.0-pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: platform
@@ -80,8 +81,38 @@ services:
     volumes:
       - ./backup:/backup:ro
       - ./backups:/backups
+      # Apps' files, read only: backed up beside the database.
+      - garage-meta:/objects/meta:ro
+      - garage-data:/objects/data:ro
     depends_on:
       postgres: { condition: service_healthy }
+
+  # Apps' files: an S3-compatible object store, reached only inside the compose network.
+  garage:
+    image: dxflrs/garage:v2.4.1
+    restart: unless-stopped
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in .env}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in .env}
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+
+  # Gives each app in APP_STORAGE its own database login and schema, and its own bucket and key,
+  # from the secrets in .env, then stops. Runs on every `up`; see docs/app-storage.md.
+  storage:
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    restart: on-failure
+    # Each app's secrets are named after it (FOLIO_DATABASE_PASSWORD, ...), so it reads them all from .env.
+    env_file: [{ path: .env, required: false }]
+    environment:
+      DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
+      GARAGE_ADMIN_URL: http://garage:3903
+      APP_STORAGE: ${APP_STORAGE:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      garage: { condition: service_started }
 
   # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it.
   keycloak:
@@ -187,3 +218,5 @@ services:
 volumes:
   pgdata:
   tailscale:
+  garage-meta:
+  garage-data:

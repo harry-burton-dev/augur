@@ -24,7 +24,7 @@ build() {
 }
 
 build web -f infra/web.Dockerfile --target web
-for service in gateway identity registry events models; do
+for service in gateway identity registry events models storage; do
   build "$service" -f infra/service.Dockerfile --build-arg "PACKAGE=@augur/$service"
 done
 

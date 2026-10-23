@@ -389,5 +389,12 @@ describe('registry', () => {
       const ok = await put({ floors: ['team', 'org'], surfaces: [{ floor: 'team', slot: 'card', module: './Card', rollup: true }, { floor: 'org', slot: 'page', module: './Page', role: 'lead' }] });
       expect(ok.statusCode).toBe(201);
     });
+
+    it('takes the storage an app keeps, and nothing else under it', async () => {
+      const app = await buildApp({ verifyService });
+      const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, ...payload } });
+      expect((await put({ storage: { database: true, bucket: true } })).statusCode).toBe(201);
+      expect((await put({ storage: { disk: true } })).statusCode).toBe(400);
+    });
   });
 });

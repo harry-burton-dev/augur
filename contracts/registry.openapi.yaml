@@ -443,6 +443,13 @@ components:
           description: Intent types this app handles, e.g. document.open
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
         search: { type: boolean, description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it" }
+        storage:
+          type: object
+          additionalProperties: false
+          description: "The storage the app keeps on the platform. An admin adds the app to APP_STORAGE and its service gets DATABASE_URL (a login owning one schema) and S3_* (its own bucket). See docs/app-storage.md."
+          properties:
+            database: { type: boolean }
+            bucket: { type: boolean }
         scopes:
           type: array
           uniqueItems: true

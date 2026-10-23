@@ -9,7 +9,7 @@ jobs:
     # The registry's Postgres store is tested against a real database.
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:0.8.0-pg17
         env:
           POSTGRES_USER: platform
           POSTGRES_PASSWORD: platform-ci-only
@@ -105,9 +105,10 @@ jobs:
           docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
       - run: docker build -f infra/web.Dockerfile --target web -t platform-web .
       - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity -t platform-identity .
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage -t platform-storage .
       - name: The images don't run as root
         run: |
-          for image in platform-web platform-identity; do
+          for image in platform-web platform-identity platform-storage; do
             uid=$(docker run --rm --entrypoint id "$image" -u)
             echo "$image runs as $uid"
             test "$uid" != 0
@@ -140,11 +141,16 @@ jobs:
           create table user_entity (id text, realm_id text); insert into user_entity values ('u1', 'r1');
           SQL
           mkdir -p /tmp/backups
+          # Stand-in for Garage's volumes: a block, a metadata snapshot, and the live database the backup leaves out.
+          mkdir -p /tmp/objects/data/00 /tmp/objects/meta/snapshots
+          echo block > /tmp/objects/data/00/block; echo snap > /tmp/objects/meta/snapshots/s1; echo live > /tmp/objects/meta/db.sqlite
           docker run --rm --link pg -e PGHOST=pg -e PGUSER=postgres -e PGPASSWORD=ci \
-            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
+            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro \
             postgres:16-alpine /bin/sh /backup/backup.sh --once
           zcat /tmp/backups/platform-*.sql.gz | grep -q "PostgreSQL database cluster dump complete"
           grep -q '"ok":true' /tmp/backups/last-backup.json
+          tar -tzf /tmp/backups/objects-*.tar.gz | tee /tmp/objects.txt
+          grep -q '^data/00/block$' /tmp/objects.txt && grep -q '^meta/snapshots/s1$' /tmp/objects.txt && ! grep -q 'db.sqlite' /tmp/objects.txt
       - name: The weekly restore test restores the newest backup and checks it
         run: |
           docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \

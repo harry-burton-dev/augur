@@ -4,6 +4,8 @@
 # Takes one at start too when today has none, so a fresh setup is covered at once.
 # Once a week (and when none has run yet) it restores the newest one into a
 # throwaway database to prove it works; see restore-test.sh.
+# Apps' files (Garage, mounted read only at /objects) go beside it in objects-<date>.tar.gz:
+# the blocks, and Garage's metadata as its newest hourly snapshot, never the live database.
 # Each run's result goes in $BACKUP_DIR/last-backup.json for Admin's Status.
 set -eu
 # Without it a failed pg_dumpall would look like success, since gzip ends the pipe.
@@ -11,6 +13,7 @@ set -o pipefail
 : "${BACKUP_HOUR_UTC:=2}"
 : "${BACKUP_KEEP_DAYS:=14}"
 : "${BACKUP_DIR:=/backups}"
+: "${OBJECTS_DIR:=/objects}"
 # 0 is Sunday.
 : "${RESTORE_TEST_WEEKDAY:=0}"
 here=$(dirname "$0")
@@ -26,19 +29,38 @@ noted() {
   mv "$BACKUP_DIR/last-backup.json.partial" "$BACKUP_DIR/last-backup.json"
 }
 
+# objects: tars apps' files into objects-<date>.tar.gz. Nothing to do without object storage.
+objects() {
+  [ -d "$OBJECTS_DIR/data" ] || return 0
+  tarball="$BACKUP_DIR/objects-$(date -u +%Y-%m-%d).tar.gz"
+  # Everything of Garage's metadata but its live database; the snapshots hold a consistent copy.
+  if tar -czf "$tarball.partial" -C "$OBJECTS_DIR" --exclude='meta/db.sqlite*' meta data; then
+    mv "$tarball.partial" "$tarball"
+    echo "backup: wrote $tarball ($(du -h "$tarball" | cut -f1))"
+  else
+    rm -f "$tarball.partial"
+    echo "backup: apps' files FAILED, keeping earlier backups" >&2
+    return 1
+  fi
+}
+
 backup() {
   file="$BACKUP_DIR/platform-$(date -u +%Y-%m-%d).sql.gz"
   # Written beside the final name, so a failed dump never replaces a good one.
   if pg_dumpall --clean --if-exists | gzip > "$file.partial"; then
     mv "$file.partial" "$file"
     echo "backup: wrote $file ($(du -h "$file" | cut -f1))"
-    noted true "$file" ""
+    if objects; then
+      noted true "$file" ""
+    else
+      noted false "$file" "The database was backed up, but apps' files could not be. Earlier backups are kept."
+    fi
   else
     rm -f "$file.partial"
     echo "backup: FAILED, keeping earlier backups" >&2
     noted false "" "The database could not be dumped. Earlier backups are kept."
   fi
-  find "$BACKUP_DIR" -name 'platform-*.sql.gz' -mtime +"$((BACKUP_KEEP_DAYS - 1))" -print -delete | sed 's/^/backup: removed /'
+  find "$BACKUP_DIR" \( -name 'platform-*.sql.gz' -o -name 'objects-*.tar.gz' \) -mtime +"$((BACKUP_KEEP_DAYS - 1))" -print -delete | sed 's/^/backup: removed /'
 }
 
 restore_test() {
