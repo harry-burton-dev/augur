@@ -25,7 +25,8 @@ build() {
 
 build web -f infra/web.Dockerfile --target web
 for service in gateway identity registry events models storage; do
-  build "$service" -f infra/service.Dockerfile --build-arg "PACKAGE=@augur/$service"
+  build "$service" -f infra/service.Dockerfile --build-arg "PACKAGE=@augur/$service" --target service
 done
+build updater -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater
 
 jq -s 'add' "$out"/*.ref.json

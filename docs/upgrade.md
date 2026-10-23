@@ -10,7 +10,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 
 **Admin → Updates** shows whether a newer release is out, what changes in each part, and a **Needs you first** list: a release you have to go through first, settings to add, breaking changes, and apps that won't open on the new SDK. It fills in the version for the steps below. The registry checks once a day; **Check now** checks straight away.
 
-**Upgrade to …** on that page asks the deployment's updater to run these steps for you: it asks for your password again, then the updater takes a backup, pulls, restarts each part and goes back by itself if anything fails, and the page follows each step. Until the updater is part of your deployment, an upgrade you ask for just waits; cancel it there and use the steps below.
+**Upgrade to …** on that page asks the deployment's updater to run these steps for you: it asks for your password again, then the updater takes a backup, pulls, restarts each part and goes back by itself if anything fails, and the page follows each step. The updater is optional: until you've set it up ([The updater](#the-updater)), an upgrade you ask for just waits; cancel it there and use the steps below. It only applies a release whose deploy files (`infra/deploy`) are the ones your server has. One that changes them, such as a new service, says so on the page and is done with these steps.
 
 1. **Read what changed.** The GitHub release for the AUGUR version you're moving to, `augur@<version>` under Releases, gathers every part's changes, any breaking change and any new setting, and says which versions it upgrades from. If you're more than one release behind and it lists a breaking change, go to the release before it first. Each package's `CHANGELOG.md` has the detail. Look for these, which mean you have something to do:
    - **major** on a service or contract: a caller has to change. The platform's own frontends move with it, but anything you've built against that API needs checking ([versioning.md](versioning.md)).
@@ -25,8 +25,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 3. **Check Admin → Status.** Everything should be Running and the heading shouldn't say "Backups need a look". Fix that first, so a problem afterwards is clearly the upgrade's.
 4. **Take a backup and test it**, so you can go back:
    ```sh
-   rm -f infra/deploy/backups/platform-$(date -u +%Y-%m-%d).sql.gz   # today's, so a fresh one is taken
-   pc exec backup /bin/sh /backup/backup.sh --once
+   pc exec backup /bin/sh /backup/backup.sh --now
    pc exec backup /bin/sh /backup/backup.sh --restore-test
    ```
    The last line ends with `restored and checked`. If it says FAILED, stop and look at why before upgrading.
@@ -66,6 +65,24 @@ Admin gets an **Updates** page, under AUGUR. It reads this repository's GitHub r
    The registry runs as user 1000. Without the token, Updates says the release feed refused it.
 
 Optional, in `.env`: `RELEASE_CHANNEL=stable` or `beta` (by default, the channel of the release you run), and `RELEASE_FEED_URL` for a mirror, or `off` to check nothing.
+
+### The updater
+
+An optional container that runs an upgrade asked for with **Upgrade to …** on Admin → Updates. It checks every image is signed by this repository's Release workflow and is the one the release names, checks the release's deploy files match your server's and the settings it needs are set, takes a backup and test-restores it, pulls, then reruns storage’s set-up and restarts identity, registry, events, models, gateway and web in turn, waiting for each to answer on its new version. If one doesn't, it puts every part back on the release you were on, and the page says why and which backup was taken. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
+
+It drives Docker, which can start any container, so it has the run of the server. Only it can reach Docker (through `docker-proxy`, on a network of their own), and only an admin who has just entered their password can ask it for anything. Once, after the upgrade that brings it:
+
+1. In `.env`, turn it on and tell it where it is. `PLATFORM_DIR` is the full path of `infra/deploy` on the server; it's mounted at that same path, so Compose's `./` paths still name your files.
+   ```sh
+   COMPOSE_PROFILES=updater
+   PLATFORM_DIR=/home/you/augur/infra/deploy
+   UPDATER_CLIENT_SECRET=<openssl rand -hex 32>
+   ```
+2. It runs as user 1000 and changes `PLATFORM_VERSION` in `.env`, so user 1000 has to be able to write it. On most servers that's the first account, so if `id -u` prints 1000 there's nothing to do; otherwise `sudo setfacl -m u:1000:rw infra/deploy/.env`.
+3. For private images, the same read:packages token the server pulls with: `printf '%s' '<the token>' > infra/deploy/secrets/image-pull-token`, owned by user 1000 like the release feed's, and `IMAGE_PULL_USER=<your GitHub username>` in `.env`.
+4. `pc up -d`. Identity makes the updater's sign-in, and an upgrade you ask for starts within half a minute.
+
+Docker must be listening on `/var/run/docker.sock` (rootless Docker isn't). From then on, upgrade from the page, or by hand as above; both work. An upgrade waiting on the page while you upgrade by hand is best cancelled first.
 
 ### Images from releases (the first `augur@` release)
 

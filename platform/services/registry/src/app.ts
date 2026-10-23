@@ -509,14 +509,32 @@ export const buildApp = async ({
         return false;
       };
 
-      /** What the updater should run: the open upgrade, by digest, or nothing (204). */
+      /**
+       * What the updater should run: the open upgrade, by digest, or nothing (204). With it, what the
+       * release file says the updater checks against: each part's version, the settings it needs
+       * and its deploy files. Those come from the feed, so they're missing when it can't be read.
+       */
       app.get('/platform/upgrade/target', async (req, reply) => {
         if (!(await isUpdater(req, reply))) return reply;
         updaterSeenAt = new Date().toISOString();
         const upgrade = await store.upgrade();
         if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') return reply.code(204).send();
         const { id, from, version, images, state } = upgrade;
-        return { id, from, version, images, state };
+        const manifest = updates.result.releases.find((r) => r.version === version)?.manifest;
+        return {
+          id,
+          from,
+          version,
+          images,
+          state,
+          ...(manifest
+            ? {
+                parts: Object.fromEntries(Object.entries(manifest.parts).map(([name, part]) => [name, part.version])),
+                required: manifest.settings?.required ?? [],
+                ...(manifest.deploy ? { deploy: manifest.deploy } : {}),
+              }
+            : {}),
+        };
       });
 
       /** One step of the open upgrade, from the updater; with `outcome`, how it ended. */

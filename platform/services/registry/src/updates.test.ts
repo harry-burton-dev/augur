@@ -172,7 +172,7 @@ describe('upgrading', () => {
   const updater = { authorization: 'Bearer platform-updater' };
   const setup = async () => {
     const entries: { action: string; target?: string; actor: { id: string } }[] = [];
-    const server = await buildApp({ verifyService, updates: await checked([release('0.3.0', 'beta', { images }), release('0.2.0')]), audit: async (e) => void entries.push(e) });
+    const server = await buildApp({ verifyService, updates: await checked([release('0.3.0', 'beta', { images, deploy: { 'compose.yml': 'cc' } }), release('0.2.0')]), audit: async (e) => void entries.push(e) });
     return { server, entries };
   };
 
@@ -196,7 +196,8 @@ describe('upgrading', () => {
     expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: { authorization: 'Bearer platform-gateway' } })).statusCode).toBe(403);
     expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: admin })).statusCode).toBe(403);
     const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
-    expect(target).toMatchObject({ version: '0.3.0', from: '0.2.0', images, state: 'requested' });
+    expect(target).toMatchObject({ version: '0.3.0', from: '0.2.0', images, state: 'requested', parts: { '@augur/registry': '0.3.0', '@augur/mfe-sdk': '1.1.0' }, deploy: { 'compose.yml': 'cc' } });
+    expect(target.required).toEqual(expect.any(Array));
 
     const report = (payload: Record<string, unknown>) => server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, ...payload } });
     expect((await report({ step: 'preflight', state: 'done' })).json()).toMatchObject({ state: 'running' });
