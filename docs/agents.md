@@ -25,7 +25,7 @@ Some choices:
 - **Any OpenAI-compatible server**, including local ones (Ollama at `http://<host>:11434/v1`, vLLM).
 - **The stand-in**: `MODEL_API_URL=stand-in` needs no key and doesn't think. It answers with what you said, and offers a tool when your words match its description, so the whole path (Agents, a confirmation card, an intent) can be tried on a server with no provider. The local dev stack uses it.
 
-The gateway also needs its own sign-in, `MODELS_CLIENT_SECRET` (`openssl rand -hex 32`), to check apps' grants and write the audit log. Then `pc up -d --build`, and turn models on in Admin.
+The gateway also needs its own sign-in, `MODELS_CLIENT_SECRET` (`openssl rand -hex 32`), to check apps' grants and write the audit log. Then `pc up -d`, and turn models on in Admin.
 
 Admin's Status shows the gateway like every service. When a call fails, the person sees why in words (for example "The model provider answered 401: check MODEL_API_KEY"), and the gateway's log has the rest.
 
