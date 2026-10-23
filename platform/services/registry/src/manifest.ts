@@ -19,7 +19,37 @@ export interface AppEntry {
   menu?: AppMenuCategory[];
   /** What the app's service asks to do on the platform, such as "notifications:send". */
   scopes?: Scope[];
+  /** The kinds of floor the app works on. Without it, every kind. */
+  floors?: FloorKind[];
+  /** What the app shows on each kind of floor, for the shell to place. */
+  surfaces?: Surface[];
 }
+
+export const FLOOR_KINDS = ['personal', 'team', 'org'] as const;
+export type FloorKind = (typeof FLOOR_KINDS)[number];
+
+/** Where on the shell a surface goes: a whole page, a card on a floor's page, a side panel, the floor's settings, or Admin. */
+export const SURFACE_SLOTS = ['page', 'card', 'panel', 'settings', 'admin'] as const;
+
+/**
+ * One thing an app shows on one kind of floor. Several surfaces can share a
+ * module, and the app's route is the same on every floor. When several match,
+ * the most specific floor wins, then a role condition, then manifest order.
+ */
+export interface Surface {
+  /** "team" means any team, at any depth. */
+  floor: FloorKind;
+  slot: (typeof SURFACE_SLOTS)[number];
+  /** The module the app's entry exposes for it. */
+  module: string;
+  /** Only for people with this role on the floor. */
+  role?: 'member' | 'lead';
+  /** Shows this floor and the teams below it that the person is on, using the platform's roll-up. */
+  rollup?: boolean;
+}
+
+/** The kinds of floor an app works on. */
+export const floorKindsOf = (entry: Pick<AppEntry, 'floors'>): readonly FloorKind[] => entry.floors ?? FLOOR_KINDS;
 
 export interface AppMenuItem {
   id?: string;
@@ -113,6 +143,23 @@ export const appEntrySchema = {
     handles: { type: 'array', maxItems: 50, items: { type: 'string', pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 } },
     ai: { type: 'boolean' },
     scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } },
+    floors: { type: 'array', minItems: 1, uniqueItems: true, maxItems: FLOOR_KINDS.length, items: { enum: [...FLOOR_KINDS] } },
+    surfaces: {
+      type: 'array',
+      maxItems: 30,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['floor', 'slot', 'module'],
+        properties: {
+          floor: { enum: [...FLOOR_KINDS] },
+          slot: { enum: [...SURFACE_SLOTS] },
+          module: { type: 'string', pattern: '^[A-Za-z0-9_./-]+$', maxLength: 100 },
+          role: { enum: ['member', 'lead'] },
+          rollup: { type: 'boolean' },
+        },
+      },
+    },
     menu: {
       type: 'array',
       maxItems: 8,
@@ -155,6 +202,13 @@ export const versionProblem = (entry: AppEntry): string | undefined => {
   if (!semver.valid(entry.version)) return `"${entry.version}" is not a semver version such as 1.2.0.`;
   if (!semver.validRange(entry.sdk)) return `"${entry.sdk}" is not a semver range of SDK versions such as ^1.0.0.`;
   return undefined;
+};
+
+/** Why an app's surfaces don't fit the floors it says it works on, or undefined when they do. */
+export const surfaceProblem = (entry: AppEntry): string | undefined => {
+  const kinds = floorKindsOf(entry);
+  const stray = entry.surfaces?.find((s) => !kinds.includes(s.floor));
+  return stray ? `${entry.name} has a ${stray.slot} for the ${stray.floor} floor, but its floors don't include ${stray.floor}.` : undefined;
 };
 
 /** Why an app can't take the id or route it asked for, or undefined when it can. */

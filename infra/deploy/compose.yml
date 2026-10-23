@@ -8,6 +8,7 @@ x-service: &service
   restart: unless-stopped
   environment: &env
     NODE_ENV: production
+    IDENTITY_URL: http://identity:8081
     EVENTS_URL: http://events:8084
     REGISTRY_URL: http://registry:8082
     # Every service signs in as itself (its own Keycloak client and SERVICE_CLIENT_SECRET); tokens name the

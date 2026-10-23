@@ -132,13 +132,14 @@ export function Host({
     return () => window.removeEventListener('popstate', onPop);
   }, [settled]);
 
-  // The catalogue: which apps this person can open.
+  // The catalogue: which apps this person can open on this floor. Another floor may have other apps.
+  const floorId = (floor ?? home).id;
   useEffect(() => {
     let live = true;
     setProblem(null);
     session
       .getToken()
-      .then((token) => loadManifest(fetchImpl, manifestUrl, token))
+      .then((token) => loadManifest(fetchImpl, manifestUrl, token, floorId))
       .then((apps) => {
         if (!live) return;
         setManifest(apps);
@@ -152,7 +153,7 @@ export function Host({
     return () => {
       live = false;
     };
-  }, [session, manifestUrl, fetchImpl, attempt]);
+  }, [session, manifestUrl, fetchImpl, attempt, floorId]);
 
   const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path) : undefined), [manifest, floor, where]);
 
@@ -256,7 +257,7 @@ export function Host({
     }
     if (!screen) {
       void mounter.current.unmount();
-      setProblem({ title: 'Nothing here', summary: `No app you can open lives at ${where.path}.`, retry: () => navigate('/') });
+      setProblem({ title: 'Nothing here', summary: `No app you can open lives at ${where.path} on ${floor.name}. An app can be on one floor and not another.`, retry: () => navigate('/') });
       return;
     }
     if (screen.kind !== 'app') {

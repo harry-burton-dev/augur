@@ -41,6 +41,14 @@ const behavesLikeAWorkspaceStore = (make: () => WorkspaceStore, reset: () => Pro
     expect((await store.teams()).map((t) => t.name)).toEqual(['Finance', 'Payroll', 'Pensions', 'Claims', 'Audits']);
   });
 
+  it('finds any floor by id', async () => {
+    const finance = await store.createTeam('Finance');
+    const own = await store.personal('u-1', 'Alex');
+    expect(await store.workspace(finance.id)).toEqual(finance);
+    expect(await store.workspace(own.id)).toEqual(own);
+    expect(await store.workspace('gone')).toBeUndefined();
+  });
+
   it('refuses a sibling’s name, keeps slugs unique and stable', async () => {
     const finance = await store.createTeam('Finance');
     await expect(store.createTeam('finance')).rejects.toMatchObject({ status: 409 });

@@ -9,6 +9,7 @@ x-service: &service
 # its own Keycloak client and SERVICE_CLIENT_SECRET (identity makes the clients
 # from SERVICE_CLIENT_SECRETS). Local only.
 x-internal: &internal
+  IDENTITY_URL: http://identity:8081
   REGISTRY_URL: http://registry:8082
   EVENTS_URL: http://events:8084
   # Services' tokens name the browser's address; they are fetched and checked over the compose network.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@platform/service-kit';
 import { buildApp } from './app.ts';
+import { MemoryWorkspaceStore } from './workspaces.ts';
 
 describe('identity', () => {
   it('reports healthy', async () => {
@@ -35,5 +36,40 @@ describe('identity', () => {
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { theme: 'pink' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { density: 'tiny' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences' })).statusCode).toBe(401);
+  });
+
+  describe('floors', () => {
+    const verifyService = async (headers: Record<string, string | string[] | undefined>) =>
+      headers.authorization === 'Bearer registry' ? ({ kind: 'platform', name: 'registry' } as const) : headers.authorization === 'Bearer app' ? ({ kind: 'app', app: 'library' } as const) : undefined;
+    const tree = async () => {
+      const workspaces = new MemoryWorkspaceStore();
+      const org = await workspaces.org();
+      const finance = await workspaces.createTeam('Finance');
+      const payroll = await workspaces.createTeam('Payroll', finance.id);
+      const legal = await workspaces.createTeam('Legal');
+      await workspaces.setMember(payroll.id, 'u-1', 'member');
+      await workspaces.setMember(legal.id, 'u-2', 'member');
+      const own = await workspaces.personal('u-1', 'Alex');
+      return { workspaces, org, finance, payroll, legal, own, app: await buildApp({ workspaces, verifyService }) };
+    };
+
+    it('tells the platform’s services where a floor sits, and no one else', async () => {
+      const { app, org, finance, payroll, own } = await tree();
+      const look = (id: string, authorization?: string) => app.inject({ method: 'GET', url: `/v1/workspaces/${id}`, headers: authorization ? { authorization } : {} });
+      expect((await look(payroll.id, 'Bearer registry')).json()).toEqual({ id: payroll.id, kind: 'team', path: [org.id, finance.id, payroll.id], org: org.id });
+      expect((await look(own.id, 'Bearer registry')).json()).toEqual({ id: own.id, kind: 'personal', path: [own.id], org: org.id });
+      expect((await look('nope', 'Bearer registry')).statusCode).toBe(404);
+      expect((await look(payroll.id, 'Bearer app')).statusCode).toBe(403);
+      expect((await look(payroll.id)).statusCode).toBe(403);
+    });
+
+    it('rolls up a floor to the teams below it that the caller is on', async () => {
+      const { app, org, finance, payroll, legal } = await tree();
+      const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: [] });
+      const rollup = async (id: string) => app.inject({ method: 'GET', url: `/v1/me/workspaces/${id}/rollup`, headers: alex });
+      expect((await rollup(finance.id)).json().workspaces.map((w: { id: string }) => w.id)).toEqual([finance.id, payroll.id]);
+      expect((await rollup(org.id)).json().workspaces.map((w: { id: string }) => w.id)).toEqual([org.id, finance.id, payroll.id]);
+      expect((await rollup(legal.id)).statusCode).toBe(404);
+    });
   });
 });

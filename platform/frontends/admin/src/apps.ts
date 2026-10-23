@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import semver from 'semver';
 import { SDK_VERSION } from '@platform/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@platform/ui-kit';
-import type { AdminApi, AllowedOrigin, AppVersion, CatalogueApp, IssuedSignIn } from './api.js';
+import type { AdminApi, AllowedOrigin, AppVersion, CatalogueApp, Department, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
 import { page } from './parts.js';
 
 /** Where an app stands: off, on, or on but unable to open in this platform. */
@@ -35,6 +35,54 @@ export const SCOPE_WORDS: Record<string, string> = {
 export const scopeWords = (scopes: string[] | undefined) =>
   scopes?.length ? scopes.map((s) => SCOPE_WORDS[s] ?? s).join(', ') : 'Nothing beyond registering itself';
 
+/** A floor an app can be set on, in tree order: the org first, then each team below the one it sits in. */
+export interface AppFloor {
+  id: string;
+  name: string;
+  /** Ids from the org down to this floor, itself included. */
+  path: string[];
+}
+
+/** The org and its teams as floors, parents before children. */
+export const floorTree = (org: { id: string; name: string }, departments: Department[]): AppFloor[] => {
+  const out: AppFloor[] = [{ id: org.id, name: org.name, path: [org.id] }];
+  const walk = (parent: string | undefined, path: string[]) => {
+    for (const d of departments.filter((x) => x.parentId === parent).sort((a, b) => a.name.localeCompare(b.name))) {
+      out.push({ id: d.id, name: d.name, path: [...path, d.id] });
+      walk(d.id, [...path, d.id]);
+    }
+  };
+  walk(undefined, [org.id]);
+  return out;
+};
+
+/**
+ * Whether an app is on for a floor, in words, the way the registry decides
+ * it: off everywhere while it's turned off, a block on the floor or above
+ * wins, then the nearest rule from the floor upwards that carries on, and on
+ * with no rule at all.
+ */
+export const floorStatus = (app: CatalogueApp, floor: AppFloor, rules: FloorRule[], names: Map<string, string>): { on: boolean; words: string } => {
+  if (!app.enabled) return { on: false, words: 'Off: the app is turned off' };
+  const kind = floor.path.length === 1 ? 'org' : 'team';
+  if (app.floors && !app.floors.includes(kind)) return { on: false, words: `Off: it doesn’t work on ${kind === 'org' ? 'the org' : 'teams'}` };
+  const block = rules.find((r) => r.state === 'blocked' && floor.path.includes(r.workspace));
+  if (block) return { on: false, words: block.workspace === floor.id ? 'Blocked here and below' : `Off: blocked by ${names.get(block.workspace) ?? 'a floor above'}` };
+  for (let i = floor.path.length - 1; i >= 0; i--) {
+    const here = i === floor.path.length - 1;
+    const rule = rules.find((r) => r.workspace === floor.path[i] && r.state !== 'blocked' && (here || r.carriesOn));
+    if (rule) return { on: rule.state === 'on', words: `${rule.state === 'on' ? 'On' : 'Off'}${here ? '' : `, as ${names.get(rule.workspace) ?? 'the floor above'}`}` };
+  }
+  return { on: true, words: 'On' };
+};
+
+const FLOOR_CHOICES: SelectOption[] = [
+  { value: 'inherit', label: 'As the floor above' },
+  { value: 'on', label: 'On here and below' },
+  { value: 'off', label: 'Off here and below' },
+  { value: 'blocked', label: 'Blocked here and below', detail: 'No team below can turn it on' },
+];
+
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 /** Every app in the catalogue with its version, a switch to stop offering one, and its kept versions to go back to. */
@@ -56,6 +104,9 @@ export class AdminApps extends LitElement {
     working: { state: true },
     issuing: { state: true },
     issued: { state: true },
+    floorRules: { state: true },
+    floorList: { state: true },
+    floorsError: { state: true },
   };
 
   declare api: AdminApi;
@@ -78,6 +129,11 @@ export class AdminApps extends LitElement {
   declare issuing: CatalogueApp | undefined;
   /** The secret just issued, shown once. */
   declare issued: (IssuedSignIn & { name: string }) | undefined;
+  /** What each floor says about the open app; undefined until loaded. */
+  declare floorRules: FloorRule[] | undefined;
+  /** The org and its teams; loaded once. */
+  declare floorList: AppFloor[] | undefined;
+  declare floorsError: string;
 
   constructor() {
     super();
@@ -91,6 +147,7 @@ export class AdminApps extends LitElement {
     this.originsOpen = false;
     this.originsError = '';
     this.working = false;
+    this.floorsError = '';
   }
 
   override createRenderRoot() {
@@ -106,8 +163,72 @@ export class AdminApps extends LitElement {
       this.saveError = '';
       const app = this.apps.find((a) => a.id === this.open);
       this.choice = app?.pinnedVersion ?? NEWEST;
-      if (app && !app.platform) void this.loadVersions(app.id);
+      this.floorRules = undefined;
+      this.floorsError = '';
+      if (app && !app.platform) {
+        void this.loadVersions(app.id);
+        void this.loadFloors(app.id);
+      }
     }
+  }
+
+  async loadFloors(id: string) {
+    try {
+      const [rules, list] = await Promise.all([
+        this.api.appFloors(id),
+        this.floorList ?? Promise.all([this.api.org(), this.api.departments()]).then(([org, departments]) => floorTree(org, departments)),
+      ]);
+      this.floorList = list;
+      if (this.open === id) this.floorRules = rules;
+    } catch (err) {
+      if (this.open === id) this.floorsError = (err as Error).message;
+    }
+  }
+
+  async setFloor(app: CatalogueApp, floor: AppFloor, state: FloorChoice) {
+    this.floorsError = '';
+    try {
+      const { rules } = await this.api.setAppFloor(app.id, floor.id, state);
+      if (this.open === app.id) this.floorRules = rules;
+    } catch (err) {
+      this.floorsError = (err as Error).message;
+    }
+  }
+
+  async allowScopes(app: CatalogueApp) {
+    this.floorsError = '';
+    try {
+      const updated = await this.api.grantScopes(app.id, [...(app.grantedScopes ?? []), ...(app.awaitingScopes ?? [])]);
+      this.apps = this.apps.map((a) => (a.id === updated.id ? updated : a));
+    } catch (err) {
+      this.floorsError = (err as Error).message;
+    }
+  }
+
+  /** Where the app is on, floor by floor, and a choice for each. */
+  private floors(app: CatalogueApp) {
+    const rules = this.floorRules;
+    const list = this.floorList;
+    if (this.floorsError && !rules) return html`<p style="color:var(--danger)">${this.floorsError}</p>`;
+    if (!rules || !list) return html`<ui-rows loading count="3"></ui-rows>`;
+    const names = new Map(list.map((f) => [f.id, f.name]));
+    return html`<div data-floors style="display:flex;flex-direction:column;gap:var(--space-2)">
+      <p>Where it’s on. Everyone’s own floor follows the org.</p>
+      ${this.floorsError ? html`<p style="color:var(--danger)">${this.floorsError}</p>` : nothing}
+      ${list.map((floor) => {
+        const rule = rules.find((r) => r.workspace === floor.id);
+        const status = floorStatus(app, floor, rules, names);
+        return html`<ui-select
+          data-floor=${floor.id}
+          style=${`margin-inline-start:calc(var(--space-4) * ${floor.path.length - 1})`}
+          label=${floor.name}
+          hint=${status.words}
+          .options=${FLOOR_CHOICES}
+          .value=${rule?.state ?? 'inherit'}
+          @ui-change=${(e: CustomEvent<{ value: FloorChoice }>) => this.setFloor(app, floor, e.detail.value)}
+        ></ui-select>`;
+      })}
+    </div>`;
   }
 
   async loadVersions(id: string) {
@@ -313,7 +434,7 @@ export class AdminApps extends LitElement {
       { label: 'Address', value: app.route },
       ...(app.entry.startsWith('/') && !app.entry.startsWith('//') ? [] : [{ label: 'Loads from', value: app.entry }]),
       ...(app.requiredRole ? [{ label: 'Only for', value: app.requiredRole }] : []),
-      ...(app.platform ? [] : [{ label: 'May', value: scopeWords(app.scopes) }]),
+      ...(app.platform ? [] : [{ label: 'May', value: scopeWords(app.grantedScopes ?? app.scopes) }]),
     ];
     return html`<ui-dialog
       open
@@ -337,6 +458,11 @@ export class AdminApps extends LitElement {
               this.apps = this.apps.map((a) => (a.id === updated.id ? updated : a));
             }}
           ></ui-toggle>`}
+      ${app.awaitingScopes?.length
+        ? html`<p>Version ${app.version} also asks to: ${scopeWords(app.awaitingScopes)}. It runs without that until you allow it.</p>
+            <div><ui-button kind="secondary" size="sm" @click=${() => this.allowScopes(app)}>Allow it</ui-button></div>`
+        : nothing}
+      ${app.platform ? nothing : this.floors(app)}
       ${app.handles?.length ? html`<p>Answers ${app.handles.join(', ')}.</p>` : nothing}
       ${app.platform ? nothing : this.history(app)}
       ${app.platform

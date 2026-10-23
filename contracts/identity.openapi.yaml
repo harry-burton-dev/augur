@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.4.0
+  version: 1.5.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -68,6 +68,52 @@ paths:
                   workspaces: { type: array, items: { $ref: "#/components/schemas/Floor" } }
         "401":
           description: No signed-in caller
+  /me/workspaces/{id}/rollup:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: A floor and every team below it the caller is on
+      description: >
+        What an app rolls up when someone asks to include sub-teams. Access
+        flows down only, so a team below appears only if the caller is on it.
+      responses:
+        "200":
+          description: The floor first, then the teams below it in tree order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace, workspaces]
+                properties:
+                  workspace: { type: string }
+                  workspaces: { type: array, items: { $ref: "#/components/schemas/Floor" } }
+        "401": { description: No signed-in caller }
+        "404": { description: The caller isn't on that floor }
+  /workspaces/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Where a floor sits (platform services only)
+      description: >
+        For the platform's services, signed in as themselves, which store only
+        a floor's id. Archived teams are still found, so old records resolve.
+      responses:
+        "200":
+          description: The floor's place in the tree
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, kind, path, org]
+                properties:
+                  id: { type: string }
+                  kind: { type: string, enum: [org, personal, team] }
+                  path: { type: array, items: { type: string }, description: Ids from the floor's root down to it; a personal floor is alone on its path }
+                  org: { type: string, description: The org's id, which every rule starts from }
+                  archivedAt: { type: string, format: date-time }
+        "403": { description: Not a platform service }
+        "404": { description: No such floor }
+        "503": { description: The caller's token can't be checked right now }
   # Admin: people and roles, kept in the sign-in provider (Keycloak), and departments,
   # which are identity's own teams (copied in once from the provider's groups).
   # Every /admin path answers 403 to a caller without the admin role, and 503 when

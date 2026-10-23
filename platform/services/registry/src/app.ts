@@ -1,7 +1,25 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type ServiceCredentials, type ServiceIdentity, type ServiceVerifier } from '@platform/service-kit';
-import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
-import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore } from './store.ts';
+import {
+  callerFromHeaders,
+  FloorsUnavailable,
+  health,
+  identifyService,
+  packageVersion,
+  recordAudit,
+  SCOPES,
+  ServiceAuthUnavailable,
+  serviceLogging,
+  type FloorLookup,
+  type FloorPlace,
+  type NewAuditEntry,
+  type Scope,
+  type ServiceCredentials,
+  type ServiceIdentity,
+  type ServiceVerifier,
+} from '@platform/service-kit';
+import { awaitingScopes, floorState, usableScopes } from './floors.ts';
+import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, surfaceProblem, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
+import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore, type FloorRule } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -13,6 +31,8 @@ export interface RegistryOptions {
   verifyService?: ServiceVerifier;
   /** Where changes to the catalogue are recorded. Without it nothing is audited. */
   audit?: (entry: NewAuditEntry) => Promise<void>;
+  /** Where a floor sits, from identity. Without it nothing can be answered for a floor (503). */
+  floors?: FloorLookup;
 }
 
 /** Records audit entries with the events service, as the registry. */
@@ -32,14 +52,19 @@ const catalogueEntry = (r: AppRecord, allowed: string[]) => {
     registeredAt: r.registeredAt,
     updatedAt: r.updatedAt,
     ...(r.pinnedVersion ? { pinnedVersion: r.pinnedVersion } : {}),
+    grantedScopes: usableScopes(r),
+    ...(awaitingScopes(r).length ? { awaitingScopes: awaitingScopes(r) } : {}),
   };
 };
+
+/** What one floor's rule changes, as the activity log names it. */
+const RULE_ACTIONS: Record<FloorRule['state'] | 'inherit', string> = { on: 'app.enabled', off: 'app.disabled', blocked: 'app.blocked', inherit: 'app.inherited' };
 
 /**
  * The catalogue of apps. The platform's own apps are built in; every other app
  * registers itself, and each person is shown only the apps their roles allow.
  */
-export const buildApp = async ({ store = new MemoryAppStore(), verifyService, audit }: RegistryOptions = {}) => {
+export const buildApp = async ({ store = new MemoryAppStore(), verifyService, audit, floors }: RegistryOptions = {}) => {
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   app.get('/healthz', async () => health('registry', version, API_VERSION));
@@ -49,15 +74,47 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
     async (app) => {
       const allowedOrigins = async () => (await store.origins()).map((o) => o.origin);
 
-      // The gateway verified who is calling and passed it on.
-      app.get('/manifest', async (req) => {
-        const roles = callerFromHeaders(req.headers)?.roles ?? [];
-        // An app whose origin an admin has stopped allowing isn't offered, even though it stays registered.
-        const allowed = await allowedOrigins();
-        const registered = (await store.records()).filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed)).map((r) => r.entry);
-        const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
-        return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
-      });
+      /** Where a floor sits; undefined (and the reply sent) when it can't be said. */
+      const placeOf = async (reply: FastifyReply, workspace: string): Promise<FloorPlace | undefined> => {
+        if (!floors) {
+          void reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up: the registry has no way to reach identity.' });
+          return undefined;
+        }
+        try {
+          const place = await floors(workspace);
+          if (!place) void reply.code(404).send({ error: 'not_found', message: 'There is no such floor.' });
+          return place;
+        } catch (err) {
+          if (!(err instanceof FloorsUnavailable)) throw err;
+          void reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now. Try again in a moment.' });
+          return undefined;
+        }
+      };
+
+      // The gateway verified who is calling, and the floor they're on, and passed both on.
+      app.get<{ Querystring: { workspace?: string } }>(
+        '/manifest',
+        { schema: { querystring: { type: 'object', properties: { workspace: { type: 'string', maxLength: 100 } } } } },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          const roles = caller?.roles ?? [];
+          const { workspace } = req.query;
+          // Only the floor the gateway checked: a person can't read the catalogue of a floor they aren't on.
+          if (workspace && caller?.workspace?.id !== workspace) {
+            return reply.code(403).send({ error: 'forbidden', message: 'Ask for the catalogue of the floor you’re on, with its X-Workspace-Id.' });
+          }
+          const place = workspace ? await placeOf(reply, workspace) : undefined;
+          if (workspace && !place) return reply;
+          // An app whose origin an admin has stopped allowing isn't offered, even though it stays registered.
+          const allowed = await allowedOrigins();
+          const rules = place ? await store.rules() : [];
+          const registered = (await store.records())
+            .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
+            .map((r) => r.entry);
+          const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
+          return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
+        },
+      );
 
       const isAdmin = (req: FastifyRequest) => callerFromHeaders(req.headers)?.roles.includes('admin') ?? false;
 
@@ -136,8 +193,9 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
 
       /**
        * What an app may do on a floor, for the platform's services to check its
-       * calls against. Today an app on the catalogue is granted what its manifest
-       * asks for, on every floor; one that is off is granted nothing.
+       * calls against: the scopes it asks for and an admin has granted, where it
+       * is on. Nothing where it is off, on a floor that no longer exists, or
+       * anywhere while it is turned off.
        */
       app.get<{ Params: { id: string }; Querystring: { workspace?: string } }>(
         '/apps/:id/grants',
@@ -148,7 +206,18 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
           if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can read what an app is granted.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-          return { app: found.entry.id, ...(req.query.workspace ? { workspace: req.query.workspace } : {}), scopes: found.enabled ? (found.entry.scopes ?? []) : [] };
+          const { workspace } = req.query;
+          if (!workspace) return { app: found.entry.id, scopes: found.enabled ? usableScopes(found) : [] };
+          let place: FloorPlace | undefined;
+          if (!floors) return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up: the registry has no way to reach identity.' });
+          try {
+            place = await floors(workspace);
+          } catch (err) {
+            if (!(err instanceof FloorsUnavailable)) throw err;
+            return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now.' });
+          }
+          const on = place ? floorState(found, place, await store.rules(found.entry.id)).on : false;
+          return { app: found.entry.id, workspace, scopes: on ? usableScopes(found) : [] };
         },
       );
 
@@ -164,7 +233,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
           if (!by) return reply;
           const entry = req.body;
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
-          const badVersion = versionProblem(entry);
+          const badVersion = versionProblem(entry) ?? surfaceProblem(entry);
           if (badVersion) return reply.code(400).send({ error: 'bad_request', message: badVersion });
           const badOrigin = entryOriginProblem(entry, await allowedOrigins());
           if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });
@@ -207,6 +276,79 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
             await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: req.body.enabled ? 'app.enabled' : 'app.disabled', target: req.params.id });
           }
           return catalogueEntry({ ...before, enabled: req.body.enabled }, await allowedOrigins());
+        },
+      );
+
+      /** What each floor says about an app, and whether it's on there, for admins to set it floor by floor. */
+      app.get<{ Params: { id: string } }>('/apps/:id/floors', async (req, reply) => {
+        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where an app is on.' });
+        if (!(await store.records()).some((r) => r.entry.id === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+        return store.rules(req.params.id);
+      });
+
+      /**
+       * Sets what one floor says about an app: on, off, blocked (for it and
+       * every floor below), or `inherit` to take its rule away. The org and
+       * teams only: nobody, admins included, sets anything on someone's own floor.
+       */
+      app.put<{ Params: { id: string; workspace: string }; Body: { state: FloorRule['state'] | 'inherit'; carriesOn?: boolean } }>(
+        '/apps/:id/floors/:workspace',
+        {
+          schema: {
+            body: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['state'],
+              properties: { state: { enum: ['on', 'off', 'blocked', 'inherit'] }, carriesOn: { type: 'boolean' } },
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where an app is on.' });
+          if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: 'Platform apps are on everywhere.' });
+          const found = (await store.records()).find((r) => r.entry.id === req.params.id);
+          if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          const place = await placeOf(reply, req.params.workspace);
+          if (!place) return reply;
+          if (place.kind === 'personal') return reply.code(400).send({ error: 'bad_request', message: 'Someone’s own floor gets the org’s apps; it can’t be set on its own.' });
+          const { state, carriesOn = true } = req.body;
+          const changed = state === 'inherit' ? await store.clearRule(found.entry.id, place.id) : await store.setRule({ app: found.entry.id, workspace: place.id, state, carriesOn, setBy: caller.id });
+          if (changed) {
+            req.log.info({ app: found.entry.id, workspace: place.id, state, by: caller.id }, 'app floor rule set');
+            await record(req, {
+              actor: { id: caller.id, kind: 'user' },
+              app: 'registry',
+              action: RULE_ACTIONS[state],
+              target: found.entry.id,
+              detail: { workspace: place.id, ...(state === 'on' || state === 'off' ? { carriesOn } : {}) },
+            });
+          }
+          return { rules: await store.rules(found.entry.id), state: floorState(found, place, await store.rules(found.entry.id)) };
+        },
+      );
+
+      /** Lets an app use scopes it asks for. An admin grants them once they've seen what a new version wants. */
+      app.put<{ Params: { id: string }; Body: { scopes: Scope[] } }>(
+        '/apps/:id/scopes',
+        {
+          schema: {
+            body: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['scopes'],
+              properties: { scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } } },
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose what an app may do.' });
+          const changed = await store.grant(req.params.id, req.body.scopes);
+          if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          req.log.info({ app: req.params.id, scopes: req.body.scopes, by: caller.id }, 'app scopes granted');
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.scopes-granted', target: req.params.id, detail: { scopes: req.body.scopes } });
+          return catalogueEntry(changed, await allowedOrigins());
         },
       );
 

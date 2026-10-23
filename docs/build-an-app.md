@@ -107,6 +107,11 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
   "requiredRole": "finance",
   "handles": ["expense.open"],
   "scopes": ["notifications:send"],
+  "floors": ["team", "org"],
+  "surfaces": [
+    { "floor": "team", "slot": "card", "module": "./TeamClaims", "rollup": true },
+    { "floor": "org", "slot": "page", "module": "./AllClaims", "role": "lead" }
+  ],
   "menu": [
     { "label": "Claims", "icon": "document", "items": [
       { "label": "Mine", "path": "/mine", "detail": "Drafts and sent" }
@@ -119,7 +124,9 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 - `sdk` is the range of SDK releases the app works with. The shell refuses an app outside it.
 - `icon` and menu `icon`s are the kit's icon names (see Storybook's Icons).
 - `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit; see [platform/frontends](../platform/frontends/README.md#title-and-orbit).
-- `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`). An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope.
+- `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`). An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope. A new version that asks for more scopes is still served, but gets the new ones only once an admin allows them in Admin, Apps.
+- `floors` is the kinds of floor the app works on: `personal` (someone's own), `team` (any team, at any depth) and `org`. Leave it out for all three. The shell never offers the app on another kind.
+- `surfaces` says what the app shows on each kind of floor, for the shell to place: a `page`, a `card` on the floor's page, a `panel`, the floor's `settings` or `admin`, each from a `module` the entry exposes. `role` limits one to members or leads there; `rollup` means it shows the floor and the teams below it that the person is on (identity's `GET /v1/me/workspaces/{id}/rollup`). Each surface's floor must be in `floors`. When several match, the most specific floor wins, then a role condition, then manifest order. The shell doesn't place surfaces yet; declaring them now is checked and kept.
 
 `pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
 
@@ -174,7 +181,7 @@ pnpm --filter @apps/expenses-frontend build
 APP_DIST=expenses=$PWD/apps/expenses/frontend/dist pnpm --filter @platform/shell dev
 ```
 
-On the server, `infra/web.Dockerfile` builds it and copies its `dist` to `/site/apps/expenses` beside Home and Admin. An admin can turn the app off in Admin without removing it.
+On the server, `infra/web.Dockerfile` builds it and copies its `dist` to `/site/apps/expenses` beside Home and Admin. An admin can turn the app off in Admin without removing it, or choose where it's on: in Admin, Apps, open the app and set each floor to on, off or blocked. On and off carry on to the teams below; blocked means no team below can turn it back on. Everyone's own floor follows the org. The shell asks the registry for the apps on the floor the person is on, and the platform holds the app's service to its scopes only where it's on.
 
 ### Serving the frontend from somewhere else
 
