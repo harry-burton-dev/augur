@@ -23,7 +23,7 @@ export const parseUpstreams = (spec = ''): Upstreams =>
   );
 
 /** The platform's own services, by the name they are reached at. */
-export const PLATFORM_SERVICES = ['identity', 'registry', 'events'];
+export const PLATFORM_SERVICES = ['identity', 'registry', 'events', 'models'];
 
 /** The platform's own services, then each app's service from APP_UPSTREAMS. The gateway knows no app by name. */
 export const defaultUpstreams = (env = process.env): Upstreams => {
@@ -35,6 +35,7 @@ export const defaultUpstreams = (env = process.env): Upstreams => {
     identity: env.IDENTITY_URL ?? 'http://localhost:8081',
     registry: env.REGISTRY_URL ?? 'http://localhost:8082',
     events: env.EVENTS_URL ?? 'http://localhost:8084',
+    models: env.MODELS_URL ?? 'http://localhost:8085',
     ...apps,
   };
 };

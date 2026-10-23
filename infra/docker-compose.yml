@@ -13,6 +13,7 @@ x-internal: &internal
   IDENTITY_URL: http://identity:8081
   REGISTRY_URL: http://registry:8082
   EVENTS_URL: http://events:8084
+  MODELS_URL: http://models:8085
   # Services' tokens name the browser's address; they are fetched and checked over the compose network.
   OIDC_ISSUER: http://localhost:8180/realms/platform
   OIDC_INTERNAL_URL: http://keycloak:8080/realms/platform
@@ -58,6 +59,7 @@ services:
       IDENTITY_URL: http://identity:8081
       REGISTRY_URL: http://registry:8082
       EVENTS_URL: http://events:8084
+      MODELS_URL: http://models:8085
       # Tokens are issued for the browser's address; signing keys are fetched over the compose network.
       OIDC_ISSUER: http://localhost:8180/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/realms/platform/protocol/openid-connect/certs
@@ -78,7 +80,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       SERVICE_CLIENT_SECRET: platform-local-only-identity
       # The clients identity makes for the platform's services and the sample app, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=platform-local-only-identity,platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,app-library=platform-local-only-library
+      SERVICE_CLIENT_SECRETS: platform-identity=platform-local-only-identity,platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-library=platform-local-only-library
       <<: *internal
     depends_on: [postgres, keycloak]
 
@@ -99,6 +101,19 @@ services:
       PORT: 8084
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-events
+      <<: *internal
+    depends_on: [postgres]
+
+  # The model gateway. Locally it has the stand-in model, which doesn't think; set MODEL_API_URL,
+  # MODEL_API_KEY and MODEL_NAME for a real one (see docs/agents.md). Off until an admin turns it on.
+  models:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/models" } }
+    environment:
+      PORT: 8085
+      DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
+      SERVICE_CLIENT_SECRET: platform-local-only-models
+      MODEL_API_URL: stand-in
       <<: *internal
     depends_on: [postgres]
 
