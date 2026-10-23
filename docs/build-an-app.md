@@ -153,6 +153,7 @@ export default defineMicroFrontend({
 The tile is about 320 by 200 pixels and has the app's name and icon above the card. A card that's missing or throws shows "couldn't show this right now" in its tile without touching the rest of Home. Keep it fast: Home mounts every card at once.
 
 - `search: true` puts the app's content in the shell's Find; see [Find](#find) below. SDK 1.3.
+- `maxUpload` is the largest request, in MB (1 to 2048), the gateway lets through to your service; 10 without it. Bodies stream through the gateway and are never held there, and one past the limit gets 413 before your service sees it. An admin can lower it in Admin, Apps. The manifest the shell gives your frontend has the limit in force, so check a file against it before sending. SDK 1.4.
 - `storage` says the app keeps its own database schema (`"database": true`) or files (`"bucket": true`) on the platform; an admin gives it them, and its service reads them with `appStorageFromEnv()`. See [App storage](app-storage.md).
 
 `pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
@@ -175,6 +176,27 @@ app.get<{ Querystring: { q: string } }>('/v1/search', async (req, reply) => {
 - Only answer with what this person can open: the shell shows whatever you send. Check permissions in your service, as for every other call.
 - Best first, at most ten (the shell drops the rest). A result opens your app at its `path`; give `workspace` (a floor id) for one that lives on another floor than the one asked from, and the shell lists it after this floor's and goes there when it's chosen.
 - Answer within 1.5 seconds. Every app is asked at once and each fills in as it answers, but past that the shell stops waiting and says your app didn't answer in time.
+
+### Documents from other apps
+
+`document.open` and `document.pick` are the standard document intents (SDK 1.4). Folio handles both out of the box; any app may handle them too by listing them in `handles`. An app that shows or needs documents doesn't need to know which app keeps them:
+
+```ts
+import { isIntentCancelled, openDocument, pickDocument } from '@augur/mfe-sdk';
+
+// Open one: whichever app handles document.open opens it.
+await openDocument(ctx, { app: 'folio', id: 'd-42', title: 'Travel policy' });
+
+// Ask the person for one: the handling app opens over yours and answers with a DocumentRef.
+try {
+  const doc = await pickDocument(ctx, { purpose: 'Attach a policy', accept: ['application/pdf'] });
+  attach(doc); // { app, id, version?, title }
+} catch (err) {
+  if (!isIntentCancelled(err)) throw err;
+}
+```
+
+An app that handles `document.open` finds a `DocumentRef` in `ctx.intent.payload`. One that handles `document.pick` gets a `DocumentPick` there and answers with `ctx.reply.respond(ref)`; `pickDocument` checks the answer is a `DocumentRef`.
 
 ## 6. Before you open a pull request
 

@@ -38,6 +38,15 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.grant('nothing', [])).toBeUndefined();
   });
 
+  it('keeps an admin’s upload limit while the app registers new versions', async () => {
+    await store.put({ ...library, maxUpload: 200 }, 'library');
+    expect((await store.limitUploads('library', 50))?.uploadLimitMb).toBe(50);
+    await store.put({ ...library, version: '0.2.0', maxUpload: 200 }, 'library');
+    expect((await store.records())[0].uploadLimitMb).toBe(50);
+    expect((await store.limitUploads('library', null))?.uploadLimitMb).toBeUndefined();
+    expect(await store.limitUploads('nothing', 5)).toBeUndefined();
+  });
+
   it('keeps one rule per app and floor, and forgets them with the app', async () => {
     await store.put(library, 'service');
     await store.setRule({ app: 'library', workspace: 'w-fin', state: 'on', carriesOn: false, setBy: 'u-1' });
@@ -147,7 +156,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

@@ -18,6 +18,8 @@ import {
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor } from './status.ts';
+import { capped, DEFAULT_UPLOAD_MB, registryUploadLimits, TooLarge, UploadLimitsUnavailable, type UploadLimits } from './uploads.ts';
+import { Readable } from 'node:stream';
 
 /** The major version of the gateway's own API (Status); see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -61,6 +63,8 @@ declare module 'fastify' {
   interface FastifyRequest {
     caller?: Caller;
     signedCaller?: Record<string, string>;
+    /** The body went past what the app may be sent, part way through. */
+    tooLarge?: string;
   }
 }
 
@@ -75,6 +79,8 @@ export interface GatewayOptions {
   floors?: FloorLookup;
   /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY, or a new key each start. */
   signer?: CallerSigner;
+  /** How much each app may be sent in one request. Defaults to asking the registry upstream. */
+  uploads?: UploadLimits;
 }
 
 /**
@@ -90,7 +96,8 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, signer = callerSignerFromEnv() }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, signer = callerSignerFromEnv(), uploads }: GatewayOptions = {}) => {
+  const uploadLimits = uploads ?? (upstreams.registry ? registryUploadLimits({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
   const app = Fastify(serviceLogging());
   // Someone reporting a problem can quote it, and it finds the request in every service's logs.
@@ -149,10 +156,37 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       prefix: `/api/${name}`,
       rewritePrefix: '',
       // The signed caller is made before the request goes on, since signing is asynchronous.
-      preHandler: async (req) => {
+      preHandler: async (req, reply) => {
         req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
+        // Bodies stream through, never held here. An app's are held to what it may be sent; the platform's services set their own.
+        if (PLATFORM_SERVICES.includes(name) || !req.caller || !(req.body instanceof Readable)) return;
+        let mb: number;
+        try {
+          mb = (uploadLimits ? (await uploadLimits(req.caller)).get(name) : undefined) ?? DEFAULT_UPLOAD_MB;
+        } catch (err) {
+          if (!(err instanceof UploadLimitsUnavailable)) throw err;
+          req.log.error({ err: err.message }, 'upload limit check failed');
+          return reply.code(503).send({ error: 'unavailable', message: 'What this app may be sent can’t be checked right now. Try again in a moment.' });
+        }
+        const tooLarge = `This is more than ${name} takes at once (${mb} MB).`;
+        const bytes = mb * 1024 * 1024;
+        if (Number(req.headers['content-length'] ?? 0) > bytes) {
+          req.body.resume();
+          return reply.code(413).send({ error: 'too_large', message: tooLarge });
+        }
+        // A body without a length (sent as a stream) is counted as it passes, and cut off past the limit.
+        const counted = capped(bytes);
+        counted.on('error', (err) => {
+          if (err instanceof TooLarge) req.tooLarge = tooLarge;
+        });
+        req.body = req.body.pipe(counted);
       },
       replyOptions: {
+        onError: (reply, { error }) => {
+          if (reply.request.tooLarge) return void reply.code(413).send({ error: 'too_large', message: reply.request.tooLarge });
+          // As reply-from answers by default.
+          reply.send(error);
+        },
         rewriteRequestHeaders: (req, headers) => {
           // Who is calling comes only from the verified token. A service's own token is refused above: its audience isn't this one.
           // The token itself stays here: it works on every platform API, so no service, an app's least of all, is handed it.

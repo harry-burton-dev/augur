@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.10.0
+  version: 1.11.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -158,6 +158,36 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CatalogueEntry" }
+        "403": { description: Not an admin }
+        "404": { description: No such app is registered }
+  /apps/{id}/upload-limit:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Lower how much an app may be sent in one request (admins)
+      description: >
+        The gateway holds every request to the app's service to its limit:
+        its manifest's maxUpload (10 MB without one), or the lower number an
+        admin sets here. `null` goes back to what the manifest asks. An admin
+        can only lower it. Kept when the app registers new versions. Audited
+        as app.upload-limit-set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mb]
+              properties:
+                mb: { oneOf: [{ type: integer, minimum: 1, maximum: 2048 }, { type: "null" }] }
+      responses:
+        "200":
+          description: The app as the catalogue now has it
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogueEntry" }
+        "400": { description: More than the app's manifest asks for }
         "403": { description: Not an admin }
         "404": { description: No such app is registered }
   /apps/{id}/floors:
@@ -514,6 +544,8 @@ components:
             blocked: { type: string, description: "Set when the app's entry is on an origin no longer allowed: why it isn't offered" }
             grantedScopes: { type: array, items: { $ref: "#/components/schemas/Scope" }, description: What it asks for that an admin has granted }
             awaitingScopes: { type: array, items: { $ref: "#/components/schemas/Scope" }, description: What it asks for that no admin has granted yet }
+            uploadLimit: { type: integer, description: "What the gateway lets through to the app's service in one request, in MB" }
+            uploadLimitLowered: { type: boolean, description: Set when an admin has lowered it below what the manifest asks }
     FloorRule:
       type: object
       required: [app, workspace, state, carriesOn, setBy, setAt]
@@ -558,6 +590,11 @@ components:
           properties:
             database: { type: boolean }
             bucket: { type: boolean }
+        maxUpload:
+          type: integer
+          minimum: 1
+          maximum: 2048
+          description: "The largest request, in MB, the gateway lets through to the app's service; 10 without it. In the manifest the registry serves, always present: what the app asks, or less where an admin lowered it."
         scopes:
           type: array
           uniqueItems: true

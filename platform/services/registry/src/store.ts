@@ -21,6 +21,8 @@ export interface AppRecord {
    * asks for more is served, but gets the extra only once an admin grants it.
    */
   grantedScopes: Scope[];
+  /** Set when an admin has lowered how much the app may be sent in one request, in MB. */
+  uploadLimitMb?: number;
 }
 
 /**
@@ -121,6 +123,8 @@ export interface AppStore {
   remove(id: string): Promise<boolean>;
   /** Lets an app use these scopes. Undefined when there is no such app. */
   grant(id: string, scopes: Scope[]): Promise<AppRecord | undefined>;
+  /** Lowers how much the app may be sent in one request, in MB, or with `null` goes back to what its manifest asks. Undefined when there is no such app. */
+  limitUploads(id: string, mb: number | null): Promise<AppRecord | undefined>;
   /** What floors say about apps: one app's, or every app's. */
   rules(app?: string): Promise<FloorRule[]>;
   /** Sets what one floor says about an app, replacing what it said before. */
@@ -220,6 +224,7 @@ export class MemoryAppStore implements AppStore {
       registeredAt: before?.registeredAt ?? now,
       updatedAt: now,
       grantedScopes: before?.grantedScopes ?? [...(entry.scopes ?? [])],
+      ...(before?.uploadLimitMb !== undefined ? { uploadLimitMb: before.uploadLimitMb } : {}),
     });
     return !before;
   }
@@ -257,6 +262,14 @@ export class MemoryAppStore implements AppStore {
     const record = this.apps.get(id);
     if (!record) return undefined;
     record.grantedScopes = [...scopes];
+    return structuredClone(record);
+  }
+
+  async limitUploads(id: string, mb: number | null) {
+    const record = this.apps.get(id);
+    if (!record) return undefined;
+    if (mb === null) delete record.uploadLimitMb;
+    else record.uploadLimitMb = mb;
     return structuredClone(record);
   }
 
@@ -371,9 +384,24 @@ export const migrations: { id: string; sql: string }[] = [
       -- At most one waiting or under way, however many admins press Upgrade at once.
       create unique index upgrades_one_open on registry.upgrades ((true)) where state in ('requested', 'running');`,
   },
+  {
+    id: '007_upload_limit',
+    sql: `
+      -- An admin's lower limit on what an app may be sent in one request, in MB; null keeps its manifest's.
+      alter table registry.apps add column upload_limit_mb integer;`,
+  },
 ];
 
-type AppRow = { manifest: AppEntry; enabled: boolean; registered_by: string; registered_at: Date; updated_at: Date; pinned_version: string | null; granted_scopes: Scope[] };
+type AppRow = {
+  manifest: AppEntry;
+  enabled: boolean;
+  registered_by: string;
+  registered_at: Date;
+  updated_at: Date;
+  pinned_version: string | null;
+  granted_scopes: Scope[];
+  upload_limit_mb: number | null;
+};
 
 const fromAppRow = (r: AppRow): AppRecord => ({
   entry: r.manifest,
@@ -383,6 +411,7 @@ const fromAppRow = (r: AppRow): AppRecord => ({
   updatedAt: r.updated_at.toISOString(),
   ...(r.pinned_version ? { pinnedVersion: r.pinned_version } : {}),
   grantedScopes: r.granted_scopes,
+  ...(r.upload_limit_mb !== null ? { uploadLimitMb: r.upload_limit_mb } : {}),
 });
 
 export class PgAppStore implements AppStore {
@@ -534,6 +563,11 @@ export class PgAppStore implements AppStore {
 
   async grant(id: string, scopes: Scope[]) {
     const { rows } = await this.pool.query<AppRow>('update registry.apps set granted_scopes = $2 where id = $1 returning *', [id, scopes]);
+    return rows[0] && fromAppRow(rows[0]);
+  }
+
+  async limitUploads(id: string, mb: number | null) {
+    const { rows } = await this.pool.query<AppRow>('update registry.apps set upload_limit_mb = $2 where id = $1 returning *', [id, mb]);
     return rows[0] && fromAppRow(rows[0]);
   }
 

@@ -71,13 +71,35 @@ describe('registry', () => {
     expect(entries.map((e) => e.action)).toEqual(['app.registered', 'app.disabled', 'app.updated', 'app.enabled']);
   });
 
+  it('tells the gateway how much an app may be sent, which only an admin can lower', async () => {
+    const entries: { action: string; detail?: unknown }[] = [];
+    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+    const served = async () => (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library');
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    expect((await served()).maxUpload).toBe(10);
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, maxUpload: 200 } });
+    expect((await served()).maxUpload).toBe(200);
+    const limit = (mb: number | null, headers = admin) => app.inject({ method: 'PUT', url: '/v1/apps/library/upload-limit', headers, payload: { mb } });
+    expect((await limit(50, editor)).statusCode).toBe(403);
+    expect((await limit(500)).statusCode).toBe(400);
+    expect((await limit(50)).json()).toMatchObject({ id: 'library', maxUpload: 200, uploadLimit: 50, uploadLimitLowered: true });
+    expect((await served()).maxUpload).toBe(50);
+    // A new version keeps the admin's limit.
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', maxUpload: 200 } });
+    expect((await served()).maxUpload).toBe(50);
+    expect((await limit(null)).json().uploadLimit).toBe(200);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/nothing/upload-limit', headers: admin, payload: { mb: 5 } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, maxUpload: 5000 } })).statusCode).toBe(400);
+    expect(entries.filter((e) => e.action === 'app.upload-limit-set').map((e) => e.detail)).toEqual([{ mb: 50 }, { mb: null }]);
+  });
+
   it('lets an app’s service register it, signed in as itself', async () => {
     const app = await buildApp({ verifyService });
     const first = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const again = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
     expect([first.statusCode, again.statusCode]).toEqual([201, 200]);
     const manifest = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json();
-    expect(manifest).toContainEqual({ ...library, version: '0.2.0' });
+    expect(manifest).toContainEqual({ ...library, version: '0.2.0', maxUpload: 10 });
   });
 
   it('lets an admin register an app, but no one else', async () => {
@@ -124,7 +146,7 @@ describe('registry', () => {
     const menu = [{ label: 'Documents', icon: 'folder', items: [{ label: 'Reports', path: '/reports', detail: 'Updated today' }] }];
     const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
     expect((await put({ ...library, ai: false, menu })).statusCode).toBe(201);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu });
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu, maxUpload: 10 });
     expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'All', path: '/' }] }] })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Empty', items: [] }] })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'Reports', path: '/r', colour: 'red' }] }] })).statusCode).toBe(400);

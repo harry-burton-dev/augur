@@ -3,7 +3,7 @@ import type { UiDialog, UiTable, UiToggle } from '@augur/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person, type PlatformUpdates } from './api.js';
-import { appStatus, floorStatus, floorTree, rollbackNote, scopeWords, type AdminApps } from './apps.js';
+import { appStatus, floorStatus, floorTree, rollbackNote, scopeWords, uploadChoices, type AdminApps } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
 import { headline as updatesHeadline, type AdminUpdates } from './updates.js';
 import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
@@ -450,6 +450,36 @@ describe('admin', () => {
       el.issued = undefined;
       await settle(el);
       expect(el.querySelector('[data-secret]')).toBeNull();
+      el.remove();
+    });
+  });
+
+  describe('Largest upload', () => {
+    it('offers what the app asks for, and only less', () => {
+      expect(uploadChoices({ maxUpload: 200 }).map((o) => o.value)).toEqual(['asked', '100', '50', '25', '10', '5', '1']);
+      expect(uploadChoices({}).map((o) => o.label)).toEqual(['10 MB, as it asks', '5 MB', '1 MB']);
+      expect(uploadChoices({ maxUpload: 200, uploadLimit: 30, uploadLimitLowered: true }).map((o) => o.value)).toContain('30');
+    });
+
+    it('lowers an app’s limit and goes back to what it asks', async () => {
+      const app: CatalogueApp = { id: 'folio', name: 'Folio', route: '/folio', entry: '/apps/folio/entry.js', version: '0.1.0', sdk: '^1.0.0', platform: false, enabled: true, maxUpload: 200, uploadLimit: 200 };
+      const calls: [string, string, unknown][] = [];
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+        const body = init.body ? JSON.parse(String(init.body)) : undefined;
+        calls.push([init.method ?? 'GET', url, body]);
+        if (url.endsWith('/upload-limit')) return Response.json({ ...app, uploadLimit: body.mb ?? 200, uploadLimitLowered: body.mb !== null });
+        return Response.json(url.endsWith('/apps') ? [app] : []);
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.apps).toHaveLength(1));
+      await el.limitUploads(app, '50');
+      expect(calls).toContainEqual(['PUT', '/api/registry/v1/apps/folio/upload-limit', { mb: 50 }]);
+      expect(el.apps[0].uploadLimit).toBe(50);
+      await el.limitUploads(app, 'asked');
+      expect(calls).toContainEqual(['PUT', '/api/registry/v1/apps/folio/upload-limit', { mb: null }]);
+      expect(el.apps[0].uploadLimitLowered).toBe(false);
       el.remove();
     });
   });

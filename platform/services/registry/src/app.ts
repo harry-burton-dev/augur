@@ -21,7 +21,19 @@ import {
   type CallerCheck,
 } from '@augur/service-kit';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
-import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, surfaceProblem, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
+import {
+  appEntrySchema,
+  conflictFor,
+  DEFAULT_UPLOAD_MB,
+  entryOriginProblem,
+  MAX_UPLOAD_MB,
+  parseOrigin,
+  platformApps,
+  surfaceProblem,
+  unbuiltApps,
+  versionProblem,
+  type AppEntry,
+} from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { UpdateChecker, updatesView } from './updates.ts';
 import { randomUUID } from 'node:crypto';
@@ -61,6 +73,11 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
   recordAudit({ eventsUrl, credentials, entry, workspace });
 
 /** A registered app as admins see it in the catalogue. */
+/** What the app's manifest asks to be sent in one request, in MB. */
+const askedUpload = (r: AppRecord) => r.entry.maxUpload ?? DEFAULT_UPLOAD_MB;
+/** What the gateway lets through to the app in one request, in MB: what it asks, or less where an admin lowered it. */
+const uploadLimitOf = (r: AppRecord) => Math.min(askedUpload(r), r.uploadLimitMb ?? MAX_UPLOAD_MB);
+
 const catalogueEntry = (r: AppRecord, allowed: string[]) => {
   const blocked = entryOriginProblem(r.entry, allowed);
   return {
@@ -75,6 +92,8 @@ const catalogueEntry = (r: AppRecord, allowed: string[]) => {
     ...(r.pinnedVersion ? { pinnedVersion: r.pinnedVersion } : {}),
     grantedScopes: usableScopes(r),
     ...(awaitingScopes(r).length ? { awaitingScopes: awaitingScopes(r) } : {}),
+    uploadLimit: uploadLimitOf(r),
+    ...(r.uploadLimitMb !== undefined ? { uploadLimitLowered: true } : {}),
   };
 };
 
@@ -149,7 +168,8 @@ export const buildApp = async ({
           const rules = place ? await store.rules() : [];
           const registered = (await store.records())
             .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
-            .map((r) => r.entry);
+            // The limit the gateway holds requests to the app's service to (SDK 1.4).
+            .map((r) => ({ ...r.entry, maxUpload: uploadLimitOf(r) }));
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
         },
@@ -387,6 +407,34 @@ export const buildApp = async ({
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, scopes: req.body.scopes, by: caller.id }, 'app scopes granted');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.scopes-granted', target: req.params.id, detail: { scopes: req.body.scopes } });
+          return catalogueEntry(changed, await allowedOrigins());
+        },
+      );
+
+      /** Lowers how much an app may be sent in one request, or with `null` gives it what its manifest asks again. */
+      app.put<{ Params: { id: string }; Body: { mb: number | null } }>(
+        '/apps/:id/upload-limit',
+        {
+          schema: {
+            body: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['mb'],
+              properties: { mb: { anyOf: [{ type: 'integer', minimum: 1, maximum: MAX_UPLOAD_MB }, { type: 'null' }] } },
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change how much an app may be sent.' });
+          const found = (await store.records()).find((r) => r.entry.id === req.params.id);
+          if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          const { mb } = req.body;
+          if (mb !== null && mb > askedUpload(found)) {
+            return reply.code(400).send({ error: 'invalid', message: `${found.entry.name} asks for ${askedUpload(found)} MB at most; an admin can only lower that.` });
+          }
+          const changed = (await store.limitUploads(req.params.id, mb))!;
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.upload-limit-set', target: req.params.id, detail: { mb } });
           return catalogueEntry(changed, await allowedOrigins());
         },
       );

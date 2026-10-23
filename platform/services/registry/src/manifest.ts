@@ -28,7 +28,14 @@ export interface AppEntry {
   search?: boolean;
   /** The storage the app keeps on the platform: its own database schema, its own bucket. See docs/app-storage.md. */
   storage?: { database?: boolean; bucket?: boolean };
+  /** The largest request body, in MB, the gateway lets through to the app's service. An admin can lower it. Without it, DEFAULT_UPLOAD_MB. */
+  maxUpload?: number;
 }
+
+/** What an app may be sent in one request when its manifest doesn't say: enough for any form, not for files. */
+export const DEFAULT_UPLOAD_MB = 10;
+/** The most any app may ask for. */
+export const MAX_UPLOAD_MB = 2048;
 
 export const FLOOR_KINDS = ['personal', 'team', 'org'] as const;
 export type FloorKind = (typeof FLOOR_KINDS)[number];
@@ -150,6 +157,7 @@ export const appEntrySchema = {
     ai: { type: 'boolean' },
     search: { type: 'boolean' },
     storage: { type: 'object', additionalProperties: false, properties: { database: { type: 'boolean' }, bucket: { type: 'boolean' } } },
+    maxUpload: { type: 'integer', minimum: 1, maximum: MAX_UPLOAD_MB },
     scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } },
     floors: { type: 'array', minItems: 1, uniqueItems: true, maxItems: FLOOR_KINDS.length, items: { enum: [...FLOOR_KINDS] } },
     surfaces: {
