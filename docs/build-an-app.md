@@ -151,6 +151,7 @@ export default defineMicroFrontend({
 The tile is about 320 by 200 pixels and has the app's name and icon above the card. A card that's missing or throws shows "couldn't show this right now" in its tile without touching the rest of Home. Keep it fast: Home mounts every card at once.
 
 - `search: true` puts the app's content in the shell's Find; see [Find](#find) below. SDK 1.3.
+- `storage` says the app keeps its own database schema (`"database": true`) or files (`"bucket": true`) on the platform; an admin gives it them, and its service reads them with `appStorageFromEnv()`. See [App storage](app-storage.md).
 
 `pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
 

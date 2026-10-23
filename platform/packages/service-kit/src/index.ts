@@ -8,3 +8,4 @@ export * from './apps.js';
 export * from './grants.js';
 export * from './floors.js';
 export * from './models.js';
+export * from './storage.js';

@@ -1,0 +1,43 @@
+import { describe, expect, it } from 'vitest';
+import { configFromEnv, envPrefix } from './config.ts';
+
+const secret = 'a'.repeat(64);
+
+describe('configFromEnv', () => {
+  it('reads each app’s secrets by its prefix', () => {
+    expect(envPrefix('team-notes')).toBe('TEAM_NOTES');
+    const config = configFromEnv({
+      DATABASE_URL: 'postgres://platform:pw@postgres:5432/platform',
+      GARAGE_ADMIN_TOKEN: 't',
+      APP_STORAGE: 'folio, team-notes',
+      FOLIO_DATABASE_PASSWORD: 'p'.repeat(32),
+      FOLIO_BUCKET_SECRET: secret,
+      TEAM_NOTES_DATABASE_PASSWORD: 'q'.repeat(32),
+      TEAM_NOTES_BUCKET_SECRET: secret,
+    });
+    expect(config).toEqual({
+      databaseUrl: 'postgres://platform:pw@postgres:5432/platform',
+      databaseHost: 'postgres:5432',
+      garage: { url: 'http://garage:3903', token: 't' },
+      apps: [
+        { app: 'folio', databasePassword: 'p'.repeat(32), bucketSecret: secret },
+        { app: 'team-notes', databasePassword: 'q'.repeat(32), bucketSecret: secret },
+      ],
+    });
+  });
+
+  it('says everything that is wrong at once', () => {
+    const config = configFromEnv({ GARAGE_ADMIN_TOKEN: 't', APP_STORAGE: 'Folio folio', FOLIO_DATABASE_PASSWORD: 'short', FOLIO_BUCKET_SECRET: 'nothex' });
+    expect('problems' in config && config.problems).toEqual([
+      expect.stringContaining('DATABASE_URL is not set'),
+      expect.stringContaining('"Folio" in APP_STORAGE is not an app id'),
+      expect.stringContaining('FOLIO_DATABASE_PASSWORD must be at least 16'),
+      expect.stringContaining('FOLIO_BUCKET_SECRET must be 64'),
+    ]);
+  });
+
+  it('needs no bucket secret without object storage', () => {
+    const config = configFromEnv({ DATABASE_URL: 'postgres://a:b@db/platform', APP_STORAGE: 'folio', FOLIO_DATABASE_PASSWORD: 'p'.repeat(20) });
+    expect(config).toMatchObject({ databaseHost: 'db:5432', garage: undefined, apps: [{ app: 'folio', bucketSecret: '' }] });
+  });
+});

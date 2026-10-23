@@ -1,6 +1,6 @@
 # Apps
 
-Each folder is one product app that runs on the platform. An app owns its service, its database schema, its object storage bucket and its frontend, and ships a `manifest.json` describing it.
+Each folder is one product app that runs on the platform. An app owns its service, its database schema, its object storage bucket ([App storage](../docs/app-storage.md)) and its frontend, and ships a `manifest.json` describing it.
 
 Start a new one with `pnpm create-app <id>` and run it with `pnpm dev:app <id>`; [Build an app](../docs/build-an-app.md) goes from there to an app in the shell.
 

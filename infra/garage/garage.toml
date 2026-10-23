@@ -1,0 +1,17 @@
+# Garage for the local stack, as in infra/deploy/garage/garage.toml; secrets come from docker-compose.yml.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+# A consistent copy of the metadata every hour, which the nightly backup takes.
+metadata_auto_snapshot_interval = "1h"
+replication_factor = 1
+
+rpc_bind_addr = "0.0.0.0:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "0.0.0.0:3900"
+
+[admin]
+api_bind_addr = "0.0.0.0:3903"

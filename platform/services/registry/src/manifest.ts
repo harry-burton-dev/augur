@@ -26,6 +26,8 @@ export interface AppEntry {
   surfaces?: Surface[];
   /** The app's service answers GET /v1/search?q=, and the shell's Find asks it. */
   search?: boolean;
+  /** The storage the app keeps on the platform: its own database schema, its own bucket. See docs/app-storage.md. */
+  storage?: { database?: boolean; bucket?: boolean };
 }
 
 export const FLOOR_KINDS = ['personal', 'team', 'org'] as const;
@@ -146,6 +148,7 @@ export const appEntrySchema = {
     handles: { type: 'array', maxItems: 50, items: { type: 'string', pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 } },
     ai: { type: 'boolean' },
     search: { type: 'boolean' },
+    storage: { type: 'object', additionalProperties: false, properties: { database: { type: 'boolean' }, bucket: { type: 'boolean' } } },
     scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } },
     floors: { type: 'array', minItems: 1, uniqueItems: true, maxItems: FLOOR_KINDS.length, items: { enum: [...FLOOR_KINDS] } },
     surfaces: {

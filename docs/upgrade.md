@@ -50,6 +50,14 @@ A new service, `models`, starts with the upgrade. Nothing changes until you want
 
 Then `pc up -d --build` as usual.
 
+### App storage
+
+Apps can now keep their own database schema and files (see [App storage](app-storage.md)). Two new containers start: `garage`, the object store, and `storage`, which sets up each app's storage and stops. Postgres moves to the same version with pgvector added (`pgvector/pgvector:0.8.0-pg16`), so the data carries over as it is. Before upgrading, add to `.env` (`openssl rand -hex 32` for each):
+
+- `GARAGE_RPC_SECRET` and `GARAGE_ADMIN_TOKEN`.
+
+Then `pc up -d --build` as usual. No app uses storage yet, so `APP_STORAGE` can stay unset.
+
 ### Renamed to AUGUR
 
 Nothing to do: the upgrade is the usual `git pull` and `pc up -d --build`. The shell, page title and Admin say AUGUR, and packages are `@augur/*`. Your server's identifiers are left alone so nobody is signed out and no data moves: the Keycloak realm is still `platform`, the database and Compose project are still `platform`, the `.env` keys keep their `PLATFORM_` names, and your address stays `https://platform.<tailnet>.ts.net`.
