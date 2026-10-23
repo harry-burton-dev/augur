@@ -91,7 +91,7 @@ The backups sit on the same disk as the database, so copy `infra/deploy/backups/
 ## What's in it
 
 - **Platform services**: identity, registry, events, models (the model gateway, off until you set a model and turn it on; see [Agents and models](agents.md)) and the gateway. Only the gateway is reachable, and only through `/api`. Services talk to each other on the compose network, each signed in as itself: identity makes each platform service's Keycloak client from its `*_CLIENT_SECRET` when it starts.
-- **Apps**: Home. The Library app isn't deployed while it's paused.
+- **Apps**: Home. Folio, the document libraries, isn't in the deploy stack yet: it joins the release as a pillar app once it is built.
 - **The front door** (`web`): nginx serving the shell and the apps' frontends, with `/api` and `/sso` behind it. The shell's page has a Content Security Policy: the browser runs only scripts from the platform's own address, the shell's import map, and the sites in `APP_ORIGINS`, and the page talks only to the platform (plus those sites). Fonts come from Google Fonts.
 - **Storage**: Postgres (with pgvector) holds every service's and app's schema. Garage holds apps' files, reachable only inside the compose network; the `storage` container gives each app in `APP_STORAGE` its own login, schema and bucket ([App storage](app-storage.md)).
 - **Sign-in**: Keycloak, imported on first start from `infra/deploy/keycloak/platform-realm.json`, with no test users. Keycloak reads that file only once. If you change `PLATFORM_URL` later, update the **shell** client's redirect URIs and web origins in the admin console.
