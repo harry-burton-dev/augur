@@ -54,6 +54,20 @@ describe('events', () => {
     expect((await post(platform, { ...review, link: 'https://elsewhere.example' })).statusCode).toBe(400);
   });
 
+  it('carries up to two actions, each an intent with a small payload', async () => {
+    const app = await buildApp({ verifyService });
+    const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
+    const approve = { label: 'Approve', intent: { type: 'document.approve', payload: { id: 'd7' } } };
+    expect((await post({ ...review, actions: [approve, { label: 'Open', intent: { type: 'document.open' } }] })).statusCode).toBe(202);
+    const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
+    expect(n.actions).toEqual([approve, { label: 'Open', intent: { type: 'document.open' } }]);
+    expect((await post({ ...review, actions: [approve, approve, approve] })).statusCode).toBe(400);
+    expect((await post({ ...review, actions: [{ label: 'Go', intent: { type: 'Not A Type' } }] })).statusCode).toBe(400);
+    expect((await post({ ...review, actions: [{ label: 'A label far too long to fit on a button', intent: { type: 'document.open' } }] })).statusCode).toBe(400);
+    const big = await post({ ...review, actions: [{ label: 'Open', intent: { type: 'document.open', payload: { text: 'x'.repeat(2000) } } }] });
+    expect([big.statusCode, big.json().message]).toEqual([400, expect.stringContaining('over 1024 bytes')]);
+  });
+
   it('marks a notification read, and unread again', async () => {
     const app = await buildApp({ verifyService });
     await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });

@@ -15,6 +15,7 @@ export { UiIconButton } from './components/icon-button.js';
 export { UiKeycap, UiBack } from './components/keycap.js';
 export { UiFacts, type Fact } from './components/facts.js';
 export { UiRows, type Row } from './components/rows.js';
+export { UiMenu, type MenuAction, type MenuEntry } from './components/menu.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,
@@ -22,6 +23,7 @@ export {
   streamWords,
   defaultFunctions,
   type ShellNotification,
+  type ShellNotificationAction,
   type NotificationLevel,
   type ShellApp,
   type ShellAgent,

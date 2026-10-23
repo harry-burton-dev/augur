@@ -95,3 +95,15 @@ test('fetch sends the token and the floor the app is on', async ({ page }) => {
   await press(page, 'fetch');
   await expect(check(page, 'fetched')).toHaveText('dev-org Bearer dev-token');
 });
+
+// SDK 1.2: buttons on a notification, each raising an intent through the shell.
+test('a notification’s action raises its intent through the shell', async ({ page }) => {
+  since('1.2');
+  await page.goto('/reference/somewhere');
+  await press(page, 'notify-action');
+  await page.evaluate(() => (document.querySelector('ui-shell') as unknown as { openView(id: string): void }).openView('stream'));
+  await page.locator('ui-shell .act', { hasText: 'Show' }).click();
+  await expect(check(page, 'intent')).toHaveText('reference.show {"n":2}');
+  const left = await page.evaluate(() => (document.querySelector('ui-shell') as unknown as { notifications: { title: string }[] }).notifications.map((n) => n.title));
+  expect(left).not.toContain('Reference action');
+});

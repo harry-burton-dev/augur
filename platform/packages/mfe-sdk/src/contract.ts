@@ -88,6 +88,23 @@ export interface Workspace extends WorkspaceRef {
   role: 'member' | 'lead';
 }
 
+/** What an app tells the person through the shell's stream. */
+export interface NotifyMessage {
+  title: string;
+  body?: string;
+  /** The person has to do something: it's marked, counted in the band, and shown on Home. */
+  needsYou?: boolean;
+  /** Up to two things to do right from the stream, such as "Approve" and "Open" (SDK 1.2). Extras are dropped. */
+  actions?: NotificationAction[];
+}
+
+/** A button on a notification: pressing it raises `intent` through the shell, and marks the notification read. */
+export interface NotificationAction {
+  /** One or two words: "Approve", "Open". */
+  label: string;
+  intent: Intent;
+}
+
 /** A request to do something, routed by the shell to whichever app handles it. */
 export interface Intent<T = unknown> {
   type: string;
@@ -116,7 +133,12 @@ export interface MountContext {
    * person closes it, and an IntentError when no app they can open handles it.
    */
   request<T = unknown>(intent: Intent): Promise<T>;
-  notify(message: { title: string; body?: string; needsYou?: boolean }): void;
+  /**
+   * A notification on the shell's stream. `actions` (SDK 1.2) puts up to two
+   * buttons on it, each raising an intent through the shell when pressed,
+   * exactly as `raise` does; the app runs no code in the stream.
+   */
+  notify(message: NotifyMessage): void;
   /**
    * The floor the app was mounted on (SDK 1.1). Changing floor unmounts the
    * app and mounts it again with the new one, so an app never shows one

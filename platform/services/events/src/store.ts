@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
-import type { NewAuditEntry, NewNotification, NotificationLevel } from '@platform/service-kit';
+import type { NewAuditEntry, NewNotification, NotificationAction, NotificationLevel } from '@platform/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
 export interface EventFloor {
@@ -17,6 +17,8 @@ export interface Notification {
   title: string;
   detail?: string;
   link?: string;
+  /** Up to two buttons, each raising an intent in the person's browser. */
+  actions?: NotificationAction[];
   createdAt: string;
   readAt?: string;
   /** The floor it's from; none for one about the platform as a whole. */
@@ -68,6 +70,7 @@ const fromInput = (n: NewNotification, recipient: string, id: string, createdAt:
   title: n.title,
   ...(n.detail ? { detail: n.detail } : {}),
   ...(n.link ? { link: n.link } : {}),
+  ...(n.actions?.length ? { actions: n.actions } : {}),
   createdAt,
   ...(floor ? { workspace: floor } : {}),
 });
@@ -181,9 +184,16 @@ export const migrations: { id: string; sql: string }[] = [
         set_at timestamptz not null default now()
       );`,
   },
+  {
+    id: '003_actions',
+    sql: `
+      -- Up to two buttons on a notification, each an intent the shell raises.
+      alter table events.notifications add column actions jsonb;`,
+  },
 ];
 
 const CHANNEL = 'events_notification';
+const NOTIFY_BYTES = 7900;
 
 type NotificationRow = {
   id: string;
@@ -193,6 +203,7 @@ type NotificationRow = {
   title: string;
   detail: string | null;
   link: string | null;
+  actions: NotificationAction[] | null;
   created_at: Date;
   read_at: Date | null;
   workspace_id: string | null;
@@ -209,6 +220,7 @@ const fromRow = (r: NotificationRow): Notification => ({
   title: r.title,
   ...(r.detail ? { detail: r.detail } : {}),
   ...(r.link ? { link: r.link } : {}),
+  ...(r.actions?.length ? { actions: r.actions } : {}),
   createdAt: r.created_at.toISOString(),
   ...(r.read_at ? { readAt: r.read_at.toISOString() } : {}),
   ...floorFrom(r.workspace_id, r.workspace_path),
@@ -282,7 +294,13 @@ export class PgEventStore implements EventStore {
     this.listening = await this.pool.connect();
     this.listening.on('notification', (msg) => {
       if (msg.channel !== CHANNEL || !msg.payload) return;
-      this.emitter.emit('notification', JSON.parse(msg.payload) as Notification);
+      const sent = JSON.parse(msg.payload) as Notification | { ref: string };
+      if (!('ref' in sent)) return void this.emitter.emit('notification', sent);
+      // Too big to travel whole: read it back.
+      void this.pool
+        .query<NotificationRow>('select * from events.notifications where id = $1', [sent.ref])
+        .then(({ rows }) => rows[0] && this.emitter.emit('notification', fromRow(rows[0])))
+        .catch(() => undefined);
     });
     await this.listening.query(`listen ${CHANNEL}`);
   }
@@ -292,14 +310,17 @@ export class PgEventStore implements EventStore {
     try {
       await client.query('begin');
       const { rows } = await client.query<NotificationRow>(
-        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path)
-         select r, $2, $3, $4, $5, $6, $7, $8 from unnest($1::text[]) as r
+        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions)
+         select r, $2, $3, $4, $5, $6, $7, $8, $9 from unnest($1::text[]) as r
          returning *`,
-        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null],
+        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null],
       );
       const added = rows.map(fromRow);
-      // Delivered when the transaction commits; validation keeps each well under the 8000-byte payload limit.
-      for (const a of added) await client.query('select pg_notify($1, $2)', [CHANNEL, JSON.stringify(a)]);
+      // Delivered when the transaction commits. Postgres caps a payload at 8000 bytes; a bigger one goes by id.
+      for (const a of added) {
+        const whole = JSON.stringify(a);
+        await client.query('select pg_notify($1, $2)', [CHANNEL, Buffer.byteLength(whole) < NOTIFY_BYTES ? whole : JSON.stringify({ ref: a.id })]);
+      }
       await client.query('commit');
       return added;
     } catch (err) {

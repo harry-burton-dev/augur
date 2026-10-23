@@ -52,8 +52,29 @@ const notificationSchema = {
     title: { type: 'string', minLength: 1, maxLength: 200 },
     detail: { type: 'string', maxLength: 2000 },
     link: { type: 'string', pattern: '^/', maxLength: 500 },
+    actions: {
+      type: 'array',
+      maxItems: 2,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['label', 'intent'],
+        properties: {
+          label: { type: 'string', minLength: 1, maxLength: 30 },
+          intent: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['type'],
+            properties: { type: { type: 'string', pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 }, payload: {} },
+          },
+        },
+      },
+    },
   },
 } as const;
+
+/** An action's payload is the app's own; it only has to stay small, since each notification travels whole to every open stream. */
+const ACTION_PAYLOAD_BYTES = 1024;
 
 const auditSchema = {
   type: 'object',
@@ -162,6 +183,8 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const floor = await floorOf(req, reply);
         if (floor === undefined) return reply;
         const { toTeam, ...notification } = req.body;
+        const big = notification.actions?.find((a) => a.intent.payload !== undefined && Buffer.byteLength(JSON.stringify(a.intent.payload)) > ACTION_PAYLOAD_BYTES);
+        if (big) return reply.code(400).send({ error: 'bad_request', message: `The payload of “${big.label}” is over ${ACTION_PAYLOAD_BYTES} bytes. Send an id and let the app look the rest up.` });
         if (!toTeam && !notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Name the recipients, or send to the team.' });
         if (toTeam) {
           if (notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Send to the team or to recipients, not both.' });

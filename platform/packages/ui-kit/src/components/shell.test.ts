@@ -93,12 +93,63 @@ describe('ui-shell', () => {
     expect(root().querySelector('.status')!.classList.contains('needs')).toBe(true);
   });
 
-  it('groups the stream into needs you, today and earlier', async () => {
-    el.notifications = [note('a', 'needs'), note('b', 'info'), note('c', 'done', 60 * 48)];
+  it('groups the stream by app: what needs you first, then the newest, muted apps last', async () => {
+    el.notifications = [
+      { ...note('a', 'info', 1), app: 'admin' },
+      { ...note('b', 'needs', 30), app: 'library' },
+      { ...note('c', 'done', 60 * 48), app: 'library' },
+      { ...note('d', 'needs', 2), app: 'home' },
+    ];
+    el.muted = ['home'];
     el.openView('stream');
     await el.updateComplete;
-    const groups = [...root().querySelectorAll('.group')].map((g) => g.textContent!.replace(/\s+/g, ' ').trim());
-    expect(groups).toEqual(['Needs you 1', 'Today 1', 'Earlier 1']);
+    const groups = [...root().querySelectorAll('.group .name')].map((g) => g.textContent!.replace(/\s+/g, ' ').trim());
+    expect(groups).toEqual(['Library 2', 'Admin 1', 'Home 1Muted']);
+    // Newest first inside a group, and only the first that needs you (not a muted one) pings.
+    expect([...root().querySelectorAll('ul')][0].textContent).toMatch(/Note b[\s\S]*Note c/);
+    expect([...root().querySelectorAll('.row.first')].map((r) => r.textContent!.trim().split(/\s+/).slice(0, 2).join(' '))).toEqual(['Note b']);
+  });
+
+  it('shows up to two actions on a row, and pressing one tells the host and closes', async () => {
+    const acted = vi.fn();
+    el.addEventListener('ui-notification-action', (e) => acted((e as CustomEvent).detail.notification.id, (e as CustomEvent).detail.index));
+    el.notifications = [{ ...note('a', 'needs'), actions: [{ label: 'Approve' }, { label: 'Open' }, { label: 'Dropped' }] }];
+    el.openView('stream');
+    await el.updateComplete;
+    const acts = [...root().querySelectorAll<HTMLButtonElement>('.act')];
+    expect(acts.map((b) => b.textContent!.trim())).toEqual(['Approve', 'Open']);
+    acts[1].click();
+    expect(acted).toHaveBeenCalledWith('a', 1);
+    expect(el.isOpen).toBe(false);
+  });
+
+  it('a muted app lands in the stream silently: no pulse, not in the band', async () => {
+    el.muted = ['library'];
+    el.notify(note('a', 'needs'));
+    await el.updateComplete;
+    expect(el.notifications).toHaveLength(1);
+    expect(el.hasAttribute('arriving')).toBe(false);
+    expect(root().querySelector('.status')!.textContent).toContain('All quiet');
+  });
+
+  it('mutes and unmutes an app from its group menu', async () => {
+    const seen: string[] = [];
+    el.addEventListener('ui-mute', (e) => seen.push(`${(e as CustomEvent).detail.app} ${(e as CustomEvent).detail.muted}`));
+    el.notifications = [note('a', 'info')];
+    el.openView('stream');
+    await el.updateComplete;
+    (root().querySelector('.group .more') as HTMLElement).click();
+    const menu = root().querySelector('ui-menu')!;
+    await menu.updateComplete;
+    const item = menu.shadowRoot!.querySelector<HTMLButtonElement>('[role=menuitem]')!;
+    expect(item.textContent).toContain('Mute Library');
+    item.click();
+    expect(el.muted).toEqual(['library']);
+    (root().querySelector('.group .more') as HTMLElement).click();
+    await menu.updateComplete;
+    menu.shadowRoot!.querySelector<HTMLButtonElement>('[role=menuitem]')!.click();
+    expect(el.muted).toEqual([]);
+    expect(seen).toEqual(['library true', 'library false']);
   });
 
   it('dismisses with undo, and clears the quiet ones', async () => {
@@ -304,7 +355,8 @@ describe('floors', () => {
     await el.updateComplete;
     const lines = [...root().querySelectorAll('.item .text span')].map((x) => x.textContent);
     expect(lines.some((l) => l?.includes('On Acme'))).toBe(true);
-    expect(lines.filter((l) => l?.includes(' · On ')).length).toBe(1);
+    // The app's name heads the group, so a row's line starts with its floor tag.
+    expect(lines.filter((l) => l?.startsWith('On ')).length).toBe(1);
     el.openView('account');
     await el.updateComplete;
     expect(root().querySelector('.floors li:nth-child(2) .meta')!.textContent).toBe('1 waiting');
