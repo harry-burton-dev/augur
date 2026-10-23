@@ -20,16 +20,18 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
    pc exec backup /bin/sh /backup/backup.sh --restore-test
    ```
    The last line ends with `restored and checked`. If it says FAILED, stop and look at why before upgrading.
-4. **Note where you are**: `git rev-parse HEAD`. That's what you'd go back to.
+4. **Note where you are**: the `PLATFORM_VERSION` in your `.env`. That's what you'd go back to.
 
 ## Upgrade
 
 ```sh
-git pull
-pc up -d --build --remove-orphans
+v=0.1.2                                   # the release you're moving to
+git fetch --tags && git checkout augur@$v  # its deploy files
+sed -i "s/^PLATFORM_VERSION=.*/PLATFORM_VERSION=$v/" infra/deploy/.env
+pc pull && pc up -d --remove-orphans
 ```
 
-Images are rebuilt from the repo, each service migrates its own tables as it starts, and containers that didn't change keep running. Keycloak and Postgres only change when their image tag in `compose.yml` does.
+The pull fetches that release's images before anything stops. Each service migrates its own tables as it starts, and containers whose image didn't change keep running. Keycloak and Postgres only change when their image tag in `compose.yml` does.
 
 ## Check
 
@@ -41,6 +43,16 @@ Images are rebuilt from the repo, each service migrates its own tables as it sta
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Images from releases (the first `augur@` release)
+
+The server stops building images and pulls the ones CI built and signed for the release instead. Once, before this upgrade:
+
+1. Sign the server in to GitHub's container registry, as in [deploy.md](deploy.md#before-you-start) (a token with only **read:packages**).
+2. Add `PLATFORM_VERSION=<the release>` to `.env`.
+3. Upgrade with the steps above, `git checkout augur@<version>` rather than `git pull`.
+
+The web container now listens on 8080 and every image runs as an unprivileged user; the new `tailscale/serve.json` already points at 8080. Your old locally built images can go with `docker image prune`.
+
 ### The model gateway
 
 A new service, `models`, starts with the upgrade. Nothing changes until you want Agents: models are off, and stay off until an admin turns them on in Admin. To get it ready, add to `.env`:
@@ -48,7 +60,7 @@ A new service, `models`, starts with the upgrade. Nothing changes until you want
 - `MODELS_CLIENT_SECRET` (`openssl rand -hex 32`): its own sign-in, which identity makes in Keycloak on the next start. Without it no model calls are made, because none could be recorded.
 - `MODEL_API_URL`, `MODEL_API_KEY` and `MODEL_NAME` for the model to use, or `MODEL_API_URL=stand-in` to try it with a model that doesn't think. See [Agents and models](agents.md).
 
-Then `pc up -d --build` as usual.
+Then upgrade as usual.
 
 ### App storage
 
@@ -56,11 +68,11 @@ Apps can now keep their own database schema and files (see [App storage](app-sto
 
 - `GARAGE_RPC_SECRET` and `GARAGE_ADMIN_TOKEN`.
 
-Then `pc up -d --build` as usual. No app uses storage yet, so `APP_STORAGE` can stay unset.
+Then upgrade as usual. No app uses storage yet, so `APP_STORAGE` can stay unset.
 
 ### Renamed to AUGUR
 
-Nothing to do: the upgrade is the usual `git pull` and `pc up -d --build`. The shell, page title and Admin say AUGUR, and packages are `@augur/*`. Your server's identifiers are left alone so nobody is signed out and no data moves: the Keycloak realm is still `platform`, the database and Compose project are still `platform`, the `.env` keys keep their `PLATFORM_` names, and your address stays `https://platform.<tailnet>.ts.net`.
+Nothing to do beyond the usual upgrade. The shell, page title and Admin say AUGUR, and packages are `@augur/*`. Your server's identifiers are left alone so nobody is signed out and no data moves: the Keycloak realm is still `platform`, the database and Compose project are still `platform`, the `.env` keys keep their `PLATFORM_` names, and your address stays `https://platform.<tailnet>.ts.net`.
 
 Two optional touches:
 
@@ -71,7 +83,7 @@ Two optional touches:
 
 Code and data are separate, so going back is two steps, and the second is only needed if the new release migrated data:
 
-1. **Code**: `git checkout <the commit you noted> && pc up -d --build --remove-orphans`.
+1. **Code**: the same steps with the version you noted: `git checkout augur@<it>`, set `PLATFORM_VERSION` back, `pc up -d --remove-orphans`. The old images are still on the server, so nothing is downloaded.
 2. **Data**, only if the older services fail on the newer tables: restore the backup you took before upgrading, as in [deploy.md](deploy.md#backups). Anything changed since that backup is lost, so check Admin → Activity first for what that is.
 
 For one app rather than the whole platform, Admin → Apps can give the shell an earlier version of the app instead ([versioning.md](versioning.md#going-back-to-an-earlier-app-version)).

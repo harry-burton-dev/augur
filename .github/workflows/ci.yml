@@ -79,7 +79,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home
-      - run: pnpm --filter @augur/contract-tests exec playwright install --with-deps chromium
+      # The browser is cached by Playwright version. No --with-deps: the runner image
+      # already has Chrome's system libraries, and apt-get was the slow, uneven part
+      # (half a minute on a good day, twelve on a bad one).
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter @augur/contract-tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
+      - run: pnpm --filter @augur/contract-tests exec playwright install --only-shell chromium
       - run: pnpm --filter @augur/contract-tests test:contract
 
   # The server setup in infra/deploy: the compose file is valid and the images build.
@@ -91,15 +101,23 @@ jobs:
         run: |
           sed -e 's/=$/=ci-placeholder/' infra/deploy/.env.example > /tmp/ci.env
           docker compose -f infra/deploy/compose.yml --env-file /tmp/ci.env config -q
+          docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
       - run: docker build -f infra/web.Dockerfile --target web -t platform-web .
       - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity -t platform-identity .
       - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage -t platform-storage .
+      - name: The images don't run as root
+        run: |
+          for image in platform-web platform-identity platform-storage; do
+            uid=$(docker run --rm --entrypoint id "$image" -u)
+            echo "$image runs as $uid"
+            test "$uid" != 0
+          done
       - name: The front door's nginx config loads
         run: docker run --rm --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 platform-web nginx -t
       - name: The shell's page carries its Content Security Policy
         run: |
           docker run -d --name web --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 \
-            -e APP_ORIGINS=https://apps.example.org -p 8088:80 platform-web
+            -e APP_ORIGINS=https://apps.example.org -p 8088:8080 platform-web
           for i in $(seq 1 20); do curl -fsI http://localhost:8088/admin > /tmp/headers && break; sleep 1; done
           cat /tmp/headers
           grep -iE "^content-security-policy: default-src 'self'; script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https://apps.example.org;" /tmp/headers

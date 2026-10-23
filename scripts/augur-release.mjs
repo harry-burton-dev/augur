@@ -2,7 +2,10 @@
 // "we're on AUGUR 0.2.0" and an updater knows exactly what that means.
 //   node scripts/augur-release.mjs version   after `changeset version`: writes release/augur-release.json
 //   node scripts/augur-release.mjs check     in CI: fails when the release file is out of step with the parts
-//   node scripts/augur-release.mjs publish   in the Release workflow: makes the GitHub release augur@<version>, which tags it
+//   node scripts/augur-release.mjs pending   in the Release workflow: prints version=, channel= and new=true|false (not released yet)
+//   node scripts/augur-release.mjs publish <images.json>
+//                                            in the Release workflow, after infra/release-images.sh: makes the GitHub release
+//                                            augur@<version>, which tags it, with the release file and its images attached
 //
 // Parts are the packages under platform/ (services, frontends, packages). Each keeps its own version and
 // changelog; the AUGUR version moves when any of them does:
@@ -13,7 +16,7 @@
 // While AUGUR is 0.x (the beta channel), breaking changes and features both bump the minor and fixes
 // the patch, as semver allows before 1.0. From 1.0 on: major, minor, patch.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import semver from 'semver';
@@ -117,7 +120,7 @@ export const notes = (release, parts) => {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('Upgrading: [docs/upgrade.md](../../blob/main/docs/upgrade.md).');
+  lines.push('### Running it', '', `Set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/main/docs/upgrade.md).`);
   return lines.join('\n');
 };
 
@@ -147,21 +150,28 @@ const main = () => {
       process.exit(1);
     }
     console.log(`AUGUR release ${previous.version} is in step.`);
-  } else if (mode === 'publish') {
+  } else if (mode === 'pending' || mode === 'publish') {
     if (!previous) throw new Error(`${RELEASE_FILE} is missing.`);
     const tag = `augur@${previous.version}`;
     const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
-    if (git('ls-remote', '--tags', 'origin', `refs/tags/${tag}`)) return console.log(`${tag} is already released.`);
-    const notesFile = join(tmpdir(), `${tag.replace('@', '-')}-notes.md`);
+    const released = Boolean(git('ls-remote', '--tags', 'origin', `refs/tags/${tag}`));
+    if (mode === 'pending') return console.log(`version=${previous.version}\nchannel=${previous.channel}\nnew=${!released}`);
+    if (released) return console.log(`${tag} is already released.`);
+    // What the release names by digest, so an updater runs exactly what was built and signed.
+    const images = process.argv[3] ? JSON.parse(readFileSync(process.argv[3], 'utf8')) : {};
+    const dir = mkdtempSync(join(tmpdir(), 'augur-release-'));
+    const asset = join(dir, 'augur-release.json');
+    writeFileSync(asset, `${JSON.stringify({ ...previous, images }, null, 2)}\n`);
+    const notesFile = join(dir, 'notes.md');
     writeFileSync(notesFile, notes(previous, parts));
     execFileSync(
       'gh',
-      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${previous.version}${previous.channel === 'beta' ? ' (beta)' : ''}`, '--notes-file', notesFile, ...(previous.channel === 'beta' ? ['--prerelease'] : ['--latest']), `${join(root, RELEASE_FILE)}#augur-release.json`],
+      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${previous.version}${previous.channel === 'beta' ? ' (beta)' : ''}`, '--notes-file', notesFile, ...(previous.channel === 'beta' ? ['--prerelease'] : ['--latest']), asset],
       { cwd: root, stdio: 'inherit' },
     );
     console.log(`Released ${tag}.`);
   } else {
-    console.error('Usage: node scripts/augur-release.mjs version|check|publish');
+    console.error('Usage: node scripts/augur-release.mjs version|check|pending|publish <images.json>');
     process.exit(2);
   }
 };

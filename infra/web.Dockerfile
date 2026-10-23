@@ -15,7 +15,9 @@ RUN pnpm install --frozen-lockfile \
  && cp -r platform/frontends/admin/dist /site/apps/admin \
  && node infra/deploy/csp.mjs /site/index.html infra/deploy/nginx.conf > /default.conf.template
 
-FROM nginx:1.27-alpine AS web
+# nginx as an unprivileged user, listening on 8080 rather than 80.
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS web
+LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 # Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
 ENV APP_ORIGINS=""
 # nginx fills in ${APP_ORIGINS} from the environment when the container starts.
