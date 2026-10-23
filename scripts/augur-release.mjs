@@ -17,6 +17,7 @@
 // While AUGUR is 0.x (the beta channel), breaking changes and features both bump the minor and fixes
 // the patch, as semver allows before 1.0. From 1.0 on: major, minor, patch.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,7 +25,8 @@ import semver from 'semver';
 
 const root = new URL('..', import.meta.url).pathname;
 const RELEASE_FILE = 'release/augur-release.json';
-const ENV_EXAMPLE = 'infra/deploy/.env.example';
+const DEPLOY_DIR = 'infra/deploy';
+const ENV_EXAMPLE = `${DEPLOY_DIR}/.env.example`;
 const VERSION_FILE = 'platform/services/registry/src/augur-version.ts';
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 
@@ -93,6 +95,22 @@ export const nextRelease = (previous, parts, settings, today) => {
     parts: shape,
   };
 };
+
+/**
+ * The server's own files in infra/deploy as this release has them, by sha256 and path inside it.
+ * An updater only applies a release whose files match the server's: when they differ, the release
+ * changed how the server runs, and that upgrade is done by hand. Two aren't counted: `.env.example`,
+ * since the server has its own `.env` and `settings` says what that needs, and `compose.build.yml`,
+ * which builds images from a checkout instead of running a release's.
+ */
+const NOT_DEPLOYED = [ENV_EXAMPLE, `${DEPLOY_DIR}/compose.build.yml`];
+export const deployFiles = (tracked) =>
+  Object.fromEntries(
+    tracked
+      .filter((path) => path.startsWith(`${DEPLOY_DIR}/`) && !NOT_DEPLOYED.includes(path))
+      .sort()
+      .map((path) => [path.slice(DEPLOY_DIR.length + 1), createHash('sha256').update(readFileSync(join(root, path))).digest('hex')]),
+  );
 
 /** The registry's copy of the release it ships in: Admin's Updates page compares the feed with it. */
 export const versionModule = (release) =>
@@ -168,11 +186,13 @@ const main = () => {
     const released = Boolean(git('ls-remote', '--tags', 'origin', `refs/tags/${tag}`));
     if (mode === 'pending') return console.log(`version=${previous.version}\nchannel=${previous.channel}\nnew=${!released}`);
     if (released) return console.log(`${tag} is already released.`);
-    // What the release names by digest, so an updater runs exactly what was built and signed.
+    // What the release names by digest, so an updater runs exactly what was built and signed,
+    // and the deploy files it was built with, so an updater can tell whether the server's still fit.
     const images = process.argv[3] ? JSON.parse(readFileSync(process.argv[3], 'utf8')) : {};
+    const deploy = deployFiles(git('ls-files', DEPLOY_DIR).split('\n'));
     const dir = mkdtempSync(join(tmpdir(), 'augur-release-'));
     const asset = join(dir, 'augur-release.json');
-    writeFileSync(asset, `${JSON.stringify({ ...previous, images }, null, 2)}\n`);
+    writeFileSync(asset, `${JSON.stringify({ ...previous, images, deploy }, null, 2)}\n`);
     const notesFile = join(dir, 'notes.md');
     writeFileSync(notesFile, notes(previous, parts));
     execFileSync(

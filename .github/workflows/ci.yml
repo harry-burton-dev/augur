@@ -103,12 +103,16 @@ jobs:
           sed -e 's/=$/=ci-placeholder/' infra/deploy/.env.example > /tmp/ci.env
           docker compose -f infra/deploy/compose.yml --env-file /tmp/ci.env config -q
           docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
+          COMPOSE_PROFILES=updater docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
       - run: docker build -f infra/web.Dockerfile --target web -t platform-web .
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity -t platform-identity .
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage -t platform-storage .
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity --target service -t platform-identity .
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage --target service -t platform-storage .
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater -t platform-updater .
+      - name: The updater has the tools it drives
+        run: docker run --rm --entrypoint sh platform-updater -c 'docker --version && docker compose version && cosign version'
       - name: The images don't run as root
         run: |
-          for image in platform-web platform-identity platform-storage; do
+          for image in platform-web platform-identity platform-storage platform-updater; do
             uid=$(docker run --rm --entrypoint id "$image" -u)
             echo "$image runs as $uid"
             test "$uid" != 0
@@ -151,6 +155,13 @@ jobs:
           grep -q '"ok":true' /tmp/backups/last-backup.json
           tar -tzf /tmp/backups/objects-*.tar.gz | tee /tmp/objects.txt
           grep -q '^data/00/block$' /tmp/objects.txt && grep -q '^meta/snapshots/s1$' /tmp/objects.txt && ! grep -q 'db.sqlite' /tmp/objects.txt
+      - name: The updater's backup is a fresh one, and the newest
+        run: |
+          docker run --rm --link pg -e PGHOST=pg -e PGUSER=postgres -e PGPASSWORD=ci \
+            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
+            postgres:16-alpine /bin/sh /backup/backup.sh --now | tee /tmp/now.log
+          grep -E "backup: wrote /backups/platform-[0-9-]+T[0-9]+Z\.sql\.gz" /tmp/now.log
+          test "$(ls /tmp/backups/platform-*.sql.gz | sort | tail -n 1)" = "$(grep -oE '/backups/platform-[^ ]+' /tmp/now.log | sed 's#^#/tmp#')"
       - name: The weekly restore test restores the newest backup and checks it
         run: |
           docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \

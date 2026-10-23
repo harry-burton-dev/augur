@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.10.0
+  version: 1.11.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -397,6 +397,9 @@ paths:
                   version: { type: string }
                   images: { type: object, additionalProperties: { type: string } }
                   state: { type: string, enum: [requested, running] }
+                  parts: { type: object, additionalProperties: { type: string }, description: "Each part's version in the release, by package name. Missing when the release file can't be read." }
+                  required: { type: array, items: { type: string }, description: The settings the release won't start without }
+                  deploy: { type: object, additionalProperties: { type: string }, description: "The release's files in infra/deploy, by path inside it, as sha256" }
         "204": { description: Nothing to do }
         "403": { description: Not the updater }
   /platform/upgrade/progress:

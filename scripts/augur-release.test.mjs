@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { nextRelease, versionModule } from './augur-release.mjs';
+import { deployFiles, nextRelease, versionModule } from './augur-release.mjs';
 
 const settings = { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL'] };
 const first = nextRelease(undefined, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-10-23');
@@ -55,4 +55,10 @@ test('new and removed settings are listed, and a settings change alone is a rele
 
 test('the registry is told which release it ships in', () => {
   assert.match(versionModule({ version: '0.4.0', channel: 'stable' }), /export const AUGUR_RELEASE = \{ version: '0\.4\.0', channel: 'stable' \} as const;/);
+});
+
+test('the deploy files are the server’s own, by hash, without .env.example or the build overlay', () => {
+  const files = deployFiles(['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'docs/deploy.md']);
+  assert.deepEqual(Object.keys(files), ['backup/backup.sh', 'compose.yml']);
+  assert.match(files['compose.yml'], /^[0-9a-f]{64}$/);
 });

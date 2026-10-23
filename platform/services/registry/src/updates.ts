@@ -17,6 +17,8 @@ export interface ReleaseManifest {
   parts: Record<string, { version: string }>;
   /** Each part's image by digest; the Release workflow adds it to the attached file. */
   images?: Record<string, string>;
+  /** The release's files in infra/deploy, by path inside it, as sha256; the Release workflow adds it too. */
+  deploy?: Record<string, string>;
 }
 
 /** One release in the feed. Its manifest is absent when it couldn't be read (or wasn't needed). */
