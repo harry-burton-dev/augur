@@ -64,7 +64,7 @@ Admin gets an **Updates** page, under AUGUR. It reads this repository's GitHub r
    ```
    The registry runs as user 1000. Without the token, Updates says the release feed refused it.
 
-Optional, in `.env`: `RELEASE_CHANNEL=stable` or `beta` (by default, the channel of the release you run), and `RELEASE_FEED_URL` for a mirror, or `off` to check nothing.
+Optional, in `.env`: `RELEASE_CHANNEL=stable` or `beta` (by default, the channel of the release you run), and `RELEASE_FEED_URL` for a mirror ([mirror.md](mirror.md)), or `off` to check nothing.
 
 ### The updater
 
