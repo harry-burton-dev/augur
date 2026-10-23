@@ -79,7 +79,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home
-      - run: pnpm --filter @augur/contract-tests exec playwright install --with-deps chromium
+      # The browser is cached by Playwright version. No --with-deps: the runner image
+      # already has Chrome's system libraries, and apt-get was the slow, uneven part
+      # (half a minute on a good day, twelve on a bad one).
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter @augur/contract-tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
+      - run: pnpm --filter @augur/contract-tests exec playwright install --only-shell chromium
       - run: pnpm --filter @augur/contract-tests test:contract
 
   # The server setup in infra/deploy: the compose file is valid and the images build.

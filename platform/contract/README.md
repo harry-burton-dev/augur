@@ -13,4 +13,6 @@ pnpm --filter @augur/contract-tests exec playwright install chromium   # once
 pnpm --filter @augur/contract-tests test:contract
 ```
 
+It runs every build side by side, each against its own copy of the shell on its own port (5180, 5181…), and prints each build's results once that build is done. Failures for a build are kept in `test-results/<build>/`.
+
 When a release bumps the SDK's minor (1.1, 1.2…), keep that release's build: `pnpm build && pnpm --filter @augur/contract-tests freeze`, and commit the new `frozen/` folder. A new part of the mount context gets a check in the reference app and the spec in the same pull request that adds it; the frozen builds don't use it, which is the point.
