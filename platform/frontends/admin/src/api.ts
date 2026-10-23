@@ -135,6 +135,40 @@ export interface PlatformStatus {
   backups?: BackupStatus;
 }
 
+/** An AUGUR release as Updates shows it (see contracts/registry.openapi.yaml). */
+export interface ReleaseSummary {
+  version: string;
+  channel: 'stable' | 'beta';
+  released?: string;
+  notesUrl?: string;
+  breaking: string[];
+}
+
+/** Something to do or know before upgrading. */
+export interface NeedsYou {
+  kind: 'path' | 'setting' | 'breaking' | 'app' | 'unknown';
+  message: string;
+  version?: string;
+  key?: string;
+  required?: boolean;
+  app?: string;
+}
+
+/** What the registry last found in the release feed, against the running release. */
+export interface PlatformUpdates {
+  running: { version: string; channel: 'stable' | 'beta' };
+  channel: 'stable' | 'beta';
+  /** Off when the deployment set RELEASE_FEED_URL=off. */
+  feed: 'on' | 'off';
+  checkedAt?: string;
+  problem?: string;
+  available?: ReleaseSummary & { parts: { name: string; from?: string; to: string }[] };
+  newer: ReleaseSummary[];
+  beta?: ReleaseSummary;
+  next?: string;
+  needsYou: NeedsYou[];
+}
+
 export interface NewPerson {
   firstName: string;
   lastName: string;
@@ -223,6 +257,10 @@ export class AdminApi {
   removeOrigin = (origin: string) => this.call<void>('DELETE', `/api/registry/v1/origins/${encodeURIComponent(origin)}`);
 
   status = () => this.call<PlatformStatus>('GET', '/api/gateway/v1/status');
+
+  updates = () => this.call<PlatformUpdates>('GET', '/api/registry/v1/platform/updates');
+  /** Reads the release feed now rather than waiting for the daily check. */
+  checkUpdates = () => this.call<PlatformUpdates>('POST', '/api/registry/v1/platform/updates/check');
 }
 
 export const fullName = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => `${p.firstName} ${p.lastName}`.trim() || p.username;

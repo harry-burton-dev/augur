@@ -1,6 +1,7 @@
 // The AUGUR release: one version over every part of the platform, so a deployment can say
 // "we're on AUGUR 0.2.0" and an updater knows exactly what that means.
-//   node scripts/augur-release.mjs version   after `changeset version`: writes release/augur-release.json
+//   node scripts/augur-release.mjs version   after `changeset version`: writes release/augur-release.json, and the
+//                                            registry's augur-version.ts, so a running registry knows its own release
 //   node scripts/augur-release.mjs check     in CI: fails when the release file is out of step with the parts
 //   node scripts/augur-release.mjs pending   in the Release workflow: prints version=, channel= and new=true|false (not released yet)
 //   node scripts/augur-release.mjs publish <images.json>
@@ -24,6 +25,7 @@ import semver from 'semver';
 const root = new URL('..', import.meta.url).pathname;
 const RELEASE_FILE = 'release/augur-release.json';
 const ENV_EXAMPLE = 'infra/deploy/.env.example';
+const VERSION_FILE = 'platform/services/registry/src/augur-version.ts';
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 
 /** Every part of the platform, by package name, with its version and where it lives. */
@@ -92,9 +94,16 @@ export const nextRelease = (previous, parts, settings, today) => {
   };
 };
 
+/** The registry's copy of the release it ships in: Admin's Updates page compares the feed with it. */
+export const versionModule = (release) =>
+  `// Written by scripts/augur-release.mjs from ${RELEASE_FILE}; don't edit by hand.\n\n` +
+  `/** The AUGUR release this registry ships in. */\n` +
+  `export const AUGUR_RELEASE = { version: '${release.version}', channel: '${release.channel}' } as const;\n`;
+
 const write = (release) => {
   mkdirSync(join(root, 'release'), { recursive: true });
   writeFileSync(join(root, RELEASE_FILE), `${JSON.stringify(release, null, 2)}\n`);
+  writeFileSync(join(root, VERSION_FILE), versionModule(release));
 };
 
 /** The section of a part's CHANGELOG.md for one version, without its heading. */
@@ -144,6 +153,8 @@ const main = () => {
         const released = previous.parts[name]?.version;
         if (released && released !== version) problems.push(`${name} is ${version}, but ${RELEASE_FILE} says ${released}`);
       }
+      const shipped = existsSync(join(root, VERSION_FILE)) ? readFileSync(join(root, VERSION_FILE), 'utf8') : '';
+      if (shipped !== versionModule(previous)) problems.push(`${VERSION_FILE} doesn't match ${RELEASE_FILE}`);
     }
     if (problems.length) {
       console.error(problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`).join('\n'));

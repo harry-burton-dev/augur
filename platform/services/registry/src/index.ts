@@ -1,5 +1,7 @@
 import { floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
+import { AUGUR_RELEASE } from './augur-version.ts';
+import { DEFAULT_FEED_URL, feedTokenFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
 
 const port = Number(process.env.PORT ?? 8082);
@@ -25,6 +27,16 @@ const { IDENTITY_URL = 'http://localhost:8081' } = process.env;
 const floors = credentials ? floorPlaces({ identityUrl: IDENTITY_URL, credentials }) : undefined;
 if (!floors) console.warn('SERVICE_CLIENT_SECRET is not set: the catalogue can’t be read floor by floor.');
 
+// New AUGUR releases: this repo's GitHub releases, or a mirror's feed; RELEASE_FEED_URL=off checks none.
+// RELEASE_CHANNEL is stable or beta; by default the channel of the release this registry ships in.
+// Compose passes unset settings as empty strings.
+const feedUrl = process.env.RELEASE_FEED_URL || DEFAULT_FEED_URL;
+const channel = (process.env.RELEASE_CHANNEL || undefined) as Channel | undefined;
+if (channel && channel !== 'stable' && channel !== 'beta') throw new Error('RELEASE_CHANNEL is stable or beta.');
+const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: feedTokenFromEnv() });
+const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel });
+updates.start();
+
 // Apps and platform services sign in as themselves (their Keycloak clients).
-const app = await buildApp({ store, verifyService: serviceVerifierFromEnv(), audit, floors });
+const app = await buildApp({ store, verifyService: serviceVerifierFromEnv(), audit, floors, updates });
 await app.listen({ port, host: '0.0.0.0' });

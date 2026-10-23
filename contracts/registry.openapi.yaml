@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.8.0
+  version: 1.9.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -320,8 +320,77 @@ paths:
         "204": { description: Removed }
         "403": { description: Not an admin }
         "404": { description: Not an allowed origin }
+  /platform/updates:
+    get:
+      summary: Whether a newer AUGUR release is out, and what upgrading to it needs first (admins only)
+      description: >
+        From the registry's last check of the release feed: this repository's GitHub releases
+        (augur@<version>, pre-releases are beta) or RELEASE_FEED_URL, a mirror's list of release files.
+        The registry checks once a day. Read-only: nothing is restarted or changed.
+      responses:
+        "200":
+          description: The running release against the feed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformUpdates" }
+        "403": { description: Not an admin }
+  /platform/updates/check:
+    post:
+      summary: Check the release feed now (admins only)
+      description: A check within 30 seconds of the last good one answers from it. Audited as platform.updates-checked.
+      responses:
+        "200":
+          description: The running release against the feed, as just checked. A feed that can't be read is a `problem`, not an error.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformUpdates" }
+        "403": { description: Not an admin }
 components:
   schemas:
+    PlatformUpdates:
+      type: object
+      required: [running, channel, feed, newer, needsYou]
+      properties:
+        running: { type: object, required: [version, channel], properties: { version: { type: string }, channel: { $ref: "#/components/schemas/ReleaseChannel" } } }
+        channel: { $ref: "#/components/schemas/ReleaseChannel" }
+        feed: { type: string, enum: ["on", "off"], description: Off when the deployment set RELEASE_FEED_URL=off }
+        checkedAt: { type: string, format: date-time }
+        problem: { type: string, description: Why the last check failed; what it found before still shows }
+        available:
+          description: The newest release on the channel, when newer than the running one
+          allOf:
+            - $ref: "#/components/schemas/ReleaseSummary"
+            - type: object
+              required: [parts]
+              properties:
+                parts:
+                  type: array
+                  items: { type: object, required: [name, to], properties: { name: { type: string }, from: { type: string }, to: { type: string } } }
+        newer: { type: array, items: { $ref: "#/components/schemas/ReleaseSummary" }, description: Every release on the channel newer than the running one, newest first }
+        beta: { $ref: "#/components/schemas/ReleaseSummary", description: "On stable: a beta newer than anything stable" }
+        next: { type: string, description: The release to upgrade to next; one on the way when the newest can't be reached straight }
+        needsYou:
+          type: array
+          items:
+            type: object
+            required: [kind, message]
+            properties:
+              kind: { type: string, enum: [path, setting, breaking, app, unknown] }
+              message: { type: string }
+              version: { type: string }
+              key: { type: string, description: The setting, for kind setting }
+              required: { type: boolean }
+              app: { type: string, description: The app that won't run on the new SDK, for kind app }
+    ReleaseChannel: { type: string, enum: [stable, beta] }
+    ReleaseSummary:
+      type: object
+      required: [version, channel, breaking]
+      properties:
+        version: { type: string }
+        channel: { $ref: "#/components/schemas/ReleaseChannel" }
+        released: { type: string }
+        notesUrl: { type: string, format: uri }
+        breaking: { type: array, items: { type: string } }
     CatalogueEntry:
       allOf:
         - $ref: "#/components/schemas/AppManifestEntry"
