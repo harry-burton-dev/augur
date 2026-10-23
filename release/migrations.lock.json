@@ -20,5 +20,8 @@
     "005_floors": "e10a98ac5da61b71",
     "006_upgrades": "a93f5823c7593614",
     "007_upload_limit": "5f47e45676b35056"
+  },
+  "@apps/folio": {
+    "001_libraries": "1c5f1dfed17e6277"
   }
 }

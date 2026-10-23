@@ -3,7 +3,7 @@ import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isSharedModule } from '@augur/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, type Plugin, type ProxyOptions } from 'vite';
 
 /**
  * Local stand-in for where apps are hosted: /apps/<id>/* is served from that
@@ -81,6 +81,9 @@ const sharedModulesMap = (): Plugin => {
  * app's source as its entry. Calls to /api/<id> go to the app's service (at
  * APP_SERVICE_URL) carrying that person, as the gateway would send them.
  */
+/** The stand-in's floors, as src/dev-app/standin.ts gives them to the shell. */
+const DEV_FLOORS: Record<string, { kind: string; role: string }> = { 'dev-me': { kind: 'personal', role: 'lead' }, 'dev-org': { kind: 'org', role: 'member' } };
+
 const devApp = (dir: string | undefined) => {
   if (!dir) return undefined;
   const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; [key: string]: unknown };
@@ -107,7 +110,21 @@ const devApp = (dir: string | undefined) => {
         target: process.env.APP_SERVICE_URL ?? 'http://localhost:8090',
         rewrite: (path: string) => path.slice(`/api/${manifest.id}`.length) || '/',
         headers: caller,
-      },
+        // The gateway checks the floor an app names and says what it is and the person's role
+        // there; the stand-in does the same for its own floors (devFloors in src/dev-app/standin.ts).
+        configure: (proxy) =>
+          proxy.on('proxyReq', (req) => {
+            req.removeHeader('x-workspace-kind');
+            req.removeHeader('x-workspace-role');
+            const floor = DEV_FLOORS[String(req.getHeader('x-workspace-id') ?? '')];
+            if (!floor) {
+              req.removeHeader('x-workspace-id');
+              return;
+            }
+            req.setHeader('x-workspace-kind', floor.kind);
+            req.setHeader('x-workspace-role', floor.role);
+          }),
+      } satisfies ProxyOptions,
     },
   };
 };

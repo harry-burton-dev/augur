@@ -20,7 +20,7 @@ When something happens that other services may care about (a document published)
 
 ## Asking another app
 
-To get something from another app, such as a document picked from the Library, an app raises an intent through its mount context rather than calling that app. See [platform/frontends](../platform/frontends/README.md#apps-asking-each-other).
+To get something from another app, such as a document picked from Folio, an app raises an intent through its mount context rather than calling that app. See [platform/frontends](../platform/frontends/README.md#apps-asking-each-other).
 
 ## Telling people, and keeping a record
 
@@ -37,4 +37,4 @@ await notify({ eventsUrl, credentials, workspace, notification: {
 
 | App | What it is |
 | --- | --- |
-| `library/` | The first app (name to be decided): document libraries that users and departments publish for internal distribution, with a readable reader view. |
+| `folio/` | Folio, the first pillar app: document libraries on your own floor, a team's or the org's, published for people to read in a readable reader view. |

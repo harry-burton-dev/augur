@@ -49,7 +49,10 @@ services:
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       GARAGE_ADMIN_URL: http://garage:3903
       GARAGE_ADMIN_TOKEN: platform-local-only
-      APP_STORAGE: ""
+      # Folio's own schema and bucket. Local only.
+      APP_STORAGE: folio
+      FOLIO_DATABASE_PASSWORD: platform-local-only-folio
+      FOLIO_BUCKET_SECRET: 6c6f63616c2d6f6e6c792d666f6c696f2d6275636b65742d7365637265742d30
     depends_on: [postgres, garage]
 
   # Sign-in. The platform realm, its shell client and test users are imported from ./keycloak.
@@ -79,7 +82,7 @@ services:
       OIDC_JWKS_URL: http://keycloak:8080/realms/platform/protocol/openid-connect/certs
       OIDC_AUDIENCE: platform-api
       # Each app's service, name=url. The platform knows no app by name.
-      APP_UPSTREAMS: library=http://library:8083
+      APP_UPSTREAMS: folio=http://folio:8083
     ports: ["8080:8080"]
 
   identity:
@@ -94,7 +97,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       SERVICE_CLIENT_SECRET: platform-local-only-identity
       # The clients identity makes for the platform's services and the sample app, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=platform-local-only-identity,platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-library=platform-local-only-library
+      SERVICE_CLIENT_SECRETS: platform-identity=platform-local-only-identity,platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio
       <<: *internal
     depends_on: [postgres, keycloak]
 
@@ -132,15 +135,19 @@ services:
     depends_on: [postgres]
 
   # ---- apps ----
-  library:
+  # Folio, the document libraries. Its frontend runs with Vite: pnpm dev:app folio.
+  folio:
     <<: *service
-    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/library" } }
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/folio" } }
     environment:
       PORT: 8083
       <<: *internal
-      SERVICE_CLIENT_SECRET: platform-local-only-library
+      SERVICE_CLIENT_SECRET: platform-local-only-folio
       APP_MANIFEST: /app/manifest.json
-    volumes: ["../apps/library/manifest.json:/app/manifest.json:ro"]
+      DATABASE_URL: postgres://app_folio:platform-local-only-folio@postgres:5432/platform
+    volumes: ["../apps/folio/manifest.json:/app/manifest.json:ro"]
+    depends_on:
+      storage: { condition: service_completed_successfully }
 
 volumes:
   pgdata:

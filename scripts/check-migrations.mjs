@@ -9,7 +9,8 @@
 //     changes a column's type or makes one required would break the release before it, which is what a
 //     deployment rolls back to. It needs a major bump of its service (a major changeset), so the AUGUR
 //     release is breaking and nobody can skip the release before it.
-// Each service's migrations are the `migrations` export of its built dist/store.js.
+// Each service's migrations are the `migrations` export of its built dist/store.js: the platform's
+// services in platform/services/*, and apps' own in apps/*/service.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -36,18 +37,24 @@ export const destructive = (sql) => DESTRUCTIVE.filter(([pattern]) => pattern.te
 
 const fingerprint = (sql) => createHash('sha256').update(sql.trim()).digest('hex').slice(0, 16);
 
+/** Every service's folder: the platform's, then each app's. */
+const serviceDirs = () => [
+  ...readdirSync(join(root, 'platform/services'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(root, 'platform/services', d.name)),
+  ...readdirSync(join(root, 'apps'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(root, 'apps', d.name, 'service')).filter((p) => existsSync(p)),
+];
+
 /** Every service's migrations, in order: { "@augur/registry": [{ id, hash, sql }] }. */
 const readMigrations = async () => {
   const all = {};
-  for (const dir of readdirSync(join(root, 'platform/services'), { withFileTypes: true }).filter((d) => d.isDirectory())) {
-    const path = join(root, 'platform/services', dir.name);
+  for (const path of serviceDirs()) {
+    const where = path.slice(root.length);
     const store = join(path, 'dist/store.js');
     if (!existsSync(join(path, 'src/store.ts'))) continue;
-    if (!existsSync(store)) throw new Error(`${dir.name} isn't built: run pnpm build first.`);
+    if (!existsSync(store)) throw new Error(`${where} isn't built: run pnpm build first.`);
     const { migrations } = await import(pathToFileURL(store).href);
     if (!migrations) {
       // A service that keeps a migrations table must show its migrations, or they'd go unchecked.
-      if (/\.migrations \(/.test(readFileSync(join(path, 'src/store.ts'), 'utf8'))) throw new Error(`${dir.name}'s src/store.ts runs migrations but doesn't export them as \`migrations\`.`);
+      if (/\.migrations \(/.test(readFileSync(join(path, 'src/store.ts'), 'utf8'))) throw new Error(`${where}'s src/store.ts runs migrations but doesn't export them as \`migrations\`.`);
       continue;
     }
     const { name } = JSON.parse(readFileSync(join(path, 'package.json'), 'utf8'));
@@ -91,8 +98,8 @@ const allowedToBreak = () => {
   }
   if (existsSync(join(root, RELEASE_FILE))) {
     const released = readJson(RELEASE_FILE).parts;
-    for (const dir of readdirSync(join(root, 'platform/services'))) {
-      const pkg = join(root, 'platform/services', dir, 'package.json');
+    for (const dir of serviceDirs()) {
+      const pkg = join(dir, 'package.json');
       if (!existsSync(pkg)) continue;
       const { name, version } = JSON.parse(readFileSync(pkg, 'utf8'));
       const was = released[name]?.version;

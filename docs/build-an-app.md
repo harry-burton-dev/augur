@@ -239,7 +239,7 @@ In `infra/docker-compose.yml` (and `infra/deploy/compose.yml` for the server), a
 
   gateway:
     environment:
-      APP_UPSTREAMS: library=http://library:8083,expenses=http://expenses:8090
+      APP_UPSTREAMS: folio=http://folio:8083,expenses=http://expenses:8090
 ```
 
 Then serve the frontend where the manifest's `entry` says. Locally, build it and tell the shell's dev server where it is:
