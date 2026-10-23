@@ -150,7 +150,28 @@ export default defineMicroFrontend({
 
 The tile is about 320 by 200 pixels and has the app's name and icon above the card. A card that's missing or throws shows "couldn't show this right now" in its tile without touching the rest of Home. Keep it fast: Home mounts every card at once.
 
+- `search: true` puts the app's content in the shell's Find; see [Find](#find) below. SDK 1.3.
+
 `pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
+
+### Find
+
+With `"search": true` in the manifest, the shell's Find asks your service `GET /v1/search?q=<what they typed>` (through the gateway, so `/api/<id>/v1/search`, with the person and their floor attached) as they type, and lists what you answer under your app's name:
+
+```ts
+import type { SearchAnswer } from '@platform/mfe-sdk';
+
+app.get<{ Querystring: { q: string } }>('/v1/search', async (req, reply) => {
+  const caller = callerFromHeaders(req.headers);
+  if (!caller) return reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to search.' });
+  const claims = await store.search(req.query.q, { visibleTo: caller, floor: caller.workspace?.id });
+  return { results: claims.map((c) => ({ id: c.id, title: c.title, detail: `Claim · ${c.status}`, path: `/claims/${c.id}` })) } satisfies SearchAnswer;
+});
+```
+
+- Only answer with what this person can open: the shell shows whatever you send. Check permissions in your service, as for every other call.
+- Best first, at most ten (the shell drops the rest). A result opens your app at its `path`; give `workspace` (a floor id) for one that lives on another floor than the one asked from, and the shell lists it after this floor's and goes there when it's chosen.
+- Answer within 1.5 seconds. Every app is asked at once and each fills in as it answers, but past that the shell stops waiting and says your app didn't answer in time.
 
 ## 6. Before you open a pull request
 

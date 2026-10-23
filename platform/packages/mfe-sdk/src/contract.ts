@@ -36,6 +36,33 @@ export interface AppManifestEntry {
    * names a `module`: a key of the entry's `surfaces` (SDK 1.2).
    */
   surfaces?: ManifestSurface[];
+  /**
+   * The app's service answers `GET /v1/search?q=` with a `SearchAnswer`, and
+   * the shell's Find asks it, through the gateway on the person's floor, as
+   * they type (SDK 1.3).
+   */
+  search?: boolean;
+}
+
+/**
+ * What an app's service answers to `GET /v1/search?q=`: what it holds that
+ * matches, best first, and only what the person who asked can open. The shell
+ * shows at most ten, under the app's name, and opens one at its `path`.
+ */
+export interface SearchAnswer {
+  results: SearchResult[];
+}
+
+export interface SearchResult {
+  /** Unique within the app. */
+  id: string;
+  title: string;
+  /** One line: what kind of thing it is, where it lives, when it changed. */
+  detail?: string;
+  /** Where in the app it opens, below the app's route, e.g. "/doc/7". Without one, the app opens at its start. */
+  path?: string;
+  /** The floor it's on, by id, when that isn't the one asked from. Results on the person's floor are listed first. */
+  workspace?: string;
 }
 
 /**

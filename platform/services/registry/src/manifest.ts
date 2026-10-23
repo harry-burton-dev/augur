@@ -23,6 +23,8 @@ export interface AppEntry {
   floors?: FloorKind[];
   /** What the app shows on each kind of floor, for the shell to place. */
   surfaces?: Surface[];
+  /** The app's service answers GET /v1/search?q=, and the shell's Find asks it. */
+  search?: boolean;
 }
 
 export const FLOOR_KINDS = ['personal', 'team', 'org'] as const;
@@ -142,6 +144,7 @@ export const appEntrySchema = {
     requiredRole: { type: 'string', maxLength: 60 },
     handles: { type: 'array', maxItems: 50, items: { type: 'string', pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 } },
     ai: { type: 'boolean' },
+    search: { type: 'boolean' },
     scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } },
     floors: { type: 'array', minItems: 1, uniqueItems: true, maxItems: FLOOR_KINDS.length, items: { enum: [...FLOOR_KINDS] } },
     surfaces: {

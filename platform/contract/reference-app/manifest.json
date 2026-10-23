@@ -8,5 +8,6 @@
   "description": "Uses every part of the mount context, for the contract tests",
   "icon": "apps",
   "handles": ["reference.show", "reference.answer"],
+  "search": true,
   "surfaces": [{ "floor": "personal", "slot": "card", "module": "./Glance" }]
 }

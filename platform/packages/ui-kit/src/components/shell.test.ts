@@ -239,6 +239,33 @@ describe('ui-shell', () => {
     expect([...root().querySelectorAll('.view .row b')].map((b) => b.textContent)).toEqual(['Travel policy published']);
   });
 
+  it('lists apps’ results under their names, saying which are still looking or didn’t answer', async () => {
+    el.openView('find');
+    await el.updateComplete;
+    const input = root().querySelector('input')!;
+    input.value = 'budget';
+    input.dispatchEvent(new InputEvent('input'));
+    el.findResults = [
+      { id: 'p', title: 'Budgets', detail: 'Admin · Platform', kind: 'page' },
+      { id: 'l1', title: 'Budget paper', detail: 'Draft', kind: 'content', group: 'Library' },
+    ];
+    el.findGroups = [
+      { name: 'Library', state: 'done' },
+      { name: 'Claims', state: 'looking' },
+      { name: 'Slow', state: 'late' },
+      { name: 'Quiet', state: 'done' },
+    ];
+    await el.updateComplete;
+    const view = root().querySelector('.view')!;
+    expect([...view.querySelectorAll('.group')].map((g) => g.textContent!.replace(/\s+/g, ' ').trim())).toEqual(['Library 1', 'Claims', 'Slow']);
+    expect([...view.querySelectorAll('.note.small')].map((n) => n.textContent)).toEqual(['Still looking…', 'Didn’t answer in time.']);
+    expect([...view.querySelectorAll('.row b')].map((b) => b.textContent)).toEqual(['Budgets', 'Budget paper']);
+    const picked = vi.fn();
+    el.addEventListener('ui-pick', (e) => picked((e as CustomEvent).detail.result.id));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(picked).toHaveBeenCalledWith('p');
+  });
+
   it('sorts agents by urgency and says when none run', async () => {
     el.openView('agents');
     await el.updateComplete;
