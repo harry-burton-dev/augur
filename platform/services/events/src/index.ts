@@ -24,3 +24,13 @@ const floors = credentials ? floorPlaces({ identityUrl: IDENTITY_URL, credential
 const members = credentials ? floorMembers({ identityUrl: IDENTITY_URL, credentials }) : undefined;
 const app = await buildApp({ store, verifyService: serviceVerifierFromEnv(), grants, floors, members });
 await app.listen({ port, host: '0.0.0.0' });
+
+// Domain events are for followers to catch up on, not a record: they're kept DOMAIN_EVENTS_KEEP_DAYS (30) days.
+const keepDays = Number(process.env.DOMAIN_EVENTS_KEEP_DAYS ?? 30);
+const prune = () =>
+  store.pruneEvents(keepDays).then(
+    (n) => n && app.log.info({ removed: n, keepDays }, 'old domain events removed'),
+    (err) => app.log.error({ err: String(err) }, 'removing old domain events failed'),
+  );
+void prune();
+setInterval(prune, 3_600_000).unref();

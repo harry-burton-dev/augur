@@ -46,6 +46,43 @@ export interface AuditFilter {
 
 export type Listener = (n: Notification) => void;
 
+/**
+ * Something that happened in a service, told to whichever services follow its
+ * topic: "folio.document.published", "platform.team.archived". Unlike a
+ * notification it is for services, not people, and carries ids, not content.
+ */
+export interface DomainEvent {
+  /** Its place in the one order every follower reads in; pass the last one seen as `after`. */
+  seq: string;
+  topic: string;
+  /** The publisher's own id for it, so sending it twice keeps one. */
+  id: string;
+  /** The app or platform service that published it. */
+  publisher: string;
+  at: string;
+  workspace?: EventFloor;
+  payload: unknown;
+}
+
+export interface NewDomainEvent {
+  topic: string;
+  id: string;
+  payload: unknown;
+  floor?: EventFloor;
+}
+
+export interface EventsQuery {
+  /** Topic names, or a family such as "folio.*". */
+  topics: string[];
+  /** Only events after this `seq`. */
+  after?: string;
+  limit: number;
+}
+
+/** Whether a topic is one of those asked for: an exact name, or under a "family.*". */
+export const topicMatches = (topic: string, wanted: string[]) =>
+  wanted.some((w) => (w.endsWith('.*') ? topic.startsWith(w.slice(0, -1)) : topic === w));
+
 export interface EventStore {
   /** Adds one notification per recipient and tells every listener, on every instance. */
   addNotifications(n: NewNotification, floor?: EventFloor): Promise<Notification[]>;
@@ -60,6 +97,12 @@ export interface EventStore {
   /** Whether a team has turned team notices on. */
   teamNotices(workspace: string): Promise<boolean>;
   setTeamNotices(workspace: string, on: boolean, by: string): Promise<void>;
+  /** Adds events, all or none; one the publisher already sent (same id) is skipped. */
+  publish(publisher: string, events: NewDomainEvent[]): Promise<{ added: number; repeated: number }>;
+  /** Events on these topics in publishing order, never leaving a gap a later read would fill. */
+  readEvents(query: EventsQuery): Promise<DomainEvent[]>;
+  /** Forgets events older than this many days; returns how many went. */
+  pruneEvents(keepDays: number): Promise<number>;
 }
 
 const fromInput = (n: NewNotification, recipient: string, id: string, createdAt: string, floor?: EventFloor): Notification => ({
@@ -136,6 +179,31 @@ export class MemoryEventStore implements EventStore {
     if (on) this.teams.add(workspace);
     else this.teams.delete(workspace);
   }
+
+  private domainEvents: DomainEvent[] = [];
+  private eventSeq = 0;
+
+  async publish(publisher: string, events: NewDomainEvent[]) {
+    let added = 0;
+    const at = new Date().toISOString();
+    for (const e of events) {
+      if (this.domainEvents.some((d) => d.publisher === publisher && d.id === e.id)) continue;
+      this.domainEvents.push({ seq: String(++this.eventSeq), topic: e.topic, id: e.id, publisher, at, ...(e.floor ? { workspace: e.floor } : {}), payload: e.payload });
+      added++;
+    }
+    return { added, repeated: events.length - added };
+  }
+
+  async readEvents({ topics, after, limit }: EventsQuery) {
+    return this.domainEvents.filter((e) => Number(e.seq) > Number(after ?? 0) && topicMatches(e.topic, topics)).slice(0, limit);
+  }
+
+  async pruneEvents(keepDays: number) {
+    const cutoff = new Date(Date.now() - keepDays * 86_400_000).toISOString();
+    const before = this.domainEvents.length;
+    this.domainEvents = this.domainEvents.filter((e) => e.at >= cutoff);
+    return before - this.domainEvents.length;
+  }
 }
 
 /** Schema changes, applied in order and recorded so each runs once. The events service owns the `events` schema. */
@@ -189,6 +257,26 @@ export const migrations: { id: string; sql: string }[] = [
     sql: `
       -- Up to two buttons on a notification, each an intent the shell raises.
       alter table events.notifications add column actions jsonb;`,
+  },
+  {
+    id: '004_domain_events',
+    sql: `
+      -- What services tell each other, read by followers in seq order. xid is the inserting
+      -- transaction, so a read never returns a seq while a lower one could still commit.
+      create table events.domain_events (
+        seq bigint generated always as identity primary key,
+        topic text not null,
+        id text not null,
+        publisher text not null,
+        at timestamptz not null default now(),
+        workspace_id text,
+        workspace_path text[],
+        payload jsonb not null,
+        xid xid8 not null default pg_current_xact_id(),
+        unique (publisher, id)
+      );
+      create index domain_events_topic on events.domain_events (topic, seq);
+      create index domain_events_at on events.domain_events (at);`,
   },
 ];
 
@@ -387,6 +475,37 @@ export class PgEventStore implements EventStore {
       on ? 'insert into events.team_notices (workspace_id, set_by) values ($1, $2) on conflict do nothing' : 'delete from events.team_notices where workspace_id = $1',
       on ? [workspace, by] : [workspace],
     );
+  }
+
+  async publish(publisher: string, events: NewDomainEvent[]) {
+    const { rowCount } = await this.pool.query(
+      `insert into events.domain_events (topic, id, publisher, workspace_id, workspace_path, payload)
+       select e.topic, e.id, $1, e.workspace_id, e.workspace_path, coalesce(e.payload, 'null'::jsonb)
+       from jsonb_to_recordset($2::jsonb) as e(topic text, id text, workspace_id text, workspace_path text[], payload jsonb)
+       on conflict (publisher, id) do nothing`,
+      [publisher, JSON.stringify(events.map((e) => ({ topic: e.topic, id: e.id, workspace_id: e.floor?.id ?? null, workspace_path: e.floor?.path ?? null, payload: e.payload ?? null })))],
+    );
+    return { added: rowCount ?? 0, repeated: events.length - (rowCount ?? 0) };
+  }
+
+  async readEvents({ topics, after, limit }: EventsQuery) {
+    const exact = topics.filter((t) => !t.endsWith('.*'));
+    const families = topics.filter((t) => t.endsWith('.*')).map((t) => `${t.slice(0, -1)}%`);
+    // Only what every earlier transaction has settled: a seq handed out to a transaction still
+    // running would otherwise commit below the follower's cursor and never be read.
+    const { rows } = await this.pool.query<{ seq: string; topic: string; id: string; publisher: string; at: Date; workspace_id: string | null; workspace_path: string[] | null; payload: unknown }>(
+      `select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events
+       where seq > $1 and (topic = any($2::text[]) or topic like any($3::text[]))
+         and xid < pg_snapshot_xmin(pg_current_snapshot())
+       order by seq limit $4`,
+      [after ?? '0', exact, families, limit],
+    );
+    return rows.map((r) => ({ seq: String(r.seq), topic: r.topic, id: r.id, publisher: r.publisher, at: r.at.toISOString(), ...floorFrom(r.workspace_id, r.workspace_path), payload: r.payload }));
+  }
+
+  async pruneEvents(keepDays: number) {
+    const { rowCount } = await this.pool.query(`delete from events.domain_events where at < now() - make_interval(days => $1)`, [keepDays]);
+    return rowCount ?? 0;
   }
 
   async close() {

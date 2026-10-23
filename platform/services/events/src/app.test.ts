@@ -210,4 +210,61 @@ describe('events', () => {
       expect(log[0]).toMatchObject({ action: 'team-notices.on', actor: { id: 'u-3' }, workspace: { id: 'w-finance' } });
     });
   });
+
+  describe('domain events', () => {
+    const as = (app: string) => ({ authorization: `Bearer app-${app}` });
+    // Folio may publish and follow; Notes may only follow; Board may do neither.
+    const grants = async (app: string) =>
+      app === 'folio' ? (['events:publish', 'events:subscribe'] as const) : app === 'notes' ? (['events:subscribe'] as const) : ([] as const);
+    const published = (id: string, workspace?: string) => ({ topic: 'folio.document.published', id, payload: { document: id }, ...(workspace ? { workspace } : {}) });
+
+    it('lets an app publish on its own topics, once per id, and others follow in order', async () => {
+      const app = (open = await buildApp({ verifyService, grants, floors }));
+      const publish = (headers: Record<string, string>, events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers, payload: { events } });
+      expect((await publish(as('folio'), [published('d1', 'w-finance'), published('d2')])).json()).toEqual({ added: 2, repeated: 0 });
+      expect((await publish(as('folio'), [published('d1', 'w-finance')])).json()).toEqual({ added: 0, repeated: 1 });
+      await publish(as('folio'), [{ topic: 'folio.document.withdrawn', id: 'w1', payload: { document: 'd1' } }]);
+
+      const read = (query: string) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers: as('notes') });
+      const first = (await read('topics=folio.document.published&limit=1')).json();
+      expect(first.events).toMatchObject([{ topic: 'folio.document.published', id: 'd1', publisher: 'folio', payload: { document: 'd1' }, workspace: { id: 'w-finance', path: ['w-org', 'w-finance'] } }]);
+      const rest = (await read(`topics=folio.*&after=${first.next}`)).json();
+      expect(rest.events.map((e: { id: string }) => e.id)).toEqual(['d2', 'w1']);
+      expect((await read(`topics=folio.*&after=${rest.next}`)).json()).toEqual({ events: [], next: rest.next });
+    });
+
+    it('keeps each publisher to its own topics and scope', async () => {
+      const app = (open = await buildApp({ verifyService, grants, floors }));
+      const publish = (headers: Record<string, string>, events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers, payload: { events } });
+      const posing = await publish(as('notes'), [published('d1')]);
+      expect([posing.statusCode, posing.json().message]).toEqual([403, 'notes can only send for itself, not for "folio".']);
+      expect((await publish(as('board'), [{ topic: 'board.card.moved', id: 'c1', payload: {} }])).statusCode).toBe(403);
+      expect((await publish(as('folio'), [{ topic: 'platform.person.disabled', id: 'p1', payload: {} }])).statusCode).toBe(403);
+      expect((await publish(platform, [published('d1')])).statusCode).toBe(403);
+      expect((await publish(as('folio'), [published('d1'), { topic: 'notes.x.y', id: 'n', payload: {} }])).statusCode).toBe(400);
+      expect((await publish(as('folio'), [published('d1', 'w-nowhere')])).statusCode).toBe(400);
+      expect((await publish(as('folio'), [{ ...published('d1'), payload: { text: 'x'.repeat(17_000) } }])).statusCode).toBe(400);
+      expect((await publish(alex, [published('d1')])).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers: as('board') })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers: alex })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/domain-events?topics=FOLIO', headers: as('notes') })).statusCode).toBe(400);
+    });
+
+    it('tells followers what identity and the registry change, as they record it', async () => {
+      const app = (open = await buildApp({ verifyService, grants, floors }));
+      const registry = await serviceHeaders({ name: 'registry', getToken: async () => 'platform-registry' });
+      const audit = (headers: Record<string, string>, entry: object, workspace?: string) =>
+        app.inject({ method: 'POST', url: '/v1/audit', headers: { ...headers, ...(workspace ? { 'x-workspace-id': workspace } : {}) }, payload: entry });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-9' });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'department.member-added', target: 'w-legal', detail: { person: 'u-2' } }, 'w-legal');
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-9' });
+      await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.disabled', target: 'notes' });
+      const { events } = (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=platform.*', headers: as('notes') })).json();
+      expect(events).toMatchObject([
+        { topic: 'platform.person.disabled', publisher: 'identity', payload: { person: 'u-9' } },
+        { topic: 'platform.team.member-added', payload: { team: 'w-legal', person: 'u-2' }, workspace: { id: 'w-legal' } },
+        { topic: 'platform.app.turned-off', publisher: 'registry', payload: { app: 'notes' } },
+      ]);
+    });
+  });
 });
