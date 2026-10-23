@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callerHeaders, type FloorPlace } from '@platform/service-kit';
+import { callerHeaders, type FloorPlace } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0', handles: ['document.open'] };
@@ -46,7 +46,7 @@ describe('registry', () => {
     const app = await buildApp();
     const forAdmin = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json();
     expect(ids(forAdmin)).toContain('admin');
-    expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Apps', 'Platform']);
+    expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Apps', 'AUGUR']);
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).not.toContain('admin');
   });
 

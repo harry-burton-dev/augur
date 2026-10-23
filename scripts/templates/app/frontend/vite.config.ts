@@ -1,4 +1,4 @@
-import { isSharedModule } from '@platform/mfe-sdk/build';
+import { isSharedModule } from '@augur/mfe-sdk/build';
 import { defineConfig } from 'vitest/config';
 
 // One ES module at dist/entry.js: the registry's entry URL for __NAME__. The kit

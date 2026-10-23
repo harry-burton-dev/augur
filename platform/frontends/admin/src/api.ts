@@ -1,4 +1,4 @@
-import type { AppManifestEntry } from '@platform/mfe-sdk';
+import type { AppManifestEntry } from '@augur/mfe-sdk';
 
 export interface Person {
   id: string;

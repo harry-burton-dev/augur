@@ -1,6 +1,6 @@
 # Build an app
 
-This takes you from nothing to an app running in the platform's shell. An app is three things in `apps/<id>/`: a **frontend** the shell mounts, a **service** with the app's own API, and a **manifest** that tells the registry about both. The app reaches the platform only through `@platform/mfe-sdk` (in the browser), `@platform/service-kit` (in its service) and the gateway. It never imports another app, and the platform never imports it.
+This takes you from nothing to an app running in AUGUR's shell. An app is three things in `apps/<id>/`: a **frontend** the shell mounts, a **service** with the app's own API, and a **manifest** that tells the registry about both. The app reaches the platform only through `@augur/mfe-sdk` (in the browser), `@augur/service-kit` (in its service) and the gateway. It never imports another app, and the platform never imports it.
 
 ## 1. Start it
 
@@ -43,9 +43,9 @@ To try your app with the rest of the platform, use the full local stack (see the
 `src/entry.ts` default-exports a micro frontend. The shell calls `mount(el, ctx)` when someone opens your app, and `unmount(el)` before the next one opens. Render into `el` and nowhere else.
 
 ```ts
-import { defineMicroFrontend, type MountContext } from '@platform/mfe-sdk';
+import { defineMicroFrontend, type MountContext } from '@augur/mfe-sdk';
 import { html, render } from 'lit';
-import '@platform/ui-kit';
+import '@augur/ui-kit';
 
 export default defineMicroFrontend({
   mount(el: HTMLElement, ctx: MountContext) {
@@ -72,14 +72,14 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.intent`, `ctx.reply` | Present when your app was opened to handle an intent, or to answer a request (`reply.respond(result)`) |
 | `ctx.bus` | Events within the page |
 
-Build screens from the kit's components (run `pnpm --filter @platform/ui-kit storybook` to see them) and its tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of the kit or Lit: the shell serves one copy to every app, and `vite.config.ts` keeps `lit`, `lit/*` and `@platform/ui-kit` out of your bundle. Anything else you import, you bundle.
+Build screens from the kit's components (run `pnpm --filter @augur/ui-kit storybook` to see them) and its tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of the kit or Lit: the shell serves one copy to every app, and `vite.config.ts` keeps `lit`, `lit/*` and `@augur/ui-kit` out of your bundle. Anything else you import, you bundle.
 
 ## 4. The service
 
 `service/src/app.ts` serves `/healthz` for operators, and the app's API under `/v1`. The gateway checks the sign-in token and passes on who is calling, so your service never reads tokens:
 
 ```ts
-import { callerFromHeaders } from '@platform/service-kit';
+import { callerFromHeaders } from '@augur/service-kit';
 
 app.get('/claims', async (req, reply) => {
   const caller = callerFromHeaders(req.headers);
@@ -159,7 +159,7 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
 With `"search": true` in the manifest, the shell's Find asks your service `GET /v1/search?q=<what they typed>` (through the gateway, so `/api/<id>/v1/search`, with the person and their floor attached) as they type, and lists what you answer under your app's name:
 
 ```ts
-import type { SearchAnswer } from '@platform/mfe-sdk';
+import type { SearchAnswer } from '@augur/mfe-sdk';
 
 app.get<{ Querystring: { q: string } }>('/v1/search', async (req, reply) => {
   const caller = callerFromHeaders(req.headers);
@@ -221,7 +221,7 @@ Then serve the frontend where the manifest's `entry` says. Locally, build it and
 
 ```sh
 pnpm --filter @apps/expenses-frontend build
-APP_DIST=expenses=$PWD/apps/expenses/frontend/dist pnpm --filter @platform/shell dev
+APP_DIST=expenses=$PWD/apps/expenses/frontend/dist pnpm --filter @augur/shell dev
 ```
 
 On the server, `infra/web.Dockerfile` builds it and copies its `dist` to `/site/apps/expenses` beside Home and Admin. An admin can turn the app off in Admin without removing it, or choose where it's on: in Admin, Apps, open the app and set each floor to on, off or blocked. On and off carry on to the teams below; blocked means no team below can turn it back on. Everyone's own floor follows the org. The shell asks the registry for the apps on the floor the person is on, and the platform holds the app's service to its scopes only where it's on.

@@ -1,4 +1,4 @@
-import { callerHeaders } from '@platform/service-kit';
+import { callerHeaders } from '@augur/service-kit';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from './app.ts';
 

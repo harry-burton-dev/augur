@@ -1,4 +1,4 @@
-import { floorMembers, floorPlaces, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@platform/service-kit';
+import { floorMembers, floorPlaces, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
 

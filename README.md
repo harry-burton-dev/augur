@@ -1,8 +1,6 @@
-# Platform
+# AUGUR
 
-"Platform" is a codename until it has a real name; packages are `@platform/*`.
-
-It is an app platform for the organisation's cloud. A **shell** in the browser loads independently built **apps** as micro frontends. Behind one **gateway** sit a few **core services** (who people are, which apps exist, notifications and audit). Apps live in `apps/` and only reach the platform through its published packages and APIs. The Library app is the first one, and it is paused while the shell is finished.
+AUGUR is an app platform for the organisation's cloud. A **shell** in the browser loads independently built **apps** as micro frontends. Behind one **gateway** sit a few **core services** (who people are, which apps exist, notifications and audit). Apps live in `apps/` and only reach AUGUR through its published `@augur/*` packages and APIs. The Library app is the first one, and it is paused while the shell is finished.
 
 ## How a request flows
 
@@ -56,9 +54,9 @@ docs/                     how-to guides (below)
 
 | Package | Purpose |
 | --- | --- |
-| `@platform/shell` | The host. Signs you in, loads your floors and the app list, draws Title and Orbit menus, mounts the app the URL points at, routes intents between apps, shows the notification stream and runs Find across apps. More in [platform/frontends](platform/frontends/README.md). |
-| `@platform/home` | Home at `/home`: what needs you and apps' glance cards. |
-| `@platform/admin` | Admin at `/admin` (admins only): people, departments, apps, activity (the audit log) and server status. Talks only to identity and registry through the gateway, never to Keycloak. |
+| `@augur/shell` | The host. Signs you in, loads your floors and the app list, draws Title and Orbit menus, mounts the app the URL points at, routes intents between apps, shows the notification stream and runs Find across apps. More in [platform/frontends](platform/frontends/README.md). |
+| `@augur/home` | Home at `/home`: what needs you and apps' glance cards. |
+| `@augur/admin` | Admin at `/admin` (admins only): people, departments, apps, activity (the audit log) and server status. Talks only to identity and registry through the gateway, never to Keycloak. |
 
 Home and Admin are built like any app: one ES module the shell imports.
 
@@ -66,9 +64,9 @@ Home and Admin are built like any app: one ES module the shell imports.
 
 | Package | Purpose |
 | --- | --- |
-| `@platform/ui-kit` | Every visual. Tokens come from `tokens/tokens.json` (the only file to edit; `pnpm --filter @platform/ui-kit tokens` regenerates the rest). Storybook: `pnpm --filter @platform/ui-kit storybook`. |
-| `@platform/mfe-sdk` | What an app gets from the shell: `defineMicroFrontend`, the mount context (`ctx.person`, `ctx.workspace`, `ctx.fetch`, `notify`, `raise`/`request` intents, event bus), and the manifest types. Breaking it breaks apps, so it is versioned carefully. |
-| `@platform/service-kit` | For backend services: read the caller the gateway verified, sign in as the service itself, register an app, send notifications and audit entries, check floors and grants, logging. |
+| `@augur/ui-kit` | Every visual. Tokens come from `tokens/tokens.json` (the only file to edit; `pnpm --filter @augur/ui-kit tokens` regenerates the rest). Storybook: `pnpm --filter @augur/ui-kit storybook`. |
+| `@augur/mfe-sdk` | What an app gets from the shell: `defineMicroFrontend`, the mount context (`ctx.person`, `ctx.workspace`, `ctx.fetch`, `notify`, `raise`/`request` intents, event bus), and the manifest types. Breaking it breaks apps, so it is versioned carefully. |
+| `@augur/service-kit` | For backend services: read the caller the gateway verified, sign in as the service itself, register an app, send notifications and audit entries, check floors and grants, logging. |
 
 ### Services
 
@@ -82,14 +80,22 @@ Home and Admin are built like any app: one ES module the shell imports.
 
 Keycloak handles sign-in, Postgres holds data (a schema per service), and MinIO is the local object store for the Library later. Each API is described in `contracts/<service>.openapi.yaml`, and its major version is its path prefix (`/v1`).
 
+## Names that still say "platform"
+
+AUGUR was codenamed "platform" until October 2026. Packages, page titles and everything people see now say AUGUR. A few names keep the old word on purpose:
+
+- **`platform/` vs `apps/`** is the architecture, not the brand: what AUGUR itself owns against the apps that run on it. The boundary check and the build depend on it.
+- **Running servers' identifiers** stay as they are, because changing them would sign everyone out or lose data: the Keycloak realm `platform` (it is in every token's issuer) and its clients (`platform-api`, `platform-identity`, …), the Postgres database and user `platform`, the Compose project `name: platform` (Docker names the data volumes after it), the `PLATFORM_*` keys in `.env`, and the default Tailscale name `platform`. See [upgrade.md](docs/upgrade.md#renamed-to-augur).
+- The shell's import map also answers to `@platform/ui-kit`, so an app built before the rename still loads through SDK 1.x.
+
 ## Rules between parts
 
 - Nothing in `platform/` imports an app, and no app imports another. `pnpm check:boundaries` enforces it.
-- Apps reach the platform only through `@platform/*` packages, the gateway, the registry manifest and events. Micro frontends never import each other; they raise intents or use the bus.
+- Apps reach the platform only through `@augur/*` packages, the gateway, the registry manifest and events. Micro frontends never import each other; they raise intents or use the bus.
 - Only the gateway reads sign-in tokens. Services trust the caller and floor the gateway passes on, never what the browser claims.
 - Each service and app signs in as itself (its own Keycloak client and secret) and can only do what the registry grants it on that floor.
 - Services talk through their OpenAPI contracts or events, never another service's tables.
-- Every visual comes from `@platform/ui-kit`.
+- Every visual comes from `@augur/ui-kit`.
 
 ## Working on it
 
@@ -99,8 +105,8 @@ pnpm build && pnpm test
 pnpm check:boundaries
 ```
 
-- One service with live reload: `pnpm --filter @platform/registry dev`. Without `DATABASE_URL`, registry and events keep data in memory.
-- Full local stack: `docker compose -f infra/docker-compose.yml up --build`, then `pnpm --filter @platform/shell dev` and open http://localhost:5173. Sign in as `alex` (admin) or `sam`; see [infra/keycloak](infra/keycloak/README.md).
+- One service with live reload: `pnpm --filter @augur/registry dev`. Without `DATABASE_URL`, registry and events keep data in memory.
+- Full local stack: `docker compose -f infra/docker-compose.yml up --build`, then `pnpm --filter @augur/shell dev` and open http://localhost:5173. Sign in as `alex` (admin) or `sam`; see [infra/keycloak](infra/keycloak/README.md).
 - New app: `pnpm create-app <id>`, then `pnpm dev:app <id>` runs it in a stand-in shell.
 - Every PR needs a changeset: `pnpm changeset` (or `pnpm changeset --empty`).
 

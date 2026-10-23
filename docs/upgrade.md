@@ -1,4 +1,4 @@
-# Upgrading the platform
+# Upgrading AUGUR
 
 Moving a running server from one release to the next. Commands use the `pc` alias from [deploy.md](deploy.md):
 
@@ -40,6 +40,15 @@ Images are rebuilt from the repo, each service migrates its own tables as it sta
 ## Release notes that need you
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
+
+### Renamed to AUGUR
+
+Nothing to do: the upgrade is the usual `git pull` and `pc up -d --build`. The shell, page title and Admin say AUGUR, and packages are `@augur/*`. Your server's identifiers are left alone so nobody is signed out and no data moves: the Keycloak realm is still `platform`, the database and Compose project are still `platform`, the `.env` keys keep their `PLATFORM_` names, and your address stays `https://platform.<tailnet>.ts.net`.
+
+Two optional touches:
+
+- **Sign-in page title**: Keycloak only reads the realm file on first start, so your sign-in page still says "Platform". In the Keycloak console (`PLATFORM_URL/sso/admin`), open the `platform` realm, **Realm settings**, and set **Display name** to `AUGUR`.
+- **Address**: to be at `https://augur.<tailnet>.ts.net`, set `TS_HOSTNAME=augur` and change `PLATFORM_URL` to match in `.env`, then in the Keycloak console update the **shell** client's redirect URIs and web origins to the new address before `pc up -d`. Everyone signs in again.
 
 ## Going back
 

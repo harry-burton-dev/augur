@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { appCredentialsFromEnv, registerApp } from '@platform/service-kit';
+import { appCredentialsFromEnv, registerApp } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 
 const port = Number(process.env.PORT ?? 8090);

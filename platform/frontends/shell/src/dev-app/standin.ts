@@ -1,4 +1,4 @@
-import type { AppManifestEntry, User, Workspace, WorkspaceRef } from '@platform/mfe-sdk';
+import type { AppManifestEntry, User, Workspace, WorkspaceRef } from '@augur/mfe-sdk';
 import type { Session } from '../host/index.js';
 
 /**

@@ -1,5 +1,5 @@
 import { render as o, html as i } from "lit";
-import "@platform/ui-kit";
+import "@augur/ui-kit";
 const u = (n) => n, l = (n) => n instanceof Error && n.name === "IntentCancelled", s = /* @__PURE__ */ new WeakMap(), k = u({
   async mount(n, e) {
     const t = { token: "waiting", answer: "", bus: "" }, r = e.bus.on("reference.ping", (d) => {

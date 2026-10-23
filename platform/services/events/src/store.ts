@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
-import type { NewAuditEntry, NewNotification, NotificationAction, NotificationLevel } from '@platform/service-kit';
+import type { NewAuditEntry, NewNotification, NotificationAction, NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
 export interface EventFloor {

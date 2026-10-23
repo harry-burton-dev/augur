@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, errors, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from 'jose';
-import type { Caller } from '@platform/service-kit';
+import type { Caller } from '@augur/service-kit';
 
 export interface AuthConfig {
   /** The sign-in service's issuer, exactly as it appears in tokens. */

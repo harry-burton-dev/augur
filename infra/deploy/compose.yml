@@ -2,6 +2,7 @@
 # https://<TS_HOSTNAME>.<your tailnet>.ts.net. See docs/deploy.md.
 #   cp infra/deploy/.env.example infra/deploy/.env   # then fill it in
 #   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d --build
+# Keeps the old codename: Docker names the data volumes after the project, so renaming it would start empty.
 name: platform
 
 x-service: &service
@@ -112,7 +113,7 @@ services:
       postgres: { condition: service_healthy }
 
   gateway:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/gateway" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/gateway" } }
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -131,7 +132,7 @@ services:
 
   identity:
     <<: *service
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/identity" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/identity" } }
     environment:
       <<: *env
       PORT: 8081
@@ -148,12 +149,12 @@ services:
 
   registry:
     <<: *service
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/registry" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/registry" } }
     environment: { <<: *env, PORT: 8082, SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}" }
 
   events:
     <<: *service
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@platform/events" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
     environment: { <<: *env, PORT: 8084, SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}" }
 
 

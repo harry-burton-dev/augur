@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callerHeaders } from '@platform/service-kit';
+import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { ensureClients, KeycloakAppClients, MemoryAppClients, parseClientSecrets } from './clients.ts';
 import type { KeycloakDirectory } from './directory.ts';

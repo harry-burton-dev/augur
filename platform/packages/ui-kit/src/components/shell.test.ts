@@ -17,7 +17,7 @@ const key = (target: EventTarget, k: string, extra: KeyboardEventInit = {}) =>
   target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, composed: true, ...extra }));
 
 beforeEach(async () => {
-  document.body.innerHTML = '<ui-shell product="Platform" workspace="Finance"><main>App</main></ui-shell>';
+  document.body.innerHTML = '<ui-shell product="AUGUR" workspace="Finance"><main>App</main></ui-shell>';
   el = document.querySelector('ui-shell')!;
   el.apps = [
     { id: 'home', name: 'Home', icon: 'home' },
@@ -246,7 +246,7 @@ describe('ui-shell', () => {
     input.value = 'budget';
     input.dispatchEvent(new InputEvent('input'));
     el.findResults = [
-      { id: 'p', title: 'Budgets', detail: 'Admin · Platform', kind: 'page' },
+      { id: 'p', title: 'Budgets', detail: 'Admin · AUGUR', kind: 'page' },
       { id: 'l1', title: 'Budget paper', detail: 'Draft', kind: 'content', group: 'Library' },
     ];
     el.findGroups = [

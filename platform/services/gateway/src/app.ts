@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import proxy from '@fastify/http-proxy';
-import { callerHeaders, health, packageVersion, REQUEST_ID_HEADER, serviceLogging, withoutCallerHeaders, WORKSPACE_HEADERS, type Caller } from '@platform/service-kit';
+import { callerHeaders, health, packageVersion, REQUEST_ID_HEADER, serviceLogging, withoutCallerHeaders, WORKSPACE_HEADERS, type Caller } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor } from './status.ts';

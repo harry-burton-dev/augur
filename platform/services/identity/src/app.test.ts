@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callerHeaders } from '@platform/service-kit';
+import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryWorkspaceStore } from './workspaces.ts';
 

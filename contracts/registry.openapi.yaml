@@ -364,7 +364,7 @@ components:
         route: { type: string, pattern: "^/[a-z0-9][a-z0-9/-]*$", description: Route prefix the shell maps to this app }
         entry: { type: string, description: URL of the app's ES module entry }
         version: { type: string, description: "The app's release, semver" }
-        sdk: { type: string, description: "The @platform/mfe-sdk releases the app works with, a semver range such as ^1.0.0. The shell will not open an app whose range its SDK does not satisfy." }
+        sdk: { type: string, description: "The @augur/mfe-sdk releases the app works with, a semver range such as ^1.0.0. The shell will not open an app whose range its SDK does not satisfy." }
         description: { type: string, description: One line shown under the app name in the Shell }
         icon: { type: string, description: A UI kit icon name }
         requiredRole: { type: string }

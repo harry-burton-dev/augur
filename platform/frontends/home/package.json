@@ -1,5 +1,5 @@
 {
-  "name": "@platform/home",
+  "name": "@augur/home",
   "version": "0.2.0",
   "private": true,
   "type": "module",
@@ -10,8 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@platform/mfe-sdk": "workspace:*",
-    "@platform/ui-kit": "workspace:*",
+    "@augur/mfe-sdk": "workspace:*",
+    "@augur/ui-kit": "workspace:*",
     "lit": "^3.3.0"
   },
   "devDependencies": {

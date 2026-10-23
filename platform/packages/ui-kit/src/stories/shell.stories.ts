@@ -46,7 +46,7 @@ const goTo = (e: CustomEvent<{ id: string }>) => ((e.currentTarget as UiShell).f
 const shell = (opts: { notes?: ShellNotification[]; online?: boolean; view?: string; open?: boolean; floor?: string; muted?: string[] } = {}) => html`
   <div style="height:100vh;min-height:620px">
     <ui-shell
-      product="Platform"
+      product="AUGUR"
       workspace="Finance"
       .user=${{ name: 'Harry Burton', email: 'harry@example.org' }}
       .apps=${apps}

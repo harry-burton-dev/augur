@@ -1,4 +1,4 @@
-import type { User, Workspace } from '@platform/mfe-sdk';
+import type { User, Workspace } from '@augur/mfe-sdk';
 import { FloorsError, loadFloors } from './floors.js';
 
 /** Who is signed in, the floors they can stand on, and how to get a current token for calling the gateway. */

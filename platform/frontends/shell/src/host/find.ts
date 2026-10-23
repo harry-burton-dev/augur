@@ -1,5 +1,5 @@
-import type { AppManifestEntry, SearchResult } from '@platform/mfe-sdk';
-import type { ShellFindGroup, ShellFindResult } from '@platform/ui-kit';
+import type { AppManifestEntry, SearchResult } from '@augur/mfe-sdk';
+import type { ShellFindGroup, ShellFindResult } from '@augur/ui-kit';
 
 /** How long Find waits for any one app before saying it didn't answer in time. */
 export const SEARCH_BUDGET_MS = 1500;

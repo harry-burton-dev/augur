@@ -1,6 +1,6 @@
 // Keeps the reference app built against this SDK minor (1.0, 1.1…), so every
 // later shell is tested against it. Run after a release that bumps the SDK's minor:
-//   pnpm --filter @platform/contract-tests freeze
+//   pnpm --filter @augur/contract-tests freeze
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 

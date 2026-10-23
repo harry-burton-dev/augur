@@ -1,4 +1,4 @@
-import { createEventBus, type MountContext, type Workspace } from '@platform/mfe-sdk';
+import { createEventBus, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import app from './entry.js';
 

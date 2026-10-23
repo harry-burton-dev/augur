@@ -1,5 +1,5 @@
 import type { DetailedHTMLProps, HTMLAttributes, Ref } from 'react';
-import type { UiButton, UiCentreMenu, UiDialog, UiHeading, UiShell } from '@platform/ui-kit';
+import type { UiButton, UiCentreMenu, UiDialog, UiHeading, UiShell } from '@augur/ui-kit';
 
 type Element<T, P = object> = DetailedHTMLProps<HTMLAttributes<T>, T> & P & { ref?: Ref<T> };
 

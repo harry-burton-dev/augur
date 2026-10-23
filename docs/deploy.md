@@ -1,4 +1,4 @@
-# Running the platform on your own server
+# Running AUGUR on your own server
 
 Everything runs in Docker on one machine. It's private to your tailnet: there are no open ports, and Tailscale gives it an HTTPS address that only your devices can reach.
 

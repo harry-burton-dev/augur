@@ -1,6 +1,6 @@
 {
   "realm": "platform",
-  "displayName": "Platform",
+  "displayName": "AUGUR",
   "enabled": true,
   "sslRequired": "external",
   "loginWithEmailAllowed": true,

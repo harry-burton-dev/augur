@@ -1,5 +1,5 @@
 # Builds any service by package name:
-#   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@platform/registry .
+#   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry .
 FROM node:22-alpine AS build
 ARG PACKAGE
 RUN corepack enable

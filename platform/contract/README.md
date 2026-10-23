@@ -9,8 +9,8 @@ It runs against every build of the reference app:
 
 ```sh
 pnpm build
-pnpm --filter @platform/contract-tests exec playwright install chromium   # once
-pnpm --filter @platform/contract-tests test:contract
+pnpm --filter @augur/contract-tests exec playwright install chromium   # once
+pnpm --filter @augur/contract-tests test:contract
 ```
 
-When a release bumps the SDK's minor (1.1, 1.2…), keep that release's build: `pnpm build && pnpm --filter @platform/contract-tests freeze`, and commit the new `frozen/` folder. A new part of the mount context gets a check in the reference app and the spec in the same pull request that adds it; the frozen builds don't use it, which is the point.
+When a release bumps the SDK's minor (1.1, 1.2…), keep that release's build: `pnpm build && pnpm --filter @augur/contract-tests freeze`, and commit the new `frozen/` folder. A new part of the mount context gets a check in the reference app and the spec in the same pull request that adds it; the frozen builds don't use it, which is the point.

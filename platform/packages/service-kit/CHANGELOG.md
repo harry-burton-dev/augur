@@ -1,4 +1,4 @@
-# @platform/service-kit
+# @augur/service-kit
 
 ## 0.3.0
 

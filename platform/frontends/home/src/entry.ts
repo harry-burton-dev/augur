@@ -1,8 +1,8 @@
-import { defineMicroFrontend, type MountContext } from '@platform/mfe-sdk';
+import { defineMicroFrontend, type MountContext } from '@augur/mfe-sdk';
 import { html, render } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
-import { ago, type ListItem } from '@platform/ui-kit';
-import '@platform/ui-kit';
+import { ago, type ListItem } from '@augur/ui-kit';
+import '@augur/ui-kit';
 
 const greeting = (hour: number) => (hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening');
 

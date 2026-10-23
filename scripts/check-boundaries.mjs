@@ -1,6 +1,6 @@
 // Separation of concerns, enforced: nothing under platform/ may depend on an app,
 // and apps may not depend on each other. Apps reach the platform only through
-// @platform/* packages, the gateway, the registry manifest and events.
+// @augur/* packages, the gateway, the registry manifest and events.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
