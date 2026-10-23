@@ -135,10 +135,12 @@ const main = () => {
     const problems = [];
     if (!previous) problems.push(`${RELEASE_FILE} is missing. Run: node scripts/augur-release.mjs version`);
     else {
+      // A part added or removed since the last release is fine: the next release takes it in or out.
+      // A part's version changing outside the Version packages PR isn't.
       for (const [name, { version }] of Object.entries(parts)) {
-        if (previous.parts[name]?.version !== version) problems.push(`${name} is ${version}, but ${RELEASE_FILE} says ${previous.parts[name]?.version ?? 'nothing'}`);
+        const released = previous.parts[name]?.version;
+        if (released && released !== version) problems.push(`${name} is ${version}, but ${RELEASE_FILE} says ${released}`);
       }
-      for (const name of Object.keys(previous.parts)) if (!parts[name]) problems.push(`${RELEASE_FILE} lists ${name}, which is gone`);
     }
     if (problems.length) {
       console.error(problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`).join('\n'));
