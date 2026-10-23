@@ -1,6 +1,6 @@
 import { createEventBus, type AppManifestEntry, type MountContext } from '@platform/mfe-sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { AppMounter, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, routeIntent, toShellNotification } from './index.js';
+import { AppMounter, fromServer, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, NotificationActions, routeIntent, toShellNotification } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -185,5 +185,34 @@ describe('toShellNotification', () => {
     expect(a.level).toBe('needs');
     expect(b.level).toBe('info');
     expect(a.id).not.toBe(b.id);
+  });
+});
+
+describe('notification actions', () => {
+  const approve = { label: 'Approve', intent: { type: 'claim.approve', payload: { id: 'c1' } } };
+  const open = { label: 'Open', intent: { type: 'claim.open', payload: {} } };
+
+  it('gives the Shell only the labels, at most two', () => {
+    const n = toShellNotification('claims', { title: 'Approve a claim', needsYou: true, actions: [approve, open, { label: 'Third', intent: { type: 'x.y', payload: {} } }] });
+    expect(n.actions).toEqual([{ label: 'Approve' }, { label: 'Open' }]);
+    expect(toShellNotification('claims', { title: 'None' }).actions).toBeUndefined();
+    expect(fromServer({ id: 's1', app: 'claims', level: 'needs', title: 'T', createdAt: '2026-10-23T00:00:00Z', actions: [open] }).actions).toEqual([{ label: 'Open' }]);
+  });
+
+  it('keeps the intent behind each button until the notification is done with', () => {
+    const kept = new NotificationActions();
+    kept.remember('n1', [approve, open]);
+    expect(kept.intentFor('n1', 0)).toEqual({ type: 'claim.approve', payload: { id: 'c1' } });
+    expect(kept.intentFor('n1', 1)).toEqual({ type: 'claim.open', payload: {} });
+    expect(kept.intentFor('n1', 2)).toBeUndefined();
+    kept.forget('n1');
+    expect(kept.intentFor('n1', 0)).toBeUndefined();
+  });
+
+  it('drops actions an app got wrong rather than showing a broken button', () => {
+    const kept = new NotificationActions();
+    kept.remember('n1', [{ label: '', intent: { type: 'a.b' } }, { label: 'No intent' }, 'nonsense', open]);
+    expect(kept.intentFor('n1', 0)).toEqual({ type: 'claim.open', payload: {} });
+    expect(toShellNotification('x', { title: 'T', actions: [{ label: 'Go' } as never] }).actions).toBeUndefined();
   });
 });

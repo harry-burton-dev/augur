@@ -20,6 +20,7 @@ export const preferencesSchema = {
     density: { type: 'string', enum: ['comfortable', 'compact'] },
     away: { type: 'boolean' },
     recent: { type: 'array', maxItems: 12, items: { type: 'string', minLength: 1, maxLength: 64 } },
+    muted: { type: 'array', maxItems: 100, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 64 } },
   },
 } as const;
 

@@ -56,6 +56,8 @@ export default defineMicroFrontend({
             ? html`<ui-button data-action="respond" @click=${() => ctx.reply!.respond({ answer: 42 })}>Answer 42</ui-button>
                 <ui-button data-action="cancel" @click=${() => ctx.reply!.cancel()}>Decline</ui-button>`
             : html`<ui-button data-action="notify" @click=${() => ctx.notify({ title: 'Reference notification', body: 'From the reference app', needsYou: true })}>Notify</ui-button>
+                <ui-button data-action="notify-action" @click=${() =>
+                  ctx.notify({ title: 'Reference action', needsYou: true, actions: [{ label: 'Show', intent: { type: 'reference.show', payload: { n: 2 } } }] })}>Notify with an action</ui-button>
                 <ui-button data-action="raise" @click=${() => void ctx.raise({ type: 'reference.show', payload: { n: 1 } })}>Raise</ui-button>
                 <ui-button data-action="request" @click=${() => void ask()}>Request</ui-button>
                 <ui-button data-action="fetch" @click=${() => void fetchFloor()}>Fetch</ui-button>

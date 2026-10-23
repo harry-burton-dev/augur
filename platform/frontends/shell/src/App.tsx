@@ -14,6 +14,7 @@ import {
   hrefFor,
   IntentError,
   loadManifest,
+  NotificationActions,
   NotificationFeed,
   orbitMenu,
   ownFloor,
@@ -89,6 +90,12 @@ export function Host({
   const [answering, setAnswering] = useState<OpenRequest | null>(null);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
+  /** What each notification's buttons raise; the Shell only has their labels. */
+  const actions = useRef(new NotificationActions());
+  /** An action pressed on a notification from another floor: raised once that floor's catalogue has loaded. */
+  const raiseOnArrival = useRef<{ floor: string; intent: Intent } | null>(null);
+  /** Which floor the loaded catalogue is for. */
+  const manifestFloor = useRef<string | undefined>(undefined);
   const prefs = useMemo(
     () =>
       new PreferenceSync(preferencesUrl, session.getToken, {
@@ -142,6 +149,7 @@ export function Host({
       .then((token) => loadManifest(fetchImpl, manifestUrl, token, floorId))
       .then((apps) => {
         if (!live) return;
+        manifestFloor.current = floorId;
         setManifest(apps);
         if (!apps.length) setProblem({ title: 'No apps yet', summary: 'There are no apps you can open. Ask an admin to give you access to one.', retry: () => setAttempt((n) => n + 1) });
       })
@@ -174,6 +182,14 @@ export function Host({
     [manifest, navigate],
   );
 
+  // An action pressed on another floor's notification, raised now that its floor's apps are here.
+  useEffect(() => {
+    const pending = raiseOnArrival.current;
+    if (!pending || !manifest || manifestFloor.current !== pending.floor) return;
+    raiseOnArrival.current = null;
+    raise(pending.intent).catch(() => undefined);
+  }, [manifest, raise]);
+
   // An app asks another for an answer: the answering app opens over it in a dialog.
   const request = useCallback(
     <T,>(intent: Intent): Promise<T> => {
@@ -199,7 +215,11 @@ export function Host({
       bus,
       raise,
       request,
-      notify: (message) => shellRef.current?.notify(toShellNotification(app.id, message)),
+      notify: (message) => {
+        const n = toShellNotification(app.id, message);
+        actions.current.remember(n.id, message.actions);
+        shellRef.current?.notify(n);
+      },
       workspace: floor ?? home,
       getWorkspace: () => floorRef.current,
       fetch: floorFetch(session.getToken, () => floorRef.current, fetchImpl),
@@ -348,12 +368,16 @@ export function Host({
       fetchImpl,
       baseUrl: eventsUrl,
       onList: (list) => {
-        list.forEach((n) => known.set(n.id, n));
+        list.forEach((n) => {
+          known.set(n.id, n);
+          actions.current.remember(n.id, n.actions);
+        });
         const local = shell.notifications.filter((n) => !known.has(n.id));
         shell.notifications = [...list.map(fromServer), ...local];
       },
       onNotification: (n) => {
         known.set(n.id, n);
+        actions.current.remember(n.id, n.actions);
         shell.notify(fromServer(n));
       },
       onState: (state) => shell.setStream(state),
@@ -385,6 +409,7 @@ export function Host({
       applyPreferences(p);
       shell.settings = { reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable' };
       shell.away = !!p.away;
+      shell.muted = p.muted ?? [];
       shell.recent = [...new Set([...shell.recent, ...(p.recent ?? [])])].slice(0, 6);
     });
     return () => {
@@ -415,6 +440,23 @@ export function Host({
       if (there && there.id !== floorRef.current.id) navigate(app ? hrefFor(app, server?.link) : '/', there);
       else if (app) navigate(hrefFor(app, server?.link));
     };
+    // A button on a notification raises its intent, as the app would itself, and the notification is done with.
+    const onAction = (e: Event) => {
+      const { notification, index } = (e as CustomEvent<{ notification: { id: string }; index: number }>).detail;
+      const intent = actions.current.intentFor(notification.id, index);
+      if (!intent) return;
+      const server = fromEvents.current.get(notification.id);
+      if (server) void feed.current?.setRead(notification.id, true);
+      shell.notifications = shell.notifications.filter((n) => n.id !== notification.id);
+      actions.current.forget(notification.id);
+      // One from another floor is done there, like opening it: the intent waits for that floor's apps.
+      const there = server?.workspace ? session.floors.find((f) => f.id === server.workspace!.id) : undefined;
+      if (there && there.id !== floorRef.current.id) {
+        raiseOnArrival.current = { floor: there.id, intent };
+        navigate('/', there);
+      } else raise(intent).catch(() => undefined);
+    };
+    const onMute = () => prefs.set('muted', [...shell.muted]);
     // Dismissing a notification marks it read, so it stays gone next time; Undo brings it back.
     const onDismiss = (e: Event) => {
       for (const id of (e as CustomEvent<{ ids: string[] }>).detail.ids) if (fromEvents.current.has(id)) void feed.current?.setRead(id, true);
@@ -454,10 +496,14 @@ export function Host({
     shell.addEventListener('ui-find', onFind);
     shell.addEventListener('ui-floor', onFloor);
     shell.addEventListener('ui-pick', onPick);
+    shell.addEventListener('ui-notification-action', onAction);
+    shell.addEventListener('ui-mute', onMute);
     shell.addEventListener('ui-dismiss', onDismiss);
     shell.addEventListener('ui-restore', onRestore);
     shell.addEventListener('ui-retry', onRetry);
     return () => {
+      shell.removeEventListener('ui-notification-action', onAction);
+      shell.removeEventListener('ui-mute', onMute);
       shell.removeEventListener('ui-dismiss', onDismiss);
       shell.removeEventListener('ui-restore', onRestore);
       shell.removeEventListener('ui-retry', onRetry);
@@ -469,7 +515,7 @@ export function Host({
       shell.removeEventListener('ui-floor', onFloor);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs, screen]);
+  }, [manifest, navigate, session, prefs, screen, raise]);
 
   return (
     <ui-shell ref={shellRef} product="Platform">

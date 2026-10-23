@@ -1,4 +1,6 @@
+import type { NotificationAction } from '@platform/mfe-sdk';
 import type { ShellNotification } from '@platform/ui-kit';
+import { usableActions } from './notifications.js';
 
 /** A notification as the events service sends it. */
 export interface ServerNotification {
@@ -12,17 +14,23 @@ export interface ServerNotification {
   createdAt: string;
   /** The floor it's from, with its path from the root. */
   workspace?: { id: string; path: string[] };
+  /** Up to two buttons, each an intent the shell raises when pressed. */
+  actions?: NotificationAction[];
 }
 
-export const fromServer = (n: ServerNotification): ShellNotification => ({
-  id: n.id,
-  app: n.app,
-  level: n.level,
-  title: n.title,
-  detail: n.detail,
-  time: n.createdAt,
-  ...(n.workspace ? { floor: n.workspace.id } : {}),
-});
+export const fromServer = (n: ServerNotification): ShellNotification => {
+  const actions = usableActions(n.actions).map(({ label }) => ({ label }));
+  return {
+    id: n.id,
+    app: n.app,
+    level: n.level,
+    title: n.title,
+    detail: n.detail,
+    time: n.createdAt,
+    ...(n.workspace ? { floor: n.workspace.id } : {}),
+    ...(actions.length ? { actions } : {}),
+  };
+};
 
 export interface FeedOptions {
   getToken(): Promise<string>;

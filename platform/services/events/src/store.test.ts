@@ -41,6 +41,15 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect(await store.teamNotices('f')).toBe(false);
   });
 
+  it('keeps a notification’s actions', async () => {
+    const actions = [{ label: 'Approve', intent: { type: 'claim.approve', payload: { id: 'c-1' } } }, { label: 'Open', intent: { type: 'claim.open' } }];
+    await store.addNotifications({ ...review, recipients: ['u-1'], actions });
+    await store.addNotifications({ ...review, recipients: ['u-1'], title: 'No actions' });
+    const [plain, acting] = await store.unread('u-1', 10);
+    expect(acting.actions).toEqual(actions);
+    expect(plain.actions).toBeUndefined();
+  });
+
   it('marks read and unread, only for the recipient', async () => {
     const [forAlex] = await store.addNotifications({ ...review, recipients: ['u-1'] });
     expect(await store.setRead('u-2', forAlex.id, true)).toBe(false);
@@ -110,6 +119,14 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
       await admin.query('truncate events.notifications, events.audit, events.team_notices');
     },
   );
+
+  it('tells another instance about a notification too big to send whole', async () => {
+    const heard: Notification[] = [];
+    const stop = other.subscribe((n) => heard.push(n));
+    await store.addNotifications({ ...review, recipients: ['u-8'], detail: 'é'.repeat(2000), actions: [{ label: 'Open', intent: { type: 'document.open', payload: { id: 'x'.repeat(900) } } }] });
+    await expect.poll(() => heard.map((n) => [n.recipient, n.detail?.length, n.actions?.[0].label])).toEqual([['u-8', 2000, 'Open']]);
+    stop();
+  });
 
   it('tells listeners on another instance', async () => {
     const heard: Notification[] = [];

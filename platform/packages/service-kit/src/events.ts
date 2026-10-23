@@ -19,6 +19,19 @@ export interface NewNotification {
   detail?: string;
   /** Path inside the app to open, e.g. "/doc/123". */
   link?: string;
+  /**
+   * Up to two buttons on it in the Shell ("Approve", "Open"). Pressing one
+   * raises its intent in the person's browser, through the shell, exactly as
+   * an app's `ctx.raise` would, and marks the notification read.
+   */
+  actions?: NotificationAction[];
+}
+
+export interface NotificationAction {
+  /** One or two words, at most 30 characters. */
+  label: string;
+  /** An intent type some app `handles`, and its payload: at most 1 KB as JSON. */
+  intent: { type: string; payload?: unknown };
 }
 
 export interface NewAuditEntry {

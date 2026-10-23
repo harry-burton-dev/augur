@@ -29,12 +29,13 @@ describe('identity', () => {
     const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: [] });
     const sam = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: [] });
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences', headers: alex })).json()).toEqual({});
-    const prefs = { reduceMotion: true, density: 'compact', away: false, recent: ['board', 'home'] };
+    const prefs = { reduceMotion: true, density: 'compact', away: false, recent: ['board', 'home'], muted: ['board'] };
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: prefs })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences', headers: alex })).json()).toEqual(prefs);
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences', headers: sam })).json()).toEqual({});
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { theme: 'pink' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { density: 'tiny' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { muted: ['board', 'board'] } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences' })).statusCode).toBe(401);
   });
 

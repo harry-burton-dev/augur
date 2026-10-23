@@ -3,9 +3,11 @@ import { base, label } from '../shared.js';
 import { floorBeside, floorDirection, floorIcon, floorLevel, floorStack, type ShellFloor } from './floors.js';
 import { statusUrgency, type StatusName } from './status.js';
 import './icon.js';
+import './menu.js';
 import './status.js';
 import './wave.js';
 import type { UiWaveBackground } from './wave.js';
+import type { MenuAction, UiMenu } from './menu.js';
 
 export type NotificationLevel = 'needs' | 'info' | 'running' | 'done' | 'failed';
 
@@ -20,6 +22,12 @@ export interface ShellNotification {
   time: Date | number | string;
   /** The floor it's from, by id: tagged with that floor's name, and a dot on the gauge until it's dealt with. */
   floor?: string;
+  /** Up to two things to do about it right from the stream ("Approve", "Open"); the host does them. Extras are dropped. */
+  actions?: ShellNotificationAction[];
+}
+
+export interface ShellNotificationAction {
+  label: string;
 }
 
 export interface ShellApp {
@@ -106,6 +114,8 @@ const isTyping = (e: Event) => {
  * @fires ui-toggle - detail `{ open }`
  * @fires ui-open-app - detail `{ id }`
  * @fires ui-open-notification - detail `{ notification }`
+ * @fires ui-notification-action - detail `{ notification, index }` when one of its actions is pressed; the Shell closes and the host does it
+ * @fires ui-mute - detail `{ app, muted }` when an app's group is muted or unmuted; the Shell has updated `muted`
  * @fires ui-dismiss - detail `{ ids }` when notifications are dismissed or cleared; the host may mark them read
  * @fires ui-restore - detail `{ ids }` when Undo brings them back
  * @fires ui-function - detail `{ id }` for functions without a view, and for Switch workspace and Sign out
@@ -127,6 +137,7 @@ export class UiShell extends LitElement {
     current: { type: String },
     recent: { attribute: false },
     notifications: { attribute: false },
+    muted: { attribute: false },
     agents: { attribute: false },
     agentsLoading: { type: Boolean, attribute: 'agents-loading' },
     agentsError: { type: String, attribute: 'agents-error' },
@@ -163,6 +174,11 @@ export class UiShell extends LitElement {
   /** App ids, most recent first. */
   declare recent: string[];
   declare notifications: ShellNotification[];
+  /**
+   * App ids the person muted. Their notifications still land in the stream,
+   * silently: no pulse, and they don't count in the band's words.
+   */
+  declare muted: string[];
   declare agents: ShellAgent[];
   declare agentsLoading: boolean;
   declare agentsError: string;
@@ -216,6 +232,7 @@ export class UiShell extends LitElement {
     this.current = '';
     this.recent = [];
     this.notifications = [];
+    this.muted = [];
     this.agents = [];
     this.agentsLoading = false;
     this.agentsError = '';
@@ -288,6 +305,7 @@ export class UiShell extends LitElement {
   /** Add a notification. It changes the status words and pulses the point once; the Shell never opens itself. */
   notify(n: ShellNotification) {
     this.notifications = [n, ...this.notifications.filter((x) => x.id !== n.id)];
+    if (this.muted.includes(n.app)) return;
     this.toggleAttribute('arriving', true);
     clearTimeout(this.arriveTimer);
     this.arriveTimer = setTimeout(() => this.removeAttribute('arriving'), 700);
@@ -316,6 +334,14 @@ export class UiShell extends LitElement {
     this.notifications = [...this.undo.items, ...this.notifications.filter((n) => !ids.has(n.id))].sort((a, b) => toTime(b.time) - toTime(a.time));
     this.undo = null;
     this.emit('ui-restore', { ids: [...ids] });
+  }
+
+  /** Mutes an app's notifications, or unmutes them. */
+  setMuted(app: string, muted: boolean) {
+    const has = this.muted.includes(app);
+    if (has === muted) return;
+    this.muted = muted ? [...this.muted, app] : this.muted.filter((a) => a !== app);
+    this.emit('ui-mute', { app, muted });
   }
 
   setCurrent(id: string) {
@@ -507,19 +533,31 @@ export class UiShell extends LitElement {
     this.close();
   }
 
+  private actOn(n: ShellNotification, index: number) {
+    this.emit('ui-notification-action', { notification: n, index });
+    this.close();
+  }
+
+  /** What the band and the dome count: everything but what the person muted. */
+  private get heard() {
+    return this.muted.length ? this.notifications.filter((n) => !this.muted.includes(n.app)) : this.notifications;
+  }
+
   /* ---- what the sky says ---- */
 
   private get mood(): 'quiet' | 'some' | 'needs' | 'offline' {
     if (!this.online) return 'offline';
-    if (this.notifications.some((n) => n.level === 'needs')) return 'needs';
-    return this.notifications.length ? 'some' : 'quiet';
+    const heard = this.heard;
+    if (heard.some((n) => n.level === 'needs')) return 'needs';
+    return heard.length ? 'some' : 'quiet';
   }
 
   private caption(): { title: string; line: string } {
     const id = this.view || this.order[this.focusIndex] || 'stream';
     if (id === 'stream') {
-      const latest = this.notifications.find((n) => n.level === 'needs') ?? this.notifications[0];
-      const title = this.online ? streamWords(this.notifications) : 'Offline';
+      const heard = this.heard;
+      const latest = heard.find((n) => n.level === 'needs') ?? heard[0];
+      const title = this.online ? streamWords(heard) : 'Offline';
       const line = !this.online ? 'These are from before you went offline.' : latest ? latest.title : 'Nothing needs you.';
       return { title, line };
     }
@@ -634,6 +672,14 @@ export class UiShell extends LitElement {
       @keyframes view-in { from { opacity: 0; transform: translate(-50%, 8px); } }
       .group { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-5) var(--space-4) var(--space-2); }
       .group b { font-weight: 500; font-variant-numeric: tabular-nums; }
+      .group .name { flex: 1; display: flex; align-items: baseline; gap: var(--space-2); }
+      .group .quiet { color: var(--ink-muted); }
+      .group .more { flex: none; align-self: center; display: flex; width: 28px; height: 28px; align-items: center; justify-content: center; color: var(--ink-muted); border-radius: 50% !important; opacity: 0.6; }
+      .group .more:hover, .group .more:focus-visible { opacity: 1; color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+      .item.muted .row { opacity: 0.7; }
+      .act { flex: none; padding: var(--space-1) var(--space-3); margin-left: var(--space-2); border-radius: var(--radius-pill); border: 1px solid var(--hairline-strong); font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink); white-space: nowrap; }
+      .act:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+      .act.main { border-color: var(--green); }
       .group.needs, .group.needs b { color: var(--green); }
       ul { list-style: none; margin: 0; padding: 0; }
       .item { display: flex; align-items: center; border-bottom: 1px solid var(--hairline); }
@@ -730,7 +776,7 @@ export class UiShell extends LitElement {
 
   private renderBand() {
     const mood = this.mood;
-    const words = this.statusLabel || (this.online ? streamWords(this.notifications) : 'Offline');
+    const words = this.statusLabel || (this.online ? streamWords(this.heard) : 'Offline');
     const time = new Date(this.now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const tab = this.isOpen ? '-1' : '0';
     return html`<header class="band" ?inert=${this.isOpen}>
@@ -809,7 +855,7 @@ export class UiShell extends LitElement {
         const lit = this.view === id;
         const tabindex = i === this.focusIndex ? '0' : '-1';
         if (id === 'stream') {
-          return html`<button class="stream ${lit ? 'lit' : ''}" style=${style} tabindex=${tabindex} aria-label=${`Notifications: ${this.online ? streamWords(this.notifications) : 'offline'}`}
+          return html`<button class="stream ${lit ? 'lit' : ''}" style=${style} tabindex=${tabindex} aria-label=${`Notifications: ${this.online ? streamWords(this.heard) : 'offline'}`}
             @focus=${() => (this.focusIndex = i)} @click=${() => this.openView('stream')}>
             <span class="thread"></span><span class="orb ${mood}"><i></i></span>
           </button>`;
@@ -827,6 +873,36 @@ export class UiShell extends LitElement {
     return this.apps.find((a) => a.id === id)?.name ?? id;
   }
 
+  /**
+   * The stream's groups, one per app, newest first inside each: apps with
+   * something that needs you first, then by their newest, muted apps last.
+   */
+  private streamGroups() {
+    const byApp = new Map<string, ShellNotification[]>();
+    for (const n of [...this.notifications].sort((a, b) => toTime(b.time) - toTime(a.time))) byApp.set(n.app, [...(byApp.get(n.app) ?? []), n]);
+    return [...byApp]
+      .map(([app, list]) => ({ app, list, muted: this.muted.includes(app), needs: list.some((n) => n.level === 'needs') }))
+      .sort((a, b) => Number(a.muted) - Number(b.muted) || Number(b.needs) - Number(a.needs) || toTime(b.list[0].time) - toTime(a.list[0].time));
+  }
+
+  private menuFor = '';
+
+  private openGroupMenu(e: Event, app: string) {
+    const menu = this.renderRoot.querySelector<UiMenu>('ui-menu.stream-menu');
+    if (!menu) return;
+    const muted = this.muted.includes(app);
+    const name = this.appName(app);
+    this.menuFor = app;
+    const items: MenuAction[] = [muted ? { id: 'unmute', label: `Unmute ${name}`, icon: 'bell' } : { id: 'mute', label: `Mute ${name}`, icon: 'mute' }];
+    if (menu.isOpen) menu.close(false);
+    void menu.show(e.currentTarget as HTMLElement, items);
+  }
+
+  private onGroupMenu(e: Event) {
+    const { item } = (e as CustomEvent<{ item: MenuAction }>).detail;
+    if (this.menuFor) this.setMuted(this.menuFor, item.id === 'mute');
+  }
+
   private renderStream() {
     if (this.streamLoading) return html`<p class="note" aria-busy="true">Catching up…</p><span class="skel"></span><span class="skel"></span>`;
     if (this.streamError) {
@@ -835,32 +911,35 @@ export class UiShell extends LitElement {
     }
     const list = this.notifications;
     if (!list.length) return html`<p class="note" tabindex="0" data-first>All quiet. Nothing needs you.</p>`;
-    const startOfDay = new Date(this.now).setHours(0, 0, 0, 0);
-    const groups: [string, ShellNotification[], boolean][] = [
-      ['Needs you', list.filter((n) => n.level === 'needs'), true],
-      ['Today', list.filter((n) => n.level !== 'needs' && toTime(n.time) >= startOfDay), false],
-      ['Earlier', list.filter((n) => n.level !== 'needs' && toTime(n.time) < startOfDay), false],
-    ];
+    const groups = this.streamGroups();
+    // The first thing that needs you pings; the rest are a still green. Muted apps never ping.
+    const pinging = groups.find((g) => !g.muted && g.needs)?.list.find((n) => n.level === 'needs')?.id;
     let first = true;
     return html`
       ${list.some((n) => n.level !== 'needs') ? html`<div class="tools"><button class="link" @click=${() => this.clear()}>Clear the quiet ones</button></div>` : nothing}
-      ${groups.filter(([, g]) => g.length).map(
-        ([name, g, needs]) => html`<div class="group label ${needs ? 'needs' : ''}">${name} <b>${g.length}</b></div>
-          <ul>${g.map((n, i) => {
+      ${groups.map(
+        ({ app, list: g, muted, needs }) => html`<div class="group label ${needs && !muted ? 'needs' : ''}">
+            <span class="name">${this.appName(app)} <b>${g.length}</b>${muted ? html`<span class="quiet">Muted</span>` : nothing}</span>
+            <button class="more" aria-label=${`${this.appName(app)}: more`} aria-haspopup="menu" @click=${(e: Event) => this.openGroupMenu(e, app)}><ui-icon name="more" size="16"></ui-icon></button>
+          </div>
+          <ul aria-label=${this.appName(app)}>${g.map((n) => {
             const attrs = first;
             first = false;
-            return html`<li class="item">
-              <button class="row ${n.level} ${needs && i === 0 ? 'first' : ''}" ?data-first=${attrs}
+            const actions = (n.actions ?? []).slice(0, 2);
+            return html`<li class="item ${muted ? 'muted' : ''}">
+              <button class="row ${n.level} ${n.id === pinging ? 'first' : ''}" ?data-first=${attrs}
                 @click=${() => this.openNotification(n)}
                 @keydown=${(e: KeyboardEvent) => e.key.toLowerCase() === 'x' && (e.preventDefault(), this.dismiss(n.id))}>
                 <span class="lead"></span>
-                <span class="text"><b>${n.title}</b><span>${this.appName(n.app)}${this.floorTag(n)}${n.detail ? ` · ${n.detail}` : ''}</span></span>
+                <span class="text"><b>${n.title}</b><span>${[this.floorTag(n).replace(/^ · /, ''), n.detail].filter(Boolean).join(' · ')}</span></span>
                 <span class="meta">${ago(n.time, this.now)}</span>
               </button>
+              ${actions.map((a, i) => html`<button class="act ${i === 0 && n.level === 'needs' ? 'main' : ''}" @click=${() => this.actOn(n, i)}>${a.label}</button>`)}
               <button class="x" aria-label=${`Dismiss ${n.title}`} @click=${() => this.dismiss(n.id)}><ui-icon name="close" size="16"></ui-icon></button>
             </li>`;
           })}</ul>`,
-      )}`;
+      )}
+      <ui-menu class="stream-menu" label="App notifications" @ui-select=${this.onGroupMenu}></ui-menu>`;
   }
 
   private renderApps() {

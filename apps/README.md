@@ -22,6 +22,15 @@ To get something from another app, such as a document picked from the Library, a
 
 An app's service tells people something with `notify` from `@platform/service-kit`: it reaches each recipient's Shell stream live, and stays there until they open or dismiss it. Anything that needs a record (a document published, access changed) goes in the platform's audit log with `recordAudit`. Both call the events service at `EVENTS_URL` as the app, which needs the `notifications:send` or `audit:write` scope in its manifest.
 
+A notification can carry up to two `actions`, each a `label` ("Approve", "Open", at most 30 characters) and an `intent` some app `handles`, with a payload of at most 1 KB as JSON (send an id, not the document). Pressing one in the Shell raises that intent in the person's browser exactly as `ctx.raise` would, opening whichever app handles it, and marks the notification read. The app runs no code in the stream, so an action is never more than a way into an app.
+
+```ts
+await notify({ eventsUrl, credentials, workspace, notification: {
+  app: 'expenses', recipients: [lead], level: 'needs', title: 'Approve Sam’s claim',
+  actions: [{ label: 'Approve', intent: { type: 'expense.approve', payload: { id: claim.id } } }, { label: 'Open', intent: { type: 'expense.open', payload: { id: claim.id } } }],
+} });
+```
+
 | App | What it is |
 | --- | --- |
 | `library/` | The first app (name to be decided): document libraries that users and departments publish for internal distribution, with a readable reader view. |

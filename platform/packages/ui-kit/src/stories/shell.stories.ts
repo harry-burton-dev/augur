@@ -19,7 +19,7 @@ const apps: ShellApp[] = [
 const min = 60_000;
 const now = Date.now();
 const notifications: ShellNotification[] = [
-  { id: '1', app: 'library', level: 'needs', title: 'Approve the travel policy', detail: 'Sam asked for your review', time: now - 4 * min, floor: 'org' },
+  { id: '1', app: 'library', level: 'needs', title: 'Approve the travel policy', detail: 'Sam asked for your review', time: now - 4 * min, floor: 'org', actions: [{ label: 'Approve' }, { label: 'Open' }] },
   { id: '2', app: 'library', level: 'needs', title: 'Procurement is due for review', detail: 'Review by Friday', time: now - 50 * min, floor: 'pay' },
   { id: '3', app: 'library', level: 'done', title: 'Expenses guide published', detail: 'Finance', time: now - 3 * 60 * min },
   { id: '4', app: 'admin', level: 'info', title: 'Two people joined HR', time: now - 30 * 60 * min },
@@ -43,7 +43,7 @@ const floors: ShellFloor[] = [
 /** Floors in a story: the host's part, going wherever the shell asks. */
 const goTo = (e: CustomEvent<{ id: string }>) => ((e.currentTarget as UiShell).floor = e.detail.id);
 
-const shell = (opts: { notes?: ShellNotification[]; online?: boolean; view?: string; open?: boolean; floor?: string } = {}) => html`
+const shell = (opts: { notes?: ShellNotification[]; online?: boolean; view?: string; open?: boolean; floor?: string; muted?: string[] } = {}) => html`
   <div style="height:100vh;min-height:620px">
     <ui-shell
       product="Platform"
@@ -53,6 +53,7 @@ const shell = (opts: { notes?: ShellNotification[]; online?: boolean; view?: str
       current="library"
       .recent=${['home']}
       .notifications=${opts.notes ?? notifications}
+      .muted=${opts.muted ?? []}
       .agents=${agents}
       .online=${opts.online ?? true}
       version="0.3.0 · SDK 1.0.0"
@@ -81,6 +82,8 @@ export const Closed: Story = { render: () => shell() };
 export const LookingUp: Story = { render: () => shell(), ...opened() };
 export const Quiet: Story = { render: () => shell({ notes: [] }), ...opened() };
 export const Stream: Story = { render: () => shell(), ...opened('stream') };
+/** Grouped by app; a row's actions sit at its end; each app's ⋯ mutes it. A muted app's notifications still land here, silently. */
+export const StreamMuted: Story = { render: () => shell({ muted: ['admin'] }), ...opened('stream') };
 export const Offline: Story = { render: () => shell({ online: false }), ...opened('stream') };
 export const Apps: Story = { render: () => shell(), ...opened('apps') };
 export const Find: Story = { render: () => shell(), ...opened('find') };

@@ -8,6 +8,8 @@ export interface Preferences {
   away?: boolean;
   /** App ids, most recent first. */
   recent?: string[];
+  /** App ids whose notifications land in the stream silently and never on Home. */
+  muted?: string[];
 }
 
 /** Where each person's preferences are kept. */
