@@ -39,7 +39,26 @@ export interface CatalogueApp extends AppManifestEntry {
   blocked?: string;
   /** What the app's service asks to do on the platform. */
   scopes?: string[];
+  /** What an admin has let it do, of what it asks for. */
+  grantedScopes?: string[];
+  /** What a newer version asks for that no admin has allowed yet. */
+  awaitingScopes?: string[];
+  /** The kinds of floor it works on; every kind when absent. */
+  floors?: ('personal' | 'team' | 'org')[];
 }
+
+/** What one floor says about an app: on or off there and below, or blocked for it and every floor below. */
+export interface FloorRule {
+  app: string;
+  workspace: string;
+  state: 'on' | 'off' | 'blocked';
+  carriesOn: boolean;
+  setBy: string;
+  setAt: string;
+}
+
+/** What an admin can set on a floor; `inherit` takes the floor's rule away. */
+export type FloorChoice = FloorRule['state'] | 'inherit';
 
 /** An app's own sign-in, straight after it is issued: the secret is shown this once. */
 export interface IssuedSignIn {
@@ -171,6 +190,17 @@ export class AdminApi {
 
   apps = () => this.call<CatalogueApp[]>('GET', '/api/registry/v1/apps');
   setAppEnabled = (id: string, enabled: boolean) => this.call<CatalogueApp>('PATCH', `/api/registry/v1/apps/${encodeURIComponent(id)}`, { enabled });
+  appFloors = (id: string) => this.call<FloorRule[]>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/floors`);
+  setAppFloor = (id: string, workspace: string, state: FloorChoice) =>
+    this.call<{ rules: FloorRule[] }>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/floors/${encodeURIComponent(workspace)}`, { state });
+  grantScopes = (id: string, scopes: string[]) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/scopes`, { scopes });
+  /** The org's own floor, which every app rule starts from. */
+  org = async () => {
+    const { workspaces } = await this.call<{ workspaces: { id: string; kind: string; name: string }[] }>('GET', '/api/identity/v1/me/workspaces');
+    const org = workspaces.find((w) => w.kind === 'org');
+    if (!org) throw new Error('The org’s floor couldn’t be found.');
+    return { id: org.id, name: org.name };
+  };
   appVersions = (id: string) => this.call<AppVersion[]>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/versions`);
   /** Serve one kept version and hold the app there; `null` follows new versions again. */
   pinApp = (id: string, version: string | null) =>

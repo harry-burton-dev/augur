@@ -54,6 +54,8 @@ export interface WorkspaceStore {
   personal(owner: string, name: string): Promise<Workspace>;
   /** Every team that isn't archived, each below the one it sits in. */
   teams(): Promise<Workspace[]>;
+  /** Any floor by id, archived teams included, so old links and audit entries still resolve. */
+  workspace(id: string): Promise<Workspace | undefined>;
   memberships(filter?: { person?: string; workspace?: string }): Promise<Membership[]>;
   /** A new team below `parentId`, or right below the org without one. */
   createTeam(name: string, parentId?: string): Promise<Workspace>;
@@ -160,6 +162,11 @@ export class MemoryWorkspaceStore implements WorkspaceStore {
       .filter((w) => w.kind === 'team' && !w.archivedAt)
       .sort((a, b) => a.path.join('.').localeCompare(b.path.join('.')))
       .map((w) => structuredClone(w));
+  }
+
+  async workspace(id: string) {
+    const w = this.all.get(id);
+    return w && structuredClone(w);
   }
 
   async memberships(filter: { person?: string; workspace?: string } = {}) {
@@ -356,6 +363,11 @@ export class PgWorkspaceStore implements WorkspaceStore {
     return this.teamsIn(this.pool);
   }
 
+  async workspace(id: string) {
+    const { rows } = await this.pool.query<Row>(`select ${COLUMNS} from identity.workspaces where id = $1`, [id]);
+    return rows[0] && fromRow(rows[0]);
+  }
+
   async memberships(filter: { person?: string; workspace?: string } = {}) {
     const { rows } = await this.pool.query<{ workspace_id: string; person: string; role: MemberRole }>(
       `select workspace_id, person, role from identity.workspace_members
@@ -465,3 +477,6 @@ export const floorsFor = async (store: WorkspaceStore, person: { id: string; nam
     ...teams.filter((t) => reachable.has(t.id)).map((t) => floor(t, direct.get(t.id) ?? 'member', direct.has(t.id))),
   ];
 };
+
+/** The floors to roll up from one: it and every team below it that the person can stand on. */
+export const rollupFor = (floors: Floor[], id: string) => floors.filter((f) => f.path.some((p) => p.id === id));

@@ -4,10 +4,13 @@ import semver from 'semver';
 export class ManifestError extends Error {}
 
 /** Loads the role-filtered app list from the registry, through the gateway. */
-export async function loadManifest(fetchImpl: typeof fetch, url: string, token: string): Promise<AppManifestEntry[]> {
+export async function loadManifest(fetchImpl: typeof fetch, url: string, token: string, workspace?: string): Promise<AppManifestEntry[]> {
   let res: Response;
   try {
-    res = await fetchImpl(url, { headers: { authorization: `Bearer ${token}`, accept: 'application/json' } });
+    // On a floor, the catalogue is that floor's: the apps on there for this person.
+    const target = workspace ? `${url}${url.includes('?') ? '&' : '?'}workspace=${encodeURIComponent(workspace)}` : url;
+    const headers: Record<string, string> = { authorization: `Bearer ${token}`, accept: 'application/json', ...(workspace ? { 'x-workspace-id': workspace } : {}) };
+    res = await fetchImpl(target, { headers });
   } catch {
     throw new ManifestError("Can't reach the app catalogue. Nothing was lost; try again.");
   }

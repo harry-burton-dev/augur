@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callerHeaders } from '@platform/service-kit';
+import { callerHeaders, type FloorPlace } from '@platform/service-kit';
 import { buildApp } from './app.ts';
 
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0', handles: ['document.open'] };
@@ -14,6 +14,19 @@ const as = (client: string) => ({ authorization: `Bearer ${client}` });
 const service = as('app-library');
 
 const ids = (body: { id: string }[]) => body.map((a) => a.id);
+
+// The org, Finance with Payroll below it, Legal, and someone's own floor.
+const places: Record<string, FloorPlace> = {
+  o: { id: 'o', kind: 'org', path: ['o'], org: 'o' },
+  f: { id: 'f', kind: 'team', path: ['o', 'f'], org: 'o' },
+  p: { id: 'p', kind: 'team', path: ['o', 'f', 'p'], org: 'o' },
+  l: { id: 'l', kind: 'team', path: ['o', 'l'], org: 'o' },
+  w1: { id: 'w1', kind: 'team', path: ['o', 'w1'], org: 'o' },
+  m: { id: 'm', kind: 'personal', path: ['m'], org: 'o' },
+};
+const floors = async (id: string) => places[id];
+/** Someone standing on a floor, as the gateway passes it on. */
+const on = (id: string) => callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id, kind: places[id].kind, role: 'member' } });
 
 describe('registry', () => {
   it('reports healthy', async () => {
@@ -253,15 +266,114 @@ describe('registry', () => {
     });
 
     it('tells platform services what an app is granted, and nothing once it is off', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await buildApp({ verifyService, floors });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
-      const grants = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w-1', headers });
-      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w-1', scopes: ['notifications:send'] });
+      const grants = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers });
+      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w1', scopes: ['notifications:send'] });
       expect((await grants(as('app-library'))).statusCode).toBe(403);
       expect((await grants(admin)).statusCode).toBe(403);
       await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } });
       expect((await grants(as('platform-events'))).json().scopes).toEqual([]);
       expect((await app.inject({ method: 'GET', url: '/v1/apps/nope/grants', headers: as('platform-events') })).statusCode).toBe(404);
+    });
+  });
+
+  describe('floor by floor', () => {
+    const setup = async (payload: object = library) => {
+      const entries: { action: string; detail?: unknown }[] = [];
+      const app = await buildApp({ verifyService, floors, audit: async (e) => void entries.push(e) });
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
+      const set = (workspace: string, state: string, headers = admin, carriesOn?: boolean) =>
+        app.inject({ method: 'PUT', url: `/v1/apps/library/floors/${workspace}`, headers, payload: { state, ...(carriesOn === undefined ? {} : { carriesOn }) } });
+      const offered = async (workspace: string) => ids((await app.inject({ method: 'GET', url: `/v1/manifest?workspace=${workspace}`, headers: on(workspace) })).json()).includes('library');
+      return { app, entries, set, offered };
+    };
+
+    it('can be on for Finance and off for Legal', async () => {
+      const { set, offered, entries } = await setup();
+      expect((await set('l', 'off')).json().state).toEqual({ on: false, why: 'set-here', by: 'l' });
+      expect(await offered('f')).toBe(true);
+      expect(await offered('p')).toBe(true);
+      expect(await offered('l')).toBe(false);
+      expect(await offered('o')).toBe(true);
+      expect(entries.at(-1)).toMatchObject({ action: 'app.disabled', target: 'library', detail: { workspace: 'l', carriesOn: true } });
+    });
+
+    it('carries an install on to the teams below unless one says otherwise', async () => {
+      const { set, offered } = await setup();
+      await set('o', 'off');
+      await set('f', 'on');
+      expect([await offered('o'), await offered('f'), await offered('p'), await offered('l'), await offered('m')]).toEqual([false, true, true, false, false]);
+      await set('f', 'on', admin, false);
+      expect([await offered('f'), await offered('p')]).toEqual([true, false]);
+      await set('p', 'on');
+      await set('f', 'inherit');
+      expect([await offered('f'), await offered('p')]).toEqual([false, true]);
+    });
+
+    it('lets a block above win over anything below it', async () => {
+      const { set, offered, entries } = await setup();
+      await set('p', 'on');
+      await set('f', 'blocked');
+      expect([await offered('f'), await offered('p'), await offered('l')]).toEqual([false, false, true]);
+      await set('o', 'blocked');
+      expect([await offered('l'), await offered('m')]).toEqual([false, false]);
+      expect(entries.map((e) => e.action)).toContain('app.blocked');
+    });
+
+    it('offers an app only on the kinds of floor it says it works on', async () => {
+      const { offered } = await setup({ ...library, floors: ['team'] });
+      expect([await offered('f'), await offered('o'), await offered('m')]).toEqual([true, false, false]);
+    });
+
+    it('answers only for the floor the gateway checked, and only admins set rules', async () => {
+      const { app, set } = await setup();
+      expect((await app.inject({ method: 'GET', url: '/v1/manifest?workspace=l', headers: on('f') })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/manifest?workspace=gone', headers: callerHeaders({ id: 'u', name: 'U', departments: [], roles: [], workspace: { id: 'gone', kind: 'team', role: 'member' } }) })).statusCode).toBe(404);
+      expect((await set('f', 'off', editor)).statusCode).toBe(403);
+      expect((await set('m', 'off')).statusCode).toBe(400);
+      expect((await set('gone', 'off')).statusCode).toBe(404);
+      expect((await app.inject({ method: 'PUT', url: '/v1/apps/admin/floors/f', headers: admin, payload: { state: 'off' } })).statusCode).toBe(409);
+      expect((await app.inject({ method: 'GET', url: '/v1/apps/library/floors', headers: editor })).statusCode).toBe(403);
+      await set('f', 'off');
+      expect((await app.inject({ method: 'GET', url: '/v1/apps/library/floors', headers: admin })).json()).toEqual([expect.objectContaining({ workspace: 'f', state: 'off', setBy: 'u-1' })]);
+    });
+
+    it('can’t answer for a floor without identity', async () => {
+      const app = await buildApp({ verifyService });
+      expect((await app.inject({ method: 'GET', url: '/v1/manifest?workspace=f', headers: on('f') })).statusCode).toBe(503);
+    });
+
+    it('grants scopes only where the app is on', async () => {
+      const { app, set } = await setup({ ...library, scopes: ['notifications:send'] });
+      await set('l', 'off');
+      const grants = async (workspace: string) => (await app.inject({ method: 'GET', url: `/v1/apps/library/grants?workspace=${workspace}`, headers: as('platform-events') })).json().scopes;
+      expect(await grants('f')).toEqual(['notifications:send']);
+      expect(await grants('l')).toEqual([]);
+      expect(await grants('gone')).toEqual([]);
+    });
+
+    it('holds back scopes a new version asks for until an admin grants them', async () => {
+      const { app, entries } = await setup({ ...library, scopes: ['notifications:send'] });
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', scopes: ['notifications:send', 'audit:write'] } });
+      const grants = async () => (await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=f', headers: as('platform-events') })).json().scopes;
+      expect(await grants()).toEqual(['notifications:send']);
+      const catalogue = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json();
+      expect(catalogue.find((a: { id: string }) => a.id === 'library')).toMatchObject({ version: '0.2.0', grantedScopes: ['notifications:send'], awaitingScopes: ['audit:write'] });
+      const grant = (headers: Record<string, string>) => app.inject({ method: 'PUT', url: '/v1/apps/library/scopes', headers, payload: { scopes: ['notifications:send', 'audit:write'] } });
+      expect((await grant(editor)).statusCode).toBe(403);
+      expect((await grant(admin)).json()).not.toHaveProperty('awaitingScopes');
+      expect(await grants()).toEqual(['notifications:send', 'audit:write']);
+      expect(entries.at(-1)).toMatchObject({ action: 'app.scopes-granted', detail: { scopes: ['notifications:send', 'audit:write'] } });
+    });
+
+    it('checks that each surface is for a floor the app works on', async () => {
+      const app = await buildApp({ verifyService });
+      const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, ...payload } });
+      expect((await put({ floors: ['team'], surfaces: [{ floor: 'org', slot: 'card', module: './Card' }] })).statusCode).toBe(400);
+      expect((await put({ surfaces: [{ floor: 'team', slot: 'shelf', module: './Card' }] })).statusCode).toBe(400);
+      const ok = await put({ floors: ['team', 'org'], surfaces: [{ floor: 'team', slot: 'card', module: './Card', rollup: true }, { floor: 'org', slot: 'page', module: './Page', role: 'lead' }] });
+      expect(ok.statusCode).toBe(201);
     });
   });
 });

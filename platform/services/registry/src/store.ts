@@ -1,4 +1,5 @@
 import pg from 'pg';
+import type { Scope } from '@platform/service-kit';
 import type { AppEntry } from './manifest.ts';
 
 /** Another app took the route first (two registrations racing). */
@@ -14,6 +15,27 @@ export interface AppRecord {
   updatedAt: string;
   /** Set when an admin has held the app at this version: registering again records the new version but doesn't serve it. */
   pinnedVersion?: string;
+  /**
+   * The scopes an admin has let the app use. Its first registration grants
+   * what it asks for (an admin already gave it a sign-in); a later version that
+   * asks for more is served, but gets the extra only once an admin grants it.
+   */
+  grantedScopes: Scope[];
+}
+
+/**
+ * What one floor says about one app. `on` and `off` install it there or take
+ * it away, and carry on to the teams below unless one of them says otherwise
+ * (or `carriesOn` is false). `blocked` is the guardrail layer: off there and on
+ * every floor below, whatever those floors say.
+ */
+export interface FloorRule {
+  app: string;
+  workspace: string;
+  state: 'on' | 'off' | 'blocked';
+  carriesOn: boolean;
+  setBy: string;
+  setAt: string;
 }
 
 /** One version of an app as it registered, kept so an admin can go back to it. */
@@ -62,8 +84,16 @@ export interface AppStore {
    * the newest. Undefined when there is no such app; UnknownVersionError when it has no such version.
    */
   pin(id: string, version: string | null): Promise<AppRecord | undefined>;
-  /** Removes an app; false when there was none. */
+  /** Removes an app, with its versions and floor rules; false when there was none. */
   remove(id: string): Promise<boolean>;
+  /** Lets an app use these scopes. Undefined when there is no such app. */
+  grant(id: string, scopes: Scope[]): Promise<AppRecord | undefined>;
+  /** What floors say about apps: one app's, or every app's. */
+  rules(app?: string): Promise<FloorRule[]>;
+  /** Sets what one floor says about an app, replacing what it said before. */
+  setRule(rule: Omit<FloorRule, 'setAt'>): Promise<FloorRule>;
+  /** Takes a floor's rule away, so the app does what the floors above say; false when there was none. */
+  clearRule(app: string, workspace: string): Promise<boolean>;
 }
 
 /** For tests, and for running the registry locally without Postgres. Forgets everything on restart. */
@@ -71,6 +101,7 @@ export class MemoryAppStore implements AppStore {
   private apps = new Map<string, AppRecord>();
   private history = new Map<string, AppVersion[]>();
   private allowed = new Map<string, AllowedOrigin>();
+  private floorRules: FloorRule[] = [];
 
   async origins() {
     return [...this.allowed.values()].sort((a, b) => a.origin.localeCompare(b.origin)).map((o) => ({ ...o }));
@@ -101,7 +132,14 @@ export class MemoryAppStore implements AppStore {
     kept.unshift({ version: entry.version, entry, registeredBy, registeredAt: now });
     this.history.set(entry.id, trim(kept, before?.pinnedVersion));
     if (before?.pinnedVersion) return false;
-    this.apps.set(entry.id, { entry, enabled: before?.enabled ?? true, registeredBy, registeredAt: before?.registeredAt ?? now, updatedAt: now });
+    this.apps.set(entry.id, {
+      entry,
+      enabled: before?.enabled ?? true,
+      registeredBy,
+      registeredAt: before?.registeredAt ?? now,
+      updatedAt: now,
+      grantedScopes: before?.grantedScopes ?? [...(entry.scopes ?? [])],
+    });
     return !before;
   }
 
@@ -130,7 +168,31 @@ export class MemoryAppStore implements AppStore {
 
   async remove(id: string) {
     this.history.delete(id);
+    this.floorRules = this.floorRules.filter((r) => r.app !== id);
     return this.apps.delete(id);
+  }
+
+  async grant(id: string, scopes: Scope[]) {
+    const record = this.apps.get(id);
+    if (!record) return undefined;
+    record.grantedScopes = [...scopes];
+    return structuredClone(record);
+  }
+
+  async rules(app?: string) {
+    return this.floorRules.filter((r) => !app || r.app === app).map((r) => ({ ...r }));
+  }
+
+  async setRule(rule: Omit<FloorRule, 'setAt'>) {
+    const set = { ...rule, carriesOn: rule.state === 'blocked' || rule.carriesOn, setAt: new Date().toISOString() };
+    this.floorRules = [...this.floorRules.filter((r) => !(r.app === rule.app && r.workspace === rule.workspace)), set];
+    return { ...set };
+  }
+
+  async clearRule(app: string, workspace: string) {
+    const before = this.floorRules.length;
+    this.floorRules = this.floorRules.filter((r) => !(r.app === app && r.workspace === workspace));
+    return this.floorRules.length < before;
   }
 }
 
@@ -184,9 +246,34 @@ export const migrations: { id: string; sql: string }[] = [
         added_at timestamptz not null default now()
       );`,
   },
+  {
+    id: '005_floors',
+    sql: `
+      alter table registry.apps add column granted_scopes text[] not null default '{}';
+      -- Apps already registered keep what they could do.
+      update registry.apps set granted_scopes = array(select jsonb_array_elements_text(coalesce(manifest->'scopes', '[]'::jsonb)));
+      -- Installs: an app on or off on a floor, and whether that carries on to the teams below.
+      create table registry.installs (
+        app_id text not null references registry.apps (id) on delete cascade,
+        workspace_id text not null,
+        enabled boolean not null,
+        carries_on boolean not null default true,
+        set_by text not null,
+        set_at timestamptz not null default now(),
+        primary key (app_id, workspace_id)
+      );
+      -- Guardrails: a floor that blocks an app for itself and every floor below.
+      create table registry.guardrails (
+        app_id text not null references registry.apps (id) on delete cascade,
+        workspace_id text not null,
+        set_by text not null,
+        set_at timestamptz not null default now(),
+        primary key (app_id, workspace_id)
+      );`,
+  },
 ];
 
-type AppRow = { manifest: AppEntry; enabled: boolean; registered_by: string; registered_at: Date; updated_at: Date; pinned_version: string | null };
+type AppRow = { manifest: AppEntry; enabled: boolean; registered_by: string; registered_at: Date; updated_at: Date; pinned_version: string | null; granted_scopes: Scope[] };
 
 const fromAppRow = (r: AppRow): AppRecord => ({
   entry: r.manifest,
@@ -195,6 +282,7 @@ const fromAppRow = (r: AppRow): AppRecord => ({
   registeredAt: r.registered_at.toISOString(),
   updatedAt: r.updated_at.toISOString(),
   ...(r.pinned_version ? { pinnedVersion: r.pinned_version } : {}),
+  grantedScopes: r.granted_scopes,
 });
 
 export class PgAppStore implements AppStore {
@@ -264,14 +352,14 @@ export class PgAppStore implements AppStore {
       // A pinned app keeps what it serves; only its history learns the new version.
       const { rows } = await client
         .query<{ created: boolean; pinned_version: string | null }>(
-          `insert into registry.apps (id, route, manifest, registered_by) values ($1, $2, $3, $4)
+          `insert into registry.apps (id, route, manifest, registered_by, granted_scopes) values ($1, $2, $3, $4, $5)
            on conflict (id) do update set
              route = case when registry.apps.pinned_version is null then excluded.route else registry.apps.route end,
              manifest = case when registry.apps.pinned_version is null then excluded.manifest else registry.apps.manifest end,
              registered_by = case when registry.apps.pinned_version is null then excluded.registered_by else registry.apps.registered_by end,
              updated_at = case when registry.apps.pinned_version is null then now() else registry.apps.updated_at end
            returning (xmax = 0) as created, pinned_version`,
-          [entry.id, entry.route, entry, registeredBy],
+          [entry.id, entry.route, entry, registeredBy, entry.scopes ?? []],
         )
         .catch((err: { code?: string }) => {
           throw err.code === '23505' ? new RouteTakenError(`Another app already lives at ${entry.route}.`) : err;
@@ -342,6 +430,44 @@ export class PgAppStore implements AppStore {
   async remove(id: string) {
     const { rowCount } = await this.pool.query('delete from registry.apps where id = $1', [id]);
     return rowCount === 1;
+  }
+
+  async grant(id: string, scopes: Scope[]) {
+    const { rows } = await this.pool.query<AppRow>('update registry.apps set granted_scopes = $2 where id = $1 returning *', [id, scopes]);
+    return rows[0] && fromAppRow(rows[0]);
+  }
+
+  async rules(app?: string) {
+    const { rows } = await this.pool.query<{ app_id: string; workspace_id: string; state: FloorRule['state']; carries_on: boolean; set_by: string; set_at: Date }>(
+      `select app_id, workspace_id, case when enabled then 'on' else 'off' end as state, carries_on, set_by, set_at from registry.installs where $1::text is null or app_id = $1
+       union all
+       select app_id, workspace_id, 'blocked', true, set_by, set_at from registry.guardrails where $1::text is null or app_id = $1
+       order by app_id, set_at`,
+      [app ?? null],
+    );
+    return rows.map((r) => ({ app: r.app_id, workspace: r.workspace_id, state: r.state, carriesOn: r.carries_on, setBy: r.set_by, setAt: r.set_at.toISOString() }));
+  }
+
+  async setRule(rule: Omit<FloorRule, 'setAt'>) {
+    return this.transaction(async (client) => {
+      await client.query('delete from registry.installs where app_id = $1 and workspace_id = $2', [rule.app, rule.workspace]);
+      await client.query('delete from registry.guardrails where app_id = $1 and workspace_id = $2', [rule.app, rule.workspace]);
+      const { rows } = await client.query<{ set_at: Date }>(
+        rule.state === 'blocked'
+          ? 'insert into registry.guardrails (app_id, workspace_id, set_by) values ($1, $2, $3) returning set_at'
+          : 'insert into registry.installs (app_id, workspace_id, set_by, enabled, carries_on) values ($1, $2, $3, $4, $5) returning set_at',
+        rule.state === 'blocked' ? [rule.app, rule.workspace, rule.setBy] : [rule.app, rule.workspace, rule.setBy, rule.state === 'on', rule.carriesOn],
+      );
+      return { ...rule, ...(rule.state === 'blocked' ? { carriesOn: true } : {}), setAt: rows[0].set_at.toISOString() };
+    });
+  }
+
+  async clearRule(app: string, workspace: string) {
+    return this.transaction(async (client) => {
+      const a = await client.query('delete from registry.installs where app_id = $1 and workspace_id = $2', [app, workspace]);
+      const b = await client.query('delete from registry.guardrails where app_id = $1 and workspace_id = $2', [app, workspace]);
+      return (a.rowCount ?? 0) + (b.rowCount ?? 0) > 0;
+    });
   }
 
   close() {

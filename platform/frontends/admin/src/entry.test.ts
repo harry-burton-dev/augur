@@ -3,7 +3,7 @@ import type { UiDialog, UiTable, UiToggle } from '@platform/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
-import { appStatus, rollbackNote, scopeWords, type AdminApps } from './apps.js';
+import { appStatus, floorStatus, floorTree, rollbackNote, scopeWords, type AdminApps } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
 import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
@@ -327,6 +327,64 @@ describe('admin', () => {
       el.issued = undefined;
       await settle(el);
       expect(el.querySelector('[data-secret]')).toBeNull();
+      el.remove();
+    });
+  });
+
+  describe('Where an app is on', () => {
+    const app: CatalogueApp = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.2.0', sdk: '^1.0.0', platform: false, enabled: true };
+    const legal: Department = { id: 'd-3', name: 'Legal', members: [] };
+    const tree = floorTree({ id: 'o', name: 'Acme' }, [finance, payroll, legal]);
+    const names = new Map(tree.map((f) => [f.id, f.name]));
+    const rule = (workspace: string, state: 'on' | 'off' | 'blocked', carriesOn = true) => ({ app: 'library', workspace, state, carriesOn, setBy: 'u-1', setAt: '2026-10-23T00:00:00.000Z' });
+    const status = (id: string, rules: ReturnType<typeof rule>[], a = app) => floorStatus(a, tree.find((f) => f.id === id)!, rules, names).words;
+
+    it('lays the org and its teams out as a tree', () => {
+      expect(tree.map((f) => [f.name, f.path])).toEqual([
+        ['Acme', ['o']],
+        ['Finance', ['o', 'd-1']],
+        ['Payroll', ['o', 'd-1', 'd-2']],
+        ['Legal', ['o', 'd-3']],
+      ]);
+    });
+
+    it('says why an app is on or off on each floor, as the registry decides', () => {
+      expect(status('d-3', [rule('d-3', 'off')])).toBe('Off');
+      expect(status('d-1', [rule('d-3', 'off')])).toBe('On');
+      expect(status('d-2', [rule('d-1', 'off')])).toBe('Off, as Finance');
+      expect(status('d-2', [rule('d-1', 'on', false), rule('o', 'off')])).toBe('Off, as Acme');
+      expect(status('d-2', [rule('d-2', 'on'), rule('o', 'blocked')])).toBe('Off: blocked by Acme');
+      expect(status('o', [rule('o', 'blocked')])).toBe('Blocked here and below');
+      expect(status('d-1', [], { ...app, enabled: false })).toBe('Off: the app is turned off');
+      expect(status('o', [], { ...app, floors: ['team'] })).toBe('Off: it doesn’t work on the org');
+    });
+
+    it('turns an app off for one team', async () => {
+      const calls: [string, string, unknown][] = [];
+      let rules: unknown[] = [];
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+        const body = init.body ? JSON.parse(String(init.body)) : undefined;
+        calls.push([init.method ?? 'GET', url, body]);
+        if (url.endsWith('/floors')) return Response.json(rules);
+        if (url.includes('/floors/')) return Response.json({ rules: (rules = [rule('d-3', body.state)]) });
+        if (url.endsWith('/me/workspaces')) return Response.json({ workspaces: [{ id: 'm', kind: 'personal', name: 'You' }, { id: 'o', kind: 'org', name: 'Acme' }] });
+        if (url.endsWith('/admin/departments')) return Response.json([finance, payroll, legal]);
+        if (url.endsWith('/versions')) return Response.json([]);
+        return Response.json([app]);
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.apps).toHaveLength(1));
+      el.open = 'library';
+      await vi.waitFor(() => expect(el.floorRules).toEqual([]));
+      await settle(el);
+      expect([...el.querySelectorAll('[data-floor]')].map((n) => n.getAttribute('label'))).toEqual(['Acme', 'Finance', 'Payroll', 'Legal']);
+      await el.setFloor(app, el.floorList!.find((f) => f.id === 'd-3')!, 'off');
+      expect(calls).toContainEqual(['PUT', '/api/registry/v1/apps/library/floors/d-3', { state: 'off' }]);
+      await settle(el);
+      expect(el.querySelector('[data-floor="d-3"]')?.getAttribute('hint')).toBe('Off');
+      expect(el.querySelector('[data-floor="d-1"]')?.getAttribute('hint')).toBe('On');
       el.remove();
     });
   });

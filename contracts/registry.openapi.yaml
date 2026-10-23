@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.5.0
+  version: 1.6.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -11,9 +11,21 @@ paths:
   /manifest:
     get:
       summary: Apps the caller may open
+      description: >
+        With `workspace`, the apps on for that floor: the caller must be on it,
+        so the request also carries it as X-Workspace-Id, which the gateway
+        checks. An app is on a floor when it is turned on, works on that kind
+        of floor (its manifest's `floors`), isn't blocked on the floor or any
+        floor above, and the nearest install from the floor upwards says on (or
+        there is none). A personal floor follows the org.
+      parameters:
+        - { name: workspace, in: query, required: false, schema: { type: string }, description: The floor to list apps for }
       responses:
+        "403": { description: The workspace isn't the floor the gateway checked }
+        "404": { description: No such floor }
+        "503": { description: Floors can't be looked up right now }
         "200":
-          description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off
+          description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there
           content:
             application/json:
               schema:
@@ -99,9 +111,11 @@ paths:
       summary: What an app may do on a floor (platform services only)
       description: >
         The platform's services check an app's calls against this, and keep
-        each answer for up to 30 seconds. An app on the catalogue is granted the
-        scopes its manifest asks for, on every floor; one that is turned off is
-        granted nothing.
+        each answer for up to 30 seconds. An app is granted the scopes it asks
+        for that an admin has granted, on floors where it is on (see
+        /manifest); nothing where it is off, on a floor that doesn't exist, or
+        anywhere while it is turned off. Without a workspace, what it is
+        granted while turned on.
       parameters:
         - { name: workspace, in: query, required: false, schema: { type: string }, description: The floor the call is for }
       responses:
@@ -118,6 +132,95 @@ paths:
                   scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
         "403": { description: Not a platform service }
         "404": { description: No such app is registered }
+        "503": { description: Floors can't be looked up right now }
+  /apps/{id}/scopes:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Let an app use these scopes (admins)
+      description: >
+        An app's first registration is granted what it asks for. A later
+        version that asks for more is served, but gets the extra only once an
+        admin grants it here. Audited as app.scopes-granted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scopes]
+              properties:
+                scopes: { type: array, uniqueItems: true, items: { $ref: "#/components/schemas/Scope" } }
+      responses:
+        "200":
+          description: The app as the catalogue now has it
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogueEntry" }
+        "403": { description: Not an admin }
+        "404": { description: No such app is registered }
+  /apps/{id}/floors:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: What each floor says about an app (admins)
+      responses:
+        "200":
+          description: The app's floor rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FloorRule" }
+        "403": { description: Not an admin }
+        "404": { description: No such app is registered }
+  /apps/{id}/floors/{workspace}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: workspace, in: path, required: true, schema: { type: string }, description: The org or a team }
+    put:
+      summary: Set what one floor says about an app (admins)
+      description: >
+        on or off installs the app there or takes it away, carrying on to the
+        teams below unless carriesOn is false or one of them says otherwise.
+        blocked is a guardrail: off there and on every floor below, whatever
+        they say. inherit takes the floor's rule away. Someone's own floor
+        can't be set; it follows the org. Audited as app.enabled, app.disabled,
+        app.blocked or app.inherited, with the floor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [state]
+              properties:
+                state: { type: string, enum: [on, off, blocked, inherit] }
+                carriesOn: { type: boolean, default: true }
+      responses:
+        "200":
+          description: The app's rules now, and whether it is on for this floor
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rules, state]
+                properties:
+                  rules: { type: array, items: { $ref: "#/components/schemas/FloorRule" } }
+                  state:
+                    type: object
+                    required: [on, why]
+                    properties:
+                      on: { type: boolean }
+                      why: { type: string, enum: [turned-off, not-for-this-kind, blocked, set-here, set-above, approved] }
+                      by: { type: string, description: The floor whose rule decided it }
+        "400": { description: Someone's own floor }
+        "403": { description: Not an admin }
+        "404": { description: No such app or floor }
+        "409": { description: A platform app, which is on everywhere }
+        "503": { description: Floors can't be looked up right now }
   /apps/{id}/versions:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -232,6 +335,18 @@ components:
             updatedAt: { type: string, format: date-time }
             pinnedVersion: { type: string, description: Set when an admin holds the app at this version }
             blocked: { type: string, description: "Set when the app's entry is on an origin no longer allowed: why it isn't offered" }
+            grantedScopes: { type: array, items: { $ref: "#/components/schemas/Scope" }, description: What it asks for that an admin has granted }
+            awaitingScopes: { type: array, items: { $ref: "#/components/schemas/Scope" }, description: What it asks for that no admin has granted yet }
+    FloorRule:
+      type: object
+      required: [app, workspace, state, carriesOn, setBy, setAt]
+      properties:
+        app: { type: string }
+        workspace: { type: string }
+        state: { type: string, enum: [on, off, blocked] }
+        carriesOn: { type: boolean, description: Whether it applies to the teams below too; always true for blocked }
+        setBy: { type: string }
+        setAt: { type: string, format: date-time }
     AllowedOrigin:
       type: object
       required: [origin, addedBy, addedAt]
@@ -263,11 +378,39 @@ components:
           uniqueItems: true
           items: { $ref: "#/components/schemas/Scope" }
           description: What the app's service asks to do on the platform. An app may always register itself.
+        floors:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/FloorKind" }
+          description: The kinds of floor the app works on; every kind when absent
+        surfaces:
+          type: array
+          maxItems: 30
+          items: { $ref: "#/components/schemas/Surface" }
+          description: >
+            What the app shows on each kind of floor, for the shell to place.
+            When several match, the most specific floor wins, then a role
+            condition, then manifest order. Each surface's floor must be in floors.
         menu:
           type: array
           maxItems: 8
           description: The app's menu, shown by the shell as Orbit at the app's root and as its chapter in Title
           items: { $ref: "#/components/schemas/AppMenuCategory" }
+    FloorKind:
+      type: string
+      enum: [personal, team, org]
+      description: team means any team, at any depth
+    Surface:
+      type: object
+      required: [floor, slot, module]
+      additionalProperties: false
+      properties:
+        floor: { $ref: "#/components/schemas/FloorKind" }
+        slot: { type: string, enum: [page, card, panel, settings, admin] }
+        module: { type: string, pattern: "^[A-Za-z0-9_./-]+$", description: The module the app's entry exposes for it }
+        role: { type: string, enum: [member, lead], description: Only for people with this role on the floor }
+        rollup: { type: boolean, description: Shows the floor and the teams below it the person is on (identity's roll-up) }
     Scope:
       type: string
       enum: [notifications:send, audit:write]

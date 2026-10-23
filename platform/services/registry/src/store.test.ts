@@ -12,6 +12,31 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     store = make();
   });
 
+  it('grants what an app first asks for, and only what an admin grants after', async () => {
+    await store.put({ ...library, scopes: ['notifications:send'] }, 'library');
+    await store.put({ ...library, version: '0.2.0', scopes: ['notifications:send', 'audit:write'] }, 'library');
+    expect((await store.records())[0].grantedScopes).toEqual(['notifications:send']);
+    expect((await store.grant('library', ['notifications:send', 'audit:write']))?.grantedScopes).toEqual(['notifications:send', 'audit:write']);
+    expect(await store.grant('nothing', [])).toBeUndefined();
+  });
+
+  it('keeps one rule per app and floor, and forgets them with the app', async () => {
+    await store.put(library, 'service');
+    await store.setRule({ app: 'library', workspace: 'w-fin', state: 'on', carriesOn: false, setBy: 'u-1' });
+    await store.setRule({ app: 'library', workspace: 'w-leg', state: 'off', carriesOn: true, setBy: 'u-1' });
+    await store.setRule({ app: 'library', workspace: 'w-fin', state: 'blocked', carriesOn: false, setBy: 'u-2' });
+    const rules = await store.rules('library');
+    expect(rules.map(({ setAt, ...r }) => (expect(Date.parse(setAt)).not.toBeNaN(), r)).sort((a, b) => a.workspace.localeCompare(b.workspace))).toEqual([
+      { app: 'library', workspace: 'w-fin', state: 'blocked', carriesOn: true, setBy: 'u-2' },
+      { app: 'library', workspace: 'w-leg', state: 'off', carriesOn: true, setBy: 'u-1' },
+    ]);
+    expect(await store.clearRule('library', 'w-leg')).toBe(true);
+    expect(await store.clearRule('library', 'w-leg')).toBe(false);
+    expect(await store.rules('papers')).toEqual([]);
+    await store.remove('library');
+    expect(await store.rules()).toEqual([]);
+  });
+
   it('adds, replaces and lists apps', async () => {
     expect(await store.put(library, 'service')).toBe(true);
     expect(await store.put({ ...library, version: '0.2.0' }, 'service')).toBe(false);
@@ -104,7 +129,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

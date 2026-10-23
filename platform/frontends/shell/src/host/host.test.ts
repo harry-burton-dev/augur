@@ -57,6 +57,12 @@ describe('loadManifest', () => {
     expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/manifest', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer tok' }) }));
   });
 
+  it('asks for the catalogue of the floor the person is on', async () => {
+    const fetchImpl = vi.fn(async () => new Response('[]')) as unknown as typeof fetch;
+    await loadManifest(fetchImpl, '/api/registry/v1/manifest', 'tok', 'w 1');
+    expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/manifest?workspace=w%201', expect.objectContaining({ headers: expect.objectContaining({ 'x-workspace-id': 'w 1' }) }));
+  });
+
   it('says plainly when the catalogue is unreachable or refuses', async () => {
     const down = vi.fn(async () => Promise.reject(new TypeError('fetch failed'))) as unknown as typeof fetch;
     await expect(loadManifest(down, '/m', 't')).rejects.toThrow(ManifestError);
