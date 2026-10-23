@@ -26,12 +26,21 @@ export const parseUpstreams = (spec = ''): Upstreams =>
 export const PLATFORM_SERVICES = ['identity', 'registry', 'events'];
 
 /** The platform's own services, then each app's service from APP_UPSTREAMS. The gateway knows no app by name. */
-export const defaultUpstreams = (): Upstreams => ({
-  identity: process.env.IDENTITY_URL ?? 'http://localhost:8081',
-  registry: process.env.REGISTRY_URL ?? 'http://localhost:8082',
-  events: process.env.EVENTS_URL ?? 'http://localhost:8084',
-  ...parseUpstreams(process.env.APP_UPSTREAMS),
-});
+export const defaultUpstreams = (env = process.env): Upstreams => {
+  const apps = parseUpstreams(env.APP_UPSTREAMS);
+  // A platform name in APP_UPSTREAMS would quietly send that service's traffic to an app.
+  const taken = Object.keys(apps).filter((name) => PLATFORM_SERVICES.includes(name) || name === 'gateway');
+  if (taken.length) throw new Error(`APP_UPSTREAMS can't name ${taken.join(', ')}: ${taken.length === 1 ? 'that name belongs' : 'those names belong'} to the platform.`);
+  return {
+    identity: env.IDENTITY_URL ?? 'http://localhost:8081',
+    registry: env.REGISTRY_URL ?? 'http://localhost:8082',
+    events: env.EVENTS_URL ?? 'http://localhost:8084',
+    ...apps,
+  };
+};
+
+/** The only routes anyone may reach without signing in. Everything else, including anything unmatched, needs a token. */
+const PUBLIC_ROUTES = new Set(['/healthz']);
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -75,7 +84,9 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   }
 
   app.addHook('onRequest', async (req, reply) => {
-    if (!req.url.startsWith('/api/')) return;
+    // Decided by the route the request matched, never by its raw URL: the router decodes
+    // the path, so "/%61pi/registry/…" reaches the registry while not starting with "/api/".
+    if (req.routeOptions.url && PUBLIC_ROUTES.has(req.routeOptions.url)) return;
     try {
       req.caller = await authenticate(req.headers.authorization, auth);
     } catch (err) {
@@ -116,7 +127,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       replyOptions: {
         rewriteRequestHeaders: (req, headers) => {
           // Who is calling comes only from the verified token. A service's own token is refused above: its audience isn't this one.
-          const clean = withoutCallerHeaders(headers);
+          // The token itself stays here: it works on every platform API, so no service, an app's least of all, is handed it.
+          const { authorization: _, ...clean } = withoutCallerHeaders(headers);
           return { ...clean, [REQUEST_ID_HEADER]: req.id, ...(req.caller ? callerHeaders(req.caller) : {}) };
         },
       },

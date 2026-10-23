@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { buildApp, parseUpstreams } from './app.ts';
+import { buildApp, defaultUpstreams, parseUpstreams } from './app.ts';
 import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
@@ -81,6 +81,23 @@ describe('gateway', () => {
     });
     expect(res.json()['x-user-id']).toBe('u-2');
     expect(res.json()['x-user-roles']).toBe('');
+  });
+
+  it('checks sign-in however the path is spelt', async () => {
+    const app = await buildApp({ upstreams: { registry: url }, auth, monitor: new HealthMonitor({ probes: [] }) });
+    // The router decodes these to /api/registry/echo; none may skip the check.
+    for (const path of ['/%61pi/registry/echo', '/api/%72egistry/echo', '/%2561pi/registry/echo', '/nothing-here']) {
+      const res = await app.inject({ method: 'GET', url: path });
+      expect(res.statusCode, path).toBe(401);
+    }
+  });
+
+  it('keeps the person’s token to itself: services get the caller, never the token', async () => {
+    const app = await buildApp({ upstreams: { registry: url }, auth, monitor: new HealthMonitor({ probes: [] }) });
+    const res = await app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: `Bearer ${await sign(ada)}` } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().authorization).toBeUndefined();
+    expect(res.json()['x-user-id']).toBe('u-1');
   });
 
   it('turns away an app’s own service token: services are reached only inside', async () => {
@@ -189,6 +206,11 @@ describe('gateway', () => {
       sample: 'http://sample:8090',
     });
     expect(parseUpstreams('')).toEqual({});
+  });
+
+  it('refuses an app service named like a platform service', () => {
+    expect(() => defaultUpstreams({ APP_UPSTREAMS: 'identity=http://elsewhere:9000' })).toThrow(/can't name identity/);
+    expect(defaultUpstreams({ APP_UPSTREAMS: 'library=http://library:8083' }).library).toBe('http://library:8083');
   });
 
   it('shows admins whether every part of the platform is answering', async () => {

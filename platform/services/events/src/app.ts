@@ -94,6 +94,17 @@ const auditSchema = {
   },
 } as const;
 
+/** The floor a service call names in X-Workspace-Id, URI-decoded; a value that won't decode is kept as sent, and fails as an unknown floor. */
+const workspaceOf = (req: FastifyRequest) => {
+  const raw = req.headers[WORKSPACE_HEADERS.id];
+  if (typeof raw !== 'string' || !raw) return undefined;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+};
+
 /** What the Shell receives: a person never sees whom else a notification went to. */
 const forCaller = ({ recipient: _, ...n }: Notification) => n;
 
@@ -136,8 +147,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
           void reply.code(403).send({ error: 'forbidden', message: `${service.app} can only send for itself, not for "${forApp}".` });
           return undefined;
         }
-        const raw = req.headers[WORKSPACE_HEADERS.id];
-        const workspace = typeof raw === 'string' && raw ? decodeURIComponent(raw) : undefined;
+        const workspace = workspaceOf(req);
         try {
           if (!grants) throw new GrantsUnavailable('The events service has no registry to check grants with.');
           if (!(await grants(service.app, workspace)).includes(scope)) {
@@ -159,8 +169,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
        * identity out of reach.
        */
       const floorOf = async (req: FastifyRequest, reply: FastifyReply): Promise<(EventFloor & { kind: string }) | null | undefined> => {
-        const raw = req.headers[WORKSPACE_HEADERS.id];
-        const id = typeof raw === 'string' && raw ? decodeURIComponent(raw) : undefined;
+        const id = workspaceOf(req);
         if (!id) return null;
         try {
           if (!floors) throw new FloorsUnavailable('The events service has no way to reach identity.');

@@ -141,6 +141,20 @@ describe('registry', () => {
     expect(clash.json().message).toBe('Library already lives at /library.');
   });
 
+  it('keeps an app out of another app’s pages, the platform’s included', async () => {
+    const app = await buildApp({ verifyService });
+    const put = (payload: object) => app.inject({ method: 'PUT', url: `/v1/apps/${(payload as { id: string }).id}`, headers: as(`app-${(payload as { id: string }).id}`), payload });
+    await put(library);
+    const underAdmin = await put({ ...library, id: 'people', route: '/admin/people' });
+    const underLibrary = await put({ ...library, id: 'papers', route: '/library/papers' });
+    const aroundLibrary = await put({ ...library, id: 'lib', route: '/lib' });
+    const trailing = await put({ ...library, id: 'copy', route: '/library/' });
+    expect([underAdmin.statusCode, underLibrary.statusCode, trailing.statusCode]).toEqual([409, 409, 409]);
+    expect(underAdmin.json().message).toBe("/admin/people is inside Admin's pages at /admin. Choose a route of its own.");
+    // Only whole segments count: /lib is beside /library, not around it.
+    expect(aroundLibrary.statusCode).toBe(201);
+  });
+
   it('records who changed the catalogue in the audit log', async () => {
     const entries: unknown[] = [];
     const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });

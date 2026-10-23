@@ -169,6 +169,8 @@ describe('events', () => {
       const audited = await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-legal'), payload: entry('document.published') });
       expect(audited.json().workspace).toEqual({ id: 'w-legal', path: ['w-org', 'w-legal'] });
       expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-gone'), payload: entry('document.published') })).statusCode).toBe(400);
+      // A floor id that won't URI-decode is an unknown floor, not a crash.
+      expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-%E0%A4%A'), payload: entry('document.published') })).statusCode).toBe(400);
       const down = await buildApp({ verifyService, floors: async () => Promise.reject(new FloorsUnavailable('down')) });
       expect((await down.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-legal'), payload: entry('document.published') })).statusCode).toBe(503);
     });

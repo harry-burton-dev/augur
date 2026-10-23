@@ -5,7 +5,9 @@ info:
   description: >
     The gateway's own API, beside the services it forwards to. Reached at
     /api/gateway/v1 by a signed-in caller. Everything else under /api/<service>
-    is forwarded to that service with the caller in x-user-* headers.
+    is forwarded to that service with the caller in x-user-* headers, and
+    without the caller's Authorization header. Every path but /healthz needs
+    a signed-in caller, however it is spelt.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
 servers:
