@@ -8,6 +8,24 @@ The gateway:
 - gives each app a number of calls a day (UTC), 500 unless an admin changes it; the shell's own assistant counts as one app, `assistant`;
 - is **off** until an admin turns it on in Admin, and can't be turned on until the server has a model.
 
+## Agents in the Shell
+
+Once models are on, the Shell has **Agents** beside Apps and Find. It lists:
+
+- **Assistant**, the Shell's own agent, always there;
+- each AI app (`"ai": true`) with an `agent` in its manifest, which the Shell talks to on the app's behalf;
+- AI apps without one, which open as apps.
+
+Choosing an agent opens its conversation at `/agents/<id>` on the floor you're on. The Shell holds the conversation (one per agent per floor, until the page is reloaded) and asks the model through the gateway, as the agent: its calls count against that app's limit, or `assistant`'s.
+
+An agent's **tools are apps' intents**. Every intent an app you can open here describes in its manifest's `intents` is offered to the model; one it doesn't describe never is. When the model asks to use one, the Shell shows a card ("Open “Q3 report” in Library?") with **Allow** and **Not now**, and nothing happens until you choose. Allow raises the intent through the Shell exactly as an app's `ctx.raise` would, so the app opens with it; Not now tells the agent it wasn't done. One thing at a time: anything else the model asks for in the same turn is turned down.
+
+Turning models off in Admin takes Agents out of the Shell the next time it loads.
+
+## Turning it on
+
+Admin, **Agents and AI** (under Platform): the switch, the calls each app gets a day, which model the server has, and what each app used today. The switch can't be turned on until the server has a model. Every change is in Activity.
+
 ## Setting up the model
 
 The gateway speaks the OpenAI-style chat completions API (`POST <url>/chat/completions`), which most providers and proxies answer. Set three things in `infra/deploy/.env`:
@@ -51,5 +69,31 @@ console.log(answer.message.content, answer.usage);
 Pass `tools` (a name, a description and a JSON schema for the arguments) and the answer may carry `toolCalls` instead of text: the app does what was asked, then sends the result back as a `tool` message with the call's `toolCallId`. The gateway never does anything itself.
 
 `askModel` throws a `ServiceCallError` whose message says why when models are off (403), the app isn't granted `models:use` on that floor (403), it has used its calls for today (429), or the provider failed (502, 504).
+
+## Giving agents an app's intents, or an agent of its own
+
+In the app's manifest (see [Build an app](build-an-app.md#agents)):
+
+```json
+{
+  "handles": ["document.open"],
+  "intents": [
+    {
+      "type": "document.open",
+      "description": "Open a document by its title",
+      "payload": { "type": "object", "properties": { "title": { "type": "string" } }, "required": ["title"] },
+      "confirm": "Open “{title}”"
+    }
+  ],
+  "ai": true,
+  "agent": { "instructions": "You find documents and summarise them.", "greeting": "What are you looking for?" },
+  "scopes": ["models:use"]
+}
+```
+
+- `intents` describes intents from `handles` for agents: `description` is what the model chooses by, `payload` a JSON schema it fills in, and `confirm` what the person is asked, with `{field}` from the payload. The Shell adds "in <app>?".
+- `agent` gives an AI app its own agent in the Shell. It needs `"ai": true` and the `models:use` scope, granted on the floor.
+
+The intent arrives in the app's `ctx.intent` as from any other app, so it must check the payload like any input: it was written by a model.
 
 The gateway's API is in [contracts/models.openapi.yaml](../contracts/models.openapi.yaml).

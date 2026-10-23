@@ -33,15 +33,50 @@ export interface AppManifestEntry {
   floors?: WorkspaceKind[];
   /**
    * What the app shows on each kind of floor, for the shell to place. Each
-   * names a `module`: a key of the entry's `surfaces` (SDK 1.2).
+   * names a `module`: a key of the entry's `surfaces` (SDK 1.1).
    */
   surfaces?: ManifestSurface[];
   /**
    * The app's service answers `GET /v1/search?q=` with a `SearchAnswer`, and
    * the shell's Find asks it, through the gateway on the person's floor, as
-   * they type (SDK 1.3).
+   * they type (SDK 1.1).
    */
   search?: boolean;
+  /**
+   * An AI app's agent, listed in the shell's Agents (SDK 1.2). The shell holds
+   * the conversation, through the platform's model gateway, as this app: it
+   * needs `ai: true` and the `models:use` scope.
+   */
+  agent?: AgentInfo;
+  /**
+   * What some of the intents in `handles` do (SDK 1.2). Each one described
+   * here is a tool any agent may ask to use; the shell asks the person first
+   * and raises it only if they allow it. An intent not described is never offered.
+   */
+  intents?: IntentInfo[];
+}
+
+/** How an AI app's agent talks in the shell's Agents. */
+export interface AgentInfo {
+  /** What the model is told about the agent: what it is for, and how to answer. */
+  instructions: string;
+  /** Its first line when a conversation starts. */
+  greeting?: string;
+}
+
+/** One intent an app handles, described for agents. */
+export interface IntentInfo {
+  /** One of the app's `handles`. */
+  type: string;
+  /** What it does, for the model to choose it by: "Open a document by its title". */
+  description: string;
+  /** A JSON schema for the intent's payload, which the model fills in. */
+  payload?: Record<string, unknown>;
+  /**
+   * What the person is asked before it's done, with `{field}` filled from the
+   * payload: "Open {title}". Without it, the description.
+   */
+  confirm?: string;
 }
 
 /**
@@ -67,7 +102,7 @@ export interface SearchResult {
 
 /**
  * One thing an app shows on one kind of floor. The shell places `card`s on
- * Home (SDK 1.2); the other slots are declared and checked, and placed later.
+ * Home (SDK 1.1); the other slots are declared and checked, and placed later.
  */
 export interface ManifestSurface {
   /** "team" means any team, at any depth. */
@@ -144,7 +179,7 @@ export interface NotifyMessage {
   body?: string;
   /** The person has to do something: it's marked, counted in the band, and shown on Home. */
   needsYou?: boolean;
-  /** Up to two things to do right from the stream, such as "Approve" and "Open" (SDK 1.2). Extras are dropped. */
+  /** Up to two things to do right from the stream, such as "Approve" and "Open" (SDK 1.1). Extras are dropped. */
   actions?: NotificationAction[];
 }
 
@@ -184,7 +219,7 @@ export interface MountContext {
    */
   request<T = unknown>(intent: Intent): Promise<T>;
   /**
-   * A notification on the shell's stream. `actions` (SDK 1.2) puts up to two
+   * A notification on the shell's stream. `actions` (SDK 1.1) puts up to two
    * buttons on it, each raising an intent through the shell when pressed,
    * exactly as `raise` does; the app runs no code in the stream.
    */
@@ -220,7 +255,7 @@ export interface MicroFrontend {
   unmount?(el: HTMLElement): void | Promise<void>;
   /**
    * The app's smaller pieces the shell places outside the app itself, by the
-   * `module` its manifest's `surfaces` name (SDK 1.2): a glance card on Home,
+   * `module` its manifest's `surfaces` name (SDK 1.1): a glance card on Home,
    * for one. Each is mounted with the same context as the app, at path `/`.
    */
   surfaces?: Record<string, Surface>;

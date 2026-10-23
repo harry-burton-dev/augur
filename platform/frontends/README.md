@@ -4,7 +4,7 @@
 | --- | --- |
 | `shell/` | The host (`@augur/shell`, React + Vite). Wraps the UI kit's `ui-shell`, loads the role-filtered manifest from the registry through the gateway, mounts the app the URL points at into the Shell's stage, routes intents to the app that handles them, and turns `ctx.notify()` into notifications on the Shell's stream. |
 | `home/` | Home (`@augur/home`, at `/home`): what needs you, and apps' glance cards. Built as one ES module at `dist/entry.js`. |
-| `admin/` | Admin (`@augur/admin`, at `/admin`, admins only): people, departments and apps. Its screens call identity's `/v1/admin/*` and the registry's `/v1/apps` and `/v1/origins` through the gateway, never Keycloak. |
+| `admin/` | Admin (`@augur/admin`, at `/admin`, admins only): people, departments, apps, status, activity, and Agents and AI (the model gateway's switch and daily limit). Its screens call identity's `/v1/admin/*` and the registry's `/v1/apps` and `/v1/origins` through the gateway, never Keycloak. |
 
 Product apps keep their own frontends under `apps/<app>/frontend`.
 
@@ -14,6 +14,10 @@ Product apps keep their own frontends under `apps/<app>/frontend`.
 2. The shell matches the URL to the longest route prefix and imports the app's `entry` with the browser's own dynamic `import()`.
 3. The module default-exports a `MicroFrontend` (`defineMicroFrontend` from `@augur/mfe-sdk`). The shell calls `mount(el, ctx)` on a fresh element, and calls `unmount(el)` before the next app opens.
 4. An app asks for anything outside itself through `ctx`: `raise(intent)` to open whichever app handles it, `request(intent)` to ask that app for an answer, `notify()` for the Shell's stream, `bus` for events, `fetch(path)` for gateway calls on the current floor (`getToken()` when it needs the token itself).
+
+## Agents
+
+`/agents/<id>` on any floor is the shell's own page, not an app's (the registry keeps the route and the id `assistant` for it). While the model gateway says models are on, the Shell shows Agents: the shell's Assistant and each AI app's `agent`. The shell holds each conversation (`host/agents.ts`), asks `/api/models/v1/chat` as the agent on the current floor, offers the model every intent apps here describe in `intents`, and shows `ui-confirm-card` before raising any of them. Nothing is raised until the person allows it. See [Agents and models](../../docs/agents.md).
 
 ## Floors
 

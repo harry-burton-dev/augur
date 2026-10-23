@@ -75,7 +75,7 @@ export default defineMicroFrontend({
     render(html``, el);
     window.referenceUnmounts = (window.referenceUnmounts ?? 0) + 1;
   },
-  // SDK 1.2: a glance card, which Home places on the person's own floor.
+  // SDK 1.1: a glance card, which Home places on the person's own floor.
   surfaces: {
     './Glance': {
       mount(el: HTMLElement, ctx: MountContext) {

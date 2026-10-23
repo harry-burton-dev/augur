@@ -44,7 +44,8 @@ export interface ShellAgent {
   id: string;
   name: string;
   detail?: string;
-  status: StatusName;
+  /** Where its conversation is: `needs` when it's waiting for you to allow something. None when there's nothing going on. */
+  status?: StatusName;
   /** The app that opens when the agent is chosen. */
   app?: string;
 }
@@ -713,6 +714,7 @@ export class UiShell extends LitElement {
       .text b { font-weight: 400; font-size: var(--type-body); line-height: var(--leading-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .text span, .meta { font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .meta { flex: none; font-variant-numeric: tabular-nums; }
+      .ai-mark { flex: none; color: var(--green); }
       .x { flex: none; display: flex; width: 28px; height: 28px; align-items: center; justify-content: center; color: var(--ink-muted); border-radius: 50% !important; }
       .x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
       .note { margin: 0; padding: var(--space-6) var(--space-4); text-align: center; color: var(--ink-muted); }
@@ -1047,13 +1049,14 @@ export class UiShell extends LitElement {
   private renderAgents() {
     if (this.agentsLoading) return html`<p class="note" aria-busy="true">Catching up…</p><span class="skel"></span>`;
     if (this.agentsError) return html`<p class="note error" role="alert">${this.agentsError}</p><button class="retry" @click=${() => this.emit('ui-retry', { what: 'agents' })}>Try again</button>`;
-    if (!this.agents.length) return html`<p class="note" tabindex="0">No agents are running.</p>`;
-    const sorted = [...this.agents].sort((a, b) => statusUrgency.indexOf(a.status) - statusUrgency.indexOf(b.status));
+    if (!this.agents.length) return html`<p class="note" tabindex="0">No agents yet.</p>`;
+    const rank = (a: ShellAgent) => (a.status ? statusUrgency.indexOf(a.status) : statusUrgency.length);
+    const sorted = [...this.agents].sort((a, b) => rank(a) - rank(b));
     const firstNeeds = sorted.findIndex((a) => a.status === 'needs');
     return html`<ul>${sorted.map(
       (a, i) => html`<li><button class="row" @click=${() => (a.app ? this.openApp(a.app) : this.emit('ui-function', { id: `agent:${a.id}` }))}>
         <span class="text"><b>${a.name}</b>${a.detail ? html`<span>${a.detail}</span>` : nothing}</span>
-        <ui-status status=${a.status} ?next=${i === firstNeeds}></ui-status>
+        ${a.status ? html`<ui-status status=${a.status} ?next=${i === firstNeeds}></ui-status>` : html`<ui-icon name="agents" class="ai-mark"></ui-icon>`}
       </button></li>`,
     )}</ul>`;
   }

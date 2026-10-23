@@ -141,6 +141,28 @@ describe('registry', () => {
     expect(clash.json().message).toBe('Library already lives at /library.');
   });
 
+  it('keeps the shell’s own agent and its Agents route for the shell', async () => {
+    const app = await buildApp({ verifyService });
+    const put = (payload: { id: string }) => app.inject({ method: 'PUT', url: `/v1/apps/${payload.id}`, headers: as(`app-${payload.id}`), payload });
+    const assistant = await put({ ...library, id: 'assistant', route: '/assistant' });
+    const agents = await put({ ...library, route: '/agents/library' });
+    expect([assistant.statusCode, agents.statusCode]).toEqual([409, 409]);
+    expect(agents.json().message).toBe("/agents is the shell's own. Choose a route of its own.");
+  });
+
+  it('keeps an AI app’s agent and the intents it describes for agents', async () => {
+    const app = await buildApp({ verifyService });
+    const put = (extra: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, ...extra } });
+    const open = { type: 'document.open', description: 'Open a document by its title', payload: { type: 'object', properties: { title: { type: 'string' } } }, confirm: 'Open {title}' };
+    expect((await put({ agent: { instructions: 'You find documents.' } })).statusCode).toBe(400);
+    expect((await put({ intents: [{ ...open, type: 'document.delete' }] })).json().message).toBe('Library describes the intent document.delete, but doesn\'t list it in "handles".');
+    expect((await put({ intents: [open, open] })).statusCode).toBe(400);
+    const ok = await put({ ai: true, agent: { instructions: 'You find documents.', greeting: 'What are you looking for?' }, intents: [open] });
+    expect(ok.statusCode).toBe(201);
+    const manifest = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json();
+    expect(manifest.find((a: { id: string }) => a.id === 'library')).toMatchObject({ agent: { greeting: 'What are you looking for?' }, intents: [open] });
+  });
+
   it('keeps an app out of another app’s pages, the platform’s included', async () => {
     const app = await buildApp({ verifyService });
     const put = (payload: object) => app.inject({ method: 'PUT', url: `/v1/apps/${(payload as { id: string }).id}`, headers: as(`app-${(payload as { id: string }).id}`), payload });

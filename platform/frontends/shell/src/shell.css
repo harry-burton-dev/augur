@@ -15,6 +15,18 @@ ui-shell[open] ui-centre-menu { opacity: 0; pointer-events: none; }
   gap: var(--space-5);
 }
 .loading { color: var(--ink-muted); }
+/* A conversation with an agent: the shell's own page, on the water like an app. */
+.agent-pane {
+  box-sizing: border-box;
+  height: 100%;
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: var(--space-7) var(--edge) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.agent-pane ui-conversation { flex: 1; min-height: 0; border-radius: var(--radius-card); background: var(--surface-pane); }
 /* A person's own Reduce motion: transitions and loops hold still, as under the system setting. */
 html[data-motion='reduce'] {
   --motion-instant: 0.01ms; --motion-quick: 0.01ms; --motion-base: 0.01ms; --motion-slow: 0.01ms; --motion-calm: 0.01ms;

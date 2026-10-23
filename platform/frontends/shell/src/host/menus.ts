@@ -1,18 +1,25 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import type { MenuCategory, MenuItem, ShellFindResult } from '@augur/ui-kit';
+import { AGENTS_ROUTE } from './agents.js';
 import { hrefFor, matchRoute } from './routes.js';
 
 /**
  * What the shell shows at a location: Title (every app a chapter) at "/",
- * an app's Orbit menu at the app's root when it has one, or the app itself.
+ * an app's Orbit menu at the app's root when it has one, the app itself, or
+ * a conversation with an agent at /agents/<id>, which is the shell's own.
  */
 export type Screen =
   | { kind: 'title' }
   | { kind: 'orbit'; app: AppManifestEntry }
-  | { kind: 'app'; app: AppManifestEntry; path: string };
+  | { kind: 'app'; app: AppManifestEntry; path: string }
+  | { kind: 'agent'; agent: string };
 
 export function screenFor(manifest: AppManifestEntry[], pathname: string): Screen | undefined {
   if (pathname === '/' || pathname === '') return { kind: 'title' };
+  if (pathname.startsWith(`${AGENTS_ROUTE}/`)) {
+    const agent = pathname.slice(AGENTS_ROUTE.length + 1).split('/')[0];
+    return agent ? { kind: 'agent', agent: decodeURIComponent(agent) } : undefined;
+  }
   const match = matchRoute(manifest, pathname);
   if (!match) return undefined;
   if (match.path === '/' && match.app.menu?.length) return { kind: 'orbit', app: match.app };
@@ -69,6 +76,7 @@ export function orbitMenu(app: AppManifestEntry): MenuCategory[] {
 /** One step back: from inside an app to its Orbit, from Orbit (or an app with no menu) to Title. */
 export function backFrom(screen: Screen | undefined): string | undefined {
   if (!screen || screen.kind === 'title') return undefined;
+  if (screen.kind === 'agent') return '/';
   if (screen.kind === 'app' && screen.app.menu?.length && screen.path !== '/') return hrefFor(screen.app);
   return '/';
 }

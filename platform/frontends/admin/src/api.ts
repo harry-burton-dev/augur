@@ -135,6 +135,28 @@ export interface PlatformStatus {
   backups?: BackupStatus;
 }
 
+/** How models are used, as the model gateway says. */
+export interface ModelSettings {
+  enabled: boolean;
+  /** Calls per app per day, UTC. */
+  dailyLimit: number;
+  updatedBy?: string;
+  updatedAt?: string;
+  /** A model is set up on the server. */
+  ready: boolean;
+  provider?: string;
+  model?: string;
+}
+
+/** One app's use of the model on one day. */
+export interface ModelUsage {
+  day: string;
+  app: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface NewPerson {
   firstName: string;
   lastName: string;
@@ -223,6 +245,10 @@ export class AdminApi {
   removeOrigin = (origin: string) => this.call<void>('DELETE', `/api/registry/v1/origins/${encodeURIComponent(origin)}`);
 
   status = () => this.call<PlatformStatus>('GET', '/api/gateway/v1/status');
+
+  models = () => this.call<ModelSettings>('GET', '/api/models/v1/settings');
+  setModels = (changes: Partial<Pick<ModelSettings, 'enabled' | 'dailyLimit'>>) => this.call<ModelSettings>('PUT', '/api/models/v1/settings', changes);
+  modelUsage = () => this.call<{ dailyLimit: number; days: ModelUsage[] }>('GET', '/api/models/v1/usage');
 }
 
 export const fullName = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => `${p.firstName} ${p.lastName}`.trim() || p.username;

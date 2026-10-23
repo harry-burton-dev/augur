@@ -269,13 +269,15 @@ describe('ui-shell', () => {
   it('sorts agents by urgency and says when none run', async () => {
     el.openView('agents');
     await el.updateComplete;
-    expect(root().querySelector('.view .note')!.textContent).toBe('No agents are running.');
+    expect(root().querySelector('.view .note')!.textContent).toBe('No agents yet.');
     el.agents = [
       { id: '1', name: 'Indexer', status: 'running' },
       { id: '2', name: 'Reviewer', status: 'needs' },
+      { id: '3', name: 'Assistant', detail: 'Ask anything' },
     ];
     await el.updateComplete;
-    expect([...root().querySelectorAll('.view .row b')].map((b) => b.textContent)).toEqual(['Reviewer', 'Indexer']);
+    expect([...root().querySelectorAll('.view .row b')].map((b) => b.textContent)).toEqual(['Reviewer', 'Indexer', 'Assistant']);
+    expect(root().querySelectorAll('.view ui-status')).toHaveLength(2);
   });
 
   it('shows stream loading and error states', async () => {

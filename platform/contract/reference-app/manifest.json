@@ -9,5 +9,13 @@
   "icon": "apps",
   "handles": ["reference.show", "reference.answer"],
   "search": true,
+  "intents": [
+    {
+      "type": "reference.show",
+      "description": "Show something in the Reference app",
+      "payload": { "type": "object", "properties": { "what": { "type": "string" } } },
+      "confirm": "Show “{what}”"
+    }
+  ],
   "surfaces": [{ "floor": "personal", "slot": "card", "module": "./Glance" }]
 }

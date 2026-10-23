@@ -18,7 +18,7 @@ import {
   type ServiceVerifier,
 } from '@augur/service-kit';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
-import { appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, surfaceProblem, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
+import { agentProblem, appEntrySchema, conflictFor, entryOriginProblem, parseOrigin, platformApps, surfaceProblem, unbuiltApps, versionProblem, type AppEntry } from './manifest.ts';
 import { MemoryAppStore, RouteTakenError, UnknownVersionError, type AppRecord, type AppStore, type FloorRule } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
@@ -233,7 +233,7 @@ export const buildApp = async ({ store = new MemoryAppStore(), verifyService, au
           if (!by) return reply;
           const entry = req.body;
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
-          const badVersion = versionProblem(entry) ?? surfaceProblem(entry);
+          const badVersion = versionProblem(entry) ?? surfaceProblem(entry) ?? agentProblem(entry);
           if (badVersion) return reply.code(400).send({ error: 'bad_request', message: badVersion });
           const badOrigin = entryOriginProblem(entry, await allowedOrigins());
           if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });

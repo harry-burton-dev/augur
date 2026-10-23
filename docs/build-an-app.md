@@ -66,7 +66,7 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.getToken()` | A current token to send as `Authorization: Bearer …` to `/api/<id>/…` |
 | `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. SDK 1.1 |
 | `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on. SDK 1.1 |
-| `ctx.notify({ title, body?, needsYou?, actions? })` | A notification on the shell's stream. `actions` (SDK 1.2) is up to two `{ label, intent }` buttons on it; pressing one raises the intent through the shell, as `ctx.raise` does |
+| `ctx.notify({ title, body?, needsYou?, actions? })` | A notification on the shell's stream. `actions` (SDK 1.1) is up to two `{ label, intent }` buttons on it; pressing one raises the intent through the shell, as `ctx.raise` does |
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
 | `ctx.request(intent)` | Ask whichever app handles an intent for an answer; it opens over yours. Rejects with `isIntentCancelled(err)` when the person closes it |
 | `ctx.intent`, `ctx.reply` | Present when your app was opened to handle an intent, or to answer a request (`reply.respond(result)`) |
@@ -126,7 +126,7 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 - `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit; see [platform/frontends](../platform/frontends/README.md#title-and-orbit).
 - `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`), `models:use` to ask an AI model through the model gateway (`askModel`, see [Agents and models](agents.md)). An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope. A new version that asks for more scopes is still served, but gets the new ones only once an admin allows them in Admin, Apps.
 - `floors` is the kinds of floor the app works on: `personal` (someone's own), `team` (any team, at any depth) and `org`. Leave it out for all three. The shell never offers the app on another kind.
-- `surfaces` says what the app shows on each kind of floor, for the shell to place: a `page`, a `card` on the floor's page, a `panel`, the floor's `settings` or `admin`, each from a `module` the entry exposes. `role` limits one to members or leads there; `rollup` means it shows the floor and the teams below it that the person is on (identity's `GET /v1/me/workspaces/{id}/rollup`). Each surface's floor must be in `floors`. When several match, the most specific floor wins, then a role condition, then manifest order. The shell places `card`s on Home (SDK 1.2); the other slots are checked and kept, and placed later.
+- `surfaces` says what the app shows on each kind of floor, for the shell to place: a `page`, a `card` on the floor's page, a `panel`, the floor's `settings` or `admin`, each from a `module` the entry exposes. `role` limits one to members or leads there; `rollup` means it shows the floor and the teams below it that the person is on (identity's `GET /v1/me/workspaces/{id}/rollup`). Each surface's floor must be in `floors`. When several match, the most specific floor wins, then a role condition, then manifest order. The shell places `card`s on Home (SDK 1.1); the other slots are checked and kept, and placed later.
 
 ### A glance card on Home
 
@@ -150,9 +150,18 @@ export default defineMicroFrontend({
 
 The tile is about 320 by 200 pixels and has the app's name and icon above the card. A card that's missing or throws shows "couldn't show this right now" in its tile without touching the rest of Home. Keep it fast: Home mounts every card at once.
 
-- `search: true` puts the app's content in the shell's Find; see [Find](#find) below. SDK 1.3.
+- `search: true` puts the app's content in the shell's Find; see [Find](#find) below. SDK 1.1.
 
 `pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
+
+### Agents
+
+Agents in the Shell can use an app's intents as tools, and an AI app can have an agent of its own. Both are manifest fields (SDK 1.2):
+
+- `intents` describes some of `handles` for agents: `{ "type", "description", "payload"?, "confirm"? }`. `payload` is a JSON schema the model fills in; `confirm` is what the person is asked before it's raised, with `{field}` from the payload ("Open “{title}”"). An intent not described is never offered to an agent. Whatever the model fills in reaches `ctx.intent` like any intent, so check it as you would any input.
+- `agent` (`{ "instructions", "greeting"? }`) gives an AI app (`"ai": true`) its own agent in the Shell's Agents, which asks the model as the app: add `models:use` to `scopes`.
+
+The person always sees what an agent asks to do and allows it first. `pnpm dev:app` has models on with a stand-in model that offers the intent matching what you type, so you can try yours at `/agents/assistant`. More in [Agents and models](agents.md).
 
 ### Find
 

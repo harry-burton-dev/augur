@@ -1,5 +1,5 @@
 import type { DetailedHTMLProps, HTMLAttributes, Ref } from 'react';
-import type { UiButton, UiCentreMenu, UiDialog, UiHeading, UiShell } from '@augur/ui-kit';
+import type { UiButton, UiCentreMenu, UiConversation, UiDialog, UiHeading, UiShell } from '@augur/ui-kit';
 
 type Element<T, P = object> = DetailedHTMLProps<HTMLAttributes<T>, T> & P & { ref?: Ref<T> };
 
@@ -10,6 +10,7 @@ declare module 'react' {
       'ui-centre-menu': Element<UiCentreMenu, { variant?: 'orbit' | 'title'; label?: string }>;
       'ui-heading': Element<UiHeading, { heading?: string; summary?: string; eyebrow?: string; size?: 's' | 'm' | 'l' }>;
       'ui-button': Element<UiButton, { kind?: string }>;
+      'ui-conversation': Element<UiConversation>;
       'ui-dialog': Element<UiDialog, { heading?: string; summary?: string; size?: 'decision' | 'glance' | 'read'; cancelLabel?: string }>;
     }
   }

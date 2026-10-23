@@ -26,7 +26,26 @@ export interface AppEntry {
   surfaces?: Surface[];
   /** The app's service answers GET /v1/search?q=, and the shell's Find asks it. */
   search?: boolean;
+  /** An AI app's agent in the shell's Agents: what it is told, and how it says hello. */
+  agent?: { instructions: string; greeting?: string };
+  /** What some of the intents in `handles` do: each one described becomes a tool agents may ask to use. */
+  intents?: IntentInfo[];
 }
+
+export interface IntentInfo {
+  /** One of the app's `handles`. */
+  type: string;
+  /** What it does, for the model: "Open a document by its title". */
+  description: string;
+  /** A JSON schema for the payload, as an object. */
+  payload?: Record<string, unknown>;
+  /** What the person is asked before it's done, with {field} from the payload: "Open {title}". */
+  confirm?: string;
+}
+
+/** The shell's own agent: no app can take its id, and its Agents live at /agents. */
+export const SHELL_AGENT = 'assistant';
+export const SHELL_ROUTES = ['/agents'];
 
 export const FLOOR_KINDS = ['personal', 'team', 'org'] as const;
 export type FloorKind = (typeof FLOOR_KINDS)[number];
@@ -86,7 +105,7 @@ export const platformApps: AppEntry[] = [
     version: PLATFORM_APP_VERSIONS.admin,
     sdk: '^1.0.0',
     icon: 'admin',
-    description: 'People, departments, apps, status and activity',
+    description: 'People, departments, apps, status, activity and AI',
     requiredRole: 'admin',
     menu: [
       {
@@ -116,6 +135,7 @@ export const platformApps: AppEntry[] = [
         items: [
           { label: 'Status', icon: 'pulse', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },
           { label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' },
+          { label: 'Agents and AI', icon: 'agents', path: '/agents', detail: 'On or off, calls a day', keywords: 'ai model llm assistant openrouter litellm limit' },
         ],
       },
     ],
@@ -146,6 +166,27 @@ export const appEntrySchema = {
     handles: { type: 'array', maxItems: 50, items: { type: 'string', pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 } },
     ai: { type: 'boolean' },
     search: { type: 'boolean' },
+    agent: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['instructions'],
+      properties: { instructions: { type: 'string', minLength: 1, maxLength: 4000 }, greeting: { type: 'string', maxLength: 200 } },
+    },
+    intents: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['type', 'description'],
+        properties: {
+          type: { type: 'string', pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 },
+          description: { type: 'string', minLength: 1, maxLength: 300 },
+          payload: { type: 'object' },
+          confirm: { type: 'string', minLength: 1, maxLength: 120 },
+        },
+      },
+    },
     scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } },
     floors: { type: 'array', minItems: 1, uniqueItems: true, maxItems: FLOOR_KINDS.length, items: { enum: [...FLOOR_KINDS] } },
     surfaces: {
@@ -215,11 +256,24 @@ export const surfaceProblem = (entry: AppEntry): string | undefined => {
   return stray ? `${entry.name} has a ${stray.slot} for the ${stray.floor} floor, but its floors don't include ${stray.floor}.` : undefined;
 };
 
+/** Why an app's agent or described intents don't fit it, or undefined when they do. */
+export const agentProblem = (entry: AppEntry): string | undefined => {
+  if (entry.agent && !entry.ai) return `${entry.name} has an agent, so it must be marked "ai": true.`;
+  const stray = entry.intents?.find((i) => !entry.handles?.includes(i.type));
+  if (stray) return `${entry.name} describes the intent ${stray.type}, but doesn't list it in "handles".`;
+  const types = entry.intents?.map((i) => i.type) ?? [];
+  if (new Set(types).size !== types.length) return `${entry.name} describes an intent twice.`;
+  return undefined;
+};
+
 /** Why an app can't take the id or route it asked for, or undefined when it can. */
 export const conflictFor = (entry: AppEntry, others: AppEntry[]): string | undefined => {
   const platform = platformApps.find((a) => a.id === entry.id);
   if (platform) return `"${entry.id}" is one of the platform's own apps.`;
+  if (entry.id === SHELL_AGENT) return `"${entry.id}" is the shell's own agent.`;
   const route = trimRoute(entry.route);
+  const shell = SHELL_ROUTES.find((r) => route === r || route.startsWith(`${r}/`) || r.startsWith(`${route}/`));
+  if (shell) return `${shell} is the shell's own. Choose a route of its own.`;
   const all = [...platformApps, ...others].filter((a) => a.id !== entry.id);
   const sameRoute = all.find((a) => trimRoute(a.route) === route);
   if (sameRoute) return `${sameRoute.name} already lives at ${entry.route}.`;

@@ -32,6 +32,31 @@ export const devSession = (user: User): Session => ({
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 
+type StandInMessage = { role: string; content: string };
+type StandInTool = { name: string; description: string; parameters?: { properties?: Record<string, { type?: string }> } };
+const words = (text: string) => text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [];
+
+/**
+ * The model gateway's stand-in model, in the browser: it offers the tool whose
+ * name and description best match what was said, so an app's intents can be
+ * tried as agents' tools with nothing behind the shell.
+ */
+export const standInModel = ({ messages, tools = [] }: { messages: StandInMessage[]; tools?: StandInTool[] }) => {
+  const last = messages[messages.length - 1];
+  if (last?.role === 'tool') return { message: { role: 'assistant', content: /not now/i.test(last.content) ? 'All right, I’ll leave that.' : 'Done.' } };
+  const said = last?.role === 'user' ? last.content : '';
+  const asked = new Set(words(said));
+  const best = tools
+    .map((tool) => ({ tool, hits: [...new Set(words(`${tool.name.replace(/[_.-]/g, ' ')} ${tool.description}`))].filter((w) => asked.has(w)).length }))
+    .filter((t) => t.hits > 0)
+    .sort((a, b) => b.hits - a.hits)[0];
+  if (best) {
+    const first = Object.entries(best.tool.parameters?.properties ?? {}).find(([, p]) => p.type === 'string')?.[0];
+    return { message: { role: 'assistant', content: '', toolCalls: [{ id: `call-${messages.length}`, name: best.tool.name, arguments: first ? { [first]: said } : {} }] } };
+  }
+  return { message: { role: 'assistant', content: `I’m a stand-in model, so I can’t really answer. You said: “${said}”` } };
+};
+
 /** Home, from its build in `frontends/home/dist`, so an app's glance card can be seen where it goes. */
 export const devHome: AppManifestEntry = { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.0.0', sdk: '^1.0.0', icon: 'home', description: 'What needs you' };
 
@@ -64,6 +89,9 @@ export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...arg
       return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
     }
     if (path.startsWith('/api/events/v1/notifications/')) return new Response(null, { status: 204 });
+    // Models are on, with the stand-in model: the app's intents can be tried as agents' tools.
+    if (path === '/api/models/v1/status') return json({ enabled: true, ready: true });
+    if (path === '/api/models/v1/chat') return json({ ...standInModel(JSON.parse(String(init?.body ?? '{}'))), usage: { inputTokens: 0, outputTokens: 0 }, model: 'stand-in' });
     return real(input, init);
   };
 };

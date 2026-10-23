@@ -1,7 +1,12 @@
 import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
-import { defaultFunctions, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@augur/ui-kit';
+import { defaultFunctions, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiConversation, type UiDialog, type UiShell } from '@augur/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AgentConversation,
+  agentsFor,
+  instructionsFor,
+  shellAgents,
+  toolsFor,
   AppMounter,
   applyPreferences,
   backFrom,
@@ -46,6 +51,8 @@ export interface HostProps {
   eventsUrl?: string;
   /** Where Identity keeps the person's preferences, through the gateway. */
   preferencesUrl?: string;
+  /** Where the model gateway is reached, through the gateway: Agents show when it says models are on. */
+  modelsUrl?: string;
   fetchImpl?: typeof fetch;
   importEntry?: ImportEntry;
 }
@@ -54,11 +61,8 @@ type Problem = { title: string; summary: string; retry: () => void; action?: str
 
 const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai });
 
-/**
- * What the Shell offers. Agents stay off until they are designed and have
- * something behind them; floors replace Switch workspace.
- */
-const alphaFunctions = defaultFunctions.filter((f) => f.id !== 'agents');
+/** What the Shell offers. Agents only while an admin has models turned on; floors replace Switch workspace. */
+const functionsFor = (agentsOn: boolean) => (agentsOn ? defaultFunctions : defaultFunctions.filter((f) => f.id !== 'agents'));
 
 /** The water for each screen: Title on Minimal, Orbit on Deep Ocean, apps on Calm Tide. */
 const waterFor = (screen: Screen | undefined) => (screen?.kind === 'title' ? 'Minimal' : screen?.kind === 'orbit' ? 'Deep Ocean' : 'Calm Tide');
@@ -76,6 +80,7 @@ export function Host({
   manifestUrl = '/api/registry/v1/manifest',
   eventsUrl = '/api/events/v1',
   preferencesUrl = '/api/identity/v1/me/preferences',
+  modelsUrl = '/api/models/v1',
   fetchImpl = fetch,
   importEntry,
 }: HostProps) {
@@ -126,6 +131,15 @@ export function Host({
       }),
     [preferencesUrl, session, fetchImpl],
   );
+
+  /** Conversations with agents, one per agent per floor, for as long as the page is open. */
+  const conversations = useRef(new Map<string, AgentConversation>());
+  const conversationRef = useRef<UiConversation>(null);
+  /** Bumped whenever a conversation changes, so what shows it is drawn again. */
+  const [talked, setTalked] = useState(0);
+  /** Whether an admin has models on: until then the Shell has no Agents. */
+  const [agentsOn, setAgentsOn] = useState(false);
+  const [agentsAttempt, setAgentsAttempt] = useState(0);
 
   const [manifest, setManifest] = useState<AppManifestEntry[] | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -184,6 +198,20 @@ export function Host({
       live = false;
     };
   }, [session, manifestUrl, fetchImpl, attempt, floorId]);
+
+  // Agents show only while models are on; asked once, and again when the person retries.
+  useEffect(() => {
+    let live = true;
+    session
+      .getToken()
+      .then((token) => fetchImpl(`${modelsUrl}/status`, { headers: { authorization: `Bearer ${token}` } }))
+      .then(async (res) => (res.ok ? ((await res.json()) as { enabled?: boolean }) : { enabled: false }))
+      .then((s) => live && setAgentsOn(!!s.enabled))
+      .catch(() => live && setAgentsOn(false));
+    return () => {
+      live = false;
+    };
+  }, [session, modelsUrl, fetchImpl, agentsAttempt]);
 
   const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path) : undefined), [manifest, floor, where]);
 
@@ -327,7 +355,7 @@ export function Host({
   // Title and Orbit: what they hold, where they start, and where choosing leads.
   useEffect(() => {
     const menu = menuRef.current;
-    if (!menu || !manifest || !screen || screen.kind === 'app') return;
+    if (!menu || !manifest || !screen || screen.kind === 'app' || screen.kind === 'agent') return;
     let categories: MenuCategory[];
     if (screen.kind === 'title') {
       categories = titleMenu(manifest);
@@ -359,15 +387,15 @@ export function Host({
     };
   }, [manifest, screen, navigate]);
 
-  // Esc that nothing else used goes back a step: from inside an app to its Orbit, then to Title.
+  // Esc that nothing else used goes back a step: from inside an app to its Orbit, then to Title; from an agent to Title.
   useEffect(() => {
-    if (screen?.kind !== 'app') return;
+    if (screen?.kind !== 'app' && screen?.kind !== 'agent') return;
     const back = backFrom(screen);
     if (!back) return;
     const onKey = (e: KeyboardEvent) => {
       if (shellRef.current?.isOpen || broker.current.current || !escapeIsFree(e)) return;
       e.preventDefault();
-      orbitStart.current = categoryOf(screen.app, screen.path);
+      if (screen.kind === 'app') orbitStart.current = categoryOf(screen.app, screen.path);
       navigate(back);
     };
     window.addEventListener('keydown', onKey);
@@ -447,10 +475,83 @@ export function Host({
     shell.user = { name: session.user.name, email: session.user.email };
     shell.floors = session.floors;
     shell.floor = floor?.id ?? '';
-    shell.functions = alphaFunctions;
+    shell.functions = functionsFor(agentsOn);
     shell.canSwitchWorkspace = false;
     shell.version = `${__SHELL_VERSION__} · SDK ${SDK_VERSION}`;
-  }, [manifest, session, floor]);
+  }, [manifest, session, floor, agentsOn]);
+
+  // The agents on this floor, each with where its conversation is.
+  useEffect(() => {
+    const here = (floor ?? home).id;
+    shellRef.current?.setAgents(agentsOn && manifest ? shellAgents(manifest, (id) => conversations.current.get(`${here} ${id}`)?.status) : []);
+  }, [agentsOn, manifest, floor, home, talked]);
+
+  /** The conversation the location points at: one per agent per floor, started the first time it's opened. */
+  const talking = useMemo(() => {
+    if (screen?.kind !== 'agent' || !manifest || !agentsOn) return undefined;
+    const agent = agentsFor(manifest).find((a) => a.id === screen.agent);
+    if (!agent) return undefined;
+    const key = `${(floor ?? home).id} ${agent.id}`;
+    let c = conversations.current.get(key);
+    if (!c) {
+      const ask = floorFetch(session.getToken, () => floorRef.current, fetchImpl);
+      c = new AgentConversation(agent, {
+        ask: (body) => ask(`${modelsUrl}/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+        onChange: () => setTalked((n) => n + 1),
+      });
+      conversations.current.set(key, c);
+    }
+    return c;
+  }, [screen, manifest, agentsOn, floor, home, session, fetchImpl, modelsUrl]);
+
+  // An agent that isn't here: off, not on this floor, or no such agent.
+  useEffect(() => {
+    if (screen?.kind !== 'agent' || !manifest) return;
+    if (talking) return setProblem(null);
+    setProblem({
+      title: agentsOn ? 'No such agent here' : 'Agents are off',
+      summary: agentsOn ? 'That agent isn’t on this floor. Open Agents in the Shell to see the ones that are.' : 'An admin can turn agents on in Admin.',
+      retry: () => navigate('/'),
+      action: 'Go to Title',
+    });
+  }, [screen, manifest, talking, agentsOn, navigate]);
+
+  // The conversation pane: what's been said, and what the person does in it.
+  useEffect(() => {
+    const el = conversationRef.current;
+    if (!el || !talking || !manifest) return;
+    el.agent = talking.agent.name;
+    el.greeting = talking.agent.greeting ?? '';
+    el.items = talking.items;
+    el.busy = talking.busy;
+    el.error = talking.error;
+    const here = floor ?? home;
+    const tools = () => toolsFor(manifest);
+    const told = () =>
+      instructionsFor(talking.agent, { person: session.user.name, floor: here.kind === 'personal' ? 'their own floor' : here.name, manifest });
+    const onSend = (e: Event) => void talking.send((e as CustomEvent<{ text: string }>).detail.text, tools(), told());
+    const onAllow = (e: Event) => {
+      const intent = talking.allow((e as CustomEvent<{ item: { id: string } }>).detail.item.id);
+      if (intent) raise(intent).catch(() => undefined);
+    };
+    const onDecline = (e: Event) => void talking.decline((e as CustomEvent<{ item: { id: string } }>).detail.item.id, tools(), told());
+    const onRetry = () => void talking.retry(tools(), told());
+    el.addEventListener('ui-send', onSend);
+    el.addEventListener('ui-allow', onAllow);
+    el.addEventListener('ui-decline', onDecline);
+    el.addEventListener('ui-retry', onRetry);
+    return () => {
+      el.removeEventListener('ui-send', onSend);
+      el.removeEventListener('ui-allow', onAllow);
+      el.removeEventListener('ui-decline', onDecline);
+      el.removeEventListener('ui-retry', onRetry);
+    };
+  }, [talking, talked, manifest, floor, home, session, raise]);
+
+  // Opening a conversation puts you in it.
+  useEffect(() => {
+    if (talking) void conversationRef.current?.updateComplete.then(() => conversationRef.current?.focus());
+  }, [talking]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.
   useEffect(() => {
@@ -522,10 +623,14 @@ export function Host({
       for (const id of (e as CustomEvent<{ ids: string[] }>).detail.ids) if (fromEvents.current.has(id)) void feed.current?.setRead(id, false);
     };
     const onRetry = (e: Event) => {
-      if ((e as CustomEvent<{ what: string }>).detail.what === 'stream') feed.current?.start();
+      const { what } = (e as CustomEvent<{ what: string }>).detail;
+      if (what === 'stream') feed.current?.start();
+      else if (what === 'agents') setAgentsAttempt((n) => n + 1);
     };
     const onFunction = (e: Event) => {
-      if ((e as CustomEvent<{ id: string }>).detail.id === 'sign-out') void session.signOut();
+      const { id } = (e as CustomEvent<{ id: string }>).detail;
+      if (id === 'sign-out') void session.signOut();
+      else if (id.startsWith('agent:')) navigate(`/agents/${encodeURIComponent(id.slice('agent:'.length))}`);
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
@@ -537,7 +642,7 @@ export function Host({
     const onFloor = (e: Event) => {
       const to = session.floors.find((f) => f.id === (e as CustomEvent<{ id: string }>).detail.id);
       if (!to) return;
-      navigate(screen && screen.kind !== 'title' ? hrefFor(screen.app) : '/', to);
+      navigate(screen?.kind === 'agent' ? `/agents/${encodeURIComponent(screen.agent)}` : screen && screen.kind !== 'title' ? hrefFor(screen.app) : '/', to);
     };
     // Find: the shell's own pages at once, then each app's content as it answers.
     const onFind = (e: Event) => {
@@ -557,6 +662,7 @@ export function Host({
     const onPick = (e: Event) => {
       const { result } = (e as CustomEvent<{ result: ShellFindResult }>).detail;
       if (result.kind === 'page') return navigate(result.id);
+      if (result.kind === 'agent') return navigate(`/agents/${encodeURIComponent(result.id)}`);
       const found = result.kind === 'content' ? search.foundIn(result.id) : undefined;
       if (!found) return;
       const there = found.workspace ? session.floors.find((f) => f.id === found.workspace) : undefined;
@@ -593,7 +699,7 @@ export function Host({
   return (
     <ui-shell ref={shellRef} product="AUGUR">
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
-      {screen && screen.kind !== 'app' && manifest?.length ? (
+      {screen && screen.kind !== 'app' && screen.kind !== 'agent' && manifest?.length ? (
         <ui-centre-menu
           key={screen.kind === 'orbit' ? `orbit:${screen.app.id}` : 'title'}
           ref={menuRef}
@@ -601,6 +707,12 @@ export function Host({
           label={screen.kind === 'orbit' ? `${screen.app.name} menu` : 'Apps'}
         />
       ) : null}
+      {screen?.kind === 'agent' && talking && (
+        <section className="agent-pane" aria-label={`${talking.agent.name}, an agent`}>
+          <ui-heading heading={talking.agent.name} summary={talking.agent.detail ?? ''} size="s" />
+          <ui-conversation ref={conversationRef} />
+        </section>
+      )}
       {problem && (
         <section className="problem" role="alert">
           <ui-heading heading={problem.title} summary={problem.summary} size="s" />

@@ -96,9 +96,9 @@ test('fetch sends the token and the floor the app is on', async ({ page }) => {
   await expect(check(page, 'fetched')).toHaveText('dev-org Bearer dev-token');
 });
 
-// SDK 1.2: buttons on a notification, each raising an intent through the shell.
+// SDK 1.1: buttons on a notification, each raising an intent through the shell.
 test('a notification’s action raises its intent through the shell', async ({ page }) => {
-  since('1.2');
+  since('1.1');
   await page.goto('/reference/somewhere');
   await press(page, 'notify-action');
   await page.evaluate(() => (document.querySelector('ui-shell') as unknown as { openView(id: string): void }).openView('stream'));
@@ -108,7 +108,7 @@ test('a notification’s action raises its intent through the shell', async ({ p
   expect(left).not.toContain('Reference action');
 });
 
-// SDK 1.2: Home lists what needs you with its actions, and places apps' glance cards.
+// SDK 1.1: Home lists what needs you with its actions, and places apps' glance cards.
 const goTo = (page: Page, path: string) =>
   page.evaluate((to) => {
     window.history.pushState(null, '', to);
@@ -116,7 +116,7 @@ const goTo = (page: Page, path: string) =>
   }, path);
 
 test('Home lists what needs you, and its actions raise their intents', async ({ page }) => {
-  since('1.2');
+  since('1.1');
   await page.goto('/reference/somewhere');
   await press(page, 'notify-action');
   await goTo(page, '/@me/home');
@@ -127,7 +127,7 @@ test('Home lists what needs you, and its actions raise their intents', async ({ 
 });
 
 test('Home places the app’s glance card for the floor, with a working context', async ({ page }) => {
-  since('1.2');
+  since('1.1');
   await page.goto('/@me/home');
   const card = page.locator('[data-app="home"] [data-card="reference"]');
   await expect(card.locator('[data-check="card"]')).toHaveText('Reference card on me');
@@ -168,4 +168,29 @@ test('Find doesn’t wait for a slow app: it says so, and lets go after the budg
   await expect(page.locator('ui-shell .view .row', { hasText: 'Reference' }).first()).toBeVisible();
   await expect(page.locator('ui-shell .view .note.small')).toHaveText('Still looking…');
   await expect(page.locator('ui-shell .view .note.small')).toHaveText('Didn’t answer in time.', { timeout: 3000 });
+});
+
+// SDK 1.2: an app's described intents are agents' tools, raised only once the person allows it.
+const askAssistant = async (page: Page, text: string) => {
+  await page.goto('/agents/assistant');
+  const field = page.locator('ui-conversation textarea');
+  await field.fill(text);
+  await field.press('Enter');
+  return page.locator('ui-conversation ui-confirm-card[state="asking"]');
+};
+
+test('an agent raises an app’s intent only after the person allows it', async ({ page }) => {
+  const card = await askAssistant(page, 'show the reference thing');
+  await expect(card.locator('h3')).toHaveText('Show “show the reference thing” in Reference?');
+  await expect(page.locator('[data-app="reference"]')).toHaveCount(0);
+  await card.locator('ui-button', { hasText: 'Allow' }).click();
+  await expect(check(page, 'intent')).toHaveText('reference.show {"what":"show the reference thing"}');
+});
+
+test('an agent’s ask the person turns down is never raised', async ({ page }) => {
+  const card = await askAssistant(page, 'show the reference thing');
+  await card.locator('ui-button', { hasText: 'Not now' }).click();
+  await expect(page.locator('ui-conversation ui-confirm-card[state="declined"]')).toHaveCount(1);
+  await expect(page.locator('ui-conversation .agent .said').last()).toHaveText('All right, I’ll leave that.');
+  await expect(page.locator('[data-app="reference"]')).toHaveCount(0);
 });

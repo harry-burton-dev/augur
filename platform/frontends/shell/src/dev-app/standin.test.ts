@@ -1,6 +1,6 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { devHome, devUser, standInFetch } from './standin.js';
+import { devHome, devUser, standInFetch, standInModel } from './standin.js';
 
 const app: AppManifestEntry = { id: 'hello', name: 'Hello', route: '/hello', entry: '/@fs/apps/hello/frontend/src/entry.ts', version: '0.0.0', sdk: '^1.0.0', requiredRole: 'editor' };
 
@@ -34,5 +34,13 @@ describe('the stand-in platform', () => {
     const real = vi.fn(async () => new Response('ok'));
     await standInFetch(app, real)('/api/hello/v1/greeting');
     expect(real).toHaveBeenCalledWith('/api/hello/v1/greeting', undefined);
+  });
+
+  it('has models on, with a stand-in model that offers the tool matching what was said', async () => {
+    expect(await (await standInFetch(app)('/api/models/v1/status')).json()).toEqual({ enabled: true, ready: true });
+    const tool = { name: 'hello_greet', description: 'Greet someone', parameters: { properties: { who: { type: 'string' } } } };
+    expect(standInModel({ messages: [{ role: 'user', content: 'greet Sam' }], tools: [tool] }).message.toolCalls).toEqual([{ id: 'call-1', name: 'hello_greet', arguments: { who: 'greet Sam' } }]);
+    expect(standInModel({ messages: [{ role: 'user', content: 'what time is it' }], tools: [tool] }).message.content).toMatch(/stand-in/);
+    expect(standInModel({ messages: [{ role: 'tool', content: 'The person said not now.' }] }).message.content).toBe('All right, I’ll leave that.');
   });
 });

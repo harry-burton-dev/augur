@@ -18,6 +18,7 @@ export { UiRows, type Row } from './components/rows.js';
 export { UiMenu, type MenuAction, type MenuEntry } from './components/menu.js';
 export { UiList, type ListItem, type ListAction } from './components/list.js';
 export { UiState, type StateKind } from './components/state.js';
+export { UiConversation, UiConfirmCard, type ConversationItem } from './components/conversation.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,

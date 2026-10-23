@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.8.0
+  version: 1.9.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -374,6 +374,19 @@ components:
           description: Intent types this app handles, e.g. document.open
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
         search: { type: boolean, description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it" }
+        agent:
+          type: object
+          additionalProperties: false
+          required: [instructions]
+          description: An AI app's agent in the shell's Agents (needs ai true)
+          properties:
+            instructions: { type: string, maxLength: 4000, description: What the model is told about the agent }
+            greeting: { type: string, maxLength: 200 }
+        intents:
+          type: array
+          maxItems: 20
+          description: What some of the intents in handles do. Each described one is a tool agents may ask to use; the shell asks the person before raising it.
+          items: { $ref: "#/components/schemas/IntentInfo" }
         scopes:
           type: array
           uniqueItems: true
@@ -412,6 +425,15 @@ components:
         module: { type: string, pattern: "^[A-Za-z0-9_./-]+$", description: The module the app's entry exposes for it }
         role: { type: string, enum: [member, lead], description: Only for people with this role on the floor }
         rollup: { type: boolean, description: Shows the floor and the teams below it the person is on (identity's roll-up) }
+    IntentInfo:
+      type: object
+      required: [type, description]
+      additionalProperties: false
+      properties:
+        type: { type: string, description: One of the app's handles }
+        description: { type: string, maxLength: 300, description: What it does, for the model }
+        payload: { type: object, description: A JSON schema for the intent's payload }
+        confirm: { type: string, maxLength: 120, description: 'What the person is asked before it is done, with {field} from the payload: "Open {title}"' }
     Scope:
       type: string
       enum: [notifications:send, audit:write, models:use]
