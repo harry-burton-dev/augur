@@ -22,6 +22,7 @@
     "007_upload_limit": "5f47e45676b35056"
   },
   "@apps/folio": {
-    "001_libraries": "1c5f1dfed17e6277"
+    "001_libraries": "1c5f1dfed17e6277",
+    "002_documents": "13680e35861e3f21"
   }
 }

@@ -3,7 +3,7 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
   Activity, ArrowLeft, ArrowRight, Bell, BellOff, Building, Building2, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes, Ellipsis,
   FileText, Folder, House, Image, KeyRound, LayoutGrid, Library, Mail, Monitor, Palette, Plus, Power, Search,
-  ShieldCheck, SlidersHorizontal, Sparkles, Star, Triangle, UserPlus, UserRound, UsersRound, Video, Wifi, X,
+  ShieldCheck, SlidersHorizontal, Sparkles, Star, Triangle, Upload, UserPlus, UserRound, UsersRound, Video, Wifi, X,
   type IconNode,
 } from 'lucide';
 import { base } from '../shared.js';
@@ -58,6 +58,7 @@ export const icons = {
   display: draw(Monitor),
   network: draw(Wifi),
   download: draw(Download),
+  upload: draw(Upload),
   power: draw(Power),
   palette: draw(Palette),
   pulse: draw(Activity),
