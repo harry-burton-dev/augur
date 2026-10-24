@@ -19,6 +19,9 @@ export { UiMenu, type MenuAction, type MenuEntry } from './components/menu.js';
 export { UiList, type ListItem, type ListAction } from './components/list.js';
 export { UiTree, treePath, type TreeItem } from './components/tree.js';
 export { UiDropZone, accepts } from './components/drop-zone.js';
+export { UiTag } from './components/tag.js';
+export { UiTagPicker, type TagOption } from './components/tag-picker.js';
+export { UiFilterBar, filterValue, type FilterDef, type FilterValue } from './components/filter-bar.js';
 export { UiState, type StateKind } from './components/state.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {

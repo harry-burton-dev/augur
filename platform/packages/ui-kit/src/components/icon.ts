@@ -1,9 +1,9 @@
 import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
-  Activity, ArrowLeft, ArrowRight, Bell, BellOff, Building, Building2, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, House, Image, KeyRound, LayoutGrid, Library, Mail, Monitor, Palette, Plus, Power, Search,
-  ShieldCheck, SlidersHorizontal, Sparkles, Star, Triangle, Upload, UserPlus, UserRound, UsersRound, Video, Wifi, X,
+  Activity, ArrowLeft, ArrowRight, ArrowUpDown, Bell, BellOff, Bookmark, Building, Building2, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes, Ellipsis,
+  FileText, Folder, House, Image, KeyRound, LayoutGrid, Library, ListFilter, Mail, Monitor, Palette, Plus, Power, Search,
+  ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Upload, UserPlus, UserRound, UsersRound, Video, Wifi, X,
   type IconNode,
 } from 'lucide';
 import { base } from '../shared.js';
@@ -65,6 +65,11 @@ export const icons = {
   // Row and group actions: the ⋯ that opens a menu, and muting an app.
   more: draw(Ellipsis),
   mute: draw(BellOff),
+  // Finding documents: tags, filters, sorting, and saved views.
+  tag: draw(Tag),
+  filter: draw(ListFilter),
+  sort: draw(ArrowUpDown),
+  view: draw(Bookmark),
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;
