@@ -11,11 +11,12 @@ export type Screen =
   | { kind: 'orbit'; app: AppManifestEntry }
   | { kind: 'app'; app: AppManifestEntry; path: string };
 
-export function screenFor(manifest: AppManifestEntry[], pathname: string): Screen | undefined {
+export function screenFor(manifest: AppManifestEntry[], pathname: string, intent = false): Screen | undefined {
   if (pathname === '/' || pathname === '') return { kind: 'title' };
   const match = matchRoute(manifest, pathname);
   if (!match) return undefined;
-  if (match.path === '/' && match.app.menu?.length) return { kind: 'orbit', app: match.app };
+  // An intent goes to the app itself, never its Orbit, so the app can answer it.
+  if (match.path === '/' && match.app.menu?.length && !intent) return { kind: 'orbit', app: match.app };
   return { kind: 'app', app: match.app, path: match.path };
 }
 

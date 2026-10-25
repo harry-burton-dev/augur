@@ -185,7 +185,9 @@ export function Host({
     };
   }, [session, manifestUrl, fetchImpl, attempt, floorId]);
 
-  const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path) : undefined), [manifest, floor, where]);
+  // Raising an intent counts up, so the app is mounted to answer it even when the location doesn't change.
+  const [raised, setRaised] = useState(0);
+  const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path, Boolean(pendingIntent.current)) : undefined), [manifest, floor, where, raised]);
 
   const raise = useCallback(
     async (intent: Intent) => {
@@ -193,6 +195,7 @@ export function Host({
       try {
         routeIntent(manifest, intent, (app) => {
           pendingIntent.current = intent;
+          setRaised((n) => n + 1);
           navigate(hrefFor(app));
         });
       } catch (err) {
