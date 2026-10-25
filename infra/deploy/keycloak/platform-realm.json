@@ -15,6 +15,10 @@
       {
         "name": "editor",
         "description": "Can publish to libraries"
+      },
+      {
+        "name": "publisher",
+        "description": "Publishes to the whole org and to any team"
       }
     ]
   },

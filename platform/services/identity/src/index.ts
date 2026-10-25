@@ -2,7 +2,7 @@ import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
 import { callerCheckFromEnv, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { ensureClients, KeycloakAppClients, parseClientSecrets, type AppClients } from './clients.ts';
-import { KeycloakDirectory, type Directory } from './directory.ts';
+import { KeycloakDirectory, PLATFORM_ROLES, type Directory } from './directory.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
 
@@ -37,6 +37,11 @@ if (KEYCLOAK_ADMIN_USER && KEYCLOAK_ADMIN_PASSWORD) {
   const keycloak = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, adminUser: KEYCLOAK_ADMIN_USER, adminPassword: KEYCLOAK_ADMIN_PASSWORD });
   directory = keycloak;
   appClients = new KeycloakAppClients(keycloak);
+  // A server set up before a role was added gets it now; Keycloak reads its realm file only when it first starts.
+  keycloak
+    .ensureRoles(PLATFORM_ROLES)
+    .then((made) => made.length && console.info(`Added the ${made.join(', ')} role${made.length === 1 ? '' : 's'} to the sign-in service.`))
+    .catch((err: Error) => console.error(`The platform's roles couldn't be checked in the sign-in service (${err.message}).`));
 } else {
   console.warn('KEYCLOAK_ADMIN_USER or KEYCLOAK_ADMIN_PASSWORD is not set: admins cannot manage people and departments.');
 }

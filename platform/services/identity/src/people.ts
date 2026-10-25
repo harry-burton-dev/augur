@@ -34,14 +34,33 @@ export const principalsOf = (person: string, teams: readonly Workspace[], member
   return [`person:${person}`, ...[...new Set(direct)].sort().map((id) => `team:${id}`), ...[...above].sort().map((id) => `tree:${id}`), 'org'];
 };
 
+/**
+ * Everyone who stands for at least one of `principals`, among `people`: so an
+ * app can tell an audience ("Finance and the teams below it") something.
+ */
+export const membersOf = (principals: readonly string[], people: readonly string[], teams: readonly Workspace[], memberships: readonly { workspace: string; person: string }[]): string[] => {
+  const wanted = new Set(principals);
+  if (wanted.has('org')) return [...people].sort();
+  const live = new Map(teams.map((t) => [t.id, t]));
+  const found = new Set<string>();
+  for (const m of memberships) {
+    const team = live.get(m.workspace);
+    if (team && (wanted.has(`team:${team.id}`) || team.path.some((id) => wanted.has(`tree:${id}`)))) found.add(m.person);
+  }
+  for (const p of principals) if (p.startsWith('person:')) found.add(p.slice('person:'.length));
+  const known = new Set(people);
+  return [...found].filter((id) => known.has(id)).sort();
+};
+
 const nameOf = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => [p.firstName, p.lastName].filter(Boolean).join(' ') || p.username;
 const fold = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase();
 
 /**
- * People and teams for apps' services: who someone is (`/people/:id/principals`)
- * and a directory to find people and teams by name (`/directory`), so an app
- * can let someone share with a colleague or a team. Platform services may ask;
- * an app needs `people:read`.
+ * People and teams for apps' services: who someone is (`/people/:id/principals`),
+ * a directory to find people and teams by name (`/directory`), so an app can
+ * let someone share with a colleague or a team, and who an audience reaches
+ * (`/members`), so it can tell them. Platform services may ask; an app needs
+ * `people:read`.
  */
 export const peopleRoutes =
   ({ workspaces, teams, verifyService, grants, now = Date.now }: PeopleOptions) =>
@@ -108,10 +127,29 @@ export const peopleRoutes =
           .slice(0, limit);
         const groups = all
           .filter((t) => (ids ? ids.has(t.id) : matches(t.name)))
-          .map((t) => ({ id: t.id, name: t.name, within: t.path.slice(0, -1).flatMap((id) => (byId.has(id) ? [byId.get(id)!.name] : [])) }))
+          .map((t) => {
+            const above = t.path.slice(0, -1).filter((id) => byId.has(id));
+            return { id: t.id, name: t.name, within: above.map((id) => byId.get(id)!.name), path: [...above, t.id] };
+          })
           .sort((a, b) => a.name.localeCompare(b.name))
           .slice(0, limit);
         return { people: found, teams: groups };
+      },
+    );
+
+    app.get<{ Querystring: { principals: string } }>(
+      '/members',
+      {
+        schema: {
+          querystring: { type: 'object', additionalProperties: false, required: ['principals'], properties: { principals: { type: 'string', minLength: 1, maxLength: 4000 } } },
+        },
+      },
+      async (req, reply) => {
+        if (!(await allowed(req, reply))) return reply;
+        await teams?.ready();
+        const principals = req.query.principals.split(',').map((s) => s.trim()).filter(Boolean);
+        const [all, folks, members] = await Promise.all([workspaces.teams(), everyone(), workspaces.memberships()]);
+        return { people: membersOf(principals, folks.map((p) => p.id), all, members) };
       },
     );
   };

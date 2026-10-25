@@ -55,12 +55,25 @@ describe('people for apps', () => {
     expect((await find('q=sam%40')).json().people.map((p: { id: string }) => p.id)).toEqual([sam.id]);
     // A turned-off sign-in can't be shared with.
     expect((await find('q=ola')).json().people).toEqual([]);
-    expect((await find('q=pay')).json().teams).toEqual([{ id: payroll.id, name: 'Payroll', within: ['Finance'] }]);
+    expect((await find('q=pay')).json().teams).toEqual([{ id: payroll.id, name: 'Payroll', within: ['Finance'], path: [finance.id, payroll.id] }]);
     const named = (await find(`ids=${sam.id},${finance.id},nope`)).json();
     expect(named.people.map((p: { id: string }) => p.id)).toEqual([sam.id]);
-    expect(named.teams).toEqual([{ id: finance.id, name: 'Finance', within: [] }]);
+    expect(named.teams).toEqual([{ id: finance.id, name: 'Finance', within: [], path: [finance.id] }]);
     expect((await find('q=a&limit=1')).json().people).toHaveLength(1);
     expect((await app.inject({ method: 'GET', url: '/v1/directory?q=a', headers: { authorization: 'Bearer other' } })).statusCode).toBe(403);
+  });
+
+  it('says who an audience reaches', async () => {
+    const { app, alex, sam, finance, payroll, legal } = await setUp();
+    const members = (principals: string, authorization = 'Bearer folio') =>
+      app.inject({ method: 'GET', url: `/v1/members?principals=${encodeURIComponent(principals)}`, headers: { authorization } });
+    expect((await members(`tree:${finance.id}`)).json().people).toEqual([alex.id]);
+    expect((await members(`team:${finance.id}`)).json().people).toEqual([]);
+    expect((await members(`team:${legal.id},team:${payroll.id}`)).json().people).toEqual([alex.id]);
+    // Everyone whose sign-in works, and no one who's been turned off.
+    expect((await members('org')).json().people).toEqual([alex.id, sam.id].sort());
+    expect((await members(`person:${sam.id},person:nobody`)).json().people).toEqual([sam.id]);
+    expect((await members('org', 'Bearer other')).statusCode).toBe(403);
   });
 
   it('refuses an app while its grants can’t be checked', async () => {
