@@ -30,7 +30,30 @@ export interface AppEntry {
   storage?: { database?: boolean; bucket?: boolean };
   /** The largest request body, in MB, the gateway lets through to the app's service. An admin can lower it. Without it, DEFAULT_UPLOAD_MB. */
   maxUpload?: number;
+  /** The app's own settings, which admins set in Admin, Apps and its service reads from the registry. */
+  settings?: AppSetting[];
 }
+
+/**
+ * One setting an app offers admins, such as how long it keeps deleted things. A whole number
+ * between `min` and `max`, `default` until an admin changes it.
+ */
+export interface AppSetting {
+  /** How the app's service names it: "retentionDays". */
+  id: string;
+  label: string;
+  /** A sentence on what it changes. */
+  detail?: string;
+  type: 'integer';
+  /** What the number counts, shown after it: "days". */
+  unit?: string;
+  min: number;
+  max: number;
+  default: number;
+}
+
+/** How many settings one app may offer. */
+export const MAX_SETTINGS = 10;
 
 /** What an app may be sent in one request when its manifest doesn't say: enough for any form, not for files. */
 export const DEFAULT_UPLOAD_MB = 10;
@@ -158,6 +181,25 @@ export const appEntrySchema = {
     search: { type: 'boolean' },
     storage: { type: 'object', additionalProperties: false, properties: { database: { type: 'boolean' }, bucket: { type: 'boolean' } } },
     maxUpload: { type: 'integer', minimum: 1, maximum: MAX_UPLOAD_MB },
+    settings: {
+      type: 'array',
+      maxItems: MAX_SETTINGS,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'label', 'type', 'min', 'max', 'default'],
+        properties: {
+          id: { type: 'string', pattern: '^[a-z][a-zA-Z0-9]{0,39}$' },
+          label: { type: 'string', minLength: 1, maxLength: 60 },
+          detail: { type: 'string', maxLength: 200 },
+          type: { enum: ['integer'] },
+          unit: { type: 'string', maxLength: 20 },
+          min: { type: 'integer' },
+          max: { type: 'integer' },
+          default: { type: 'integer' },
+        },
+      },
+    },
     scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } },
     floors: { type: 'array', minItems: 1, uniqueItems: true, maxItems: FLOOR_KINDS.length, items: { enum: [...FLOOR_KINDS] } },
     surfaces: {
@@ -225,6 +267,18 @@ export const surfaceProblem = (entry: AppEntry): string | undefined => {
   const kinds = floorKindsOf(entry);
   const stray = entry.surfaces?.find((s) => !kinds.includes(s.floor));
   return stray ? `${entry.name} has a ${stray.slot} for the ${stray.floor} floor, but its floors don't include ${stray.floor}.` : undefined;
+};
+
+/** What's wrong with the settings an app offers, or undefined when nothing is. */
+export const settingsProblem = (entry: AppEntry): string | undefined => {
+  const seen = new Set<string>();
+  for (const setting of entry.settings ?? []) {
+    if (seen.has(setting.id)) return `${entry.name} offers the setting "${setting.id}" twice.`;
+    seen.add(setting.id);
+    if (setting.min > setting.max) return `${entry.name}'s setting "${setting.id}" has a min above its max.`;
+    if (setting.default < setting.min || setting.default > setting.max) return `${entry.name}'s setting "${setting.id}" defaults to ${setting.default}, outside ${setting.min} to ${setting.max}.`;
+  }
+  return undefined;
 };
 
 /** Why an app can't take the id or route it asked for, or undefined when it can. */

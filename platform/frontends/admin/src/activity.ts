@@ -71,7 +71,13 @@ export const describe = (e: AuditEntry, names: Names): string => {
     case 'app.inherited':
       return `${who} let ${names.app(target)} follow the floor above on ${names.department(String(d.workspace))}`;
     case 'app.scopes-granted':
-      return `${who} changed what ${names.app(target)} may do`;
+      return d.shipsWithAugur ? `${names.app(target)} may now do what its release asks` : `${who} changed what ${names.app(target)} may do`;
+    case 'app.setting-changed': {
+      const setting = `“${String(d.label ?? d.setting)}”`;
+      return d.value === null
+        ? `${who} put ${names.app(target)}’s ${setting} back to its default`
+        : `${who} set ${names.app(target)}’s ${setting} to ${String(d.value)}${d.unit ? ` ${String(d.unit)}` : ''}`;
+    }
     case 'team-notices.on':
       return `${who} turned on team notices for ${names.department(target)}`;
     case 'team-notices.off':

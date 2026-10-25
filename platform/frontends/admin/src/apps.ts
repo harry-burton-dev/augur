@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import semver from 'semver';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
-import type { AdminApi, AllowedOrigin, AppVersion, CatalogueApp, Department, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
+import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, Department, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
 import { page } from './parts.js';
 
 /** Where an app stands: off, on, or on but unable to open in this platform. */
@@ -124,6 +124,8 @@ export class AdminApps extends LitElement {
     floorRules: { state: true },
     floorList: { state: true },
     floorsError: { state: true },
+    settingValues: { state: true },
+    settingsError: { state: true },
   };
 
   declare api: AdminApi;
@@ -151,6 +153,9 @@ export class AdminApps extends LitElement {
   /** The org and its teams; loaded once. */
   declare floorList: AppFloor[] | undefined;
   declare floorsError: string;
+  /** The open app's settings with their values; undefined until loaded. */
+  declare settingValues: AppSettingValue[] | undefined;
+  declare settingsError: string;
 
   constructor() {
     super();
@@ -158,6 +163,7 @@ export class AdminApps extends LitElement {
     this.loading = true;
     this.error = '';
     this.versionsError = '';
+    this.settingsError = '';
     this.choice = NEWEST;
     this.saving = false;
     this.saveError = '';
@@ -182,6 +188,9 @@ export class AdminApps extends LitElement {
       this.choice = app?.pinnedVersion ?? NEWEST;
       this.floorRules = undefined;
       this.floorsError = '';
+      this.settingValues = undefined;
+      this.settingsError = '';
+      if (app?.settings?.length) void this.loadSettings(app.id);
       if (app && !app.platform) {
         // An app that ships with AUGUR changes version with the release, so it has none to go back to.
         if (!app.pillar) void this.loadVersions(app.id);
@@ -211,6 +220,54 @@ export class AdminApps extends LitElement {
     } catch (err) {
       this.floorsError = (err as Error).message;
     }
+  }
+
+  async loadSettings(id: string) {
+    try {
+      const values = await this.api.appSettings(id);
+      if (this.open === id) this.settingValues = values;
+    } catch (err) {
+      if (this.open === id) this.settingsError = (err as Error).message;
+    }
+  }
+
+  /** Sets one of the open app's settings from what was typed; empty puts it back to its default. */
+  async setSetting(app: CatalogueApp, setting: AppSettingValue, typed: string) {
+    this.settingsError = '';
+    const value = typed.trim() === '' ? null : Number(typed);
+    if (value !== null && (!Number.isInteger(value) || value < setting.min || value > setting.max)) {
+      this.settingsError = `${setting.label} is a whole number from ${setting.min} to ${setting.max}${setting.unit ? ` ${setting.unit}` : ''}.`;
+      return;
+    }
+    try {
+      const values = await this.api.setAppSetting(app.id, setting.id, value);
+      if (this.open === app.id) this.settingValues = values;
+    } catch (err) {
+      this.settingsError = (err as Error).message;
+    }
+  }
+
+  /** The settings the app offers, each a number to type, saved when the field is left. */
+  private settingsFields(app: CatalogueApp) {
+    if (!app.settings?.length) return nothing;
+    const values = this.settingValues;
+    return html`<div data-settings style="display:flex;flex-direction:column;gap:var(--space-4)">
+      ${values
+        ? values.map(
+            (s) => html`<ui-text-field
+              data-setting=${s.id}
+              type="number"
+              label=${s.unit ? `${s.label} (${s.unit})` : s.label}
+              hint=${[s.detail, `${s.min} to ${s.max}; ${s.default} unless you change it.`].filter(Boolean).join(' ')}
+              .value=${String(s.value)}
+              @ui-change=${(e: CustomEvent<{ value: string }>) => this.setSetting(app, s, e.detail.value)}
+            ></ui-text-field>`,
+          )
+        : this.settingsError
+          ? nothing
+          : html`<p>Loading its settings…</p>`}
+      ${this.settingsError ? html`<p role="alert" data-settings-error>${this.settingsError}</p>` : nothing}
+    </div>`;
   }
 
   async limitUploads(app: CatalogueApp, choice: string) {
@@ -500,6 +557,7 @@ export class AdminApps extends LitElement {
             .value=${app.uploadLimitLowered ? String(app.uploadLimit) : 'asked'}
             @ui-change=${(e: CustomEvent<{ value: string }>) => this.limitUploads(app, e.detail.value)}
           ></ui-select>`}
+      ${app.platform ? nothing : this.settingsFields(app)}
       ${app.platform ? nothing : this.floors(app)}
       ${app.handles?.length ? html`<p>Answers ${app.handles.join(', ')}.</p>` : nothing}
       ${app.pillar

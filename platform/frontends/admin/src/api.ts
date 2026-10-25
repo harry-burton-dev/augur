@@ -51,6 +51,27 @@ export interface CatalogueApp extends AppManifestEntry {
   uploadLimit?: number;
   /** Set when an admin has lowered that below what the app asks. */
   uploadLimitLowered?: boolean;
+  /** Settings the app offers admins, from its manifest. */
+  settings?: AppSetting[];
+}
+
+/** One setting an app offers admins: a whole number between min and max. */
+export interface AppSetting {
+  id: string;
+  label: string;
+  detail?: string;
+  type: 'integer';
+  unit?: string;
+  min: number;
+  max: number;
+  default: number;
+}
+
+/** A setting with the value in force: an admin's, or its default. */
+export interface AppSettingValue extends AppSetting {
+  value: number;
+  setBy?: string;
+  setAt?: string;
 }
 
 /** What one floor says about an app: on or off there and below, or blocked for it and every floor below. */
@@ -275,6 +296,10 @@ export class AdminApi {
     this.call<{ rules: FloorRule[] }>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/floors/${encodeURIComponent(workspace)}`, { state });
   /** Lowers how much an app may be sent at once, in MB, or with `null` gives it what it asks again. */
   limitUploads = (id: string, mb: number | null) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/upload-limit`, { mb });
+  appSettings = async (id: string) => (await this.call<{ settings: AppSettingValue[] }>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/settings`)).settings;
+  /** Sets one of an app's settings; `null` puts it back to its default. */
+  setAppSetting = async (id: string, setting: string, value: number | null) =>
+    (await this.call<{ settings: AppSettingValue[] }>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/settings/${encodeURIComponent(setting)}`, { value })).settings;
   grantScopes = (id: string, scopes: string[]) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/scopes`, { scopes });
   /** The org's own floor, which every app rule starts from. */
   org = async () => {

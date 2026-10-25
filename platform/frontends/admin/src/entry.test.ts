@@ -276,6 +276,15 @@ describe('admin', () => {
       expect(sentence(entry('app.updated', { app: 'registry', target: 'library', detail: { version: '0.3.0', heldAt: '0.1.0' } }), names)).toBe(
         'Library registered version 0.3.0, kept but not used while it’s held at 0.1.0',
       );
+      expect(sentence(entry('app.setting-changed', { app: 'registry', target: 'library', detail: { setting: 'retentionDays', label: 'Keep deleted documents for', value: 90, unit: 'days' } }), names)).toBe(
+        'Alex Rivera set Library’s “Keep deleted documents for” to 90 days',
+      );
+      expect(sentence(entry('app.setting-changed', { app: 'registry', target: 'library', detail: { setting: 'retentionDays', label: 'Keep deleted documents for', value: null } }), names)).toBe(
+        'Alex Rivera put Library’s “Keep deleted documents for” back to its default',
+      );
+      expect(sentence(entry('app.scopes-granted', { app: 'registry', actor: { id: 'library', kind: 'service' }, target: 'library', detail: { scopes: [], shipsWithAugur: true } }), names)).toBe(
+        'Library may now do what its release asks',
+      );
       expect(sentence(entry('origin.allowed', { app: 'registry', target: 'https://apps.example.org' }), names)).toBe('Alex Rivera let apps load from https://apps.example.org');
       expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
     });
@@ -473,6 +482,40 @@ describe('admin', () => {
       expect(el.querySelector('ui-toggle')).not.toBeNull();
       expect(el.textContent).not.toContain('Issue a new sign-in');
       expect(urls.some((u) => u.endsWith('/versions'))).toBe(false);
+      el.remove();
+    });
+  });
+
+  describe('An app’s own settings', () => {
+    it('shows each with its value, and saves what’s typed, or the default when emptied', async () => {
+      const retention = { id: 'retentionDays', label: 'Keep deleted documents for', type: 'integer' as const, unit: 'days', min: 1, max: 3650, default: 30 };
+      const folio: CatalogueApp = { id: 'folio', name: 'Folio', route: '/folio', entry: '/apps/folio/entry.js', version: '0.1.0', sdk: '^1.1.0', platform: false, enabled: true, settings: [retention] };
+      const calls: [string, string, string?][] = [];
+      let value = 30;
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+        calls.push([init.method ?? 'GET', url, init.body as string | undefined]);
+        if (url.includes('/settings/')) value = JSON.parse(String(init.body)).value ?? 30;
+        const body = url.includes('/settings') ? { settings: [{ ...retention, value }] } : url.endsWith('/floors') ? [] : url.endsWith('/versions') ? [] : [folio];
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.apps).toHaveLength(1));
+      el.open = 'folio';
+      await vi.waitFor(() => expect(el.settingValues).toHaveLength(1));
+      await settle(el);
+      const field = el.querySelector('[data-setting="retentionDays"]') as HTMLElement & { value: string; label: string };
+      expect(field.label).toBe('Keep deleted documents for (days)');
+      expect(field.value).toBe('30');
+      await el.setSetting(folio, el.settingValues![0], '0');
+      expect(el.settingsError).toBe('Keep deleted documents for is a whole number from 1 to 3650 days.');
+      await el.setSetting(folio, el.settingValues![0], '90');
+      expect(calls).toContainEqual(['PUT', '/api/registry/v1/apps/folio/settings/retentionDays', JSON.stringify({ value: 90 })]);
+      expect(el.settingValues![0].value).toBe(90);
+      await el.setSetting(folio, el.settingValues![0], '');
+      expect(calls.at(-1)?.[2]).toBe(JSON.stringify({ value: null }));
+      expect(el.settingValues![0].value).toBe(30);
       el.remove();
     });
   });

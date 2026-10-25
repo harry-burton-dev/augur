@@ -47,6 +47,19 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.limitUploads('nothing', 5)).toBeUndefined();
   });
 
+  it('keeps an admin’s settings while the app registers new versions, until they’re taken away', async () => {
+    await store.put(library, 'library');
+    const set = await store.setSetting('library', 'retentionDays', 90, 'u-1');
+    expect(set?.settings?.retentionDays).toMatchObject({ value: 90, setBy: 'u-1' });
+    expect(Date.parse(set!.settings!.retentionDays.setAt)).not.toBeNaN();
+    await store.setSetting('library', 'other', 3, 'u-2');
+    await store.put({ ...library, version: '0.2.0' }, 'library');
+    expect(Object.keys((await store.records())[0].settings ?? {}).sort()).toEqual(['other', 'retentionDays']);
+    expect((await store.setSetting('library', 'retentionDays', null, 'u-1'))?.settings?.retentionDays).toBeUndefined();
+    expect((await store.setSetting('library', 'other', null, 'u-1'))?.settings).toBeUndefined();
+    expect(await store.setSetting('nothing', 'other', 5, 'u-1')).toBeUndefined();
+  });
+
   it('keeps one rule per app and floor, and forgets them with the app', async () => {
     await store.put(library, 'service');
     await store.setRule({ app: 'library', workspace: 'w-fin', state: 'on', carriesOn: false, setBy: 'u-1' });
@@ -156,7 +169,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {
