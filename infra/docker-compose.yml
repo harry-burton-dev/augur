@@ -20,6 +20,15 @@ x-internal: &internal
   OIDC_ISSUER: http://localhost:8180/realms/platform
   OIDC_INTERNAL_URL: http://keycloak:8080/realms/platform
 
+# Folio's own schema and bucket, for its service and its rendition worker. Local only.
+x-folio-storage: &folio-storage
+  DATABASE_URL: postgres://app_folio:platform-local-only-folio@postgres:5432/platform
+  S3_ENDPOINT: http://garage:3900
+  S3_BUCKET: folio
+  # The storage service derives the key's id from FOLIO_BUCKET_SECRET; it prints it too.
+  S3_ACCESS_KEY_ID: GK999cf764e1807dfcdb6310d6
+  S3_SECRET_ACCESS_KEY: 6c6f63616c2d6f6e6c792d666f6c696f2d6275636b65742d7365637265742d30
+
 services:
   # ---- infrastructure ----
   # Postgres with pgvector, for apps' embeddings.
@@ -140,19 +149,22 @@ services:
     <<: *service
     build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/folio" } }
     environment:
+      <<: [*internal, *folio-storage]
       PORT: 8083
-      <<: *internal
       SERVICE_CLIENT_SECRET: platform-local-only-folio
       APP_MANIFEST: /app/manifest.json
-      DATABASE_URL: postgres://app_folio:platform-local-only-folio@postgres:5432/platform
-      S3_ENDPOINT: http://garage:3900
-      S3_BUCKET: folio
-      # The storage service derives the key's id from FOLIO_BUCKET_SECRET; it prints it too.
-      S3_ACCESS_KEY_ID: GK999cf764e1807dfcdb6310d6
-      S3_SECRET_ACCESS_KEY: 6c6f63616c2d6f6e6c792d666f6c696f2d6275636b65742d7365637265742d30
     volumes: ["../apps/folio/manifest.json:/app/manifest.json:ro"]
     depends_on:
       storage: { condition: service_completed_successfully }
+
+  # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
+  # It works on the tables Folio's service makes, so it waits for the service to start.
+  folio-worker:
+    <<: *service
+    build: { context: .., dockerfile: apps/folio/worker/Dockerfile }
+    environment:
+      <<: *folio-storage
+    depends_on: [folio]
 
 volumes:
   pgdata:

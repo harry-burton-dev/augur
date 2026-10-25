@@ -9,3 +9,6 @@ coverage/
 infra/deploy/backups/
 infra/deploy/secrets/
 infra/deploy/releases/
+__pycache__/
+*.egg-info/
+.pytest_cache/
