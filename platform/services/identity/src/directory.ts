@@ -51,6 +51,15 @@ export interface Role {
   description?: string;
 }
 
+/**
+ * Lets a team lead publish beyond their team: to the whole org, or to teams
+ * outside their own. Folio checks it when someone publishes.
+ */
+export const PUBLISHER_ROLE: Role = { name: 'publisher', description: 'Publishes to the whole org and to any team' };
+
+/** The roles the platform itself relies on, made in Keycloak at start when they're missing (its realm file is read only when it first starts). */
+export const PLATFORM_ROLES: readonly Role[] = [PUBLISHER_ROLE];
+
 /** A refusal the admin can act on (404, 409), or the directory being out of reach (503). */
 export class DirectoryError extends Error {
   readonly status: 400 | 404 | 409 | 503;
@@ -89,6 +98,7 @@ export class MemoryDirectory implements Directory {
     roles: Role[] = [
       { name: 'admin', description: 'Runs the platform; sees the Admin app' },
       { name: 'editor', description: 'Can publish to libraries' },
+      PUBLISHER_ROLE,
     ],
   ) {
     this.roleList = roles;
@@ -304,6 +314,17 @@ export class KeycloakDirectory implements Directory {
   private async memberIds(group: string): Promise<string[]> {
     const { data } = await this.call<KcUser[]>('GET', `/groups/${group}/members?briefRepresentation=true&max=10000`);
     return data.map((u) => u.id);
+  }
+
+  /** Makes any of these realm roles that don't exist yet; returns the ones it made. */
+  async ensureRoles(roles: readonly Role[]): Promise<string[]> {
+    const have = new Set((await this.realmRoles()).map((r) => r.name));
+    const made: string[] = [];
+    for (const role of roles.filter((r) => !have.has(r.name))) {
+      await this.call('POST', '/roles', { name: role.name, ...(role.description ? { description: role.description } : {}) });
+      made.push(role.name);
+    }
+    return made;
   }
 
   async roles(): Promise<Role[]> {

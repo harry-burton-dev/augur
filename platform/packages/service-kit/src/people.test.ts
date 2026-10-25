@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { identityDirectory, identityPrincipals, PeopleUnavailable } from './people.js';
+import { identityAudience, identityDirectory, identityPrincipals, PeopleUnavailable } from './people.js';
 
 const credentials = { name: 'folio', getToken: async () => 'folio-token' };
 
@@ -36,5 +36,13 @@ describe('people', () => {
     await find({ ids: ['u-1', 't-1'] });
     expect(await find({ ids: [] })).toEqual({ people: [], teams: [] });
     expect(fetchImpl.mock.calls.map((c) => String((c as unknown[])[0]))).toEqual(['http://identity/v1/directory?q=alex&limit=5', 'http://identity/v1/directory?ids=u-1%2Ct-1']);
+  });
+
+  it('asks who an audience reaches', async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ people: ['u-1'] }));
+    const audience = identityAudience({ identityUrl: 'http://identity', credentials, fetchImpl: fetchImpl as typeof fetch });
+    expect(await audience(['tree:t-1', 'org'])).toEqual(['u-1']);
+    expect(await audience([])).toEqual([]);
+    expect(fetchImpl.mock.calls.map((c) => String((c as unknown[])[0]))).toEqual(['http://identity/v1/members?principals=tree%3At-1%2Corg']);
   });
 });

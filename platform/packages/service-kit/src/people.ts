@@ -58,6 +58,8 @@ export interface DirectoryTeam {
   name: string;
   /** The names of the teams it sits in, from the top down; the org's left out. */
   within: string[];
+  /** The ids of those teams, then its own: whether one team sits inside another. Identity 1.9. */
+  path?: string[];
 }
 
 export interface DirectoryResult {
@@ -77,4 +79,14 @@ export const identityDirectory = ({ identityUrl, credentials, fetchImpl = fetch 
   }
   if (limit) url.searchParams.set('limit', String(limit));
   return (await ask(fetchImpl, url, credentials)) as DirectoryResult;
+};
+
+/** Who an audience reaches: the ids of everyone who stands for at least one of the principals, whose sign-in works. */
+export type AudienceLookup = (principals: readonly string[]) => Promise<string[]>;
+
+export const identityAudience = ({ identityUrl, credentials, fetchImpl = fetch }: Omit<PeopleOptions, 'ttlMs' | 'now'>): AudienceLookup => async (principals) => {
+  if (!principals.length) return [];
+  const url = new URL(`${identityUrl.replace(/\/$/, '')}/v1/members`);
+  url.searchParams.set('principals', principals.join(','));
+  return ((await ask(fetchImpl, url, credentials)) as { people: string[] }).people;
 };

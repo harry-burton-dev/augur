@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.8.0
+  version: 1.9.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -196,6 +196,29 @@ paths:
                         id: { type: string }
                         name: { type: string }
                         within: { type: array, description: Names of the teams it sits in, from the top down, items: { type: string } }
+                        path: { type: array, description: "The ids of those teams, then its own (1.9)", items: { type: string } }
+        "403": { description: Not a platform service, or an app without people:read }
+        "503": { description: The caller's token or the app's grants can't be checked right now }
+  /members:
+    get:
+      summary: Who an audience reaches (platform services, and apps with people:read)
+      description: >
+        The ids of everyone who stands for at least one of the principals
+        (person:, team:, tree: or org), so an app can tell an audience that
+        something was published to it. People whose sign-in is turned off
+        aren't listed. Since 1.9.
+      parameters:
+        - { name: principals, in: query, required: true, description: Comma-separated principals, schema: { type: string, minLength: 1, maxLength: 4000 } }
+      responses:
+        "200":
+          description: Person ids, sorted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [people]
+                properties:
+                  people: { type: array, items: { type: string } }
         "403": { description: Not a platform service, or an app without people:read }
         "503": { description: The caller's token or the app's grants can't be checked right now }
   # Admin: people and roles, kept in the sign-in provider (Keycloak), and departments,

@@ -2,8 +2,8 @@ import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
   Activity, ArrowLeft, ArrowRight, ArrowUpDown, Bell, BellOff, Bookmark, Building, Building2, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, House, Image, KeyRound, LayoutGrid, Library, ListFilter, Mail, Monitor, Palette, Plus, Power, Search,
-  ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Upload, UserPlus, UserRound, UsersRound, Video, Wifi, X,
+  FileText, Folder, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Mail, Monitor, Palette, Plus, Power, Search,
+  Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, UserPlus, UserRound, UsersRound, Video, Wifi, X,
   type IconNode,
 } from 'lucide';
 import { base } from '../shared.js';
@@ -70,6 +70,10 @@ export const icons = {
   filter: draw(ListFilter),
   sort: draw(ArrowUpDown),
   view: draw(Bookmark),
+  // Publishing: putting a version out, what's been put out to you, and taking it back.
+  publish: draw(Send),
+  inbox: draw(Inbox),
+  withdraw: draw(Undo2),
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;
