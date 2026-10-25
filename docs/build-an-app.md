@@ -179,10 +179,10 @@ app.get<{ Querystring: { q: string } }>('/v1/search', async (req, reply) => {
 
 ### Documents from other apps
 
-`document.open` and `document.pick` are the standard document intents (SDK 1.4). Folio handles both out of the box; any app may handle them too by listing them in `handles`. An app that shows or needs documents doesn't need to know which app keeps them:
+`document.open` and `document.pick` are the standard document intents (SDK 1.4), with `library.open` beside them. Folio handles all three out of the box; any app may handle them too by listing them in `handles`. An app that shows or needs documents doesn't need to know which app keeps them:
 
 ```ts
-import { isIntentCancelled, openDocument, pickDocument } from '@augur/mfe-sdk';
+import { isIntentCancelled, openDocument, openLibrary, pickDocument } from '@augur/mfe-sdk';
 
 // Open one: whichever app handles document.open opens it.
 await openDocument(ctx, { app: 'folio', id: 'd-42', title: 'Travel policy' });
@@ -195,6 +195,8 @@ try {
   if (!isIntentCancelled(err)) throw err;
 }
 ```
+
+`library.open` opens a whole library the same way: `openLibrary(ctx, { app: 'folio', id: 'l-7', name: 'Policies' })`, with a `LibraryRef` in the handling app's `ctx.intent.payload` (check it with `isLibraryRef`).
 
 An app that handles `document.open` finds a `DocumentRef` in `ctx.intent.payload`. One that handles `document.pick` gets a `DocumentPick` there and answers with `ctx.reply.respond(ref)`; `pickDocument` checks the answer is a `DocumentRef`.
 
