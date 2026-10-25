@@ -1,8 +1,9 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
+import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
 import { appClientRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
+import { peopleRoutes } from './people.ts';
 import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from './store.ts';
 import { TeamDirectory } from './teams.ts';
 import { floorsFor, MemoryWorkspaceStore, rollupFor, type WorkspaceStore } from './workspaces.ts';
@@ -38,6 +39,8 @@ export interface IdentityOptions {
   verifyService?: ServiceVerifier;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
   callers?: CallerCheck;
+  /** What apps are granted, from the registry, so an app with `people:read` can look people up. */
+  grants?: GrantLookup;
 }
 
 /** Records audit entries with the events service, as identity. */
@@ -51,7 +54,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit, verifyService, callers }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit, verifyService, callers, grants }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   // Before anything reads the caller: only the gateway's signed word says who is calling.
@@ -98,6 +101,8 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
         const people = new Set((await workspaces.memberships()).filter((m) => below.has(m.workspace)).map((m) => m.person));
         return { workspace: team.id, people: [...people].sort() };
       });
+
+      await app.register(peopleRoutes({ workspaces, teams, verifyService, grants }));
     },
     { prefix: `/${API_VERSION}` },
   );

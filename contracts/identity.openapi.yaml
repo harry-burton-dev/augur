@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.7.0
+  version: 1.8.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -133,6 +133,71 @@ paths:
                   people: { type: array, items: { type: string } }
         "403": { description: Not a platform service }
         "404": { description: No such team }
+  /people/{id}/principals:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 100 } }
+    get:
+      summary: Who a person stands for (platform services, and apps with people:read)
+      description: >
+        The principals an app matches against who may see something: person:<id>;
+        team:<id> for each team they're on; tree:<id> for each of those teams and
+        every team above it (shared with a team and the teams below it); and org,
+        which everyone is in. Archived teams don't count. Apps keep each answer
+        for 30 seconds (identityPrincipals in the service kit).
+      responses:
+        "200":
+          description: Their principals
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [person, principals]
+                properties:
+                  person: { type: string }
+                  principals: { type: array, items: { type: string } }
+        "403": { description: Not a platform service, or an app without people:read }
+        "503": { description: The caller's token or the app's grants can't be checked right now }
+  /directory:
+    get:
+      summary: Find people and teams (platform services, and apps with people:read)
+      description: >
+        For sharing: people whose name, email or username has `q` in it, and teams
+        whose name does, each sorted by name, first `limit` of each. With `ids`
+        instead, the people and teams with those ids, so an app can name who it
+        has shared with. People whose sign-in is turned off aren't listed.
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: ids, in: query, description: Comma-separated person and team ids, schema: { type: string, maxLength: 4000 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        "200":
+          description: People and teams
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [people, teams]
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        email: { type: string }
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, within]
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        within: { type: array, description: Names of the teams it sits in, from the top down, items: { type: string } }
+        "403": { description: Not a platform service, or an app without people:read }
+        "503": { description: The caller's token or the app's grants can't be checked right now }
   # Admin: people and roles, kept in the sign-in provider (Keycloak), and departments,
   # which are identity's own teams (copied in once from the provider's groups).
   # Every /admin path answers 403 to a caller without the admin role, and 503 when
