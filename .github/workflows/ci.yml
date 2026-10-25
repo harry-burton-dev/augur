@@ -48,6 +48,65 @@ jobs:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
       - run: pnpm --filter @augur/ui-kit build-storybook
 
+  # Folio's rendition worker, in Python: its tests against a real Postgres with Folio's
+  # schema, PDFs included (Docling fetches its models once; they're cached), and its image
+  # when the worker changed.
+  folio-worker:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg17
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform-ci-only
+          POSTGRES_DB: platform
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/folio/worker/pyproject.toml
+      # Torch's CPU-only build, as the image has it.
+      - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -e "apps/folio/worker[test]"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: docling-models-${{ hashFiles('apps/folio/worker/pyproject.toml') }}
+      # The worker works on the tables Folio's service makes.
+      - run: pnpm --filter @apps/folio migrate
+      - run: python -m pytest apps/folio/worker -v
+        env:
+          RUN_PDF_TESTS: "1"
+      - name: Did the worker change?
+        id: changed
+        run: |
+          base=${{ github.event_name == 'pull_request' && format('origin/{0}...', github.base_ref) || 'HEAD~1' }}
+          git diff --quiet "$base" -- apps/folio/worker || echo "worker=true" >> "$GITHUB_OUTPUT"
+      - name: The worker's image builds, holds its models and doesn't run as root
+        if: steps.changed.outputs.worker == 'true'
+        run: |
+          docker build -f apps/folio/worker/Dockerfile -t folio-worker .
+          test "$(docker run --rm folio-worker id -u)" != 0
+          docker run --rm folio-worker python -c "from folio_worker.render import ENGINE_VERSION; print(ENGINE_VERSION)"
+          test -n "$(docker run --rm folio-worker sh -c 'ls "$DOCLING_ARTIFACTS_PATH"')"
+
   # The developer kit still makes an app that builds, passes its tests and is accepted by the registry.
   app-scaffold:
     runs-on: ubuntu-latest

@@ -24,6 +24,7 @@
   "@apps/folio": {
     "001_libraries": "1c5f1dfed17e6277",
     "002_documents": "13680e35861e3f21",
-    "003_tags_views": "671dbdecf0e69ff8"
+    "003_tags_views": "671dbdecf0e69ff8",
+    "004_renditions": "3cda292842cefca3"
   }
 }
