@@ -25,6 +25,8 @@ describe('screenFor', () => {
   it('shows Title at the root, Orbit at a root with a menu, and the app everywhere else', () => {
     expect(screenFor(manifest, '/')).toEqual({ kind: 'title' });
     expect(screenFor(manifest, '/board')).toEqual({ kind: 'orbit', app: board });
+    // An intent raised for it goes to the app, to answer it.
+    expect(screenFor(manifest, '/board', true)).toEqual({ kind: 'app', app: board, path: '/' });
     expect(screenFor(manifest, '/board/labels')).toEqual({ kind: 'app', app: board, path: '/labels' });
     expect(screenFor(manifest, '/home')).toEqual({ kind: 'app', app: home, path: '/' });
     expect(screenFor(manifest, '/nowhere')).toBeUndefined();
