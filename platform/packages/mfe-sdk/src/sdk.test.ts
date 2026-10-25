@@ -7,6 +7,9 @@ import {
   isDocumentRef,
   isIntentCancelled,
   openDocument,
+  openLibrary,
+  isLibraryRef,
+  type LibraryRef,
   pickDocument,
   resolveIntent,
   type AppManifestEntry,
@@ -93,6 +96,16 @@ describe('document intents', () => {
     expect(request).toHaveBeenCalledWith({ type: 'document.pick', payload: { purpose: 'Attach a policy' } });
     request.mockResolvedValueOnce({ id: 'd-1' });
     await expect(pickDocument({ request: request as MountContext['request'] })).rejects.toMatchObject({ name: 'IntentError' });
+  });
+
+  it('opens a library through whichever app handles library.open, and knows a LibraryRef', async () => {
+    const raise = vi.fn(async () => undefined);
+    const library: LibraryRef = { app: 'folio', id: 'l-1', name: 'Policies' };
+    await openLibrary({ raise }, library);
+    expect(raise).toHaveBeenCalledWith({ type: 'library.open', payload: library });
+    expect(isLibraryRef(library)).toBe(true);
+    expect(isLibraryRef({ app: 'folio', id: 'l-1' })).toBe(false);
+    expect(isLibraryRef('l-1')).toBe(false);
   });
 
   it('knows a DocumentRef when it sees one', () => {
