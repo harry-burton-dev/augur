@@ -66,7 +66,16 @@ export interface RegistryOptions {
   updates?: UpdateChecker;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
   callers?: CallerCheck;
+  /**
+   * Apps that ship with AUGUR (PILLAR_APPS), its pillar apps. Each is an ordinary app that registers
+   * itself on first start, but it is given the scopes its release asks for with no admin step, its
+   * version comes with the release, and it can be turned off but never removed.
+   */
+  pillars?: string[];
 }
+
+/** PILLAR_APPS: the ids of the apps this deployment ships with, space or comma separated. */
+export const pillarsFromEnv = (env: Record<string, string | undefined> = process.env) => (env.PILLAR_APPS ?? '').split(/[\s,]+/).filter(Boolean);
 
 /** Records audit entries with the events service, as the registry. */
 export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry, workspace?: string) =>
@@ -78,13 +87,15 @@ const askedUpload = (r: AppRecord) => r.entry.maxUpload ?? DEFAULT_UPLOAD_MB;
 /** What the gateway lets through to the app in one request, in MB: what it asks, or less where an admin lowered it. */
 const uploadLimitOf = (r: AppRecord) => Math.min(askedUpload(r), r.uploadLimitMb ?? MAX_UPLOAD_MB);
 
-const catalogueEntry = (r: AppRecord, allowed: string[]) => {
+const catalogueEntry = (r: AppRecord, allowed: string[], pillar: boolean) => {
   const blocked = entryOriginProblem(r.entry, allowed);
   return {
     ...r.entry,
     // Registered from an origin no longer allowed: kept, but not offered.
     ...(blocked ? { blocked } : {}),
     platform: false,
+    // Ships with AUGUR: its version comes with the release, and it's turned off rather than removed.
+    ...(pillar ? { pillar: true } : {}),
     enabled: r.enabled,
     registeredBy: r.registeredBy,
     registeredAt: r.registeredAt,
@@ -120,7 +131,10 @@ export const buildApp = async ({
   floors,
   updates = new UpdateChecker({ running: AUGUR_RELEASE }),
   callers,
+  pillars = [],
 }: RegistryOptions = {}) => {
+  const isPillar = (id: string) => pillars.includes(id);
+  const entryOf = (r: AppRecord, allowed: string[]) => catalogueEntry(r, allowed, isPillar(r.entry.id));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   // Before anything reads the caller: only the gateway's signed word says who is calling.
@@ -182,7 +196,7 @@ export const buildApp = async ({
         if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see the whole catalogue.' });
         const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
         const allowed = await allowedOrigins();
-        return [...platform, ...(await store.records()).map((r) => catalogueEntry(r, allowed))];
+        return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed))];
       });
 
       /** An app's kept versions, newest first, and which one the shell is given. */
@@ -197,7 +211,9 @@ export const buildApp = async ({
       const pin = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply, version: string | null) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose an app’s version.' });
-        if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: 'Built-in apps change with AUGUR’s own release.' });
+        if (platformApps.some((a) => a.id === req.params.id) || isPillar(req.params.id)) {
+          return reply.code(409).send({ error: 'conflict', message: 'Apps that ship with AUGUR change with AUGUR’s own release.' });
+        }
         try {
           const changed = await store.pin(req.params.id, version);
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
@@ -209,7 +225,7 @@ export const buildApp = async ({
             target: req.params.id,
             detail: { version: changed.entry.version },
           });
-          return catalogueEntry(changed, await allowedOrigins());
+          return entryOf(changed, await allowedOrigins());
         } catch (err) {
           if (err instanceof UnknownVersionError) return reply.code(404).send({ error: 'not_found', message: err.message });
           if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
@@ -300,7 +316,13 @@ export const buildApp = async ({
           if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
           try {
             const created = await store.put(entry, by.id);
-            const pinned = (await store.records()).find((r) => r.entry.id === entry.id)?.pinnedVersion;
+            // An app that ships with AUGUR may do what its release asks: the admin chose the release.
+            const asked = (await store.records()).find((r) => r.entry.id === entry.id);
+            if (isPillar(entry.id) && asked && awaitingScopes(asked).length) {
+              await store.grant(entry.id, entry.scopes ?? []);
+              await record(req, { actor: by, app: 'registry', action: 'app.scopes-granted', target: entry.id, detail: { scopes: entry.scopes ?? [], shipsWithAugur: true } });
+            }
+            const pinned = asked?.pinnedVersion;
             const held = pinned !== undefined && pinned !== entry.version;
             req.log.info({ app: entry.id, version: entry.version, by: by.id, held }, created ? 'app registered' : held ? 'app version kept, pinned elsewhere' : 'app updated');
             await record(req, {
@@ -334,7 +356,7 @@ export const buildApp = async ({
             req.log.info({ app: req.params.id, enabled: req.body.enabled, by: caller.id }, req.body.enabled ? 'app turned on' : 'app turned off');
             await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: req.body.enabled ? 'app.enabled' : 'app.disabled', target: req.params.id });
           }
-          return catalogueEntry({ ...before, enabled: req.body.enabled }, await allowedOrigins());
+          return entryOf({ ...before, enabled: req.body.enabled }, await allowedOrigins());
         },
       );
 
@@ -407,7 +429,7 @@ export const buildApp = async ({
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, scopes: req.body.scopes, by: caller.id }, 'app scopes granted');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.scopes-granted', target: req.params.id, detail: { scopes: req.body.scopes } });
-          return catalogueEntry(changed, await allowedOrigins());
+          return entryOf(changed, await allowedOrigins());
         },
       );
 
@@ -435,7 +457,7 @@ export const buildApp = async ({
           }
           const changed = (await store.limitUploads(req.params.id, mb))!;
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.upload-limit-set', target: req.params.id, detail: { mb } });
-          return catalogueEntry(changed, await allowedOrigins());
+          return entryOf(changed, await allowedOrigins());
         },
       );
 
@@ -626,6 +648,8 @@ export const buildApp = async ({
       app.delete<{ Params: { id: string } }>('/apps/:id', async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can remove apps.' });
+        const pillar = (await store.records()).find((r) => r.entry.id === req.params.id && isPillar(r.entry.id));
+        if (pillar) return reply.code(409).send({ error: 'conflict', message: `${pillar.entry.name} ships with AUGUR and can’t be removed. Turn it off instead.` });
         if (!(await store.remove(req.params.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
         req.log.info({ app: req.params.id, by: caller.id }, 'app removed');
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.removed', target: req.params.id });

@@ -29,6 +29,7 @@ export const HEALTH_URLS: Record<string, string> = {
   events: 'http://events:8084/healthz',
   models: 'http://models:8085/healthz',
   gateway: 'http://gateway:8080/healthz',
+  folio: 'http://folio:8083/healthz',
   // nginx has no /healthz; the shell's page answering is the check.
   web: 'http://web:8080/',
 };

@@ -183,7 +183,8 @@ export class AdminApps extends LitElement {
       this.floorRules = undefined;
       this.floorsError = '';
       if (app && !app.platform) {
-        void this.loadVersions(app.id);
+        // An app that ships with AUGUR changes version with the release, so it has none to go back to.
+        if (!app.pillar) void this.loadVersions(app.id);
         void this.loadFloors(app.id);
       }
     }
@@ -467,7 +468,7 @@ export class AdminApps extends LitElement {
       open
       light
       size="glance"
-      eyebrow=${app.platform ? 'Part of the platform' : `Registered by ${app.registeredBy ?? 'its service'}`}
+      eyebrow=${app.platform ? 'Part of the platform' : app.pillar ? 'Ships with AUGUR' : `Registered by ${app.registeredBy ?? 'its service'}`}
       heading=${app.name}
       summary=${app.description ?? ''}
       cancel-label="Close"
@@ -501,8 +502,11 @@ export class AdminApps extends LitElement {
           ></ui-select>`}
       ${app.platform ? nothing : this.floors(app)}
       ${app.handles?.length ? html`<p>Answers ${app.handles.join(', ')}.</p>` : nothing}
-      ${app.platform ? nothing : this.history(app)}
-      ${app.platform
+      ${app.pillar
+        ? html`<p data-pillar>It ships with AUGUR and changes version with it. Turn it off here or floor by floor; it can’t be removed, and its sign-in is in the server’s settings.</p>`
+        : nothing}
+      ${app.platform || app.pillar ? nothing : this.history(app)}
+      ${app.platform || app.pillar
         ? nothing
         : html`<div>
             <ui-button kind="tertiary" size="sm" @click=${() => (this.issuing = app)}>Issue a new sign-in</ui-button>
@@ -521,7 +525,7 @@ export class AdminApps extends LitElement {
         route: a.route,
         state: state.label,
         stateStatus: state.status,
-        source: a.platform ? 'AUGUR' : (a.registeredBy ?? ''),
+        source: a.platform || a.pillar ? 'AUGUR' : (a.registeredBy ?? ''),
       };
     });
     return page(

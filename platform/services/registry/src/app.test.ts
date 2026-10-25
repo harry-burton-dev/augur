@@ -314,6 +314,42 @@ describe('registry', () => {
     });
   });
 
+  describe('apps that ship with AUGUR', () => {
+    const shipped = { ...library, scopes: ['notifications:send' as const] };
+    const put = (app: Awaited<ReturnType<typeof buildApp>>, payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
+
+    it('register themselves with what their release asks, with no admin step', async () => {
+      const entries: { action: string; detail?: unknown }[] = [];
+      const app = await buildApp({ verifyService, pillars: ['library'], audit: async (e) => void entries.push(e) });
+      expect((await put(app, shipped)).statusCode).toBe(201);
+      // The next release asks for more: an ordinary app waits for an admin, one that ships with AUGUR doesn't.
+      await put(app, { ...shipped, version: '0.2.0', scopes: ['notifications:send', 'people:read'] });
+      const entry = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json().find((a: { id: string }) => a.id === 'library');
+      expect(entry).toMatchObject({ id: 'library', pillar: true, grantedScopes: ['notifications:send', 'people:read'] });
+      expect(entry.awaitingScopes).toBeUndefined();
+      expect(entries.find((e) => e.action === 'app.scopes-granted')?.detail).toEqual({ scopes: ['notifications:send', 'people:read'], shipsWithAugur: true });
+
+      const ordinary = await buildApp({ verifyService });
+      await put(ordinary, shipped);
+      await put(ordinary, { ...shipped, version: '0.2.0', scopes: ['notifications:send', 'people:read'] });
+      const waiting = (await ordinary.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json().find((a: { id: string }) => a.id === 'library');
+      expect(waiting.pillar).toBeUndefined();
+      expect(waiting.awaitingScopes).toEqual(['people:read']);
+    });
+
+    it('can be turned off, org-wide or on a floor, but never removed or held at a version', async () => {
+      const app = await buildApp({ verifyService, floors, pillars: ['library'] });
+      await put(app, shipped);
+      expect((await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } })).json().enabled).toBe(false);
+      expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/floors/f', headers: admin, payload: { state: 'off' } })).statusCode).toBe(200);
+      const removed = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
+      expect(removed.statusCode).toBe(409);
+      expect(removed.json().message).toBe('Library ships with AUGUR and can’t be removed. Turn it off instead.');
+      expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '0.1.0' } })).statusCode).toBe(409);
+      expect(ids((await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json())).toContain('library');
+    });
+  });
+
   describe('floor by floor', () => {
     const setup = async (payload: object = library) => {
       const entries: { action: string; detail?: unknown }[] = [];

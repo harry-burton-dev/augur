@@ -29,6 +29,8 @@ export interface Role {
 export interface CatalogueApp extends AppManifestEntry {
   /** Ships with the platform; can't be turned off. */
   platform: boolean;
+  /** Ships with AUGUR but is an ordinary app: turned off rather than removed, and its version comes with the release. */
+  pillar?: boolean;
   enabled: boolean;
   registeredBy?: string;
   registeredAt?: string;

@@ -34,7 +34,7 @@ Fill in `infra/deploy/.env`:
 - `PLATFORM_VERSION`: the same release, without `augur@`, for example `0.1.1`.
 - `PLATFORM_URL`: `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`.
 - `TS_AUTHKEY`: the key from the admin console.
-- `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`: long random strings, each different. `openssl rand -hex 32` makes one.
+- `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `FOLIO_CLIENT_SECRET`, `FOLIO_DATABASE_PASSWORD`, `FOLIO_BUCKET_SECRET`: long random strings, each different. `openssl rand -hex 32` makes one. The `FOLIO_` ones are for Folio, the document libraries every deployment ships with.
 - `PLATFORM_ADMIN_*`: you. This is the first person who can sign in, as an admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one.
 
 Then:
@@ -91,7 +91,7 @@ The backups sit on the same disk as the database, so copy `infra/deploy/backups/
 ## What's in it
 
 - **Platform services**: identity, registry, events, models (the model gateway, off until you set a model and turn it on; see [Agents and models](agents.md)) and the gateway. Only the gateway is reachable, and only through `/api`. Services talk to each other on the compose network, each signed in as itself: identity makes each platform service's Keycloak client from its `*_CLIENT_SECRET` when it starts.
-- **Apps**: Home. Folio, the document libraries, isn't in the deploy stack yet: it joins the release as a pillar app once it is built.
+- **Apps**: Home, and Folio, the document libraries, which every deployment ships with. Folio is an ordinary app all the same: its service (`folio`) and rendition worker (`folio-worker`) run in their own containers with their own sign-in, schema and bucket, and it puts itself in Admin, Apps when it starts. Turn it off there, org-wide or floor by floor; it can't be removed.
 - **The front door** (`web`): nginx serving the shell and the apps' frontends, with `/api` and `/sso` behind it. The shell's page has a Content Security Policy: the browser runs only scripts from the platform's own address, the shell's import map, and the sites in `APP_ORIGINS`, and the page talks only to the platform (plus those sites). Fonts come from Google Fonts.
 - **Storage**: Postgres (with pgvector) holds every service's and app's schema. Garage holds apps' files, reachable only inside the compose network; the `storage` container gives each app in `APP_STORAGE` its own login, schema and bucket ([App storage](app-storage.md)).
 - **Sign-in**: Keycloak, imported on first start from `infra/deploy/keycloak/platform-realm.json`, with no test users. Keycloak reads that file only once. If you change `PLATFORM_URL` later, update the **shell** client's redirect URIs and web origins in the admin console.

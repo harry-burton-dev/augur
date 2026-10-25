@@ -10,9 +10,25 @@ import { defineConfig, type Plugin, type ProxyOptions } from 'vite';
  * app's built frontend. In the cloud each app is deployed on its own and the
  * registry's entry URL points there. APP_DIST lists extra apps as id=dir pairs.
  */
+/**
+ * DEV_ALSO: other apps beside the one `pnpm dev:app` opens, as `<app folder>=<its service's url>`
+ * pairs, comma separated. Each is served from its built frontend and put in the stand-in's catalogue.
+ * The contract tests use it to run the reference app beside an app that ships with AUGUR.
+ */
+const devAlso = (process.env.DEV_ALSO ?? '')
+  .split(',')
+  .map((pair) => pair.trim())
+  .filter(Boolean)
+  .map((pair) => {
+    const dir = resolve(pair.slice(0, pair.indexOf('=')));
+    const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; [key: string]: unknown };
+    return { manifest, dist: join(dir, 'frontend', 'dist'), service: pair.slice(pair.indexOf('=') + 1) };
+  });
+
 const appDirs: Record<string, string> = {
   home: fileURLToPath(new URL('../home/dist', import.meta.url)),
   admin: fileURLToPath(new URL('../admin/dist', import.meta.url)),
+  ...Object.fromEntries(devAlso.map((a) => [a.manifest.id, a.dist])),
   ...Object.fromEntries(
     (process.env.APP_DIST ?? '')
       .split(',')
@@ -102,29 +118,34 @@ const devApp = (dir: string | undefined) => {
     apply: 'serve',
     transformIndexHtml: (html) => html.replace('/src/main.tsx', '/src/dev-app.tsx'),
   };
+  /** Sends /api/<id> to an app's service carrying the stand-in person, as the gateway would. */
+  const proxyTo = (id: string, target: string): Record<string, ProxyOptions> => ({
+    [`/api/${id}`]: {
+      target,
+      rewrite: (path: string) => path.slice(`/api/${id}`.length) || '/',
+      headers: caller,
+      // The gateway checks the floor an app names and says what it is and the person's role
+      // there; the stand-in does the same for its own floors (devFloors in src/dev-app/standin.ts).
+      configure: (proxy) =>
+        proxy.on('proxyReq', (req) => {
+          req.removeHeader('x-workspace-kind');
+          req.removeHeader('x-workspace-role');
+          const floor = DEV_FLOORS[String(req.getHeader('x-workspace-id') ?? '')];
+          if (!floor) {
+            req.removeHeader('x-workspace-id');
+            return;
+          }
+          req.setHeader('x-workspace-kind', floor.kind);
+          req.setHeader('x-workspace-role', floor.role);
+        }),
+    },
+  });
   return {
     plugin,
-    define: { __DEV_APP__: JSON.stringify(app), __DEV_ROLES__: JSON.stringify(roles) },
+    define: { __DEV_APP__: JSON.stringify(app), __DEV_ALSO__: JSON.stringify(devAlso.map((a) => a.manifest)), __DEV_ROLES__: JSON.stringify(roles) },
     proxy: {
-      [`/api/${manifest.id}`]: {
-        target: process.env.APP_SERVICE_URL ?? 'http://localhost:8090',
-        rewrite: (path: string) => path.slice(`/api/${manifest.id}`.length) || '/',
-        headers: caller,
-        // The gateway checks the floor an app names and says what it is and the person's role
-        // there; the stand-in does the same for its own floors (devFloors in src/dev-app/standin.ts).
-        configure: (proxy) =>
-          proxy.on('proxyReq', (req) => {
-            req.removeHeader('x-workspace-kind');
-            req.removeHeader('x-workspace-role');
-            const floor = DEV_FLOORS[String(req.getHeader('x-workspace-id') ?? '')];
-            if (!floor) {
-              req.removeHeader('x-workspace-id');
-              return;
-            }
-            req.setHeader('x-workspace-kind', floor.kind);
-            req.setHeader('x-workspace-role', floor.role);
-          }),
-      } satisfies ProxyOptions,
+      ...proxyTo(manifest.id, process.env.APP_SERVICE_URL ?? 'http://localhost:8090'),
+      ...Object.assign({}, ...devAlso.map((a) => proxyTo(a.manifest.id, a.service))),
     },
   };
 };

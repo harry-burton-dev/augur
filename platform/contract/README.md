@@ -8,10 +8,12 @@ It runs against every build of the reference app:
 - **`frozen/sdk-<major>.<minor>/entry.js`**: the reference app as it was built against each earlier SDK minor. These are never rebuilt or replaced, so they stand for apps that were released and not touched since. A shell change that breaks any of them breaks real apps, and fails CI.
 
 ```sh
-pnpm build
+pnpm build   # Folio's frontend and service too
 pnpm --filter @augur/contract-tests exec playwright install chromium   # once
 pnpm --filter @augur/contract-tests test:contract
 ```
+
+Folio ships with AUGUR but an admin can turn it off, and either way the shell, Home, Find and other apps must keep working. So today's build runs twice, once with Folio in the catalogue beside it (its built frontend, and its service keeping everything in memory, through the dev-app mode's `DEV_ALSO`) and once without, and each frozen build runs beside Folio, as released apps now do. `tests/pillar.spec.ts` checks what changes: Folio's Home card, `document.open` and `document.pick` answered by Folio, and with it off, Home without its card and those intents saying no app handles them.
 
 It runs every build side by side, each against its own copy of the shell on its own port (5180, 5181…), and prints each build's results once that build is done. Failures for a build are kept in `test-results/<build>/`.
 

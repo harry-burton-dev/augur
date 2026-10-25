@@ -1,5 +1,5 @@
-# The web front door: the shell and the apps' frontends as static files, with
-# /api sent to the gateway and /sso to Keycloak, so everything is one origin.
+# The web front door: the shell and the apps' frontends (the platform's own, and the apps that ship
+# with AUGUR) as static files, with /api sent to the gateway and /sso to Keycloak, so everything is one origin.
 #   docker build -f infra/web.Dockerfile .
 FROM node:22-alpine AS build
 RUN corepack enable
@@ -8,11 +8,12 @@ COPY . .
 # A path: the shell signs in against Keycloak on whatever address it is served from.
 ENV VITE_OIDC_AUTHORITY=/sso/realms/platform
 RUN pnpm install --frozen-lockfile \
- && pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/admin..." build \
+ && pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/admin..." --filter "@apps/folio-frontend..." build \
  && mkdir -p /site/apps \
  && cp -r platform/frontends/shell/dist/. /site/ \
  && cp -r platform/frontends/home/dist /site/apps/home \
  && cp -r platform/frontends/admin/dist /site/apps/admin \
+ && cp -r apps/folio/frontend/dist /site/apps/folio \
  && node infra/deploy/csp.mjs /site/index.html infra/deploy/nginx.conf > /default.conf.template
 
 # nginx as an unprivileged user, listening on 8080 rather than 80.

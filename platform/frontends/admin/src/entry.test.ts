@@ -454,6 +454,29 @@ describe('admin', () => {
     });
   });
 
+  describe('Apps that ship with AUGUR', () => {
+    it('can be turned off, but offer no version to go back to and no sign-in to issue', async () => {
+      const folio: CatalogueApp = { id: 'folio', name: 'Folio', route: '/folio', entry: '/apps/folio/entry.js', version: '0.1.0', sdk: '^1.1.0', platform: false, pillar: true, enabled: true, registeredBy: 'folio' };
+      const urls: string[] = [];
+      const fetchImpl = vi.fn(async (url: string) => {
+        urls.push(url);
+        return new Response(JSON.stringify(url.endsWith('/floors') ? [] : [folio]), { status: 200 });
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.apps).toHaveLength(1));
+      el.open = 'folio';
+      await settle(el);
+      expect(el.querySelector('ui-dialog')?.getAttribute('eyebrow')).toBe('Ships with AUGUR');
+      expect(el.querySelector('[data-pillar]')?.textContent).toMatch(/can’t be removed/);
+      expect(el.querySelector('ui-toggle')).not.toBeNull();
+      expect(el.textContent).not.toContain('Issue a new sign-in');
+      expect(urls.some((u) => u.endsWith('/versions'))).toBe(false);
+      el.remove();
+    });
+  });
+
   describe('Largest upload', () => {
     it('offers what the app asks for, and only less', () => {
       expect(uploadChoices({ maxUpload: 200 }).map((o) => o.value)).toEqual(['asked', '100', '50', '25', '10', '5', '1']);

@@ -8,8 +8,8 @@
 //                                            in the Release workflow, after infra/release-images.sh: makes the GitHub release
 //                                            augur@<version>, which tags it, with the release file and its images attached
 //
-// Parts are the packages under platform/ (services, frontends, packages). Each keeps its own version and
-// changelog; the AUGUR version moves when any of them does:
+// Parts are the packages under platform/ (services, frontends, packages) and those of the apps that ship
+// with AUGUR (PILLAR_APPS). Each keeps its own version and changelog; the AUGUR version moves when any of them does:
 //   - a part's major bump (or a part removed) is breaking: deployments must be on the previous AUGUR
 //     release before taking this one (`upgradeFrom`), and the release lists why under `breaking`
 //   - any other new feature (a minor bump, or a new part) is a feature
@@ -30,12 +30,19 @@ const ENV_EXAMPLE = `${DEPLOY_DIR}/.env.example`;
 const VERSION_FILE = 'platform/services/registry/src/augur-version.ts';
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 
+/**
+ * The apps that ship with AUGUR (pillar apps), by their folder under apps/. Each is an ordinary app,
+ * but the release builds its images and pins its versions, so its packages are parts too.
+ */
+export const PILLAR_APPS = ['folio'];
+
 /** Every part of the platform, by package name, with its version and where it lives. */
 export const readParts = () => {
   const parts = {};
-  for (const group of ['packages', 'services', 'frontends']) {
-    for (const dir of readdirSync(join(root, 'platform', group), { withFileTypes: true }).filter((d) => d.isDirectory())) {
-      const path = `platform/${group}/${dir.name}`;
+  const groups = [...['packages', 'services', 'frontends'].map((g) => `platform/${g}`), ...PILLAR_APPS.map((app) => `apps/${app}`)];
+  for (const group of groups) {
+    for (const dir of readdirSync(join(root, group), { withFileTypes: true }).filter((d) => d.isDirectory())) {
+      const path = `${group}/${dir.name}`;
       if (!existsSync(join(root, path, 'package.json'))) continue;
       const { name, version } = readJson(`${path}/package.json`);
       parts[name] = { version, path };

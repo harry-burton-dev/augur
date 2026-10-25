@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { since } from './builds';
 
 /**
  * What the shell promises every app through the SDK's mount context. Each test
@@ -68,12 +69,6 @@ test('leaving the app unmounts it', async ({ page }) => {
   await expect(app(page)).toHaveCount(0);
 });
 
-/** Skips a check for frozen builds from before the SDK minor that added what it checks. */
-const since = (minor: string) => {
-  const built = /^sdk-(\d+\.\d+)$/.exec(process.env.CONTRACT_TARGET ?? '')?.[1];
-  const older = built !== undefined && built.localeCompare(minor, undefined, { numeric: true }) < 0;
-  test.skip(older, `the build from sdk-${built} predates SDK ${minor}`);
-};
 
 // SDK 1.1: the floor the app is on, and requests that name it.
 test('mounts on the person’s own floor unless the address names another', async ({ page }) => {
@@ -166,6 +161,8 @@ test('Find doesn’t wait for a slow app: it says so, and lets go after the budg
   await page.goto('/reference');
   await find(page, 'reference');
   await expect(page.locator('ui-shell .view .row', { hasText: 'Reference' }).first()).toBeVisible();
-  await expect(page.locator('ui-shell .view .note.small')).toHaveText('Still looking…');
-  await expect(page.locator('ui-shell .view .note.small')).toHaveText('Didn’t answer in time.', { timeout: 3000 });
+  // The reference app's own note: other apps in the catalogue (Folio, when it's on) have theirs.
+  const note = page.locator('ui-shell .view .group.label:has-text("Reference") + p.note.small');
+  await expect(note).toHaveText('Still looking…');
+  await expect(note).toHaveText('Didn’t answer in time.', { timeout: 3000 });
 });

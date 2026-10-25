@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.12.0
+  version: 1.13.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -104,6 +104,7 @@ paths:
         "204": { description: Removed }
         "403": { description: Not an admin }
         "404": { description: No such app }
+        "409": { description: An app that ships with AUGUR (pillar), which is turned off instead }
   /apps/{id}/grants:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -297,7 +298,7 @@ paths:
               schema: { $ref: "#/components/schemas/CatalogueEntry" }
         "403": { description: Not an admin }
         "404": { description: No such app, or no such version kept }
-        "409": { description: A platform app, or another app now has that version's route }
+        "409": { description: A platform app or one that ships with AUGUR, or another app now has that version's route }
     delete:
       summary: Let go of a pin and serve the newest version (admins only)
       description: Audited as app.unpinned.
@@ -309,7 +310,7 @@ paths:
               schema: { $ref: "#/components/schemas/CatalogueEntry" }
         "403": { description: Not an admin }
         "404": { description: No such app }
-        "409": { description: A platform app }
+        "409": { description: A platform app or one that ships with AUGUR }
   /origins:
     get:
       summary: Where apps may load from besides the platform itself (admins only)
@@ -539,6 +540,11 @@ components:
           required: [platform, enabled]
           properties:
             platform: { type: boolean, description: Ships with the platform and is always on }
+            pillar:
+              type: boolean
+              description: >
+                Ships with AUGUR (PILLAR_APPS) but is an ordinary app: it registers itself, is given the
+                scopes its release asks for, changes version with the release, and can be turned off but not removed.
             enabled: { type: boolean }
             registeredBy: { type: string, description: The service or admin that last registered it }
             registeredAt: { type: string, format: date-time }
