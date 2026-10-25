@@ -1,7 +1,7 @@
 import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
-  Activity, ArrowLeft, ArrowRight, ArrowUpDown, Bell, BellOff, Bookmark, Building, Building2, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes, Ellipsis,
+  Activity, ArrowLeft, ArrowRight, ArrowUpDown, Bell, BellOff, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes, Ellipsis,
   FileText, Folder, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Mail, Monitor, Palette, Plus, Power, Search,
   Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, UserPlus, UserRound, UsersRound, Video, Wifi, X,
   type IconNode,
@@ -74,6 +74,8 @@ export const icons = {
   publish: draw(Send),
   inbox: draw(Inbox),
   withdraw: draw(Undo2),
+  // A run of documents that comes out on a cadence, such as a weekly report.
+  series: draw(CalendarRange),
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;
