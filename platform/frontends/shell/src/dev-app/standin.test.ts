@@ -16,6 +16,12 @@ describe('the stand-in platform', () => {
     expect(await (await standInFetch(devHome)('/api/registry/v1/manifest')).json()).toEqual([devHome]);
   });
 
+  it('lists the other apps it was given beside them', async () => {
+    const folio: AppManifestEntry = { id: 'folio', name: 'Folio', route: '/folio', entry: '/apps/folio/entry.js', version: '0.1.0', sdk: '^1.1.0' };
+    const res = await standInFetch(app, undefined, [folio, app])('/api/registry/v1/manifest');
+    expect(await res.json()).toEqual([devHome, app, folio]);
+  });
+
   it('keeps preferences until the page reloads', async () => {
     const f = standInFetch(app);
     await f('/api/identity/v1/me/preferences', { method: 'PUT', body: JSON.stringify({ away: true }) });

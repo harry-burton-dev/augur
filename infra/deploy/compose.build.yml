@@ -18,5 +18,9 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/models" } }
   storage:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/storage" } }
+  folio:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/folio" } }
+  folio-worker:
+    build: { context: ../.., dockerfile: apps/folio/worker/Dockerfile }
   updater:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, target: updater, args: { PACKAGE: "@augur/updater" } }

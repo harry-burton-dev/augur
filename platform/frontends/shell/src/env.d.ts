@@ -12,5 +12,7 @@ interface ImportMeta {
 
 /** Set only under `pnpm dev:app`: the app being developed, its entry pointing at its source. */
 declare const __DEV_APP__: import('@augur/mfe-sdk').AppManifestEntry;
+/** Set only under `pnpm dev:app`: other apps in the stand-in's catalogue, from DEV_ALSO. */
+declare const __DEV_ALSO__: import('@augur/mfe-sdk').AppManifestEntry[];
 /** Set only under `pnpm dev:app`: extra roles for the stand-in person, from DEV_ROLES. */
 declare const __DEV_ROLES__: string[];

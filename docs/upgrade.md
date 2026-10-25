@@ -51,6 +51,15 @@ The pull fetches that release's images before anything stops. Each service migra
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Folio ships with AUGUR
+
+Folio, the document libraries, is now part of every release: three new containers start (`folio`, its rendition worker `folio-worker`, and Folio's frontend inside `web`), and Folio puts itself in Admin, Apps on its first start. There's nothing to install or allow in Admin. This release changes `compose.yml`, so it's upgraded by hand, not from the Updates page. Before upgrading, add to `.env` (`openssl rand -hex 32` for each):
+
+- `FOLIO_CLIENT_SECRET`: Folio's sign-in, which identity makes in Keycloak on the next start.
+- `FOLIO_DATABASE_PASSWORD` and `FOLIO_BUCKET_SECRET`: its database login and its bucket's secret, which the `storage` container sets up.
+
+Then upgrade as usual. The worker's image is large (about 2 GB: the models that read PDFs and Word files come with it, so nothing is fetched at run time). If you'd rather not offer Folio yet, turn it off in Admin, Apps, org-wide or floor by floor; it can be turned off but not removed. Its files are in the nightly backup with the other apps'.
+
 ### The Updates page
 
 Admin gets an **Updates** page, under AUGUR. It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. Once:

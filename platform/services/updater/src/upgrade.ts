@@ -69,11 +69,14 @@ export interface Server {
 
 /**
  * The parts the updater restarts, in order: storage's set-up first (it gives apps their database
- * logins and buckets, then stops), then the services others call, the front door last.
+ * logins and buckets, then stops), then the services others call, then the apps that ship with
+ * AUGUR, the front door last.
  */
-export const ROLL_ORDER = ['storage', 'identity', 'registry', 'events', 'models', 'gateway', 'web'] as const;
+export const ROLL_ORDER = ['storage', 'identity', 'registry', 'events', 'models', 'folio', 'folio-worker', 'gateway', 'web'] as const;
 /** Parts that do their work and stop, rather than serve: ready once they've stopped without an error. */
 const JOBS = new Set<string>(['storage']);
+/** Parts that work in the background and answer nothing: ready once they're running and stay up. */
+const WORKERS = new Set<string>(['folio-worker']);
 /** Itself: pulled with the rest, and replaced only after the upgrade has ended (see index.ts). */
 export const UPDATER = 'updater';
 /** How long a part has to come back on its new version. */
@@ -92,6 +95,10 @@ const ready = async (server: Server, services: readonly string[], versionOf: (se
   for (const service of services) {
     if (JOBS.has(service)) {
       await finished(server, service);
+      continue;
+    }
+    if (WORKERS.has(service)) {
+      await running(server, service);
       continue;
     }
     const want = versionOf(service);
@@ -118,12 +125,20 @@ const finished = async (server: Server, service: string) => {
   }
 };
 
+/** A worker has nothing to ask: it's ready when it's still running a little after it started. */
+const running = async (server: Server, service: string) => {
+  await server.wait(POLL_MS);
+  const code = await server.exitCode(service).catch(() => undefined);
+  if (code !== undefined) throw new StepFailed(`${service} stopped (exit code ${code}); its logs say why.`);
+};
+
 /** What went wrong, for the page: a message we wrote, or the first line of anything else. */
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 500);
 
 export const runUpgrade = async (target: Target, server: Server, report: Reporter): Promise<Outcome> => {
   const services = ROLL_ORDER.filter((s) => target.images[s]);
-  const versionOf = (service: string) => (service === 'web' ? undefined : target.parts?.[`@augur/${service}`]);
+  // A platform service's part is @augur/<service>; an app that ships with AUGUR is @apps/<its id>.
+  const versionOf = (service: string) => (service === 'web' ? undefined : (target.parts?.[`@augur/${service}`] ?? target.parts?.[`@apps/${service}`]));
   const before = await server.readEnv();
   let step: Step = 'preflight';
   let backup: string | undefined;

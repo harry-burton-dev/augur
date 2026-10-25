@@ -25,6 +25,14 @@ x-service: &service
   depends_on:
     postgres: { condition: service_healthy }
 
+# Folio's own schema and bucket, for its service and its rendition worker. The storage service
+# makes both from these secrets; the bucket key's id is worked out from its secret.
+x-folio-storage: &folio-storage
+  DATABASE_URL: postgres://app_folio:${FOLIO_DATABASE_PASSWORD:?set FOLIO_DATABASE_PASSWORD in .env}@postgres:5432/platform
+  S3_ENDPOINT: http://garage:3900
+  S3_BUCKET: folio
+  S3_SECRET_ACCESS_KEY: ${FOLIO_BUCKET_SECRET:?set FOLIO_BUCKET_SECRET in .env}
+
 services:
   # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate.
   tailscale:
@@ -111,7 +119,8 @@ services:
     environment:
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       GARAGE_ADMIN_URL: http://garage:3903
-      APP_STORAGE: ${APP_STORAGE:-}
+      # Folio's, which ships with AUGUR, and any others named in .env.
+      APP_STORAGE: folio ${APP_STORAGE:-}
     depends_on:
       postgres: { condition: service_healthy }
       garage: { condition: service_started }
@@ -163,6 +172,8 @@ services:
       OIDC_AUDIENCE: platform-api
       # Admin's Status reads what the backup container last wrote here.
       BACKUP_DIR: /backups
+      # Each app's service, name=url: the apps that ship with AUGUR.
+      APP_UPSTREAMS: folio=http://folio:8083
     volumes:
       - ./backups:/backups:ro
     depends_on: [identity, registry, events, models]
@@ -182,7 +193,7 @@ services:
       ORG_NAME: ${ORG_NAME:-Organisation}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Identity makes each platform service's sign-in in Keycloak with these secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-}
+      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env}
 
   registry:
     <<: *service
@@ -194,6 +205,8 @@ services:
       # Admin's Updates page: where new AUGUR releases are listed, and which ones to follow.
       RELEASE_FEED_URL: ${RELEASE_FEED_URL:-}
       RELEASE_CHANNEL: ${RELEASE_CHANNEL:-}
+      # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.
+      PILLAR_APPS: folio
     volumes:
       # A read-only token for a private release feed, as secrets/release-feed-token (docs/upgrade.md).
       - ./secrets:/run/secrets/augur:ro
@@ -217,6 +230,30 @@ services:
       MODEL_API_URL: "${MODEL_API_URL:-}"
       MODEL_API_KEY: "${MODEL_API_KEY:-}"
       MODEL_NAME: "${MODEL_NAME:-}"
+
+  # Folio, the document libraries: the app every deployment ships with (a pillar app). It's an ordinary
+  # app all the same, with its own sign-in, schema and bucket, and it puts itself in the catalogue when it
+  # starts. Admins turn it off org-wide or floor by floor in Admin, Apps; it can't be removed.
+  folio:
+    <<: *service
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    environment:
+      # Its own login comes first: it replaces the platform's DATABASE_URL.
+      <<: [*folio-storage, *env]
+      PORT: 8083
+      SERVICE_CLIENT_SECRET: ${FOLIO_CLIENT_SECRET}
+    depends_on:
+      postgres: { condition: service_healthy }
+      storage: { condition: service_completed_successfully }
+
+  # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
+  # It works on the tables Folio's service makes, so it waits for the service to start.
+  folio-worker:
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    restart: unless-stopped
+    environment:
+      <<: *folio-storage
+    depends_on: [folio]
 
   # Applies the upgrades an admin asks for on Admin → Updates: backup, pull, restart each part, and back
   # by itself if one doesn't come up (docs/upgrade.md, The updater). Optional: only with

@@ -11,7 +11,10 @@ export interface GarageOptions {
   fetchImpl?: typeof fetch;
 }
 
-/** A bucket key's id, derived from its secret, so a new secret in .env is a new key and the same one is left alone. */
+/**
+ * A bucket key's id, derived from its secret, so a new secret in .env is a new key and the same one is left alone.
+ * Apps work it out the same way (service-kit's bucketKeyIdFor), so they need only the secret.
+ */
 export const keyIdFor = (secret: string) => `GK${createHash('sha256').update(secret).digest('hex').slice(0, 24)}`;
 /** The name an app's key carries in Garage, which is how its old keys are found. */
 export const keyNameFor = (app: string) => `app-${app}`;

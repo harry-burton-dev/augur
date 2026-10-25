@@ -37,13 +37,13 @@ export const devHome: AppManifestEntry = { id: 'home', name: 'Home', route: '/ho
 
 /**
  * Answers the platform's own endpoints for the shell, so the real shell runs
- * with no platform behind it: the catalogue is Home and this app, nothing is
- * in the stream but what the app sends, and preferences last until the page
- * reloads. Anything else (the app's own service) goes to `real`.
+ * with no platform behind it: the catalogue is Home, this app and any `also`,
+ * nothing is in the stream but what the app sends, and preferences last until
+ * the page reloads. Anything else (the apps' own services) goes to `real`.
  */
-export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...args) => fetch(...args)): typeof fetch => {
+export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...args) => fetch(...args), also: AppManifestEntry[] = []): typeof fetch => {
   let preferences: unknown = {};
-  const catalogue = app.id === devHome.id ? [app] : [devHome, app];
+  const catalogue = [...(app.id === devHome.id ? [app] : [devHome, app]), ...also.filter((a) => a.id !== app.id && a.id !== devHome.id)];
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://stand-in');
     const path = url.pathname;

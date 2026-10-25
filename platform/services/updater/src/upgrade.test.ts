@@ -15,11 +15,11 @@ const target = (more: Partial<Target> = {}): Target => ({
 });
 
 /** A server that does what it's told, and remembers it; `breaks` makes one thing go wrong. */
-const fakeServer = (breaks: Partial<Record<'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'rollBack', boolean>> = {}) => {
+const fakeServer = (breaks: Partial<Record<'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack', boolean>> = {}) => {
   const did: string[] = [];
   let env = 'PLATFORM_VERSION=0.2.0\nPLATFORM_URL=https://augur.example.org\n';
-  const versions: Record<string, string> = { identity: '0.3.0', registry: '0.4.0', web: '' };
-  const newVersions: Record<string, string> = { identity: '0.4.0', registry: breaks.registry ? '0.4.0' : '0.5.0', web: '' };
+  const versions: Record<string, string> = { identity: '0.3.0', registry: '0.4.0', folio: '0.1.0', web: '' };
+  const newVersions: Record<string, string> = { identity: '0.4.0', registry: breaks.registry ? '0.4.0' : '0.5.0', folio: '0.2.0', web: '' };
   const oldVersions = { ...versions };
   let rolledBack = false;
   const server: Server = {
@@ -52,7 +52,12 @@ const fakeServer = (breaks: Partial<Record<'sign' | 'backup' | 'restore' | 'dige
       did.push(`up ${services.join(' ')}`);
     },
     health: async (service) => ({ version: versions[service] }),
-    exitCode: async (service) => (breaks.storage && service === 'storage' && env.includes('PLATFORM_VERSION=0.3.0') ? 1 : 0),
+    exitCode: async (service) => {
+      const onNew = env.includes('PLATFORM_VERSION=0.3.0');
+      // A worker runs on (no exit code) unless it fell over.
+      if (service === 'folio-worker') return breaks.worker && onNew ? 1 : undefined;
+      return breaks.storage && service === 'storage' && onNew ? 1 : 0;
+    },
     wait: async () => {},
   };
   return { server, did, env: () => env, rolledBack: () => rolledBack };
@@ -75,6 +80,20 @@ describe('an upgrade', () => {
     expect(fake.did.filter((d) => !d.startsWith('verify'))).toEqual(['backup', 'restore-test', 'pull storage identity registry web updater 0.3.0', 'env 0.3.0', 'up storage', 'up identity', 'up registry', 'up web']);
     expect(fake.did.filter((d) => d.startsWith('verify'))).toHaveLength(5);
     expect(fake.env()).toContain('PLATFORM_URL=https://augur.example.org');
+  });
+
+  it('restarts the apps that ship with AUGUR too, on the version the release gives them', async () => {
+    const shipped = target({
+      images: { ...target().images, folio: image('folio', 'f3'), 'folio-worker': image('folio-worker', 'f3') },
+      // Folio's service, as the release names it (@apps/<id>).
+      parts: { ...target().parts, [`@apps/${'folio'}`]: '0.2.0' },
+    });
+    const fake = fakeServer();
+    expect((await run(shipped, fake.server)).outcome).toBe('done');
+    expect(fake.did.filter((d) => d.startsWith('up '))).toEqual(['up storage', 'up identity', 'up registry', 'up folio', 'up folio-worker', 'up web']);
+    const { outcome, last } = await run(shipped, fakeServer({ worker: true }).server);
+    expect(outcome).toBe('rolled-back');
+    expect(last.message).toContain('folio-worker stopped (exit code 1)');
   });
 
   it('verifies images where the deployment pulls them from', async () => {

@@ -117,6 +117,8 @@ services:
       PORT: 8082
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-registry
+      # The apps that ship with AUGUR: turned off rather than removed.
+      PILLAR_APPS: folio
       <<: *internal
     depends_on: [postgres]
 

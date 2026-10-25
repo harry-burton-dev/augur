@@ -1,5 +1,5 @@
 import { callerCheckFromEnv, floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
-import { auditTo, buildApp } from './app.ts';
+import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { DEFAULT_FEED_URL, feedTokenFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
@@ -37,6 +37,7 @@ const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: 
 const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel });
 updates.start();
 
-// Apps and platform services sign in as themselves (their Keycloak clients).
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates });
+// Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
+// this deployment ships with, which register themselves like any other.
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv() });
 await app.listen({ port, host: '0.0.0.0' });

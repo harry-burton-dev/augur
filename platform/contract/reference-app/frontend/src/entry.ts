@@ -1,4 +1,4 @@
-import { defineMicroFrontend, isIntentCancelled, type MountContext } from '@augur/mfe-sdk';
+import { defineMicroFrontend, isIntentCancelled, openDocument, pickDocument, type MountContext } from '@augur/mfe-sdk';
 import { html, render } from 'lit';
 import '@augur/ui-kit';
 
@@ -17,7 +17,7 @@ const views = new WeakMap<HTMLElement, () => void>();
 
 export default defineMicroFrontend({
   async mount(el: HTMLElement, ctx: MountContext) {
-    const state = { token: 'waiting', answer: '', bus: '', fetched: '' };
+    const state = { token: 'waiting', answer: '', bus: '', fetched: '', opened: '', picked: '' };
     const off = ctx.bus.on<string>('reference.ping', (payload) => {
       state.bus = payload;
       draw();
@@ -38,6 +38,29 @@ export default defineMicroFrontend({
       state.fetched = await res.text();
       draw();
     };
+    // SDK 1.4: the standard document intents, answered by whichever app handles them (Folio ships with AUGUR).
+    const openOne = () =>
+      openDocument(ctx, { app: 'folio', id: 'd-contract', title: 'Contract document' }).then(
+        () => {
+          state.opened = 'raised';
+          draw();
+        },
+        () => {
+          state.opened = 'no app';
+          draw();
+        },
+      );
+    const pickOne = () =>
+      pickDocument(ctx, { purpose: 'For the contract tests' }).then(
+        (ref) => {
+          state.picked = ref.title ?? ref.id;
+          draw();
+        },
+        (err: unknown) => {
+          state.picked = isIntentCancelled(err) ? 'cancelled' : 'no app';
+          draw();
+        },
+      );
     const draw = () =>
       render(
         html`<section data-reference style="padding:var(--space-6)">
@@ -51,6 +74,8 @@ export default defineMicroFrontend({
             <dt>Bus</dt><dd data-check="bus">${state.bus}</dd>
             <dt>Floor</dt><dd data-check="floor">${ctx.workspace.name} (${ctx.workspace.slug}, ${ctx.workspace.kind}, ${ctx.workspace.role}) ${ctx.getWorkspace().id}</dd>
             <dt>Fetched</dt><dd data-check="fetched">${state.fetched}</dd>
+            <dt>Opened</dt><dd data-check="opened">${state.opened}</dd>
+            <dt>Picked</dt><dd data-check="picked">${state.picked}</dd>
           </dl>
           ${ctx.reply
             ? html`<ui-button data-action="respond" @click=${() => ctx.reply!.respond({ answer: 42 })}>Answer 42</ui-button>
@@ -61,7 +86,9 @@ export default defineMicroFrontend({
                 <ui-button data-action="raise" @click=${() => void ctx.raise({ type: 'reference.show', payload: { n: 1 } })}>Raise</ui-button>
                 <ui-button data-action="request" @click=${() => void ask()}>Request</ui-button>
                 <ui-button data-action="fetch" @click=${() => void fetchFloor()}>Fetch</ui-button>
-                <ui-button data-action="emit" @click=${() => ctx.bus.emit('reference.ping', 'pong')}>Emit</ui-button>`}
+                <ui-button data-action="emit" @click=${() => ctx.bus.emit('reference.ping', 'pong')}>Emit</ui-button>
+                <ui-button data-action="open-document" @click=${() => void openOne()}>Open a document</ui-button>
+                <ui-button data-action="pick-document" @click=${() => void pickOne()}>Pick a document</ui-button>`}
         </section>`,
         el,
       );
