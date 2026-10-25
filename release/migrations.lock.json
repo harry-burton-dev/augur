@@ -23,6 +23,7 @@
   },
   "@apps/folio": {
     "001_libraries": "1c5f1dfed17e6277",
-    "002_documents": "13680e35861e3f21"
+    "002_documents": "13680e35861e3f21",
+    "003_tags_views": "671dbdecf0e69ff8"
   }
 }
