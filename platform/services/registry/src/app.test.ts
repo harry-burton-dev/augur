@@ -314,6 +314,46 @@ describe('registry', () => {
     });
   });
 
+  describe('an app’s own settings', () => {
+    const retention = { id: 'retentionDays', label: 'Keep deleted documents for', type: 'integer', unit: 'days', min: 1, max: 365, default: 30 };
+    const withSettings = { ...library, settings: [retention] };
+
+    it('turns away settings that can’t work', async () => {
+      const app = await buildApp({ verifyService });
+      const put = (settings: object[]) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, settings } });
+      expect((await put([{ ...retention, default: 400 }])).json().message).toMatch(/defaults to 400, outside 1 to 365/);
+      expect((await put([retention, retention])).json().message).toMatch(/twice/);
+      expect((await put([{ ...retention, type: 'text' }])).statusCode).toBe(400);
+      expect((await put([retention])).statusCode).toBe(201);
+    });
+
+    it('lets admins set them and the app read them, with defaults until then, all on the record', async () => {
+      const entries: { action: string; detail?: unknown }[] = [];
+      const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: withSettings });
+      const read = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/settings', headers });
+      const set = (value: number | null, headers = admin, setting = 'retentionDays') => app.inject({ method: 'PUT', url: `/v1/apps/library/settings/${setting}`, headers, payload: { value } });
+
+      expect((await read(service)).json()).toEqual({ settings: [{ ...retention, value: 30 }] });
+      expect((await read(as('app-board'))).statusCode).toBe(403);
+      expect((await read(editor)).statusCode).toBe(403);
+      expect((await set(90, editor)).statusCode).toBe(403);
+      expect((await set(900)).json().message).toBe('Keep deleted documents for is 1 to 365 days.');
+      expect((await set(5, admin, 'nothing')).statusCode).toBe(404);
+      expect((await set(90)).json().settings[0]).toMatchObject({ id: 'retentionDays', value: 90, setBy: 'u-1' });
+      // A new version keeps it; one that narrows the range past it falls back to its default.
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...withSettings, version: '0.2.0' } });
+      expect((await read(service)).json().settings[0].value).toBe(90);
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...withSettings, version: '0.3.0', settings: [{ ...retention, max: 60 }] } });
+      expect((await read(admin)).json().settings[0]).toEqual({ ...retention, max: 60, value: 30 });
+      expect((await set(null)).json().settings[0].value).toBe(30);
+      expect(entries.filter((e) => e.action === 'app.setting-changed').map((e) => e.detail)).toEqual([
+        { setting: 'retentionDays', label: 'Keep deleted documents for', value: 90, unit: 'days' },
+        { setting: 'retentionDays', label: 'Keep deleted documents for', value: null, unit: 'days' },
+      ]);
+    });
+  });
+
   describe('apps that ship with AUGUR', () => {
     const shipped = { ...library, scopes: ['notifications:send' as const] };
     const put = (app: Awaited<ReturnType<typeof buildApp>>, payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });

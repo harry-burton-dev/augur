@@ -29,6 +29,7 @@ import {
   MAX_UPLOAD_MB,
   parseOrigin,
   platformApps,
+  settingsProblem,
   surfaceProblem,
   unbuiltApps,
   versionProblem,
@@ -86,6 +87,16 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
 const askedUpload = (r: AppRecord) => r.entry.maxUpload ?? DEFAULT_UPLOAD_MB;
 /** What the gateway lets through to the app in one request, in MB: what it asks, or less where an admin lowered it. */
 const uploadLimitOf = (r: AppRecord) => Math.min(askedUpload(r), r.uploadLimitMb ?? MAX_UPLOAD_MB);
+
+/** An app's settings as its manifest offers them, each with the value in force: an admin's, or its default. */
+const settingsOf = (r: AppRecord) => ({
+  settings: (r.entry.settings ?? []).map((setting) => {
+    const set = r.settings?.[setting.id];
+    // A value set before the app narrowed the range is kept, but only used while it still fits.
+    const fits = set && set.value >= setting.min && set.value <= setting.max;
+    return { ...setting, value: fits ? set.value : setting.default, ...(fits ? { setBy: set.setBy, setAt: set.setAt } : {}) };
+  }),
+});
 
 const catalogueEntry = (r: AppRecord, allowed: string[], pillar: boolean) => {
   const blocked = entryOriginProblem(r.entry, allowed);
@@ -308,7 +319,7 @@ export const buildApp = async ({
           if (!by) return reply;
           const entry = req.body;
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
-          const badVersion = versionProblem(entry) ?? surfaceProblem(entry);
+          const badVersion = versionProblem(entry) ?? surfaceProblem(entry) ?? settingsProblem(entry);
           if (badVersion) return reply.code(400).send({ error: 'bad_request', message: badVersion });
           const badOrigin = entryOriginProblem(entry, await allowedOrigins());
           if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });
@@ -458,6 +469,43 @@ export const buildApp = async ({
           const changed = (await store.limitUploads(req.params.id, mb))!;
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.upload-limit-set', target: req.params.id, detail: { mb } });
           return entryOf(changed, await allowedOrigins());
+        },
+      );
+
+      /** The app's own settings and what each is set to: for admins, and for the app's service to work by. */
+      app.get<{ Params: { id: string } }>('/apps/:id/settings', async (req, reply) => {
+        const service = await serviceOf(req, reply);
+        if (service === undefined) return reply;
+        const own = service?.kind === 'app' && service.app === req.params.id;
+        if (!own && !isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the app itself can see its settings.' });
+        const found = (await store.records()).find((r) => r.entry.id === req.params.id);
+        if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+        return settingsOf(found);
+      });
+
+      /** Sets one of an app's settings, or with `null` puts it back to its default. Admins only; audited. */
+      app.put<{ Params: { id: string; setting: string }; Body: { value: number | null } }>(
+        '/apps/:id/settings/:setting',
+        {
+          schema: {
+            body: { type: 'object', additionalProperties: false, required: ['value'], properties: { value: { type: ['integer', 'null'] } } },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change an app’s settings.' });
+          const found = (await store.records()).find((r) => r.entry.id === req.params.id);
+          if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          const setting = found.entry.settings?.find((s) => s.id === req.params.setting);
+          if (!setting) return reply.code(404).send({ error: 'not_found', message: `${found.entry.name} has no setting "${req.params.setting}".` });
+          const { value } = req.body;
+          if (value !== null && (value < setting.min || value > setting.max)) {
+            return reply.code(400).send({ error: 'invalid', message: `${setting.label} is ${setting.min} to ${setting.max}${setting.unit ? ` ${setting.unit}` : ''}.` });
+          }
+          const changed = (await store.setSetting(found.entry.id, setting.id, value, caller.id))!;
+          req.log.info({ app: found.entry.id, setting: setting.id, value, by: caller.id }, 'app setting changed');
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.setting-changed', target: found.entry.id, detail: { setting: setting.id, label: setting.label, value, ...(setting.unit ? { unit: setting.unit } : {}) } });
+          return settingsOf(changed);
         },
       );
 

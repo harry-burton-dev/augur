@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { registerApp } from './registration.js';
+import { appSettings, registerApp } from './registration.js';
 import { ServiceCallError } from './service.js';
 
 const manifest = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0' };
@@ -33,5 +33,22 @@ describe('registerApp', () => {
       new ServiceCallError('Could not register library with the registry: it answered 409: Home already lives at /.'),
     );
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('appSettings', () => {
+  it('reads the app’s settings as itself, by id', async () => {
+    const fetchImpl = vi.fn(async () => reply(200, { settings: [{ id: 'retentionDays', label: 'Keep for', type: 'integer', min: 1, max: 365, default: 30, value: 90 }] }));
+    expect(await appSettings({ registryUrl: 'http://registry:8082/', credentials, app: 'library', fetchImpl })).toEqual({ retentionDays: 90 });
+    expect(fetchImpl).toHaveBeenCalledWith('http://registry:8082/v1/apps/library/settings', { headers: { authorization: 'Bearer s3cret' } });
+  });
+
+  it('says why when the registry can’t say', async () => {
+    const refused = vi.fn(async () => reply(403, { message: 'Only an admin or the app itself can see its settings.' }));
+    await expect(appSettings({ registryUrl: 'http://r', credentials, app: 'library', fetchImpl: refused })).rejects.toThrow(
+      new ServiceCallError("Could not read library's settings from the registry: it answered 403: Only an admin or the app itself can see its settings."),
+    );
+    const down = vi.fn(async () => Promise.reject(new TypeError('fetch failed')));
+    await expect(appSettings({ registryUrl: 'http://r', credentials, app: 'library', fetchImpl: down })).rejects.toThrow(/fetch failed/);
   });
 });

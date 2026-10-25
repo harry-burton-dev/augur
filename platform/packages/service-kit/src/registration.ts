@@ -1,4 +1,4 @@
-import { callService, type ServiceCredentials } from './service.js';
+import { callService, serviceHeaders, ServiceCallError, type ServiceCredentials } from './service.js';
 
 export interface RegisterOptions {
   /** The registry's internal address, e.g. http://registry:8082. */
@@ -26,4 +26,29 @@ export async function registerApp({ registryUrl, credentials, manifest, attempts
     retryMs,
     fetchImpl,
   });
+}
+
+export interface SettingsOptions {
+  /** The registry's internal address, e.g. http://registry:8082. */
+  registryUrl: string;
+  credentials: ServiceCredentials;
+  /** The app's id. */
+  app: string;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * The app's own settings (its manifest's `settings`) as admins set them in Admin, Apps,
+ * by setting id: an admin's value, or the setting's default. Ask again whenever the value
+ * is about to be used, since an admin can change it at any time. Throws ServiceCallError
+ * when the registry can't say.
+ */
+export async function appSettings({ registryUrl, credentials, app, fetchImpl = fetch }: SettingsOptions): Promise<Record<string, number>> {
+  const what = `read ${app}'s settings from the registry`;
+  const res = await fetchImpl(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/settings`, { headers: await serviceHeaders(credentials) }).catch((err: Error) => {
+    throw new ServiceCallError(`Could not ${what}: ${err.message}.`);
+  });
+  const reply = (await res.json().catch(() => ({}))) as { settings?: { id: string; value: number }[]; message?: string };
+  if (!res.ok || !Array.isArray(reply.settings)) throw new ServiceCallError(`Could not ${what}: it answered ${res.status}${reply.message ? `: ${reply.message.replace(/\.$/, '')}` : ''}.`);
+  return Object.fromEntries(reply.settings.map((s) => [s.id, s.value]));
 }

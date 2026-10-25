@@ -23,6 +23,15 @@ export interface AppRecord {
   grantedScopes: Scope[];
   /** Set when an admin has lowered how much the app may be sent in one request, in MB. */
   uploadLimitMb?: number;
+  /** What admins set the app's own settings (its manifest's `settings`) to, by setting id. Unset ones take their default. */
+  settings?: Record<string, SettingValue>;
+}
+
+/** An admin's value for one of an app's settings. */
+export interface SettingValue {
+  value: number;
+  setBy: string;
+  setAt: string;
 }
 
 /**
@@ -125,6 +134,8 @@ export interface AppStore {
   grant(id: string, scopes: Scope[]): Promise<AppRecord | undefined>;
   /** Lowers how much the app may be sent in one request, in MB, or with `null` goes back to what its manifest asks. Undefined when there is no such app. */
   limitUploads(id: string, mb: number | null): Promise<AppRecord | undefined>;
+  /** Sets one of the app's settings, or with `null` takes the admin's value away. Undefined when there is no such app. */
+  setSetting(id: string, setting: string, value: number | null, by: string): Promise<AppRecord | undefined>;
   /** What floors say about apps: one app's, or every app's. */
   rules(app?: string): Promise<FloorRule[]>;
   /** Sets what one floor says about an app, replacing what it said before. */
@@ -225,6 +236,7 @@ export class MemoryAppStore implements AppStore {
       updatedAt: now,
       grantedScopes: before?.grantedScopes ?? [...(entry.scopes ?? [])],
       ...(before?.uploadLimitMb !== undefined ? { uploadLimitMb: before.uploadLimitMb } : {}),
+      ...(before?.settings ? { settings: before.settings } : {}),
     });
     return !before;
   }
@@ -270,6 +282,17 @@ export class MemoryAppStore implements AppStore {
     if (!record) return undefined;
     if (mb === null) delete record.uploadLimitMb;
     else record.uploadLimitMb = mb;
+    return structuredClone(record);
+  }
+
+  async setSetting(id: string, setting: string, value: number | null, by: string) {
+    const record = this.apps.get(id);
+    if (!record) return undefined;
+    const settings = { ...record.settings };
+    if (value === null) delete settings[setting];
+    else settings[setting] = { value, setBy: by, setAt: new Date().toISOString() };
+    if (Object.keys(settings).length) record.settings = settings;
+    else delete record.settings;
     return structuredClone(record);
   }
 
@@ -390,6 +413,12 @@ export const migrations: { id: string; sql: string }[] = [
       -- An admin's lower limit on what an app may be sent in one request, in MB; null keeps its manifest's.
       alter table registry.apps add column upload_limit_mb integer;`,
   },
+  {
+    id: '008_settings',
+    sql: `
+      -- What admins set an app's own settings to: { "<setting>": { "value", "setBy", "setAt" } }. Unset ones take their default.
+      alter table registry.apps add column settings jsonb not null default '{}'::jsonb;`,
+  },
 ];
 
 type AppRow = {
@@ -401,6 +430,7 @@ type AppRow = {
   pinned_version: string | null;
   granted_scopes: Scope[];
   upload_limit_mb: number | null;
+  settings: Record<string, SettingValue> | null;
 };
 
 const fromAppRow = (r: AppRow): AppRecord => ({
@@ -412,6 +442,7 @@ const fromAppRow = (r: AppRow): AppRecord => ({
   ...(r.pinned_version ? { pinnedVersion: r.pinned_version } : {}),
   grantedScopes: r.granted_scopes,
   ...(r.upload_limit_mb !== null ? { uploadLimitMb: r.upload_limit_mb } : {}),
+  ...(r.settings && Object.keys(r.settings).length ? { settings: r.settings } : {}),
 });
 
 export class PgAppStore implements AppStore {
@@ -568,6 +599,16 @@ export class PgAppStore implements AppStore {
 
   async limitUploads(id: string, mb: number | null) {
     const { rows } = await this.pool.query<AppRow>('update registry.apps set upload_limit_mb = $2 where id = $1 returning *', [id, mb]);
+    return rows[0] && fromAppRow(rows[0]);
+  }
+
+  async setSetting(id: string, setting: string, value: number | null, by: string) {
+    const { rows } = await this.pool.query<AppRow>(
+      value === null
+        ? 'update registry.apps set settings = settings - $2 where id = $1 returning *'
+        : `update registry.apps set settings = settings || jsonb_build_object($2::text, jsonb_build_object('value', $3::numeric, 'setBy', $4::text, 'setAt', $5::text)) where id = $1 returning *`,
+      value === null ? [id, setting] : [id, setting, value, by, new Date().toISOString()],
+    );
     return rows[0] && fromAppRow(rows[0]);
   }
 

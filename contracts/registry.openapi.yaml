@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.13.0
+  version: 1.14.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -191,6 +191,51 @@ paths:
         "400": { description: More than the app's manifest asks for }
         "403": { description: Not an admin }
         "404": { description: No such app is registered }
+  /apps/{id}/settings:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: The app's own settings and the value of each (admins, and the app's own service)
+      description: >
+        Each setting the app's manifest offers, with the value in force: an
+        admin's, or the setting's default. A value set before the app narrowed
+        a setting's range is used only while it still fits.
+      responses:
+        "200":
+          description: Its settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppSettings" }
+        "403": { description: Neither an admin nor the app's own service }
+        "404": { description: No such app is registered }
+  /apps/{id}/settings/{setting}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: setting, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Set one of an app's settings (admins)
+      description: >
+        `null` puts it back to its default. Kept when the app registers new
+        versions. Audited as app.setting-changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [value]
+              properties:
+                value: { type: [integer, "null"] }
+      responses:
+        "200":
+          description: Its settings as they now are
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppSettings" }
+        "400": { description: Outside the setting's min and max }
+        "403": { description: Not an admin }
+        "404": { description: No such app, or it offers no such setting }
   /apps/{id}/floors:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -463,6 +508,34 @@ paths:
         "404": { description: Not the open upgrade }
 components:
   schemas:
+    AppSetting:
+      type: object
+      additionalProperties: false
+      required: [id, label, type, min, max, default]
+      properties:
+        id: { type: string, pattern: "^[a-z][a-zA-Z0-9]{0,39}$", description: "How the app's service names it, e.g. retentionDays" }
+        label: { type: string, maxLength: 60 }
+        detail: { type: string, maxLength: 200 }
+        type: { enum: [integer] }
+        unit: { type: string, maxLength: 20, description: "What the number counts, e.g. days" }
+        min: { type: integer }
+        max: { type: integer }
+        default: { type: integer, description: Between min and max }
+    AppSettings:
+      type: object
+      required: [settings]
+      properties:
+        settings:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/AppSetting"
+              - type: object
+                required: [value]
+                properties:
+                  value: { type: integer, description: "An admin's value, or the default" }
+                  setBy: { type: string, description: The admin who set it }
+                  setAt: { type: string, format: date-time }
     Upgrade:
       type: object
       required: [id, from, version, images, requestedBy, requestedAt, state, steps]
@@ -609,6 +682,11 @@ components:
           uniqueItems: true
           items: { $ref: "#/components/schemas/Scope" }
           description: What the app's service asks to do on the platform. An app may always register itself.
+        settings:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/AppSetting" }
+          description: Settings the app offers admins (Admin, Apps); its service reads them from /apps/{id}/settings.
         floors:
           type: array
           minItems: 1
