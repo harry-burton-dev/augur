@@ -1,5 +1,15 @@
 # @augur/events
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [f7fc3e6]
+- Updated dependencies [94d0c0c]
+- Updated dependencies [4608af1]
+- Updated dependencies [936bb00]
+  - @augur/service-kit@0.6.0
+
 ## 0.4.0
 
 ### Minor Changes

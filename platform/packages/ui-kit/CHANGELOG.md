@@ -1,5 +1,16 @@
 # @augur/ui-kit
 
+## 1.2.0
+
+### Minor Changes
+
+- c95e799: `ui-drop-zone`: somewhere to drop files, or press Choose files. It hands over the ones its `accept` allows and says which it turned away; `accepts` does the same matching. The kit gains the `upload` icon.
+- 936bb00: Icons for publishing: `publish`, `inbox` and `withdraw`.
+- f1b5773: `ui-reader` shows Markdown as a page of text in the kit's type: every heading and top-level block gets a stable anchor, raw HTML is escaped, pictures load only through `imageSource`, and tables scroll in their own region. It has text sizes and a narrow or wide measure, reports its outline (`ui-outline`) and where the reader has got to (`ui-position`), and `goTo` takes you to an anchor. `ui-contents` lists an outline as links and marks the current one.
+- d5d54cc: A `series` icon, for runs of documents that come out on a cadence.
+- 22be7f4: `ui-tag` (a word something is filed under, with an optional ×), `ui-tag-picker` (pick any number of tags by typing, and with `creatable` ask to add a new one) and `ui-filter-bar` (a button for each way to narrow a list, a sort, the count, room for actions, and what's on as removable tags; `filterValue` tidies a value). The kit gains the `tag`, `filter`, `sort` and `view` icons.
+- a25ab8a: `ui-tree`: things inside things, such as a library's folders, one row each with a chevron to open what's inside. It follows the ARIA tree pattern (arrow keys move, open and close; Enter selects) and opens the selected row's parents by itself. `treePath` finds the ids down to a row.
+
 ## 1.1.0
 
 ### Minor Changes
