@@ -116,6 +116,7 @@ pnpm check:boundaries
 
 | Guide | Covers |
 | --- | --- |
+| [Folio](docs/folio.md) | Using Folio, the document libraries, and running it as an admin |
 | [Build an app](docs/build-an-app.md) | From `create-app` to an app in the shell |
 | [Deploy](docs/deploy.md) | Running the stack on a server with Docker Compose and Tailscale |
 | [Upgrade](docs/upgrade.md) | Updating a running server, backups and rollback |
