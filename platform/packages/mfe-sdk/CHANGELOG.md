@@ -1,5 +1,11 @@
 # @augur/mfe-sdk
 
+## 1.3.0
+
+### Minor Changes
+
+- 043d5d3: `library.open` joins the standard document intents: `LIBRARY_OPEN`, the `LibraryRef` type, `isLibraryRef` and `openLibrary(ctx, ref)`.
+
 ## 1.2.0
 
 ### Minor Changes

@@ -1,5 +1,20 @@
 # @augur/identity
 
+## 0.5.0
+
+### Minor Changes
+
+- 4608af1: Apps can look people up for sharing, with the new `people:read` scope. Identity says who a person stands for (`GET /v1/people/:id/principals`: `person:`, `team:` and `tree:` principals and `org`) and finds people and teams by name or names them by id (`GET /v1/directory`). The service kit's `identityPrincipals` (kept 30 seconds) and `identityDirectory` call them. Admin shows the scope as "Look up people and teams".
+- 936bb00: A publisher role, for people who may publish beyond their own team (to the whole org, or any team). Identity adds it to the sign-in service when it starts, so existing servers get it too. Identity says who an audience reaches (`GET /v1/members?principals=`, `people:read`), which the service kit's `identityAudience` calls, and the directory's teams carry their `path` of team ids.
+
+### Patch Changes
+
+- Updated dependencies [f7fc3e6]
+- Updated dependencies [94d0c0c]
+- Updated dependencies [4608af1]
+- Updated dependencies [936bb00]
+  - @augur/service-kit@0.6.0
+
 ## 0.4.0
 
 ### Minor Changes

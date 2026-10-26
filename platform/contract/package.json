@@ -1,6 +1,6 @@
 {
   "name": "@augur/contract-tests",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "The shell's promise to apps, tested: a reference app, and frozen builds of it from each SDK release, mounted by the real shell in a browser.",
