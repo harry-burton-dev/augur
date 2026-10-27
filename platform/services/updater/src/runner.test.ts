@@ -41,6 +41,9 @@ const fakeHost = (env = ENV) => {
     async provisionStorage(app) {
       did.push(`storage ${app}`);
     },
+    async dropStorage(id) {
+      did.push(`drop ${id}`);
+    },
     async start(services) {
       for (const s of services) {
         const svc = (project!.services as Record<string, { image: string }>)[s];
@@ -204,5 +207,53 @@ describe('settings', () => {
     const project = appsProject({ apps: { notes: { active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: false, bucket: false } } } } }, 'net');
     expect(project.networks).toEqual({ platform: { external: true, name: 'net' } });
     expect(project.services['app-notes-blue']).toMatchObject({ image: image('a'), cap_drop: ['ALL'], security_opt: ['no-new-privileges:true'], env_file: ['./app-notes-blue.env'] });
+  });
+
+  it('runs a pull request’s build beside the app, signed in as it with scratch storage, and replaces it in place', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    t.did.length = 0;
+    t.calls.did.length = 0;
+    t.versions.set(image('d'), '1.1.0-pr.12.1');
+    t.versions.set(image('e'), '1.1.0-pr.12.2');
+    const signer = { signer: { repository: 'o/r', workflow: '.github/workflows/app-preview.yml' } };
+    const preview = (version: string, c: string): AppJob => ({ id: `p-${version}`, app: 'notes', action: 'preview', pr: 12, release: release(version, c, signer), state: 'requested' });
+    // The app's release workflow doesn't make previews.
+    expect(await t.run({ ...preview('1.1.0-pr.12.1', 'd'), release: release('1.1.0-pr.12.1', 'd') })).toBe('failed');
+    t.did.length = 0;
+    expect(await t.run(preview('1.1.0-pr.12.1', 'd'))).toBe('done');
+    expect(t.did).toEqual(['verify https://github.com/o/r/.github/workflows/app-preview.yml@refs/pull/12/merge', 'storage notes-pr12', 'start app-notes-pr12']);
+    // Never registered, never the app's upstream: the registry sends only its developers to it.
+    expect(t.calls.did).toEqual([]);
+    expect(t.reports.at(-1)).toMatchObject({ step: 'switch', outcome: 'done', upstream: 'http://app-notes-pr12:8080' });
+    const env = t.envFiles()['app-notes-pr12'];
+    expect(env).toContain(`SERVICE_CLIENT_SECRET=${appSecretFor(KEY, 'notes', 'sign-in')}`);
+    expect(env).toContain(`DATABASE_URL=postgres://app_notes_pr12:${appSecretFor(KEY, 'notes-pr12', 'database')}@postgres:5432/platform`);
+    expect(env).toContain('APP_PREVIEW=pr-12');
+    expect(t.project()!.services['app-notes-pr12']).toMatchObject({ image: image('d'), cap_drop: ['ALL'], labels: { 'augur.preview': '12' } });
+    expect(t.running.has('app-notes-blue')).toBe(true);
+
+    t.did.length = 0;
+    expect(await t.run(preview('1.1.0-pr.12.2', 'e'))).toBe('done');
+    expect(t.did).toEqual(['verify https://github.com/o/r/.github/workflows/app-preview.yml@refs/pull/12/merge', 'storage notes-pr12', 'stop app-notes-pr12', 'start app-notes-pr12']);
+    expect(t.state().previews?.['notes-pr12']).toMatchObject({ version: '1.1.0-pr.12.2', image: image('e') });
+
+    t.did.length = 0;
+    expect(await t.run({ id: 'r-1', app: 'notes', action: 'preview-remove', pr: 12, state: 'requested' })).toBe('done');
+    expect(t.did).toEqual(['stop app-notes-pr12', 'drop notes-pr12']);
+    expect(t.state().previews).toEqual({});
+    expect(Object.keys(t.project()!.services)).toEqual(['app-notes-blue']);
+  });
+
+  it('takes a preview that doesn’t come up away again, leaving the app alone', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    t.versions.set(image('f'), '0.0.1');
+    const signer = { signer: { repository: 'o/r', workflow: '.github/workflows/app-preview.yml' } };
+    expect(await t.run({ id: 'p-1', app: 'notes', action: 'preview', pr: 3, release: release('1.1.0-pr.3.1', 'f', signer), state: 'requested' })).toBe('failed');
+    expect(t.reports.at(-1)).toMatchObject({ step: 'health', outcome: 'failed', message: 'Notes came up on 0.0.1, not 1.1.0-pr.3.1.' });
+    expect(t.running.has('app-notes-pr3')).toBe(false);
+    expect(t.running.has('app-notes-blue')).toBe(true);
+    expect(t.state().previews).toEqual({});
   });
 });

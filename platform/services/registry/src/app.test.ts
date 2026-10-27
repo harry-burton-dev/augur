@@ -290,9 +290,9 @@ describe('registry', () => {
       app.inject({ method: 'PUT', url: `/v1/apps/${id}/upstream`, headers, payload: { url } });
     const upstreams = (headers: Record<string, string> = callerHeaders(GATEWAY_CALLER)) => app.inject({ method: 'GET', url: '/v1/upstreams', headers });
 
-    expect((await upstreams()).json()).toEqual({ apps: {} });
+    expect((await upstreams()).json()).toEqual({ apps: {}, previews: {} });
     expect((await set('http://app-library:8090/')).json()).toMatchObject({ id: 'library', upstream: 'http://app-library:8090' });
-    expect((await upstreams()).json()).toEqual({ apps: { library: 'http://app-library:8090' } });
+    expect((await upstreams()).json()).toEqual({ apps: { library: 'http://app-library:8090' }, previews: {} });
     expect((await upstreams(admin)).statusCode).toBe(200);
     expect((await upstreams(editor)).statusCode).toBe(403);
 
@@ -305,9 +305,9 @@ describe('registry', () => {
 
     // Registering a new version keeps it; null forgets it.
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
-    expect((await upstreams()).json()).toEqual({ apps: { library: 'http://app-library:8090' } });
+    expect((await upstreams()).json()).toEqual({ apps: { library: 'http://app-library:8090' }, previews: {} });
     await set(null, admin);
-    expect((await upstreams()).json()).toEqual({ apps: {} });
+    expect((await upstreams()).json()).toEqual({ apps: {}, previews: {} });
     expect(entries.filter((e) => e.action.startsWith('app.upstream')).map((e) => [e.action, e.actor.id])).toEqual([
       ['app.upstream-set', 'updater'],
       ['app.upstream-cleared', 'u-1'],

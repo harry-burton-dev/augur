@@ -140,6 +140,8 @@ export interface AppRelease {
   signer: { repository: string; workflow: string };
   asks?: Record<string, unknown>;
   notes?: string;
+  /** For a pull request's build: which one, and where to read it. */
+  preview?: { pr: number; title?: string; url?: string };
 }
 
 /** The steps the app runner takes, in order: `remove` only for a removal. */
@@ -158,13 +160,21 @@ export interface AppJobStepState {
  * install, an upgrade or going back are all the same), or remove the app's containers. It waits
  * (`requested`) until the runner picks it up (`running`), and ends `done`, `failed` (what was
  * running before keeps running) or `cancelled`. One app has at most one open at a time.
+ *
+ * A pull request's preview is the same, with `pr`: `preview` runs that build beside the installed
+ * app, with its own scratch storage, and `preview-remove` takes it and its storage away. Each pull
+ * request has at most one open at a time, apart from the app's own.
  */
 export interface AppJob {
   id: string;
   app: string;
-  action: 'install' | 'remove';
-  /** For an install: the release to run, as its app-release.json says. */
+  action: 'install' | 'remove' | 'preview' | 'preview-remove';
+  /** For an install or a preview: the release to run, as its app-release.json says. */
   release?: AppRelease;
+  /** For a preview: the pull request it's built from. */
+  pr?: number;
+  /** For a preview that's running: where the gateway reaches it, as the runner said. */
+  upstream?: string;
   requestedBy: string;
   requestedAt: string;
   state: 'requested' | 'running' | 'done' | 'failed' | 'cancelled';
@@ -189,6 +199,32 @@ export interface InstalledApp {
   app: string;
   release: AppRelease;
   installedAt: string;
+}
+
+/** A pull request's build of an installed app, running beside it for the app's developers to try. */
+export interface RunningPreview {
+  app: string;
+  pr: number;
+  release: AppRelease;
+  /** Where the gateway sends a developer's calls to the app while they've chosen this preview. */
+  upstream: string;
+  /** When this build of it started. */
+  startedAt: string;
+}
+
+/** Someone who may try an app's previews (Admin → Apps). */
+export interface AppDeveloper {
+  app: string;
+  person: string;
+  addedBy: string;
+  addedAt: string;
+}
+
+/** The preview a developer is using instead of the installed app. */
+export interface PreviewChoice {
+  person: string;
+  app: string;
+  pr: number;
 }
 
 /** Where registered apps are kept. */
@@ -252,9 +288,12 @@ export interface AppStore {
   /** The oldest job not yet finished, for the app runner to do next. */
   nextAppJob(): Promise<AppJob | undefined>;
   /** Records a job for the app runner; false when that app already has one waiting or under way. */
-  requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'requestedBy'>): Promise<boolean>;
-  /** Records a step of the open job `id`, which starts it, and with `outcome` ends it. Undefined when `id` isn't open. */
-  progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string }): Promise<AppJob | undefined>;
+  requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'pr' | 'requestedBy'>): Promise<boolean>;
+  /**
+   * Records a step of the open job `id`, which starts it, and with `outcome` ends it (with `upstream`,
+   * where a preview it started is). Undefined when `id` isn't open.
+   */
+  progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string; upstream?: string }): Promise<AppJob | undefined>;
   /** Takes back a job the runner hasn't started; false when it isn't waiting. */
   cancelAppJob(id: string): Promise<boolean>;
   /** The apps the runner has installed and not removed since: each one's last finished install. */
@@ -262,6 +301,16 @@ export interface AppStore {
   /** What admins chose for each installed app's updates; an app with none follows stable, automatically. */
   follows(): Promise<AppFollow[]>;
   setFollow(follow: Omit<AppFollow, 'setAt'>): Promise<AppFollow>;
+  /** The previews running now: each pull request's last finished preview job, unless it was a removal. */
+  runningPreviews(): Promise<RunningPreview[]>;
+  /** Who may try previews: of one app, or of every app. */
+  developers(app?: string): Promise<AppDeveloper[]>;
+  /** Replaces an app's developers. Those taken off lose their choice of its previews. */
+  setDevelopers(app: string, people: string[], by: string): Promise<AppDeveloper[]>;
+  /** Which previews people chose: one person's, or everyone's. */
+  previewChoices(person?: string): Promise<PreviewChoice[]>;
+  /** Uses one of an app's previews instead of the app, or with `null` goes back to the app. */
+  choosePreview(person: string, app: string, pr: number | null): Promise<void>;
 }
 
 /** A step's new state replaces its last one, so each step shows once. */
@@ -280,10 +329,42 @@ export class MemoryAppStore implements AppStore {
   private kept: StoredFrontend[] = [];
   private jobs: AppJob[] = [];
   private following = new Map<string, AppFollow>();
+  private devs: AppDeveloper[] = [];
+  private choices: PreviewChoice[] = [];
+
+  async runningPreviews() {
+    const last = new Map<string, AppJob>();
+    for (const j of this.jobs) if (j.state === 'done' && j.pr !== undefined) last.set(`${j.app}#${j.pr}`, j);
+    return [...last.values()]
+      .filter((j) => j.action === 'preview' && j.release && j.upstream)
+      .map((j) => ({ app: j.app, pr: j.pr!, release: structuredClone(j.release!), upstream: j.upstream!, startedAt: j.finishedAt! }));
+  }
+
+  async developers(app?: string) {
+    return this.devs.filter((d) => !app || d.app === app).map((d) => ({ ...d }));
+  }
+
+  async setDevelopers(app: string, people: string[], by: string) {
+    const at = new Date().toISOString();
+    const kept = this.devs.filter((d) => d.app === app && people.includes(d.person));
+    const added = people.filter((p) => !kept.some((d) => d.person === p)).map((person) => ({ app, person, addedBy: by, addedAt: at }));
+    this.devs = [...this.devs.filter((d) => d.app !== app), ...kept, ...added];
+    this.choices = this.choices.filter((c) => c.app !== app || people.includes(c.person));
+    return this.developers(app);
+  }
+
+  async previewChoices(person?: string) {
+    return this.choices.filter((c) => !person || c.person === person).map((c) => ({ ...c }));
+  }
+
+  async choosePreview(person: string, app: string, pr: number | null) {
+    this.choices = this.choices.filter((c) => c.person !== person || c.app !== app);
+    if (pr !== null) this.choices.push({ person, app, pr });
+  }
 
   async installedApps() {
     const last = new Map<string, AppJob>();
-    for (const j of this.jobs) if (j.state === 'done') last.set(j.app, j);
+    for (const j of this.jobs) if (j.state === 'done' && j.pr === undefined) last.set(j.app, j);
     return [...last.values()].filter((j) => j.action === 'install' && j.release).map((j) => ({ app: j.app, release: structuredClone(j.release!), installedAt: j.finishedAt! }));
   }
 
@@ -306,13 +387,13 @@ export class MemoryAppStore implements AppStore {
     return job && structuredClone(job);
   }
 
-  async requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'requestedBy'>) {
-    if (this.jobs.some((j) => j.app === job.app && isOpen(j))) return false;
+  async requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'pr' | 'requestedBy'>) {
+    if (this.jobs.some((j) => j.app === job.app && j.pr === job.pr && isOpen(j))) return false;
     this.jobs.push({ ...structuredClone(job), requestedAt: new Date().toISOString(), state: 'requested', steps: [] });
     return true;
   }
 
-  async progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string }) {
+  async progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string; upstream?: string }) {
     const job = this.jobs.find((j) => j.id === id && isOpen(j));
     if (!job) return undefined;
     const at = new Date().toISOString();
@@ -321,6 +402,7 @@ export class MemoryAppStore implements AppStore {
     if (outcome) {
       job.finishedAt = at;
       if (outcome.message) job.message = outcome.message;
+      if (outcome.upstream) job.upstream = outcome.upstream;
     }
     return structuredClone(job);
   }
@@ -661,6 +743,30 @@ export const migrations: { id: string; sql: string }[] = [
         set_at timestamptz not null default now()
       );`,
   },
+  {
+    id: '013_previews',
+    sql: `
+      -- Pull requests' previews are app runner jobs too: the pull request, and where its preview answers once running.
+      alter table registry.app_jobs add column pr integer;
+      alter table registry.app_jobs add column upstream text;
+      -- At most one waiting or under way for each app, and for each of its pull requests.
+      drop index registry.app_jobs_one_open;
+      create unique index app_jobs_one_open on registry.app_jobs (app_id, coalesce(pr, 0)) where state in ('requested', 'running');
+      -- Who may try each app's previews, and which preview each of them is using instead of the app.
+      create table registry.app_developers (
+        app_id text not null,
+        person_id text not null,
+        added_by text not null,
+        added_at timestamptz not null default now(),
+        primary key (app_id, person_id)
+      );
+      create table registry.preview_choices (
+        person_id text not null,
+        app_id text not null,
+        pr integer not null,
+        primary key (person_id, app_id)
+      );`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -971,23 +1077,24 @@ export class PgAppStore implements AppStore {
     return rows[0] && fromAppJobRow(rows[0]);
   }
 
-  async requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'requestedBy'>) {
+  async requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'pr' | 'requestedBy'>) {
     const { rowCount } = await this.pool.query(
-      'insert into registry.app_jobs (id, app_id, action, release, requested_by) values ($1, $2, $3, $4, $5) on conflict do nothing',
-      [job.id, job.app, job.action, job.release ? JSON.stringify(job.release) : null, job.requestedBy],
+      'insert into registry.app_jobs (id, app_id, action, release, pr, requested_by) values ($1, $2, $3, $4, $5, $6) on conflict do nothing',
+      [job.id, job.app, job.action, job.release ? JSON.stringify(job.release) : null, job.pr ?? null, job.requestedBy],
     );
     return rowCount === 1;
   }
 
-  async progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string }) {
+  async progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string; upstream?: string }) {
     return this.transaction(async (client) => {
       const { rows } = await client.query<AppJobRow>("select * from registry.app_jobs where id = $1 and state in ('requested', 'running') for update", [id]);
       if (!rows[0]) return undefined;
       const steps = withStep(fromAppJobRow(rows[0]).steps, { ...step, at: new Date().toISOString() });
       const { rows: updated } = await client.query<AppJobRow>(
-        `update registry.app_jobs set steps = $2, state = $3, message = coalesce($4, message), finished_at = case when $5 then now() else finished_at end
+        `update registry.app_jobs set steps = $2, state = $3, message = coalesce($4, message), finished_at = case when $5 then now() else finished_at end,
+           upstream = coalesce($6, upstream)
          where id = $1 returning *`,
-        [id, JSON.stringify(steps), outcome?.state ?? 'running', outcome?.message ?? null, Boolean(outcome)],
+        [id, JSON.stringify(steps), outcome?.state ?? 'running', outcome?.message ?? null, Boolean(outcome), outcome?.upstream ?? null],
       );
       return fromAppJobRow(updated[0]);
     });
@@ -999,8 +1106,47 @@ export class PgAppStore implements AppStore {
   }
 
   async installedApps() {
-    const { rows } = await this.pool.query<AppJobRow>("select distinct on (app_id) * from registry.app_jobs where state = 'done' order by app_id, finished_at desc");
+    const { rows } = await this.pool.query<AppJobRow>("select distinct on (app_id) * from registry.app_jobs where state = 'done' and pr is null order by app_id, finished_at desc");
     return rows.filter((r) => r.action === 'install' && r.release).map((r) => ({ app: r.app_id, release: r.release!, installedAt: r.finished_at!.toISOString() }));
+  }
+
+  async runningPreviews() {
+    const { rows } = await this.pool.query<AppJobRow>(
+      "select distinct on (app_id, pr) * from registry.app_jobs where state = 'done' and pr is not null order by app_id, pr, finished_at desc",
+    );
+    return rows
+      .filter((r) => r.action === 'preview' && r.release && r.upstream)
+      .map((r) => ({ app: r.app_id, pr: r.pr!, release: r.release!, upstream: r.upstream!, startedAt: r.finished_at!.toISOString() }));
+  }
+
+  async developers(app?: string) {
+    const { rows } = await this.pool.query<{ app_id: string; person_id: string; added_by: string; added_at: Date }>(
+      'select * from registry.app_developers where $1::text is null or app_id = $1 order by app_id, added_at',
+      [app ?? null],
+    );
+    return rows.map((r) => ({ app: r.app_id, person: r.person_id, addedBy: r.added_by, addedAt: r.added_at.toISOString() }));
+  }
+
+  async setDevelopers(app: string, people: string[], by: string) {
+    await this.transaction(async (client) => {
+      await client.query('delete from registry.app_developers where app_id = $1 and not (person_id = any($2::text[]))', [app, people]);
+      await client.query('delete from registry.preview_choices where app_id = $1 and not (person_id = any($2::text[]))', [app, people]);
+      await client.query('insert into registry.app_developers (app_id, person_id, added_by) select $1, unnest($2::text[]), $3 on conflict do nothing', [app, people, by]);
+    });
+    return this.developers(app);
+  }
+
+  async previewChoices(person?: string) {
+    const { rows } = await this.pool.query<{ person_id: string; app_id: string; pr: number }>(
+      'select * from registry.preview_choices where $1::text is null or person_id = $1 order by person_id, app_id',
+      [person ?? null],
+    );
+    return rows.map((r) => ({ person: r.person_id, app: r.app_id, pr: r.pr }));
+  }
+
+  async choosePreview(person: string, app: string, pr: number | null) {
+    if (pr === null) await this.pool.query('delete from registry.preview_choices where person_id = $1 and app_id = $2', [person, app]);
+    else await this.pool.query('insert into registry.preview_choices (person_id, app_id, pr) values ($1, $2, $3) on conflict (person_id, app_id) do update set pr = excluded.pr', [person, app, pr]);
   }
 
   async follows() {
@@ -1053,6 +1199,8 @@ type AppJobRow = {
   app_id: string;
   action: AppJob['action'];
   release: AppRelease | null;
+  pr: number | null;
+  upstream: string | null;
   requested_by: string;
   requested_at: Date;
   state: AppJob['state'];
@@ -1066,6 +1214,8 @@ const fromAppJobRow = (r: AppJobRow): AppJob => ({
   app: r.app_id,
   action: r.action,
   ...(r.release ? { release: r.release } : {}),
+  ...(r.pr !== null ? { pr: r.pr } : {}),
+  ...(r.upstream ? { upstream: r.upstream } : {}),
   requestedBy: r.requested_by,
   requestedAt: r.requested_at.toISOString(),
   state: r.state,

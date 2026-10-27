@@ -19,7 +19,7 @@ describe('configFromEnv', () => {
     expect(config).toEqual({
       databaseUrl: 'postgres://platform:pw@postgres:5432/platform',
       databaseHost: 'postgres:5432',
-      garage: { url: 'http://garage:3903', token: 't' },
+      garage: { url: 'http://garage:3903', token: 't', s3Url: 'http://garage:3900' },
       apps: [
         { app: 'folio', databasePassword: 'p'.repeat(32), bucketSecret: secret },
         { app: 'team-notes', databasePassword: 'q'.repeat(32), bucketSecret: secret },
@@ -48,6 +48,20 @@ describe('configFromEnv', () => {
     expect(configFromEnv(base)).not.toHaveProperty('frontendsSecret');
     const bad = configFromEnv({ ...base, FRONTENDS_BUCKET_SECRET: 'short', APP_STORAGE: 'augur-frontends', AUGUR_FRONTENDS_DATABASE_PASSWORD: 'p'.repeat(20) });
     expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('starts with augur-'), expect.stringContaining('FRONTENDS_BUCKET_SECRET must be 64')]);
+  });
+
+  it('takes only a preview’s storage away, on its own', () => {
+    const key = 'k'.repeat(64);
+    const base = { DATABASE_URL: 'postgres://a:b@db/platform', GARAGE_ADMIN_TOKEN: 't', APP_SECRETS_KEY: key };
+    expect(configFromEnv({ ...base, APP_STORAGE_DROP: 'notes-pr12' })).toMatchObject({
+      apps: [],
+      drop: { app: 'notes-pr12', databasePassword: appSecretFor(key, 'notes-pr12', 'database'), bucketSecret: appSecretFor(key, 'notes-pr12', 'bucket') },
+      garage: { s3Url: 'http://garage:3900' },
+    });
+    // A preview's storage is made like an app's.
+    expect(configFromEnv({ ...base, APP_STORAGE: 'notes-pr12' })).toMatchObject({ apps: [{ app: 'notes-pr12' }] });
+    const bad = configFromEnv({ ...base, APP_STORAGE: 'notes', APP_STORAGE_DROP: 'folio' });
+    expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('isn’t a preview’s storage'), expect.stringContaining('leave APP_STORAGE empty')]);
   });
 
   it('works out each app’s secrets from APP_SECRETS_KEY when .env doesn’t name them', () => {

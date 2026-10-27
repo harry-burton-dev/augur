@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { appRelease, appTag, APP_RELEASE_SCHEMA, asksOf, channelOf, FRONTEND_MEDIA_TYPE, readApps } from './app-release.mjs';
+import { appRelease, appTag, APP_RELEASE_SCHEMA, asksOf, changedApps, channelOf, FRONTEND_MEDIA_TYPE, previewPrOf, previewVersion, readApps } from './app-release.mjs';
 
 const digest = (c) => `sha256:${c.repeat(64)}`;
 const manifest = { id: 'notes', name: 'Notes', version: '1.2.0', sdk: '^1.3.0', route: '/notes', entry: '/apps/notes/entry.js', scopes: ['people:read'] };
@@ -9,9 +9,27 @@ const app = { id: 'notes', manifest };
 const signer = { repository: 'harry-burton-dev/im-platform', workflow: '.github/workflows/release.yml' };
 const bundle = { service: `ghcr.io/x/apps/notes@${digest('a')}`, frontend: { artifact: `ghcr.io/x/apps/notes-frontend@${digest('b')}`, digest: digest('c') } };
 
-test('a version with a prerelease part is beta, any other stable', () => {
+test('a version with a prerelease part is beta, a pull request’s build preview, any other stable', () => {
   assert.equal(channelOf('1.2.0'), 'stable');
   assert.equal(channelOf('1.2.0-beta.1'), 'beta');
+  assert.equal(channelOf('1.2.0-pr.12.3'), 'preview');
+});
+
+test('a pull request’s build gets a version of its own, which says where it’s from', () => {
+  assert.equal(previewVersion('1.2.0', 12, 3), '1.2.0-pr.12.3');
+  assert.equal(previewVersion('1.3.0-beta.2', '7', '41'), '1.3.0-pr.7.41');
+  assert.throws(() => previewVersion('1.2.0', 'x', 1), /numbers/);
+  assert.equal(previewPrOf('app/notes@1.2.0-pr.12.3'), 12);
+  assert.equal(previewPrOf('app/notes@1.2.0'), undefined);
+  assert.equal(previewPrOf('augur@0.5.0'), undefined);
+  const apps = [{ id: 'notes', path: 'apps/notes' }, { id: 'notes-2', path: 'apps/notes-2' }];
+  assert.deepEqual(changedApps(apps, ['apps/notes/service/src/app.ts', 'platform/x.ts']).map((a) => a.id), ['notes']);
+});
+
+test('a preview names its pull request', () => {
+  const release = appRelease({ app: { id: 'notes', manifest: { ...manifest, version: '1.2.0-pr.4.1' } }, bundle: { ...bundle, channel: 'preview' }, signer, preview: { pr: 4, title: 'Tags' } });
+  assert.equal(release.channel, 'preview');
+  assert.deepEqual(release.preview, { pr: 4, title: 'Tags' });
 });
 
 test('an app release is tagged beside AUGUR’s', () => {

@@ -7,11 +7,17 @@ export type AppChannel = 'stable' | 'beta';
 /** What happens when a newer release is out on the app's channel. */
 export type AppPolicy = 'automatic' | 'ask' | 'hold';
 
-/** One app release in the feed. Its release file is missing when it couldn't be read (or wasn't needed). */
+/**
+ * One app release in the feed. Its release file is missing when it couldn't be read (or wasn't needed).
+ * A pull request's build (a version such as 1.3.0-pr.12.4) is on the `preview` channel, which no
+ * deployment follows: it's only ever run beside the app, for the app's developers.
+ */
 export interface AppFeedRelease {
   app: string;
   version: string;
-  channel: AppChannel;
+  channel: AppChannel | 'preview';
+  /** For a preview: the pull request it was built from. */
+  pr?: number;
   released?: string;
   notesUrl?: string;
   release?: AppRelease;
@@ -22,6 +28,17 @@ export type AppFeed = () => Promise<AppFeedRelease[]>;
 /** How many of each app's newest releases have their release files read. */
 const FILES_READ_PER_APP = 4;
 const TAG = /^app\/([a-z][a-z0-9-]{1,39})@(.+)$/;
+/** A pull request's build: <version>-pr.<number>.<run>. */
+const PREVIEW = /-pr\.(\d+)\.\d+$/;
+/** The pull request a version was built from, when it's a preview. */
+export const previewPr = (version: string) => {
+  const m = PREVIEW.exec(version);
+  return m ? Number(m[1]) : undefined;
+};
+const channelOf = (version: string, prerelease: boolean): Pick<AppFeedRelease, 'channel' | 'pr'> => {
+  const pr = previewPr(version);
+  return pr !== undefined ? { channel: 'preview', pr } : { channel: prerelease ? 'beta' : 'stable' };
+};
 
 const isAppRelease = (x: unknown): x is AppRelease =>
   typeof x === 'object' && x !== null && (x as AppRelease).schema === 'augur.app-release/v1' && typeof (x as AppRelease).id === 'string' && semver.valid((x as AppRelease).version) !== null;
@@ -38,7 +55,7 @@ export const appFeed =
     const body = await get(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { apps?: unknown })?.apps) ? (body as { apps: unknown[] }).apps : [];
     if (items.some(isAppRelease)) {
-      return items.filter(isAppRelease).map((r) => ({ app: r.id, version: r.version, channel: r.channel === 'stable' ? 'stable' : 'beta', ...(r.releasedAt ? { released: r.releasedAt } : {}), release: r }));
+      return items.filter(isAppRelease).map((r) => ({ app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...(r.releasedAt ? { released: r.releasedAt } : {}), release: r }));
     }
     const releases = (items as GitHubRelease[])
       .filter((r) => typeof r?.tag_name === 'string' && !r.draft)
@@ -49,11 +66,13 @@ export const appFeed =
     return Promise.all(
       releases.map(async ({ r, tag }): Promise<AppFeedRelease> => {
         const [, app, version] = tag;
-        const base: AppFeedRelease = { app, version, channel: r.prerelease ? 'beta' : 'stable', ...(r.published_at ? { released: r.published_at } : {}), ...(r.html_url ? { notesUrl: r.html_url } : {}) };
-        const count = read.get(app) ?? 0;
+        const base: AppFeedRelease = { app, version, ...channelOf(version, Boolean(r.prerelease)), ...(r.published_at ? { released: r.published_at } : {}), ...(r.html_url ? { notesUrl: r.html_url } : {}) };
+        // Each app's newest few releases, and each pull request's newest build.
+        const key = base.pr === undefined ? app : `${app}#${base.pr}`;
+        const count = read.get(key) ?? 0;
         const asset = r.assets?.find((a) => a.name === 'app-release.json');
-        if (count >= FILES_READ_PER_APP || !asset) return base;
-        read.set(app, count + 1);
+        if (count >= (base.pr === undefined ? FILES_READ_PER_APP : 1) || !asset) return base;
+        read.set(key, count + 1);
         const file = await get(asset.url, 'application/octet-stream').catch(() => undefined);
         return isAppRelease(file) && file.id === app && file.version === version ? { ...base, release: file } : base;
       }),
@@ -124,11 +143,22 @@ export class AppUpdateChecker {
   }
 }
 
-/** The newest release of `app` on `channel` that the feed has a release file for. */
+/** The newest release of `app` on `channel` that the feed has a release file for. Never a preview. */
 export const newestOn = (releases: AppFeedRelease[], app: string, channel: AppChannel) =>
   releases
-    .filter((r) => r.app === app && r.release && (channel === 'beta' || r.channel === 'stable'))
+    .filter((r) => r.app === app && r.release && r.channel !== 'preview' && (channel === 'beta' || r.channel === 'stable'))
     .sort((a, b) => semver.rcompare(a.version, b.version))[0];
+
+/** Each open pull request's newest build of `app` that the feed has a release file for, newest pull request first. */
+export const previewsIn = (releases: AppFeedRelease[], app: string) => {
+  const newest = new Map<number, AppFeedRelease>();
+  for (const r of releases) {
+    if (r.app !== app || r.pr === undefined || !r.release) continue;
+    const had = newest.get(r.pr);
+    if (!had || semver.gt(r.version, had.version)) newest.set(r.pr, r);
+  }
+  return [...newest.values()].sort((a, b) => b.pr! - a.pr!);
+};
 
 /**
  * Why an update from `from` to `to` waits for an admin even under the Automatic policy: a major

@@ -8,6 +8,11 @@
  * does the registry list it and the gateway send it calls. Until then the old version keeps serving,
  * so a version that doesn't come up changes nothing. The old one is stopped a few minutes later, once
  * shells have fetched the new manifest.
+ *
+ * A pull request's preview runs beside the app in a container of its own (`app-<id>-pr<n>`), signed
+ * in as the app but with scratch storage of its own (`<id>-pr<n>`), and is never registered: the
+ * registry gives its manifest, and the gateway sends calls to it, only for developers who chose it.
+ * A newer build of the pull request replaces it in place; taking it away drops its storage.
  */
 import { appSecretFor } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
@@ -25,8 +30,10 @@ export interface AppRelease {
 export interface AppJob {
   id: string;
   app: string;
-  action: 'install' | 'remove';
+  action: 'install' | 'remove' | 'preview' | 'preview-remove';
   release?: AppRelease;
+  /** For a preview: its pull request. */
+  pr?: number;
   state: 'requested' | 'running';
 }
 
@@ -36,6 +43,8 @@ export interface JobReport {
   state: 'running' | 'done' | 'failed';
   message?: string;
   outcome?: 'done' | 'failed';
+  /** With a preview's outcome: where it answers. */
+  upstream?: string;
 }
 export type JobReporter = (report: JobReport) => Promise<void>;
 
@@ -50,9 +59,19 @@ export interface RunningApp {
   /** The old version, stopped once this time has passed. */
   until?: string;
 }
+/** A pull request's preview, as the runner keeps it. */
+export interface RunningPreview {
+  app: string;
+  pr: number;
+  version: string;
+  image: string;
+  storage: RunningApp['storage'];
+}
 /** What the runner runs, kept beside the project it writes (apps/state.json). */
 export interface RunnerState {
   apps: Record<string, { active?: RunningApp; retiring?: RunningApp }>;
+  /** By preview id (notes-pr12). Missing in a state written before previews. */
+  previews?: Record<string, RunningPreview>;
 }
 
 /** What the runner does to the server. The real one drives Docker Compose (server.ts); tests use a fake. */
@@ -64,8 +83,10 @@ export interface AppHost {
   writeProject(state: RunnerState, project: object, envFiles: Record<string, string>): Promise<void>;
   /** Throws unless `ref` (an image by digest) was signed by `identity` (a workflow's certificate identity). */
   verifySignedBy(ref: string, identity: string): Promise<void>;
-  /** Runs the storage container for this app alone: its database login and schema, its bucket and key. */
+  /** Runs the storage container for this app (or preview id) alone: its database login and schema, its bucket and key. */
   provisionStorage(app: string): Promise<void>;
+  /** Runs the storage container to take a preview's scratch storage away, data and all. */
+  dropStorage(previewId: string): Promise<void>;
   /** Pulls and starts these services of the apps' project, leaving the others alone. */
   start(services: string[]): Promise<void>;
   /** Stops and removes these services' containers. */
@@ -107,10 +128,20 @@ const POLL_MS = 3_000;
 
 export const serviceName = (app: string, slot: Slot) => `app-${app}-${slot}`;
 export const upstreamOf = (app: string, slot: Slot) => `http://${serviceName(app, slot)}:${APP_PORT}`;
+/** A pull request's preview of an app: its storage is kept under this id, and its container is app-<id>. */
+export const previewId = (app: string, pr: number) => `${app}-pr${pr}`;
+const previewService = (id: string) => `app-${id}`;
+const previewUpstream = (id: string) => `http://${previewService(id)}:${APP_PORT}`;
 /** The prefix of an app's own settings in .env, as the storage container reads them: "team-notes" → TEAM_NOTES. */
 const envPrefix = (app: string) => app.toUpperCase().replace(/-/g, '_');
-/** A workflow's certificate identity, as cosign checks it: the workflow file on the main branch. */
-export const signerIdentity = (publisher: string) => `https://github.com/${publisher}@refs/heads/main`;
+/**
+ * A workflow's certificate identity, as cosign checks it: the workflow file on the main branch, or
+ * for a pull request's build, on that pull request's merge ref, so a build is only ever taken as the
+ * pull request it says it is.
+ */
+export const signerIdentity = (publisher: string, pr?: number) => `https://github.com/${publisher}@${pr === undefined ? 'refs/heads/main' : `refs/pull/${pr}/merge`}`;
+/** The workflow that builds pull requests' previews, in a repository trusted to publish apps. */
+export const PREVIEW_WORKFLOW = '.github/workflows/app-preview.yml';
 
 /** APP_PUBLISHERS in .env: `owner/repo` (its release.yml) or `owner/repo/.github/workflows/<file>`, space or comma separated. */
 export const publishersFrom = (setting = '') =>
@@ -134,10 +165,15 @@ export const appSecrets = (env: string, app: string) => {
   };
 };
 
-/** The settings each container gets: where the platform is, its own sign-in and its own storage. */
-export const containerEnv = (env: string, app: string, storage: RunningApp['storage']): Record<string, string> => {
+/**
+ * The settings each container gets: where the platform is, its own sign-in and its own storage. A
+ * preview signs in as its app, with the storage of its preview id, and is told it's a preview.
+ */
+export const containerEnv = (env: string, app: string, storage: RunningApp['storage'], preview?: { pr: number }): Record<string, string> => {
   const secrets = appSecrets(env, app);
   if (!secrets) throw new Error('APP_SECRETS_KEY is not set in .env, so the runner can’t give apps their secrets.');
+  const storageId = preview ? previewId(app, preview.pr) : app;
+  const kept = preview ? appSecrets(env, storageId)! : secrets;
   const platformUrl = envValue(env, 'PLATFORM_URL') ?? '';
   return {
     NODE_ENV: 'production',
@@ -152,8 +188,9 @@ export const containerEnv = (env: string, app: string, storage: RunningApp['stor
     SERVICE_CLIENT_SECRET: secrets.signIn,
     // The runner registers each version itself, once it's healthy (service kit's registerApp).
     APP_REGISTERED_BY: 'runner',
-    ...(storage.database ? { DATABASE_URL: `postgres://app_${app.replace(/-/g, '_')}:${encodeURIComponent(secrets.database)}@postgres:5432/platform` } : {}),
-    ...(storage.bucket ? { S3_ENDPOINT: 'http://garage:3900', S3_BUCKET: app, S3_SECRET_ACCESS_KEY: secrets.bucket } : {}),
+    ...(preview ? { APP_PREVIEW: `pr-${preview.pr}` } : {}),
+    ...(storage.database ? { DATABASE_URL: `postgres://app_${storageId.replace(/-/g, '_')}:${encodeURIComponent(kept.database)}@postgres:5432/platform` } : {}),
+    ...(storage.bucket ? { S3_ENDPOINT: 'http://garage:3900', S3_BUCKET: storageId, S3_SECRET_ACCESS_KEY: kept.bucket } : {}),
   };
 };
 
@@ -164,20 +201,25 @@ export const appsProject = (state: RunnerState, network = DEFAULT_NETWORK) => {
     for (const running of [active, retiring]) {
       if (!running) continue;
       const name = serviceName(app, running.slot);
-      services[name] = {
-        image: running.image,
-        restart: 'unless-stopped',
-        env_file: [`./${name}.env`],
-        networks: ['platform'],
-        // Never privileged, no host folders, no added powers.
-        cap_drop: ['ALL'],
-        security_opt: ['no-new-privileges:true'],
-        labels: { 'augur.app': app, 'augur.version': running.version },
-      };
+      services[name] = container(running.image, name, { 'augur.app': app, 'augur.version': running.version });
     }
+  }
+  for (const [id, p] of Object.entries(state.previews ?? {})) {
+    services[previewService(id)] = container(p.image, previewService(id), { 'augur.app': p.app, 'augur.version': p.version, 'augur.preview': String(p.pr) });
   }
   return { name: 'augur-apps', services, networks: { platform: { external: true, name: network } } };
 };
+
+const container = (image: string, envFile: string, labels: Record<string, string>) => ({
+  image,
+  restart: 'unless-stopped',
+  env_file: [`./${envFile}.env`],
+  networks: ['platform'],
+  // Never privileged, no host folders, no added powers.
+  cap_drop: ['ALL'],
+  security_opt: ['no-new-privileges:true'],
+  labels,
+});
 
 const envFileText = (vars: Record<string, string>) =>
   Object.entries(vars)
@@ -190,10 +232,17 @@ const envFilesFor = (state: RunnerState, env: string) => {
   for (const [app, { active, retiring }] of Object.entries(state.apps)) {
     for (const running of [active, retiring]) if (running) files[serviceName(app, running.slot)] = envFileText(containerEnv(env, app, running.storage));
   }
+  for (const [id, p] of Object.entries(state.previews ?? {})) files[previewService(id)] = envFileText(containerEnv(env, p.app, p.storage, { pr: p.pr }));
   return files;
 };
 
 class StepFailed extends Error {}
+
+/** Why a container didn't become ready: it answered on another version, or not at all. */
+const notReady = (release: AppRelease, seen?: { version?: string }) =>
+  seen
+    ? `${release.manifest.name} came up on ${seen.version ?? 'an unknown version'}, not ${release.version}.`
+    : `${release.manifest.name} ${release.version} didn’t answer within ${READY_MS / 1000} s; its logs say why.`;
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 500);
 
 export const appRunner = ({ host, calls, publishers, now = () => new Date() }: RunnerOptions) => {
@@ -209,23 +258,42 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
     await save(state, await host.readEnv());
   };
 
-  const install = async (job: AppJob, report: JobReporter) => {
+  /** The release to run, .env, and the signature checked: the start of an install and of a preview. */
+  const verified = async (job: AppJob, report: JobReporter) => {
     const release = job.release;
     if (!release?.service) throw new StepFailed('The job names no release with a service to run.');
-    const app = job.app;
     const env = await host.readEnv();
-    if (!appSecrets(env, app)) throw new StepFailed('APP_SECRETS_KEY is not set in .env, so the runner can’t give the app its secrets (docs/upgrade.md, The app runner).');
+    if (!appSecrets(env, job.app)) throw new StepFailed('APP_SECRETS_KEY is not set in .env, so the runner can’t give the app its secrets (docs/upgrade.md, The app runner).');
 
     await report({ step: 'verify', state: 'running' });
     const publisher = `${release.signer.repository}/${release.signer.workflow}`;
     const trusted = [...publishers, ...publishersFrom(envValue(env, 'APP_PUBLISHERS'))];
-    if (!trusted.includes(publisher)) throw new StepFailed(`${publisher} isn’t trusted to publish apps on this server. Add it to APP_PUBLISHERS in .env to trust it.`);
+    // A preview comes from the preview workflow of a repository whose releases are trusted.
+    const ok = job.pr === undefined ? trusted.includes(publisher) : release.signer.workflow === PREVIEW_WORKFLOW && trusted.some((t) => t.startsWith(`${release.signer.repository}/`));
+    if (!ok) throw new StepFailed(`${publisher} isn’t trusted to publish ${job.pr === undefined ? 'apps' : 'previews'} on this server. Add ${job.pr === undefined ? 'it' : 'its repository'} to APP_PUBLISHERS in .env to trust it.`);
     try {
-      await host.verifySignedBy(release.service.image, signerIdentity(publisher));
+      await host.verifySignedBy(release.service.image, signerIdentity(publisher, job.pr));
     } catch (err) {
       throw new StepFailed(`The service image isn’t signed by ${publisher}: ${reason(err)}`);
     }
     await report({ step: 'verify', state: 'done' });
+    return { release: release as AppRelease & { service: { image: string } }, env };
+  };
+
+  /** Waits for `url` to answer on `version`; the answer it last gave when it doesn't in time. */
+  const answers = async (url: string, version: string) => {
+    let seen: { version?: string } | undefined;
+    for (let waited = 0; ; waited += POLL_MS) {
+      seen = await host.health(url).catch(() => undefined);
+      if (seen?.version === version) return { ready: true as const };
+      if (waited >= READY_MS) return { ready: false as const, seen };
+      await host.wait(POLL_MS);
+    }
+  };
+
+  const install = async (job: AppJob, report: JobReporter) => {
+    const app = job.app;
+    const { release, env } = await verified(job, report);
 
     const storage = { database: Boolean(release.manifest.storage?.database), bucket: Boolean(release.manifest.storage?.bucket) };
     if (storage.database || storage.bucket) {
@@ -270,20 +338,10 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
     await report({ step: 'start', state: 'done' });
 
     await report({ step: 'health', state: 'running' });
-    let seen: string | undefined;
-    for (let waited = 0; ; waited += POLL_MS) {
-      const health = await host.health(`${upstreamOf(app, slot)}/healthz`).catch(() => undefined);
-      seen = health?.version;
-      if (health && seen === release.version) break;
-      if (waited >= READY_MS) {
-        await undo();
-        throw new StepFailed(
-          health
-            ? `${release.manifest.name} came up on ${seen ?? 'an unknown version'}, not ${release.version}. ${current.active ? `${current.active.version} is still serving.` : ''}`.trim()
-            : `${release.manifest.name} ${release.version} didn’t answer within ${READY_MS / 1000} s; its logs say why. ${current.active ? `${current.active.version} is still serving.` : ''}`.trim(),
-        );
-      }
-      await host.wait(POLL_MS);
+    const health = await answers(`${upstreamOf(app, slot)}/healthz`, release.version);
+    if (!health.ready) {
+      await undo();
+      throw new StepFailed(`${notReady(release, health.seen)} ${current.active ? `${current.active.version} is still serving.` : ''}`.trim());
     }
     await report({ step: 'health', state: 'done' });
 
@@ -307,6 +365,67 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
       outcome: 'done',
       message: current.active ? `${release.manifest.name} ${release.version} is serving; ${current.active.version} stops at ${until.slice(11, 16)} UTC.` : `${release.manifest.name} ${release.version} is installed.`,
     });
+  };
+
+  /** Runs a pull request's build beside the app, replacing the pull request's last one. */
+  const preview = async (job: AppJob, report: JobReporter) => {
+    if (job.pr === undefined) throw new StepFailed('The job names no pull request.');
+    const { release, env } = await verified(job, report);
+    const id = previewId(job.app, job.pr);
+    const name = previewService(id);
+    const storage = { database: Boolean(release.manifest.storage?.database), bucket: Boolean(release.manifest.storage?.bucket) };
+    if (storage.database || storage.bucket) {
+      await report({ step: 'storage', state: 'running', message: `Scratch storage ${id}, apart from ${release.manifest.name}’s own` });
+      await host.provisionStorage(id);
+      await report({ step: 'storage', state: 'done' });
+    }
+
+    await report({ step: 'start', state: 'running' });
+    const state = await host.readState();
+    const had = state.previews?.[id];
+    // One container a pull request: its last build makes way for this one.
+    if (had) await host.stop([name]);
+    const next: RunnerState = { ...state, previews: { ...state.previews, [id]: { app: job.app, pr: job.pr, version: release.version, image: release.service.image, storage } } };
+    await save(next, env);
+    /** Takes the container away; the pull request has no preview until its next build. */
+    const undo = async () => {
+      await host.stop([name]).catch(() => undefined);
+      const { [id]: _, ...others } = next.previews!;
+      await save({ ...next, previews: others }, env).catch(() => undefined);
+    };
+    try {
+      await host.start([name]);
+    } catch (err) {
+      await undo();
+      throw new StepFailed(`${name} wouldn’t start: ${reason(err)}`);
+    }
+    await report({ step: 'start', state: 'done' });
+
+    await report({ step: 'health', state: 'running' });
+    const health = await answers(`${previewUpstream(id)}/healthz`, release.version);
+    if (!health.ready) {
+      await undo();
+      throw new StepFailed(notReady(release, health.seen));
+    }
+    await report({ step: 'health', state: 'done' });
+    await report({ step: 'switch', state: 'done', outcome: 'done', upstream: previewUpstream(id), message: `Pull request ${job.pr}’s build ${release.version} is running for ${release.manifest.name}’s developers.` });
+  };
+
+  /** Takes a pull request's preview away, with its scratch storage. */
+  const removePreview = async (job: AppJob, report: JobReporter) => {
+    if (job.pr === undefined) throw new StepFailed('The job names no pull request.');
+    await report({ step: 'remove', state: 'running' });
+    const id = previewId(job.app, job.pr);
+    const state = await host.readState();
+    const had = state.previews?.[id];
+    await host.stop([previewService(id)]);
+    if (had) {
+      const { [id]: _, ...others } = state.previews!;
+      await save({ ...state, previews: others }, await host.readEnv());
+    }
+    // A build that never got as far as storage has none to drop.
+    if (!had || had.storage.database || had.storage.bucket) await host.dropStorage(id);
+    await report({ step: 'remove', state: 'done', outcome: 'done', message: had ? `Pull request ${job.pr}’s preview and its scratch data are gone.` : `Nothing of pull request ${job.pr} was running.` });
   };
 
   const remove = async (job: AppJob, report: JobReporter) => {
@@ -334,7 +453,7 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
       // Only this runner works on jobs, so one already under way means it stopped partway through.
       // A new version it had started but not switched to (retiring, with no end) is taken away.
       const state = await host.readState();
-      const started = state.apps[job.app]?.retiring;
+      const started = job.pr === undefined ? state.apps[job.app]?.retiring : undefined;
       if (started && !started.until) {
         await host.stop([serviceName(job.app, started.slot)]).catch(() => undefined);
         delete state.apps[job.app].retiring;
@@ -344,13 +463,15 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
       await report({ step: 'start', state: 'failed', outcome: 'failed', message: 'The app runner restarted partway through. Whatever was serving before still is; ask again.' });
       return 'failed';
     }
-    let step: JobStep = job.action === 'install' ? 'verify' : 'remove';
+    const work = { install, remove, preview, 'preview-remove': removePreview }[job.action];
+    let step: JobStep = job.action === 'install' || job.action === 'preview' ? 'verify' : 'remove';
     const tracked: JobReporter = async (r) => {
       step = r.step;
       await report(r);
     };
     try {
-      await (job.action === 'install' ? install(job, tracked) : remove(job, tracked));
+      if (!work) throw new StepFailed(`This app runner doesn’t know how to ${job.action}.`);
+      await work(job, tracked);
       return 'done';
     } catch (err) {
       await report({ step, state: 'failed', outcome: 'failed', message: reason(err) });
