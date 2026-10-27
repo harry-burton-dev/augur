@@ -178,6 +178,8 @@ export interface NeedsYou {
   version?: string;
   key?: string;
   required?: boolean;
+  /** For a setting: a secret the updater makes up itself. */
+  madeUp?: boolean;
   app?: string;
 }
 
@@ -407,8 +409,12 @@ export class AdminApi {
   updates = () => this.call<PlatformUpdates>('GET', '/api/registry/v1/platform/updates');
   /** Reads the release feed now rather than waiting for the daily check. */
   checkUpdates = () => this.call<PlatformUpdates>('POST', '/api/registry/v1/platform/updates/check');
-  /** Asks the updater to move to `version`. Turned down with `sign_in_again` unless the admin just entered their password. */
-  upgrade = (version: string) => this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/upgrade', { version });
+  /**
+   * Asks the updater to move to `version`, with any new settings entered for .env. Turned down with
+   * `sign_in_again` unless the admin just entered their password.
+   */
+  upgrade = (version: string, settings: Record<string, string> = {}) =>
+    this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/upgrade', Object.keys(settings).length ? { version, settings } : { version });
   installs = () => this.call<AppInstalls>('GET', '/api/registry/v1/app-runner/apps');
   /** Reads the app feed now, starting any automatic updates it finds. */
   checkInstalls = () => this.call<AppInstalls>('POST', '/api/registry/v1/app-runner/check');

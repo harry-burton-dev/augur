@@ -178,7 +178,10 @@ describe('admin', () => {
         { version: '0.3.0', channel: 'beta', breaking: ['@augur/identity 0.3.0 → 1.0.0'] },
       ],
       next: '0.4.0',
-      needsYou: [{ kind: 'setting', key: 'OBJECT_STORE_URL', required: true, message: 'Set OBJECT_STORE_URL in .env: 0.4.0 won’t start without it.' }],
+      needsYou: [
+        { kind: 'setting', key: 'OBJECT_STORE_URL', required: true, message: 'Set OBJECT_STORE_URL in .env: 0.4.0 won’t start without it.' },
+        { kind: 'setting', key: 'SEARCH_CLIENT_SECRET', required: true, madeUp: true, message: 'SEARCH_CLIENT_SECRET is new. Upgrading from here makes one up.' },
+      ],
     };
 
     it('heads the screen with what’s out, or that all is current', () => {
@@ -221,9 +224,18 @@ describe('admin', () => {
       const dialog = el.querySelector('ui-dialog') as UiDialog;
       expect(dialog.getAttribute('heading')).toBe('Upgrade to AUGUR 0.4.0?');
       expect(dialog.textContent).toContain('Set OBJECT_STORE_URL in .env');
+      // A field for the setting only a person can give, none for the secret the updater makes up.
+      expect([...el.querySelectorAll('[data-setting]')].map((f) => f.getAttribute('data-setting'))).toEqual(['OBJECT_STORE_URL']);
+      el.querySelector('[data-setting]')!.dispatchEvent(new CustomEvent('ui-change', { detail: { value: ' https://s3.example.org ' } }));
       await dialog.confirm();
-      expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/platform/upgrade', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ version: '0.4.0' }) }));
+      expect(fetchImpl).toHaveBeenCalledWith(
+        '/api/registry/v1/platform/upgrade',
+        expect.objectContaining({ method: 'PUT', body: JSON.stringify({ version: '0.4.0', settings: { OBJECT_STORE_URL: 'https://s3.example.org' } }) }),
+      );
       expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/admin/updates?upgrade=0.4.0')}`);
+      // Kept for when the password's been entered and the page asks again.
+      expect(sessionStorage.getItem('augur.upgrade-settings')).toBe(JSON.stringify({ OBJECT_STORE_URL: 'https://s3.example.org' }));
+      sessionStorage.clear();
       el.remove();
       vi.unstubAllGlobals();
     });

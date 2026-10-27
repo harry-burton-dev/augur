@@ -132,7 +132,8 @@ describe('an upgrade', () => {
     ['a deploy file the release changes was edited on the server', target({ deploy: { 'compose.yml': hash('c1') } }), { edited: true }, 'compose.yml has been changed on the server since AUGUR 0.2.0'],
     ['the release’s updater carries other deploy files than it says', target({ deploy: { 'compose.yml': hash('c1') } }), { badFile: true }, 'carries compose.yml other than the release file says'],
     ['the release file couldn’t be read', target({ deploy: undefined }), {}, 'release file couldn’t be read'],
-    ['a required setting is missing', target({ required: ['PLATFORM_URL', 'OBJECT_STORE_URL'] }), {}, 'Set OBJECT_STORE_URL in .env first'],
+    ['a required setting is missing', target({ required: ['PLATFORM_URL', 'OBJECT_STORE_URL'] }), {}, 'AUGUR 0.3.0 won’t start without OBJECT_STORE_URL. Enter it when you ask'],
+    ['an entered value can’t be written', target({ settings: { ORG_NAME: 'it\'s "ours"' } }), {}, 'The value entered for ORG_NAME can’t go in .env'],
     ['an image isn’t signed', target(), { sign: true }, 'The web image isn’t signed by AUGUR’s Release workflow'],
     ['the backup fails', target(), { backup: true }, 'The backup couldn’t be taken: pg_dumpall: connection refused'],
     ['the backup doesn’t restore', target(), { restore: true }, 'didn’t restore in the test'],
@@ -161,7 +162,8 @@ describe('an upgrade', () => {
     const t = target({
       images: { ...target().images, search: image('search', 's3') },
       deploy: { 'compose.yml': hash('c1'), 'keycloak/realm.json': hash('k1'), 'search.yml': hash('s1') },
-      required: ['PLATFORM_URL', 'SEARCH_CLIENT_SECRET'],
+      required: ['PLATFORM_URL', 'SEARCH_CLIENT_SECRET', 'SEARCH_URL'],
+      settings: { SEARCH_URL: 'http://search:9200', ORG_NAME: 'Acme & Co $HOME' },
     });
     const fake = fakeServer();
     const { outcome, reports } = await run(t, fake.server);
@@ -169,6 +171,7 @@ describe('an upgrade', () => {
     expect(fake.did).toContain('files from ghcr.io/o/r/updater@sha256:u3');
     expect(fake.disk).toMatchObject({ 'compose.yml': 'c1', 'keycloak/realm.json': 'k1', 'search.yml': 's1' });
     expect(fake.env()).toMatch(/^SEARCH_CLIENT_SECRET=[0-9a-f]{64}$/m);
+    expect(fake.env()).toContain("SEARCH_URL=http://search:9200\nORG_NAME='Acme & Co $HOME'\n");
     expect(fake.did.filter((d) => !d.startsWith('verify') && !d.startsWith('files'))).toEqual([
       'backup',
       'restore-test',
@@ -185,7 +188,7 @@ describe('an upgrade', () => {
       'up search',
     ]);
     expect(reports.find((r) => r.step === 'roll-forward' && r.state === 'done')?.message).toBe(
-      'wrote compose.yml, keycloak/realm.json, search.yml; made up SEARCH_CLIENT_SECRET in .env; started search.',
+      'wrote compose.yml, keycloak/realm.json, search.yml; set SEARCH_URL, ORG_NAME as entered; made up SEARCH_CLIENT_SECRET in .env; started search.',
     );
   });
 

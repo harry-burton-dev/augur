@@ -9,7 +9,7 @@
  * or not anything was restarted) and `failed` (it couldn't go back either: someone has to look).
  */
 import { createHash, randomBytes } from 'node:crypto';
-import { envValue, withEnvValue } from './env-file.ts';
+import { envQuoted, envValue, withEnvValue } from './env-file.ts';
 
 /** What the registry hands the updater for the open upgrade (GET /v1/platform/upgrade/target). */
 export interface Target {
@@ -25,6 +25,8 @@ export interface Target {
   required?: string[];
   /** The release's files in infra/deploy, by path inside it, as sha256. */
   deploy?: Record<string, string>;
+  /** Settings the admin entered on the Updates page when they asked, for .env. */
+  settings?: Record<string, string>;
 }
 
 export type Step = 'preflight' | 'backup' | 'pull' | 'roll-forward' | 'verify' | 'roll-back';
@@ -177,6 +179,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
   // Settings the release needs that the updater makes up, and the services it pulled before writing new files.
   let settings = before;
   const madeKeys: string[] = [];
+  const enteredKeys: string[] = [];
   let pulledFirst: string[] = [];
 
   const run = async (name: Step, work: () => Promise<string | void>) => {
@@ -209,9 +212,19 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
         }
         changedFiles = Object.fromEntries(changed.map((path) => [path, undefined]));
       }
-      const missing = (target.required ?? []).filter((key) => key !== 'PLATFORM_VERSION' && !envValue(before, key));
+      // Settings entered on the Updates page go in as entered; a secret the release needs is made up.
+      for (const [key, value] of Object.entries(target.settings ?? {})) {
+        if (key === 'PLATFORM_VERSION' || !value) continue;
+        const written = envQuoted(value);
+        if (written === undefined) throw new StepFailed(`The value entered for ${key} can’t go in .env as it is (it has a quote or a line break). Put it in .env yourself, then ask again.`);
+        settings = withEnvValue(settings, key, written);
+        enteredKeys.push(key);
+      }
+      const missing = (target.required ?? []).filter((key) => key !== 'PLATFORM_VERSION' && !envValue(settings, key));
       const needYou = missing.filter((key) => !madeUp(key));
-      if (needYou.length) throw new StepFailed(`Set ${needYou.join(', ')} in .env first: AUGUR ${target.version} won’t start without ${needYou.length > 1 ? 'them' : 'it'}.`);
+      if (needYou.length) {
+        throw new StepFailed(`AUGUR ${target.version} won’t start without ${needYou.join(', ')}. Enter ${needYou.length > 1 ? 'them' : 'it'} when you ask for the upgrade on the Updates page, or set ${needYou.length > 1 ? 'them' : 'it'} in .env.`);
+      }
       for (const key of missing) {
         settings = withEnvValue(settings, key, randomBytes(32).toString('hex'));
         madeKeys.push(key);
@@ -284,7 +297,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
         await ready(server, [service], versionOf);
       }
       if (added.length) await server.up(added);
-      const notes = [paths.length ? `wrote ${paths.join(', ')}` : '', madeKeys.length ? `made up ${madeKeys.join(', ')} in .env` : '', added.length ? `started ${added.join(', ')}` : ''].filter(Boolean);
+      const notes = [paths.length ? `wrote ${paths.join(', ')}` : '', enteredKeys.length ? `set ${enteredKeys.join(', ')} as entered` : '', madeKeys.length ? `made up ${madeKeys.join(', ')} in .env` : '', added.length ? `started ${added.join(', ')}` : ''].filter(Boolean);
       return notes.length ? `${notes.join('; ')}.` : undefined;
     });
     // Every part again, now that all of them are on it: one that came up early may have fallen over since.
