@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.10.0
+  version: 1.11.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -68,6 +68,24 @@ paths:
                   workspaces: { type: array, items: { $ref: "#/components/schemas/Floor" } }
         "401":
           description: No signed-in caller
+  /me/map:
+    get:
+      summary: The caller's map of the org
+      description: >
+        For Auspex. Every floor the caller can stand on, with who is there and
+        why they can come in; the teams inside ones they lead (and, for admins,
+        every team) to see into without standing on; and every other team as a
+        closed door that names only itself, where it sits and its leads, so the
+        caller knows who can add them. Nothing inside a closed team is said:
+        not its people, how many, or what it uses. Floors are the org, then
+        teams depth first, then the caller's own floor.
+      responses:
+        "200":
+          description: The caller's map
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonMap" }
+        "401": { description: No signed-in caller }
   /me/workspaces/{id}/rollup:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -446,6 +464,61 @@ components:
             direct:
               type: boolean
               description: False when you're on it only through a team below it
+    MapPerson:
+      type: object
+      required: [id, name]
+      properties: { id: { type: string }, name: { type: string } }
+    FloorReason:
+      type: object
+      required: [kind]
+      description: >
+        Why the caller can come in: own (their own floor), org (everyone is),
+        member (with role), inside (on a team inside it, `via`), leads-above
+        (leads `team`, which this sits inside), admin.
+      properties:
+        kind: { type: string, enum: [own, org, member, inside, leads-above, admin] }
+        role: { type: string, enum: [member, lead] }
+        via: { $ref: "#/components/schemas/MapPerson" }
+        team: { $ref: "#/components/schemas/MapPerson" }
+    PersonMap:
+      type: object
+      required: [floors, closed, principals]
+      properties:
+        floors:
+          type: array
+          items:
+            type: object
+            required: [id, kind, name, slug, depth, open, why, people, leads]
+            properties:
+              id: { type: string }
+              kind: { type: string, enum: [org, personal, team] }
+              name: { type: string }
+              slug: { type: string }
+              parentId: { type: string }
+              depth: { type: integer, minimum: 0, maximum: 5 }
+              open: { type: boolean, description: "False for a team the caller sees into without standing on it" }
+              why: { $ref: "#/components/schemas/FloorReason" }
+              people: { type: integer, description: Everyone who can stand on it }
+              leads: { type: array, items: { $ref: "#/components/schemas/MapPerson" } }
+              members:
+                type: array
+                description: Who is on a team directly, leads first
+                items:
+                  allOf:
+                    - { $ref: "#/components/schemas/MapPerson" }
+                    - { type: object, required: [role], properties: { role: { type: string, enum: [member, lead] } } }
+        closed:
+          type: array
+          items:
+            type: object
+            required: [id, name, depth, leads]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              parentId: { type: string }
+              depth: { type: integer, minimum: 1, maximum: 5 }
+              leads: { type: array, items: { $ref: "#/components/schemas/MapPerson" } }
+        principals: { type: array, items: { type: string } }
     Role:
       type: object
       required: [name]
