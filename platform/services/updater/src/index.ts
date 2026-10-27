@@ -7,12 +7,24 @@
  *   node dist/index.js replace   replace the updater's own container (see server.ts)
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { platformCredentialsFromEnv, serviceAuthFromEnv } from '@augur/service-kit';
+import { commonSettings, loadConfigOrExit, platformCredentialsFromEnv, serviceAuthFromEnv } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appRunner } from './runner.ts';
 import { composeAppHost, composeServer } from './server.ts';
 import { runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
+
+// Every setting the updater reads, checked before it starts (in production, a missing one stops it).
+loadConfigOrExit('updater', [
+  commonSettings.registry,
+  commonSettings.issuer,
+  commonSettings.issuerInside,
+  commonSettings.clientSecret,
+  { name: 'DOCKER_HOST', about: 'the Docker API the updater drives (the docker-proxy).', required: true },
+  { name: 'PLATFORM_DIR', about: 'the deployment folder’s full path on the server.', required: true },
+  { name: 'IMAGE_PULL_USER', about: 'who the pull token in secrets/image-pull-token belongs to, for private images.' },
+  { name: 'APP_SECRETS_KEY', about: 'the key apps’ secrets are made from, for the app runner.', secret: true },
+]);
 
 const POLL_MS = 30_000;
 /** This repository's Release workflow, which signs every image it publishes (infra/release-images.sh). */

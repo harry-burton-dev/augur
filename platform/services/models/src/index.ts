@@ -1,7 +1,21 @@
-import { callerCheckFromEnv, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { providerFromEnv } from './config.ts';
 import { MemoryModelStore, PgModelStore, type ModelStore } from './store.ts';
+
+// Every setting the model gateway reads, checked before it starts (in production, a missing one stops it).
+loadConfigOrExit('models', [
+  commonSettings.database,
+  commonSettings.registry,
+  commonSettings.events,
+  commonSettings.issuer,
+  commonSettings.issuerInside,
+  { ...commonSettings.clientSecret, required: false },
+  commonSettings.gateway,
+  { name: 'MODEL_API_URL', about: 'an OpenAI-style API for the model behind Agents; without it models stay off.' },
+  { name: 'MODEL_API_KEY', about: 'the key to MODEL_API_URL.', secret: true },
+  { name: 'MODEL_NAME', about: 'which model MODEL_API_URL serves.' },
+]);
 
 const port = Number(process.env.PORT ?? 8085);
 

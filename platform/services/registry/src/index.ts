@@ -1,10 +1,27 @@
-import { callerCheckFromEnv, floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorPlaces, loadConfigOrExit, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
 import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
 import { DEFAULT_FEED_URL, feedTokenFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
+
+// Every setting the registry reads, checked before it starts (in production, a missing one stops it).
+loadConfigOrExit('registry', [
+  commonSettings.database,
+  commonSettings.identity,
+  commonSettings.events,
+  commonSettings.issuer,
+  commonSettings.issuerInside,
+  commonSettings.clientSecret,
+  commonSettings.gateway,
+  { name: 'RELEASE_FEED_URL', about: 'where new AUGUR releases are listed, or off.' },
+  { name: 'RELEASE_CHANNEL', about: 'stable or beta (default: the channel of the release running).' },
+  { name: 'APP_FEED_URL', about: 'where new versions of apps are listed, or off.' },
+  { name: 'PILLAR_APPS', about: 'the apps that ship with AUGUR, which register themselves.' },
+  { name: 'FRONTENDS_BUCKET_SECRET', about: 'the registry’s key to the bucket apps’ frontends are kept in by version.', secret: true },
+  { name: 'FRONTENDS_S3_URL', about: 'where that bucket is.' },
+]);
 
 const port = Number(process.env.PORT ?? 8082);
 
