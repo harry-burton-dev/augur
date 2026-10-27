@@ -38,3 +38,4 @@ await notify({ eventsUrl, credentials, workspace, notification: {
 | App | What it is |
 | --- | --- |
 | `folio/` | Folio, the first pillar app: document libraries on your own floor, a team's or the org's, published for people to read in a readable reader view. |
+| `auspex/` | Auspex, a pillar app: where you are on AUGUR, who's on each floor, and why you can or can't use each app. |

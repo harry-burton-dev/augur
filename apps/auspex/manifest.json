@@ -1,0 +1,62 @@
+{
+  "id": "auspex",
+  "name": "Auspex",
+  "route": "/auspex",
+  "entry": "/apps/auspex/entry.js",
+  "version": "0.0.0",
+  "sdk": "^1.4.0",
+  "description": "Where you are on AUGUR, who’s there, and why you can or can’t use things",
+  "icon": "explore",
+  "floors": [
+    "personal",
+    "team",
+    "org"
+  ],
+  "surfaces": [
+    {
+      "floor": "team",
+      "slot": "card",
+      "module": "./Glance"
+    },
+    {
+      "floor": "org",
+      "slot": "card",
+      "module": "./Glance"
+    }
+  ],
+  "search": true,
+  "scopes": [
+    "people:read",
+    "events:subscribe"
+  ],
+  "handles": [
+    "floor.map",
+    "auspex.open"
+  ],
+  "orbit": false,
+  "menu": [
+    {
+      "id": "explore",
+      "label": "Explore",
+      "icon": "explore",
+      "items": [
+        {
+          "id": "where",
+          "label": "Where you are",
+          "icon": "explore",
+          "path": "/map",
+          "detail": "Your floors, and why you can go to each",
+          "keywords": "map floors teams org structure"
+        },
+        {
+          "id": "here",
+          "label": "This floor",
+          "icon": "people",
+          "path": "/here",
+          "detail": "Who’s here and which apps you can use",
+          "keywords": "people apps members leads"
+        }
+      ]
+    }
+  ]
+}
