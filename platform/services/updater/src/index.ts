@@ -22,7 +22,8 @@ loadConfigOrExit('updater', [
   commonSettings.clientSecret,
   { name: 'DOCKER_HOST', about: 'the Docker API the updater drives (the docker-proxy).', required: true },
   { name: 'PLATFORM_DIR', about: 'the deployment folder’s full path on the server.', required: true },
-  { name: 'IMAGE_PULL_USER', about: 'who the pull token in secrets/image-pull-token belongs to, for private images.' },
+  { name: 'GITHUB_READ_USER', about: 'the GitHub account the deployment’s read key (secrets/github-read-key) belongs to, for private images.' },
+  { name: 'IMAGE_PULL_USER', about: 'before read keys: who the pull token in secrets/image-pull-token belongs to.' },
   { name: 'APP_SECRETS_KEY', about: 'the key apps’ secrets are made from, for the app runner.', secret: true },
 ]);
 
@@ -30,7 +31,9 @@ const POLL_MS = 30_000;
 /** This repository's Release workflow, which signs every image it publishes (infra/release-images.sh). */
 const RELEASE_SIGNER = 'https://github.com/harry-burton-dev/im-platform/.github/workflows/release.yml@refs/heads/main';
 const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
-/** The pull token for a private image registry, kept beside the release feed's (docs/upgrade.md). */
+/** The deployment's read key, which the registry checks for releases with too (docs/upgrade.md). */
+const READ_KEY_FILE = '/run/secrets/augur/github-read-key';
+/** Before read keys: a pull token for a private image registry. */
 const PULL_TOKEN_FILE = '/run/secrets/augur/image-pull-token';
 
 const log = (message: string, more: Record<string, unknown> = {}) => console.log(JSON.stringify({ time: new Date().toISOString(), service: 'updater', msg: message, ...more }));
@@ -42,6 +45,7 @@ const DOCKER_HOST = setting('DOCKER_HOST', 'tcp://docker-proxy:2375');
 const REGISTRY_URL = setting('REGISTRY_URL', 'http://registry:8082');
 const IDENTITY_URL = setting('IDENTITY_URL', 'http://identity:8081');
 const IMAGE_SIGNER = setting('IMAGE_SIGNER', RELEASE_SIGNER);
+const GITHUB_READ_USER = setting('GITHUB_READ_USER');
 const IMAGE_PULL_USER = setting('IMAGE_PULL_USER');
 if (!PLATFORM_DIR) throw new Error('PLATFORM_DIR is not set: the updater needs the deploy folder’s path on the host (docs/upgrade.md).');
 const signer = { identity: IMAGE_SIGNER, issuer: setting('IMAGE_SIGNER_ISSUER', GITHUB_ISSUER) };
@@ -66,12 +70,20 @@ const runner = appRunner({
   publishers: [IMAGE_SIGNER.replace(/^https:\/\/github\.com\//, '').replace(/@.*$/, '')],
 });
 
-/** Signs the docker CLI in to the image registry, when the images are private. */
+const readFile = (path: string) => (existsSync(path) ? readFileSync(path, 'utf8').trim() : '');
+
+/**
+ * Signs the docker CLI in to the image registry, when the images are private: with the deployment's
+ * read key, or a pull token from before read keys. A mirror (PLATFORM_IMAGES elsewhere) has its own
+ * pull token, as docs/mirror.md says.
+ */
 const signIn = async () => {
-  const token = existsSync(PULL_TOKEN_FILE) ? readFileSync(PULL_TOKEN_FILE, 'utf8').trim() : '';
-  if (!token || !IMAGE_PULL_USER) return;
   const images = envValue(await server.readEnv(), 'PLATFORM_IMAGES') || 'ghcr.io/harry-burton-dev/im-platform';
-  await server.login(images.split('/')[0], IMAGE_PULL_USER, token);
+  const host = images.split('/')[0]!;
+  const key = readFile(READ_KEY_FILE);
+  if (key && GITHUB_READ_USER && host === 'ghcr.io') return server.login(host, GITHUB_READ_USER, key);
+  const token = readFile(PULL_TOKEN_FILE);
+  if (token && IMAGE_PULL_USER) await server.login(host, IMAGE_PULL_USER, token);
 };
 
 const once = async () => {

@@ -40,6 +40,19 @@ export type ReleaseFeed = (running: string) => Promise<FeedRelease[]>;
 /** This repo's GitHub releases: the feed every deployment reads unless RELEASE_FEED_URL points at a mirror. */
 export const DEFAULT_FEED_URL = 'https://api.github.com/repos/harry-burton-dev/im-platform/releases?per_page=100';
 
+/**
+ * The same releases, and apps' releases, as one file the Release workflow pushes to GitHub's container
+ * registry beside the images (scripts/publish-feed.mjs). A deployment reads it with its read key, the
+ * same read:packages token it pulls images with, so one key covers updates of AUGUR and of apps.
+ */
+export const DEFAULT_OCI_FEED_URL = 'oci://ghcr.io/harry-burton-dev/im-platform/feed:latest';
+
+/** A deployment's read key: a GitHub token that can read this repository's packages, and whose it is. */
+export interface ReadKey {
+  user: string;
+  token: string;
+}
+
 /** How many releases newer than the running one have their manifests read. */
 const MANIFESTS_READ = 10;
 const TIMEOUT_MS = 10_000;
@@ -64,8 +77,9 @@ export interface GitHubRelease {
  * or one on the server (`file:///…`). Failures are FeedProblems that say what to do.
  */
 export const feedReader =
-  ({ token, fetchImpl = (...args) => fetch(...args) }: { token?: string; fetchImpl?: typeof fetch }) =>
+  ({ token, key, fetchImpl = (...args) => fetch(...args) }: { token?: string; key?: ReadKey; fetchImpl?: typeof fetch }) =>
   async (target: string, accept: string): Promise<unknown> => {
+    if (target.startsWith('oci:')) return ociFile(target, key, fetchImpl);
     if (target.startsWith('file:')) {
       const text = await readFile(fileURLToPath(target), 'utf8').catch(() => {
         throw new FeedProblem(`The release feed file ${fileURLToPath(target)} can’t be read. Check RELEASE_FEED_URL and that it’s mounted (docs/mirror.md).`);
@@ -101,6 +115,56 @@ export const feedReader =
     }) as Promise<unknown>;
   };
 
+const parseJson = (text: string) => {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new FeedProblem('The release feed isn’t JSON. Check RELEASE_FEED_URL.');
+  }
+};
+
+/**
+ * Reads the one file of an OCI artifact, `oci://<registry>/<repository>:<tag>`, as Docker would pull
+ * it: a pull token for the repository (with the read key, when there is one), then the tag's manifest,
+ * then its first layer.
+ */
+const ociFile = async (target: string, key: ReadKey | undefined, fetchImpl: typeof fetch): Promise<unknown> => {
+  const m = /^oci:\/\/([^/]+)\/(.+):([^:/]+)$/.exec(target);
+  if (!m) throw new FeedProblem('The release feed’s address isn’t oci://<registry>/<repository>:<tag>. Check RELEASE_FEED_URL.');
+  const [, host, repository, tag] = m;
+  const call = async (url: string, headers: Record<string, string>) => {
+    try {
+      return await fetchImpl(url, { headers: { 'user-agent': 'augur-registry', ...headers }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    } catch {
+      throw new FeedProblem(`The release feed at ${host} can’t be reached. Check the server can reach it, or point RELEASE_FEED_URL at a mirror.`);
+    }
+  };
+  const refused = (status: number) =>
+    new FeedProblem(
+      key
+        ? `The release feed refused this deployment’s read key (${status}). Check the token in secrets/github-read-key can still read the repository’s packages, and that GITHUB_READ_USER is its account (docs/upgrade.md).`
+        : `The release feed refused the registry (${status}). A private repository needs a read key: see docs/upgrade.md.`,
+    );
+  const tokenRes = await call(
+    `https://${host}/token?service=${encodeURIComponent(host)}&scope=${encodeURIComponent(`repository:${repository}:pull`)}`,
+    key ? { authorization: `Basic ${Buffer.from(`${key.user}:${key.token}`).toString('base64')}` } : {},
+  );
+  if (!tokenRes.ok) throw refused(tokenRes.status);
+  const { token } = (await tokenRes.json().catch(() => ({}))) as { token?: string };
+  if (!token) throw refused(tokenRes.status);
+  const auth = { authorization: `Bearer ${token}` };
+  const manifestRes = await call(`https://${host}/v2/${repository}/manifests/${tag}`, { ...auth, accept: 'application/vnd.oci.image.manifest.v1+json' });
+  if (manifestRes.status === 401 || manifestRes.status === 403 || manifestRes.status === 404) throw refused(manifestRes.status);
+  if (!manifestRes.ok) throw new FeedProblem(`The release feed answered ${manifestRes.status}. Try again later.`);
+  const manifest = (await manifestRes.json().catch(() => ({}))) as { layers?: { digest?: string }[] };
+  const digest = manifest.layers?.[0]?.digest;
+  if (!digest) throw new FeedProblem('The release feed has no file in it. Check RELEASE_FEED_URL.');
+  // The blob is a redirect to storage elsewhere; fetch drops the token on the way.
+  const blobRes = await call(`https://${host}/v2/${repository}/blobs/${digest}`, auth);
+  if (!blobRes.ok) throw new FeedProblem(`The release feed answered ${blobRes.status}. Try again later.`);
+  return parseJson(await blobRes.text());
+};
+
 /**
  * Reads releases from `url`: GitHub's releases API (the `augur@<version>` ones, with their
  * augur-release.json asset) or a mirror's JSON, which is a list of release files or `{ releases: [...] }`.
@@ -108,9 +172,9 @@ export const feedReader =
  * On GitHub a release marked pre-release is beta; promoting it to stable is unticking that.
  */
 export const releaseFeed =
-  ({ url, token, fetchImpl }: { url: string; token?: string; fetchImpl?: typeof fetch }): ReleaseFeed =>
+  ({ url, token, key, fetchImpl }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch }): ReleaseFeed =>
   async (running) => {
-    const get = feedReader({ token, fetchImpl });
+    const get = feedReader({ token, key, fetchImpl });
     const body = await get(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { releases?: unknown })?.releases) ? (body as { releases: unknown[] }).releases : [];
 
@@ -137,7 +201,18 @@ export const releaseFeed =
     );
   };
 
-/** The registry's read-only token for a private feed: a Docker secret, or RELEASE_FEED_TOKEN. */
+/**
+ * The deployment's read key: a token in secrets/github-read-key (or GITHUB_READ_KEY) that can read this
+ * repository's packages, and GITHUB_READ_USER, the account it belongs to. Undefined without both.
+ */
+export const readKeyFromEnv = (env = process.env): ReadKey | undefined => {
+  const file = env.GITHUB_READ_KEY_FILE ?? '/run/secrets/augur/github-read-key';
+  const token = (existsSync(file) ? readFileSync(file, 'utf8').trim() : '') || env.GITHUB_READ_KEY || '';
+  const user = env.GITHUB_READ_USER || '';
+  return token && user ? { user, token } : undefined;
+};
+
+/** The registry's read-only token for GitHub's releases API (before read keys): a Docker secret, or RELEASE_FEED_TOKEN. */
 export const feedTokenFromEnv = (env = process.env) => {
   const file = env.RELEASE_FEED_TOKEN_FILE ?? '/run/secrets/augur/release-feed-token';
   const fromFile = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';

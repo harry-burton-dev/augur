@@ -1,6 +1,6 @@
 import semver from 'semver';
 import type { AppRelease } from './store.ts';
-import { FeedProblem, feedReader, type GitHubRelease } from './updates.ts';
+import { FeedProblem, feedReader, type GitHubRelease, type ReadKey } from './updates.ts';
 
 /** Which of an app's releases a deployment takes: stable ones only, or betas too. */
 export type AppChannel = 'stable' | 'beta';
@@ -49,9 +49,9 @@ const isAppRelease = (x: unknown): x is AppRelease =>
  * On GitHub a release marked pre-release is beta.
  */
 export const appFeed =
-  ({ url, token, fetchImpl }: { url: string; token?: string; fetchImpl?: typeof fetch }): AppFeed =>
+  ({ url, token, key, fetchImpl }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch }): AppFeed =>
   async () => {
-    const get = feedReader({ token, fetchImpl });
+    const get = feedReader({ token, key, fetchImpl });
     const body = await get(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { apps?: unknown })?.apps) ? (body as { apps: unknown[] }).apps : [];
     if (items.some(isAppRelease)) {
