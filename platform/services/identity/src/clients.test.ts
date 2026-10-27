@@ -20,6 +20,23 @@ describe('apps’ sign-ins', () => {
     expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/Not_An_App/credential', headers: admin })).statusCode).toBe(400);
   });
 
+  it('lets only the app runner set an app’s sign-in to the secret it works out', async () => {
+    const entries: unknown[] = [];
+    const appClients = new MemoryAppClients();
+    const verifyService = async (h: Record<string, string | string[] | undefined>) => {
+      const m = /^Bearer (app|platform)-(\S+)$/.exec(String(h.authorization ?? ''));
+      return m ? (m[1] === 'app' ? { kind: 'app' as const, app: m[2] } : { kind: 'platform' as const, name: m[2] }) : undefined;
+    };
+    const app = await buildApp({ appClients, verifyService, audit: async (e) => void entries.push(e) });
+    const put = (authorization: string, secret = 'a'.repeat(64)) =>
+      app.inject({ method: 'PUT', url: '/v1/admin/apps/notes/credential', headers: { authorization, ...(authorization ? {} : admin) }, payload: { secret } });
+    expect((await put('Bearer platform-updater')).json()).toEqual({ clientId: 'app-notes' });
+    expect(appClients.secrets.get('app-notes')).toBe('a'.repeat(64));
+    expect(entries).toEqual([{ actor: { id: 'updater', kind: 'service' }, app: 'identity', action: 'app.credential-set', target: 'notes' }]);
+    for (const who of ['Bearer platform-registry', 'Bearer app-notes', '']) expect((await put(who)).statusCode).toBe(403);
+    expect((await put('Bearer platform-updater', 'short')).statusCode).toBe(400);
+  });
+
   it('answers 503 without the sign-in service', async () => {
     const app = await buildApp();
     expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: admin })).statusCode).toBe(503);

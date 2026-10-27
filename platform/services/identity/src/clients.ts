@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { appClientId, callerFromHeaders, SERVICES_AUDIENCE, type NewAuditEntry } from '@augur/service-kit';
+import { appClientId, callerFromHeaders, identifyService, ServiceAuthUnavailable, SERVICES_AUDIENCE, type NewAuditEntry, type ServiceVerifier } from '@augur/service-kit';
 import { DirectoryError, type KeycloakDirectory } from './directory.ts';
 
 /**
@@ -130,7 +130,12 @@ export class MemoryAppClients implements AppClients {
 interface ClientRoutesOptions {
   clients?: AppClients;
   audit?: (entry: NewAuditEntry) => Promise<void>;
+  /** Checks platform services' own sign-ins, for the app runner setting an app's sign-in. */
+  verifyService?: ServiceVerifier;
 }
+
+/** The platform service that runs apps: it sets the sign-in of each app it installs. */
+const APP_RUNNER = 'updater';
 
 /** Admins issue an app's sign-in, and replace it when it may have leaked. Audited, never with the secret. */
 export const appClientRoutes =
@@ -150,6 +155,49 @@ export const appClientRoutes =
             req.log.error({ err: err.message }, 'audit entry not recorded'),
           );
           return reply.code(201).send(issued);
+        } catch (err) {
+          if (!(err instanceof DirectoryError)) throw err;
+          return reply.code(err.status === 503 ? 503 : 502).send({ error: 'unavailable', message: err.message });
+        }
+      },
+    );
+  };
+
+/** For the platform's services rather than people: the app runner setting the sign-in of an app it installs. */
+export const appRunnerRoutes =
+  ({ clients, audit, verifyService }: ClientRoutesOptions) =>
+  async (app: FastifyInstance) => {
+    /**
+     * The app runner sets the sign-in of an app it installs to the secret it works out from
+     * APP_SECRETS_KEY (service kit's appSecretFor), so it can give the app that secret without
+     * keeping it anywhere. Only the runner: it already decides what runs on the server.
+     */
+    app.put<{ Params: { id: string }; Body: { secret: string } }>(
+      '/:id/credential',
+      {
+        schema: {
+          params: { type: 'object', required: ['id'], properties: { id: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' } } },
+          body: { type: 'object', additionalProperties: false, required: ['secret'], properties: { secret: { type: 'string', pattern: '^[0-9a-f]{64}$' } } },
+        },
+      },
+      async (req, reply) => {
+        let service;
+        try {
+          service = await identifyService(req.headers, verifyService);
+        } catch (err) {
+          if (!(err instanceof ServiceAuthUnavailable)) throw err;
+          return reply.code(503).send({ error: 'unavailable', message: err.message });
+        }
+        if (service?.kind !== 'platform' || service.name !== APP_RUNNER) return reply.code(403).send({ error: 'forbidden', message: 'Only the app runner sets an app’s sign-in this way; admins issue one.' });
+        if (!clients) return reply.code(503).send({ error: 'unavailable', message: 'Identity isn’t connected to the sign-in service, so apps’ sign-ins can’t be set here yet.' });
+        try {
+          const clientId = appClientId(req.params.id);
+          await clients.ensure(clientId, req.body.secret);
+          req.log.info({ app: req.params.id, by: service.name }, 'app credential set');
+          await audit?.({ actor: { id: service.name, kind: 'service' }, app: 'identity', action: 'app.credential-set', target: req.params.id }).catch((err: Error) =>
+            req.log.error({ err: err.message }, 'audit entry not recorded'),
+          );
+          return reply.code(200).send({ clientId });
         } catch (err) {
           if (!(err instanceof DirectoryError)) throw err;
           return reply.code(err.status === 503 ? 503 : 502).send({ error: 'unavailable', message: err.message });

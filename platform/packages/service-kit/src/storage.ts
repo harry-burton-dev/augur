@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 /**
  * Where an app's own storage is, from the settings the platform gives its service
@@ -36,3 +36,14 @@ export const appStorageFromEnv = (env: Record<string, string | undefined> = proc
       : undefined;
   return { databaseUrl: DATABASE_URL || undefined, bucket };
 };
+
+/** What an app's secret opens: its database login, its bucket key, or its sign-in. */
+export type AppSecretPurpose = 'database' | 'bucket' | 'sign-in';
+
+/**
+ * One of an app's secrets, worked out from the deployment's APP_SECRETS_KEY rather than kept
+ * anywhere: 64 hex characters, different for each app and purpose, the same every time. The
+ * storage container, identity and the app runner each work it out, so installing an app needs
+ * no secret written into .env, and a new APP_SECRETS_KEY changes every app's secrets at once.
+ */
+export const appSecretFor = (key: string, app: string, purpose: AppSecretPurpose) => createHmac('sha256', key).update(`augur-app-secret:v1:${app}:${purpose}`).digest('hex');

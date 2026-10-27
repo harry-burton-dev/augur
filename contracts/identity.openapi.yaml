@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.9.0
+  version: 1.10.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -258,6 +258,26 @@ paths:
                   secret: { type: string }
         "400": { description: Not an app id }
         "403": { description: Not an admin }
+        "503": { description: Identity isn't connected to the sign-in service }
+    put:
+      summary: Set an app's sign-in to a given secret (the app runner only)
+      description: >
+        The app runner (platform-updater) sets the sign-in of an app it
+        installs to the secret it works out from APP_SECRETS_KEY, making the
+        client if it's missing. Audited as app.credential-set, without the secret.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [secret], properties: { secret: { type: string, pattern: "^[0-9a-f]{64}$" } } }
+      responses:
+        "200":
+          description: The app's client
+          content:
+            application/json:
+              schema: { type: object, required: [clientId], properties: { clientId: { type: string, example: app-notes } } }
+        "400": { description: Not an app id, or not 64 hex characters }
+        "403": { description: Not the app runner }
         "503": { description: Identity isn't connected to the sign-in service }
   /admin/people:
     get:
