@@ -51,6 +51,34 @@ The pull fetches that release's images before anything stops. Each service migra
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### The read key
+
+While the repository is private, a deployment needs one **read key**: a GitHub token that can read this repository's packages and nothing else. With it, the registry checks GitHub for new AUGUR releases (Admin → Updates) and new app releases (Admin → Apps) itself, and the updater pulls both. The releases are listed in a feed the Release workflow keeps beside the images, `ghcr.io/harry-burton-dev/im-platform/feed`, so the one token GitHub's container registry accepts covers everything. It replaces the two tokens servers needed before (`release-feed-token` and `image-pull-token`), which still work until you swap them.
+
+Give each deployment its own key, so you can take one away without touching the others. Keys belong to a GitHub account, so use one that can do nothing but read: a separate account for deployments (a "machine user", such as `augur-deploy`, made with its own email address).
+
+**Once, in GitHub:**
+
+1. Sign up for the deployments' account and turn on two-factor authentication for it.
+2. As the repository's owner, give that account **Read** on each package: open **Packages** on your profile, then each of `feed`, `web`, `gateway`, `identity`, `registry`, `events`, `models`, `storage`, `folio`, `folio-worker`, `updater` and each app under `apps/`, and under **Package settings → Manage access → Invite**, add the account with the **Read** role. Don't add it to the repository itself: on a repository owned by a personal account every collaborator can push. (If the repository moves to an organisation, giving the account the **Read** role on the repository covers every package that inherits its access.) A package made later, such as a new app's, needs the same once, after its first release.
+
+**For each deployment:**
+
+1. Signed in as the deployments' account, make a [classic token](https://github.com/settings/tokens/new?scopes=read:packages) named after the deployment (such as `augur demo`), with only **read:packages** and an expiry you'll put in your calendar.
+2. On the server:
+   ```sh
+   mkdir -p infra/deploy/secrets
+   printf '%s' '<the token>' > infra/deploy/secrets/github-read-key
+   sudo chown 1000 infra/deploy/secrets/github-read-key && chmod 600 infra/deploy/secrets/github-read-key
+   echo '<the token>' | docker login ghcr.io -u <the account> --password-stdin
+   ```
+   and in `.env`, `GITHUB_READ_USER=<the account>`. `docker login` is for pulling by hand (`pc pull`); the updater signs itself in with the same key.
+3. `pc up -d registry updater`, then **Check now** on Admin → Updates. It lists releases, or says the key was refused and why. The old `release-feed-token`, `image-pull-token` and `IMAGE_PULL_USER` can then go.
+
+To take a deployment's access away, delete its token in the account's **Settings → Developer settings → Personal access tokens**; the others carry on. When a token is near its expiry, make a new one and repeat step 2.
+
+A deployment that pulls from a mirror ([mirror.md](mirror.md)) has no use for a read key: its feed and images are in your own registry.
+
 ### Folio is called Artifacts
 
 Folio now shows as **Artifacts** everywhere people see it, and opens straight into its own side menu, with **All apps** in the top bar as the way back. Its containers, `.env` names (`FOLIO_*`), schema, bucket and address (`/folio`) haven't changed, so there's nothing to do.
@@ -74,7 +102,7 @@ Then upgrade as usual. The worker's image is large (about 2 GB: the models that 
 
 ### The Updates page
 
-Admin gets an **Updates** page, under AUGUR. It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. Once:
+Admin gets an **Updates** page, under AUGUR. It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. [The read key](#the-read-key) now does this, and the steps below are how servers did it before:
 
 1. In GitHub, **Settings → Developer settings → Fine-grained tokens**, make a token for this repository only, with **Contents: Read-only** and nothing else. (The `read:packages` token you sign Docker in with can't read releases.)
 2. Save it where only the registry reads it, then upgrade as usual:
@@ -100,7 +128,7 @@ It drives Docker, which can start any container, so it has the run of the server
    UPDATER_CLIENT_SECRET=<openssl rand -hex 32>
    ```
 2. It runs as user 1000 and changes `PLATFORM_VERSION` in `.env`, so user 1000 has to be able to write it. On most servers that's the first account, so if `id -u` prints 1000 there's nothing to do; otherwise `sudo setfacl -m u:1000:rw infra/deploy/.env`.
-3. For private images, the same read:packages token the server pulls with: `printf '%s' '<the token>' > infra/deploy/secrets/image-pull-token`, owned by user 1000 like the release feed's, and `IMAGE_PULL_USER=<your GitHub username>` in `.env`.
+3. For private images, the deployment's [read key](#the-read-key), which the updater signs in with. (Before read keys: the read:packages token the server pulls with, as `infra/deploy/secrets/image-pull-token`, owned by user 1000, with `IMAGE_PULL_USER=<its GitHub username>` in `.env`.)
 4. `pc up -d`. Identity makes the updater's sign-in, and an upgrade you ask for starts within half a minute.
 
 Docker must be listening on `/var/run/docker.sock` (rootless Docker isn't). From then on, upgrade from the page, or by hand as above; both work. An upgrade waiting on the page while you upgrade by hand is best cancelled first.

@@ -213,6 +213,9 @@ services:
       <<: *env
       PORT: 8082
       SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}"
+      # The deployment's read key (secrets/github-read-key) and whose it is: the registry checks GitHub
+      # for new AUGUR and app releases with it, and the updater pulls with it (docs/upgrade.md).
+      GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
       # Admin's Updates page: where new AUGUR releases are listed, and which ones to follow.
       RELEASE_FEED_URL: ${RELEASE_FEED_URL:-}
       RELEASE_CHANNEL: ${RELEASE_CHANNEL:-}
@@ -224,7 +227,7 @@ services:
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
     volumes:
-      # A read-only token for a private release feed, as secrets/release-feed-token (docs/upgrade.md).
+      # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/upgrade.md).
       - ./secrets:/run/secrets/augur:ro
       # A mirror's feed kept on this server, for RELEASE_FEED_URL=file:///run/augur/releases/releases.json (docs/mirror.md).
       - ./releases:/run/augur/releases:ro
@@ -288,7 +291,9 @@ services:
       DOCKER_HOST: tcp://docker-proxy:2375
       # This folder's full path on the host, mounted at the same path so Compose's ./ paths still name the host's files.
       PLATFORM_DIR: "${PLATFORM_DIR:-}"
-      # For private images: who the pull token in secrets/image-pull-token belongs to.
+      # The read key's account: the updater signs Docker in with secrets/github-read-key to pull.
+      GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
+      # Before read keys: who the pull token in secrets/image-pull-token belongs to.
       IMAGE_PULL_USER: "${IMAGE_PULL_USER:-}"
     volumes:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}

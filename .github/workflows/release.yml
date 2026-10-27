@@ -12,6 +12,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,3 +95,8 @@ jobs:
         env:
           PENDING: ${{ steps.apps.outputs.pending }}
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+  # Deployments learn of what was just released from the feed beside the images, read with their read key.
+  feed:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    uses: ./.github/workflows/feed.yml

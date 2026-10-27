@@ -96,3 +96,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+  # Deployments' app runners learn of a new or removed preview from the feed beside the images.
+  feed:
+    needs: [preview, closed]
+    if: always() && (needs.preview.result == 'success' || needs.closed.result == 'success')
+    uses: ./.github/workflows/feed.yml

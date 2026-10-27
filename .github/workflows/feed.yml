@@ -1,0 +1,33 @@
+name: Release feed
+# Keeps ghcr.io/<repo>/feed:latest, the list of AUGUR's and apps' releases that deployments read with
+# their read key (scripts/publish-feed.mjs, docs/upgrade.md "The read key"), in step with GitHub's
+# releases: after the Release and App previews workflows make or remove one, and whenever someone
+# edits one here, such as promoting a release to stable by unticking pre-release.
+on:
+  workflow_call:
+  workflow_dispatch:
+  release:
+    types: [published, edited, released, prereleased, unpublished, deleted]
+concurrency:
+  group: release-feed
+  cancel-in-progress: false
+permissions:
+  contents: read
+  packages: write
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: oras-project/setup-oras@v1
+      - run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Publish the feed
+        run: node scripts/publish-feed.mjs --out "$RUNNER_TEMP/feed.json" --push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
