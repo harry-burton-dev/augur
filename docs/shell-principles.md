@@ -25,10 +25,10 @@ token. If you need to break one, change the rule here first.
 | **One motion switch** | The system's reduce-motion setting and AUGUR's own are one check. Every motion has a crossfade fallback, and loops stop. | Kit `motionMode()` and its tests (coming) |
 | **Tokens only** | Every duration, distance and colour comes from `platform/packages/ui-kit/tokens/tokens.json`. Icons come from Lucide through `icon.ts`. | Token build; review |
 
-Rules marked "coming" are agreed and being built.
+Rules marked "coming" are agreed and being built. Until they land, the
+behaviour they describe isn't there yet.
 
 Where the shell hides things today, it is to be measured against **Nothing is
 obtuse**: an app offered only on some kinds of floor, a menu entry that needs
 a role, and an empty menu should show as unavailable with the reason, unless
-knowing it exists is itself restricted. Until they land, the
-behaviour they describe isn't there yet.
+knowing it exists is itself restricted.
