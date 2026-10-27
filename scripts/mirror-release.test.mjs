@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { asMirrored, destinations, withRelease } from './mirror-release.mjs';
+import { appReleasesToMirror, asMirrored, destinations, mirroredAppRelease, withAppReleases, withRelease } from './mirror-release.mjs';
 
 const manifest = (version, more = {}) => ({ version, channel: 'beta', parts: {}, ...more });
 
@@ -23,4 +23,32 @@ test('each image goes where compose.yml looks with PLATFORM_IMAGES set to the mi
   assert.deepEqual(destinations({ web: 'ghcr.io/o/r/web@sha256:aa' }, 'registry.example.org/augur/', '0.3.0'), [
     { part: 'web', from: 'ghcr.io/o/r/web@sha256:aa', to: 'registry.example.org/augur/web:0.3.0', digest: 'sha256:aa' },
   ]);
+});
+
+test('apps are mirrored a few releases each, never previews or drafts', () => {
+  const gh = (tag, more = {}) => ({ tag_name: tag, draft: false, prerelease: false, ...more });
+  const chosen = appReleasesToMirror([
+    gh('augur@0.5.0'),
+    gh('app/notes@1.0.0'),
+    gh('app/notes@1.1.0'),
+    gh('app/notes@1.2.0-beta.1', { prerelease: true }),
+    gh('app/notes@1.3.0', { draft: true }),
+    gh('app/notes@0.9.0'),
+    gh('app/notes@1.2.0-pr.4.1', { prerelease: true }),
+    gh('app/tasks@2.0.0'),
+  ]);
+  assert.deepEqual(chosen.map((c) => `${c.app} ${c.version}`), ['notes 1.2.0-beta.1', 'notes 1.1.0', 'notes 1.0.0', 'tasks 2.0.0']);
+  assert.deepEqual(appReleasesToMirror([gh('app/notes@1.0.0'), gh('app/tasks@2.0.0')], ['tasks']).map((c) => c.app), ['tasks']);
+});
+
+test('a mirrored app release names its parts in the mirror, by the same digest', () => {
+  const d = (c) => `sha256:${c.repeat(64)}`;
+  const file = { id: 'notes', version: '1.0.0', service: { image: `ghcr.io/o/r/apps/notes@${d('a')}` }, frontend: { artifact: `ghcr.io/o/r/apps/notes-frontend@${d('b')}`, digest: d('c'), mediaType: 'x' } };
+  const mirrored = mirroredAppRelease(file, 'registry.example.org/augur/');
+  assert.equal(mirrored.service.image, `registry.example.org/augur/apps/notes@${d('a')}`);
+  assert.equal(mirrored.frontend.artifact, `registry.example.org/augur/apps/notes-frontend@${d('b')}`);
+  assert.equal(mirrored.frontend.digest, d('c'));
+  assert.equal(mirroredAppRelease({ ...file, service: null }, 'r').service, null);
+  const feed = withAppReleases({ apps: [{ id: 'notes', version: '1.0.0', old: true }, { id: 'notes', version: '0.9.0' }] }, [{ id: 'notes', version: '1.0.0' }, { id: 'auth', version: '1.0.0' }]);
+  assert.deepEqual(feed.apps.map((f) => `${f.id} ${f.version}${f.old ? ' old' : ''}`), ['auth 1.0.0', 'notes 1.0.0', 'notes 0.9.0']);
 });
