@@ -80,17 +80,24 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
     },
 
     /**
-     * The app's key for this secret, imported when it's new, allowed to read and
+     * The app's key for this secret (or the platform's own, named `name`), imported when it's new, allowed to read and
      * write the app's bucket only, and every other key the app had removed.
      */
-    async ensureKey(app: string, secret: string, bucketId: string): Promise<string> {
+    async ensureKey(app: string, secret: string, bucketId: string, name = keyNameFor(app)): Promise<string> {
       const id = keyIdFor(secret);
-      const name = keyNameFor(app);
       const keys = await call<{ id: string; name: string }[]>('GET', 'ListKeys');
       if (!keys.some((k) => k.id === id)) await call('POST', 'ImportKey', { name, accessKeyId: id, secretAccessKey: secret });
       await call('POST', 'AllowBucketKey', { bucketId, accessKeyId: id, permissions: { read: true, write: true, owner: false } });
       for (const old of keys.filter((k) => k.name === name && k.id !== id)) await call('POST', `DeleteKey?id=${encodeURIComponent(old.id)}`);
       return id;
+    },
+
+    /**
+     * Serves the bucket's objects read-only on Garage's web endpoint (port 3902), so the
+     * front door can hand them to browsers without a key. Only for what anyone may read.
+     */
+    async ensureWebsite(bucketId: string): Promise<void> {
+      await call('POST', `UpdateBucket?id=${encodeURIComponent(bucketId)}`, { websiteAccess: { enabled: true, indexDocument: 'index.html', errorDocument: null } });
     },
   };
 };

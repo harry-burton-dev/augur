@@ -1,6 +1,10 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import {
   callerFromHeaders,
+  frontendDigest,
+  FrontendProblem,
+  FRONTEND_LIMITS,
+  unpackFrontend,
   FloorsUnavailable,
   health,
   identifyService,
@@ -37,6 +41,8 @@ import {
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { UpdateChecker, updatesView } from './updates.ts';
+import { servedEntry, type FrontendFiles } from './frontends.ts';
+import semver from 'semver';
 import { randomUUID } from 'node:crypto';
 import {
   MemoryAppStore,
@@ -46,6 +52,7 @@ import {
   type AppRecord,
   type AppStore,
   type FloorRule,
+  type StoredFrontend,
   type Upgrade,
   type UpgradeOutcome,
   type UpgradeStepState,
@@ -73,6 +80,11 @@ export interface RegistryOptions {
    * version comes with the release, and it can be turned off but never removed.
    */
   pillars?: string[];
+  /**
+   * The frontends bucket, where each version of an app's frontend is kept and served from
+   * /apps/<id>/<version>/. Without it apps are served from wherever their manifests' `entry` says.
+   */
+  frontendFiles?: FrontendFiles;
 }
 
 /** PILLAR_APPS: the ids of the apps this deployment ships with, space or comma separated. */
@@ -143,9 +155,10 @@ export const buildApp = async ({
   updates = new UpdateChecker({ running: AUGUR_RELEASE }),
   callers,
   pillars = [],
+  frontendFiles,
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
-  const entryOf = (r: AppRecord, allowed: string[]) => catalogueEntry(r, allowed, isPillar(r.entry.id));
+  const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   // Before anything reads the caller: only the gateway's signed word says who is calling.
@@ -191,10 +204,11 @@ export const buildApp = async ({
           // An app whose origin an admin has stopped allowing isn't offered, even though it stays registered.
           const allowed = await allowedOrigins();
           const rules = place ? await store.rules() : [];
+          const kept = await store.frontends();
           const registered = (await store.records())
             .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
-            // The limit the gateway holds requests to the app's service to (SDK 1.3).
-            .map((r) => ({ ...r.entry, maxUpload: uploadLimitOf(r) }));
+            // The limit the gateway holds requests to the app's service to (SDK 1.3), and the version's own copy of its code.
+            .map((r) => ({ ...servedEntry(r.entry, kept), maxUpload: uploadLimitOf(r) }));
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
         },
@@ -207,7 +221,8 @@ export const buildApp = async ({
         if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see the whole catalogue.' });
         const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
         const allowed = await allowedOrigins();
-        return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed))];
+        const kept = await store.frontends();
+        return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed, kept))];
       });
 
       /** An app's kept versions, newest first, and which one the shell is given. */
@@ -215,7 +230,8 @@ export const buildApp = async ({
         if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see an app’s versions.' });
         const record = (await store.records()).find((r) => r.entry.id === req.params.id);
         if (!record) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-        return (await store.versions(req.params.id)).map((v) => ({ ...v, serving: v.version === record.entry.version }));
+        const kept = await store.frontends(req.params.id);
+        return (await store.versions(req.params.id)).map((v) => ({ ...v, entry: servedEntry(v.entry, kept), serving: v.version === record.entry.version }));
       });
 
       /** Serve one kept version and hold the app there, whatever registers next; or let go and serve the newest. */
@@ -236,7 +252,7 @@ export const buildApp = async ({
             target: req.params.id,
             detail: { version: changed.entry.version },
           });
-          return entryOf(changed, await allowedOrigins());
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
         } catch (err) {
           if (err instanceof UnknownVersionError) return reply.code(404).send({ error: 'not_found', message: err.message });
           if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
@@ -351,6 +367,42 @@ export const buildApp = async ({
         },
       );
 
+      // A frontend arrives as one gzipped tarball (service kit's packFrontend), held in memory while it's checked.
+      app.addContentTypeParser('application/gzip', { parseAs: 'buffer', bodyLimit: FRONTEND_LIMITS.bytes + 1024 * 1024 }, (_req, body, done) => done(null, body));
+
+      /**
+       * Keeps one version of an app's frontend and serves it at /apps/<id>/<version>/: the app's own
+       * service gives it before registering that version, or a platform service or an admin does.
+       * A version's frontend never changes: the same files again is fine, other files are refused.
+       */
+      app.put<{ Params: { id: string; version: string }; Body: Buffer }>('/apps/:id/versions/:version/frontend', async (req, reply) => {
+        const by = await changedBy(req, reply);
+        if (!by) return reply;
+        const { id, version } = req.params;
+        if (!frontendFiles) return reply.code(501).send({ error: 'not_implemented', message: 'This deployment doesn’t keep apps’ frontends by version (FRONTENDS_BUCKET_SECRET isn’t set).' });
+        if (platformApps.some((a) => a.id === id)) return reply.code(409).send({ error: 'conflict', message: `"${id}" is one of the platform’s own apps.` });
+        if (!semver.valid(version)) return reply.code(400).send({ error: 'bad_request', message: `"${version}" is not a semver version such as 1.2.0.` });
+        if (!Buffer.isBuffer(req.body)) return reply.code(415).send({ error: 'unsupported_media_type', message: 'Send the frontend as one gzipped tarball, Content-Type application/gzip.' });
+        const digest = frontendDigest(req.body);
+        const had = (await store.frontends(id)).find((f) => f.version === version);
+        if (had) {
+          if (had.digest === digest) return reply.code(200).send(had);
+          return reply.code(409).send({ error: 'conflict', message: `${id} ${version} already has a frontend, and a version’s frontend never changes. Release a new version.` });
+        }
+        let files;
+        try {
+          files = unpackFrontend(req.body);
+        } catch (err) {
+          if (err instanceof FrontendProblem) return reply.code(400).send({ error: 'bad_request', message: err.message });
+          throw err;
+        }
+        await frontendFiles.put(id, version, files);
+        const stored = await store.putFrontend({ app: id, version, digest, files: files.map((f) => f.path), bytes: files.reduce((n, f) => n + f.data.length, 0), publishedBy: by.id });
+        req.log.info({ app: id, version, files: files.length, bytes: stored.bytes, by: by.id }, 'app frontend kept');
+        await record(req, { actor: by, app: 'registry', action: 'app.frontend-published', target: id, detail: { version, digest, files: files.length } });
+        return reply.code(201).send(stored);
+      });
+
       app.patch<{ Params: { id: string }; Body: { enabled: boolean } }>(
         '/apps/:id',
         { schema: { body: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' } } } } },
@@ -367,7 +419,7 @@ export const buildApp = async ({
             req.log.info({ app: req.params.id, enabled: req.body.enabled, by: caller.id }, req.body.enabled ? 'app turned on' : 'app turned off');
             await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: req.body.enabled ? 'app.enabled' : 'app.disabled', target: req.params.id });
           }
-          return entryOf({ ...before, enabled: req.body.enabled }, await allowedOrigins());
+          return entryOf({ ...before, enabled: req.body.enabled }, await allowedOrigins(), await store.frontends(req.params.id));
         },
       );
 
@@ -440,7 +492,7 @@ export const buildApp = async ({
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, scopes: req.body.scopes, by: caller.id }, 'app scopes granted');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.scopes-granted', target: req.params.id, detail: { scopes: req.body.scopes } });
-          return entryOf(changed, await allowedOrigins());
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
         },
       );
 
@@ -468,7 +520,7 @@ export const buildApp = async ({
           }
           const changed = (await store.limitUploads(req.params.id, mb))!;
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.upload-limit-set', target: req.params.id, detail: { mb } });
-          return entryOf(changed, await allowedOrigins());
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
         },
       );
 

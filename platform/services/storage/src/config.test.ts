@@ -40,4 +40,12 @@ describe('configFromEnv', () => {
     const config = configFromEnv({ DATABASE_URL: 'postgres://a:b@db/platform', APP_STORAGE: 'folio', FOLIO_DATABASE_PASSWORD: 'p'.repeat(20) });
     expect(config).toMatchObject({ databaseHost: 'db:5432', garage: undefined, apps: [{ app: 'folio', bucketSecret: '' }] });
   });
+
+  it('reads the frontends bucket’s secret, and keeps augur- names for the platform', () => {
+    const base = { DATABASE_URL: 'postgres://a:b@db/platform', GARAGE_ADMIN_TOKEN: 't' };
+    expect(configFromEnv({ ...base, FRONTENDS_BUCKET_SECRET: secret })).toMatchObject({ frontendsSecret: secret });
+    expect(configFromEnv(base)).not.toHaveProperty('frontendsSecret');
+    const bad = configFromEnv({ ...base, FRONTENDS_BUCKET_SECRET: 'short', APP_STORAGE: 'augur-frontends', AUGUR_FRONTENDS_DATABASE_PASSWORD: 'p'.repeat(20) });
+    expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('starts with augur-'), expect.stringContaining('FRONTENDS_BUCKET_SECRET must be 64')]);
+  });
 });

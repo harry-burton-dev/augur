@@ -15,7 +15,17 @@ export interface StorageConfig {
   /** Garage's admin API. Without it there is no object storage, and only databases are made. */
   garage?: { url: string; token: string };
   apps: AppStorage[];
+  /**
+   * The secret of the registry's key to the bucket of apps' frontends (FRONTENDS_BUCKET_SECRET),
+   * 64 hex characters. Without it apps' frontends aren't kept by version (docs/upgrade.md).
+   */
+  frontendsSecret?: string;
 }
+
+/** The bucket each app's frontend is kept in, by version, and served from at /apps/<id>/<version>/. */
+export const FRONTENDS_BUCKET = 'augur-frontends';
+/** The name the registry's key to it carries in Garage. */
+export const FRONTENDS_KEY = 'platform-frontends';
 
 const APP_ID = /^[a-z][a-z0-9-]{1,39}$/;
 
@@ -34,6 +44,10 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
       problems.push(`"${app}" in APP_STORAGE is not an app id (2 to 40 lowercase letters, digits and dashes).`);
       continue;
     }
+    if (app.startsWith('augur-')) {
+      problems.push(`"${app}" in APP_STORAGE starts with augur-, which is kept for the platform's own buckets.`);
+      continue;
+    }
     const prefix = envPrefix(app);
     const databasePassword = env[`${prefix}_DATABASE_PASSWORD`] ?? '';
     const bucketSecret = env[`${prefix}_BUCKET_SECRET`] ?? '';
@@ -41,6 +55,8 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     if (env.GARAGE_ADMIN_TOKEN && !/^[0-9a-f]{64}$/.test(bucketSecret)) problems.push(`${prefix}_BUCKET_SECRET must be 64 lowercase hex characters; \`openssl rand -hex 32\` makes one.`);
     apps.push({ app, databasePassword, bucketSecret });
   }
+  const frontendsSecret = env.FRONTENDS_BUCKET_SECRET || undefined;
+  if (frontendsSecret && !/^[0-9a-f]{64}$/.test(frontendsSecret)) problems.push('FRONTENDS_BUCKET_SECRET must be 64 lowercase hex characters; `openssl rand -hex 32` makes one.');
   if (problems.length || !databaseUrl) return { problems };
   const url = new URL(databaseUrl);
   return {
@@ -48,5 +64,6 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     databaseHost: env.APP_DATABASE_HOST ?? `${url.hostname}:${url.port || 5432}`,
     garage: env.GARAGE_ADMIN_TOKEN ? { url: env.GARAGE_ADMIN_URL ?? 'http://garage:3903', token: env.GARAGE_ADMIN_TOKEN } : undefined,
     apps,
+    ...(frontendsSecret ? { frontendsSecret } : {}),
   };
 };

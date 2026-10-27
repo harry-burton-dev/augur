@@ -57,6 +57,22 @@ export interface AppVersion {
   registeredAt: string;
 }
 
+/**
+ * One version of an app's frontend, kept in the frontends bucket at apps/<app>/<version>/ and served
+ * from there. Kept apart from the app's versions: an app gives its frontend before it registers.
+ */
+export interface StoredFrontend {
+  app: string;
+  version: string;
+  /** sha256 of the tarball it came in, `sha256:<hex>`. A version's frontend never changes. */
+  digest: string;
+  /** Every file's path inside it, so an entry is only pointed at a file that's there. */
+  files: string[];
+  bytes: number;
+  publishedBy: string;
+  publishedAt: string;
+}
+
 /** How many versions of each app are kept. A pinned version is kept even when older. */
 export const KEPT_VERSIONS = 5;
 
@@ -128,8 +144,12 @@ export interface AppStore {
    * the newest. Undefined when there is no such app; UnknownVersionError when it has no such version.
    */
   pin(id: string, version: string | null): Promise<AppRecord | undefined>;
-  /** Removes an app, with its versions and floor rules; false when there was none. */
+  /** Removes an app, with its versions, frontends and floor rules; false when there was none. */
   remove(id: string): Promise<boolean>;
+  /** The frontends kept for one app, or for every app. */
+  frontends(app?: string): Promise<StoredFrontend[]>;
+  /** Records a version's frontend once its files are in the bucket; a version that has one keeps it. */
+  putFrontend(frontend: Omit<StoredFrontend, 'publishedAt'>): Promise<StoredFrontend>;
   /** Lets an app use these scopes. Undefined when there is no such app. */
   grant(id: string, scopes: Scope[]): Promise<AppRecord | undefined>;
   /** Lowers how much the app may be sent in one request, in MB, or with `null` goes back to what its manifest asks. Undefined when there is no such app. */
@@ -166,6 +186,19 @@ export class MemoryAppStore implements AppStore {
   private allowed = new Map<string, AllowedOrigin>();
   private floorRules: FloorRule[] = [];
   private upgrades: Upgrade[] = [];
+  private kept: StoredFrontend[] = [];
+
+  async frontends(app?: string) {
+    return this.kept.filter((f) => !app || f.app === app).map((f) => structuredClone(f));
+  }
+
+  async putFrontend(frontend: Omit<StoredFrontend, 'publishedAt'>) {
+    const had = this.kept.find((f) => f.app === frontend.app && f.version === frontend.version);
+    if (had) return structuredClone(had);
+    const stored = { ...frontend, files: [...frontend.files], publishedAt: new Date().toISOString() };
+    this.kept.push(stored);
+    return structuredClone(stored);
+  }
 
   async upgrade() {
     const last = this.upgrades.at(-1);
@@ -266,6 +299,7 @@ export class MemoryAppStore implements AppStore {
 
   async remove(id: string) {
     this.history.delete(id);
+    this.kept = this.kept.filter((f) => f.app !== id);
     this.floorRules = this.floorRules.filter((r) => r.app !== id);
     return this.apps.delete(id);
   }
@@ -419,7 +453,35 @@ export const migrations: { id: string; sql: string }[] = [
       -- What admins set an app's own settings to: { "<setting>": { "value", "setBy", "setAt" } }. Unset ones take their default.
       alter table registry.apps add column settings jsonb not null default '{}'::jsonb;`,
   },
+  {
+    id: '009_frontends',
+    sql: `
+      -- Apps' frontends kept by version in the frontends bucket. Not tied to registry.apps: an app gives its
+      -- frontend before it registers the version, so the shell is never given code that isn't there yet.
+      create table registry.app_frontends (
+        app_id text not null,
+        version text not null,
+        digest text not null,
+        files jsonb not null,
+        bytes bigint not null,
+        published_by text not null,
+        published_at timestamptz not null default now(),
+        primary key (app_id, version)
+      );`,
+  },
 ];
+
+type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
+
+const fromFrontendRow = (r: FrontendRow): StoredFrontend => ({
+  app: r.app_id,
+  version: r.version,
+  digest: r.digest,
+  files: r.files,
+  bytes: Number(r.bytes),
+  publishedBy: r.published_by,
+  publishedAt: r.published_at.toISOString(),
+});
 
 type AppRow = {
   manifest: AppEntry;
@@ -589,7 +651,26 @@ export class PgAppStore implements AppStore {
 
   async remove(id: string) {
     const { rowCount } = await this.pool.query('delete from registry.apps where id = $1', [id]);
+    await this.pool.query('delete from registry.app_frontends where app_id = $1', [id]);
     return rowCount === 1;
+  }
+
+  async frontends(app?: string) {
+    const { rows } = await this.pool.query<FrontendRow>(
+      app ? 'select * from registry.app_frontends where app_id = $1 order by published_at desc' : 'select * from registry.app_frontends order by app_id, published_at desc',
+      app ? [app] : [],
+    );
+    return rows.map(fromFrontendRow);
+  }
+
+  async putFrontend(f: Omit<StoredFrontend, 'publishedAt'>) {
+    await this.pool.query(
+      `insert into registry.app_frontends (app_id, version, digest, files, bytes, published_by) values ($1, $2, $3, $4, $5, $6)
+       on conflict (app_id, version) do nothing`,
+      [f.app, f.version, f.digest, JSON.stringify(f.files), f.bytes, f.publishedBy],
+    );
+    const { rows } = await this.pool.query<FrontendRow>('select * from registry.app_frontends where app_id = $1 and version = $2', [f.app, f.version]);
+    return fromFrontendRow(rows[0]);
   }
 
   async grant(id: string, scopes: Scope[]) {

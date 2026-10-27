@@ -266,7 +266,17 @@ pnpm --filter @apps/expenses-frontend build
 APP_DIST=expenses=$PWD/apps/expenses/frontend/dist pnpm --filter @augur/shell dev
 ```
 
-On the server, `infra/web.Dockerfile` builds it and copies its `dist` to `/site/apps/expenses` beside Home and Admin. An admin can turn the app off in Admin without removing it, or choose where it's on: in Admin, Apps, open the app and set each floor to on, off or blocked. On and off carry on to the teams below; blocked means no team below can turn it back on. Everyone's own floor follows the org. The shell asks the registry for the apps on the floor the person is on, and the platform holds the app's service to its scopes only where it's on.
+On the server, give the registry each version's frontend before registering that version, and the shell loads it from `/apps/expenses/<version>/` (where the deployment keeps frontends by version; see [Versioning](versioning.md#going-back-to-an-earlier-app-version)). Build the service's image with the frontend in it (`--build-arg FRONTEND=@apps/expenses-frontend` to `infra/service.Dockerfile` puts it at `/app/frontend`), and when the service starts:
+
+```ts
+import { publishFrontend, registerApp } from '@augur/service-kit';
+
+// false where the deployment doesn't keep frontends by version; the manifest's entry is used then.
+await publishFrontend({ registryUrl, credentials, app: manifest.id, version: manifest.version, dir: '/app/frontend' }).catch(log);
+await registerApp({ registryUrl, credentials, manifest });
+```
+
+A version's frontend never changes once given: the same files again are fine (every restart gives them), different ones are refused, so change the version. The manifest's `entry` must be a file under `/apps/expenses/`, such as `/apps/expenses/entry.js`, and keep its other files beside it with relative imports, as Vite's library build does. Otherwise `infra/web.Dockerfile` can build it and copy its `dist` to `/site/apps/expenses` beside Home and Admin, served from the manifest's entry as it is. An admin can turn the app off in Admin without removing it, or choose where it's on: in Admin, Apps, open the app and set each floor to on, off or blocked. On and off carry on to the teams below; blocked means no team below can turn it back on. Everyone's own floor follows the org. The shell asks the registry for the apps on the floor the person is on, and the platform holds the app's service to its scopes only where it's on.
 
 ### Serving the frontend from somewhere else
 

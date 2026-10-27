@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.15.0
+  version: 1.16.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -320,6 +320,33 @@ paths:
                     serving: { type: boolean }
         "403": { description: Not an admin }
         "404": { description: No such app }
+  /apps/{id}/versions/{version}/frontend:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: version, in: path, required: true, schema: { type: string }, description: The release the frontend belongs to, its manifest's version }
+    put:
+      summary: Keep one version of an app's frontend, served at /apps/{id}/{version}/
+      description: >
+        The app's own service (or a platform service, or an admin) gives the
+        built frontend as one gzipped tarball, before registering that version.
+        From then on the manifest the shell is given points `entry` at that
+        version's own copy (/apps/{id}/{version}/entry.js) whenever the entry
+        is a file under /apps/{id}/ and the tarball holds it. A version's
+        frontend never changes: the same tarball again answers 200, a different
+        one 409. At most 2000 files and 50 MB. Audited as app.frontend-published.
+      requestBody:
+        required: true
+        content:
+          application/gzip:
+            schema: { type: string, format: binary }
+      responses:
+        "200": { description: This version already had exactly this frontend, content: { application/json: { schema: { $ref: "#/components/schemas/StoredFrontend" } } } }
+        "201": { description: Kept, content: { application/json: { schema: { $ref: "#/components/schemas/StoredFrontend" } } } }
+        "400": { description: Not a semver version, or not a usable tarball (links, odd paths, too big) }
+        "403": { description: Another app, or not an admin }
+        "409": { description: One of the platform's own apps, or this version already has other files }
+        "415": { description: Not sent as application/gzip }
+        "501": { description: This deployment doesn't keep frontends by version (FRONTENDS_BUCKET_SECRET isn't set) }
   /apps/{id}/pin:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -328,8 +355,10 @@ paths:
       description: >
         Rolls an app back, or holds it at its current version. Registrations
         after this are kept in its history but not served until it is
-        unpinned. Changes the manifest the shell is given, not the code an
-        app's service serves at its entry URL. Audited as app.pinned.
+        unpinned. When the version's frontend is kept (PUT
+        /apps/{id}/versions/{version}/frontend), its code is held too, since
+        the manifest then points at that version's own copy; otherwise only
+        the manifest changes. Audited as app.pinned.
       requestBody:
         required: true
         content:
@@ -508,6 +537,17 @@ paths:
         "404": { description: Not the open upgrade }
 components:
   schemas:
+    StoredFrontend:
+      type: object
+      required: [app, version, digest, files, bytes, publishedBy, publishedAt]
+      properties:
+        app: { type: string }
+        version: { type: string }
+        digest: { type: string, description: "sha256 of the tarball, sha256:<hex>" }
+        files: { type: array, items: { type: string } }
+        bytes: { type: integer }
+        publishedBy: { type: string }
+        publishedAt: { type: string, format: date-time }
     AppSetting:
       type: object
       additionalProperties: false

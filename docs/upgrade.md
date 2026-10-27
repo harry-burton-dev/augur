@@ -55,6 +55,14 @@ The pull fetches that release's images before anything stops. Each service migra
 
 Folio now shows as **Artifacts** everywhere people see it, and opens straight into its own side menu, with **All apps** in the top bar as the way back. Its containers, `.env` names (`FOLIO_*`), schema, bucket and address (`/folio`) haven't changed, so there's nothing to do.
 
+### Apps' frontends by version
+
+Each version of an app's frontend is now kept on its own, at `/apps/<id>/<version>/`, so holding an app at an older version in Admin, Apps gives people that version's code as well as its manifest. The `storage` container makes a bucket for them (`augur-frontends`), the registry writes each version there as the app gives it, and the front door serves it from Garage. Folio gives its own on every start. This release changes `compose.yml` and Garage's `garage.toml`, so it's upgraded by hand, not from the Updates page. Before upgrading, add to `.env`:
+
+- `FRONTENDS_BUCKET_SECRET` (`openssl rand -hex 32`): the registry's key to that bucket.
+
+Then upgrade as usual. Without it nothing breaks: apps are served from where their manifests say, as before, and the registry's log says frontends aren't kept by version.
+
 ### Folio ships with AUGUR
 
 Folio, the document libraries, is now part of every release: three new containers start (`folio`, its rendition worker `folio-worker`, and Folio's frontend inside `web`), and Folio puts itself in Admin, Apps on its first start. There's nothing to install or allow in Admin. This release changes `compose.yml`, so it's upgraded by hand, not from the Updates page. Before upgrading, add to `.env` (`openssl rand -hex 32` for each):

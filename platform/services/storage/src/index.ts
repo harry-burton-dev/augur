@@ -2,7 +2,7 @@
 // and a bucket with a key that opens only it. Runs to the end and stops, on every `up`; running it
 // again changes nothing unless a secret in .env changed. See docs/app-storage.md.
 import pg from 'pg';
-import { configFromEnv } from './config.ts';
+import { configFromEnv, FRONTENDS_BUCKET, FRONTENDS_KEY } from './config.ts';
 import { garageAdmin, keyIdFor } from './garage.ts';
 import { prepareDatabase, provisionDatabase, roleFor, schemaFor } from './postgres.ts';
 
@@ -32,6 +32,15 @@ if (config.garage) {
     const bucket = await garage.ensureBucket(app);
     await garage.ensureKey(app, bucketSecret, bucket);
     console.log(`storage: ${app} has bucket ${app}, opened by key ${keyIdFor(bucketSecret)}`);
+  }
+  // Apps' frontends, kept by version: the registry writes them, the front door serves them.
+  if (config.frontendsSecret) {
+    const bucket = await garage.ensureBucket(FRONTENDS_BUCKET);
+    await garage.ensureWebsite(bucket);
+    await garage.ensureKey(FRONTENDS_KEY, config.frontendsSecret, bucket, FRONTENDS_KEY);
+    console.log(`storage: apps' frontends are kept in bucket ${FRONTENDS_BUCKET}, opened by key ${keyIdFor(config.frontendsSecret)}`);
+  } else {
+    console.warn('storage: FRONTENDS_BUCKET_SECRET is not set, so apps’ frontends aren’t kept by version.');
   }
 } else if (config.apps.length) {
   console.warn('storage: GARAGE_ADMIN_TOKEN is not set, so apps get no bucket.');
