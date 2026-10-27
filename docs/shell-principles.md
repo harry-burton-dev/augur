@@ -11,6 +11,7 @@ token. If you need to break one, change the rule here first.
 
 | Rule | What it means | Held by |
 | --- | --- | --- |
+| **Nothing is obtuse** | AUGUR never hides something only because you can't use it right now. Anything disabled or unavailable stays where it would be, looks unavailable, and says why in plain words: who can use it, what it's waiting for, or what would turn it on. Hiding is only for things you are not allowed to know exist. This applies across the platform, not only the shell. | Review; kit controls carry a reason with their disabled state (coming) |
 | **Fixed depth** | Getting around always goes app, area, group, page. Title shows apps and their areas. Orbit shows an app's groups and pages. The app shows the page. No level shows another level's things, so Title never lists an app's sub-menus or actions. | Shell menu builder and its tests (areas arrive with SDK 1.5) |
 | **Nothing repeats its parent** | No child has the same label or icon as the thing it sits under, at any depth. | Registry check on every manifest; shell test over every built-in app (SDK 1.5) |
 | **One child is the parent** | A level with one child isn't offered as a choice. An app with one area, or a group with one page, opens that thing itself. | Shell menu builder and its tests (SDK 1.5) |
@@ -24,5 +25,10 @@ token. If you need to break one, change the rule here first.
 | **One motion switch** | The system's reduce-motion setting and AUGUR's own are one check. Every motion has a crossfade fallback, and loops stop. | Kit `motionMode()` and its tests (coming) |
 | **Tokens only** | Every duration, distance and colour comes from `platform/packages/ui-kit/tokens/tokens.json`. Icons come from Lucide through `icon.ts`. | Token build; review |
 
-Rules marked "coming" are agreed and being built. Until they land, the
+Rules marked "coming" are agreed and being built.
+
+Where the shell hides things today, it is to be measured against **Nothing is
+obtuse**: an app offered only on some kinds of floor, a menu entry that needs
+a role, and an empty menu should show as unavailable with the reason, unless
+knowing it exists is itself restricted. Until they land, the
 behaviour they describe isn't there yet.
