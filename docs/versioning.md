@@ -63,6 +63,30 @@ When the release bumps the SDK's minor, keep the reference app built against it 
 
 To do the same by hand: `pnpm version-packages`, review, commit, merge, then `pnpm release && git push --follow-tags`.
 
+### App releases
+
+An app in `apps/` that doesn't ship with AUGUR (every app but Folio, for now) is released on its own, whenever its version moves. Its version is its manifest's, which the Version packages PR keeps in step with its packages. A version with a prerelease part, such as `1.3.0-beta.1`, is on the **beta** channel; any other is **stable**.
+
+Once the Version packages PR merges, the Release workflow asks `node scripts/app-release.mjs pending` which apps have a version with no release yet, and for each one:
+
+1. `infra/release-app.sh <id> <version> <channel>` builds the service's image with the frontend in it and pushes it to `ghcr.io/<repo>/apps/<id>`, packs the built frontend and pushes it beside it as an OCI artifact, `ghcr.io/<repo>/apps/<id>-frontend` (with [ORAS](https://oras.land)). Both are tagged with the version and the channel, and signed with cosign keyless.
+2. `node scripts/app-release.mjs publish` makes the GitHub release `app/<id>@<version>`, a pre-release when it's beta, with `app-release.json` attached.
+
+`app-release.json` is what a deployment's app runner installs from:
+
+| Field | Meaning |
+| --- | --- |
+| `schema` | `augur.app-release/v1`, so a runner can refuse a file it doesn't understand. |
+| `id`, `version`, `channel`, `releasedAt`, `sdk` | Which app and version this is, and the SDK range it needs. |
+| `manifest` | The app's manifest as released. |
+| `service.image` | The service image, by digest; `null` for an app with no service. |
+| `frontend` | The frontend artifact by digest, the sha256 of its tarball (what the registry records when it keeps it) and its media type; `null` for an app with no frontend. |
+| `signer` | The repository and workflow that signed both parts, which the runner checks each signature against. |
+| `asks` | What the version asks an admin for: scopes, storage, floors, upload size and settings. A runner compares it with the version before to decide whether an update needs an admin. |
+| `notes` | The app's changelog for this version. |
+
+To see the file an app's next release would carry, without releasing it: `node scripts/app-release.mjs describe <id>`.
+
 ### Database migrations
 
 A server can always go back to the release before the one it's on, so its tables must still work for that release. Two rules, checked in CI by `pnpm check:migrations` (after `pnpm build`):

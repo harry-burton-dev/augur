@@ -63,3 +63,33 @@ jobs:
         run: node scripts/augur-release.mjs publish "$RUNNER_TEMP/images.json"
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      # Apps in apps/ that don't ship with AUGUR are released on their own, whenever their version
+      # moves: each gets a signed bundle (service image and frontend) and the GitHub release
+      # app/<id>@<version> with app-release.json attached, which deployments' app runners install from.
+      - name: Are there app releases to make?
+        id: apps
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: echo "pending=$(node scripts/app-release.mjs pending)" >> "$GITHUB_OUTPUT"
+      - if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
+        uses: docker/setup-buildx-action@v3
+      - if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
+        uses: sigstore/cosign-installer@v3
+      - if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
+        uses: oras-project/setup-oras@v1
+      - name: Build, sign and release each app
+        if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
+        run: |
+          echo "$PENDING" | jq -c '.[]' | while read -r app; do
+            id=$(jq -r .id <<< "$app")
+            infra/release-app.sh "$id" "$(jq -r .version <<< "$app")" "$(jq -r .channel <<< "$app")" > "$RUNNER_TEMP/$id.json"
+            node scripts/app-release.mjs publish "$id" "$RUNNER_TEMP/$id.json"
+          done
+        env:
+          PENDING: ${{ steps.apps.outputs.pending }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
