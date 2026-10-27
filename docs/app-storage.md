@@ -52,6 +52,8 @@ The `storage` service makes each app's login, schema, bucket and key from `.env`
    S3_SECRET_ACCESS_KEY: ${NOTES_BUCKET_SECRET}
    ```
 
+With `APP_SECRETS_KEY` set in `.env` (`openssl rand -hex 32`), an app's two secrets don't have to be written there at all: the storage container works each one out from that key and the app's id (`appSecretFor` in the service kit), and so does the app runner when it installs the app, so it can hand the app the same ones. A secret written in `.env` still wins, so apps set up the old way keep theirs. Changing `APP_SECRETS_KEY` changes every worked-out secret at once.
+
 To change a secret, put the new one in `.env`, `pc up -d`, and restart the app. The database password changes in place; a new bucket secret makes a new key (its id is printed again) and removes the old one. Removing an app from `APP_STORAGE` leaves its data alone.
 
 Both stores are inside the compose network only: an app hosted elsewhere can't reach them.

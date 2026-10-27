@@ -417,6 +417,9 @@ importers:
 
   platform/services/storage:
     dependencies:
+      '@augur/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
       pg:
         specifier: ^8.23.1
         version: 8.23.1

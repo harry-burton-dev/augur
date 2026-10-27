@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@augur/service-kit": "workspace:*",
     "pg": "^8.23.1"
   },
   "devDependencies": {

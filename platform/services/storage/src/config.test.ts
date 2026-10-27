@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { appSecretFor } from '@augur/service-kit';
 import { configFromEnv, envPrefix } from './config.ts';
 
 const secret = 'a'.repeat(64);
@@ -47,5 +48,19 @@ describe('configFromEnv', () => {
     expect(configFromEnv(base)).not.toHaveProperty('frontendsSecret');
     const bad = configFromEnv({ ...base, FRONTENDS_BUCKET_SECRET: 'short', APP_STORAGE: 'augur-frontends', AUGUR_FRONTENDS_DATABASE_PASSWORD: 'p'.repeat(20) });
     expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('starts with augur-'), expect.stringContaining('FRONTENDS_BUCKET_SECRET must be 64')]);
+  });
+
+  it('works out each app’s secrets from APP_SECRETS_KEY when .env doesn’t name them', () => {
+    const key = 'k'.repeat(64);
+    const config = configFromEnv({ DATABASE_URL: 'postgres://a:b@db/platform', GARAGE_ADMIN_TOKEN: 't', APP_SECRETS_KEY: key, APP_STORAGE: 'notes folio', FOLIO_DATABASE_PASSWORD: 'p'.repeat(32), FOLIO_BUCKET_SECRET: secret });
+    expect('apps' in config && config.apps).toEqual([
+      { app: 'notes', databasePassword: appSecretFor(key, 'notes', 'database'), bucketSecret: appSecretFor(key, 'notes', 'bucket') },
+      { app: 'folio', databasePassword: 'p'.repeat(32), bucketSecret: secret },
+    ]);
+    expect(appSecretFor(key, 'notes', 'bucket')).toMatch(/^[0-9a-f]{64}$/);
+    expect(appSecretFor(key, 'notes', 'bucket')).not.toBe(appSecretFor(key, 'notes', 'database'));
+    expect(appSecretFor(key, 'notes', 'bucket')).not.toBe(appSecretFor(key, 'other', 'bucket'));
+    const short = configFromEnv({ DATABASE_URL: 'postgres://a:b@db/platform', APP_SECRETS_KEY: 'short' });
+    expect('problems' in short && short.problems).toEqual([expect.stringContaining('APP_SECRETS_KEY must be')]);
   });
 });

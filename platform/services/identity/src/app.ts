@@ -1,7 +1,7 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
-import { appClientRoutes, type AppClients } from './clients.ts';
+import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
 import { peopleRoutes } from './people.ts';
 import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from './store.ts';
@@ -103,6 +103,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       });
 
       await app.register(peopleRoutes({ workspaces, teams, verifyService, grants }));
+      await app.register(appRunnerRoutes({ clients: appClients, audit, verifyService }), { prefix: '/admin/apps' });
     },
     { prefix: `/${API_VERSION}` },
   );

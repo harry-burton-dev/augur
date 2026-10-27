@@ -1,4 +1,6 @@
 /** One app the platform keeps a database schema and a bucket for, and the secrets they open with. */
+import { appSecretFor } from '@augur/service-kit';
+
 export interface AppStorage {
   app: string;
   /** The password of the app's own database login. */
@@ -49,12 +51,15 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
       continue;
     }
     const prefix = envPrefix(app);
-    const databasePassword = env[`${prefix}_DATABASE_PASSWORD`] ?? '';
-    const bucketSecret = env[`${prefix}_BUCKET_SECRET`] ?? '';
-    if (databasePassword.length < 16) problems.push(`${prefix}_DATABASE_PASSWORD must be at least 16 characters; \`openssl rand -hex 32\` makes one.`);
+    // A secret in .env wins; otherwise it's worked out from APP_SECRETS_KEY, as the app runner does.
+    const key = env.APP_SECRETS_KEY || undefined;
+    const databasePassword = env[`${prefix}_DATABASE_PASSWORD`] || (key ? appSecretFor(key, app, 'database') : '');
+    const bucketSecret = env[`${prefix}_BUCKET_SECRET`] || (key ? appSecretFor(key, app, 'bucket') : '');
+    if (databasePassword.length < 16) problems.push(`${prefix}_DATABASE_PASSWORD must be at least 16 characters (or set APP_SECRETS_KEY); \`openssl rand -hex 32\` makes one.`);
     if (env.GARAGE_ADMIN_TOKEN && !/^[0-9a-f]{64}$/.test(bucketSecret)) problems.push(`${prefix}_BUCKET_SECRET must be 64 lowercase hex characters; \`openssl rand -hex 32\` makes one.`);
     apps.push({ app, databasePassword, bucketSecret });
   }
+  if (env.APP_SECRETS_KEY && env.APP_SECRETS_KEY.length < 32) problems.push('APP_SECRETS_KEY must be at least 32 characters; `openssl rand -hex 32` makes one.');
   const frontendsSecret = env.FRONTENDS_BUCKET_SECRET || undefined;
   if (frontendsSecret && !/^[0-9a-f]{64}$/.test(frontendsSecret)) problems.push('FRONTENDS_BUCKET_SECRET must be 64 lowercase hex characters; `openssl rand -hex 32` makes one.');
   if (problems.length || !databaseUrl) return { problems };
