@@ -204,11 +204,33 @@ export interface KeycloakConfig {
   url: string;
   /** The realm people sign in to. */
   realm: string;
-  /** An admin of Keycloak's master realm: the bootstrap admin the stack already creates. */
-  adminUser: string;
-  adminPassword: string;
+  /**
+   * How identity signs in to Keycloak's admin API: as its own client (`platform-identity`), whose
+   * service account manages this realm alone, or as an admin of Keycloak's master realm, which
+   * identity uses only at start, to give its own client those rights (`grantRealmAdmin`).
+   */
+  signIn: { client: { id: string; secret: string } } | { admin: { user: string; password: string } };
   fetchImpl?: typeof fetch;
 }
+
+/**
+ * What identity's own client may do in the realm (Keycloak's realm-management roles): people,
+ * departments, roles and the realm's sign-in policy, and the sign-ins of services and apps. Nothing
+ * in any other realm, Keycloak's master realm included.
+ */
+export const REALM_ADMIN_ROLES = ['view-realm', 'manage-realm', 'view-users', 'query-users', 'manage-users', 'query-groups', 'view-clients', 'query-clients', 'manage-clients'] as const;
+
+/** How the realm treats wrong passwords: a growing wait after 10 in a row, up to 15 minutes, never a permanent lock. */
+export const BRUTE_FORCE_POLICY = {
+  bruteForceProtected: true,
+  permanentLockout: false,
+  failureFactor: 10,
+  waitIncrementSeconds: 60,
+  maxFailureWaitSeconds: 900,
+  maxDeltaTimeSeconds: 43200,
+  quickLoginCheckMilliSeconds: 1000,
+  minimumQuickLoginWaitSeconds: 60,
+} as const;
 
 /** Roles every Keycloak realm has; they aren't the platform's to hand out. */
 const builtInRole = (name: string, realm: string) => name === `default-roles-${realm}` || name === 'offline_access' || name === 'uma_authorization';
@@ -228,6 +250,10 @@ interface KcGroup {
   name: string;
   parentId?: string;
   subGroupCount?: number;
+}
+interface KcClient {
+  id: string;
+  clientId: string;
 }
 interface KcRole {
   id: string;
@@ -252,13 +278,22 @@ export class KeycloakDirectory implements Directory {
 
   private async accessToken(): Promise<string> {
     if (this.token && this.token.expires > Date.now() + 10_000) return this.token.value;
+    const root = this.config.url.replace(/\/$/, '');
+    const { signIn } = this.config;
     let res: Response;
     try {
-      res = await this.fetchImpl(`${this.config.url.replace(/\/$/, '')}/realms/master/protocol/openid-connect/token`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'password', client_id: 'admin-cli', username: this.config.adminUser, password: this.config.adminPassword }),
-      });
+      res =
+        'client' in signIn
+          ? await this.fetchImpl(`${root}/realms/${encodeURIComponent(this.config.realm)}/protocol/openid-connect/token`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({ grant_type: 'client_credentials', client_id: signIn.client.id, client_secret: signIn.client.secret }),
+            })
+          : await this.fetchImpl(`${root}/realms/master/protocol/openid-connect/token`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({ grant_type: 'password', client_id: 'admin-cli', username: signIn.admin.user, password: signIn.admin.password }),
+            });
     } catch {
       throw new DirectoryError('The sign-in service can’t be reached right now. Nothing was changed.', 503);
     }
@@ -266,6 +301,36 @@ export class KeycloakDirectory implements Directory {
     const body = (await res.json()) as { access_token: string; expires_in: number };
     this.token = { value: body.access_token, expires: Date.now() + body.expires_in * 1000 };
     return this.token.value;
+  }
+
+  /** Signs in again on the next call, for rights given since the last sign-in. */
+  forgetSignIn() {
+    this.token = undefined;
+  }
+
+  /**
+   * Gives a client's service account the realm-management roles in `REALM_ADMIN_ROLES` that it lacks,
+   * and says which it gave. Needs a sign-in that may grant them (Keycloak's master admin).
+   */
+  async grantRealmAdmin(clientId: string): Promise<string[]> {
+    const client = (await this.call<KcClient[]>('GET', `/clients?clientId=${encodeURIComponent(clientId)}`)).data[0];
+    if (!client) throw new DirectoryError(`There is no ${clientId} client to give the realm's admin rights to.`, 404);
+    const { data: account } = await this.call<{ id: string }>('GET', `/clients/${client.id}/service-account-user`);
+    const management = (await this.call<KcClient[]>('GET', '/clients?clientId=realm-management')).data[0];
+    if (!management) throw new DirectoryError('The realm has no realm-management client.', 404);
+    const mappings = `/users/${account.id}/role-mappings/clients/${management.id}`;
+    const have = new Set((await this.call<KcRole[]>('GET', mappings)).data.map((r) => r.name));
+    const roles = (await this.call<KcRole[]>('GET', `/clients/${management.id}/roles`)).data.filter((r) => (REALM_ADMIN_ROLES as readonly string[]).includes(r.name) && !have.has(r.name));
+    if (roles.length) await this.call('POST', mappings, roles);
+    return roles.map((r) => r.name);
+  }
+
+  /** Makes sure the realm slows down repeated wrong passwords (`BRUTE_FORCE_POLICY`); true when it changed it. */
+  async ensureSignInPolicy(): Promise<boolean> {
+    const { data: realm } = await this.call<Record<string, unknown>>('GET', '');
+    if (realm.bruteForceProtected) return false;
+    await this.call('PUT', '', { ...BRUTE_FORCE_POLICY });
+    return true;
   }
 
   /** One admin API call. `notFound` names what a 404 means. Also used for apps' clients (clients.ts). */
