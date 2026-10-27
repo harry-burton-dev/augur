@@ -1,5 +1,21 @@
 # @augur/updater
 
+## 0.3.0
+
+### Minor Changes
+
+- 82ce131: Pull requests that change an app get previews: the App previews workflow builds, signs and releases each push as `<x.y.z>-pr.<n>.<run>`, and a server with the app installed runs the newest build beside it (at most three per app, for a week after the last build, gone when the pull request closes) with scratch storage of its own. An admin names an app’s developers in Admin → Apps; each developer can switch to a preview for themselves (`/v1/previews`), which gives them its frontend and sends their calls to it, while everyone else stays on the installed version.
+- 57d3760: The updater can now run apps: with `APP_SECRETS_KEY` in `.env` it installs, upgrades and removes apps that don't ship with AUGUR, from their signed releases, in a Compose project of its own (`augur-apps`). Upgrades are blue/green with a health check: a version that doesn't come up leaves the old one serving. Admins ask for installs and removals through the registry's new `/v1/app-runner/jobs`, and the service kit's `registerApp` leaves registering to the runner when it runs the app.
+
+### Patch Changes
+
+- Updated dependencies [57d3760]
+- Updated dependencies [476907a]
+- Updated dependencies [ef587a4]
+- Updated dependencies [a6b6bca]
+- Updated dependencies [948526d]
+  - @augur/service-kit@0.7.0
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,5 +1,21 @@
 # @augur/gateway
 
+## 0.5.0
+
+### Minor Changes
+
+- 82ce131: Pull requests that change an app get previews: the App previews workflow builds, signs and releases each push as `<x.y.z>-pr.<n>.<run>`, and a server with the app installed runs the newest build beside it (at most three per app, for a week after the last build, gone when the pull request closes) with scratch storage of its own. An admin names an app’s developers in Admin → Apps; each developer can switch to a preview for themselves (`/v1/previews`), which gives them its frontend and sends their calls to it, while everyone else stays on the installed version.
+- 948526d: The gateway finds apps' services through the registry. Whatever runs an app (a platform service) or an admin says where its service is (`PUT /v1/apps/{id}/upstream`), and the gateway sends `/api/<id>/…` there, asking the registry as itself (`GET /v1/upstreams`, the signed caller `augur:gateway`) every 30 seconds and keeping the last answer through a registry restart. Status checks those apps too. `APP_UPSTREAMS` still works and wins for the apps it names, so nothing changes for a server until an app is set up this way. Upstreams can never be one of the platform's own parts.
+
+### Patch Changes
+
+- Updated dependencies [57d3760]
+- Updated dependencies [476907a]
+- Updated dependencies [ef587a4]
+- Updated dependencies [a6b6bca]
+- Updated dependencies [948526d]
+  - @augur/service-kit@0.7.0
+
 ## 0.4.1
 
 ### Patch Changes

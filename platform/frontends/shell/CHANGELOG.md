@@ -1,5 +1,19 @@
 # @augur/shell
 
+## 0.6.0
+
+### Minor Changes
+
+- 70df61e: An app can keep its menu inside it: `"orbit": false` in its manifest (SDK 1.4) means the shell never shows its Orbit. Its root opens the app, Title still lists its menu and opens the chosen category's first page, and Esc stays with the app. The band now names the open app after the floor, with **All apps** (`ui-home`) as the deliberate way back to Title. The floor gauge pins the open app beside the floor you're on and, pointed at or tabbed into, opens out to say what each floor is, who sees it, and which one the app is showing; Account's floor list says the same. Changing floor no longer mounts the app twice, once against the last floor's catalogue: nothing of the old floor's stays mounted until the new floor's catalogue arrives.
+- aa0f0f4: An app's developers get Previews in the shell's band: each of their apps' pull requests' previews running on the server, to switch to for themselves and back. While one is in use, the shell says so at the bottom of the screen, with a link to the pull request and the way back. The kit gains a `preview` icon.
+
+### Patch Changes
+
+- Updated dependencies [70df61e]
+- Updated dependencies [aa0f0f4]
+  - @augur/mfe-sdk@1.4.0
+  - @augur/ui-kit@1.3.0
+
 ## 0.5.1
 
 ### Patch Changes
