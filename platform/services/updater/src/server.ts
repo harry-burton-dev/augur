@@ -160,6 +160,9 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
     async provisionStorage(app) {
       await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, 'storage']);
     },
+    async dropStorage(previewId) {
+      await platform(['run', '--rm', '--no-deps', '-e', 'APP_STORAGE=', '-e', `APP_STORAGE_DROP=${previewId}`, 'storage']);
+    },
     async start(services) {
       await apps(['pull', '--quiet', ...services]);
       await apps(['up', '-d', '--no-deps', ...services]);

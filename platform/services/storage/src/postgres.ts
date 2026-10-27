@@ -39,3 +39,13 @@ export async function provisionDatabase(sql: Sql, { app, password }: { app: stri
   await sql.query(`alter schema ${schema} owner to ${role}`);
   await sql.query(`alter role ${role} set search_path = ${schema}, public`);
 }
+
+/** Takes a preview's login and schema away, with everything in the schema. Nothing happens when there's none. */
+export async function dropDatabase(sql: Sql, app: string): Promise<void> {
+  const role = pg.escapeIdentifier(roleFor(app));
+  await sql.query(`drop schema if exists ${pg.escapeIdentifier(schemaFor(app))} cascade`);
+  const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
+  if (!exists.rowCount) return;
+  await sql.query(`drop owned by ${role}`);
+  await sql.query(`drop role ${role}`);
+}

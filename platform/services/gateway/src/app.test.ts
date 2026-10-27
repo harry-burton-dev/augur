@@ -317,7 +317,7 @@ describe('gateway', () => {
     let found: Record<string, string> = { notes: url, registry: 'http://elsewhere.test' };
     const apps = async () => {
       asked++;
-      return found;
+      return { apps: found, previews: {} };
     };
     const app = await buildApp({ upstreams: { registry: url }, auth, apps, uploads: async () => new Map([['notes', 1]]) });
     const headers = { authorization: `Bearer ${await sign(ada)}` };
@@ -341,6 +341,16 @@ describe('gateway', () => {
     expect(asked).toBeGreaterThan(0);
   });
 
+  it('sends a developer who chose a pull request’s preview to it, and everyone else to the app', async () => {
+    const apps = async () => ({ apps: { notes: 'http://127.0.0.1:9' }, previews: { notes: { 'u-1': url } } });
+    const app = await buildApp({ upstreams: {}, auth, apps, uploads: async () => new Map() });
+    const res = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign(ada)}` } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()['x-user-id']).toBe('u-1');
+    const other = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign({ ...ada, sub: 'u-2' })}` } });
+    expect(other.statusCode).toBeGreaterThanOrEqual(500);
+  });
+
   it('says so when it can’t find out where apps are', async () => {
     const app = await buildApp({ upstreams: {}, auth, apps: async () => Promise.reject(new UpstreamsUnavailable('down')) });
     const res = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign(ada)}` } });
@@ -358,10 +368,10 @@ describe('gateway', () => {
       return new Response(JSON.stringify({ apps: { notes: `http://notes:8090#${caller.id}` } }));
     }) as typeof fetch;
     const upstreamsOf = registryUpstreams({ registryUrl: 'http://registry:8082', signer, ttlMs: 1000, fetchImpl, now: () => now });
-    expect(await upstreamsOf()).toEqual({ notes: 'http://notes:8090#augur:gateway' });
+    expect(await upstreamsOf()).toEqual({ apps: { notes: 'http://notes:8090#augur:gateway' }, previews: {} });
     up = false;
     now = 5000;
-    expect(await upstreamsOf()).toEqual({ notes: 'http://notes:8090#augur:gateway' });
+    expect(await upstreamsOf()).toEqual({ apps: { notes: 'http://notes:8090#augur:gateway' }, previews: {} });
     await expect(registryUpstreams({ registryUrl: 'http://registry:8082', signer, fetchImpl })()).rejects.toBeInstanceOf(UpstreamsUnavailable);
   });
 

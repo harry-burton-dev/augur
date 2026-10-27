@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.19.0
+  version: 1.20.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -353,13 +353,21 @@ paths:
       description: >
         The upstreams set for apps by what runs them, or by an admin. The
         gateway asks as itself (its signed caller augur:gateway) and sends
-        /api/{id}/… there for any app not in its APP_UPSTREAMS.
+        /api/{id}/… there for any app not in its APP_UPSTREAMS. `previews`
+        names, for each app, the developers who chose one of its pull
+        requests' previews and where that preview is: the gateway sends
+        their calls there instead.
       responses:
         "200":
           description: Upstreams by app id
           content:
             application/json:
-              schema: { type: object, required: [apps], properties: { apps: { type: object, additionalProperties: { type: string } } } }
+              schema:
+                type: object
+                required: [apps]
+                properties:
+                  apps: { type: object, additionalProperties: { type: string } }
+                  previews: { type: object, description: "App id → person id → upstream", additionalProperties: { type: object, additionalProperties: { type: string } } }
         "403": { description: Neither the gateway nor an admin }
   /apps/{id}/upstream:
     parameters:
@@ -662,7 +670,9 @@ paths:
       summary: Report a step of an open job (the deployment's app runner only)
       description: >
         The first report starts it. With `outcome` it ends, audited as app.installed,
-        app.install-failed, app.uninstalled or app.uninstall-failed.
+        app.install-failed, app.uninstalled, app.uninstall-failed, app.preview-started,
+        app.preview-failed, app.preview-removed or app.preview-remove-failed. A preview
+        that started ends with `upstream`, where it answers.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -678,6 +688,7 @@ paths:
                 state: { type: string, enum: [running, done, failed] }
                 message: { type: string }
                 outcome: { type: string, enum: [done, failed] }
+                upstream: { type: string, description: "With a preview's outcome: where it answers, such as http://app-notes-pr12:8080" }
       responses:
         "200":
           description: The job as it stands
@@ -734,6 +745,81 @@ paths:
               schema: { $ref: "#/components/schemas/AppInstalls" }
         "403": { description: Not an admin }
         "404": { description: The app runner hasn't installed that app }
+  /app-runner/apps/{id}/developers:
+    put:
+      summary: Set who may try an installed app's pull requests' previews (admins only)
+      description: >
+        People's ids, at most 50. Previews run only for apps with developers; one taken off loses
+        their choice of its previews. Audited as app.developers-set.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [people]
+              properties: { people: { type: array, maxItems: 50, uniqueItems: true, items: { type: string } } }
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppInstalls" }
+        "403": { description: Not an admin }
+        "404": { description: The app runner hasn't installed that app }
+  /previews:
+    get:
+      summary: The previews the caller may try, of the apps they're a developer of
+      description: >
+        Each pull request's newest build runs beside the app on the deployment, for a week after
+        its last build or until the pull request closes. `chosen` is the pull request whose
+        preview the caller uses instead of the app, if any.
+      responses:
+        "200":
+          description: The caller's apps and their previews
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apps]
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      required: [app, name, version, previews]
+                      properties:
+                        app: { type: string }
+                        name: { type: string }
+                        version: { type: string, description: The installed version }
+                        chosen: { type: integer }
+                        previews: { type: array, items: { $ref: "#/components/schemas/Preview" } }
+        "401": { description: Not signed in }
+  /previews/{id}:
+    put:
+      summary: Use one of an app's previews instead of the app, for the caller alone
+      description: >
+        The shell is given the preview's manifest, and the gateway sends the caller's calls to the
+        app to the preview, until they choose `null` (back to the app) or the preview goes.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [pr]
+              properties: { pr: { type: [integer, "null"], minimum: 1 } }
+      responses:
+        "204": { description: Chosen }
+        "401": { description: Not signed in }
+        "403": { description: Not one of the app's developers }
+        "404": { description: No preview of that pull request is running }
 components:
   schemas:
     AppInstalls:
@@ -767,6 +853,8 @@ components:
                   notesUrl: { type: string }
                   needs: { type: array, items: { type: string }, description: "Why it waits for an admin; empty when it can install by itself" }
               job: { $ref: "#/components/schemas/AppJob" }
+              developers: { type: array, items: { type: string }, description: "Who may try its previews, by person id" }
+              previews: { type: array, items: { $ref: "#/components/schemas/Preview" } }
         available:
           type: array
           items:
@@ -812,14 +900,32 @@ components:
           properties: { repository: { type: string }, workflow: { type: string } }
         asks: { type: object, description: "What the version asks an admin for: scopes, storage, floors, maxUpload, settings" }
         notes: { type: string }
+        preview:
+          type: object
+          description: For a pull request's build (channel preview, version <x.y.z>-pr.<number>.<run>)
+          required: [pr]
+          properties: { pr: { type: integer }, title: { type: string }, url: { type: string } }
+    Preview:
+      type: object
+      description: A pull request's build running beside the app
+      required: [pr, version, startedAt, endsAt]
+      properties:
+        pr: { type: integer }
+        version: { type: string }
+        title: { type: string }
+        url: { type: string, description: The pull request }
+        startedAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time, description: When it's taken away unless the pull request is built again }
     AppJob:
       type: object
       required: [id, app, action, requestedBy, requestedAt, state, steps]
       properties:
         id: { type: string }
         app: { type: string }
-        action: { type: string, enum: [install, remove] }
+        action: { type: string, enum: [install, remove, preview, preview-remove] }
         release: { $ref: "#/components/schemas/AppRelease" }
+        pr: { type: integer, description: For a preview's job, its pull request }
+        upstream: { type: string, description: "For a preview that started, where it answers" }
         requestedBy: { type: string }
         requestedAt: { type: string, format: date-time }
         state: { type: string, enum: [requested, running, done, failed, cancelled] }

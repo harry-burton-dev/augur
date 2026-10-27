@@ -93,6 +93,26 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
     },
 
     /**
+     * Takes a bucket away, after `empty` has emptied it (Garage only deletes an empty bucket), with
+     * the app's keys. False when there was no such bucket.
+     */
+    async removeBucket(alias: string, empty: () => Promise<void>, name = keyNameFor(alias)): Promise<boolean> {
+      let id: string | undefined;
+      try {
+        id = (await call<{ id: string }>('GET', `GetBucketInfo?globalAlias=${encodeURIComponent(alias)}`)).id;
+      } catch (err) {
+        if (!(err instanceof GarageError) || err.status !== 404) throw err;
+      }
+      if (id) {
+        await empty();
+        await call('POST', `DeleteBucket?id=${encodeURIComponent(id)}`);
+      }
+      const keys = await call<{ id: string; name: string }[]>('GET', 'ListKeys');
+      for (const key of keys.filter((k) => k.name === name)) await call('POST', `DeleteKey?id=${encodeURIComponent(key.id)}`);
+      return Boolean(id);
+    },
+
+    /**
      * Serves the bucket's objects read-only on Garage's web endpoint (port 3902), so the
      * front door can hand them to browsers without a key. Only for what anyone may read.
      */

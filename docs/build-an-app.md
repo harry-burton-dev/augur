@@ -282,6 +282,8 @@ A version's frontend never changes once given: the same files again are fine (ev
 
 You don't release an app by hand. Merging the Version packages PR that moves its version releases it on its own: a signed service image, a signed frontend and the GitHub release `app/<id>@<version>` ([Versioning](versioning.md#app-releases)). A deployment's app runner can install and update it from there, with no new AUGUR release. The app made by `pnpm create-app` already copies its manifest into its build and gives the registry its frontend when it starts, as the release needs.
 
+Before that, every push to a pull request that changes the app makes a preview, which a server with the app installed runs beside it for the app's developers to switch to ([app-previews.md](app-previews.md)). A preview signs in as the app but keeps its data apart, and sees `APP_PREVIEW=pr-<number>` in its settings if it needs to say so.
+
 ### Serving the frontend from somewhere else
 
 An `entry` that is a path (`/apps/expenses/entry.js`) is served by the platform and always allowed. An `entry` that is a full address (`https://apps.example.org/expenses/entry.js`) is only accepted when an admin has allowed that site in Admin, **Apps**, **Where apps load from**. Otherwise registering fails with a 400 that says so, and `pnpm check:manifest` doesn't catch it, because only the real registry knows which sites are allowed. The site also has to be in the server's `APP_ORIGINS` so the shell's Content Security Policy lets the browser run it, and it has to send CORS headers, since the entry is loaded as a module from another origin. See [Deploy](deploy.md#day-to-day).

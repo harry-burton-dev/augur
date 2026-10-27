@@ -24,6 +24,11 @@ const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; 
     if (path === 'ImportKey') return json(200, state.keys.push({ id: body.accessKeyId, name: body.name }));
     if (path === 'AllowBucketKey') return json(200, {});
     if (path.startsWith('UpdateBucket')) return json(200, { id: url.searchParams.get('id'), websiteAccess: body.websiteAccess.enabled });
+    if (path.startsWith('DeleteBucket')) {
+      const alias = Object.keys(state.buckets).find((k) => state.buckets[k] === url.searchParams.get('id'));
+      if (alias) delete state.buckets[alias];
+      return json(200, {});
+    }
     if (path.startsWith('DeleteKey')) return json(200, (state.keys = state.keys.filter((k) => k.id !== url.searchParams.get('id'))));
     return json(500, { message: `unexpected ${path}` });
   }) as typeof fetch;
@@ -61,6 +66,18 @@ describe('garageAdmin', () => {
     const { garage, state } = fakeGarage({ roles: [], buckets: {}, keys: [] });
     const id = await garage.ensureKey('platform-frontends', '2'.repeat(64), 'b-augur-frontends', 'platform-frontends');
     expect(state.keys).toEqual([{ id, name: 'platform-frontends' }]);
+  });
+
+  it('takes a preview’s bucket away once it’s empty, with its keys', async () => {
+    const { garage, state, calls } = fakeGarage({ roles: [], buckets: { 'notes-pr12': 'b-1', notes: 'b-2' }, keys: [{ id: 'GK1', name: 'app-notes-pr12' }, { id: 'GK2', name: 'app-notes' }] });
+    const emptied: string[] = [];
+    expect(await garage.removeBucket('notes-pr12', async () => void emptied.push(calls.at(-1)!))).toBe(true);
+    // Emptied after it was found, before it was deleted.
+    expect(emptied).toEqual(['GetBucketInfo?globalAlias=notes-pr12']);
+    expect(state.buckets).toEqual({ notes: 'b-2' });
+    expect(state.keys).toEqual([{ id: 'GK2', name: 'app-notes' }]);
+    expect(await garage.removeBucket('notes-pr12', async () => void emptied.push('again'))).toBe(false);
+    expect(emptied).toHaveLength(1);
   });
 
   it('serves a bucket on the web endpoint', async () => {

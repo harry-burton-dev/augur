@@ -119,7 +119,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     new HealthMonitor({
       probes: probesFor(upstreams, PLATFORM_SERVICES, signInKeysUrl(auth)),
       // Apps whose service the registry knows of are checked too, found again each round.
-      moreProbes: appUpstreams ? async () => probesFor(await appUpstreams(), PLATFORM_SERVICES) : undefined,
+      moreProbes: appUpstreams ? async () => probesFor((await appUpstreams()).apps, PLATFORM_SERVICES) : undefined,
     });
   if (!monitor) {
     statusMonitor.start();
@@ -228,8 +228,11 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       const handler = async (req: FastifyRequest<{ Params: { name: string; '*'?: string } }>, reply: FastifyReply) => {
         const { name } = req.params;
         let upstream: string | undefined;
+        let previews: Record<string, string> | undefined;
         try {
-          upstream = name in upstreams ? undefined : (await appUpstreams())[name];
+          const known = name in upstreams ? undefined : await appUpstreams();
+          upstream = known?.apps[name];
+          previews = known?.previews[name];
         } catch (err) {
           if (!(err instanceof UpstreamsUnavailable)) throw err;
           req.log.error({ err: err.message }, 'app upstreams unavailable');
@@ -239,7 +242,9 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         await beforeProxy(name, req, reply);
         if (reply.sent) return reply;
         const rest = req.params['*'] ?? '';
-        return reply.from(`${upstream}/${rest}`, replyOptions as never);
+        // A developer who chose one of the app's previews is sent to it instead; everyone else to the app.
+        const preview = req.caller ? previews?.[req.caller.id] : undefined;
+        return reply.from(`${preview ?? upstream}/${rest}`, replyOptions as never);
       };
       sub.all('/api/:name', handler);
       sub.all('/api/:name/*', handler);

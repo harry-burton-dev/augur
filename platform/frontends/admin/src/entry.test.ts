@@ -528,6 +528,28 @@ describe('admin', () => {
       expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/follow', body: { channel: 'beta', policy: 'ask' } });
       el.remove();
     });
+
+    it('chooses an installed app’s developers from everyone, and lists its previews', async () => {
+      const ada = { id: 'u-2', username: 'ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.org', enabled: true, roles: [], departments: [] };
+      const withPreview: AppInstalls = {
+        ...installs,
+        installed: [{ ...installs.installed[0], developers: ['u-2'], previews: [{ pr: 12, version: '1.1.0-pr.12.1', title: 'Tags on notes', url: 'https://github.com/o/r/pull/12', startedAt: '2026-10-27T12:00:00Z', endsAt: '2026-11-03T12:00:00Z' }] }],
+      };
+      const { el, sent } = setup((_method, url) =>
+        url.endsWith('/admin/people') ? new Response(JSON.stringify([ada])) : url.startsWith('/api/registry/v1/app-runner/') ? new Response(JSON.stringify(withPreview)) : undefined,
+      );
+      await vi.waitFor(() => expect(el.installs).toBeDefined());
+      el.open = 'notes';
+      await vi.waitFor(() => expect(el.people).toHaveLength(1));
+      await settle(el);
+      const picker = el.querySelector('[data-developers]') as HTMLElement & { options: { label: string }[]; values: string[] };
+      expect(picker.options.map((o) => o.label)).toEqual(['Ada Lovelace']);
+      expect(picker.values).toEqual(['u-2']);
+      expect(el.querySelector('[data-runner]')?.textContent).toContain('Tags on notes');
+      await el.setDevelopers(el.installs!.installed[0], []);
+      expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/developers', body: { people: [] } });
+      el.remove();
+    });
   });
 
   describe('Apps that ship with AUGUR', () => {

@@ -1,15 +1,38 @@
 // Gives apps their storage: for each app in APP_STORAGE, a database login that owns one schema,
 // and a bucket with a key that opens only it. Runs to the end and stops, on every `up`; running it
 // again changes nothing unless a secret in .env changed. See docs/app-storage.md.
+// With APP_STORAGE_DROP, it instead takes one pull request's preview's scratch storage away.
 import pg from 'pg';
 import { configFromEnv, FRONTENDS_BUCKET, FRONTENDS_KEY } from './config.ts';
 import { garageAdmin, keyIdFor } from './garage.ts';
-import { prepareDatabase, provisionDatabase, roleFor, schemaFor } from './postgres.ts';
+import { dropDatabase, prepareDatabase, provisionDatabase, roleFor, schemaFor } from './postgres.ts';
+import { emptyBucket } from './s3.ts';
 
 const config = configFromEnv();
 if ('problems' in config) {
   for (const problem of config.problems) console.error(`storage: ${problem}`);
   process.exit(1);
+}
+
+if (config.drop) {
+  const { app, bucketSecret } = config.drop;
+  const sql = new pg.Client({ connectionString: config.databaseUrl });
+  await sql.connect();
+  try {
+    await dropDatabase(sql, app);
+  } finally {
+    await sql.end();
+  }
+  console.log(`storage: ${app}’s database login and schema are gone`);
+  if (config.garage) {
+    const { s3Url } = config.garage;
+    const had = await garageAdmin(config.garage).removeBucket(app, async () => {
+      const deleted = await emptyBucket({ endpoint: s3Url, bucket: app, secret: bucketSecret });
+      console.log(`storage: emptied bucket ${app} (${deleted} objects)`);
+    });
+    console.log(had ? `storage: bucket ${app} and its key are gone` : `storage: ${app} had no bucket`);
+  }
+  process.exit(0);
 }
 
 const client = new pg.Client({ connectionString: config.databaseUrl });

@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
-import { AppUpdateChecker, newestOn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
+import { AppUpdateChecker, newestOn, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
-import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore } from './store.ts';
+import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore, type RunningPreview } from './store.ts';
+import { upstreamProblem } from './upstreams.ts';
 
 /** What an app release file must say before the runner is asked to install it. Mirrors AppRelease in contracts/registry.openapi.yaml. */
 export const APP_RELEASE_SCHEMA = 'augur.app-release/v1';
@@ -41,6 +42,13 @@ const appReleaseSchema = {
     },
     asks: { type: 'object' },
     notes: { type: 'string', maxLength: 20000 },
+    // A pull request's build: which one, and where to read it.
+    preview: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['pr'],
+      properties: { pr: { type: 'integer', minimum: 1 }, title: { type: 'string', maxLength: 300 }, url: { type: 'string', maxLength: 300 } },
+    },
   },
 } as const;
 
@@ -51,7 +59,16 @@ const RUNNER = 'updater';
 const OUTCOME_ACTIONS: Record<AppJob['action'], Record<AppJobOutcome, string>> = {
   install: { done: 'app.installed', failed: 'app.install-failed' },
   remove: { done: 'app.uninstalled', failed: 'app.uninstall-failed' },
+  preview: { done: 'app.preview-started', failed: 'app.preview-failed' },
+  'preview-remove': { done: 'app.preview-removed', failed: 'app.preview-remove-failed' },
 };
+
+/** How many pull requests' previews one app runs at once. */
+export const MAX_PREVIEWS = 3;
+/** How long a preview runs after its pull request's last build. */
+export const PREVIEW_MS = 7 * 24 * 60 * 60 * 1000;
+/** The most developers one app has. */
+const MAX_DEVELOPERS = 50;
 
 /** Why a release can't be installed, beyond its shape; undefined when it can. */
 export const releaseProblem = (release: AppRelease, pillars: string[]): string | undefined => {
@@ -60,6 +77,14 @@ export const releaseProblem = (release: AppRelease, pillars: string[]): string |
   if (pillars.includes(release.id)) return `${release.manifest.name} ships with AUGUR, so it’s upgraded with AUGUR, not on its own.`;
   if (!release.service) return 'The app runner installs apps with a service. A frontend-only app isn’t supported yet.';
   return versionProblem(release.manifest) ?? surfaceProblem(release.manifest) ?? settingsProblem(release.manifest);
+};
+
+/** Why a pull request's build can't be previewed beside the installed release; undefined when it can. */
+export const previewProblem = (preview: AppRelease, installed: AppRelease, pillars: string[]): string | undefined => {
+  if (previewPr(preview.version) === undefined) return `${preview.version} isn’t a pull request’s build.`;
+  // Only the workflow trusted with the app's releases: a preview runs with the app's own sign-in.
+  if (preview.signer.repository !== installed.signer.repository) return `It’s built by ${preview.signer.repository}, not ${installed.signer.repository}.`;
+  return releaseProblem(preview, pillars);
 };
 
 export interface AppRunnerRouteOptions {
@@ -71,6 +96,7 @@ export interface AppRunnerRouteOptions {
   sdkVersion: string;
   /** Records what happens without a request, such as an update starting by itself. */
   audit?: (entry: NewAuditEntry) => Promise<void>;
+  now?: () => Date;
   /** Which app or platform service sent this call; undefined when the reply has been sent. */
   serviceOf: (req: FastifyRequest, reply: FastifyReply) => Promise<ServiceIdentity | null | undefined>;
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
@@ -81,7 +107,7 @@ export interface AppRunnerRouteOptions {
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, pillars, updates, sdkVersion, audit, serviceOf, record }: AppRunnerRouteOptions) =>
+  ({ store, pillars, updates, sdkVersion, audit, serviceOf, record, now = () => new Date() }: AppRunnerRouteOptions) =>
   async (app: FastifyInstance) => {
     /** When the runner last asked what to do; it lives only as long as this process. */
     let runnerSeenAt: string | undefined;
@@ -101,19 +127,63 @@ export const appRunnerRoutes =
         if (!newest?.release || !semver.gt(newest.version, current.version) || updateNeeds(current, newest.release, sdkVersion).length) continue;
         if (releaseProblem(newest.release, pillars)) continue;
         const jobs = await store.appJobs(id);
-        if (jobs.some((j) => j.release?.version === newest.version && j.state === 'failed')) continue;
+        if (jobs.some((j) => j.pr === undefined && j.release?.version === newest.version && j.state === 'failed')) continue;
         if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'install', release: newest.release, requestedBy: 'automatic' }))) continue;
         await audit?.({ actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'app.install-requested', target: id, detail: { version: newest.version, from: current.version, automatic: true } }).catch(() => undefined);
       }
     };
-    updates.onChecked(autoUpdate);
+
+    const byRegistry = (action: string, target: string, detail: Record<string, unknown>) =>
+      audit?.({ actor: { id: 'registry', kind: 'service' }, app: 'registry', action, target, detail }).catch(() => undefined);
+
+    /**
+     * After each check of the feed, previews follow the pull requests: an installed app with developers
+     * gets each open pull request's newest build running beside it (at most MAX_PREVIEWS, a build tried
+     * once), and a preview is taken away when its pull request is closed (its builds leave the feed),
+     * a week after its last build, or once the app isn't installed.
+     */
+    const syncPreviews = async () => {
+      const [installed, running, developers] = await Promise.all([store.installedApps(), store.runningPreviews(), store.developers()]);
+      const { releases } = updates.result;
+      const at = now().getTime();
+      const remove = async (p: RunningPreview, why: string) => {
+        if (await store.requestAppJob({ id: randomUUID(), app: p.app, action: 'preview-remove', pr: p.pr, requestedBy: 'automatic' })) await byRegistry('app.preview-remove-requested', p.app, { pr: p.pr, why });
+      };
+      for (const p of running) {
+        const open = previewsIn(releases, p.app).some((r) => r.pr === p.pr);
+        if (!installed.some((i) => i.app === p.app)) await remove(p, 'The app isn’t installed.');
+        else if (!open) await remove(p, 'Its pull request is closed.');
+        else if (Date.parse(p.startedAt) + PREVIEW_MS <= at) await remove(p, 'Its last build is a week old.');
+      }
+      for (const { app: id, release: current } of installed) {
+        if (!developers.some((d) => d.app === id)) continue;
+        const jobs = await store.appJobs(id);
+        const busy = (pr: number) => jobs.some((j) => j.pr === pr && (j.state === 'requested' || j.state === 'running'));
+        const starting = jobs.filter((j) => j.action === 'preview' && (j.state === 'requested' || j.state === 'running'));
+        const live = new Set([...running.filter((p) => p.app === id).map((p) => p.pr), ...starting.map((j) => j.pr!)]);
+        for (const build of previewsIn(releases, id)) {
+          const pr = build.pr!;
+          if (busy(pr) || jobs.some((j) => j.pr === pr && j.release?.version === build.version)) continue;
+          if (build.released && Date.parse(build.released) + PREVIEW_MS <= at) continue;
+          if (!live.has(pr) && live.size >= MAX_PREVIEWS) continue;
+          if (previewProblem(build.release!, current, pillars)) continue;
+          if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'preview', release: build.release, pr, requestedBy: 'automatic' }))) continue;
+          live.add(pr);
+          await byRegistry('app.preview-requested', id, { pr, version: build.version });
+        }
+      }
+    };
+    updates.onChecked(async () => {
+      await autoUpdate();
+      await syncPreviews();
+    });
 
     /** Admin → Apps' view of installs: what's installed and how it follows updates, and what the feed offers. */
     const appsView = async () => {
-      const [installed, follows, jobs] = await Promise.all([store.installedApps(), store.follows(), store.appJobs()]);
+      const [installed, follows, jobs, running, developers] = await Promise.all([store.installedApps(), store.follows(), store.appJobs(), store.runningPreviews(), store.developers()]);
       const { checkedAt, problem, releases } = updates.result;
       const installedIds = new Set(installed.map((i) => i.app));
-      const latestJob = (id: string) => jobs.find((j) => j.app === id);
+      const latestJob = (id: string) => jobs.find((j) => j.app === id && j.pr === undefined);
       return {
         feed: updates.on ? 'on' : 'off',
         ...(checkedAt ? { checkedAt } : {}),
@@ -134,6 +204,8 @@ export const appRunnerRoutes =
               ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release, sdkVersion) } }
               : {}),
             ...(job ? { job } : {}),
+            developers: developers.filter((d) => d.app === id).map((d) => d.person),
+            previews: running.filter((p) => p.app === id).map(previewView),
           };
         }),
         available: [...new Set(releases.map((r) => r.app))]
@@ -154,6 +226,83 @@ export const appRunnerRoutes =
           })),
       };
     };
+
+    /** A running preview as people are shown it. */
+    const previewView = (p: RunningPreview) => ({
+      pr: p.pr,
+      version: p.release.version,
+      ...(p.release.preview?.title ? { title: p.release.preview.title } : {}),
+      ...(p.release.preview?.url ? { url: p.release.preview.url } : {}),
+      startedAt: p.startedAt,
+      endsAt: new Date(Date.parse(p.startedAt) + PREVIEW_MS).toISOString(),
+    });
+
+    /** Who may try an app's pull requests' previews: people's ids. Previews run only for apps with someone to try them. */
+    app.put<{ Params: { id: string }; Body: { people: string[] } }>(
+      '/app-runner/apps/:id/developers',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['people'],
+            properties: { people: { type: 'array', maxItems: MAX_DEVELOPERS, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 100 } } },
+          },
+        },
+      },
+      async (req, reply) => {
+        const caller = admin(req, reply);
+        if (!caller) return reply;
+        if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
+        const before = (await store.developers(req.params.id)).map((d) => d.person);
+        const after = (await store.setDevelopers(req.params.id, req.body.people, caller.id)).map((d) => d.person);
+        const added = after.filter((p) => !before.includes(p));
+        const removed = before.filter((p) => !after.includes(p));
+        if (added.length || removed.length) await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.developers-set', target: req.params.id, detail: { added, removed } });
+        await syncPreviews();
+        return appsView();
+      },
+    );
+
+    /** The previews the caller may try: of the apps they're a developer of, with the one they chose of each. */
+    app.get('/previews', async (req, reply) => {
+      const caller = callerFromHeaders(req.headers);
+      if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to see previews.' });
+      const [mine, running, choices, installed] = await Promise.all([store.developers(), store.runningPreviews(), store.previewChoices(caller.id), store.installedApps()]);
+      const apps = new Set(mine.filter((d) => d.person === caller.id).map((d) => d.app));
+      return {
+        apps: installed
+          .filter((i) => apps.has(i.app))
+          .map((i) => {
+            const chosen = choices.find((c) => c.app === i.app)?.pr;
+            const previews = running.filter((p) => p.app === i.app);
+            return {
+              app: i.app,
+              name: i.release.manifest.name,
+              version: i.release.version,
+              ...(chosen !== undefined && previews.some((p) => p.pr === chosen) ? { chosen } : {}),
+              previews: previews.map(previewView),
+            };
+          }),
+      };
+    });
+
+    /** Uses one of an app's running previews instead of the app, for the caller alone; `null` goes back to the app. */
+    app.put<{ Params: { id: string }; Body: { pr: number | null } }>(
+      '/previews/:id',
+      { schema: { body: { type: 'object', additionalProperties: false, required: ['pr'], properties: { pr: { type: ['integer', 'null'], minimum: 1 } } } } },
+      async (req, reply) => {
+        const caller = callerFromHeaders(req.headers);
+        if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to try a preview.' });
+        const { id } = req.params;
+        if (!(await store.developers(id)).some((d) => d.person === caller.id)) return reply.code(403).send({ error: 'forbidden', message: `Only ${id}’s developers can try its previews. An admin adds them in Admin → Apps.` });
+        const { pr } = req.body;
+        if (pr !== null && !(await store.runningPreviews()).some((p) => p.app === id && p.pr === pr)) return reply.code(404).send({ error: 'not_found', message: `No preview of pull request ${pr} is running.` });
+        await store.choosePreview(caller.id, id, pr);
+        req.log.info({ by: caller.id, app: id, pr }, pr === null ? 'preview left' : 'preview chosen');
+        return reply.code(204).send();
+      },
+    );
 
     app.get('/app-runner/apps', async (req, reply) => {
       if (!admin(req, reply)) return reply;
@@ -241,7 +390,7 @@ export const appRunnerRoutes =
         }
         const target = release ? release.id : (body as { app: string }).app;
         if (release) {
-          const problem = releaseProblem(release, pillars);
+          const problem = previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : releaseProblem(release, pillars);
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         } else if (pillars.includes(target)) {
           return reply.code(409).send({ error: 'conflict', message: `${target} ships with AUGUR and can’t be removed. Turn it off instead.` });
@@ -280,7 +429,7 @@ export const appRunnerRoutes =
     });
 
     /** One step of an open job, from the runner; with `outcome`, how it ended. */
-    app.post<{ Params: { id: string }; Body: Omit<AppJobStepState, 'at'> & { outcome?: AppJobOutcome } }>(
+    app.post<{ Params: { id: string }; Body: Omit<AppJobStepState, 'at'> & { outcome?: AppJobOutcome; upstream?: string } }>(
       '/app-runner/jobs/:id/progress',
       {
         schema: {
@@ -293,14 +442,22 @@ export const appRunnerRoutes =
               state: { enum: ['running', 'done', 'failed'] },
               message: { type: 'string', maxLength: 2000 },
               outcome: { enum: ['done', 'failed'] },
+              // Where a preview it started answers.
+              upstream: { type: 'string', maxLength: 300 },
             },
           },
         },
       },
       async (req, reply) => {
         if (!(await isRunner(req, reply))) return reply;
-        const { outcome, message, ...step } = req.body;
-        const job = await store.progressAppJob(req.params.id, { ...step, ...(message ? { message } : {}) }, outcome ? { state: outcome, ...(message ? { message } : {}) } : undefined);
+        const { outcome, message, upstream, ...step } = req.body;
+        const problem = upstream === undefined ? undefined : upstreamProblem(upstream);
+        if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
+        const job = await store.progressAppJob(
+          req.params.id,
+          { ...step, ...(message ? { message } : {}) },
+          outcome ? { state: outcome, ...(message ? { message } : {}), ...(upstream && outcome === 'done' ? { upstream: upstream.replace(/\/+$/, '') } : {}) } : undefined,
+        );
         if (!job) return reply.code(404).send({ error: 'not_found', message: 'That job isn’t open.' });
         req.log.info({ job: job.id, app: job.app, step: step.step, state: step.state, outcome }, 'app job progress');
         if (outcome) {
@@ -309,7 +466,7 @@ export const appRunnerRoutes =
             app: 'registry',
             action: OUTCOME_ACTIONS[job.action][outcome],
             target: job.app,
-            detail: { requestedBy: job.requestedBy, ...(job.release ? { version: job.release.version } : {}), ...(message ? { message } : {}) },
+            detail: { requestedBy: job.requestedBy, ...(job.pr !== undefined ? { pr: job.pr } : {}), ...(job.release ? { version: job.release.version } : {}), ...(message ? { message } : {}) },
           });
         }
         return job;

@@ -214,16 +214,30 @@ export const buildApp = async ({
           const allowed = await allowedOrigins();
           const rules = place ? await store.rules() : [];
           const kept = await store.frontends();
+          const previews = await previewsChosenBy(caller?.id);
           const registered = (await store.records())
             .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
-            // The limit the gateway holds requests to the app's service to (SDK 1.3), and the version's own copy of its code.
-            .map((r) => ({ ...servedEntry(r.entry, kept), maxUpload: uploadLimitOf(r) }));
+            // The limit the gateway holds requests to the app's service to (SDK 1.3), and the version's own copy of its code:
+            // for a developer trying one of its pull requests, that build's.
+            .map((r) => ({ ...servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept), maxUpload: uploadLimitOf(r) }));
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
         },
       );
 
       const isAdmin = (req: FastifyRequest) => callerFromHeaders(req.headers)?.roles.includes('admin') ?? false;
+
+      /** The running previews someone chose, by app id: theirs alone, or everyone's (person id → app id) with no one named. */
+      const chosenPreviews = async (person?: string) => {
+        const choices = await store.previewChoices(person);
+        if (!choices.length) return [];
+        const running = await store.runningPreviews();
+        return choices.flatMap((c) => {
+          const preview = running.find((p) => p.app === c.app && p.pr === c.pr);
+          return preview ? [{ person: c.person, preview }] : [];
+        });
+      };
+      const previewsChosenBy = async (person?: string) => new Map(person ? (await chosenPreviews(person)).map(({ preview }) => [preview.app, preview]) : []);
 
       /** The whole catalogue for admins: every app, on or off, with who registered it and when. */
       app.get('/apps', async (req, reply) => {
@@ -423,7 +437,13 @@ export const buildApp = async ({
         if (!isGatewayCaller(caller ?? undefined) && !caller?.roles.includes('admin')) {
           return reply.code(403).send({ error: 'forbidden', message: 'Only the gateway and admins can see where apps’ services are.' });
         }
-        return { apps: Object.fromEntries((await store.records()).filter((r) => r.upstream).map((r) => [r.entry.id, r.upstream])) };
+        const records = (await store.records()).filter((r) => r.upstream);
+        // Developers trying a pull request's build of an app the gateway sends to the app.
+        const previews: Record<string, Record<string, string>> = {};
+        for (const { person, preview } of await chosenPreviews()) {
+          if (records.some((r) => r.entry.id === preview.app)) (previews[preview.app] ??= {})[person] = preview.upstream;
+        }
+        return { apps: Object.fromEntries(records.map((r) => [r.entry.id, r.upstream])), previews };
       });
 
       /** Sets where the gateway reaches an app's service: a platform service that runs it, or an admin. Never the app itself. */

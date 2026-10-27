@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import semver from 'semver';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
-import { ApiError, type AdminApi, type AllowedOrigin, type AppChannel, type AppInstalls, type AppPolicy, type AppSettingValue, type AppVersion, type CatalogueApp, type Department, type FloorChoice, type FloorRule, type InstalledApp, type IssuedSignIn } from './api.js';
+import { ApiError, fullName, type AdminApi, type AllowedOrigin, type AppChannel, type AppInstalls, type AppPolicy, type AppSettingValue, type AppVersion, type CatalogueApp, type Department, type FloorChoice, type FloorRule, type InstalledApp, type IssuedSignIn, type Person } from './api.js';
 import { asksWords, CHANNEL_CHOICES, JOB_REFRESH_MS, jobOpen, jobSteps, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
 import { line, page, section } from './parts.js';
 
@@ -132,6 +132,7 @@ export class AdminApps extends LitElement {
     checkingInstalls: { state: true },
     confirmInstall: { state: true },
     confirmRemove: { state: true },
+    people: { state: true },
   };
 
   declare api: AdminApi;
@@ -170,6 +171,8 @@ export class AdminApps extends LitElement {
   declare confirmInstall: { app: string; name: string; version: string; notes: string[] } | undefined;
   /** The installed app about to be removed, while the admin confirms. */
   declare confirmRemove: InstalledApp | undefined;
+  /** Everyone, to choose an installed app's developers from; asked for once an installed app is opened. */
+  declare people: Person[] | undefined;
   private refreshTimer?: ReturnType<typeof setTimeout>;
 
   constructor() {
@@ -287,6 +290,23 @@ export class AdminApps extends LitElement {
     await this.loadInstalls();
   };
 
+  async loadPeople() {
+    try {
+      this.people = await this.api.people();
+    } catch (err) {
+      this.installsError = (err as Error).message;
+    }
+  }
+
+  async setDevelopers(app: InstalledApp, people: string[]) {
+    this.installsError = '';
+    try {
+      this.installs = await this.api.setDevelopers(app.app, people);
+    } catch (err) {
+      this.installsError = (err as Error).message;
+    }
+  }
+
   async follow(app: InstalledApp, channel: AppChannel, policy: AppPolicy) {
     this.installsError = '';
     try {
@@ -317,6 +337,7 @@ export class AdminApps extends LitElement {
       this.settingValues = undefined;
       this.settingsError = '';
       if (app?.settings?.length) void this.loadSettings(app.id);
+      if (app && !this.people && this.installs?.installed.some((i) => i.app === app.id)) void this.loadPeople();
       if (app && !app.platform) {
         // An app that ships with AUGUR changes version with the release, so it has none to go back to.
         if (!app.pillar) void this.loadVersions(app.id);
@@ -658,6 +679,27 @@ export class AdminApps extends LitElement {
               : html`<div><ui-button data-update kind="secondary" size="sm" @click=${() => this.askInstall(installed.app, installed.update!.version)}>Install ${installed.update.version}</ui-button></div>`}`
         : nothing}
       ${installed.job ? html`<p style="margin:0" data-job>${jobWords(installed.job)}</p>${jobOpen(installed.job) || installed.job.state === 'failed' ? jobSteps(installed.job) : nothing}` : nothing}
+      <ui-tag-picker
+        data-developers
+        label="Developers"
+        hint="They can switch to a preview of any pull request that changes it, for themselves; previews run only while it has developers."
+        placeholder="Type a name"
+        max="50"
+        .options=${(this.people ?? []).map((p) => ({ value: p.id, label: fullName(p), detail: p.email, icon: 'account' }))}
+        .values=${installed.developers ?? []}
+        @ui-change=${(e: CustomEvent<{ values: string[] }>) => this.setDevelopers(installed, e.detail.values)}
+      ></ui-tag-picker>
+      ${installed.previews?.length
+        ? section(
+            'Previews running',
+            html`${installed.previews.map((p) =>
+              line(
+                html`${p.url ? html`<a href=${p.url} target="_blank" rel="noopener">#${p.pr}</a>` : `#${p.pr}`} ${p.title ?? ''}`,
+                `${p.version}, until ${new Date(p.endsAt).toLocaleDateString()}`,
+              ),
+            )}`,
+          )
+        : nothing}
       ${this.installsError ? html`<p role="alert" style="color:var(--danger)">${this.installsError}</p>` : nothing}
       <div><ui-button data-uninstall kind="tertiary" size="sm" ?disabled=${jobOpen(installed.job)} @click=${() => (this.confirmRemove = installed)}>Remove from the server</ui-button></div>
     </div>`;

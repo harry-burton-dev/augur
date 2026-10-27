@@ -257,6 +257,19 @@ export interface InstalledApp {
   /** The newest release on its channel, when newer; `needs` says why it waits for an admin. */
   update?: { version: string; channel: AppChannel; notesUrl?: string; needs: string[] };
   job?: AppJob;
+  /** Who may try its pull requests' previews, by person id. */
+  developers?: string[];
+  previews?: AppPreview[];
+}
+
+/** A pull request's build of an installed app, running beside it for its developers. */
+export interface AppPreview {
+  pr: number;
+  version: string;
+  title?: string;
+  url?: string;
+  startedAt: string;
+  endsAt: string;
 }
 
 /** An app the feed offers that isn't installed. */
@@ -404,6 +417,7 @@ export class AdminApi {
   /** Asks the app runner to stop and remove an app's containers. Needs the password just entered too. */
   uninstallApp = (app: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'remove', app });
   followApp = (app: string, channel: AppChannel, policy: AppPolicy) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/follow`, { channel, policy });
+  setDevelopers = (app: string, people: string[]) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/developers`, { people });
   /** Takes back an upgrade the updater hasn't started. */
   cancelUpgrade = () => this.call<PlatformUpdates>('DELETE', '/api/registry/v1/platform/upgrade');
 }

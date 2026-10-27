@@ -87,6 +87,8 @@ Once the Version packages PR merges, the Release workflow asks `node scripts/app
 
 To see the file an app's next release would carry, without releasing it: `node scripts/app-release.mjs describe <id>`.
 
+A pull request's build is on a third channel, **preview**, with a version of its own, `<x.y.z>-pr.<number>.<run>`, signed by `.github/workflows/app-preview.yml` rather than the Release workflow, and a `preview` field naming the pull request. No deployment follows that channel or installs one as the app: the app runner runs it beside the app, for the app's developers ([app-previews.md](app-previews.md)). Closing the pull request deletes its preview releases.
+
 ### Database migrations
 
 A server can always go back to the release before the one it's on, so its tables must still work for that release. Two rules, checked in CI by `pnpm check:migrations` (after `pnpm build`):
