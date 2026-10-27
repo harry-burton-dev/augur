@@ -383,6 +383,9 @@ importers:
 
   platform/services/registry:
     dependencies:
+      '@augur/mfe-sdk':
+        specifier: workspace:*
+        version: link:../../packages/mfe-sdk
       '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit

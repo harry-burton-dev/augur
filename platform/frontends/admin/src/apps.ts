@@ -2,8 +2,9 @@ import { LitElement, html, nothing } from 'lit';
 import semver from 'semver';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
-import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, Department, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
-import { page } from './parts.js';
+import { ApiError, type AdminApi, type AllowedOrigin, type AppChannel, type AppInstalls, type AppPolicy, type AppSettingValue, type AppVersion, type CatalogueApp, type Department, type FloorChoice, type FloorRule, type InstalledApp, type IssuedSignIn } from './api.js';
+import { asksWords, CHANNEL_CHOICES, JOB_REFRESH_MS, jobOpen, jobSteps, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
+import { line, page, section } from './parts.js';
 
 /** Where an app stands: off, on, or on but unable to open in this platform. */
 export const appStatus = (app: CatalogueApp, sdkVersion = SDK_VERSION): { status: StatusName; label: string; why?: string } => {
@@ -126,6 +127,11 @@ export class AdminApps extends LitElement {
     floorsError: { state: true },
     settingValues: { state: true },
     settingsError: { state: true },
+    installs: { state: true },
+    installsError: { state: true },
+    checkingInstalls: { state: true },
+    confirmInstall: { state: true },
+    confirmRemove: { state: true },
   };
 
   declare api: AdminApi;
@@ -156,6 +162,15 @@ export class AdminApps extends LitElement {
   /** The open app's settings with their values; undefined until loaded. */
   declare settingValues: AppSettingValue[] | undefined;
   declare settingsError: string;
+  /** What the app runner installed and what the app feed offers; undefined until loaded. */
+  declare installs: AppInstalls | undefined;
+  declare installsError: string;
+  declare checkingInstalls: boolean;
+  /** The release about to be installed, while the admin confirms: with what it asks, or why it waited. */
+  declare confirmInstall: { app: string; name: string; version: string; notes: string[] } | undefined;
+  /** The installed app about to be removed, while the admin confirms. */
+  declare confirmRemove: InstalledApp | undefined;
+  private refreshTimer?: ReturnType<typeof setTimeout>;
 
   constructor() {
     super();
@@ -171,6 +186,114 @@ export class AdminApps extends LitElement {
     this.originsError = '';
     this.working = false;
     this.floorsError = '';
+    this.installsError = '';
+    this.checkingInstalls = false;
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    clearTimeout(this.refreshTimer);
+  }
+
+  /** Asks again while the app runner has something waiting or under way, so the page follows along. */
+  override updated() {
+    const busy = this.installs && [...this.installs.installed, ...this.installs.available].some((a) => jobOpen(a.job));
+    if (busy && !this.refreshTimer) {
+      this.refreshTimer = setTimeout(() => {
+        this.refreshTimer = undefined;
+        void this.loadInstalls().then(() => this.load(false));
+      }, JOB_REFRESH_MS);
+    }
+  }
+
+  async loadInstalls() {
+    try {
+      const installs = await this.api.installs();
+      // Anything else (a registry without the app runner) shows no installs.
+      this.installs = Array.isArray(installs?.installed) && Array.isArray(installs.available) ? installs : undefined;
+      this.installsError = '';
+      this.resumeInstall();
+    } catch (err) {
+      this.installsError = (err as Error).message;
+    }
+  }
+
+  async checkInstalls() {
+    this.checkingInstalls = true;
+    try {
+      this.installs = await this.api.checkInstalls();
+      this.installsError = '';
+    } catch (err) {
+      this.installsError = (err as Error).message;
+    } finally {
+      this.checkingInstalls = false;
+    }
+  }
+
+  /** Back from entering the password again (`?install=<app>@<version>` or `?uninstall=<app>`): ask once more. */
+  private resumeInstall() {
+    const params = new URLSearchParams(window.location.search);
+    const install = params.get('install');
+    const uninstall = params.get('uninstall');
+    if (!install && !uninstall) return;
+    params.delete('install');
+    params.delete('uninstall');
+    const rest = params.toString();
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
+    const at = install?.lastIndexOf('@') ?? -1;
+    if (install && at > 0) this.askInstall(install.slice(0, at), install.slice(at + 1));
+    if (uninstall) this.confirmRemove = this.installs?.installed.find((i) => i.app === uninstall);
+  }
+
+  /** Opens "Install …?" for a release the feed offers, or an installed app's newer version. */
+  askInstall(app: string, version: string) {
+    const offered = this.installs?.available.find((a) => a.app === app && a.version === version);
+    const installed = this.installs?.installed.find((a) => a.app === app && a.update?.version === version);
+    if (offered) this.confirmInstall = { app, name: offered.name, version, notes: [...asksWords(offered.asks, scopeWords), ...(offered.problem ? [offered.problem] : [])] };
+    else if (installed) this.confirmInstall = { app, name: installed.name, version, notes: installed.update!.needs };
+  }
+
+  /** Where the password is entered again before anything is installed or removed; back here after. */
+  private signInAgain(query: string) {
+    const back = `${window.location.pathname}?${query}`;
+    window.location.assign(`/auth/again?return=${encodeURIComponent(back)}`);
+  }
+
+  install: DialogSubmit = async () => {
+    const { app, version } = this.confirmInstall!;
+    try {
+      await this.api.installApp(app, version);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') {
+        this.signInAgain(`install=${encodeURIComponent(`${app}@${version}`)}`);
+        return false;
+      }
+      throw err;
+    }
+    await this.loadInstalls();
+  };
+
+  uninstall: DialogSubmit = async () => {
+    const { app } = this.confirmRemove!;
+    try {
+      await this.api.uninstallApp(app);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') {
+        this.signInAgain(`uninstall=${encodeURIComponent(app)}`);
+        return false;
+      }
+      throw err;
+    }
+    await this.loadInstalls();
+  };
+
+  async follow(app: InstalledApp, channel: AppChannel, policy: AppPolicy) {
+    this.installsError = '';
+    try {
+      this.installs = await this.api.followApp(app.app, channel, policy);
+    } catch (err) {
+      this.installsError = (err as Error).message;
+    }
   }
 
   override createRenderRoot() {
@@ -178,7 +301,10 @@ export class AdminApps extends LitElement {
   }
 
   override willUpdate(changed: Map<string, unknown>) {
-    if (changed.has('api') && this.api) void this.load();
+    if (changed.has('api') && this.api) {
+      void this.load();
+      void this.loadInstalls();
+    }
     if (changed.has('originsOpen') && this.originsOpen) void this.loadOrigins();
     if (changed.has('open')) {
       this.versions = undefined;
@@ -371,8 +497,8 @@ export class AdminApps extends LitElement {
       </div>`;
   }
 
-  async load() {
-    this.loading = true;
+  async load(showLoading = true) {
+    this.loading = showLoading;
     this.error = '';
     try {
       this.apps = await this.api.apps();
@@ -501,6 +627,126 @@ export class AdminApps extends LitElement {
     </ui-dialog>`;
   }
 
+  /** For an app the app runner installed: how it takes new releases, a newer one waiting, what the runner is doing, and Remove. */
+  private runnerControls(app: CatalogueApp) {
+    const installed = this.installs?.installed.find((i) => i.app === app.id);
+    if (!installed) return nothing;
+    const waiting = waitingWhy(installed);
+    return html`<div data-runner style="display:flex;flex-direction:column;gap:var(--space-4)">
+      <ui-select
+        data-channel
+        label="New releases"
+        .options=${CHANNEL_CHOICES}
+        .value=${installed.channel}
+        @ui-change=${(e: CustomEvent<{ value: AppChannel }>) => this.follow(installed, e.detail.value, installed.policy)}
+      ></ui-select>
+      <ui-select
+        data-policy
+        label="When one is out"
+        hint=${policyHint(installed.policy)}
+        .options=${POLICY_CHOICES}
+        .value=${installed.policy}
+        @ui-change=${(e: CustomEvent<{ value: AppPolicy }>) => this.follow(installed, installed.channel, e.detail.value)}
+      ></ui-select>
+      ${installed.update && !jobOpen(installed.job)
+        ? html`<p style="margin:0">
+              Version ${installed.update.version} is out${waiting.length ? html`, and waits for you: ${waiting.join(' ')}` : installed.policy === 'hold' ? ', but it’s held.' : '; it installs by itself shortly.'}
+              ${installed.update.notesUrl ? html`<a href=${installed.update.notesUrl} target="_blank" rel="noopener">What’s new</a>` : nothing}
+            </p>
+            ${installed.policy === 'automatic' && !waiting.length
+              ? nothing
+              : html`<div><ui-button data-update kind="secondary" size="sm" @click=${() => this.askInstall(installed.app, installed.update!.version)}>Install ${installed.update.version}</ui-button></div>`}`
+        : nothing}
+      ${installed.job ? html`<p style="margin:0" data-job>${jobWords(installed.job)}</p>${jobOpen(installed.job) || installed.job.state === 'failed' ? jobSteps(installed.job) : nothing}` : nothing}
+      ${this.installsError ? html`<p role="alert" style="color:var(--danger)">${this.installsError}</p>` : nothing}
+      <div><ui-button data-uninstall kind="tertiary" size="sm" ?disabled=${jobOpen(installed.job)} @click=${() => (this.confirmRemove = installed)}>Remove from the server</ui-button></div>
+    </div>`;
+  }
+
+  /** What the app feed offers to install, what's waiting on an admin, and whether there's a runner to do it. */
+  private installsSection() {
+    const i = this.installs;
+    if (!i) return this.installsError ? html`<p style="color:var(--danger);padding:var(--space-4)">${this.installsError}</p>` : nothing;
+    const waiting = i.installed.filter((a) => waitingWhy(a).length);
+    const busy = [...i.installed, ...i.available].filter((a) => jobOpen(a.job));
+    return html`<div data-installs style="display:flex;flex-direction:column;gap:var(--space-5);padding:var(--space-4)">
+      ${!i.runnerSeenAt
+        ? html`<ui-status status="warning" label="No app runner has asked for work since the registry started, so nothing below can be installed yet. It’s the updater with APP_SECRETS_KEY set: see docs/upgrade.md, The app runner."></ui-status>`
+        : nothing}
+      ${i.problem ? html`<ui-status status="warning" label=${`The app feed couldn’t be read: ${i.problem}`}></ui-status>` : nothing}
+      ${busy.length ? section('Under way', html`${busy.map((a) => line(a.name, jobWords(a.job!)))}`) : nothing}
+      ${waiting.length
+        ? section(
+            'Needs you',
+            html`<div data-waiting>
+              ${waiting.map((a) =>
+                line(
+                  html`${a.name} ${a.update!.version}<span style="color:var(--ink-muted);font-size:var(--type-small)"> · ${waitingWhy(a).join(' ')}</span>`,
+                  html`<ui-button kind="secondary" size="sm" @click=${() => this.askInstall(a.app, a.update!.version)}>Install</ui-button>`,
+                ),
+              )}
+            </div>`,
+          )
+        : nothing}
+      ${section(
+        'Install from releases',
+        i.feed === 'off'
+          ? html`<p style="margin:0">This server doesn’t read app releases: APP_FEED_URL is off, or the release feed is a mirror.</p>`
+          : html`<div data-available>
+                ${i.available.filter((a) => !jobOpen(a.job)).length
+                  ? i.available
+                      .filter((a) => !jobOpen(a.job))
+                      .map((a) =>
+                        line(
+                          html`${a.name} ${a.version}${a.channel === 'beta' ? ' (beta)' : ''}<span style="color:var(--ink-muted);font-size:var(--type-small)">${a.description ? ` · ${a.description}` : ''}${a.job?.state === 'failed' ? ` · ${jobWords(a.job)}` : ''}</span>`,
+                          html`<ui-button kind="secondary" size="sm" ?disabled=${Boolean(a.problem)} @click=${() => this.askInstall(a.app, a.version)}>Install</ui-button>`,
+                        ),
+                      )
+                  : html`<p style="margin:0">Nothing new to install.${i.checkedAt ? ` Checked ${new Date(i.checkedAt).toLocaleString()}.` : ''}</p>`}
+              </div>
+              <div><ui-button data-check-installs kind="tertiary" size="sm" ?busy=${this.checkingInstalls} @click=${() => this.checkInstalls()}>Check for releases</ui-button></div>`,
+      )}
+    </div>`;
+  }
+
+  private installDialog() {
+    const c = this.confirmInstall;
+    if (!c) return nothing;
+    return html`<ui-dialog
+      open
+      size="glance"
+      eyebrow="Apps"
+      heading=${`Install ${c.name} ${c.version}?`}
+      summary="The new version starts beside whatever runs now, and people are switched to it only once it answers. If it doesn’t, nothing changes."
+      action-label="Install"
+      busy-label="Asking…"
+      cancel-label="Not now"
+      .submit=${this.install}
+      @ui-close=${() => (this.confirmInstall = undefined)}
+    >
+      ${c.notes.length ? html`<ul style="margin:0;padding-left:var(--space-5)">${c.notes.map((n) => html`<li>${n}</li>`)}</ul>` : nothing}
+      <p>You may be asked for your password again.</p>
+    </ui-dialog>`;
+  }
+
+  private removeDialog() {
+    const app = this.confirmRemove;
+    if (!app) return nothing;
+    return html`<ui-dialog
+      open
+      size="glance"
+      danger
+      eyebrow=${app.name}
+      heading="Remove it from the server?"
+      summary="Its containers stop and are removed, so nobody can open it. Its data stays: install it again to get it back. Remove it from the catalogue too, to stop it being listed."
+      action-label="Remove"
+      busy-label="Asking…"
+      cancel-label="Keep it"
+      .submit=${this.uninstall}
+      @ui-close=${() => (this.confirmRemove = undefined)}
+    ></ui-dialog>`;
+  }
+
   private readonly columns: TableColumn[] = [
     { key: 'name', label: 'App', sortable: true },
     { key: 'version', label: 'Version', sortable: true },
@@ -569,6 +815,7 @@ export class AdminApps extends LitElement {
         : html`<div>
             <ui-button kind="tertiary" size="sm" @click=${() => (this.issuing = app)}>Issue a new sign-in</ui-button>
           </div>`}
+      ${app.platform || app.pillar ? nothing : this.runnerControls(app)}
       ${app.updatedAt ? html`<p>Registered ${day(app.registeredAt)}, last updated ${day(app.updatedAt)}.</p>` : nothing}
     </ui-dialog>`;
   }
@@ -589,7 +836,7 @@ export class AdminApps extends LitElement {
     return page(
       'Admin',
       'Apps',
-      'Every app in the catalogue. Turn one off to stop offering it, or go back to an earlier version, without removing it.',
+      'Every app in the catalogue. Turn one off to stop offering it, or go back to an earlier version, without removing it. Install new apps from their releases below.',
       html`<ui-table
           noun="apps"
           .columns=${this.columns}
@@ -602,7 +849,7 @@ export class AdminApps extends LitElement {
         >
           <ui-button slot="actions" kind="secondary" size="sm" @click=${() => (this.originsOpen = true)}>Where apps load from</ui-button>
         </ui-table>
-        ${this.details()} ${this.originsDialog()} ${this.issueDialog()} ${this.secretNote()}`,
+        ${this.installsSection()} ${this.details()} ${this.originsDialog()} ${this.issueDialog()} ${this.secretNote()} ${this.installDialog()} ${this.removeDialog()}`,
     );
   }
 }

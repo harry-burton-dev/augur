@@ -25,7 +25,9 @@ import {
   signedCallers,
   type CallerCheck,
 } from '@augur/service-kit';
+import { SDK_VERSION } from '@augur/mfe-sdk';
 import { appRunnerRoutes } from './app-runner.ts';
+import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import {
   appEntrySchema,
@@ -88,6 +90,8 @@ export interface RegistryOptions {
    * /apps/<id>/<version>/. Without it apps are served from wherever their manifests' `entry` says.
    */
   frontendFiles?: FrontendFiles;
+  /** The app feed, for the app runner's installs and updates (Admin → Apps). Without one nothing is offered. */
+  appUpdates?: AppUpdateChecker;
 }
 
 /** PILLAR_APPS: the ids of the apps this deployment ships with, space or comma separated. */
@@ -160,6 +164,7 @@ export const buildApp = async ({
   callers,
   pillars = [],
   frontendFiles,
+  appUpdates = new AppUpdateChecker(),
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
@@ -331,7 +336,7 @@ export const buildApp = async ({
       const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
-      await app.register(appRunnerRoutes({ store, pillars, serviceOf, record }));
+      await app.register(appRunnerRoutes({ store, pillars, updates: appUpdates, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(
         '/apps/:id',

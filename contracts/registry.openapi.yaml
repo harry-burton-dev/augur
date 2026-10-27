@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.18.0
+  version: 1.19.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -611,6 +611,14 @@ paths:
                     release: { $ref: "#/components/schemas/AppRelease" }
                 - type: object
                   additionalProperties: false
+                  required: [action, app, version]
+                  description: A release from the app feed, by version
+                  properties:
+                    action: { type: string, enum: [install] }
+                    app: { type: string }
+                    version: { type: string }
+                - type: object
+                  additionalProperties: false
                   required: [action, app]
                   properties:
                     action: { type: string, enum: [remove] }
@@ -622,6 +630,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AppJob" }
         "400": { description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, or a bad manifest" }
+        "404": { description: The app feed has no release file for that app and version }
         "401": { description: "sign_in_again: enter the password again first" }
         "403": { description: Not an admin }
         "409": { description: "The app ships with AUGUR, or already has a job waiting or under way" }
@@ -677,8 +686,103 @@ paths:
               schema: { $ref: "#/components/schemas/AppJob" }
         "403": { description: Not the app runner }
         "404": { description: The job isn't open }
+  /app-runner/apps:
+    get:
+      summary: Installed apps and how each takes updates, and what the app feed offers (admins only)
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppInstalls" }
+        "403": { description: Not an admin }
+  /app-runner/check:
+    post:
+      summary: Check the app feed now, starting any automatic updates it finds (admins only)
+      responses:
+        "200":
+          description: Admin → Apps' installs after the check
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppInstalls" }
+        "403": { description: Not an admin }
+  /app-runner/apps/{id}/follow:
+    put:
+      summary: Set how an installed app takes new releases (admins only)
+      description: >
+        Its channel, and its policy: automatic (a newer release on the channel that asks for nothing
+        new installs by itself), ask (each waits for an admin) or hold (nothing is offered). An app
+        with no choice yet follows stable, automatically. Audited as app.updates-set.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [channel, policy]
+              properties:
+                channel: { type: string, enum: [stable, beta] }
+                policy: { type: string, enum: [automatic, ask, hold] }
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppInstalls" }
+        "403": { description: Not an admin }
+        "404": { description: The app runner hasn't installed that app }
 components:
   schemas:
+    AppInstalls:
+      type: object
+      required: [feed, sdkVersion, installed, available]
+      properties:
+        feed: { type: string, enum: [on, off] }
+        checkedAt: { type: string, format: date-time }
+        problem: { type: string, description: Why the app feed couldn't be read last time }
+        runnerSeenAt: { type: string, format: date-time, description: "When the app runner last asked for work; missing when it hasn't since the registry started" }
+        sdkVersion: { type: string }
+        installed:
+          type: array
+          items:
+            type: object
+            required: [app, name, version, installedAt, channel, policy]
+            properties:
+              app: { type: string }
+              name: { type: string }
+              version: { type: string }
+              installedAt: { type: string, format: date-time }
+              channel: { type: string, enum: [stable, beta] }
+              policy: { type: string, enum: [automatic, ask, hold] }
+              update:
+                type: object
+                required: [version, channel, needs]
+                description: The newest release on its channel, when newer than what runs
+                properties:
+                  version: { type: string }
+                  channel: { type: string, enum: [stable, beta] }
+                  notesUrl: { type: string }
+                  needs: { type: array, items: { type: string }, description: "Why it waits for an admin; empty when it can install by itself" }
+              job: { $ref: "#/components/schemas/AppJob" }
+        available:
+          type: array
+          items:
+            type: object
+            required: [app, name, version, channel, signer, asks]
+            properties:
+              app: { type: string }
+              name: { type: string }
+              description: { type: string }
+              version: { type: string }
+              channel: { type: string, enum: [stable, beta] }
+              notesUrl: { type: string }
+              signer: { type: object, properties: { repository: { type: string }, workflow: { type: string } } }
+              asks: { type: object, properties: { scopes: { type: array, items: { type: string } }, storage: { type: object }, maxUpload: { type: integer } } }
+              problem: { type: string, description: "Why it can't open in this AUGUR" }
+              job: { $ref: "#/components/schemas/AppJob" }
     AppRelease:
       type: object
       description: "An app's release file, app-release.json, as scripts/app-release.mjs writes it (docs/versioning.md, App releases)"

@@ -127,14 +127,21 @@ An install (a first install, an upgrade or going back to an older version alike)
 6. **switch**: the runner registers the new version and points the gateway at it, in that order.
 7. **retire**: the old version keeps running 10 more minutes for shells still holding the old manifest, then stops.
 
-For now an admin asks for an install through the API, with the release's `app-release.json` (Admin → Apps gets buttons for it next):
+Admin → Apps lists, under the catalogue, the apps this repository has released that aren't installed, with **Install**; it says what each one asks for, and asks for your password again before anything is installed or removed. The registry reads the releases every 15 minutes, or at once with **Check for releases**: the same GitHub releases Updates reads, with the same token (`APP_FEED_URL` points it elsewhere, and `off` turns it off; it's off by itself when `RELEASE_FEED_URL` is a mirror).
+
+Open an installed app to choose how it takes new releases:
+
+- **New releases**: stable only, or betas too.
+- **When one is out**: **Automatic** (the default) installs a newer version by itself when it's a fix or a feature that asks for nothing new: no major version, no new scopes, storage, kinds of floor or bigger uploads, an SDK range this AUGUR opens, and the same signer. Anything else waits under **Needs you** with why. **Ask first** makes every version wait for you, and **Hold** offers none. A version that failed to install isn't tried again by itself.
+
+The same page follows each job step by step, and **Remove from the server** stops an app's containers; its data stays, and removing it from the catalogue too stops it being listed. Every install, update, removal and choice is in Activity.
+
+Scripts can do the same through the registry (`/api/registry/v1/app-runner/…` in `contracts/registry.openapi.yaml`), with an `app-release.json` in place of a version from the feed:
 
 ```sh
 curl -X POST https://<platform>/api/registry/v1/app-runner/jobs -H "authorization: Bearer <admin token>" \
   -H 'content-type: application/json' -d "{\"action\":\"install\",\"release\":$(cat app-release.json)}"
 ```
-
-`{"action":"remove","app":"<id>"}` stops an app's containers; its data stays, and removing it in Admin → Apps takes it out of the catalogue. `GET /api/registry/v1/app-runner/jobs` shows each job's steps, and whether the runner has asked for work lately.
 
 Apps join the platform's network (`platform_default`; set `APPS_NETWORK` in `.env` if your project has another name), so `pc down` can't remove that network while they run: stop them first with `docker compose -p augur-apps -f infra/deploy/apps/compose.yml down`. They restart by themselves with Docker, like the platform.
 

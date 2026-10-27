@@ -205,6 +205,8 @@ services:
       # Admin's Updates page: where new AUGUR releases are listed, and which ones to follow.
       RELEASE_FEED_URL: ${RELEASE_FEED_URL:-}
       RELEASE_CHANNEL: ${RELEASE_CHANNEL:-}
+      # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
+      APP_FEED_URL: ${APP_FEED_URL:-}
       # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.
       PILLAR_APPS: folio
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).

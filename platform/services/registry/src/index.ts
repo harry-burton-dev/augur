@@ -1,5 +1,6 @@
 import { callerCheckFromEnv, floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
+import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
 import { DEFAULT_FEED_URL, feedTokenFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
@@ -38,11 +39,18 @@ const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: 
 const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel });
 updates.start();
 
+// Apps' own releases, for the app runner (Admin → Apps): this repository's releases, read with the same
+// token, unless APP_FEED_URL says otherwise. Off when the AUGUR feed is a mirror or off and APP_FEED_URL
+// isn't set, or with APP_FEED_URL=off.
+const appFeedUrl = process.env.APP_FEED_URL || (process.env.RELEASE_FEED_URL ? 'off' : DEFAULT_FEED_URL);
+const appUpdates = new AppUpdateChecker(appFeedUrl === 'off' ? undefined : appFeed({ url: appFeedUrl, token: feedTokenFromEnv() }));
+appUpdates.start();
+
 // Apps' frontends, kept by version in the frontends bucket (FRONTENDS_BUCKET_SECRET, made by the storage service).
 const frontendFiles = frontendFilesFromEnv();
 if (!frontendFiles) console.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ frontends are served from where their manifests say, not kept by version.');
 
 // Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
 // this deployment ships with, which register themselves like any other.
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates });
 await app.listen({ port, host: '0.0.0.0' });

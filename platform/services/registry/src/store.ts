@@ -175,6 +175,22 @@ export interface AppJob {
 
 export type AppJobOutcome = 'done' | 'failed';
 
+/** Which releases of an installed app a deployment takes, and whether new ones install by themselves. */
+export interface AppFollow {
+  app: string;
+  channel: 'stable' | 'beta';
+  policy: 'automatic' | 'ask' | 'hold';
+  setBy: string;
+  setAt: string;
+}
+
+/** An app the runner installed, and the release it's on. */
+export interface InstalledApp {
+  app: string;
+  release: AppRelease;
+  installedAt: string;
+}
+
 /** Where registered apps are kept. */
 export interface AppStore {
   /** Origins apps may load their entry from, besides the platform itself. */
@@ -241,6 +257,11 @@ export interface AppStore {
   progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string }): Promise<AppJob | undefined>;
   /** Takes back a job the runner hasn't started; false when it isn't waiting. */
   cancelAppJob(id: string): Promise<boolean>;
+  /** The apps the runner has installed and not removed since: each one's last finished install. */
+  installedApps(): Promise<InstalledApp[]>;
+  /** What admins chose for each installed app's updates; an app with none follows stable, automatically. */
+  follows(): Promise<AppFollow[]>;
+  setFollow(follow: Omit<AppFollow, 'setAt'>): Promise<AppFollow>;
 }
 
 /** A step's new state replaces its last one, so each step shows once. */
@@ -258,6 +279,23 @@ export class MemoryAppStore implements AppStore {
   private upgrades: Upgrade[] = [];
   private kept: StoredFrontend[] = [];
   private jobs: AppJob[] = [];
+  private following = new Map<string, AppFollow>();
+
+  async installedApps() {
+    const last = new Map<string, AppJob>();
+    for (const j of this.jobs) if (j.state === 'done') last.set(j.app, j);
+    return [...last.values()].filter((j) => j.action === 'install' && j.release).map((j) => ({ app: j.app, release: structuredClone(j.release!), installedAt: j.finishedAt! }));
+  }
+
+  async follows() {
+    return [...this.following.values()].map((f) => ({ ...f }));
+  }
+
+  async setFollow(follow: Omit<AppFollow, 'setAt'>) {
+    const set = { ...follow, setAt: new Date().toISOString() };
+    this.following.set(follow.app, set);
+    return { ...set };
+  }
 
   async appJobs(app?: string) {
     return this.jobs.filter((j) => !app || j.app === app).slice(-APP_JOBS_LISTED).reverse().map((j) => structuredClone(j));
@@ -611,6 +649,18 @@ export const migrations: { id: string; sql: string }[] = [
       -- At most one waiting or under way for each app.
       create unique index app_jobs_one_open on registry.app_jobs (app_id) where state in ('requested', 'running');`,
   },
+  {
+    id: '012_app_follows',
+    sql: `
+      -- Which releases of each installed app the deployment takes, and whether they install by themselves.
+      create table registry.app_follows (
+        app_id text primary key,
+        channel text not null,
+        policy text not null,
+        set_by text not null,
+        set_at timestamptz not null default now()
+      );`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -946,6 +996,25 @@ export class PgAppStore implements AppStore {
   async cancelAppJob(id: string) {
     const { rowCount } = await this.pool.query("update registry.app_jobs set state = 'cancelled', finished_at = now() where id = $1 and state = 'requested'", [id]);
     return rowCount === 1;
+  }
+
+  async installedApps() {
+    const { rows } = await this.pool.query<AppJobRow>("select distinct on (app_id) * from registry.app_jobs where state = 'done' order by app_id, finished_at desc");
+    return rows.filter((r) => r.action === 'install' && r.release).map((r) => ({ app: r.app_id, release: r.release!, installedAt: r.finished_at!.toISOString() }));
+  }
+
+  async follows() {
+    const { rows } = await this.pool.query<{ app_id: string; channel: AppFollow['channel']; policy: AppFollow['policy']; set_by: string; set_at: Date }>('select * from registry.app_follows order by app_id');
+    return rows.map((r) => ({ app: r.app_id, channel: r.channel, policy: r.policy, setBy: r.set_by, setAt: r.set_at.toISOString() }));
+  }
+
+  async setFollow(f: Omit<AppFollow, 'setAt'>) {
+    const { rows } = await this.pool.query<{ set_at: Date }>(
+      `insert into registry.app_follows (app_id, channel, policy, set_by) values ($1, $2, $3, $4)
+       on conflict (app_id) do update set channel = excluded.channel, policy = excluded.policy, set_by = excluded.set_by, set_at = now() returning set_at`,
+      [f.app, f.channel, f.policy, f.setBy],
+    );
+    return { ...f, setAt: rows[0].set_at.toISOString() };
   }
 
   close() {

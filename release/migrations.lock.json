@@ -23,7 +23,8 @@
     "008_settings": "052493451d39b92b",
     "009_frontends": "5aeb6fdb89c1b425",
     "010_upstream": "2eee2e575a5c38ed",
-    "011_app_jobs": "42247cc8425b22c2"
+    "011_app_jobs": "42247cc8425b22c2",
+    "012_app_follows": "0867e84dc2f2e71a"
   },
   "@apps/folio": {
     "001_libraries": "1c5f1dfed17e6277",
