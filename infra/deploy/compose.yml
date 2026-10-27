@@ -56,6 +56,14 @@ services:
     environment:
       # Other sites apps may load from, space separated (also allow each in Admin, Apps).
       APP_ORIGINS: ${APP_ORIGINS:-}
+      # The front door's limits (docs/deploy.md, "Limits at the front door"); the image's defaults when unset.
+      API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
+      API_RATE_BURST: ${API_RATE_BURST:-200}
+      SSO_RATE_PER_SECOND: ${SSO_RATE_PER_SECOND:-10}
+      SSO_RATE_BURST: ${SSO_RATE_BURST:-50}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
+      # Keycloak's own admin console, at PLATFORM_URL/sso/admin: open serves it; it's closed otherwise.
+      KEYCLOAK_CONSOLE: ${KEYCLOAK_CONSOLE:-closed}
     depends_on: [gateway, keycloak]
 
   # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.

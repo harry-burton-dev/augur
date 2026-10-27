@@ -188,7 +188,7 @@ Nothing to do beyond the usual upgrade. The shell, page title and Admin say AUGU
 
 Two optional touches:
 
-- **Sign-in page title**: Keycloak only reads the realm file on first start, so your sign-in page still says "Platform". In the Keycloak console (`PLATFORM_URL/sso/admin`), open the `platform` realm, **Realm settings**, and set **Display name** to `AUGUR`.
+- **Sign-in page title**: Keycloak only reads the realm file on first start, so your sign-in page still says "Platform". In the Keycloak console (`PLATFORM_URL/sso/admin`, with `KEYCLOAK_CONSOLE=open` in `.env`; see [deploy.md](deploy.md), Limits at the front door), open the `platform` realm, **Realm settings**, and set **Display name** to `AUGUR`.
 - **Address**: to be at `https://augur.<tailnet>.ts.net`, set `TS_HOSTNAME=augur` and change `PLATFORM_URL` to match in `.env`, then in the Keycloak console update the **shell** client's redirect URIs and web origins to the new address before `pc up -d`. Everyone signs in again.
 
 ## Going back
