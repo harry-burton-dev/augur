@@ -55,8 +55,33 @@ interface Place {
 }
 
 const TAU = Math.PI * 2;
+/** Anything shown and reachable stays at least this opaque, so icons keep 3:1 contrast. Further things fade out. */
+const SHOWN = 0.55;
+/** A press has to travel this far before it is a drag; less is still a click. It also locks the drag to one axis. */
+const DRAG_START = 6;
+/** Wheel and trackpad movement settles on the nearest item this long after it stops. */
+const SETTLE_MS = 120;
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/** A place part way between two others, so a fractional position draws smoothly between rest places. */
+function between(a: Place, b: Place, t: number): Place {
+  return {
+    x: lerp(a.x, b.x, t),
+    y: lerp(a.y, b.y, t),
+    z: lerp(a.z ?? 0, b.z ?? 0, t),
+    scale: lerp(a.scale, b.scale, t),
+    opacity: lerp(a.opacity, b.opacity, t),
+    blur: lerp(a.blur ?? 0, b.blur ?? 0, t),
+  };
+}
+
+/** Draw a fractional offset `d` from the focus with `at`, which knows only whole steps. */
+function placeAt(d: number, at: (d: number) => Place): Place {
+  const lo = Math.floor(d);
+  return d === lo ? at(d) : between(at(lo), at(lo + 1), d - lo);
+}
 
 /** Search across every category: the label, its keywords and the category's name. */
 export function searchMenu(categories: MenuCategory[], query: string): Entry[] {
@@ -75,8 +100,13 @@ export function searchMenu(categories: MenuCategory[], query: string): Entry[] {
  *
  * ← → pick a category, ↑ ↓ an item, Enter opens, Esc goes back, typing
  * searches every category, and right-click or the context-menu key shows an
- * item's options. With the mouse, hovering highlights in place and only a
- * click moves things; Orbit also spins when dragged.
+ * item's options. With the mouse, hovering highlights in place and a click
+ * moves things. The wheel, a trackpad and a press-and-drag all move both ways
+ * in both variants: up and down through items, sideways through categories
+ * (Orbit spins). Movement follows the hand, then settles on the nearest item.
+ *
+ * Categories are a tablist and the focused category's items a listbox, which
+ * holds keyboard focus and points at the focused item.
  *
  * @fires ui-select - detail `{ item, category }` when an item is opened
  * @fires ui-option - detail `{ option, item, category }` when an option is chosen
@@ -105,6 +135,7 @@ export class UiCentreMenu extends LitElement {
     hover: { state: true },
     size: { state: true },
     spinning: { state: true },
+    moving: { state: true },
     introDone: { state: true },
   };
 
@@ -130,7 +161,10 @@ export class UiCentreMenu extends LitElement {
   declare private uses: number;
   declare private hover: { label: string; x: number; y: number; side: 'above' | 'right' } | null;
   declare private size: { w: number; h: number };
+  /** Categories are being moved by hand: the items fade until it settles. */
   declare private spinning: boolean;
+  /** Something follows the hand, so the rest-place transitions are off. */
+  declare private moving: boolean;
   declare private introDone: boolean;
 
   /** The focused item in each category, and in the search results under `q`. */
@@ -138,11 +172,14 @@ export class UiCentreMenu extends LitElement {
   private rot = 0;
   private target = 0;
   private spinFrame = 0;
-  private drag: { x: number; last: number; t: number; v: number; moved: boolean; id: number } | null = null;
+  private drag: { x: number; y: number; last: number; t: number; v: number; axis: 'x' | 'y' | null; id: number } | null = null;
   private suppressClick = false;
-  private wheelY = 0;
-  private wheelX = 0;
-  private lastWheel = 0;
+  /** How far between rest places the items (down) and Title's categories (across) are, while moving. */
+  private nudgeY = 0;
+  private nudgeX = 0;
+  /** The axis a wheel or trackpad gesture locked to, until it settles. */
+  private wheelAxis: 'x' | 'y' | null = null;
+  private settleTimer = 0;
   private pressed = -1;
   private resizeObserver?: ResizeObserver;
   private lastChange = '';
@@ -172,13 +209,14 @@ export class UiCentreMenu extends LitElement {
     this.hover = null;
     this.size = { w: 0, h: 0 };
     this.spinning = false;
+    this.moving = false;
     this.introDone = false;
   }
 
   /* ---- what callers can do ---- */
 
   override focus(options?: FocusOptions) {
-    this.root?.focus({ preventScroll: true, ...options });
+    this.list?.focus({ preventScroll: true, ...options });
   }
 
   setCategory(i: number) {
@@ -204,6 +242,10 @@ export class UiCentreMenu extends LitElement {
 
   private get root() {
     return this.renderRoot?.querySelector<HTMLElement>('.menu') ?? null;
+  }
+
+  private get list() {
+    return this.renderRoot?.querySelector<HTMLElement>('.col') ?? null;
   }
 
   private get cats() {
@@ -299,11 +341,81 @@ export class UiCentreMenu extends LitElement {
     if (option && cur) this.emit('ui-option', { option, item: cur.item, category: cur.cat });
   }
 
-  /* ---- Orbit: a continuous ring angle; drag to spin with inertia, release snaps to a category ---- */
+  /* ---- moving by hand: wheel, trackpad and drag share one model ---- */
 
-  private nearestCat() {
-    return mod(Math.round(this.rot / this.step), this.cats.length);
+  /** Move the items by a fraction of an item; the focus follows the nearest one. */
+  private slideItems(by: number) {
+    const n = this.column.length;
+    if (!n) return;
+    const pos = clamp(this.focusIndex + this.nudgeY + by, -0.3, n - 0.7);
+    const near = clamp(Math.round(pos), 0, n - 1);
+    if (near !== this.focusIndex) {
+      this.setFocus(near);
+      this.swell(0.3);
+    }
+    this.nudgeY = pos - near;
+    this.moving = true;
+    this.requestUpdate();
   }
+
+  /** Move the categories by a fraction of one: Orbit spins its ring, Title slides its row. */
+  private slideCats(by: number) {
+    if (!this.cats.length) return;
+    if (this.query) this.setQuery('');
+    if (!this.spinning) {
+      cancelAnimationFrame(this.spinFrame);
+      this.spinFrame = 0;
+      this.spinning = true;
+      this.options = null;
+      this.hover = null;
+    }
+    if (this.variant === 'orbit') {
+      this.rot += by * this.step;
+      this.target = this.rot;
+    } else this.nudgeX = clamp(this.cat + this.nudgeX + by, -0.3, this.cats.length - 0.7) - this.cat;
+    this.moving = true;
+    this.requestUpdate();
+  }
+
+  /** The category nearest the focal point while the row is being moved. */
+  private nearestCat() {
+    return this.variant === 'orbit' ? mod(Math.round(this.rot / this.step), this.cats.length) : clamp(Math.round(this.cat + this.nudgeX), 0, this.cats.length - 1);
+  }
+
+  /** Come to rest on the nearest item and category, carried on by `throwX`/`throwY` (steps per ms). */
+  private settle(throwX = 0, throwY = 0) {
+    clearTimeout(this.settleTimer);
+    this.wheelAxis = null;
+    if (this.spinning) {
+      let i: number;
+      if (this.variant === 'orbit') {
+        const idx = Math.round(this.rot / this.step + throwX * 300);
+        i = mod(idx, this.cats.length);
+        this.target = idx * this.step;
+        this.spin();
+      } else i = clamp(Math.round(this.cat + this.nudgeX + throwX * 300), 0, this.cats.length - 1);
+      this.nudgeX = 0;
+      this.spinning = false;
+      if (i !== this.cat) {
+        this.cat = i;
+        this.options = null;
+        this.swell(1);
+      }
+    }
+    if (this.nudgeY || throwY) {
+      const n = this.column.length;
+      const j = clamp(Math.round(this.focusIndex + this.nudgeY + throwY * 300), 0, Math.max(0, n - 1));
+      this.nudgeY = 0;
+      if (j !== this.focusIndex) {
+        this.setFocus(j);
+        this.swell(0.3);
+      }
+    }
+    this.moving = false;
+    this.requestUpdate();
+  }
+
+  /* ---- Orbit's ring: a continuous angle that eases to its target ---- */
 
   private orbitTo(i: number) {
     const d = mod(i * this.step - this.target + Math.PI, TAU) - Math.PI;
@@ -325,58 +437,53 @@ export class UiCentreMenu extends LitElement {
     this.spinFrame = requestAnimationFrame(tick);
   }
 
+  /** Pixels of hand movement per step: a category across, an item down. */
+  private get pitch() {
+    return { x: this.variant === 'orbit' ? this.pitchX * 1.1 : this.pitchX, y: this.pitchY };
+  }
+
   private onPointerDown = (e: PointerEvent) => {
-    if (this.variant !== 'orbit' || e.button !== 0 || (e.target as HTMLElement).closest?.('.options')) return;
-    this.drag = { x: e.clientX, last: e.clientX, t: performance.now(), v: 0, moved: false, id: e.pointerId };
+    if (e.button !== 0 || (e.target as HTMLElement).closest?.('.options')) return;
+    this.drag = { x: e.clientX, y: e.clientY, last: 0, t: performance.now(), v: 0, axis: null, id: e.pointerId };
   };
 
   private onPointerMove = (e: PointerEvent) => {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
-    if (!d.moved && Math.abs(e.clientX - d.x) < 5) return;
-    if (!d.moved) {
-      d.moved = true;
+    if (!d.axis) {
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (Math.hypot(dx, dy) < DRAG_START) return;
+      d.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+      d.last = d.axis === 'x' ? d.x : d.y;
       try {
         this.root?.setPointerCapture(e.pointerId);
       } catch {
         /* the pointer may already be gone */
       }
-      this.spinning = true;
       this.options = null;
       this.hover = null;
-      cancelAnimationFrame(this.spinFrame);
-      this.spinFrame = 0;
+      clearTimeout(this.settleTimer);
     }
     const now = performance.now();
-    const dx = e.clientX - d.last;
-    const k = this.step / (this.pitchX * 1.1);
-    this.rot -= dx * k;
-    this.target = this.rot;
-    d.v = 0.75 * d.v + 0.25 * ((-dx * k) / Math.max(1, now - d.t));
-    d.last = e.clientX;
+    const at = d.axis === 'x' ? e.clientX : e.clientY;
+    const by = -(at - d.last) / this.pitch[d.axis];
+    if (d.axis === 'x') this.slideCats(by);
+    else this.slideItems(by);
+    d.v = 0.75 * d.v + 0.25 * (by / Math.max(1, now - d.t));
+    d.last = at;
     d.t = now;
-    this.requestUpdate();
   };
 
   private onPointerUp = () => {
     const d = this.drag;
     this.drag = null;
-    if (!d?.moved) return;
+    if (!d?.axis) return;
     this.suppressClick = true;
     setTimeout(() => (this.suppressClick = false), 0);
-    this.spinning = false;
     if (performance.now() - d.t > 90) d.v = 0; // held still before letting go: no throw
-    const idx = Math.round((this.rot + d.v * 300) / this.step);
-    const i = mod(idx, this.cats.length);
-    this.target = idx * this.step;
     this.use();
-    if (i !== this.cat || this.query) {
-      this.query = '';
-      this.cat = i;
-      this.options = null;
-      this.swell(1);
-    }
-    this.spin();
+    this.settle(d.axis === 'x' ? d.v : 0, d.axis === 'y' ? d.v : 0);
   };
 
   /* ---- keys, wheel, hover ---- */
@@ -414,25 +521,29 @@ export class UiCentreMenu extends LitElement {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    const now = performance.now();
-    if (now - this.lastWheel > 200) this.wheelY = this.wheelX = 0;
-    this.lastWheel = now;
-    const across = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
-    if (across) {
-      this.wheelX += e.shiftKey ? e.deltaY : e.deltaX;
-      if (Math.abs(this.wheelX) >= 60) {
-        this.setCat(this.cat + (this.wheelX > 0 ? 1 : -1));
-        this.wheelX = 0;
-        this.use();
-      }
-    } else {
-      this.wheelY += e.deltaY;
-      if (Math.abs(this.wheelY) >= 50) {
-        if (!this.options) this.moveItem(this.wheelY > 0 ? 1 : -1);
-        this.wheelY = 0;
-        this.use();
-      }
+    if (this.options) return;
+    const px = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? this.size.h : 1;
+    let dx = e.deltaX * px;
+    let dy = e.deltaY * px;
+    if (e.shiftKey && !dx) [dx, dy] = [dy, 0];
+    const axis = this.wheelAxis ?? (Math.abs(dx) > Math.abs(dy) ? 'x' : 'y');
+    const delta = axis === 'x' ? dx : dy;
+    if (!delta) return;
+    // a mouse wheel clicks in whole notches; a trackpad streams small, uneven amounts
+    const notch = !this.wheelAxis && (e.deltaMode !== 0 || (Math.abs(delta) >= 50 && Number.isInteger(delta) && !(axis === 'x' ? dy : dx)));
+    this.use();
+    if (notch) {
+      if (axis === 'x') {
+        this.setQuery('');
+        this.setCat(this.cat + Math.sign(delta));
+      } else this.moveItem(Math.sign(delta));
+      return;
     }
+    this.wheelAxis = axis;
+    if (axis === 'x') this.slideCats(delta / this.pitch.x);
+    else this.slideItems(delta / this.pitch.y);
+    clearTimeout(this.settleTimer);
+    this.settleTimer = window.setTimeout(() => this.settle(), SETTLE_MS);
   };
 
   private showHover(label: string, target: HTMLElement, side: 'above' | 'right') {
@@ -463,28 +574,31 @@ export class UiCentreMenu extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
+    // on the host, not the drawn menu: an empty menu draws a different element, which would drop them
+    this.addEventListener('wheel', this.onWheel, { passive: false });
     if (this.hasUpdated) this.observe();
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    this.removeEventListener('wheel', this.onWheel);
     this.resizeObserver?.disconnect();
     cancelAnimationFrame(this.spinFrame);
     this.spinFrame = 0;
+    clearTimeout(this.settleTimer);
   }
 
   private observe() {
-    const root = this.root;
-    if (!root) return;
     if (typeof ResizeObserver === 'function') {
       this.resizeObserver ??= new ResizeObserver(() => this.measure());
-      this.resizeObserver.observe(root);
+      this.resizeObserver.observe(this);
     }
     this.measure();
   }
 
+  /** The host and the menu it draws share one box. */
   private measure() {
-    const r = this.root?.getBoundingClientRect();
+    const r = this.getBoundingClientRect();
     if (r && (r.width !== this.size.w || r.height !== this.size.h)) this.size = { w: r.width, h: r.height };
   }
 
@@ -499,7 +613,6 @@ export class UiCentreMenu extends LitElement {
 
   override firstUpdated() {
     this.observe();
-    this.root?.addEventListener('wheel', this.onWheel, { passive: false });
     setTimeout(() => (this.introDone = true), 1800);
   }
 
@@ -551,46 +664,44 @@ export class UiCentreMenu extends LitElement {
             x,
             y: g.rowY,
             z,
-            scale: 0.86 + 0.14 * dep + (this.drag ? 0.12 : 0.3) * wt,
-            opacity: searching ? 0.1 : Math.max(0.14 + 0.62 * Math.pow(dep, 1.6), wt),
+            scale: 0.86 + 0.14 * dep + (this.spinning ? 0.12 : 0.3) * wt,
+            opacity: searching ? 0.1 : SHOWN + (1 - SHOWN) * Math.max(Math.pow(dep, 1.6), wt),
             blur: (1 - dep) * 1.6 * (1 - wt),
           },
-          focused: !searching && !this.drag && wt > 0.9,
+          focused: !searching && !this.spinning && wt > 0.9,
         };
       });
     }
-    return this.cats.map((_, i) => {
-      const d = i - this.cat;
+    const title = this.variant === 'title';
+    const at = (d: number): Place => {
       const ad = Math.abs(d);
-      const title = this.variant === 'title';
-      const opacity = searching
-        ? title
-          ? 0.08
-          : 0.12
-        : title
-          ? [0.9, 0.3, 0.12][ad] ?? 0
-          : [1, 0.5, 0.28, 0.12][ad] ?? 0;
-      return {
-        place: { x: g.cx + d * this.pitchX, y: g.rowY, scale: title ? (d === 0 ? 1.05 : 0.8) : d === 0 ? 1.3 : 1, opacity },
-        focused: d === 0 && !searching,
-      };
-    });
+      const opacity = searching ? (title ? 0.08 : 0.12) : title ? ([0.9, SHOWN][ad] ?? 0) : ([1, 0.8, SHOWN][ad] ?? 0);
+      return { x: g.cx + d * this.pitchX, y: g.rowY, scale: title ? (d === 0 ? 1.05 : 0.8) : d === 0 ? 1.3 : 1, opacity };
+    };
+    return this.cats.map((_, i) => ({
+      place: placeAt(i - this.cat - this.nudgeX, at),
+      focused: i === this.cat && !searching && !this.spinning,
+    }));
   }
 
   private itemPlace(j: number): Place {
+    return placeAt(j - this.focusIndex - this.nudgeY, (d) => this.itemPlaceAt(d));
+  }
+
+  /** Where the item `d` steps from the focus rests. */
+  private itemPlaceAt(d: number): Place {
     const g = this.geometry();
-    const d = j - this.focusIndex;
     const py = this.pitchY;
     if (this.variant === 'orbit') {
       // items recede by scale and blur, not depth, so they never ride up into the caption
       if (d === 0) return { x: g.cx, y: g.focus, scale: 1.35, opacity: 1 };
-      if (d > 0) return { x: g.cx, y: g.focus + 128 + (d - 1) * py * 0.78, scale: 1 - d * 0.12, blur: d * 0.9, opacity: d <= 4 ? 0.7 - d * 0.14 : 0 };
-      return { x: g.cx, y: g.rowY - 100, scale: 0.7, opacity: 0 }; // the ring owns the space above
+      if (d > 0) return { x: g.cx, y: g.focus + 128 + (d - 1) * py * 0.78, scale: 1 - d * 0.12, blur: d * 0.9, opacity: d <= 3 ? 0.8 - (d - 1) * 0.12 : 0 };
+      return { x: g.cx, y: g.focus - 72, scale: 0.8, blur: 2, opacity: 0 }; // fades out short of the ring, which owns the space above
     }
     // title
     if (d === 0) return { x: g.cx, y: g.focus, scale: 1.1, opacity: 1 };
-    if (d > 0) return { x: g.cx, y: g.focus + 196 + (d - 1) * py, scale: 0.9, opacity: d === 1 ? 0.22 : 0 };
-    return { x: g.cx, y: g.rowY - 104 - (-d - 1) * py, scale: 0.9, opacity: d === -1 ? 0.18 : 0 };
+    if (d > 0) return { x: g.cx, y: g.focus + 196 + (d - 1) * py, scale: 0.9, opacity: d === 1 ? SHOWN : 0 };
+    return { x: g.cx, y: g.rowY - 104 - (-d - 1) * py, scale: 0.9, opacity: d === -1 ? SHOWN : 0 };
   }
 
   static override styles = [
@@ -599,9 +710,12 @@ export class UiCentreMenu extends LitElement {
       :host { position: absolute; inset: 0; display: block; z-index: var(--layer-menu); }
       .menu {
         position: absolute; inset: 0; overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; touch-action: none;
-        font-family: var(--font-sans); color: var(--ink);
+        font-family: var(--font-sans); color: var(--ink); cursor: grab;
         --wm-ease: cubic-bezier(0.2, 0.7, 0.2, 1); --wm-dur: 280ms;
       }
+      .menu.moving { cursor: grabbing; }
+      /* while it follows the hand nothing eases behind it; letting go turns the easing back on, which carries it to rest */
+      .moving .cat, .moving .item, .moving .catlabel, .moving .caption { transition-property: opacity, filter; }
       .scene { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; }
       .row, .col { position: absolute; inset: 0; pointer-events: none; transform-style: preserve-3d; }
       .cat, .item {
@@ -613,7 +727,8 @@ export class UiCentreMenu extends LitElement {
       .cat.focus:not(.ai), .item.focus:not(.ai) { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--green) 35%, transparent)); }
       .item.press { animation: press var(--motion-base) var(--wm-ease); }
       @keyframes press { 40% { filter: drop-shadow(0 0 18px color-mix(in srgb, var(--green) 70%, transparent)); } }
-      .menu:focus-visible .item.focus { outline: 1.5px solid var(--focus); outline-offset: 9px; border-radius: 50%; }
+      .col { outline: none; }
+      .col:focus-visible .item.focus { outline: 1.5px solid var(--focus); outline-offset: 9px; border-radius: 50%; }
 
       .catlabel, .caption, .hover, .options { position: absolute; left: 0; top: 0; white-space: nowrap; }
       .catlabel {
@@ -649,14 +764,13 @@ export class UiCentreMenu extends LitElement {
       .menu:not(.intro) .item > * { animation: born var(--motion-calm) var(--ease-out) both; animation-delay: calc(var(--k, 0) * var(--motion-instant)); }
 
       /* Orbit: categories ride a ring receding into depth; items fall away behind the focus */
-      .orbit { perspective: 900px; cursor: grab; }
-      .orbit.spinning { cursor: grabbing; }
+      .orbit { perspective: 900px; }
       .ring { display: none; position: absolute; left: 0; top: 0; border-radius: 50%; border: 1px solid var(--ink-muted); opacity: 0.24; transform-origin: 50% 50%; }
       .orbit .ring { display: block; }
       .orbit .cat { transition: filter var(--motion-base); }
       .orbit .item { transition-duration: var(--motion-calm); }
-      .orbit .col, .orbit .caption { transition: opacity var(--motion-base) var(--ease-standard), transform var(--wm-dur) var(--wm-ease); }
-      .orbit.spinning .col, .orbit.spinning .caption { opacity: 0.1; }
+      .col, .caption { transition: opacity var(--motion-base) var(--ease-standard), transform var(--wm-dur) var(--wm-ease); }
+      .spinning .col, .spinning .caption { opacity: 0.1; }
 
       /* Title: letterbox, a chapter number, and the focused item set as a film title */
       /* The letterbox is a fade, never a slab: the water shows through it, and the shell's band rests on the top one. */
@@ -692,29 +806,19 @@ export class UiCentreMenu extends LitElement {
     const variantClass = this.variant === 'title' ? 'title-variant' : 'orbit';
     const showIntro = this.intro && !this.introDone && !this.reduce;
     const ready = this.size.w > 0;
-    const num = String(this.cat + 1).padStart(2, '0');
-    const catText = searching
-      ? `“${this.query}”`
-      : this.variant === 'title'
-        ? `${num}  /  ${cats[this.cat].label}`
-        : this.drag?.moved
-          ? cats[this.nearestCat()].label
-          : cats[this.cat].label;
+    const shown = this.spinning ? this.nearestCat() : this.cat;
+    const num = String(shown + 1).padStart(2, '0');
+    const catText = searching ? `“${this.query}”` : this.variant === 'title' ? `${num}  /  ${cats[shown].label}` : cats[shown].label;
     const title = cur ? cur.item.label : searching ? 'No matches' : '';
     const detail = cur ? (searching ? [cur.cat.label, cur.item.detail].filter(Boolean).join(' · ') : (cur.item.detail ?? '')) : searching ? 'Esc to clear' : '';
-    const hintText = `←→ category   ↑↓ item   Enter open   Esc back   Right-click options${this.search ? '   Type to search' : ''}${g.orbit ? '   Drag to spin' : ''}`;
+    const hintText = 'Scroll or drag to move · Enter to open · Esc to go back';
     const live = cur ? `${cur.item.label}, ${f + 1} of ${column.length}${searching ? '' : `, ${cats[this.cat].label}`}` : searching ? 'No matches' : '';
     const places = this.catPlaces();
     const uid = 'm';
 
     return html`
       <div
-        class="menu ${variantClass} ${showIntro ? 'intro' : ''} ${ready ? 'in' : ''} ${this.spinning ? 'spinning' : ''}"
-        tabindex="0"
-        role="application"
-        aria-roledescription="menu"
-        aria-label=${this.label}
-        aria-activedescendant=${cur ? `${uid}-i${f}` : `${uid}-c${this.cat}`}
+        class="menu ${variantClass} ${showIntro ? 'intro' : ''} ${ready ? 'in' : ''} ${this.spinning ? 'spinning' : ''} ${this.moving ? 'moving' : ''}"
         style=${styleMap({ perspectiveOrigin: `${g.cx}px ${g.orbit ? g.rowY - 290 : g.rowY}px`, opacity: ready ? '' : '0' })}
         @keydown=${this.onKey}
         @pointerdown=${this.onPointerDown}
@@ -722,6 +826,9 @@ export class UiCentreMenu extends LitElement {
         @pointerup=${this.onPointerUp}
         @pointercancel=${this.onPointerUp}
         @mousedown=${(e: MouseEvent) => {
+          // the listbox keeps focus wherever the menu is pressed, so the keys go on working after a click on a category
+          e.preventDefault();
+          this.focus();
           if (e.button === 0 && this.options && !(e.target as HTMLElement).closest?.('.options')) this.options = null;
         }}
         @contextmenu=${(e: Event) => e.preventDefault()}
@@ -735,12 +842,15 @@ export class UiCentreMenu extends LitElement {
               transform: `translate3d(${g.cx - g.R}px, ${g.rowY - g.R}px, ${-g.R}px) rotateX(90deg) rotateZ(${((this.rot * 180) / Math.PI).toFixed(2)}deg)`,
             })}
           ></div>
-          <div class="row">
+          <div class="row" role="tablist" aria-label=${this.label}>
             ${cats.map(
               (c, i) => html`<div
                 id="${uid}-c${i}"
                 class="cat ${places[i].focused ? 'focus' : ''} ${c.ai ? 'ai' : ''}"
-                role="menuitem"
+                role="tab"
+                tabindex="-1"
+                aria-selected=${String(i === this.cat && !searching)}
+                aria-controls="${uid}-list"
                 aria-label=${c.label}
                 style=${this.place(places[i].place, { '--i': String(Math.abs(i - this.cat)) })}
                 @click=${() => this.clickCat(i)}
@@ -751,14 +861,22 @@ export class UiCentreMenu extends LitElement {
               </div>`,
             )}
           </div>
-          ${keyed(
-            searching ? `q:${this.query}` : `c:${this.cat}`,
-            html`<div class="col">
-              ${column.map(
+          <div
+            class="col"
+            id="${uid}-list"
+            role="listbox"
+            tabindex="0"
+            aria-label=${searching ? `Results for ${this.query}` : cats[this.cat].label}
+            aria-activedescendant=${cur ? `${uid}-i${f}` : nothing}
+          >
+            ${keyed(
+              searching ? `q:${this.query}` : `c:${this.cat}`,
+              html`${column.map(
                 (entry, j) => html`<div
                   id="${uid}-i${j}"
                   class="item ${j === f ? 'focus' : ''} ${entry.item.ai ? 'ai' : ''} ${j === this.pressed ? 'press' : ''}"
-                  role="menuitem"
+                  role="option"
+                  aria-selected=${String(j === f)}
                   aria-label=${entry.item.label}
                   style=${this.place(this.itemPlace(j), { '--i': String(j + 2), '--k': String(j) })}
                   @click=${() => this.clickItem(j)}
@@ -775,9 +893,9 @@ export class UiCentreMenu extends LitElement {
                   <ui-icon name=${entry.item.icon ?? 'apps'} size="40" ?bubble=${!!entry.item.ai}></ui-icon>
                   ${this.labels === 'all' ? html`<span class="itemlabel">${entry.item.label}</span>` : nothing}
                 </div>`,
-              )}
-            </div>`,
-          )}
+              )}`,
+            )}
+          </div>
           <div class="catlabel ${searching ? 'query' : ''}" style=${styleMap({ transform: `translate(-50%, 0) translate3d(${g.cx}px, ${g.rowY - 62}px, 0)` })}>
             ${catText}
           </div>
