@@ -125,7 +125,7 @@ const isTyping = (e: Event) => {
  * @slot - the stage, where the current app mounts
  * @fires ui-toggle - detail `{ open }`
  * @fires ui-open-app - detail `{ id }`
- * @fires ui-home - All apps in the band was pressed: the host leaves the open app for its own menu of every app
+ * @fires ui-back - Back in the band was pressed: the host goes up one level, to where `backTo` names
  * @fires ui-open-notification - detail `{ notification }`
  * @fires ui-notification-action - detail `{ notification, index }` when one of its actions is pressed; the Shell closes and the host does it
  * @fires ui-notifications - detail `{ notifications, muted }` after either changed, however it changed, for a host that shows them elsewhere too
@@ -164,6 +164,8 @@ export class UiShell extends LitElement {
     settings: { attribute: false },
     away: { type: Boolean },
     canSwitchWorkspace: { attribute: false },
+    backTo: { type: String, attribute: 'back-to' },
+    area: { type: String },
     floors: { attribute: false },
     floor: { type: String },
     arrival: { state: true },
@@ -210,11 +212,18 @@ export class UiShell extends LitElement {
   declare canSwitchWorkspace: boolean;
   /**
    * Every floor the person can stand on. With floors, the top left shows the
-   * current one's icon and breadcrumb instead of the product, a gauge at the
+   * current one's icon and name instead of the product, a gauge at the
    * edge shows the floors above and below, Account lists them all, and each
    * kind of floor gives the water its own colours and height.
    */
   declare floors: ShellFloor[];
+  /**
+   * Where Back goes, in words ("Admin's menu", "all apps"); empty hides Back.
+   * The host works it out from where you are: Back is always up one level.
+   */
+  declare backTo: string;
+  /** The part of the open app you're in, said under its name; empty says only the app. */
+  declare area: string;
   /** The id of the floor the person is on. Setting a new one plays the move. */
   declare floor: string;
   /** The floor just arrived on, shown for a moment like a lift's display. */
@@ -263,6 +272,8 @@ export class UiShell extends LitElement {
     this.away = false;
     this.canSwitchWorkspace = true;
     this.floors = [];
+    this.backTo = '';
+    this.area = '';
     this.floor = '';
     this.arrival = null;
     this.version = '';
@@ -600,14 +611,17 @@ export class UiShell extends LitElement {
       button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
       button:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 3px; border-radius: var(--radius-key); }
       .ground { position: absolute; inset: 0; z-index: 0; background: radial-gradient(120% 90% at 50% 40%, var(--slate), var(--slate-deep)); transition: transform var(--motion-calm) var(--s-ease), filter var(--motion-calm) var(--s-ease); }
-      .stage { position: absolute; inset: var(--band-top) 0 0; z-index: 1; isolation: isolate; overflow: auto; transform-origin: 50% 100%; transition: transform var(--motion-calm) var(--s-ease), filter var(--motion-calm) var(--s-ease); }
+      /* The stage starts below the band, as apps expect, and its top edge fades in so there's no hard line where it begins. */
+      .stage { position: absolute; inset: var(--band-top) 0 0; z-index: 1; isolation: isolate; overflow: auto; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--space-4)); mask-image: linear-gradient(to bottom, transparent, #000 var(--space-4)); transform-origin: 50% 100%; transition: transform var(--motion-calm) var(--s-ease), filter var(--motion-calm) var(--s-ease); }
       /* looking up: the water and the app tip away below you and go dark */
       :host([open]) .ground { transform: translateY(14%) scale(1.04); filter: brightness(0.5) saturate(0.7); }
       :host([open]) .stage { transform: perspective(1400px) translateY(12%) rotateX(9deg) scale(0.96); filter: brightness(0.38) saturate(0.6) blur(2px); }
       .live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
       /* the band */
+      /* The band is chrome, never a surface: on every screen it rests on a fade from the scrim, so it reads over bright water or an app. */
       .band { position: absolute; z-index: 4; top: 0; left: 0; right: 0; height: var(--band-top); padding: 0 var(--edge); display: flex; align-items: center; justify-content: space-between; transition: opacity var(--motion-slow) var(--ease-standard); }
+      .band::before { content: ''; position: absolute; z-index: -1; inset: 0 0 calc(var(--space-5) * -1); pointer-events: none; background: linear-gradient(to bottom, var(--scrim), transparent); }
       :host([open]) .band { opacity: 0; pointer-events: none; }
       .mark { display: flex; align-items: baseline; gap: var(--space-3); }
       .mark b { font-weight: 600; font-size: var(--type-small); line-height: var(--leading-small); letter-spacing: var(--tracking-mark); text-transform: uppercase; }
@@ -628,6 +642,13 @@ export class UiShell extends LitElement {
       .handle { position: absolute; left: 50%; top: 0; transform: translateX(-50%); width: 96px; height: 28px; display: flex; justify-content: center; padding-top: var(--space-2); }
       .handle i { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--hairline-strong); transition: width var(--motion-slow) var(--s-ease); }
       .handle:hover i, .handle:focus-visible i { width: 56px; background: color-mix(in srgb, var(--ink) 50%, transparent); }
+      /* On a floor the handle takes the floor's colour on every screen, so the level is always in view. */
+      :host([floor-kind]) .handle i { background: color-mix(in srgb, var(--floor-mark) 70%, transparent); box-shadow: 0 0 var(--space-3) color-mix(in srgb, var(--floor-mark) 40%, transparent); }
+      :host([floor-kind]) .handle:hover i, :host([floor-kind]) .handle:focus-visible i { background: var(--floor-mark); }
+      /* Under the handle: the open app's name, and the part of it you're in. Nothing on Title. */
+      .place { position: absolute; left: 50%; top: calc(var(--space-2) + var(--space-4)); transform: translateX(-50%); max-width: min(var(--measure-card), 40vw); margin: 0; text-align: center; pointer-events: none; }
+      .place b { display: block; font-weight: 400; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .place span { display: block; font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
       /* the sky */
       .sky { position: absolute; inset: 0; z-index: 3; visibility: hidden; pointer-events: none; transition: visibility 0s var(--motion-calm); }
@@ -755,13 +776,9 @@ export class UiShell extends LitElement {
       @keyframes skel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 
       /* floors: where you are, top left; the gauge at the edge; the floor's name as you arrive */
-      .where { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
+      .where { display: flex; align-items: center; gap: var(--space-2); min-width: 0; margin: 0; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
       .where ui-icon { color: var(--floor-mark, var(--ink)); flex: none; }
-      .where ol { display: flex; align-items: center; gap: var(--space-2); list-style: none; margin: 0; padding: 0; min-width: 0; }
-      .where li { display: flex; align-items: center; gap: var(--space-2); min-width: 0; white-space: nowrap; }
-      .where li + li::before { content: '/'; color: var(--hairline-strong); }
-      .where li[aria-current] { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-      .where button:hover { color: var(--ink); }
+      .where b { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       :host { --floor-mark: var(--floor-you-high); }
       :host([floor-kind='team']) { --floor-mark: var(--floor-team-high); }
       :host([floor-kind='org']) { --floor-mark: var(--floor-org-high); }
@@ -801,12 +818,10 @@ export class UiShell extends LitElement {
       .floors .row[aria-current] ui-icon { color: var(--floor-mark); }
       .floors .row .text b i { font-style: normal; color: var(--ink-muted); }
       .left { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
-      .home { flex: none; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border-radius: var(--radius-pill); border: 1px solid var(--hairline-strong); font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink); transition: background var(--motion-quick); }
-      .home:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
-      .home:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--focus); }
-      .where li.open { color: var(--ink); font-weight: 600; }
-      .where li.open ui-icon { color: var(--ink-muted); }
-      @media (max-width: 640px) { .mark span, .home span { display: none; } .where li:not([aria-current]) { display: none; } .where li + li::before { content: none; } .dome > button { left: calc(50% + var(--x) * 0.6); } }
+      .back { flex: none; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border-radius: var(--radius-pill); border: 1px solid var(--hairline-strong); font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink); transition: background var(--motion-quick); }
+      .back:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+      .back:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--focus); }
+      @media (max-width: 640px) { .mark span, .back span, .place span { display: none; } .dome > button { left: calc(50% + var(--x) * 0.6); } }
       @media (prefers-reduced-motion: reduce) {
         :host([open]) .stage, :host([open]) .ground, .fade, :host([open]) .fade { transform: none; }
         .dome > button, :host([open]) .dome > button { transform: translate(-50%, -50%); transition: opacity var(--motion-base); }
@@ -825,8 +840,9 @@ export class UiShell extends LitElement {
     const time = new Date(this.now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const tab = this.isOpen ? '-1' : '0';
     return html`<header class="band" ?inert=${this.isOpen}>
-      <div class="left">${this.renderHome(tab)}${this.renderWhere(tab)}</div>
+      <div class="left">${this.renderWhere()}${this.renderBack(tab)}</div>
       <button class="handle" aria-label="Open the shell" tabindex=${tab} @click=${() => this.open()}><i></i></button>
+      ${this.renderPlace()}
       <div class="right">
         <button class="status ${mood}" tabindex=${tab} aria-label=${`${words}. Open notifications.`} @click=${() => this.openView('stream')}><i class="point"></i>${words}</button>
         <span class="clock">${time}</span>
@@ -839,31 +855,26 @@ export class UiShell extends LitElement {
     return this.current ? this.apps.find((a) => a.id === this.current) : undefined;
   }
 
-  /** Top left, while an app is open: the one deliberate way back to the menu of every app. */
-  private renderHome(tab: string) {
-    if (!this.openNow) return nothing;
-    return html`<button class="home" tabindex=${tab} @click=${() => this.emit('ui-home', {})}><ui-icon name="apps" size="16"></ui-icon><span>All apps</span></button>`;
+  /** Back, beside where you are: up one level, the same as Esc. Hidden when there's nowhere up to go. */
+  private renderBack(tab: string) {
+    if (!this.backTo) return nothing;
+    return html`<button class="back" tabindex=${tab} aria-label=${`Back to ${this.backTo}`} @click=${() => this.emit('ui-back', {})}><ui-icon name="back" size="16"></ui-icon><span>Back</span></button>`;
   }
 
-  /**
-   * Top left: the product, or with floors the current floor's icon and its
-   * path from the org, each step a way up, then the app open on it.
-   */
-  private renderWhere(tab: string) {
-    const here = this.currentFloor;
+  /** Under the handle: the open app's name, and the part of it you're in. It's the one place the band names an app. */
+  private renderPlace() {
     const app = this.openNow;
-    if (!here) return html`<div class="mark"><b>${this.product}</b>${this.workspace ? html`<span>${this.workspace}</span>` : nothing}${app ? html`<span>${app.name}</span>` : nothing}</div>`;
-    return html`<nav class="where" aria-label="Where you are">
-      <ui-icon name=${floorIcon[here.kind]} size="16"></ui-icon>
-      <ol>
-        ${here.path.map((p) =>
-          p.id === here.id
-            ? html`<li aria-current=${app ? nothing : 'location'}>${here.name}</li>`
-            : html`<li><button tabindex=${tab} @click=${() => this.goToFloor(p.id)}>${p.name}</button></li>`,
-        )}
-        ${app ? html`<li class="open" aria-current="page"><ui-icon name=${app.icon ?? 'apps'} size="14"></ui-icon>${app.name}</li>` : nothing}
-      </ol>
-    </nav>`;
+    if (!app) return nothing;
+    return html`<p class="place"><b>${app.name}</b>${this.area ? html`<span>${this.area}</span>` : nothing}</p>`;
+  }
+
+  /** Top left: the product, or with floors the floor you're on, its icon in the floor's colour and its name. Never a path. */
+  private renderWhere() {
+    const here = this.currentFloor;
+    if (!here) return html`<div class="mark"><b>${this.product}</b>${this.workspace ? html`<span>${this.workspace}</span>` : nothing}</div>`;
+    return html`<p class="where" aria-label=${`You’re on ${here.kind === 'personal' ? 'your own floor' : here.name}`}>
+      <ui-icon name=${floorIcon[here.kind]} size="16"></ui-icon><b aria-hidden="true">${here.name}</b>
+    </p>`;
   }
 
   /** How many notifications wait on each floor. */

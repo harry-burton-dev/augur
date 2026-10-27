@@ -20,7 +20,7 @@ The first half of this guide is for everyone who uses it. The second half is for
 
 ### Getting around
 
-Artifacts opens straight into its own menu down the side: the floor's libraries, what's been published or shared with you, and the open library's folders, views and series. Esc never takes you out of it. To get back to the menu of every app, press **All apps** at the top left. The top bar stays on every screen, and says which floor you're on and that Artifacts is open on it.
+Artifacts opens straight into its own menu down the side: the floor's libraries, what's been published or shared with you, and the open library's folders, views and series. Esc never takes you out of it. To get back to the menu of every app, press **Back** at the top left. The top bar stays on every screen: the floor you're on is at the top left, and Artifacts' name sits in the middle under the look-up handle.
 
 What Artifacts shows is always the floor you're on. The floor gauge at the right edge lights that floor and pins Artifacts beside it; point at it to see every floor you can go to, who sees what's on each, and which one Artifacts is showing. Going to another floor keeps you in Artifacts, at the start of that floor's libraries.
 

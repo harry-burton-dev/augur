@@ -32,7 +32,7 @@ export interface MenuCategory {
   items: MenuItem[];
 }
 
-/** Title picks the app (letterbox, chapters, film-title type); Orbit is the menu inside it (a 360° ring). */
+/** Title picks the app (a letterbox of fades, chapters, film-title type); Orbit is the menu inside it (a 360° ring). */
 export type MenuVariant = 'orbit' | 'title';
 
 /** Anything that can swell the water, such as `ui-wave-background`. */
@@ -659,10 +659,12 @@ export class UiCentreMenu extends LitElement {
       .orbit.spinning .col, .orbit.spinning .caption { opacity: 0.1; }
 
       /* Title: letterbox, a chapter number, and the focused item set as a film title */
-      .bar { display: none; position: absolute; left: 0; right: 0; height: var(--letterbox); z-index: 2; background: var(--slate-deep); transition: transform var(--motion-run) var(--ease-standard); }
+      /* The letterbox is a fade, never a slab: the water shows through it, and the shell's band rests on the top one. */
+      .bar { display: none; position: absolute; left: 0; right: 0; height: var(--letterbox); z-index: 2; pointer-events: none; transition: transform var(--motion-run) var(--ease-standard); }
       .title-variant .bar { display: block; }
-      .bar.top { top: 0; transform: translateY(-100%); }
-      .bar.bottom { bottom: 0; transform: translateY(100%); }
+      /* the shell's band brings its own fade, which is the top of the letterbox, so the menu draws only the bottom one */
+      .bar.top { display: none !important; }
+      .bar.bottom { bottom: 0; transform: translateY(100%); background: linear-gradient(to top, var(--scrim), transparent); }
       .title-variant.in .bar { transform: none; }
       .title-variant .hints { z-index: 3; bottom: 3.5%; }
       .title-variant .catlabel { font-size: var(--type-label); line-height: var(--leading-label); font-weight: 400; letter-spacing: var(--tracking-title); }

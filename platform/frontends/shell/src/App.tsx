@@ -5,6 +5,8 @@ import {
   AppMounter,
   applyPreferences,
   backFrom,
+  upFrom,
+  titleFor,
   escapeIsFree,
   findPages,
   floorBySlug,
@@ -448,6 +450,13 @@ export function Host({
     if (shellRef.current) shellRef.current.background = waterFor(screen);
   }, [screen]);
 
+  // The band follows where you are: Back names the level above, and the tab says the page, app and floor.
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (shell) shell.backTo = upFrom(screen)?.label ?? '';
+    if (screen) document.title = titleFor(screen, floor?.name);
+  }, [screen, floor]);
+
   useEffect(() => () => void mounter.current?.unmount(), []);
 
   // Home hears from the shell on the bus: what needs you and the cards for this floor; the shell does what Home asks.
@@ -605,8 +614,14 @@ export function Host({
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       applyPreferences(prefs.current);
     };
-    // All apps in the band: out of the app, to the menu of every app.
-    const onHome = () => navigate('/');
+    // Back in the band: up one level, wherever you are.
+    const onBack = (e: Event) => {
+      if (e.target !== shell) return; // a menu's own Esc is its business
+      const up = upFrom(screen);
+      if (!up) return;
+      if (screen?.kind === 'app') orbitStart.current = categoryOf(screen.app, screen.path);
+      navigate(up.to);
+    };
     // Going to another floor keeps you in the same app, at its start; its menu or Title stay as they were.
     const onFloor = (e: Event) => {
       const to = session.floors.find((f) => f.id === (e as CustomEvent<{ id: string }>).detail.id);
@@ -642,7 +657,7 @@ export function Host({
     shell.addEventListener('ui-setting', onSetting);
     shell.addEventListener('ui-find', onFind);
     shell.addEventListener('ui-floor', onFloor);
-    shell.addEventListener('ui-home', onHome);
+    shell.addEventListener('ui-back', onBack);
     shell.addEventListener('ui-pick', onPick);
     shell.addEventListener('ui-notification-action', onAction);
     shell.addEventListener('ui-mute', onMute);
@@ -661,7 +676,7 @@ export function Host({
       shell.removeEventListener('ui-setting', onSetting);
       shell.removeEventListener('ui-find', onFind);
       shell.removeEventListener('ui-floor', onFloor);
-      shell.removeEventListener('ui-home', onHome);
+      shell.removeEventListener('ui-back', onBack);
       shell.removeEventListener('ui-pick', onPick);
     };
   }, [manifest, navigate, session, prefs, screen, raise, search]);
