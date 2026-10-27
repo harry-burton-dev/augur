@@ -53,15 +53,24 @@ interface EventsOptions {
   /** The floor it happened on; an app's grants are checked there. */
   workspace?: string;
   fetchImpl?: typeof fetch;
+  /** Where APP_PREVIEW is read from: set by the app runner on a pull request's preview. */
+  env?: Record<string, string | undefined>;
 }
 
-/** Tells people something through the Shell's stream. */
-export async function notify({ eventsUrl, credentials, workspace, fetchImpl, notification }: EventsOptions & { notification: NewNotification }): Promise<void> {
+/** The pull request this service is a preview of (APP_PREVIEW=pr-12 → 12), or undefined for the app itself. */
+export const previewOf = (env: Record<string, string | undefined> = process.env) => {
+  const m = /^pr-(\d+)$/.exec(env.APP_PREVIEW ?? '');
+  return m ? Number(m[1]) : undefined;
+};
+
+/** Tells people something through the Shell's stream. A preview's notifications say they're from it. */
+export async function notify({ eventsUrl, credentials, workspace, fetchImpl, notification, env }: EventsOptions & { notification: NewNotification }): Promise<void> {
+  const pr = previewOf(env);
   await callService({
     method: 'POST',
     url: `${eventsUrl.replace(/\/$/, '')}/v1/notifications`,
     credentials,
-    body: notification,
+    body: pr === undefined ? notification : { ...notification, title: `Preview #${pr}: ${notification.title}`.slice(0, 200) },
     what: notification.toTeam ? 'notify the team' : `notify ${notification.recipients.length} people`,
     workspace,
     attempts: 3,
@@ -69,13 +78,14 @@ export async function notify({ eventsUrl, credentials, workspace, fetchImpl, not
   });
 }
 
-/** Adds an entry to the platform's audit log. */
-export async function recordAudit({ eventsUrl, credentials, workspace, fetchImpl, entry }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
+/** Adds an entry to the platform's audit log. A preview's entries say which pull request they're from. */
+export async function recordAudit({ eventsUrl, credentials, workspace, fetchImpl, entry, env }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
+  const pr = previewOf(env);
   await callService({
     method: 'POST',
     url: `${eventsUrl.replace(/\/$/, '')}/v1/audit`,
     credentials,
-    body: entry,
+    body: pr === undefined ? entry : { ...entry, detail: { ...entry.detail, preview: pr } },
     what: `record ${entry.action} in the audit log`,
     workspace,
     attempts: 3,

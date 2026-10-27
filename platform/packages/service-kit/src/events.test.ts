@@ -20,4 +20,14 @@ describe('events helpers', () => {
     });
     expect(ok.mock.calls.map(([url]) => url)).toEqual(['http://events:8084/v1/notifications', 'http://events:8084/v1/audit']);
   });
+
+  it('says a preview’s notifications and audit entries come from it', async () => {
+    const sent = vi.fn(async () => new Response('{}', { status: 202 }));
+    const env = { APP_PREVIEW: 'pr-12' };
+    await notify({ eventsUrl: 'http://events:8084', credentials, fetchImpl: sent, env, notification: { app: 'notes', recipients: ['u-1'], level: 'info', title: 'Saved' } });
+    await recordAudit({ eventsUrl: 'http://events:8084', credentials, fetchImpl: sent, env, entry: { actor: { id: 'u-1', kind: 'user' }, app: 'notes', action: 'note.saved', detail: { words: 3 } } });
+    const bodies = sent.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+    expect(bodies[0].title).toBe('Preview #12: Saved');
+    expect(bodies[1].detail).toEqual({ words: 3, preview: 12 });
+  });
 });
