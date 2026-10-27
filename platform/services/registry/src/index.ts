@@ -1,6 +1,7 @@
 import { callerCheckFromEnv, floorPlaces, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
+import { frontendFilesFromEnv } from './frontends.ts';
 import { DEFAULT_FEED_URL, feedTokenFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
 
@@ -37,7 +38,11 @@ const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: 
 const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel });
 updates.start();
 
+// Apps' frontends, kept by version in the frontends bucket (FRONTENDS_BUCKET_SECRET, made by the storage service).
+const frontendFiles = frontendFilesFromEnv();
+if (!frontendFiles) console.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ frontends are served from where their manifests say, not kept by version.');
+
 // Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
 // this deployment ships with, which register themselves like any other.
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv() });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles });
 await app.listen({ port, host: '0.0.0.0' });

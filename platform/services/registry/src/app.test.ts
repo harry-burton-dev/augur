@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { callerHeaders, type FloorPlace } from '@augur/service-kit';
+import { callerHeaders, packFrontend, type FloorPlace } from '@augur/service-kit';
+import { MemoryFrontendFiles } from './frontends.ts';
 import { buildApp } from './app.ts';
 
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0', handles: ['document.open'] };
@@ -230,6 +231,55 @@ describe('registry', () => {
     const app = await buildApp({ verifyService, audit: async () => Promise.reject(new Error('events is down')) });
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect(res.statusCode).toBe(201);
+  });
+
+  it('keeps each version’s frontend and points the shell at that version’s own copy', async () => {
+    const entries: { action: string }[] = [];
+    const frontendFiles = new MemoryFrontendFiles();
+    const app = await buildApp({ verifyService, frontendFiles, audit: async (e) => void entries.push(e) });
+    const tarball = (text: string) => packFrontend([{ path: 'entry.js', data: Buffer.from(text) }, { path: 'assets/a.js', data: Buffer.from('export {};') }]);
+    const give = (version: string, body: Buffer, headers: Record<string, string> = service, id = 'library') =>
+      app.inject({ method: 'PUT', url: `/v1/apps/${id}/versions/${version}/frontend`, headers: { ...headers, 'content-type': 'application/gzip' }, payload: body });
+    const served = async () => (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library');
+
+    // Given before the version registers, so the shell never gets a version whose code isn't there.
+    expect((await give('0.1.0', tarball('one'))).statusCode).toBe(201);
+    expect(frontendFiles.objects.get('apps/library/0.1.0/entry.js')?.toString()).toBe('one');
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    expect((await served()).entry).toBe('/apps/library/0.1.0/entry.js');
+
+    // The same files again (every restart) are fine; other files under the same version aren't.
+    expect((await give('0.1.0', tarball('one'))).statusCode).toBe(200);
+    expect((await give('0.1.0', tarball('changed'))).statusCode).toBe(409);
+    expect((await give('0.1.0', tarball('one'), as('app-other'))).statusCode).toBe(403);
+    expect((await give('0.1.0', tarball('one'), editor)).statusCode).toBe(403);
+    expect((await give('next', tarball('one'))).statusCode).toBe(400);
+    expect((await give('0.1.0', tarball('one'), admin, 'home')).statusCode).toBe(409);
+    expect((await give('0.3.0', Buffer.from('not a tarball'))).statusCode).toBe(400);
+
+    // A version without a kept frontend is served from its manifest's entry as before.
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
+    expect((await served()).entry).toBe('/apps/library/entry.js');
+    expect((await give('0.2.0', tarball('two'))).statusCode).toBe(201);
+    expect((await served()).entry).toBe('/apps/library/0.2.0/entry.js');
+
+    // Holding the app at an older version now holds its code too, and admins see each version's address.
+    await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '0.1.0' } });
+    expect((await served()).entry).toBe('/apps/library/0.1.0/entry.js');
+    const versions = (await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: admin })).json();
+    expect(versions.map((v: { entry: { entry: string } }) => v.entry.entry)).toEqual(['/apps/library/0.2.0/entry.js', '/apps/library/0.1.0/entry.js']);
+
+    // An entry that isn't in the frontend it gave is served as registered.
+    await app.inject({ method: 'DELETE', url: '/v1/apps/library/pin', headers: admin });
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', entry: '/apps/library/main.js' } });
+    expect((await served()).entry).toBe('/apps/library/main.js');
+    expect(entries.filter((e) => e.action === 'app.frontend-published')).toHaveLength(2);
+  });
+
+  it('says so when the deployment doesn’t keep frontends', async () => {
+    const app = await buildApp({ verifyService });
+    const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.1.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]) });
+    expect(res.statusCode).toBe(501);
   });
 
   it('lets an admin remove an app', async () => {

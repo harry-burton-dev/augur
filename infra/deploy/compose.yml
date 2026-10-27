@@ -207,6 +207,9 @@ services:
       RELEASE_CHANNEL: ${RELEASE_CHANNEL:-}
       # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.
       PILLAR_APPS: folio
+      # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
+      FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
+      FRONTENDS_S3_URL: http://garage:3900
     volumes:
       # A read-only token for a private release feed, as secrets/release-feed-token (docs/upgrade.md).
       - ./secrets:/run/secrets/augur:ro

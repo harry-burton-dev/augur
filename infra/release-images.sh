@@ -29,7 +29,7 @@ for service in gateway identity registry events models storage; do
 done
 build updater -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater
 # The apps that ship with AUGUR: Folio's service and its rendition worker.
-build folio -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --target service
+build folio -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend --target service
 build folio-worker -f apps/folio/worker/Dockerfile
 
 jq -s 'add' "$out"/*.ref.json

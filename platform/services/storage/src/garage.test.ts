@@ -23,6 +23,7 @@ const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; 
     if (path === 'ListKeys') return json(200, state.keys);
     if (path === 'ImportKey') return json(200, state.keys.push({ id: body.accessKeyId, name: body.name }));
     if (path === 'AllowBucketKey') return json(200, {});
+    if (path.startsWith('UpdateBucket')) return json(200, { id: url.searchParams.get('id'), websiteAccess: body.websiteAccess.enabled });
     if (path.startsWith('DeleteKey')) return json(200, (state.keys = state.keys.filter((k) => k.id !== url.searchParams.get('id'))));
     return json(500, { message: `unexpected ${path}` });
   }) as typeof fetch;
@@ -54,5 +55,17 @@ describe('garageAdmin', () => {
     calls.length = 0;
     await garage.ensureKey('folio', secret, 'b-folio');
     expect(calls).toEqual(['ListKeys', 'AllowBucketKey']);
+  });
+
+  it('names the platform’s own key as asked', async () => {
+    const { garage, state } = fakeGarage({ roles: [], buckets: {}, keys: [] });
+    const id = await garage.ensureKey('platform-frontends', '2'.repeat(64), 'b-augur-frontends', 'platform-frontends');
+    expect(state.keys).toEqual([{ id, name: 'platform-frontends' }]);
+  });
+
+  it('serves a bucket on the web endpoint', async () => {
+    const { garage, calls } = fakeGarage({ roles: [], buckets: {}, keys: [] });
+    await garage.ensureWebsite('b-augur-frontends');
+    expect(calls).toEqual(['UpdateBucket?id=b-augur-frontends']);
   });
 });
