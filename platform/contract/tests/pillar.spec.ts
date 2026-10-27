@@ -34,13 +34,13 @@ test.describe('with Folio on', () => {
     await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
   });
 
-  test('Folio (Artifacts) opens straight in with its own menu, keeps Esc, and All apps goes back to Title', async ({ page }) => {
+  test('Folio (Artifacts) opens straight in with its own menu, keeps Esc, and Back goes up to Title', async ({ page }) => {
     await page.goto('/@me/folio');
     await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
     await expect(page.locator('ui-centre-menu')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/\/@me\/folio$/);
-    await page.locator('ui-shell').locator('.home').click();
+    await page.locator('ui-shell').locator('.back').click();
     await expect(page).toHaveURL(/\/@me$/);
     await expect(page.locator('ui-centre-menu[variant="title"]')).toBeVisible();
   });

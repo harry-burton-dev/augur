@@ -1,6 +1,6 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it } from 'vitest';
-import { backFrom, escapeIsFree, findPages, orbitMenu, screenFor, titleMenu, titleTarget } from './index.js';
+import { backFrom, escapeIsFree, findPages, orbitMenu, screenFor, titleFor, titleMenu, titleTarget, upFrom } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -83,6 +83,32 @@ describe('backFrom', () => {
   it('never steps out of an app that keeps its own menu', () => {
     expect(backFrom({ kind: 'app', app: shelf, path: '/labels' })).toBeUndefined();
     expect(backFrom({ kind: 'app', app: shelf, path: '/' })).toBeUndefined();
+  });
+});
+
+describe('upFrom', () => {
+  it('is always one level up, and says where, for Back', () => {
+    expect(upFrom({ kind: 'app', app: board, path: '/labels' })).toEqual({ to: '/board', label: `${board.name}’s menu` });
+    expect(upFrom({ kind: 'orbit', app: board })).toEqual({ to: '/', label: 'all apps' });
+    expect(upFrom({ kind: 'app', app: home, path: '/' })).toEqual({ to: '/', label: 'all apps' });
+    expect(upFrom({ kind: 'title' })).toBeUndefined();
+  });
+
+  it('takes an app that keeps its own menu, and keeps Esc, back to Title', () => {
+    expect(upFrom({ kind: 'app', app: shelf, path: '/labels' })).toEqual({ to: '/', label: 'all apps' });
+  });
+
+  it('agrees with Esc everywhere Esc is the shell’s', () => {
+    const screens = [{ kind: 'app' as const, app: board, path: '/labels' }, { kind: 'orbit' as const, app: board }, { kind: 'app' as const, app: home, path: '/' }, { kind: 'title' as const }];
+    for (const s of screens) expect(backFrom(s)).toBe(upFrom(s)?.to);
+  });
+});
+
+describe('titleFor', () => {
+  it('names the page, the app, the floor and AUGUR, most specific first', () => {
+    expect(titleFor({ kind: 'app', app: board, path: '/labels' }, 'Finance')).toBe(`${board.menu![0].items.find((i) => i.path === '/labels')!.label} · ${board.name} · Finance · AUGUR`);
+    expect(titleFor({ kind: 'orbit', app: board }, 'Finance')).toBe(`${board.name} · Finance · AUGUR`);
+    expect(titleFor({ kind: 'title' }, 'Finance')).toBe('Finance · AUGUR');
   });
 });
 

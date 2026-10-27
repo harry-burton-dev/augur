@@ -80,15 +80,41 @@ export function orbitMenu(app: AppManifestEntry): MenuCategory[] {
 }
 
 /**
- * One step back: from inside an app to its Orbit, from Orbit (or an app with
- * no menu) to Title. An app that keeps its own menu is never left by a step
- * back: the way out is the band's All apps.
+ * Up one level, which is what Back always does: from inside an app to its
+ * Orbit, from Orbit (or an app without one) to Title. Nothing on Title. `to`
+ * is where it goes and `label` names it, for Back's spoken name.
+ */
+export function upFrom(screen: Screen | undefined): { to: string; label: string } | undefined {
+  if (!screen || screen.kind === 'title') return undefined;
+  if (screen.kind === 'app' && hasOrbit(screen.app) && screen.path !== '/') return { to: hrefFor(screen.app), label: `${screen.app.name}’s menu` };
+  return { to: '/', label: 'all apps' };
+}
+
+/**
+ * Where Esc goes: up one level, as Back does, except that an app that keeps
+ * its own menu keeps Esc for itself; Back is its way out.
  */
 export function backFrom(screen: Screen | undefined): string | undefined {
-  if (!screen || screen.kind === 'title') return undefined;
-  if (screen.kind === 'app' && screen.app.menu?.length && screen.app.orbit === false) return undefined;
-  if (screen.kind === 'app' && hasOrbit(screen.app) && screen.path !== '/') return hrefFor(screen.app);
-  return '/';
+  if (screen?.kind === 'app' && screen.app.menu?.length && screen.app.orbit === false) return undefined;
+  return upFrom(screen)?.to;
+}
+
+/**
+ * The tab's title, most specific first: the page, the app, the floor, AUGUR.
+ * The page is the app's menu item for where you are, when there is one.
+ */
+export function titleFor(screen: Screen | undefined, floor: string | undefined, product = 'AUGUR'): string {
+  const parts: string[] = [];
+  if (screen && screen.kind !== 'title') {
+    if (screen.kind === 'app') {
+      const page = screen.app.menu?.flatMap((c) => c.items).find((it) => it.path === screen.path);
+      if (page) parts.push(page.label);
+    }
+    parts.push(screen.app.name);
+  }
+  if (floor) parts.push(floor);
+  parts.push(product);
+  return parts.join(' · ');
 }
 
 /**

@@ -339,29 +339,36 @@ describe('floors', () => {
     await el.updateComplete;
   });
 
-  it('shows where you are top left, each step above a way up', async () => {
+  it('shows the floor you’re on top left, its icon and name with no path', async () => {
     el.current = '';
     await el.updateComplete;
-    const crumbs = [...root().querySelectorAll('.where li')].map((li) => li.textContent!.trim());
-    expect(crumbs).toEqual(['Acme', 'Finance']);
-    expect(root().querySelector('.where [aria-current]')!.textContent).toBe('Finance');
-    expect(root().querySelector('.home')).toBeNull();
+    const where = root().querySelector('.where')!;
+    expect(where.textContent!.trim()).toBe('Finance');
+    expect(where.querySelector('ui-icon')!.getAttribute('name')).toBe('people');
+    expect(where.querySelectorAll('li, button')).toHaveLength(0);
     expect(root().querySelector('.mark')).toBeNull();
-    const go = vi.fn();
-    el.addEventListener('ui-floor', (e) => go((e as CustomEvent).detail));
-    root().querySelector<HTMLButtonElement>('.where button')!.click();
-    expect(go).toHaveBeenCalledWith({ id: 'org', direction: 'up' });
+    expect(root().querySelector('.place')).toBeNull();
     expect(el.getAttribute('floor-kind')).toBe('team');
   });
 
-  it('names the open app after the floor, with All apps as the way back to every app', async () => {
-    const crumbs = [...root().querySelectorAll('.where li')].map((li) => li.textContent!.trim());
-    expect(crumbs).toEqual(['Acme', 'Finance', 'Home']);
-    expect(root().querySelector('.where [aria-current]')!.textContent!.trim()).toBe('Home');
-    const home = vi.fn();
-    el.addEventListener('ui-home', home);
-    root().querySelector<HTMLButtonElement>('.home')!.click();
-    expect(home).toHaveBeenCalledOnce();
+  it('names the open app under the handle, and the part of it you’re in', async () => {
+    expect(root().querySelector('.where')!.textContent!.trim()).toBe('Finance');
+    expect(root().querySelector('.place')!.textContent!.trim()).toBe('Home');
+    el.area = 'Organisation';
+    await el.updateComplete;
+    expect(root().querySelector('.place span')!.textContent).toBe('Organisation');
+  });
+
+  it('shows Back only when there is a level to go up to, and says where', async () => {
+    expect(root().querySelector('.back')).toBeNull();
+    el.backTo = 'all apps';
+    await el.updateComplete;
+    const back = root().querySelector<HTMLButtonElement>('.back')!;
+    expect(back.getAttribute('aria-label')).toBe('Back to all apps');
+    const up = vi.fn();
+    el.addEventListener('ui-back', up);
+    back.click();
+    expect(up).toHaveBeenCalledOnce();
   });
 
   it('draws the gauge from the org down to your own floor, lit where you are', () => {
