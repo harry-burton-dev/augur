@@ -297,10 +297,16 @@ export interface ReleaseSummary {
   breaking: string[];
 }
 
+/**
+ * A setting the updater makes up when a release needs it and the server hasn't got it: a long random
+ * string, as infra/deploy/.env.example says of any whose name ends so (platform/services/updater).
+ */
+export const madeUpSetting = (key: string) => /_(SECRET|PASSWORD|TOKEN)$/.test(key) && key !== 'PLATFORM_ADMIN_PASSWORD';
+
 /** Something a person has to do or know before upgrading. */
 export type NeedsYou =
   | { kind: 'path'; version: string; message: string }
-  | { kind: 'setting'; key: string; required: boolean; message: string }
+  | { kind: 'setting'; key: string; required: boolean; madeUp?: boolean; message: string }
   | { kind: 'breaking'; version: string; message: string }
   | { kind: 'app'; app: string; message: string }
   | { kind: 'unknown'; version: string; message: string };
@@ -382,7 +388,11 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
     const added = new Set(steps.flatMap((r) => r.manifest?.settings.added ?? []).filter((k) => target.settings.all.includes(k)));
     for (const key of added) {
       const required = target.settings.required.includes(key);
-      needsYou.push({ kind: 'setting', key, required, message: required ? `Set ${key} in .env: ${next.version} won’t start without it.` : `${key} is a new, optional setting.` });
+      if (required && madeUpSetting(key)) {
+        needsYou.push({ kind: 'setting', key, required, madeUp: true, message: `${key} is new. Upgrading from here makes one up; upgrading by hand, set it in .env (openssl rand -hex 32).` });
+        continue;
+      }
+      needsYou.push({ kind: 'setting', key, required, message: required ? `Set ${key}: ${next.version} won’t start without it. Enter it when you upgrade, or put it in .env.` : `${key} is a new, optional setting.` });
     }
     // Apps that register themselves run in the new shell only if it speaks their SDK.
     const sdk = target.parts['@augur/mfe-sdk']?.version;

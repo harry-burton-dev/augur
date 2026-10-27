@@ -503,12 +503,20 @@ paths:
         `version` must be the `next` release Updates shows. Needs an admin who entered their
         password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again.
         Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as
-        platform.upgrade-requested.
+        platform.upgrade-requested. `settings` are new settings for `.env`, each one the release
+        has: they're kept in memory for the updater until the upgrade ends, never stored, and only
+        their names are audited. An empty value is left out.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: false, required: [version], properties: { version: { type: string } } }
+            schema:
+              type: object
+              additionalProperties: false
+              required: [version]
+              properties:
+                version: { type: string }
+                settings: { type: object, additionalProperties: { type: string, maxLength: 4096 }, description: "Setting name to value, one line each" }
       responses:
         "202":
           description: Waiting for the updater
@@ -517,6 +525,7 @@ paths:
               schema: { $ref: "#/components/schemas/PlatformUpdates" }
         "401": { description: "sign_in_again: enter the password again first" }
         "403": { description: Not an admin }
+        "400": { description: A setting the release doesn't have, or a value over more than one line }
         "409": { description: Not the next release, its release file names no images, or an upgrade is already waiting or under way }
     delete:
       summary: Take back an upgrade the updater hasn't started (admins only)
@@ -551,6 +560,7 @@ paths:
                   parts: { type: object, additionalProperties: { type: string }, description: "Each part's version in the release, by package name. Missing when the release file can't be read." }
                   required: { type: array, items: { type: string }, description: The settings the release won't start without }
                   deploy: { type: object, additionalProperties: { type: string }, description: "The release's files in infra/deploy, by path inside it, as sha256" }
+                  settings: { type: object, additionalProperties: { type: string }, description: "Settings the admin entered when asking, for the updater to write to .env" }
         "204": { description: Nothing to do }
         "403": { description: Not the updater }
   /platform/upgrade/progress:
@@ -1040,6 +1050,7 @@ components:
               version: { type: string }
               key: { type: string, description: The setting, for kind setting }
               required: { type: boolean }
+              madeUp: { type: boolean, description: "For kind setting: a secret the updater makes up itself" }
               app: { type: string, description: The app that won't run on the new SDK, for kind app }
     ReleaseChannel: { type: string, enum: [stable, beta] }
     ReleaseSummary:

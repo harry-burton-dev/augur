@@ -18,6 +18,17 @@ export const envValue = (text: string, key: string): string | undefined => {
 /** The text with `key` set to `value`: its line changed in place, or added at the end. */
 export const withEnvValue = (text: string, key: string, value: string): string => {
   const pattern = new RegExp(`^(\\s*(?:export\\s+)?${key}\\s*=).*$`, 'm');
-  if (pattern.test(text)) return text.replace(new RegExp(pattern.source, 'gm'), `$1${value}`);
+  if (pattern.test(text)) return text.replace(new RegExp(pattern.source, 'gm'), (_, start: string) => `${start}${value}`);
   return `${text}${text === '' || text.endsWith('\n') ? '' : '\n'}${key}=${value}\n`;
+};
+
+/**
+ * A value as it's written into .env: as it is when it's plain, otherwise in single quotes, which
+ * Compose reads as written (no `$` interpolation). Undefined for one that can't be written: over
+ * more than one line, or with a single quote in it as well as something that needs quoting.
+ */
+export const envQuoted = (value: string): string | undefined => {
+  if (/[\r\n]/.test(value)) return undefined;
+  if (/^[A-Za-z0-9_.:/@+,=-]*$/.test(value)) return value;
+  return value.includes("'") ? undefined : `'${value}'`;
 };

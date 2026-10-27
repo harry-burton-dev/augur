@@ -9,6 +9,25 @@ const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined,
 /** How often the page asks again while an upgrade is waiting or under way. */
 const UPGRADE_REFRESH_MS = 5_000;
 
+/** Settings entered before going to enter the password again, kept for this tab until it's back. */
+const ENTERED_KEY = 'augur.upgrade-settings';
+const keepEntered = (settings: Record<string, string>) => {
+  try {
+    if (Object.keys(settings).length) sessionStorage.setItem(ENTERED_KEY, JSON.stringify(settings));
+  } catch {
+    // Private browsing: they're typed again.
+  }
+};
+const takeEntered = (): Record<string, string> => {
+  try {
+    const text = sessionStorage.getItem(ENTERED_KEY);
+    sessionStorage.removeItem(ENTERED_KEY);
+    return text ? (JSON.parse(text) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+};
+
 export const isOpen = (up?: Upgrade) => up?.state === 'requested' || up?.state === 'running';
 
 const stepWords: Record<UpgradeStepState['step'], string> = {
@@ -32,7 +51,8 @@ export const headline = (u?: PlatformUpdates, error?: string): { heading: string
   if (up?.state === 'failed' && up.from === u.running.version) return { heading: `The upgrade to ${up.version} needs you`, summary: up.message ?? 'It stopped partway. See “Going back” in docs/upgrade.md.' };
   if (u.feed === 'off') return { heading: 'Updates', summary: 'This deployment doesn’t check for new releases: RELEASE_FEED_URL is off.' };
   if (u.available) {
-    const n = u.needsYou.length;
+    // A secret the updater makes up needs nothing from anyone.
+    const n = u.needsYou.filter((x) => !x.madeUp).length;
     return { heading: `AUGUR ${u.available.version} is out`, summary: `You’re on ${u.running.version}. ${n ? `${n === 1 ? '1 thing needs' : `${n} things need`} you before upgrading.` : 'Nothing needs you before upgrading.'}` };
   }
   if (u.problem) return { heading: 'Updates can’t be checked', summary: u.problem };
@@ -52,6 +72,7 @@ export class AdminUpdates extends LitElement {
     checking: { state: true },
     error: { state: true },
     confirming: { state: true },
+    entered: { state: true },
   };
 
   declare api: AdminApi;
@@ -61,6 +82,8 @@ export class AdminUpdates extends LitElement {
   declare error: string;
   /** Asking "Upgrade to …?" */
   declare confirming: boolean;
+  /** New settings typed into "Upgrade to …?", for the updater to write to .env. */
+  declare entered: Record<string, string>;
   private timer?: ReturnType<typeof setInterval>;
 
   constructor() {
@@ -69,6 +92,7 @@ export class AdminUpdates extends LitElement {
     this.checking = false;
     this.error = '';
     this.confirming = false;
+    this.entered = {};
   }
 
   override disconnectedCallback() {
@@ -102,16 +126,22 @@ export class AdminUpdates extends LitElement {
     params.delete('upgrade');
     const rest = params.toString();
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
-    if (wanted === this.updates?.next && !isOpen(this.updates.upgrade)) this.confirming = true;
+    if (wanted === this.updates?.next && !isOpen(this.updates.upgrade)) {
+      this.entered = takeEntered();
+      this.confirming = true;
+    }
   }
 
   /** Asks for the upgrade; when the password is needed again, goes to enter it and comes back here. */
   private upgrade = async () => {
     const version = this.updates!.next!;
+    const settings = Object.fromEntries(Object.entries(this.entered).map(([key, value]) => [key, value.trim()]).filter(([, value]) => value));
     try {
-      this.updates = await this.api.upgrade(version);
+      this.updates = await this.api.upgrade(version, settings);
+      this.entered = {};
     } catch (err) {
       if (err instanceof ApiError && err.code === 'sign_in_again') {
+        keepEntered(settings);
         const back = `${window.location.pathname}?upgrade=${encodeURIComponent(version)}`;
         window.location.assign(`/auth/again?return=${encodeURIComponent(back)}`);
         return false;
@@ -202,6 +232,26 @@ export class AdminUpdates extends LitElement {
     );
   }
 
+  /**
+   * A field for each new setting only a person can give. The updater writes what's entered to .env;
+   * one left empty is left as .env has it. Secrets it makes up itself get no field.
+   */
+  private settingFields(u: PlatformUpdates) {
+    const fields = u.needsYou.filter((n) => n.kind === 'setting' && n.key && !n.madeUp);
+    if (!fields.length) return nothing;
+    return html`<div data-new-settings style="display:flex;flex-direction:column;gap:var(--space-4)">
+      ${fields.map(
+        (n) => html`<ui-text-field
+          data-setting=${n.key!}
+          label=${n.key!}
+          hint=${n.required ? 'Needed. Leave it empty if it’s already in .env.' : 'Optional.'}
+          .value=${this.entered[n.key!] ?? ''}
+          @ui-change=${(e: CustomEvent<{ value: string }>) => (this.entered = { ...this.entered, [n.key!]: e.detail.value })}
+        ></ui-text-field>`,
+      )}
+    </div>`;
+  }
+
   /** "Upgrade to …?", with what needs doing first. */
   private confirmDialog(u: PlatformUpdates) {
     if (!this.confirming || !u.next) return nothing;
@@ -222,6 +272,7 @@ export class AdminUpdates extends LitElement {
               ${u.needsYou.map((n) => html`<li>${n.message}</li>`)}
             </ul>`
         : html`<p>Nothing needs doing first.</p>`}
+      ${this.settingFields(u)}
       <p>You may be asked for your password again.</p>
     </ui-dialog>`;
   }
@@ -234,7 +285,7 @@ export class AdminUpdates extends LitElement {
       ${a && u.needsYou.length
         ? section(
             'Needs you first',
-            html`<div data-needs>${u.needsYou.map((n) => line(html`<ui-status status=${n.kind === 'setting' && !n.required ? 'queued' : 'needs'} mark-only></ui-status> ${n.message}`))}</div>`,
+            html`<div data-needs>${u.needsYou.map((n) => line(html`<ui-status status=${n.kind === 'setting' && (!n.required || n.madeUp) ? 'queued' : 'needs'} mark-only></ui-status> ${n.message}`))}</div>`,
           )
         : nothing}
       ${a?.parts.length ? section(`What changes in ${a.version}`, html`<div data-parts>${a.parts.map((p) => line(p.name, p.from ? `${p.from} → ${p.to}` : p.to))}</div>`) : nothing}

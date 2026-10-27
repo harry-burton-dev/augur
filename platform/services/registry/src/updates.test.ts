@@ -127,7 +127,7 @@ describe('the Updates page', () => {
 
   it('shows the newest release, what changes, and what to do first', async () => {
     const releases = [
-      release('0.4.0', 'beta', { settings: settings(['OBJECT_STORE_URL', 'ORG_LOGO'], ['OBJECT_STORE_URL']), parts: { '@augur/registry': { version: '0.4.0' }, '@augur/mfe-sdk': { version: '2.0.0' } }, breaking: ['@augur/mfe-sdk 1.1.0 → 2.0.0'], upgradeFrom: '>=0.2.0' }),
+      release('0.4.0', 'beta', { settings: settings(['OBJECT_STORE_URL', 'ORG_LOGO', 'SEARCH_CLIENT_SECRET'], ['OBJECT_STORE_URL', 'SEARCH_CLIENT_SECRET']), parts: { '@augur/registry': { version: '0.4.0' }, '@augur/mfe-sdk': { version: '2.0.0' } }, breaking: ['@augur/mfe-sdk 1.1.0 → 2.0.0'], upgradeFrom: '>=0.2.0' }),
       release('0.3.0', 'beta', { settings: settings(['MODEL_API_URL']) }),
       release('0.2.0'),
     ];
@@ -137,8 +137,9 @@ describe('the Updates page', () => {
     expect(view.next).toBe('0.4.0');
     expect(view.needsYou.map((n) => [n.kind, n.message])).toEqual([
       ['breaking', '0.4.0: @augur/mfe-sdk 1.1.0 → 2.0.0'],
-      ['setting', 'Set OBJECT_STORE_URL in .env: 0.4.0 won’t start without it.'],
+      ['setting', 'Set OBJECT_STORE_URL: 0.4.0 won’t start without it. Enter it when you upgrade, or put it in .env.'],
       ['setting', 'ORG_LOGO is a new, optional setting.'],
+      ['setting', 'SEARCH_CLIENT_SECRET is new. Upgrading from here makes one up; upgrading by hand, set it in .env (openssl rand -hex 32).'],
       ['app', 'Library needs SDK ^1.0.0, and 0.4.0 has 2.0.0: it won’t open until it’s rebuilt.'],
     ]);
   });
@@ -224,6 +225,23 @@ describe('upgrading', () => {
     expect(page.upgrade.state).toBe('rolled-back');
     expect(page.updaterSeenAt).toBeDefined();
     expect(entries.map((e) => `${e.action} ${e.target} by ${e.actor.id}`)).toEqual(['platform.upgrade-requested 0.3.0 by u-1', 'platform.upgrade-rolled-back 0.3.0 by updater']);
+  });
+
+  it('passes settings entered with the ask to the updater alone, until the upgrade ends', async () => {
+    const entries: { action: string; detail?: unknown }[] = [];
+    const server = await buildApp({ verifyService, updates: await checked([release('0.3.0', 'beta', { images, settings: settings(['OBJECT_STORE_URL'], ['OBJECT_STORE_URL']) }), release('0.2.0')]), audit: async (e) => void entries.push(e) });
+    const ask = (s: Record<string, string>) => server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0', settings: s } });
+    expect((await ask({ NOT_A_SETTING: 'x' })).json().message).toBe('AUGUR 0.3.0 has no setting NOT_A_SETTING.');
+    expect((await ask({ OBJECT_STORE_URL: 'a\nB=c' })).statusCode).toBe(400);
+    expect((await ask({ OBJECT_STORE_URL: 'https://s3.example.org' })).statusCode).toBe(202);
+    expect(JSON.stringify(entries)).not.toContain('s3.example.org');
+    expect(entries.at(-1)?.detail).toEqual({ from: '0.2.0', settings: ['OBJECT_STORE_URL'] });
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).body).not.toContain('s3.example.org');
+    const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
+    expect(target.settings).toEqual({ OBJECT_STORE_URL: 'https://s3.example.org' });
+    await server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, step: 'preflight', state: 'failed', outcome: 'rolled-back' } });
+    await ask({});
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json().settings).toBeUndefined();
   });
 
   it('lets an admin take back an upgrade nothing has started', async () => {

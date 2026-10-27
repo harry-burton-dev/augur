@@ -686,6 +686,8 @@ export const buildApp = async ({
 
       /** When the deployment's updater last asked what to do; it lives only as long as this process. */
       let updaterSeenAt: string | undefined;
+      /** Settings an admin entered for the upgrade they asked for, until it ends. */
+      let upgradeSettings: { id: string; settings: Record<string, string> } | undefined;
 
       /** The Updates page: the feed against the running release, and the upgrade asked for, while it matters. */
       const updatesPage = async () => {
@@ -700,9 +702,22 @@ export const buildApp = async ({
        * is next. Needs an admin who entered their password in the last few minutes. Nothing
        * restarts here: the updater picks it up and reports each step.
        */
-      app.put<{ Body: { version: string } }>(
+      app.put<{ Body: { version: string; settings?: Record<string, string> } }>(
         '/platform/upgrade',
-        { schema: { body: { type: 'object', additionalProperties: false, required: ['version'], properties: { version: { type: 'string', minLength: 1, maxLength: 64 } } } } },
+        {
+          schema: {
+            body: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['version'],
+              properties: {
+                version: { type: 'string', minLength: 1, maxLength: 64 },
+                // New settings for .env, entered on the Updates page: one line each.
+                settings: { type: 'object', maxProperties: 50, propertyNames: { pattern: '^[A-Z][A-Z0-9_]{0,63}$' }, additionalProperties: { type: 'string', maxLength: 4096, pattern: '^[^\\r\\n]*$' } },
+              },
+            },
+          },
+        },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can upgrade AUGUR.' });
@@ -713,14 +728,26 @@ export const buildApp = async ({
           if (view.next !== req.body.version) {
             return reply.code(409).send({ error: 'conflict', message: view.next ? `Upgrade to ${view.next} next, not ${req.body.version}.` : `There’s no release to upgrade to from ${view.running.version} right now.` });
           }
-          const images = updates.result.releases.find((r) => r.version === view.next)?.manifest?.images ?? {};
+          const manifest = updates.result.releases.find((r) => r.version === view.next)?.manifest;
+          const images = manifest?.images ?? {};
           if (!Object.keys(images).length) return reply.code(409).send({ error: 'conflict', message: `AUGUR ${view.next}’s release file names no images, so it can’t be applied.` });
+          const settings = Object.fromEntries(Object.entries(req.body.settings ?? {}).filter(([, value]) => value !== ''));
+          const unknown = Object.keys(settings).filter((key) => key === 'PLATFORM_VERSION' || !manifest?.settings?.all.includes(key));
+          if (unknown.length) return reply.code(400).send({ error: 'bad_request', message: `AUGUR ${view.next} has no setting ${unknown.join(', ')}.` });
           const id = randomUUID();
           if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: caller.id }))) {
             return reply.code(409).send({ error: 'conflict', message: 'An upgrade is already waiting or under way.' });
           }
-          req.log.info({ by: caller.id, from: view.running.version, to: view.next }, 'upgrade requested');
-          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.upgrade-requested', target: view.next, detail: { from: view.running.version } });
+          // Kept in memory only, for the updater to write to .env: never stored, and only their names audited.
+          upgradeSettings = Object.keys(settings).length ? { id, settings } : undefined;
+          req.log.info({ by: caller.id, from: view.running.version, to: view.next, settings: Object.keys(settings) }, 'upgrade requested');
+          await record(req, {
+            actor: { id: caller.id, kind: 'user' },
+            app: 'registry',
+            action: 'platform.upgrade-requested',
+            target: view.next,
+            detail: { from: view.running.version, ...(Object.keys(settings).length ? { settings: Object.keys(settings) } : {}) },
+          });
           return reply.code(202).send(await updatesPage());
         },
       );
@@ -732,6 +759,7 @@ export const buildApp = async ({
         const upgrade = await store.upgrade();
         if (upgrade?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes or rolls back by itself.' });
         if (!upgrade || !(await store.cancelUpgrade(upgrade.id))) return reply.code(404).send({ error: 'not_found', message: 'No upgrade is waiting.' });
+        upgradeSettings = undefined;
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.upgrade-cancelled', target: upgrade.version });
         return updatesPage();
       });
@@ -763,6 +791,7 @@ export const buildApp = async ({
           version,
           images,
           state,
+          ...(upgradeSettings?.id === id ? { settings: upgradeSettings.settings } : {}),
           ...(manifest
             ? {
                 parts: Object.fromEntries(Object.entries(manifest.parts).map(([name, part]) => [name, part.version])),
@@ -797,6 +826,7 @@ export const buildApp = async ({
           const { id, outcome, message, ...step } = req.body;
           const upgrade: Upgrade | undefined = await store.progressUpgrade(id, { ...step, ...(message ? { message } : {}) }, outcome ? { state: outcome, ...(message ? { message } : {}) } : undefined);
           if (!upgrade) return reply.code(404).send({ error: 'not_found', message: 'That isn’t the upgrade under way.' });
+          if (outcome && upgradeSettings?.id === id) upgradeSettings = undefined;
           req.log.info({ upgrade: id, step: step.step, state: step.state, outcome }, 'upgrade progress');
           if (outcome) {
             await record(req, {
