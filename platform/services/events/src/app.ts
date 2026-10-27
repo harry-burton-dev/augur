@@ -143,6 +143,8 @@ const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntr
   'registry app.disabled': { topic: 'platform.app.turned-off', payload: (e) => ({ app: e.target }) },
   'registry app.enabled': { topic: 'platform.app.turned-on', payload: (e) => ({ app: e.target }) },
   'registry app.removed': { topic: 'platform.app.removed', payload: (e) => ({ app: e.target }) },
+  'registry app.blocked': { topic: 'platform.app.blocked', payload: (e) => ({ app: e.target }) },
+  'registry app.inherited': { topic: 'platform.app.rule-cleared', payload: (e) => ({ app: e.target }) },
 };
 
 /** The floor a service call names in X-Workspace-Id, URI-decoded; a value that won't decode is kept as sent, and fails as an unknown floor. */
