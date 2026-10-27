@@ -50,7 +50,7 @@ export class FeedProblem extends Error {}
 const isManifest = (x: unknown): x is ReleaseManifest =>
   typeof x === 'object' && x !== null && typeof (x as ReleaseManifest).version === 'string' && semver.valid((x as ReleaseManifest).version) !== null && typeof (x as ReleaseManifest).parts === 'object';
 
-interface GitHubRelease {
+export interface GitHubRelease {
   tag_name: string;
   draft: boolean;
   prerelease: boolean;
@@ -60,50 +60,57 @@ interface GitHubRelease {
 }
 
 /**
+ * Fetches a feed's JSON: GitHub's releases API, an asset of a release, a mirror's file over the web,
+ * or one on the server (`file:///…`). Failures are FeedProblems that say what to do.
+ */
+export const feedReader =
+  ({ token, fetchImpl = (...args) => fetch(...args) }: { token?: string; fetchImpl?: typeof fetch }) =>
+  async (target: string, accept: string): Promise<unknown> => {
+    if (target.startsWith('file:')) {
+      const text = await readFile(fileURLToPath(target), 'utf8').catch(() => {
+        throw new FeedProblem(`The release feed file ${fileURLToPath(target)} can’t be read. Check RELEASE_FEED_URL and that it’s mounted (docs/mirror.md).`);
+      });
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        throw new FeedProblem('The release feed file isn’t JSON. Check RELEASE_FEED_URL.');
+      }
+    }
+    let res: Response;
+    try {
+      res = await fetchImpl(target, {
+        headers: { accept, 'user-agent': 'augur-registry', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch {
+      throw new FeedProblem(`The release feed at ${new URL(target).host} can’t be reached. Check the server can reach it, or point RELEASE_FEED_URL at a mirror.`);
+    }
+    if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
+      throw new FeedProblem('GitHub’s limit on checks without a token was reached. It resets within the hour; a read-only token raises it (docs/upgrade.md).');
+    }
+    if (res.status === 401 || res.status === 403 || res.status === 404) {
+      throw new FeedProblem(
+        token
+          ? `The release feed refused the registry’s token (${res.status}). Check it can still read the repository’s releases.`
+          : `The release feed refused the registry (${res.status}). A private repository needs a read-only token: see docs/upgrade.md.`,
+      );
+    }
+    if (!res.ok) throw new FeedProblem(`The release feed answered ${res.status}. Try again later.`);
+    return res.json().catch(() => {
+      throw new FeedProblem('The release feed didn’t answer with JSON. Check RELEASE_FEED_URL.');
+    }) as Promise<unknown>;
+  };
+
+/**
  * Reads releases from `url`: GitHub's releases API (the `augur@<version>` ones, with their
  * augur-release.json asset) or a mirror's JSON, which is a list of release files or `{ releases: [...] }`.
  * A mirror's feed can be a file on the server too (`file:///…`), for one that can't reach any web server.
  * On GitHub a release marked pre-release is beta; promoting it to stable is unticking that.
  */
 export const releaseFeed =
-  ({ url, token, fetchImpl = (...args) => fetch(...args) }: { url: string; token?: string; fetchImpl?: typeof fetch }): ReleaseFeed =>
+  ({ url, token, fetchImpl }: { url: string; token?: string; fetchImpl?: typeof fetch }): ReleaseFeed =>
   async (running) => {
-    const get = async (target: string, accept: string) => {
-      if (target.startsWith('file:')) {
-        const text = await readFile(fileURLToPath(target), 'utf8').catch(() => {
-          throw new FeedProblem(`The release feed file ${fileURLToPath(target)} can’t be read. Check RELEASE_FEED_URL and that it’s mounted (docs/mirror.md).`);
-        });
-        try {
-          return JSON.parse(text) as unknown;
-        } catch {
-          throw new FeedProblem('The release feed file isn’t JSON. Check RELEASE_FEED_URL.');
-        }
-      }
-      let res: Response;
-      try {
-        res = await fetchImpl(target, {
-          headers: { accept, 'user-agent': 'augur-registry', ...(token ? { authorization: `Bearer ${token}` } : {}) },
-          signal: AbortSignal.timeout(TIMEOUT_MS),
-        });
-      } catch {
-        throw new FeedProblem(`The release feed at ${new URL(target).host} can’t be reached. Check the server can reach it, or point RELEASE_FEED_URL at a mirror.`);
-      }
-      if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
-        throw new FeedProblem('GitHub’s limit on checks without a token was reached. It resets within the hour; a read-only token raises it (docs/upgrade.md).');
-      }
-      if (res.status === 401 || res.status === 403 || res.status === 404) {
-        throw new FeedProblem(
-          token
-            ? `The release feed refused the registry’s token (${res.status}). Check it can still read the repository’s releases.`
-            : `The release feed refused the registry (${res.status}). A private repository needs a read-only token: see docs/upgrade.md.`,
-        );
-      }
-      if (!res.ok) throw new FeedProblem(`The release feed answered ${res.status}. Try again later.`);
-      return res.json().catch(() => {
-        throw new FeedProblem('The release feed didn’t answer with JSON. Check RELEASE_FEED_URL.');
-      }) as Promise<unknown>;
-    };
-
+    const get = feedReader({ token, fetchImpl });
     const body = await get(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { releases?: unknown })?.releases) ? (body as { releases: unknown[] }).releases : [];
 

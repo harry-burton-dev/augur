@@ -2,7 +2,7 @@ import { createEventBus, type MountContext } from '@augur/mfe-sdk';
 import type { UiDialog, UiTable, UiToggle } from '@augur/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
-import { AdminApi, departmentPath, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person, type PlatformUpdates } from './api.js';
+import { AdminApi, departmentPath, type AppInstalls, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person, type PlatformUpdates } from './api.js';
 import { appStatus, floorStatus, floorTree, rollbackNote, scopeWords, uploadChoices, type AdminApps } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
 import { headline as updatesHeadline, type AdminUpdates } from './updates.js';
@@ -459,6 +459,73 @@ describe('admin', () => {
       el.issued = undefined;
       await settle(el);
       expect(el.querySelector('[data-secret]')).toBeNull();
+      el.remove();
+    });
+  });
+
+  describe('Installs from releases', () => {
+    const notes: CatalogueApp = { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', version: '1.0.0', sdk: '^1.0.0', platform: false, enabled: true, registeredBy: 'notes' };
+    const installs: AppInstalls = {
+      feed: 'on',
+      runnerSeenAt: '2026-10-27T12:00:00Z',
+      sdkVersion: '1.3.0',
+      installed: [{ app: 'notes', name: 'Notes', version: '1.0.0', installedAt: '2026-10-27T11:00:00Z', channel: 'stable', policy: 'automatic', update: { version: '2.0.0', channel: 'stable', needs: ['2.0.0 is a major version: it may change how Notes works.'] } }],
+      available: [{ app: 'tasks', name: 'Tasks', description: 'Things to do', version: '1.2.0', channel: 'stable', signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' }, asks: { scopes: ['notifications:send'], storage: { database: true }, maxUpload: 10 } }],
+    };
+    const setup = (answer: (method: string, url: string, body?: unknown) => Response | undefined = () => undefined) => {
+      const sent: { method: string; url: string; body?: unknown }[] = [];
+      const fetchImpl = vi.fn(async (url: string, init: RequestInit = {}) => {
+        const method = init.method ?? 'GET';
+        const body = init.body ? JSON.parse(String(init.body)) : undefined;
+        sent.push({ method, url, body });
+        const said = answer(method, url, body);
+        if (said) return said;
+        const data = url.startsWith('/api/registry/v1/app-runner/') ? installs : url.endsWith('/floors') || url.endsWith('/versions') ? [] : [notes];
+        return new Response(JSON.stringify(data), { status: 200 });
+      });
+      const el = document.createElement('admin-apps') as AdminApps;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      return { el, sent };
+    };
+
+    it('lists what the feed offers and what waits for an admin, and installs on confirming', async () => {
+      const { el, sent } = setup();
+      await vi.waitFor(() => expect(el.installs).toBeDefined());
+      await settle(el);
+      expect(el.querySelector('[data-available]')?.textContent).toContain('Tasks 1.2.0');
+      expect(el.querySelector('[data-waiting]')?.textContent).toContain('Notes 2.0.0');
+      el.askInstall('tasks', '1.2.0');
+      await settle(el);
+      expect(el.confirmInstall?.notes).toEqual(['May: Notify people', 'Keeps a database on the server', 'Uploads up to 10 MB']);
+      await el.install({}, document.createElement('ui-dialog') as UiDialog);
+      expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/jobs', body: { action: 'install', app: 'tasks', version: '1.2.0' } });
+      el.remove();
+    });
+
+    it('goes to enter the password again when the registry asks for it', async () => {
+      const { el } = setup((method) => (method === 'POST' ? new Response(JSON.stringify({ error: 'sign_in_again', message: 'Enter your password again.' }), { status: 401 }) : undefined));
+      const assign = vi.fn();
+      const location = window.location;
+      Object.defineProperty(window, 'location', { configurable: true, value: { ...location, pathname: '/admin/apps', search: '', assign } });
+      await vi.waitFor(() => expect(el.installs).toBeDefined());
+      el.askInstall('notes', '2.0.0');
+      expect(el.confirmInstall?.notes).toEqual(['2.0.0 is a major version: it may change how Notes works.']);
+      expect(await el.install({}, document.createElement('ui-dialog') as UiDialog)).toBe(false);
+      expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/admin/apps?install=notes%402.0.0')}`);
+      Object.defineProperty(window, 'location', { configurable: true, value: location });
+      el.remove();
+    });
+
+    it('sets how an installed app takes new releases from its details', async () => {
+      const { el, sent } = setup();
+      await vi.waitFor(() => expect(el.installs).toBeDefined());
+      el.open = 'notes';
+      await settle(el);
+      expect(el.querySelector('[data-runner]')).not.toBeNull();
+      expect(el.querySelector('[data-update]')?.textContent).toContain('Install 2.0.0');
+      await el.follow(el.installs!.installed[0], 'beta', 'ask');
+      expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/follow', body: { channel: 'beta', policy: 'ask' } });
       el.remove();
     });
   });

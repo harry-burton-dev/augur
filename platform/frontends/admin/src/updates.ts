@@ -1,7 +1,7 @@
 import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import type { Fact } from '@augur/ui-kit';
 import { ApiError, type AdminApi, type PlatformUpdates, type Upgrade, type UpgradeStepState } from './api.js';
-import { page } from './parts.js';
+import { line, page, section } from './parts.js';
 
 const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Stable' : 'Beta');
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -38,17 +38,6 @@ export const headline = (u?: PlatformUpdates, error?: string): { heading: string
   if (u.problem) return { heading: 'Updates can’t be checked', summary: u.problem };
   return { heading: 'You’re up to date', summary: `AUGUR ${u.running.version} is the newest ${u.channel} release.` };
 };
-
-const section = (title: string, body: TemplateResult | typeof nothing) =>
-  html`<section style="display:flex;flex-direction:column;gap:var(--space-2)">
-    <div style="font-size:var(--type-label);color:var(--ink-muted)">${title}</div>
-    ${body}
-  </section>`;
-
-const line = (content: TemplateResult | string, end?: TemplateResult | string) =>
-  html`<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);min-height:40px;border-bottom:1px solid var(--hairline);color:var(--ink)">
-    <span>${content}</span>${end ? html`<span style="color:var(--ink-muted);font-size:var(--type-small)">${end}</span>` : nothing}
-  </div>`;
 
 /**
  * Whether a newer AUGUR release is out, what changes, and what has to be done before upgrading,

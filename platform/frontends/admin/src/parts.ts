@@ -1,4 +1,4 @@
-import { html, type TemplateResult } from 'lit';
+import { html, nothing, type TemplateResult } from 'lit';
 import type { StatusName } from '@augur/ui-kit';
 import type { Person } from './api.js';
 
@@ -33,3 +33,17 @@ export const passwordNote = ({ name, value, reset }: { name: string; value: stri
       <ui-button kind="secondary" size="sm" @click=${() => navigator.clipboard?.writeText(value).catch(() => undefined)}>Copy it</ui-button>
     </div>
   </ui-dialog>`;
+
+/** A titled part of a page. */
+export const section = (title: string, body: TemplateResult | typeof nothing) =>
+  html`<section style="display:flex;flex-direction:column;gap:var(--space-2)">
+    <div style="font-size:var(--type-label);color:var(--ink-muted)">${title}</div>
+    ${body}
+  </section>`;
+
+/** One line of a list: what, and on the right something about it. */
+export const line = (content: TemplateResult | string, end?: TemplateResult | string) =>
+  html`<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);min-height:40px;border-bottom:1px solid var(--hairline);color:var(--ink)">
+    <span>${content}</span>${end ? html`<span style="color:var(--ink-muted);font-size:var(--type-small)">${end}</span>` : nothing}
+  </div>`;
+

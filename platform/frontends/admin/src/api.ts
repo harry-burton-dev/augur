@@ -221,6 +221,70 @@ export interface PlatformUpdates {
   updaterSeenAt?: string;
 }
 
+/** One step the app runner took (see contracts/registry.openapi.yaml). */
+export interface AppJobStepState {
+  step: 'verify' | 'storage' | 'sign-in' | 'start' | 'health' | 'switch' | 'retire' | 'remove';
+  state: 'running' | 'done' | 'failed';
+  at: string;
+  message?: string;
+}
+
+/** An install or removal an admin (or an automatic update) asked the app runner for. */
+export interface AppJob {
+  id: string;
+  app: string;
+  action: 'install' | 'remove';
+  release?: { version: string; channel: string };
+  requestedBy: string;
+  requestedAt: string;
+  state: 'requested' | 'running' | 'done' | 'failed' | 'cancelled';
+  steps: AppJobStepState[];
+  message?: string;
+  finishedAt?: string;
+}
+
+export type AppChannel = 'stable' | 'beta';
+export type AppPolicy = 'automatic' | 'ask' | 'hold';
+
+/** An app the app runner installed, and how it takes new releases. */
+export interface InstalledApp {
+  app: string;
+  name: string;
+  version: string;
+  installedAt: string;
+  channel: AppChannel;
+  policy: AppPolicy;
+  /** The newest release on its channel, when newer; `needs` says why it waits for an admin. */
+  update?: { version: string; channel: AppChannel; notesUrl?: string; needs: string[] };
+  job?: AppJob;
+}
+
+/** An app the feed offers that isn't installed. */
+export interface AvailableApp {
+  app: string;
+  name: string;
+  description?: string;
+  version: string;
+  channel: AppChannel;
+  notesUrl?: string;
+  signer: { repository: string; workflow: string };
+  asks: { scopes: string[]; storage: { database?: boolean; bucket?: boolean }; maxUpload: number };
+  /** Why it can't open in this AUGUR. */
+  problem?: string;
+  job?: AppJob;
+}
+
+/** Admin → Apps' installs: what the app runner installed, and what the app feed offers. */
+export interface AppInstalls {
+  feed: 'on' | 'off';
+  checkedAt?: string;
+  problem?: string;
+  runnerSeenAt?: string;
+  sdkVersion: string;
+  installed: InstalledApp[];
+  available: AvailableApp[];
+}
+
 export interface NewPerson {
   firstName: string;
   lastName: string;
@@ -332,6 +396,14 @@ export class AdminApi {
   checkUpdates = () => this.call<PlatformUpdates>('POST', '/api/registry/v1/platform/updates/check');
   /** Asks the updater to move to `version`. Turned down with `sign_in_again` unless the admin just entered their password. */
   upgrade = (version: string) => this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/upgrade', { version });
+  installs = () => this.call<AppInstalls>('GET', '/api/registry/v1/app-runner/apps');
+  /** Reads the app feed now, starting any automatic updates it finds. */
+  checkInstalls = () => this.call<AppInstalls>('POST', '/api/registry/v1/app-runner/check');
+  /** Asks the app runner to install a release from the feed. Turned down with `sign_in_again` unless the admin just entered their password. */
+  installApp = (app: string, version: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', app, version });
+  /** Asks the app runner to stop and remove an app's containers. Needs the password just entered too. */
+  uninstallApp = (app: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'remove', app });
+  followApp = (app: string, channel: AppChannel, policy: AppPolicy) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/follow`, { channel, policy });
   /** Takes back an upgrade the updater hasn't started. */
   cancelUpgrade = () => this.call<PlatformUpdates>('DELETE', '/api/registry/v1/platform/upgrade');
 }

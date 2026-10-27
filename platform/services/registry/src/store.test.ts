@@ -70,6 +70,23 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.appJobs()).toHaveLength(2);
   });
 
+  it('knows which apps the runner installed, and how each follows new releases', async () => {
+    const release = (version: string) => ({ schema: 'augur.app-release/v1' as const, id: 'notes', version, channel: 'stable', manifest: { ...library, id: 'notes', version }, service: { image: 'x@sha256:aa' }, frontend: null, signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' } });
+    const finish = async (id: string, job: Parameters<AppStore['requestAppJob']>[0], state: 'done' | 'failed' = 'done') => {
+      await store.requestAppJob({ ...job, id });
+      await store.progressAppJob(id, { step: 'retire', state: 'done' }, { state });
+    };
+    await finish('i-1', { id: '', app: 'notes', action: 'install', release: release('1.0.0'), requestedBy: 'u-1' });
+    await finish('i-2', { id: '', app: 'notes', action: 'install', release: release('1.1.0'), requestedBy: 'u-1' }, 'failed');
+    expect((await store.installedApps()).map((i) => `${i.app} ${i.release.version}`)).toEqual(['notes 1.0.0']);
+    await finish('i-3', { id: '', app: 'notes', action: 'remove', requestedBy: 'u-1' });
+    expect(await store.installedApps()).toEqual([]);
+    expect(await store.follows()).toEqual([]);
+    await store.setFollow({ app: 'notes', channel: 'beta', policy: 'ask', setBy: 'u-1' });
+    await store.setFollow({ app: 'notes', channel: 'stable', policy: 'hold', setBy: 'u-2' });
+    expect(await store.follows()).toEqual([expect.objectContaining({ app: 'notes', channel: 'stable', policy: 'hold', setBy: 'u-2' })]);
+  });
+
   it('grants what an app first asks for, and only what an admin grants after', async () => {
     await store.put({ ...library, scopes: ['notifications:send'] }, 'library');
     await store.put({ ...library, version: '0.2.0', scopes: ['notifications:send', 'audit:write'] }, 'library');
@@ -202,14 +219,14 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades, registry.app_frontends, registry.app_jobs cascade');
+      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades, registry.app_frontends, registry.app_jobs, registry.app_follows cascade');
     },
   );
 
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

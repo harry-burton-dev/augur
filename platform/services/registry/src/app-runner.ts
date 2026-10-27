@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
+import { AppUpdateChecker, newestOn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
-import { APP_JOB_STEPS, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore } from './store.ts';
+import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore } from './store.ts';
 
 /** What an app release file must say before the runner is asked to install it. Mirrors AppRelease in contracts/registry.openapi.yaml. */
 export const APP_RELEASE_SCHEMA = 'augur.app-release/v1';
@@ -64,6 +65,12 @@ export const releaseProblem = (release: AppRelease, pillars: string[]): string |
 export interface AppRunnerRouteOptions {
   store: AppStore;
   pillars: string[];
+  /** The app feed: releases admins can install, and newer ones for what's installed. */
+  updates: AppUpdateChecker;
+  /** The SDK this AUGUR's shell speaks, which a release's `sdk` range must cover to install by itself. */
+  sdkVersion: string;
+  /** Records what happens without a request, such as an update starting by itself. */
+  audit?: (entry: NewAuditEntry) => Promise<void>;
   /** Which app or platform service sent this call; undefined when the reply has been sent. */
   serviceOf: (req: FastifyRequest, reply: FastifyReply) => Promise<ServiceIdentity | null | undefined>;
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
@@ -74,10 +81,106 @@ export interface AppRunnerRouteOptions {
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, pillars, serviceOf, record }: AppRunnerRouteOptions) =>
+  ({ store, pillars, updates, sdkVersion, audit, serviceOf, record }: AppRunnerRouteOptions) =>
   async (app: FastifyInstance) => {
     /** When the runner last asked what to do; it lives only as long as this process. */
     let runnerSeenAt: string | undefined;
+
+    const followOf = (follows: AppFollow[], id: string): Pick<AppFollow, 'channel' | 'policy'> => follows.find((f) => f.app === id) ?? { channel: 'stable', policy: 'automatic' };
+
+    /**
+     * After each check of the feed: every installed app on Automatic whose channel has a newer release
+     * that asks for nothing new gets an install job, unless that release already failed to install.
+     */
+    const autoUpdate = async () => {
+      const [installed, follows] = await Promise.all([store.installedApps(), store.follows()]);
+      for (const { app: id, release: current } of installed) {
+        const follow = followOf(follows, id);
+        if (follow.policy !== 'automatic') continue;
+        const newest = newestOn(updates.result.releases, id, follow.channel);
+        if (!newest?.release || !semver.gt(newest.version, current.version) || updateNeeds(current, newest.release, sdkVersion).length) continue;
+        if (releaseProblem(newest.release, pillars)) continue;
+        const jobs = await store.appJobs(id);
+        if (jobs.some((j) => j.release?.version === newest.version && j.state === 'failed')) continue;
+        if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'install', release: newest.release, requestedBy: 'automatic' }))) continue;
+        await audit?.({ actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'app.install-requested', target: id, detail: { version: newest.version, from: current.version, automatic: true } }).catch(() => undefined);
+      }
+    };
+    updates.onChecked(autoUpdate);
+
+    /** Admin → Apps' view of installs: what's installed and how it follows updates, and what the feed offers. */
+    const appsView = async () => {
+      const [installed, follows, jobs] = await Promise.all([store.installedApps(), store.follows(), store.appJobs()]);
+      const { checkedAt, problem, releases } = updates.result;
+      const installedIds = new Set(installed.map((i) => i.app));
+      const latestJob = (id: string) => jobs.find((j) => j.app === id);
+      return {
+        feed: updates.on ? 'on' : 'off',
+        ...(checkedAt ? { checkedAt } : {}),
+        ...(problem ? { problem } : {}),
+        ...(runnerSeenAt ? { runnerSeenAt } : {}),
+        sdkVersion,
+        installed: installed.map(({ app: id, release, installedAt }) => {
+          const follow = followOf(follows, id);
+          const newest = newestOn(releases, id, follow.channel);
+          const job = latestJob(id);
+          return {
+            app: id,
+            name: release.manifest.name,
+            version: release.version,
+            installedAt,
+            ...follow,
+            ...(newest?.release && semver.gt(newest.version, release.version)
+              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release, sdkVersion) } }
+              : {}),
+            ...(job ? { job } : {}),
+          };
+        }),
+        available: [...new Set(releases.map((r) => r.app))]
+          .filter((id) => !installedIds.has(id) && !pillars.includes(id))
+          .map((id) => newestOn(releases, id, 'stable') ?? newestOn(releases, id, 'beta'))
+          .filter((r): r is NonNullable<typeof r> => Boolean(r?.release?.service))
+          .map((r) => ({
+            app: r.app,
+            name: r.release!.manifest.name,
+            ...(r.release!.manifest.description ? { description: r.release!.manifest.description } : {}),
+            version: r.version,
+            channel: r.channel,
+            ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
+            signer: r.release!.signer,
+            asks: { scopes: r.release!.manifest.scopes ?? [], storage: r.release!.manifest.storage ?? {}, maxUpload: r.release!.manifest.maxUpload ?? 10 },
+            ...(semver.satisfies(sdkVersion, r.release!.manifest.sdk, { includePrerelease: true }) ? {} : { problem: `It needs SDK ${r.release!.manifest.sdk}, and this AUGUR has ${sdkVersion}.` }),
+            ...(latestJob(r.app) ? { job: latestJob(r.app) } : {}),
+          })),
+      };
+    };
+
+    app.get('/app-runner/apps', async (req, reply) => {
+      if (!admin(req, reply)) return reply;
+      return appsView();
+    });
+
+    /** Checks the app feed now (and starts any automatic updates it finds), rather than waiting for the next check. */
+    app.post('/app-runner/check', async (req, reply) => {
+      if (!admin(req, reply)) return reply;
+      await updates.check();
+      return appsView();
+    });
+
+    /** How an installed app takes new releases: its channel, and Automatic, Ask first or Hold. */
+    app.put<{ Params: { id: string }; Body: { channel: AppChannel; policy: AppPolicy } }>(
+      '/app-runner/apps/:id/follow',
+      { schema: { body: { type: 'object', additionalProperties: false, required: ['channel', 'policy'], properties: { channel: { enum: ['stable', 'beta'] }, policy: { enum: ['automatic', 'ask', 'hold'] } } } } },
+      async (req, reply) => {
+        const caller = admin(req, reply);
+        if (!caller) return reply;
+        if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
+        await store.setFollow({ app: req.params.id, ...req.body, setBy: caller.id });
+        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.updates-set', target: req.params.id, detail: { ...req.body } });
+        await autoUpdate();
+        return appsView();
+      },
+    );
 
     const admin = (req: FastifyRequest, reply: FastifyReply) => {
       const caller = callerFromHeaders(req.headers);
@@ -105,13 +208,20 @@ export const appRunnerRoutes =
      * one) or to remove an app's containers. Needs an admin who entered their password in the last
      * few minutes: it puts code on the server.
      */
-    app.post<{ Body: { action: 'install'; release: AppRelease } | { action: 'remove'; app: string } }>(
+    app.post<{ Body: { action: 'install'; release: AppRelease } | { action: 'install'; app: string; version: string } | { action: 'remove'; app: string } }>(
       '/app-runner/jobs',
       {
         schema: {
           body: {
             oneOf: [
               { type: 'object', additionalProperties: false, required: ['action', 'release'], properties: { action: { const: 'install' }, release: appReleaseSchema } },
+              // A release from the app feed, by version.
+              {
+                type: 'object',
+                additionalProperties: false,
+                required: ['action', 'app', 'version'],
+                properties: { action: { const: 'install' }, app: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' }, version: { type: 'string', minLength: 1, maxLength: 40 } },
+              },
               { type: 'object', additionalProperties: false, required: ['action', 'app'], properties: { action: { const: 'remove' }, app: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' } } },
             ],
           },
@@ -124,22 +234,27 @@ export const appRunnerRoutes =
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install or remove an app. It’s asked for anything this drastic.' });
         }
         const body = req.body;
-        const target = body.action === 'install' ? body.release.id : body.app;
+        let release: AppRelease | undefined;
         if (body.action === 'install') {
-          const problem = releaseProblem(body.release, pillars);
+          release = 'release' in body ? body.release : updates.result.releases.find((r) => r.app === body.app && r.version === body.version)?.release;
+          if (!release) return reply.code(404).send({ error: 'not_found', message: `The app feed has no release file for ${'app' in body ? `${body.app} ${body.version}` : 'it'}. Check for updates, then try again.` });
+        }
+        const target = release ? release.id : (body as { app: string }).app;
+        if (release) {
+          const problem = releaseProblem(release, pillars);
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         } else if (pillars.includes(target)) {
           return reply.code(409).send({ error: 'conflict', message: `${target} ships with AUGUR and can’t be removed. Turn it off instead.` });
         }
-        const job = { id: randomUUID(), app: target, action: body.action, ...(body.action === 'install' ? { release: body.release } : {}), requestedBy: caller.id };
+        const job = { id: randomUUID(), app: target, action: body.action, ...(release ? { release } : {}), requestedBy: caller.id };
         if (!(await store.requestAppJob(job))) return reply.code(409).send({ error: 'conflict', message: `Something is already waiting or under way for ${target}.` });
         req.log.info({ by: caller.id, app: target, action: body.action }, 'app job requested');
         await record(req, {
           actor: { id: caller.id, kind: 'user' },
           app: 'registry',
-          action: body.action === 'install' ? 'app.install-requested' : 'app.uninstall-requested',
+          action: release ? 'app.install-requested' : 'app.uninstall-requested',
           target,
-          detail: body.action === 'install' ? { version: body.release.version, channel: body.release.channel, signer: `${body.release.signer.repository}/${body.release.signer.workflow}` } : {},
+          detail: release ? { version: release.version, channel: release.channel, signer: `${release.signer.repository}/${release.signer.workflow}` } : {},
         });
         return reply.code(202).send((await store.appJobs(target))[0]);
       },
