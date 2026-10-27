@@ -282,7 +282,7 @@ A version's frontend never changes once given: the same files again are fine (ev
 
 You don't release an app by hand. Merging the Version packages PR that moves its version releases it on its own: a signed service image, a signed frontend and the GitHub release `app/<id>@<version>` ([Versioning](versioning.md#app-releases)). A deployment's app runner can install and update it from there, with no new AUGUR release. The app made by `pnpm create-app` already copies its manifest into its build and gives the registry its frontend when it starts, as the release needs.
 
-Before that, every push to a pull request that changes the app makes a preview, which a server with the app installed runs beside it for the app's developers to switch to ([app-previews.md](app-previews.md)). A preview signs in as the app but keeps its data apart, and sees `APP_PREVIEW=pr-<number>` in its settings if it needs to say so.
+Before that, every push to a pull request that changes the app makes a preview, which a server with the app installed runs beside it for the app's developers to switch to ([app-previews.md](app-previews.md)). A preview signs in as the app but keeps its data apart, and sees `APP_PREVIEW=pr-<number>` in its settings; the service kit marks its notifications ("Preview #12: …") and audit entries (`preview: 12`) with it.
 
 ### Serving the frontend from somewhere else
 
