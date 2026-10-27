@@ -340,9 +340,12 @@ describe('floors', () => {
   });
 
   it('shows where you are top left, each step above a way up', async () => {
+    el.current = '';
+    await el.updateComplete;
     const crumbs = [...root().querySelectorAll('.where li')].map((li) => li.textContent!.trim());
     expect(crumbs).toEqual(['Acme', 'Finance']);
     expect(root().querySelector('.where [aria-current]')!.textContent).toBe('Finance');
+    expect(root().querySelector('.home')).toBeNull();
     expect(root().querySelector('.mark')).toBeNull();
     const go = vi.fn();
     el.addEventListener('ui-floor', (e) => go((e as CustomEvent).detail));
@@ -351,10 +354,34 @@ describe('floors', () => {
     expect(el.getAttribute('floor-kind')).toBe('team');
   });
 
+  it('names the open app after the floor, with All apps as the way back to every app', async () => {
+    const crumbs = [...root().querySelectorAll('.where li')].map((li) => li.textContent!.trim());
+    expect(crumbs).toEqual(['Acme', 'Finance', 'Home']);
+    expect(root().querySelector('.where [aria-current]')!.textContent!.trim()).toBe('Home');
+    const home = vi.fn();
+    el.addEventListener('ui-home', home);
+    root().querySelector<HTMLButtonElement>('.home')!.click();
+    expect(home).toHaveBeenCalledOnce();
+  });
+
   it('draws the gauge from the org down to your own floor, lit where you are', () => {
     const notches = [...root().querySelectorAll('.gauge button')];
-    expect(notches.map((b) => b.getAttribute('aria-label'))).toEqual(['Acme', 'Finance', 'Your own floor']);
+    expect(notches.map((b) => b.getAttribute('aria-label'))).toEqual(['Acme', 'Finance, you’re here', 'Your own floor']);
     expect(notches[1].getAttribute('aria-current')).toBe('location');
+  });
+
+  it('says on the gauge who sees each floor, and which floor the open app is showing', async () => {
+    const labels = [...root().querySelectorAll('.gauge .label')].map((l) => l.textContent!.replace(/\s+/g, ' ').trim());
+    expect(labels).toEqual([
+      'Acme Everyone in Acme sees what’s here.',
+      'Finance You’re here Finance and the teams under it see what’s here. Home is showing this floor',
+      'Your own floor Just you. No one else sees what’s here unless you share it.',
+    ]);
+    expect(root().querySelectorAll('.gauge .pinned')).toHaveLength(1);
+    el.current = '';
+    await el.updateComplete;
+    expect(root().querySelector('.gauge .bound')).toBeNull();
+    expect(root().querySelector('.gauge .pinned')).toBeNull();
   });
 
   it('goes up or down a floor with Page Up and Page Down', () => {
@@ -388,7 +415,7 @@ describe('floors', () => {
     el.notify({ id: 'n3', app: 'home', level: 'info', title: 'Plain', time: Date.now() });
     await el.updateComplete;
     const notches = [...root().querySelectorAll('.gauge button')];
-    expect(notches.map((b) => b.getAttribute('aria-label'))).toEqual(['Acme, 1 waiting', 'Finance, 1 waiting', 'Your own floor']);
+    expect(notches.map((b) => b.getAttribute('aria-label'))).toEqual(['Acme, 1 waiting', 'Finance, you’re here, 1 waiting', 'Your own floor']);
     expect(notches.map((b) => !!b.querySelector('.dot'))).toEqual([true, true, false]);
     el.openView('stream');
     await el.updateComplete;
@@ -405,7 +432,8 @@ describe('floors', () => {
     el.openView('account');
     await el.updateComplete;
     const rows = [...root().querySelectorAll('.floors .row')];
-    expect(rows.map((r) => r.querySelector('b')!.textContent)).toEqual(['Your own floor', 'Acme', 'Finance']);
+    expect(rows.map((r) => r.querySelector('b')!.textContent)).toEqual(['Your own floor', 'Acme', 'Finance in Acme']);
+    expect(rows[1].querySelector('.text > span')!.textContent).toBe('Everyone in Acme sees what’s here.');
     expect(rows[2].getAttribute('aria-current')).toBe('location');
     expect([...root().querySelectorAll('.view .link')].map((b) => b.textContent!.trim())).toEqual(['Sign out']);
   });

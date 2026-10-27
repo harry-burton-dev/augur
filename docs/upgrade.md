@@ -51,6 +51,10 @@ The pull fetches that release's images before anything stops. Each service migra
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Folio is called Artifacts
+
+Folio now shows as **Artifacts** everywhere people see it, and opens straight into its own side menu, with **All apps** in the top bar as the way back. Its containers, `.env` names (`FOLIO_*`), schema, bucket and address (`/folio`) haven't changed, so there's nothing to do.
+
 ### Folio ships with AUGUR
 
 Folio, the document libraries, is now part of every release: three new containers start (`folio`, its rendition worker `folio-worker`, and Folio's frontend inside `web`), and Folio puts itself in Admin, Apps on its first start. There's nothing to install or allow in Admin. This release changes `compose.yml`, so it's upgraded by hand, not from the Updates page. Before upgrading, add to `.env` (`openssl rand -hex 32` for each):

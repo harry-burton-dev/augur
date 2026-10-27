@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { base, label } from '../shared.js';
-import { floorBeside, floorDirection, floorIcon, floorLevel, floorStack, type ShellFloor } from './floors.js';
+import { floorBeside, floorDirection, floorIcon, floorLevel, floorMeaning, floorStack, type ShellFloor } from './floors.js';
 import { statusUrgency, type StatusName } from './status.js';
 import './icon.js';
 import './menu.js';
@@ -125,6 +125,7 @@ const isTyping = (e: Event) => {
  * @slot - the stage, where the current app mounts
  * @fires ui-toggle - detail `{ open }`
  * @fires ui-open-app - detail `{ id }`
+ * @fires ui-home - All apps in the band was pressed: the host leaves the open app for its own menu of every app
  * @fires ui-open-notification - detail `{ notification }`
  * @fires ui-notification-action - detail `{ notification, index }` when one of its actions is pressed; the Shell closes and the host does it
  * @fires ui-notifications - detail `{ notifications, muted }` after either changed, however it changed, for a host that shows them elsewhere too
@@ -764,14 +765,31 @@ export class UiShell extends LitElement {
       :host { --floor-mark: var(--floor-you-high); }
       :host([floor-kind='team']) { --floor-mark: var(--floor-team-high); }
       :host([floor-kind='org']) { --floor-mark: var(--floor-org-high); }
-      .gauge { position: absolute; z-index: 3; right: var(--space-3); top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; transition: opacity var(--motion-slow) var(--ease-standard); }
-      .gauge::before { content: ''; position: absolute; top: var(--space-4); bottom: var(--space-4); left: 50%; width: 1px; background: var(--hairline); z-index: -1; }
+      .gauge { position: absolute; z-index: 3; right: var(--space-2); top: 50%; transform: translateY(-50%); padding: var(--space-2); border-radius: var(--radius-inset); border: 1px solid transparent; transition: opacity var(--motion-slow) var(--ease-standard), background var(--motion-base) var(--ease-standard), border-color var(--motion-base) var(--ease-standard); }
+      .gauge ol { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
+      .gauge ol::before { content: ''; position: absolute; top: var(--space-4); bottom: var(--space-4); right: 13.5px; width: 1px; background: var(--hairline); }
       :host([open]) .gauge { opacity: 0; pointer-events: none; }
-      .gauge button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: var(--ink-muted); background: var(--slate-deep); border: 1px solid var(--hairline); transition: color var(--motion-quick), border-color var(--motion-quick); }
-      .gauge button:hover { color: var(--ink); }
-      .gauge button { position: relative; }
+      .gauge button { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); color: var(--ink-muted); text-align: right; }
+      .gauge .notch { position: relative; flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--slate-deep); border: 1px solid var(--hairline); transition: color var(--motion-quick), border-color var(--motion-quick); }
+      .gauge button:hover .notch, .gauge button:focus-visible .notch { color: var(--ink); border-color: var(--hairline-strong); }
+      .gauge button:focus-visible { outline: 0; }
+      .gauge button:focus-visible .notch { box-shadow: 0 0 0 2px var(--focus); }
       .gauge .dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--floor-mark, var(--green)); border: 2px solid var(--slate-deep); }
-      .gauge button[aria-current] { color: var(--floor-mark); border-color: var(--floor-mark); box-shadow: 0 0 12px color-mix(in srgb, var(--floor-mark) 45%, transparent); }
+      .gauge button[aria-current] .notch { color: var(--floor-mark); border-color: var(--floor-mark); box-shadow: 0 0 12px color-mix(in srgb, var(--floor-mark) 45%, transparent); }
+      .gauge .pinned { flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-right: calc(var(--space-2) * -1); border-radius: var(--radius-key); color: var(--ink); background: color-mix(in srgb, var(--floor-mark) 22%, var(--slate-deep)); border: 1px solid var(--floor-mark); }
+      .gauge .label { display: none; flex-direction: column; align-items: flex-end; gap: 2px; width: 240px; font-size: var(--type-small); line-height: var(--leading-small); letter-spacing: normal; text-transform: none; }
+      .gauge .label b { display: flex; align-items: baseline; gap: var(--space-2); font-weight: 500; color: var(--ink); }
+      .gauge .label em { font-style: normal; font-size: var(--type-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--floor-mark); }
+      .gauge .label em.waiting { color: var(--ink-muted); }
+      .gauge .label .bound { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-1); color: var(--ink); }
+      .gauge .label .bound ui-icon { color: var(--floor-mark); }
+      .gauge:hover, .gauge:has(:focus-visible) { background: color-mix(in srgb, var(--slate-deep) 94%, transparent); backdrop-filter: blur(12px); border-color: var(--hairline); box-shadow: 0 12px 40px rgb(0 0 0 / 0.35); }
+      .gauge:hover ol, .gauge:has(:focus-visible) ol { gap: var(--space-4); }
+      .gauge:hover .label, .gauge:has(:focus-visible) .label { display: flex; animation: label-in var(--motion-base) var(--ease-standard); }
+      .gauge:hover .pinned, .gauge:has(:focus-visible) .pinned { display: none; }
+      .gauge button:not([aria-current]) .label b { color: var(--ink-muted); font-weight: 400; }
+      .gauge button:hover .label b { color: var(--ink); }
+      @keyframes label-in { from { opacity: 0; transform: translateX(6px); } }
       .lift { position: absolute; z-index: 5; left: 50%; top: calc(var(--band-top) + var(--space-5)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border-radius: var(--radius-pill); background: var(--surface-overlay); border: 1px solid var(--hairline); color: var(--ink); font-size: var(--type-small); letter-spacing: var(--tracking-mark); text-transform: uppercase; pointer-events: none; animation: lift var(--motion-calm) var(--s-ease); }
       .lift ui-icon { color: var(--floor-mark); }
       @keyframes lift { from { opacity: 0; transform: translate(-50%, -8px); } }
@@ -781,13 +799,20 @@ export class UiShell extends LitElement {
       .floors .row[aria-current] { color: var(--ink); }
       .floors .row ui-icon { color: var(--ink-muted); }
       .floors .row[aria-current] ui-icon { color: var(--floor-mark); }
-      @media (max-width: 640px) { .mark span { display: none; } .where li:not([aria-current]) { display: none; } .where li + li::before { content: none; } .dome > button { left: calc(50% + var(--x) * 0.6); } }
+      .floors .row .text b i { font-style: normal; color: var(--ink-muted); }
+      .left { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+      .home { flex: none; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border-radius: var(--radius-pill); border: 1px solid var(--hairline-strong); font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink); transition: background var(--motion-quick); }
+      .home:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+      .home:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--focus); }
+      .where li.open { color: var(--ink); font-weight: 600; }
+      .where li.open ui-icon { color: var(--ink-muted); }
+      @media (max-width: 640px) { .mark span, .home span { display: none; } .where li:not([aria-current]) { display: none; } .where li + li::before { content: none; } .dome > button { left: calc(50% + var(--x) * 0.6); } }
       @media (prefers-reduced-motion: reduce) {
         :host([open]) .stage, :host([open]) .ground, .fade, :host([open]) .fade { transform: none; }
         .dome > button, :host([open]) .dome > button { transform: translate(-50%, -50%); transition: opacity var(--motion-base); }
         .thread::after, .orb.needs::after { animation: none; }
         .view { animation: none; }
-        .lift, :host([moving]) .stage { animation: none; }
+        .lift, :host([moving]) .stage, .gauge .label { animation: none; }
       }
     `,
   ];
@@ -800,7 +825,7 @@ export class UiShell extends LitElement {
     const time = new Date(this.now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const tab = this.isOpen ? '-1' : '0';
     return html`<header class="band" ?inert=${this.isOpen}>
-      ${this.renderWhere(tab)}
+      <div class="left">${this.renderHome(tab)}${this.renderWhere(tab)}</div>
       <button class="handle" aria-label="Open the shell" tabindex=${tab} @click=${() => this.open()}><i></i></button>
       <div class="right">
         <button class="status ${mood}" tabindex=${tab} aria-label=${`${words}. Open notifications.`} @click=${() => this.openView('stream')}><i class="point"></i>${words}</button>
@@ -809,18 +834,34 @@ export class UiShell extends LitElement {
     </header>`;
   }
 
-  /** Top left: the product, or with floors the current floor's icon and its path from the org, each step a way up. */
+  /** The app that's open, when one is: `current` among `apps`. */
+  get openNow(): ShellApp | undefined {
+    return this.current ? this.apps.find((a) => a.id === this.current) : undefined;
+  }
+
+  /** Top left, while an app is open: the one deliberate way back to the menu of every app. */
+  private renderHome(tab: string) {
+    if (!this.openNow) return nothing;
+    return html`<button class="home" tabindex=${tab} @click=${() => this.emit('ui-home', {})}><ui-icon name="apps" size="16"></ui-icon><span>All apps</span></button>`;
+  }
+
+  /**
+   * Top left: the product, or with floors the current floor's icon and its
+   * path from the org, each step a way up, then the app open on it.
+   */
   private renderWhere(tab: string) {
     const here = this.currentFloor;
-    if (!here) return html`<div class="mark"><b>${this.product}</b>${this.workspace ? html`<span>${this.workspace}</span>` : nothing}</div>`;
+    const app = this.openNow;
+    if (!here) return html`<div class="mark"><b>${this.product}</b>${this.workspace ? html`<span>${this.workspace}</span>` : nothing}${app ? html`<span>${app.name}</span>` : nothing}</div>`;
     return html`<nav class="where" aria-label="Where you are">
       <ui-icon name=${floorIcon[here.kind]} size="16"></ui-icon>
       <ol>
         ${here.path.map((p) =>
           p.id === here.id
-            ? html`<li aria-current="location">${here.name}</li>`
+            ? html`<li aria-current=${app ? nothing : 'location'}>${here.name}</li>`
             : html`<li><button tabindex=${tab} @click=${() => this.goToFloor(p.id)}>${p.name}</button></li>`,
         )}
+        ${app ? html`<li class="open" aria-current="page"><ui-icon name=${app.icon ?? 'apps'} size="14"></ui-icon>${app.name}</li>` : nothing}
       </ol>
     </nav>`;
   }
@@ -839,19 +880,36 @@ export class UiShell extends LitElement {
     return f ? ` · ${f.kind === 'personal' ? 'On your own floor' : `On ${f.name}`}` : '';
   }
 
-  /** The edge gauge: one notch per floor from yours to the org, the one you're on lit in its colour, with a dot where something waits. */
+  /**
+   * The edge gauge: one notch per floor from yours to the org, the one you're
+   * on lit in its colour, with a dot where something waits and the open app
+   * pinned beside it. Pointing at it or tabbing into it opens it out: each
+   * floor's name and who sees what's on it, and which floor the app is showing.
+   */
   private renderGauge() {
     if (!this.currentFloor) return nothing;
     const stack = floorStack(this.floors, this.floor, this.lastTeam).reverse();
     const tab = this.isOpen ? '-1' : '0';
     const waiting = this.waitingByFloor();
+    const app = this.openNow;
     return html`<nav class="gauge" aria-label="Floors" ?inert=${this.isOpen}>
-      ${stack.map((f) => {
-        const count = waiting.get(f.id) ?? 0;
-        const name = f.kind === 'personal' ? 'Your own floor' : f.name;
-        return html`<button tabindex=${tab} aria-label=${count ? `${name}, ${count} waiting` : name} title=${f.name} aria-current=${f.id === this.floor ? 'location' : nothing}
-          ?data-waiting=${count > 0} @click=${() => this.goToFloor(f.id)}><ui-icon name=${floorIcon[f.kind]} size="14"></ui-icon>${count ? html`<span class="dot"></span>` : nothing}</button>`;
-      })}
+      <ol>
+        ${stack.map((f) => {
+          const count = waiting.get(f.id) ?? 0;
+          const name = f.kind === 'personal' ? 'Your own floor' : f.name;
+          const here = f.id === this.floor;
+          return html`<li><button tabindex=${tab} aria-label=${[name, here ? 'you’re here' : '', count ? `${count} waiting` : ''].filter(Boolean).join(', ')}
+            aria-describedby=${`floor-${f.id}`} aria-current=${here ? 'location' : nothing} ?data-waiting=${count > 0} @click=${() => this.goToFloor(f.id)}>
+            <span class="label" id=${`floor-${f.id}`}>
+              <b>${name} ${here ? html`<em>You’re here</em>` : count ? html`<em class="waiting">${count} waiting</em>` : nothing}</b>
+              <span>${floorMeaning(f)}</span>
+              ${here && app ? html`<span class="bound"><ui-icon name=${app.icon ?? 'apps'} size="14"></ui-icon>${app.name} is showing this floor</span>` : nothing}
+            </span>
+            ${here && app ? html`<span class="pinned" aria-hidden="true"><ui-icon name=${app.icon ?? 'apps'} size="12"></ui-icon></span>` : nothing}
+            <span class="notch"><ui-icon name=${floorIcon[f.kind]} size="14"></ui-icon>${count ? html`<span class="dot"></span>` : nothing}</span>
+          </button></li>`;
+        })}
+      </ol>
     </nav>`;
   }
 
@@ -1068,7 +1126,7 @@ export class UiShell extends LitElement {
               ${this.floors.map(
                 (f) => html`<li><button class="row" aria-current=${f.id === this.floor ? 'location' : nothing} @click=${() => (this.goToFloor(f.id), this.close())}>
                   <ui-icon name=${floorIcon[f.kind]}></ui-icon>
-                  <span class="text"><b>${f.kind === 'personal' ? 'Your own floor' : f.name}</b>${f.path.length > 1 ? html`<span>${f.path.slice(0, -1).map((p) => p.name).join(' / ')}</span>` : nothing}</span>
+                  <span class="text"><b>${f.kind === 'personal' ? 'Your own floor' : f.name}${f.path.length > 1 ? html`<i> in ${f.path.slice(0, -1).map((p) => p.name).join(' / ')}</i>` : nothing}</b><span>${floorMeaning(f)}</span></span>
                   ${f.id === this.floor ? html`<span class="meta">You’re here</span>` : waiting.get(f.id) ? html`<span class="meta">${waiting.get(f.id)} waiting</span>` : nothing}
                 </button></li>`,
               )}

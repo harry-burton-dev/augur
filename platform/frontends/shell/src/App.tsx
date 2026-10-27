@@ -127,7 +127,8 @@ export function Host({
     [preferencesUrl, session, fetchImpl],
   );
 
-  const [manifest, setManifest] = useState<AppManifestEntry[] | null>(null);
+  /** The catalogue, and the floor it's for: until the new floor's arrives, nothing is shown from the last one's. */
+  const [catalogue, setCatalogue] = useState<{ floor: string; apps: AppManifestEntry[] } | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const home = ownFloor(session.floors)!;
   /** Every location names its floor: one that doesn't is on the person's own, and the address says so. */
@@ -144,6 +145,8 @@ export function Host({
   const floor = floorBySlug(session.floors, where.slug);
   const floorRef = useRef<Workspace>(floor ?? home);
   floorRef.current = floor ?? home;
+  const floorId = (floor ?? home).id;
+  const manifest = catalogue?.floor === floorId ? catalogue.apps : null;
 
   /** Goes to a path on the current floor; `to` goes to another floor instead. */
   const navigate = useCallback(
@@ -162,7 +165,6 @@ export function Host({
   }, [settled]);
 
   // The catalogue: which apps this person can open on this floor. Another floor may have other apps.
-  const floorId = (floor ?? home).id;
   useEffect(() => {
     let live = true;
     setProblem(null);
@@ -172,12 +174,12 @@ export function Host({
       .then((apps) => {
         if (!live) return;
         manifestFloor.current = floorId;
-        setManifest(apps);
+        setCatalogue({ floor: floorId, apps });
         if (!apps.length) setProblem({ title: 'No apps yet', summary: 'There are no apps you can open. Ask an admin to give you access to one.', retry: () => setAttempt((n) => n + 1) });
       })
       .catch((err: Error) => {
         if (!live) return;
-        setManifest(null);
+        setCatalogue(null);
         setProblem({ title: 'Apps are unavailable', summary: err.message, retry: () => setAttempt((n) => n + 1) });
       });
     return () => {
@@ -287,8 +289,13 @@ export function Host({
   // Mount whichever app the location points at; Title and Orbit are the shell's own.
   useEffect(() => {
     const stage = stageRef.current;
-    if (!stage || !manifest) return;
+    if (!stage) return;
     mounter.current ??= new AppMounter(stage, importEntry);
+    // On the way to another floor: the app comes off until that floor's catalogue says what's there.
+    if (!manifest) {
+      void mounter.current.unmount();
+      return;
+    }
     if (!manifest.length) return;
     if (!floor) {
       void mounter.current.unmount();
@@ -311,7 +318,7 @@ export function Host({
       if (screen.kind === 'orbit') {
         shellRef.current?.setCurrent(screen.app.id);
         prefs.opened(screen.app.id);
-      }
+      } else if (shellRef.current) shellRef.current.current = '';
       return;
     }
     const { app, path } = screen;
@@ -351,7 +358,7 @@ export function Host({
       if (!target) return;
       lastApp.current = target.app.id;
       orbitStart.current = target.category;
-      navigate(hrefFor(target.app));
+      navigate(hrefFor(target.app, target.path));
     };
     const onBack = () => screen.kind === 'orbit' && navigate('/');
     menu.addEventListener('ui-select', onSelect);
@@ -362,7 +369,7 @@ export function Host({
     };
   }, [manifest, screen, navigate]);
 
-  // Esc that nothing else used goes back a step: from inside an app to its Orbit, then to Title.
+  // Esc that nothing else used goes back a step: from inside an app to its Orbit, then to Title. An app that keeps its own menu keeps Esc.
   useEffect(() => {
     if (screen?.kind !== 'app') return;
     const back = backFrom(screen);
@@ -446,14 +453,14 @@ export function Host({
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
-    shell.apps = (manifest ?? []).map(toShellApp);
+    shell.apps = (catalogue?.apps ?? []).map(toShellApp);
     shell.user = { name: session.user.name, email: session.user.email };
     shell.floors = session.floors;
     shell.floor = floor?.id ?? '';
     shell.functions = alphaFunctions;
     shell.canSwitchWorkspace = false;
     shell.version = `${__SHELL_VERSION__} · SDK ${SDK_VERSION}`;
-  }, [manifest, session, floor]);
+  }, [catalogue, session, floor]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.
   useEffect(() => {
@@ -536,6 +543,8 @@ export function Host({
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       applyPreferences(prefs.current);
     };
+    // All apps in the band: out of the app, to the menu of every app.
+    const onHome = () => navigate('/');
     // Going to another floor keeps you in the same app, at its start; its menu or Title stay as they were.
     const onFloor = (e: Event) => {
       const to = session.floors.find((f) => f.id === (e as CustomEvent<{ id: string }>).detail.id);
@@ -571,6 +580,7 @@ export function Host({
     shell.addEventListener('ui-setting', onSetting);
     shell.addEventListener('ui-find', onFind);
     shell.addEventListener('ui-floor', onFloor);
+    shell.addEventListener('ui-home', onHome);
     shell.addEventListener('ui-pick', onPick);
     shell.addEventListener('ui-notification-action', onAction);
     shell.addEventListener('ui-mute', onMute);
@@ -589,6 +599,7 @@ export function Host({
       shell.removeEventListener('ui-setting', onSetting);
       shell.removeEventListener('ui-find', onFind);
       shell.removeEventListener('ui-floor', onFloor);
+      shell.removeEventListener('ui-home', onHome);
       shell.removeEventListener('ui-pick', onPick);
     };
   }, [manifest, navigate, session, prefs, screen, raise, search]);

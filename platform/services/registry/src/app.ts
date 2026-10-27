@@ -193,7 +193,7 @@ export const buildApp = async ({
           const rules = place ? await store.rules() : [];
           const registered = (await store.records())
             .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
-            // The limit the gateway holds requests to the app's service to (SDK 1.4).
+            // The limit the gateway holds requests to the app's service to (SDK 1.3).
             .map((r) => ({ ...r.entry, maxUpload: uploadLimitOf(r) }));
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));

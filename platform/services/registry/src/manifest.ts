@@ -18,6 +18,8 @@ export interface AppEntry {
   handles?: string[];
   ai?: boolean;
   menu?: AppMenuCategory[];
+  /** false: the app keeps its own menu inside it and the shell never shows its Orbit. */
+  orbit?: boolean;
   /** What the app's service asks to do on the platform, such as "notifications:send". */
   scopes?: Scope[];
   /** The kinds of floor the app works on. Without it, every kind. */
@@ -218,6 +220,7 @@ export const appEntrySchema = {
         },
       },
     },
+    orbit: { type: 'boolean' },
     menu: {
       type: 'array',
       maxItems: 8,
