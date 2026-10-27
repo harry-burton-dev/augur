@@ -130,6 +130,56 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
 
+  apps/mandate/frontend:
+    dependencies:
+      '@augur/mfe-sdk':
+        specifier: workspace:*
+        version: link:../../../platform/packages/mfe-sdk
+      '@augur/ui-kit':
+        specifier: workspace:*
+        version: link:../../../platform/packages/ui-kit
+      lit:
+        specifier: ^3.3.0
+        version: 3.3.3
+    devDependencies:
+      happy-dom:
+        specifier: ^20.0.0
+        version: 20.14.6
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vite:
+        specifier: ^7.3.7
+        version: 7.3.7(@types/node@22.20.5)
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
+
+  apps/mandate/service:
+    dependencies:
+      '@augur/service-kit':
+        specifier: workspace:*
+        version: link:../../../platform/packages/service-kit
+      fastify:
+        specifier: ^5.6.0
+        version: 5.12.7
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)
+
   platform/contract:
     dependencies:
       '@augur/mfe-sdk':
