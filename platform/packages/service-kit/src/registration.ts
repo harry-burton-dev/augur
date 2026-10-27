@@ -9,13 +9,18 @@ export interface RegisterOptions {
   attempts?: number;
   retryMs?: number;
   fetchImpl?: typeof fetch;
+  env?: Record<string, string | undefined>;
 }
 
 /**
  * Puts an app in the platform's catalogue. Its service calls this when it
- * starts; it retries while the registry is not up yet.
+ * starts; it retries while the registry is not up yet. Under a deployment's
+ * app runner (APP_REGISTERED_BY=runner) it does nothing and answers false: the
+ * runner registers the version itself once it has passed its health check, so
+ * a version that never comes up is never offered.
  */
-export async function registerApp({ registryUrl, credentials, manifest, attempts = 6, retryMs, fetchImpl }: RegisterOptions): Promise<void> {
+export async function registerApp({ registryUrl, credentials, manifest, attempts = 6, retryMs, fetchImpl, env = process.env }: RegisterOptions): Promise<boolean> {
+  if (env.APP_REGISTERED_BY === 'runner') return false;
   await callService({
     method: 'PUT',
     url: `${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(manifest.id)}`,
@@ -26,6 +31,7 @@ export async function registerApp({ registryUrl, credentials, manifest, attempts
     retryMs,
     fetchImpl,
   });
+  return true;
 }
 
 export interface SettingsOptions {

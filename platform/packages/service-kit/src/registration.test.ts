@@ -17,6 +17,13 @@ describe('registerApp', () => {
     });
   });
 
+  it('leaves registering to the app runner when it runs the app', async () => {
+    const fetchImpl = vi.fn(async () => reply(201));
+    expect(await registerApp({ registryUrl: 'http://r', credentials, manifest, fetchImpl, env: { APP_REGISTERED_BY: 'runner' } })).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(await registerApp({ registryUrl: 'http://r', credentials, manifest, fetchImpl, env: {} })).toBe(true);
+  });
+
   it('retries while the registry is starting', async () => {
     const fetchImpl = vi
       .fn()

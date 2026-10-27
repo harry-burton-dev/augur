@@ -105,6 +105,39 @@ It drives Docker, which can start any container, so it has the run of the server
 
 Docker must be listening on `/var/run/docker.sock` (rootless Docker isn't). From then on, upgrade from the page, or by hand as above; both work. An upgrade waiting on the page while you upgrade by hand is best cancelled first.
 
+### The app runner
+
+The updater can also install, upgrade and remove apps that don't ship with AUGUR, from their own signed releases ([Versioning](versioning.md#app-releases)), with no change to `compose.yml` or `.env` per app. It runs them in a Compose project of its own, `augur-apps`, which it writes in `infra/deploy/apps/` (`compose.yml`, a settings file per container and `state.json`). Don't edit those: they're rewritten on every install.
+
+To turn it on, with the updater already set up, add one setting to `.env` and `pc up -d`:
+
+```sh
+APP_SECRETS_KEY=<openssl rand -hex 32>
+```
+
+Every app's database password, bucket secret and sign-in are worked out from it ([app-storage.md](app-storage.md)), so keep it as safe as `POSTGRES_PASSWORD`, and don't change it once apps are installed: they'd lose their database login and bucket key until reinstalled.
+
+An install (a first install, an upgrade or going back to an older version alike) goes:
+
+1. **verify**: the release's signer must be trusted (this repository's Release workflow always is; `APP_PUBLISHERS` in `.env` adds others, as `owner/repo` or `owner/repo/.github/workflows/<file>`), and its service image must carry that workflow's signature.
+2. **storage**: when the app asks for a database or a bucket, the storage container makes them for that app alone.
+3. **sign-in**: identity sets the app's sign-in to its worked-out secret.
+4. **start**: the new version starts in the slot (blue or green) the app isn't using, beside the old one, on the platform's network. It can't add powers, gets no host folders and isn't privileged.
+5. **health**: it must answer `/healthz` on its new version within 3 minutes. If it doesn't, it's removed and the old version carries on as if nothing happened.
+6. **switch**: the runner registers the new version and points the gateway at it, in that order.
+7. **retire**: the old version keeps running 10 more minutes for shells still holding the old manifest, then stops.
+
+For now an admin asks for an install through the API, with the release's `app-release.json` (Admin → Apps gets buttons for it next):
+
+```sh
+curl -X POST https://<platform>/api/registry/v1/app-runner/jobs -H "authorization: Bearer <admin token>" \
+  -H 'content-type: application/json' -d "{\"action\":\"install\",\"release\":$(cat app-release.json)}"
+```
+
+`{"action":"remove","app":"<id>"}` stops an app's containers; its data stays, and removing it in Admin → Apps takes it out of the catalogue. `GET /api/registry/v1/app-runner/jobs` shows each job's steps, and whether the runner has asked for work lately.
+
+Apps join the platform's network (`platform_default`; set `APPS_NETWORK` in `.env` if your project has another name), so `pc down` can't remove that network while they run: stop them first with `docker compose -p augur-apps -f infra/deploy/apps/compose.yml down`. They restart by themselves with Docker, like the platform.
+
 ### Images from releases (the first `augur@` release)
 
 The server stops building images and pulls the ones CI built and signed for the release instead. Once, before this upgrade:

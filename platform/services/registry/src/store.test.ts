@@ -51,6 +51,25 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect((await store.upgrade())?.state).toBe('cancelled');
   });
 
+  it('keeps one job open per app for the app runner, oldest first', async () => {
+    const ask = (id: string, app: string, action: 'install' | 'remove' = 'remove') => store.requestAppJob({ id, app, action, requestedBy: 'u-1' });
+    expect(await store.nextAppJob()).toBeUndefined();
+    expect(await ask('j-1', 'notes')).toBe(true);
+    expect(await ask('j-2', 'notes')).toBe(false);
+    expect(await ask('j-3', 'tasks')).toBe(true);
+    expect((await store.nextAppJob())?.id).toBe('j-1');
+    expect((await store.progressAppJob('j-1', { step: 'remove', state: 'running' }))?.state).toBe('running');
+    expect(await store.cancelAppJob('j-1')).toBe(false);
+    const done = await store.progressAppJob('j-1', { step: 'remove', state: 'done' }, { state: 'done' });
+    expect(done).toMatchObject({ app: 'notes', action: 'remove', state: 'done', steps: [{ step: 'remove', state: 'done' }] });
+    expect(await store.progressAppJob('j-1', { step: 'remove', state: 'done' })).toBeUndefined();
+    expect((await store.nextAppJob())?.id).toBe('j-3');
+    expect(await store.cancelAppJob('j-3')).toBe(true);
+    expect(await store.nextAppJob()).toBeUndefined();
+    expect((await store.appJobs('notes')).map((j) => j.id)).toEqual(['j-1']);
+    expect(await store.appJobs()).toHaveLength(2);
+  });
+
   it('grants what an app first asks for, and only what an admin grants after', async () => {
     await store.put({ ...library, scopes: ['notifications:send'] }, 'library');
     await store.put({ ...library, version: '0.2.0', scopes: ['notifications:send', 'audit:write'] }, 'library');
@@ -183,14 +202,14 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades, registry.app_frontends cascade');
+      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades, registry.app_frontends, registry.app_jobs cascade');
     },
   );
 
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

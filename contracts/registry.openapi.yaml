@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.17.0
+  version: 1.18.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -573,8 +573,165 @@ paths:
               schema: { $ref: "#/components/schemas/Upgrade" }
         "403": { description: Not the updater }
         "404": { description: Not the open upgrade }
+  /app-runner/jobs:
+    get:
+      summary: The app runner's recent jobs, newest first (admins only)
+      parameters:
+        - { name: app, in: query, required: false, schema: { type: string }, description: Only this app's }
+      responses:
+        "200":
+          description: Up to 50 jobs, and when the runner last asked for work (missing when it hasn't since the registry started)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs]
+                properties:
+                  jobs: { type: array, items: { $ref: "#/components/schemas/AppJob" } }
+                  runnerSeenAt: { type: string, format: date-time }
+        "403": { description: Not an admin }
+    post:
+      summary: Ask the app runner to install a release or remove an app (admins only)
+      description: >
+        Installing covers a first install, an upgrade and going back to an older version alike.
+        Needs an admin who entered their password in the last 10 minutes, or it answers 401
+        sign_in_again. Apps that ship with AUGUR are refused. Audited as app.install-requested or
+        app.uninstall-requested.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [action, release]
+                  properties:
+                    action: { type: string, enum: [install] }
+                    release: { $ref: "#/components/schemas/AppRelease" }
+                - type: object
+                  additionalProperties: false
+                  required: [action, app]
+                  properties:
+                    action: { type: string, enum: [remove] }
+                    app: { type: string }
+      responses:
+        "202":
+          description: Waiting for the runner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppJob" }
+        "400": { description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, or a bad manifest" }
+        "401": { description: "sign_in_again: enter the password again first" }
+        "403": { description: Not an admin }
+        "409": { description: "The app ships with AUGUR, or already has a job waiting or under way" }
+  /app-runner/jobs/{id}:
+    delete:
+      summary: Take back a job the runner hasn't started (admins only)
+      description: Audited as app.job-cancelled.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Cancelled }
+        "403": { description: Not an admin }
+        "404": { description: No such job is waiting }
+        "409": { description: It has started; it finishes by itself }
+  /app-runner/next:
+    get:
+      summary: The oldest open job (the deployment's app runner only)
+      description: Signed in as the platform-updater client. Each call counts as the runner being seen.
+      responses:
+        "200":
+          description: The job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppJob" }
+        "204": { description: Nothing to do }
+        "403": { description: Not the app runner }
+  /app-runner/jobs/{id}/progress:
+    post:
+      summary: Report a step of an open job (the deployment's app runner only)
+      description: >
+        The first report starts it. With `outcome` it ends, audited as app.installed,
+        app.install-failed, app.uninstalled or app.uninstall-failed.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [step, state]
+              properties:
+                step: { $ref: "#/components/schemas/AppJobStep" }
+                state: { type: string, enum: [running, done, failed] }
+                message: { type: string }
+                outcome: { type: string, enum: [done, failed] }
+      responses:
+        "200":
+          description: The job as it stands
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AppJob" }
+        "403": { description: Not the app runner }
+        "404": { description: The job isn't open }
 components:
   schemas:
+    AppRelease:
+      type: object
+      description: "An app's release file, app-release.json, as scripts/app-release.mjs writes it (docs/versioning.md, App releases)"
+      required: [schema, id, version, channel, manifest, service, frontend, signer]
+      properties:
+        schema: { type: string, enum: [augur.app-release/v1] }
+        id: { type: string }
+        version: { type: string }
+        channel: { type: string, enum: [stable, beta, preview] }
+        releasedAt: { type: string }
+        sdk: { type: string }
+        manifest: { $ref: "#/components/schemas/AppManifestEntry" }
+        service:
+          type: [object, "null"]
+          required: [image]
+          properties: { image: { type: string, description: "The service image by digest, <repo>@sha256:<hex>" } }
+        frontend:
+          type: [object, "null"]
+          required: [artifact, digest, mediaType]
+          properties:
+            artifact: { type: string, description: The frontend's OCI artifact by digest }
+            digest: { type: string, description: "sha256 of the frontend's tarball" }
+            mediaType: { type: string }
+        signer:
+          type: object
+          required: [repository, workflow]
+          properties: { repository: { type: string }, workflow: { type: string } }
+        asks: { type: object, description: "What the version asks an admin for: scopes, storage, floors, maxUpload, settings" }
+        notes: { type: string }
+    AppJob:
+      type: object
+      required: [id, app, action, requestedBy, requestedAt, state, steps]
+      properties:
+        id: { type: string }
+        app: { type: string }
+        action: { type: string, enum: [install, remove] }
+        release: { $ref: "#/components/schemas/AppRelease" }
+        requestedBy: { type: string }
+        requestedAt: { type: string, format: date-time }
+        state: { type: string, enum: [requested, running, done, failed, cancelled] }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [step, state, at]
+            properties:
+              step: { $ref: "#/components/schemas/AppJobStep" }
+              state: { type: string, enum: [running, done, failed] }
+              at: { type: string, format: date-time }
+              message: { type: string }
+        message: { type: string }
+        finishedAt: { type: string, format: date-time }
+    AppJobStep: { type: string, enum: [verify, storage, sign-in, start, health, switch, retire, remove] }
     StoredFrontend:
       type: object
       required: [app, version, digest, files, bytes, publishedBy, publishedAt]

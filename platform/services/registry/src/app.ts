@@ -25,6 +25,7 @@ import {
   signedCallers,
   type CallerCheck,
 } from '@augur/service-kit';
+import { appRunnerRoutes } from './app-runner.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import {
   appEntrySchema,
@@ -329,6 +330,8 @@ export const buildApp = async ({
       /** The catalogue changed either way; a failed audit write is logged, not turned into a failed request. */
       const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
+
+      await app.register(appRunnerRoutes({ store, pillars, serviceOf, record }));
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(
         '/apps/:id',
