@@ -118,8 +118,11 @@ pnpm check:boundaries
 | --- | --- |
 | [Artifacts](docs/folio.md) | Using Artifacts, the document libraries, and running it as an admin |
 | [Build an app](docs/build-an-app.md) | From `create-app` to an app in the shell |
+| [Ship an app](docs/ship-an-app.md) | From a pull request's preview to servers updating the app by themselves |
+| [App previews](docs/app-previews.md) | Trying a pull request's build of an app on a real server |
 | [Deploy](docs/deploy.md) | Running the stack on a server with Docker Compose and Tailscale |
 | [Upgrade](docs/upgrade.md) | Updating a running server, backups and rollback |
+| [Mirror](docs/mirror.md) | Releases and apps for servers that can't reach GitHub |
 | [Agents and models](docs/agents.md) | Setting up the model behind Agents, and an app's service asking it |
 | [Versioning](docs/versioning.md) | Changesets, releases, API and SDK versions |
 | [apps/](apps/README.md) | How apps register and ask each other for things |
