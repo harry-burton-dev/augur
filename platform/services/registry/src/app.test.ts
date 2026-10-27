@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callerHeaders, packFrontend, type FloorPlace } from '@augur/service-kit';
+import { callerHeaders, GATEWAY_CALLER, packFrontend, type FloorPlace } from '@augur/service-kit';
 import { MemoryFrontendFiles } from './frontends.ts';
 import { buildApp } from './app.ts';
 
@@ -280,6 +280,38 @@ describe('registry', () => {
     const app = await buildApp({ verifyService });
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.1.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]) });
     expect(res.statusCode).toBe(501);
+  });
+
+  it('tells the gateway where each app’s service is, as set by what runs it or an admin', async () => {
+    const entries: { action: string; actor: { id: string } }[] = [];
+    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    const set = (url: string | null, headers: Record<string, string> = as('platform-updater'), id = 'library') =>
+      app.inject({ method: 'PUT', url: `/v1/apps/${id}/upstream`, headers, payload: { url } });
+    const upstreams = (headers: Record<string, string> = callerHeaders(GATEWAY_CALLER)) => app.inject({ method: 'GET', url: '/v1/upstreams', headers });
+
+    expect((await upstreams()).json()).toEqual({ apps: {} });
+    expect((await set('http://app-library:8090/')).json()).toMatchObject({ id: 'library', upstream: 'http://app-library:8090' });
+    expect((await upstreams()).json()).toEqual({ apps: { library: 'http://app-library:8090' } });
+    expect((await upstreams(admin)).statusCode).toBe(200);
+    expect((await upstreams(editor)).statusCode).toBe(403);
+
+    // Never the app itself, nor anyone else; never the platform's own parts.
+    expect((await set('http://evil:1', service)).statusCode).toBe(403);
+    expect((await set('http://evil:1', editor)).statusCode).toBe(403);
+    for (const bad of ['http://identity:8081', 'http://keycloak:8080', 'ftp://x:1', 'http://u:p@x:1', 'http://x:1/path', 'nonsense']) expect((await set(bad)).statusCode).toBe(400);
+    expect((await set('http://x:1', admin, 'home')).statusCode).toBe(409);
+    expect((await set('http://x:1', admin, 'nothing')).statusCode).toBe(404);
+
+    // Registering a new version keeps it; null forgets it.
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
+    expect((await upstreams()).json()).toEqual({ apps: { library: 'http://app-library:8090' } });
+    await set(null, admin);
+    expect((await upstreams()).json()).toEqual({ apps: {} });
+    expect(entries.filter((e) => e.action.startsWith('app.upstream')).map((e) => [e.action, e.actor.id])).toEqual([
+      ['app.upstream-set', 'updater'],
+      ['app.upstream-cleared', 'u-1'],
+    ]);
   });
 
   it('lets an admin remove an app', async () => {

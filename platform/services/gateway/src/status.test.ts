@@ -53,6 +53,25 @@ describe('HealthMonitor', () => {
     expect(rows[3].seenAt).toBeUndefined();
   });
 
+  it('checks apps found each round too, keeping the last ones found when they can’t be', async () => {
+    const clock = { t: 0 };
+    let found: () => Promise<{ name: string; kind: 'app'; url: string }[]> = async () => [{ name: 'notes', kind: 'app', url: 'http://notes/healthz' }, { name: 'registry', kind: 'app', url: 'http://elsewhere/healthz' }];
+    const monitor = new HealthMonitor({
+      probes: probes.slice(0, 1),
+      moreProbes: () => found(),
+      now: () => clock.t,
+      fetchImpl: fakeFetch(clock, { 'http://registry/healthz': { body: { version: '0.4.0' } }, 'http://notes/healthz': { body: { version: '1.0.0' } } }),
+    });
+    await monitor.checkAll();
+    found = async () => Promise.reject(new Error('registry down'));
+    await monitor.checkAll();
+    expect(monitor.snapshot(gateway).map((c) => [c.name, c.kind, c.version])).toEqual([
+      ['gateway', 'gateway', '0.2.0'],
+      ['registry', 'service', '0.4.0'],
+      ['notes', 'app', '1.0.0'],
+    ]);
+  });
+
   it('says what an error answer was, and keeps when it was last seen', async () => {
     const clock = { t: 0 };
     const answers: Parameters<typeof fakeFetch>[1] = { 'http://registry/healthz': { body: { version: '1.0.0' } } };

@@ -2,6 +2,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import {
   callerFromHeaders,
   frontendDigest,
+  isGatewayCaller,
   FrontendProblem,
   FRONTEND_LIMITS,
   unpackFrontend,
@@ -42,6 +43,7 @@ import {
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { UpdateChecker, updatesView } from './updates.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
+import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
 import { randomUUID } from 'node:crypto';
 import {
@@ -128,6 +130,7 @@ const catalogueEntry = (r: AppRecord, allowed: string[], pillar: boolean) => {
     ...(awaitingScopes(r).length ? { awaitingScopes: awaitingScopes(r) } : {}),
     uploadLimit: uploadLimitOf(r),
     ...(r.uploadLimitMb !== undefined ? { uploadLimitLowered: true } : {}),
+    ...(r.upstream ? { upstream: r.upstream } : {}),
   };
 };
 
@@ -402,6 +405,41 @@ export const buildApp = async ({
         await record(req, { actor: by, app: 'registry', action: 'app.frontend-published', target: id, detail: { version, digest, files: files.length } });
         return reply.code(201).send(stored);
       });
+
+      /**
+       * Where the gateway sends each app's calls: the upstreams set for apps (by whatever runs them,
+       * or an admin), for the gateway itself and admins. Apps without one are wherever APP_UPSTREAMS says.
+       */
+      app.get('/upstreams', async (req, reply) => {
+        const caller = callerFromHeaders(req.headers);
+        if (!isGatewayCaller(caller ?? undefined) && !caller?.roles.includes('admin')) {
+          return reply.code(403).send({ error: 'forbidden', message: 'Only the gateway and admins can see where apps’ services are.' });
+        }
+        return { apps: Object.fromEntries((await store.records()).filter((r) => r.upstream).map((r) => [r.entry.id, r.upstream])) };
+      });
+
+      /** Sets where the gateway reaches an app's service: a platform service that runs it, or an admin. Never the app itself. */
+      app.put<{ Params: { id: string }; Body: { url: string | null } }>(
+        '/apps/:id/upstream',
+        { schema: { body: { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: ['string', 'null'], maxLength: 300 } } } } },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          const caller = callerFromHeaders(req.headers);
+          const by: NewAuditEntry['actor'] | undefined =
+            service?.kind === 'platform' ? { id: service.name, kind: 'service' } : !service && caller?.roles.includes('admin') ? { id: caller.id, kind: 'user' } : undefined;
+          if (!by) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the platform service that runs an app can say where it is.' });
+          if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: `"${req.params.id}" is one of the platform’s own apps.` });
+          const problem = req.body.url === null ? undefined : upstreamProblem(req.body.url);
+          if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
+          const url = req.body.url === null ? null : req.body.url.replace(/\/+$/, '');
+          const changed = await store.setUpstream(req.params.id, url);
+          if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          req.log.info({ app: req.params.id, upstream: url, by: by.id }, 'app upstream set');
+          await record(req, { actor: by, app: 'registry', action: url ? 'app.upstream-set' : 'app.upstream-cleared', target: req.params.id, detail: url ? { url } : {} });
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+        },
+      );
 
       app.patch<{ Params: { id: string }; Body: { enabled: boolean } }>(
         '/apps/:id',

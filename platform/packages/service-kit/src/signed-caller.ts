@@ -13,6 +13,14 @@ export const CALLER_TOKEN_HEADER = 'x-augur-caller';
 /** Where the gateway publishes the keys it signs callers with. No sign-in is needed: they are public keys. */
 export const CALLER_KEYS_PATH = '/api/gateway/v1/caller-keys';
 
+/**
+ * The gateway itself, when it asks a platform service something for its own work (such as
+ * where each app's service is), signed like any caller. Only the gateway signs callers, and
+ * a person's id is their sign-in subject, so no person can be this one.
+ */
+export const GATEWAY_CALLER: Caller = { id: 'augur:gateway', name: 'Gateway', departments: [], roles: [] };
+export const isGatewayCaller = (caller?: Pick<Caller, 'id'>) => caller?.id === GATEWAY_CALLER.id;
+
 /** How long a signed caller lasts. It is made per request, so a minute is plenty and a copied one soon stops working. */
 const LIFETIME_SECONDS = 60;
 const ISSUER = 'augur-gateway';
