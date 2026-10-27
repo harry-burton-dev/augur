@@ -22,6 +22,24 @@ const press = async (key: string, init: KeyboardEventInit = {}) => {
   menu().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true, ...init }));
   await el.updateComplete;
 };
+const wheel = async (init: WheelEventInit) => {
+  const e = new WheelEvent('wheel', { bubbles: true, composed: true, cancelable: true, ...init });
+  if (init.shiftKey) Object.defineProperty(e, 'shiftKey', { value: true }); // happy-dom drops it
+  menu().dispatchEvent(e);
+  await el.updateComplete;
+};
+const pointer = (type: string, x: number, y: number) =>
+  menu().dispatchEvent(new PointerEvent(type, { bubbles: true, composed: true, button: 0, pointerId: 1, clientX: x, clientY: y }));
+/** Press at the first point, move slowly through the rest (no throw), let go. */
+const drag = async (...points: [number, number][]) => {
+  let t = 0;
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => (t += 100));
+  pointer('pointerdown', ...points[0]);
+  for (const p of points.slice(1)) pointer('pointermove', ...p);
+  pointer('pointerup', ...points[points.length - 1]);
+  now.mockRestore();
+  await el.updateComplete;
+};
 const caption = () => root().querySelector('.caption .title')!.textContent;
 const catLabel = () => root().querySelector('.catlabel')!.textContent!.trim();
 
@@ -146,5 +164,89 @@ describe('ui-centre-menu', () => {
     await press('ArrowDown');
     await press('ArrowRight');
     expect(pulse.mock.calls.map((c) => c[0])).toEqual([0.3, 1]);
+  });
+
+  it('moves one item per notch of a mouse wheel, and sideways with Shift', async () => {
+    await wheel({ deltaY: 100 });
+    expect(caption()).toBe('Recent');
+    await wheel({ deltaY: -100 });
+    expect(caption()).toBe('Welcome');
+    await wheel({ deltaY: 100, shiftKey: true });
+    expect(catLabel()).toBe('Documents');
+  });
+
+  it('follows a trackpad continuously, then settles on the nearest item', async () => {
+    vi.useFakeTimers();
+    try {
+      for (let i = 0; i < 6; i++) await wheel({ deltaY: 7.5 }); // 45px, three quarters of an item
+      expect(root().querySelector('.menu')!.classList.contains('moving')).toBe(true);
+      expect(caption()).toBe('Recent'); // the focus follows the nearest item while moving
+      vi.advanceTimersByTime(200);
+      await el.updateComplete;
+      expect(root().querySelector('.menu')!.classList.contains('moving')).toBe(false);
+      expect(caption()).toBe('Recent');
+      for (let i = 0; i < 6; i++) await wheel({ deltaX: 21.5 }); // 129px across, about one category
+      vi.advanceTimersByTime(200);
+      await el.updateComplete;
+      expect(catLabel()).toBe('Documents');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drags on both axes, locked to the first one moved', async () => {
+    await drag([500, 300], [500, 290], [503, 270], [505, 240]); // up, with a little drift sideways
+    expect(caption()).toBe('Recent');
+    expect(catLabel()).toBe('Home');
+    await drag([500, 300], [490, 300], [400, 302], [355, 305]); // left, about one category
+    expect(catLabel()).toBe('Documents');
+  });
+
+  it('slides between apps when Title is dragged sideways, and stops at the ends', async () => {
+    el.variant = 'title';
+    await el.updateComplete;
+    await drag([500, 300], [490, 300], [380, 300], [370, 300]);
+    expect(catLabel()).toBe('02  /  Documents');
+    await drag([500, 300], [510, 300], [900, 300], [1400, 300]);
+    expect(catLabel()).toBe('01  /  Home');
+  });
+
+  it('keeps a press that moves less than 6px a click', async () => {
+    const select = vi.fn();
+    el.addEventListener('ui-select', select);
+    await drag([500, 300], [503, 302]);
+    (root().querySelectorAll<HTMLElement>('.item')[0]).click();
+    expect(select).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a tablist of categories controlling a listbox of items', async () => {
+    const tabs = [...root().querySelectorAll('[role=tab]')];
+    expect(tabs.map((t) => t.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
+    const list = root().querySelector('[role=listbox]')!;
+    expect(tabs[0].getAttribute('aria-controls')).toBe(list.id);
+    expect(list.getAttribute('aria-label')).toBe('Home');
+    const options = [...list.querySelectorAll('[role=option]')];
+    expect(list.getAttribute('aria-activedescendant')).toBe(options[0].id);
+    await press('ArrowDown');
+    expect(list.getAttribute('aria-activedescendant')).toBe(options[1].id);
+    expect(options.map((o) => o.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+    el.focus();
+    expect(root().activeElement).toBe(list);
+  });
+
+  it('keeps every icon it shows at least 55% opaque', async () => {
+    const many: MenuCategory[] = Array.from({ length: 8 }, (_, i) => ({
+      label: `C${i}`,
+      items: Array.from({ length: 8 }, (_, j) => ({ label: `I${i}.${j}` })),
+    }));
+    for (const variant of ['orbit', 'title'] as const) {
+      el.variant = variant;
+      el.categories = many;
+      el.setCategory(3);
+      el.setItem(3);
+      await el.updateComplete;
+      const opacities = [...root().querySelectorAll<HTMLElement>('.cat, .item')].map((n) => Number(n.style.opacity));
+      expect(opacities.filter((o) => o > 0 && o < 0.55), variant).toEqual([]);
+    }
   });
 });
