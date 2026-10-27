@@ -29,6 +29,13 @@ export interface AppManifestEntry {
    * Without one, the app opens straight away.
    */
   menu?: AppMenuCategory[];
+  /**
+   * `false`: the app keeps its own menu inside it, so the shell never shows
+   * its Orbit. Title's chapter for it still lists its menu, and choosing an
+   * item opens the app there; its root opens the app itself, Esc doesn't
+   * leave it, and the way back to the shell is the top bar's All apps (SDK 1.4).
+   */
+  orbit?: boolean;
   /** The kinds of floor the app works on. Without it, every kind. */
   floors?: WorkspaceKind[];
   /**
@@ -44,7 +51,7 @@ export interface AppManifestEntry {
   search?: boolean;
   /**
    * The largest request the gateway lets through to the app's service, in MB
-   * (SDK 1.4): what its manifest asks, or less where an admin lowered it. The
+   * (SDK 1.3): what its manifest asks, or less where an admin lowered it. The
    * registry always fills it in; an app checks a file against it before sending.
    */
   maxUpload?: number;
