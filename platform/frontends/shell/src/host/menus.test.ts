@@ -19,7 +19,9 @@ const board = app('board', '/board', {
   ],
 });
 const home = app('home', '/home', { icon: 'home', description: 'What needs you' });
-const manifest = [home, board];
+/** Keeps its menu inside it: the shell shows no Orbit for it. */
+const shelf = app('shelf', '/shelf', { orbit: false, menu: board.menu });
+const manifest = [home, board, shelf];
 
 describe('screenFor', () => {
   it('shows Title at the root, Orbit at a root with a menu, and the app everywhere else', () => {
@@ -31,12 +33,16 @@ describe('screenFor', () => {
     expect(screenFor(manifest, '/home')).toEqual({ kind: 'app', app: home, path: '/' });
     expect(screenFor(manifest, '/nowhere')).toBeUndefined();
   });
+
+  it('opens an app that keeps its own menu straight away at its root', () => {
+    expect(screenFor(manifest, '/shelf')).toEqual({ kind: 'app', app: shelf, path: '/' });
+  });
 });
 
 describe('titleMenu', () => {
   it('makes each app a chapter, its menu categories the items', () => {
     const title = titleMenu(manifest);
-    expect(title.map((c) => c.label)).toEqual(['Home', 'Board']);
+    expect(title.map((c) => c.label)).toEqual(['Home', 'Board', 'Shelf']);
     expect(title[0].items).toEqual([{ id: 'home/', label: 'Home', icon: 'home', ai: undefined, detail: 'What needs you' }]);
     expect(title[1].items.map((i) => [i.label, i.detail])).toEqual([
       ['Labels', 'All labels, New and 1 more'],
@@ -50,6 +56,11 @@ describe('titleMenu', () => {
     expect(titleTarget(manifest, homeChapter.items[0])).toEqual({ app: home, category: 0 });
     expect(titleTarget(manifest, boardChapter.items[1])).toEqual({ app: board, category: 1 });
     expect(titleTarget(manifest, { label: 'Gone', id: 'gone/0' })).toBeUndefined();
+  });
+
+  it('opens an app that keeps its own menu at the chosen category’s first page', () => {
+    const shelfChapter = titleMenu(manifest)[2];
+    expect(titleTarget(manifest, shelfChapter.items[1])).toEqual({ app: shelf, category: 1, path: '/colours' });
   });
 });
 
@@ -67,6 +78,11 @@ describe('backFrom', () => {
     expect(backFrom({ kind: 'orbit', app: board })).toBe('/');
     expect(backFrom({ kind: 'app', app: home, path: '/' })).toBe('/');
     expect(backFrom({ kind: 'title' })).toBeUndefined();
+  });
+
+  it('never steps out of an app that keeps its own menu', () => {
+    expect(backFrom({ kind: 'app', app: shelf, path: '/labels' })).toBeUndefined();
+    expect(backFrom({ kind: 'app', app: shelf, path: '/' })).toBeUndefined();
   });
 });
 
@@ -93,10 +109,10 @@ describe('escapeIsFree', () => {
 
 describe('findPages', () => {
   it('finds menu pages across apps by any of their words, each opening its location', () => {
-    expect(findPages(manifest, 'labels new')).toEqual([{ id: '/board/labels/new', title: 'New', detail: 'Board · Labels', kind: 'page' }]);
-    expect(findPages(manifest, 'PALETTE').map((r) => r.id)).toEqual(['/board/colours']);
-    expect(findPages(manifest, 'board').length).toBe(4);
-    expect(findPages(manifest, '  ')).toEqual([]);
-    expect(findPages(manifest, 'nothing like it')).toEqual([]);
+    expect(findPages([home, board], 'labels new')).toEqual([{ id: '/board/labels/new', title: 'New', detail: 'Board · Labels', kind: 'page' }]);
+    expect(findPages([home, board], 'PALETTE').map((r) => r.id)).toEqual(['/board/colours']);
+    expect(findPages([home, board], 'board').length).toBe(4);
+    expect(findPages([home, board], '  ')).toEqual([]);
+    expect(findPages([home, board], 'nothing like it')).toEqual([]);
   });
 });

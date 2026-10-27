@@ -145,8 +145,9 @@ describe('registry', () => {
     const app = await buildApp({ verifyService });
     const menu = [{ label: 'Documents', icon: 'folder', items: [{ label: 'Reports', path: '/reports', detail: 'Updated today' }] }];
     const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
-    expect((await put({ ...library, ai: false, menu })).statusCode).toBe(201);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu, maxUpload: 10 });
+    expect((await put({ ...library, ai: false, menu, orbit: false })).statusCode).toBe(201);
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu, orbit: false, maxUpload: 10 });
+    expect((await put({ ...library, menu, orbit: 'no' })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'All', path: '/' }] }] })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Empty', items: [] }] })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'Reports', path: '/r', colour: 'red' }] }] })).statusCode).toBe(400);

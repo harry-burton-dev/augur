@@ -42,7 +42,7 @@ export {
   type ShellView,
   type ShellViewRenderer,
 } from './components/shell.js';
-export { floorStack, floorBeside, floorDirection, floorIcon, floorLevel, type ShellFloor, type ShellFloorRef, type FloorKind } from './components/floors.js';
+export { floorStack, floorBeside, floorDirection, floorIcon, floorLevel, floorMeaning, type ShellFloor, type ShellFloorRef, type FloorKind } from './components/floors.js';
 export {
   UiWaveBackground,
   wavePresets,

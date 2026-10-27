@@ -4,7 +4,8 @@ import { hrefFor, matchRoute } from './routes.js';
 
 /**
  * What the shell shows at a location: Title (every app a chapter) at "/",
- * an app's Orbit menu at the app's root when it has one, or the app itself.
+ * an app's Orbit menu at the app's root when it has one and wants it, or the
+ * app itself.
  */
 export type Screen =
   | { kind: 'title' }
@@ -16,9 +17,12 @@ export function screenFor(manifest: AppManifestEntry[], pathname: string, intent
   const match = matchRoute(manifest, pathname);
   if (!match) return undefined;
   // An intent goes to the app itself, never its Orbit, so the app can answer it.
-  if (match.path === '/' && match.app.menu?.length && !intent) return { kind: 'orbit', app: match.app };
+  if (match.path === '/' && hasOrbit(match.app) && !intent) return { kind: 'orbit', app: match.app };
   return { kind: 'app', app: match.app, path: match.path };
 }
+
+/** Whether the shell shows the app's menu as its Orbit; an app with `orbit: false` keeps its menu inside it. */
+export const hasOrbit = (app: AppManifestEntry) => Boolean(app.menu?.length) && app.orbit !== false;
 
 /** "Reports, Drafts and 2 more": one short line naming what a chapter leads to. */
 const listed = (labels: string[]) =>
@@ -26,8 +30,8 @@ const listed = (labels: string[]) =>
 
 /**
  * Title: one chapter per app. A chapter's items are the app's menu categories,
- * each opening the app's Orbit there; an app without a menu is one item that
- * opens it.
+ * each opening the app's Orbit there (or, for an app without one, the
+ * category's first page); an app without a menu is one item that opens it.
  */
 export function titleMenu(manifest: AppManifestEntry[]): MenuCategory[] {
   return manifest.map((app) => ({
@@ -48,12 +52,20 @@ export function titleMenu(manifest: AppManifestEntry[]): MenuCategory[] {
   }));
 }
 
-/** Where a Title item leads: the app, and the Orbit category to start on. */
-export function titleTarget(manifest: AppManifestEntry[], item: MenuItem): { app: AppManifestEntry; category: number } | undefined {
+/**
+ * Where a Title item leads: the app, the Orbit category to start on, and the
+ * path to open, which is the category's first page for an app without an Orbit.
+ */
+export function titleTarget(
+  manifest: AppManifestEntry[],
+  item: MenuItem,
+): { app: AppManifestEntry; category: number; path?: string } | undefined {
   const [id, index] = (item.id ?? '').split('/');
   const app = manifest.find((a) => a.id === id);
   if (!app) return undefined;
-  return { app, category: index ? Number(index) : 0 };
+  const category = index ? Number(index) : 0;
+  const path = hasOrbit(app) ? undefined : app.menu?.[category]?.items[0]?.path;
+  return { app, category, path };
 }
 
 /** Orbit: the app's own menu. Each item's id is the path it opens. */
@@ -67,10 +79,15 @@ export function orbitMenu(app: AppManifestEntry): MenuCategory[] {
   }));
 }
 
-/** One step back: from inside an app to its Orbit, from Orbit (or an app with no menu) to Title. */
+/**
+ * One step back: from inside an app to its Orbit, from Orbit (or an app with
+ * no menu) to Title. An app that keeps its own menu is never left by a step
+ * back: the way out is the band's All apps.
+ */
 export function backFrom(screen: Screen | undefined): string | undefined {
   if (!screen || screen.kind === 'title') return undefined;
-  if (screen.kind === 'app' && screen.app.menu?.length && screen.path !== '/') return hrefFor(screen.app);
+  if (screen.kind === 'app' && screen.app.menu?.length && screen.app.orbit === false) return undefined;
+  if (screen.kind === 'app' && hasOrbit(screen.app) && screen.path !== '/') return hrefFor(screen.app);
   return '/';
 }
 

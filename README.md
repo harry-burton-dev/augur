@@ -78,7 +78,7 @@ Home and Admin are built like any app: one ES module the shell imports.
 | `registry` | 8082 | The app catalogue on Postgres. Apps register themselves on start; each person gets the manifest their roles allow; admins can turn apps off and allow app origins. |
 | `events` | 8084 | Notifications (streamed live to the shell) and the append-only audit log, on Postgres. Only services can write; people read their own notifications. |
 | `models` | 8085 | The model gateway. Holds the AI provider's key (any OpenAI-style API: OpenRouter, LiteLLM, or the stand-in model), records every call in the audit log before making it, and gives each app a number of calls a day. Off until an admin turns it on. |
-| `@apps/folio` | 8083 | Folio's service: document libraries on each floor, with their folders, in its own schema. |
+| `@apps/folio` | 8083 | The service behind Artifacts (Folio in code): document libraries on each floor, with their folders, in its own schema. |
 
 Keycloak handles sign-in. The gateway passes each service the person calling, signed for that service alone ([Signed caller](docs/signed-caller.md)). Postgres holds data (a schema per service), and Garage is the object store for apps' files ([App storage](docs/app-storage.md)). Each API is described in `contracts/<service>.openapi.yaml`, and its major version is its path prefix (`/v1`).
 
@@ -116,7 +116,7 @@ pnpm check:boundaries
 
 | Guide | Covers |
 | --- | --- |
-| [Folio](docs/folio.md) | Using Folio, the document libraries, and running it as an admin |
+| [Artifacts](docs/folio.md) | Using Artifacts, the document libraries, and running it as an admin |
 | [Build an app](docs/build-an-app.md) | From `create-app` to an app in the shell |
 | [Deploy](docs/deploy.md) | Running the stack on a server with Docker Compose and Tailscale |
 | [Upgrade](docs/upgrade.md) | Updating a running server, backups and rollback |

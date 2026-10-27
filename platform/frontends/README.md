@@ -30,6 +30,9 @@ The shell's own navigation is the design system's centre menu, over the water.
 - `/` is **Title**: every app the person can open is a chapter. A chapter's items are the app's menu categories, or the app itself when it has no menu. Enter opens it.
 - An app's root is its **Orbit** when its manifest has a `menu`: categories on a ring, each item opening the app at its `path` (for example `/library/drafts`). An app without a menu opens straight away.
 - **Esc goes back a step:** from inside an app to its Orbit, from Orbit (or an app with no menu) to Title. It only does so when nothing else used the Esc, so a component that handles Esc itself (an armed button, a filter, a dialog) calls `preventDefault()`.
+- **An app can keep its menu inside it** with `"orbit": false` (SDK 1.4), as Artifacts does with its side rail. The shell then never shows its Orbit: its root opens the app, Title's chapter still lists its menu categories and opens the app at the chosen category's first page, and Esc stays with the app. The way out is **All apps** in the band.
+- **The band stays on every screen.** While an app is open it names the app after the floor's breadcrumb, and **All apps** (`ui-home`) goes back to Title, on the open app's chapter.
+- **The floor gauge** at the right edge lights the floor you're on and pins the open app beside it, since what an app shows is that floor's. Pointing at it, or tabbing into it, opens it out: each floor's name, who sees what's on it, which one you're on, and which one the app is showing. Changing floor keeps you in the same app, at its start. Until the new floor's catalogue arrives nothing of the old floor's stays mounted, so an app is never shown one floor's data under another's address.
 
 ```json
 "menu": [

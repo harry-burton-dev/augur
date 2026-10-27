@@ -64,3 +64,10 @@ export function floorDirection(from: ShellFloor | undefined, to: ShellFloor): 'u
   const b = height(to);
   return b > a ? 'up' : b < a ? 'down' : 'across';
 }
+
+/** What a floor is, in a line: who sees what’s kept on it. */
+export function floorMeaning(f: ShellFloor): string {
+  if (f.kind === 'personal') return 'Just you. No one else sees what’s here unless you share it.';
+  if (f.kind === 'org') return `Everyone in ${f.name} sees what’s here.`;
+  return `${f.name} and the teams under it see what’s here.`;
+}
