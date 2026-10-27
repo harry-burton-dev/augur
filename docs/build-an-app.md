@@ -65,7 +65,7 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.path` | Where in your app they are, below its route: `/reports/q3` for `/expenses/reports/q3` |
 | `ctx.getToken()` | A current token to send as `Authorization: Bearer …` to `/api/<id>/…` |
 | `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. SDK 1.1 |
-| `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on. SDK 1.1 |
+| `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on, and a call to your app on a floor where it's off for them (a call naming no floor is checked on the organisation's). SDK 1.1 |
 | `ctx.notify({ title, body?, needsYou?, actions? })` | A notification on the shell's stream. `actions` (SDK 1.2) is up to two `{ label, intent }` buttons on it; pressing one raises the intent through the shell, as `ctx.raise` does |
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
 | `ctx.request(intent)` | Ask whichever app handles an intent for an answer; it opens over yours. Rejects with `isIntentCancelled(err)` when the person closes it |

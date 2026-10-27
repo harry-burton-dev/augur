@@ -4,52 +4,57 @@ import { callerHeaders, signedCallerHeaders, type Caller, type CallerSigner } fr
 /** What an app may be sent in one request when the registry doesn't say: the registry's own default. */
 export const DEFAULT_UPLOAD_MB = 10;
 
-/** How much one person may send each app in one request, in MB, by app id. Throws when that can't be found out. */
-export type UploadLimits = (caller: Caller) => Promise<Map<string, number>>;
+/**
+ * The apps one person may use on one floor (the caller's `workspace`, or none), by app id, with what
+ * each may be sent in one request, in MB, where it says. Throws when that can't be found out.
+ */
+export type AppAccess = (caller: Caller) => Promise<Map<string, { maxUpload?: number }>>;
 
-export class UploadLimitsUnavailable extends Error {}
+export class AppAccessUnavailable extends Error {}
 
-export interface RegistryUploadLimitsOptions {
+export interface RegistryAppAccessOptions {
   registryUrl: string;
   /** Signs the person for the registry, which believes no other. */
   signer?: CallerSigner;
-  /** How long one person's limits are trusted before the registry is asked again. */
+  /** How long one person's apps on one floor are trusted before the registry is asked again. */
   ttlMs?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
 }
 
-/** People to remember at once; past this the oldest is forgotten first. */
+/** People and floors to remember at once; past this the oldest is forgotten first. */
 const MAX_REMEMBERED = 5000;
 
 /**
- * Reads each app's limit (`maxUpload`, lowered by an admin) from the catalogue
- * the registry gives the person, the same one their shell gets, and remembers
- * it for a short while. Only requests that carry a body ask.
+ * Reads the catalogue the registry gives the person on the floor, the same one their shell gets: an
+ * app turned off, blocked on that floor, or needing a role they don't have isn't in it. Each app's
+ * limit (`maxUpload`, lowered by an admin) comes with it. Remembered for a short while, so turning an
+ * app off reaches the gateway within `ttlMs`.
  */
-export const registryUploadLimits = ({ registryUrl, signer, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: RegistryUploadLimitsOptions): UploadLimits => {
-  const remembered = new Map<string, { limits: Promise<Map<string, number>>; until: number }>();
+export const registryAppAccess = ({ registryUrl, signer, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: RegistryAppAccessOptions): AppAccess => {
+  const remembered = new Map<string, { apps: Promise<Map<string, { maxUpload?: number }>>; until: number }>();
   return (caller) => {
-    const hit = remembered.get(caller.id);
-    if (hit && hit.until > now()) return hit.limits;
-    const limits = (async () => {
-      const asked = { ...caller, workspace: undefined };
+    const floor = caller.workspace?.id;
+    const key = `${caller.id} ${floor ?? ''}`;
+    const hit = remembered.get(key);
+    if (hit && hit.until > now()) return hit.apps;
+    const apps = (async () => {
       let res: Response;
       try {
-        const headers = { ...callerHeaders(asked), ...(signer ? await signedCallerHeaders(signer, asked, 'registry') : {}) };
-        res = await fetchImpl(`${registryUrl.replace(/\/$/, '')}/v1/manifest`, { headers });
+        const headers = { ...callerHeaders(caller), ...(signer ? await signedCallerHeaders(signer, caller, 'registry') : {}) };
+        res = await fetchImpl(`${registryUrl.replace(/\/$/, '')}/v1/manifest${floor ? `?workspace=${encodeURIComponent(floor)}` : ''}`, { headers });
       } catch (err) {
-        throw new UploadLimitsUnavailable(`the registry could not be reached (${(err as Error).message})`);
+        throw new AppAccessUnavailable(`the registry could not be reached (${(err as Error).message})`);
       }
-      if (!res.ok) throw new UploadLimitsUnavailable(`the registry answered ${res.status}`);
-      const apps = (await res.json()) as { id: string; maxUpload?: number }[];
-      return new Map(apps.filter((a) => typeof a.maxUpload === 'number').map((a) => [a.id, a.maxUpload!]));
+      if (!res.ok) throw new AppAccessUnavailable(`the registry answered ${res.status}`);
+      const list = (await res.json()) as { id: string; maxUpload?: number }[];
+      return new Map(list.map((a) => [a.id, typeof a.maxUpload === 'number' ? { maxUpload: a.maxUpload } : {}]));
     })();
-    remembered.delete(caller.id);
-    remembered.set(caller.id, { limits, until: now() + ttlMs });
-    limits.catch(() => remembered.get(caller.id)?.limits === limits && remembered.delete(caller.id));
+    remembered.delete(key);
+    remembered.set(key, { apps, until: now() + ttlMs });
+    apps.catch(() => remembered.get(key)?.apps === apps && remembered.delete(key));
     if (remembered.size > MAX_REMEMBERED) remembered.delete(remembered.keys().next().value!);
-    return limits;
+    return apps;
   };
 };
 
