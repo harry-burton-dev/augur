@@ -54,4 +54,19 @@ describe('identity’s sign-in to Keycloak', () => {
     expect(await directory.ensureSignInPolicy()).toBe(false);
     expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
   });
+
+  it('gives a role to the first admin only while nobody holds it', async () => {
+    let holders: unknown[] = [];
+    const { calls, fetchImpl } = keycloak((method, path) => {
+      if (path.startsWith('/roles/deployment-admin/users')) return holders;
+      if (path === '/users?username=harry&exact=true') return [{ id: 'u-1', username: 'harry' }];
+      if (path === '/roles/deployment-admin') return { id: 'r-1', name: 'deployment-admin' };
+      return undefined;
+    });
+    const directory = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn: { client: { id: 'platform-identity', secret: 's' } }, fetchImpl });
+    expect(await directory.ensureRoleHolder('deployment-admin', 'harry')).toBe(true);
+    expect(JSON.parse(calls.find((c) => c.method === 'POST' && c.url.endsWith('/users/u-1/role-mappings/realm'))!.body!)).toEqual([{ id: 'r-1', name: 'deployment-admin' }]);
+    holders = [{ id: 'u-1' }];
+    expect(await directory.ensureRoleHolder('deployment-admin', 'harry')).toBe(false);
+  });
 });

@@ -16,6 +16,32 @@ const setup = async () => {
   return { app, directory, audit, call };
 };
 
+describe('admin: deployment admins', () => {
+  const deployer = callerHeaders({ id: 'admin-9', name: 'Harry', departments: [], roles: ['admin', 'deployment-admin'] });
+
+  it('lets only a deployment admin make one, or change one’s role or sign-in', async () => {
+    const { call } = await setup();
+    const add = { firstName: 'Ops', lastName: 'Person', email: 'ops@example.org', roles: ['admin', 'deployment-admin'] };
+    expect((await call('POST', '/people', add)).statusCode).toBe(403);
+    const { person } = (await call('POST', '/people', add, deployer)).json();
+    expect(person.roles).toContain('deployment-admin');
+    expect((await call('PATCH', `/people/${person.id}`, { roles: ['admin'] })).statusCode).toBe(403);
+    expect((await call('PATCH', `/people/${person.id}`, { enabled: false })).statusCode).toBe(403);
+    expect((await call('PATCH', `/people/${person.id}`, { email: 'other@example.org' })).statusCode).toBe(403);
+    expect((await call('POST', `/people/${person.id}/password`)).statusCode).toBe(403);
+    expect((await call('PATCH', `/people/${person.id}`, { lastName: 'Lead', roles: ['deployment-admin', 'admin'] })).statusCode).toBe(200);
+    expect((await call('POST', `/people/${person.id}/password`, undefined, deployer)).statusCode).toBe(200);
+    expect((await call('PATCH', `/people/${person.id}`, { roles: ['admin'] }, deployer)).statusCode).toBe(200);
+  });
+
+  it('keeps an admin from giving the role to someone else', async () => {
+    const { call } = await setup();
+    const { person } = (await call('POST', '/people', { firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org' })).json();
+    expect((await call('PATCH', `/people/${person.id}`, { roles: ['deployment-admin'] })).statusCode).toBe(403);
+    expect((await call('PATCH', `/people/${person.id}`, { enabled: false })).statusCode).toBe(200);
+  });
+});
+
 describe('admin: people', () => {
   it('is for admins only', async () => {
     const { call } = await setup();

@@ -192,11 +192,14 @@ services:
     environment:
       <<: *env
       PORT: 8081
-      # Admin's People screen: identity manages people in Keycloak as its admin. Departments are
-      # identity's own teams, copied in once from Keycloak's groups.
+      # Admin's People screen: identity manages people in Keycloak as its own client, which Keycloak's
+      # admin gives the realm's admin rights as identity starts. Departments are identity's own teams,
+      # copied in once from Keycloak's groups.
       KEYCLOAK_URL: http://keycloak:8080/sso
       KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Given the deployment-admin role if nobody has it yet.
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # What the top floor, the whole organisation, is called.
       ORG_NAME: ${ORG_NAME:-Organisation}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
