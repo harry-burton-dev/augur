@@ -5,8 +5,9 @@
  */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { AppHost, RunnerState } from './runner.ts';
 import type { Server } from './upgrade.ts';
 
 export interface ServerOptions {
@@ -119,3 +120,58 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
     },
   };
 };
+
+/** Writes a file whole or not at all: to a temporary name first, then renamed over the old one. */
+const writeWhole = async (path: string, text: string, mode = 0o600) => {
+  await writeFile(`${path}.tmp`, text, { mode });
+  await chmod(`${path}.tmp`, mode);
+  await rename(`${path}.tmp`, path);
+};
+
+/**
+ * The app runner's server: the apps' own Compose project, `augur-apps`, in the deploy folder's apps/
+ * (compose.yml, a settings file per container and state.json, all written by the runner and never
+ * by hand), driven with the same docker CLI as the platform's.
+ */
+export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<ServerOptions, 'healthUrls'>): AppHost => {
+  const env = () => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dockerConfig, DOCKER_HOST: dockerHost, DOCKER_CONFIG: dockerConfig });
+  const appsDir = join(dir, 'apps');
+  const apps = (args: string[]) => command('docker', ['compose', '-p', 'augur-apps', '-f', join(appsDir, 'compose.yml'), ...args], env());
+  const platform = (args: string[]) => command('docker', ['compose', '-f', join(dir, 'compose.yml'), '--env-file', join(dir, '.env'), ...args], env());
+
+  return {
+    readEnv: () => readFile(join(dir, '.env'), 'utf8'),
+    async readState() {
+      const text = await readFile(join(appsDir, 'state.json'), 'utf8').catch(() => undefined);
+      return text ? (JSON.parse(text) as RunnerState) : { apps: {} };
+    },
+    async writeProject(state, project, envFiles) {
+      await mkdir(appsDir, { recursive: true, mode: 0o700 });
+      // Each container's settings hold its secrets: readable by the updater alone, like .env.
+      for (const [name, text] of Object.entries(envFiles)) await writeWhole(join(appsDir, `${name}.env`), text);
+      const header = '# Written by the app runner (the updater) from state.json. Don’t edit it: it is rewritten on every install.\n';
+      // JSON is YAML, which Compose reads.
+      await writeWhole(join(appsDir, 'compose.yml'), header + JSON.stringify(project, null, 2) + '\n', 0o644);
+      await writeWhole(join(appsDir, 'state.json'), JSON.stringify(state, null, 2) + '\n');
+    },
+    async verifySignedBy(ref, identity) {
+      await command('cosign', ['verify', '--certificate-identity', identity, '--certificate-oidc-issuer', signer.issuer, '--output', 'text', ref], env());
+    },
+    async provisionStorage(app) {
+      await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, 'storage']);
+    },
+    async start(services) {
+      await apps(['pull', '--quiet', ...services]);
+      await apps(['up', '-d', '--no-deps', ...services]);
+    },
+    async stop(services) {
+      if (services.length) await apps(['rm', '--stop', '--force', ...services]);
+    },
+    async health(url) {
+      const res = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      return res.ok ? ((await res.json()) as { version?: string }) : undefined;
+    },
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
+};
+

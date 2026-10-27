@@ -124,6 +124,57 @@ export interface Upgrade {
 
 export type UpgradeOutcome = 'done' | 'rolled-back' | 'failed';
 
+/** What an app release file says (scripts/app-release.mjs): the bundle a deployment's app runner installs. */
+export interface AppRelease {
+  schema: 'augur.app-release/v1';
+  id: string;
+  version: string;
+  channel: string;
+  releasedAt?: string;
+  sdk?: string;
+  manifest: AppEntry;
+  /** The service image, by digest; null for an app with no service. */
+  service: { image: string } | null;
+  frontend: { artifact: string; digest: string; mediaType: string } | null;
+  /** The repository and workflow that built and signed both parts. */
+  signer: { repository: string; workflow: string };
+  asks?: Record<string, unknown>;
+  notes?: string;
+}
+
+/** The steps the app runner takes, in order: `remove` only for a removal. */
+export const APP_JOB_STEPS = ['verify', 'storage', 'sign-in', 'start', 'health', 'switch', 'retire', 'remove'] as const;
+export type AppJobStep = (typeof APP_JOB_STEPS)[number];
+
+export interface AppJobStepState {
+  step: AppJobStep;
+  state: 'running' | 'done' | 'failed';
+  at: string;
+  message?: string;
+}
+
+/**
+ * Something an admin asked the deployment's app runner to do to one app: install a release (a first
+ * install, an upgrade or going back are all the same), or remove the app's containers. It waits
+ * (`requested`) until the runner picks it up (`running`), and ends `done`, `failed` (what was
+ * running before keeps running) or `cancelled`. One app has at most one open at a time.
+ */
+export interface AppJob {
+  id: string;
+  app: string;
+  action: 'install' | 'remove';
+  /** For an install: the release to run, as its app-release.json says. */
+  release?: AppRelease;
+  requestedBy: string;
+  requestedAt: string;
+  state: 'requested' | 'running' | 'done' | 'failed' | 'cancelled';
+  steps: AppJobStepState[];
+  message?: string;
+  finishedAt?: string;
+}
+
+export type AppJobOutcome = 'done' | 'failed';
+
 /** Where registered apps are kept. */
 export interface AppStore {
   /** Origins apps may load their entry from, besides the platform itself. */
@@ -180,11 +231,23 @@ export interface AppStore {
   progressUpgrade(id: string, step: Omit<UpgradeStepState, 'at'>, outcome?: { state: UpgradeOutcome; message?: string }): Promise<Upgrade | undefined>;
   /** Takes back an upgrade nothing has started yet; false when there is none waiting. */
   cancelUpgrade(id: string): Promise<boolean>;
+  /** The app runner's latest jobs, newest first: one app's, or every app's. */
+  appJobs(app?: string): Promise<AppJob[]>;
+  /** The oldest job not yet finished, for the app runner to do next. */
+  nextAppJob(): Promise<AppJob | undefined>;
+  /** Records a job for the app runner; false when that app already has one waiting or under way. */
+  requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'requestedBy'>): Promise<boolean>;
+  /** Records a step of the open job `id`, which starts it, and with `outcome` ends it. Undefined when `id` isn't open. */
+  progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string }): Promise<AppJob | undefined>;
+  /** Takes back a job the runner hasn't started; false when it isn't waiting. */
+  cancelAppJob(id: string): Promise<boolean>;
 }
 
 /** A step's new state replaces its last one, so each step shows once. */
-const withStep = (steps: UpgradeStepState[], step: UpgradeStepState) => [...steps.filter((s) => s.step !== step.step), step];
-const isOpen = (u?: Upgrade) => u?.state === 'requested' || u?.state === 'running';
+const withStep = <S extends { step: string }>(steps: S[], step: S) => [...steps.filter((s) => s.step !== step.step), step];
+const isOpen = (u?: { state: string }) => u?.state === 'requested' || u?.state === 'running';
+/** How many of the runner's jobs are listed. */
+const APP_JOBS_LISTED = 50;
 
 /** For tests, and for running the registry locally without Postgres. Forgets everything on restart. */
 export class MemoryAppStore implements AppStore {
@@ -194,6 +257,43 @@ export class MemoryAppStore implements AppStore {
   private floorRules: FloorRule[] = [];
   private upgrades: Upgrade[] = [];
   private kept: StoredFrontend[] = [];
+  private jobs: AppJob[] = [];
+
+  async appJobs(app?: string) {
+    return this.jobs.filter((j) => !app || j.app === app).slice(-APP_JOBS_LISTED).reverse().map((j) => structuredClone(j));
+  }
+
+  async nextAppJob() {
+    const job = this.jobs.find((j) => isOpen(j));
+    return job && structuredClone(job);
+  }
+
+  async requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'requestedBy'>) {
+    if (this.jobs.some((j) => j.app === job.app && isOpen(j))) return false;
+    this.jobs.push({ ...structuredClone(job), requestedAt: new Date().toISOString(), state: 'requested', steps: [] });
+    return true;
+  }
+
+  async progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string }) {
+    const job = this.jobs.find((j) => j.id === id && isOpen(j));
+    if (!job) return undefined;
+    const at = new Date().toISOString();
+    job.steps = withStep(job.steps, { ...step, at });
+    job.state = outcome?.state ?? 'running';
+    if (outcome) {
+      job.finishedAt = at;
+      if (outcome.message) job.message = outcome.message;
+    }
+    return structuredClone(job);
+  }
+
+  async cancelAppJob(id: string) {
+    const job = this.jobs.find((j) => j.id === id && j.state === 'requested');
+    if (!job) return false;
+    job.state = 'cancelled';
+    job.finishedAt = new Date().toISOString();
+    return true;
+  }
 
   async frontends(app?: string) {
     return this.kept.filter((f) => !app || f.app === app).map((f) => structuredClone(f));
@@ -490,6 +590,26 @@ export const migrations: { id: string; sql: string }[] = [
     sql: `
       -- Where the gateway reaches the app's service, set by whatever runs it; null leaves it to APP_UPSTREAMS.
       alter table registry.apps add column upstream text;`,
+  },
+  {
+    id: '011_app_jobs',
+    sql: `
+      -- What admins asked the deployment's app runner to do (install a release, remove an app), and how it went.
+      -- Not tied to registry.apps: an app is installed before it first registers.
+      create table registry.app_jobs (
+        id text primary key,
+        app_id text not null,
+        action text not null,
+        release jsonb,
+        requested_by text not null,
+        requested_at timestamptz not null default now(),
+        state text not null default 'requested',
+        steps jsonb not null default '[]',
+        message text,
+        finished_at timestamptz
+      );
+      -- At most one waiting or under way for each app.
+      create unique index app_jobs_one_open on registry.app_jobs (app_id) where state in ('requested', 'running');`,
   },
 ];
 
@@ -788,6 +908,46 @@ export class PgAppStore implements AppStore {
     return rowCount === 1;
   }
 
+  async appJobs(app?: string) {
+    const { rows } = await this.pool.query<AppJobRow>(
+      'select * from registry.app_jobs where $1::text is null or app_id = $1 order by requested_at desc limit $2',
+      [app ?? null, APP_JOBS_LISTED],
+    );
+    return rows.map(fromAppJobRow);
+  }
+
+  async nextAppJob() {
+    const { rows } = await this.pool.query<AppJobRow>("select * from registry.app_jobs where state in ('requested', 'running') order by requested_at limit 1");
+    return rows[0] && fromAppJobRow(rows[0]);
+  }
+
+  async requestAppJob(job: Pick<AppJob, 'id' | 'app' | 'action' | 'release' | 'requestedBy'>) {
+    const { rowCount } = await this.pool.query(
+      'insert into registry.app_jobs (id, app_id, action, release, requested_by) values ($1, $2, $3, $4, $5) on conflict do nothing',
+      [job.id, job.app, job.action, job.release ? JSON.stringify(job.release) : null, job.requestedBy],
+    );
+    return rowCount === 1;
+  }
+
+  async progressAppJob(id: string, step: Omit<AppJobStepState, 'at'>, outcome?: { state: AppJobOutcome; message?: string }) {
+    return this.transaction(async (client) => {
+      const { rows } = await client.query<AppJobRow>("select * from registry.app_jobs where id = $1 and state in ('requested', 'running') for update", [id]);
+      if (!rows[0]) return undefined;
+      const steps = withStep(fromAppJobRow(rows[0]).steps, { ...step, at: new Date().toISOString() });
+      const { rows: updated } = await client.query<AppJobRow>(
+        `update registry.app_jobs set steps = $2, state = $3, message = coalesce($4, message), finished_at = case when $5 then now() else finished_at end
+         where id = $1 returning *`,
+        [id, JSON.stringify(steps), outcome?.state ?? 'running', outcome?.message ?? null, Boolean(outcome)],
+      );
+      return fromAppJobRow(updated[0]);
+    });
+  }
+
+  async cancelAppJob(id: string) {
+    const { rowCount } = await this.pool.query("update registry.app_jobs set state = 'cancelled', finished_at = now() where id = $1 and state = 'requested'", [id]);
+    return rowCount === 1;
+  }
+
   close() {
     return this.pool.end();
   }
@@ -811,6 +971,32 @@ const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
   from: r.from_version,
   version: r.version,
   images: r.images,
+  requestedBy: r.requested_by,
+  requestedAt: r.requested_at.toISOString(),
+  state: r.state,
+  steps: r.steps,
+  ...(r.message ? { message: r.message } : {}),
+  ...(r.finished_at ? { finishedAt: r.finished_at.toISOString() } : {}),
+});
+
+type AppJobRow = {
+  id: string;
+  app_id: string;
+  action: AppJob['action'];
+  release: AppRelease | null;
+  requested_by: string;
+  requested_at: Date;
+  state: AppJob['state'];
+  steps: AppJobStepState[];
+  message: string | null;
+  finished_at: Date | null;
+};
+
+const fromAppJobRow = (r: AppJobRow): AppJob => ({
+  id: r.id,
+  app: r.app_id,
+  action: r.action,
+  ...(r.release ? { release: r.release } : {}),
   requestedBy: r.requested_by,
   requestedAt: r.requested_at.toISOString(),
   state: r.state,
