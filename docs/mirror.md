@@ -52,4 +52,25 @@ The updater checks each image's signature before running anything, and that chec
 - `tuf-repo-cdn.sigstore.dev`
 - `rekor.sigstore.dev`
 
-A server with no outbound traffic at all can't run the updater's check yet. Upgrade it by hand from the mirror ([upgrade.md](upgrade.md)). The mirror script checked each image's signature when it copied it, and `pc pull` pulls the tags it wrote, so keep pushing to your registry to the people and machines that run the script.
+A server with no outbound traffic at all checks them offline instead, from a copy of the trust root. The mirror script writes one, `trusted_root.json`, into the `--feed` folder each time it runs; copy it to `infra/deploy/releases/trusted_root.json`. When that file is there, the updater checks every signature (AUGUR's and apps') against it and the transparency-log proof each signature carries, and asks Sigstore nothing. Sigstore rotates its keys now and then, so copy the newest one across with each release you mirror.
+
+## Mirror apps
+
+Apps the [app runner](upgrade.md#the-app-runner) installs have releases of their own (`app/<id>@<version>`). Mirror them the same way, into the same feed folder:
+
+```sh
+node scripts/mirror-release.mjs apps --to registry.example.org/augur --feed ./augur-mirror
+node scripts/mirror-release.mjs apps --to registry.example.org/augur --feed ./augur-mirror --app notes   # just one app
+```
+
+For each app it copies its newest 3 releases, stable or beta (never pull requests' previews or drafts): its service's image to `registry.example.org/augur/apps/<id>` and its frontend to `…/apps/<id>-frontend`, by the same digests, with their signatures, each checked again from your registry. It writes `augur-mirror/apps.json`, the apps' feed, with the release files pointing at your copies, and keeps releases it mirrored before.
+
+Then point the registry at it in `infra/deploy/.env`, as for AUGUR's feed:
+
+```sh
+APP_FEED_URL=https://mirror.example.org/augur/apps.json
+# or, kept on the server in infra/deploy/releases/:
+APP_FEED_URL=file:///run/augur/releases/apps.json
+```
+
+Without `APP_FEED_URL`, a server whose `RELEASE_FEED_URL` is a mirror reads no app releases at all. Previews of pull requests aren't mirrored: they're for servers that can reach GitHub ([app-previews.md](app-previews.md)).

@@ -5,7 +5,7 @@
  */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AppHost, RunnerState } from './runner.ts';
 import type { Server } from './upgrade.ts';
@@ -40,6 +40,32 @@ const COMMAND_MS = 20 * 60_000;
 
 export class CommandFailed extends Error {}
 
+/**
+ * A copy of Sigstore's trust root in the deploy folder, which the mirror script writes beside its feed
+ * (docs/mirror.md). With it, signatures are checked with no network at all: against the Rekor bundle
+ * each signature carries, and the certificates and logs the trust root names.
+ */
+export const TRUSTED_ROOT = 'releases/trusted_root.json';
+
+/** cosign's arguments to check `ref` was signed by `identity`, offline when there's a trust root to check against. */
+export const verifyArgs = (identity: string, issuer: string, ref: string, trustedRoot?: string) => [
+  'verify',
+  '--certificate-identity',
+  identity,
+  '--certificate-oidc-issuer',
+  issuer,
+  ...(trustedRoot ? ['--offline=true', '--trusted-root', trustedRoot] : []),
+  '--output',
+  'text',
+  ref,
+];
+
+/** The deploy folder's trust root, when it has one. */
+const trustedRootIn = (dir: string) => access(join(dir, TRUSTED_ROOT)).then(
+  () => join(dir, TRUSTED_ROOT),
+  () => undefined,
+);
+
 /** Runs a command and gives back its output; its error output becomes the error's message. */
 export const command = (file: string, args: string[], env: Record<string, string>, input?: string) =>
   new Promise<string>((resolve, reject) => {
@@ -72,7 +98,7 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
       return hashes;
     },
     async verifySignature(ref) {
-      await command('cosign', ['verify', '--certificate-identity', signer.identity, '--certificate-oidc-issuer', signer.issuer, '--output', 'text', ref], env());
+      await command('cosign', verifyArgs(signer.identity, signer.issuer, ref, await trustedRootIn(dir)), env());
     },
     async backup() {
       const said = await compose(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--now']);
@@ -155,7 +181,7 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
       await writeWhole(join(appsDir, 'state.json'), JSON.stringify(state, null, 2) + '\n');
     },
     async verifySignedBy(ref, identity) {
-      await command('cosign', ['verify', '--certificate-identity', identity, '--certificate-oidc-issuer', signer.issuer, '--output', 'text', ref], env());
+      await command('cosign', verifyArgs(identity, signer.issuer, ref, await trustedRootIn(dir)), env());
     },
     async provisionStorage(app) {
       await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, 'storage']);
