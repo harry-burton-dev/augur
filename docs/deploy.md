@@ -47,6 +47,17 @@ The first pull takes a minute or two. Keycloak needs about a minute to start, an
 
 Check on it with `docker compose -f infra/deploy/compose.yml ps` and `... logs -f <service>`.
 
+## Settings and secrets
+
+Each service checks its settings before it starts. In production, a missing one stops it with a list of every problem at once, for example:
+
+```
+identity can't start until its settings are fixed:
+  - KEYCLOAK_URL is not set: Keycloak as identity reaches it, such as http://keycloak:8080/sso.
+```
+
+`pc logs <service>` shows it. Any secret (a password, a client secret, a bucket key, `DATABASE_URL`) can be given as a file instead: set `<NAME>_FILE` to its path inside the container, for a Docker secret or a file decrypted at deploy, and leave `<NAME>` unset. The file's contents, less a final newline, are used.
+
 ## Day to day
 
 To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'`.

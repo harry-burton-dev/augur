@@ -1,6 +1,18 @@
-import { callerCheckFromEnv, floorMembers, floorPlaces, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
+
+// Every setting events reads, checked before it starts (in production, a missing one stops it).
+loadConfigOrExit('events', [
+  commonSettings.database,
+  commonSettings.registry,
+  commonSettings.identity,
+  commonSettings.issuer,
+  commonSettings.issuerInside,
+  commonSettings.clientSecret,
+  commonSettings.gateway,
+  { name: 'DOMAIN_EVENTS_KEEP_DAYS', about: 'how many days apps’ domain events are kept (default 30).' },
+]);
 
 const port = Number(process.env.PORT ?? 8084);
 

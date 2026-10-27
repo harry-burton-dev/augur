@@ -1,10 +1,27 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
-import { callerCheckFromEnv, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { ensureClients, KeycloakAppClients, parseClientSecrets, type AppClients } from './clients.ts';
 import { KeycloakDirectory, PLATFORM_ROLES, type Directory } from './directory.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
+
+// Every setting identity reads, checked before it starts (in production, a missing one stops it).
+loadConfigOrExit('identity', [
+  commonSettings.database,
+  commonSettings.events,
+  commonSettings.registry,
+  commonSettings.issuer,
+  commonSettings.issuerInside,
+  commonSettings.clientSecret,
+  commonSettings.gateway,
+  { name: 'KEYCLOAK_URL', about: 'Keycloak as identity reaches it, such as http://keycloak:8080/sso.', required: true },
+  { name: 'KEYCLOAK_REALM', about: 'the Keycloak realm people sign in to (default platform).' },
+  { name: 'KEYCLOAK_ADMIN_USER', about: 'the Keycloak admin identity manages people as.', required: true },
+  { name: 'KEYCLOAK_ADMIN_PASSWORD', about: 'that admin’s password.', required: true, secret: true },
+  { name: 'SERVICE_CLIENT_SECRETS', about: 'each platform service’s sign-in secret, client=secret, comma separated, for identity to make their Keycloak clients.', secret: true },
+  { name: 'ORG_NAME', about: 'what the top floor, the whole organisation, is called (default Organisation).' },
+]);
 
 const port = Number(process.env.PORT ?? 8081);
 const production = process.env.NODE_ENV === 'production';
