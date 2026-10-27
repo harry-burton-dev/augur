@@ -53,7 +53,7 @@ To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml -
 
 - **Update** to a new release: see [upgrade.md](upgrade.md). In short, check out its `augur@<version>` tag, set `PLATFORM_VERSION` to it, then `pc pull && pc up -d --remove-orphans`. Services migrate their own database schemas on start.
 - **Try a change before it's released**: build the images from your checkout with `pc -f infra/deploy/compose.build.yml up -d --build`, with `PLATFORM_VERSION=local` so a later pull doesn't mistake them for a release.
-- **Add people**: open **Admin** (admins see it in Apps and on Title). **People** adds someone and gives you a one-time password to pass on; they choose their own when they first sign in. The same screen changes roles and departments, turns someone's sign-in off, and makes a new one-time password. **Departments** adds, renames and fills departments (one can sit inside another), and **Apps** turns an app off without removing it. Every change is in the audit log. Identity manages people in Keycloak as `KEYCLOAK_ADMIN_USER` and keeps departments in its own tables (the first start copies Keycloak's groups in once), so Keycloak's own console (`PLATFORM_URL/sso/admin`) is only needed for realm settings.
+- **Add people**: open **Admin** (admins see it in Apps and on Title). **People** adds someone and gives you a one-time password to pass on; they choose their own when they first sign in. The same screen changes roles and departments, turns someone's sign-in off, and makes a new one-time password. **Departments** adds, renames and fills departments (one can sit inside another), and **Apps** turns an app off without removing it. Every change is in the audit log. Identity manages people in Keycloak as `KEYCLOAK_ADMIN_USER` and keeps departments in its own tables (the first start copies Keycloak's groups in once), so Keycloak's own console (`PLATFORM_URL/sso/admin`) is only needed for realm settings. It's closed to the network unless `KEYCLOAK_CONSOLE=open` is in `.env` (below).
 - **Apps** that don't ship with AUGUR install and update themselves from their own releases once the [app runner](upgrade.md#the-app-runner) is on: install each from Admin → Apps once. The whole loop, from a developer's pull request to your server, is in [ship-an-app.md](ship-an-app.md).
 - **Backups** happen on their own (below).
 - **Remove an app** from the catalogue, rather than turning it off in Admin's **Apps** screen (for example the old samples, `sample-board` and `sample-palette`):
@@ -96,6 +96,14 @@ The backups sit on the same disk as the database, so copy `infra/deploy/backups/
 - **The front door** (`web`): nginx serving the shell and the apps' frontends, with `/api` and `/sso` behind it. Each version of an app's frontend is kept in Garage's `augur-frontends` bucket and served from `/apps/<id>/<version>/`, so it never changes under someone using it. The shell's page has a Content Security Policy: the browser runs only scripts from the platform's own address, the shell's import map, and the sites in `APP_ORIGINS`, and the page talks only to the platform (plus those sites). Fonts come from Google Fonts.
 - **Storage**: Postgres (with pgvector) holds every service's and app's schema. Garage holds apps' files, reachable only inside the compose network; the `storage` container gives each app in `APP_STORAGE` its own login, schema and bucket ([App storage](app-storage.md)).
 - **Sign-in**: Keycloak, imported on first start from `infra/deploy/keycloak/platform-realm.json`, with no test users. Keycloak reads that file only once. If you change `PLATFORM_URL` later, update the **shell** client's redirect URIs and web origins in the admin console.
+
+### Limits at the front door
+
+The front door (`web`) holds every caller to a few limits, set in `.env` and applied by `pc up -d`:
+
+- **Keycloak's own console is closed.** `/sso/admin` and the `master` realm (which holds Keycloak's own admin) answer 404, so nobody on the network can try its admin password. To change realm settings by hand, set `KEYCLOAK_CONSOLE=open`, `pc up -d`, make the change, then remove it and `pc up -d` again.
+- **Requests a second from one address.** The API takes `API_RATE_PER_SECOND` (30), with `API_RATE_BURST` (200) let through at once, since a page fires many calls together; sign-in takes `SSO_RATE_PER_SECOND` (10) with `SSO_RATE_BURST` (50). Past them the answer is 429, *Too Many Requests*. The address is the one the proxy in front saw (Tailscale, or a load balancer), passed on in `X-Forwarded-For` and only believed from private addresses.
+- **The largest upload**, `MAX_UPLOAD_MB` (2048). Each app has its own lower limit under it.
 
 ## Upgrading
 
