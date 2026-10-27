@@ -57,8 +57,18 @@ export interface Role {
  */
 export const PUBLISHER_ROLE: Role = { name: 'publisher', description: 'Publishes to the whole org and to any team' };
 
+/**
+ * Runs the deployment itself: its settings, secrets, updates and backups (Admin → Deployment). Only
+ * someone who holds it may give it or take it away, or change a holder's sign-in, and a holder signs
+ * in with a one-time code as well as a password.
+ */
+export const DEPLOYMENT_ADMIN_ROLE: Role = { name: 'deployment-admin', description: 'Runs the deployment: settings, secrets, updates and backups' };
+
 /** The roles the platform itself relies on, made in Keycloak at start when they're missing (its realm file is read only when it first starts). */
-export const PLATFORM_ROLES: readonly Role[] = [PUBLISHER_ROLE];
+export const PLATFORM_ROLES: readonly Role[] = [PUBLISHER_ROLE, DEPLOYMENT_ADMIN_ROLE];
+
+/** The realm's sign-in flow once a role must use one-time codes: Keycloak's browser flow plus that rule. */
+export const SIGN_IN_FLOW = 'augur browser';
 
 /** A refusal the admin can act on (404, 409), or the directory being out of reach (503). */
 export class DirectoryError extends Error {
@@ -99,6 +109,7 @@ export class MemoryDirectory implements Directory {
       { name: 'admin', description: 'Runs the platform; sees the Admin app' },
       { name: 'editor', description: 'Can publish to libraries' },
       PUBLISHER_ROLE,
+      DEPLOYMENT_ADMIN_ROLE,
     ],
   ) {
     this.roleList = roles;
@@ -255,6 +266,16 @@ interface KcClient {
   id: string;
   clientId: string;
 }
+interface KcExecution {
+  id: string;
+  level: number;
+  index: number;
+  requirement: string;
+  displayName: string;
+  providerId?: string;
+  authenticationFlow?: boolean;
+  flowId?: string;
+}
 interface KcRole {
   id: string;
   name: string;
@@ -330,6 +351,74 @@ export class KeycloakDirectory implements Directory {
     const { data: realm } = await this.call<Record<string, unknown>>('GET', '');
     if (realm.bruteForceProtected) return false;
     await this.call('PUT', '', { ...BRUTE_FORCE_POLICY });
+    return true;
+  }
+
+  /**
+   * Gives `role` to `username` when nobody holds it yet, so a server set up before the role existed
+   * has someone who can use it. Returns whether it gave it.
+   */
+  async ensureRoleHolder(role: string, username: string): Promise<boolean> {
+    const holders = (await this.call<unknown[]>('GET', `/roles/${encodeURIComponent(role)}/users?first=0&max=1`)).data;
+    if (holders.length) return false;
+    const user = (await this.call<KcUser[]>('GET', `/users?username=${encodeURIComponent(username)}&exact=true`)).data[0];
+    if (!user) throw new DirectoryError(`There is no ${username} to give the ${role} role to.`, 404);
+    const { data: rep } = await this.call<KcRole>('GET', `/roles/${encodeURIComponent(role)}`);
+    await this.call('POST', `/users/${user.id}/role-mappings/realm`, [rep]);
+    return true;
+  }
+
+  /**
+   * Makes everyone with `role` sign in with a one-time code as well as their password, setting one up
+   * the first time if they have none. Keycloak's browser flow already asks for a code from anyone who
+   * has one; this copies it as `SIGN_IN_FLOW`, asks holders of `role` for theirs in a step of its own,
+   * leaves them out of the usual step (so they're asked once), and makes the copy the realm's sign-in.
+   * Returns whether it changed the realm.
+   */
+  async ensureOtpFor(role: string): Promise<boolean> {
+    const flows = (await this.call<{ alias: string }[]>('GET', '/authentication/flows')).data;
+    if (!flows.some((f) => f.alias === SIGN_IN_FLOW)) {
+      await this.call('POST', '/authentication/flows/browser/copy', { newName: SIGN_IN_FLOW });
+    }
+    const executionsOf = async (alias: string) => (await this.call<KcExecution[]>('GET', `/authentication/flows/${encodeURIComponent(alias)}/executions`)).data;
+    const flowAlias = async (id: string) => (await this.call<{ alias: string }>('GET', `/authentication/flows/${id}`)).data.alias;
+    const setRequirement = (exec: KcExecution, requirement: string) =>
+      this.call('PUT', `/authentication/flows/${encodeURIComponent(SIGN_IN_FLOW)}/executions`, { ...exec, requirement });
+    const addCondition = async (alias: string, config: Record<string, string>, name: string) => {
+      const { location } = await this.call('POST', `/authentication/flows/${encodeURIComponent(alias)}/executions/execution`, { provider: 'conditional-user-role' });
+      const id = location?.split('/').pop();
+      const exec = (await executionsOf(SIGN_IN_FLOW)).find((e) => e.id === id);
+      if (!exec) throw new DirectoryError('The sign-in service didn’t add the one-time code rule.', 503);
+      await setRequirement(exec, 'REQUIRED');
+      await this.call('POST', `/authentication/executions/${exec.id}/config`, { alias: name, config });
+    };
+    const roleRule = `${role} code`;
+    let all = await executionsOf(SIGN_IN_FLOW);
+    if (all.some((e) => e.displayName === roleRule)) return false;
+
+    // The usual code step (a conditional sub-flow holding the OTP form) and the forms step around it.
+    const otpAt = all.findIndex((e) => e.providerId === 'auth-otp-form');
+    const usual = all.slice(0, otpAt).reverse().find((e) => e.authenticationFlow && e.level === all[otpAt]!.level - 1);
+    const forms = all.slice(0, otpAt).reverse().find((e) => e.authenticationFlow && e.level === all[otpAt]!.level - 2);
+    if (!usual?.flowId || !forms?.flowId) throw new DirectoryError('The sign-in flow isn’t shaped as expected, so one-time codes weren’t set up.', 503);
+    const formsAlias = await flowAlias(forms.flowId);
+    await addCondition(await flowAlias(usual.flowId), { condUserRole: role, negate: 'true' }, `not ${role}`);
+
+    await this.call('POST', `/authentication/flows/${encodeURIComponent(formsAlias)}/executions/flow`, {
+      alias: roleRule,
+      type: 'basic-flow',
+      provider: 'registration-page-form',
+      description: `Everyone with the ${role} role signs in with a one-time code.`,
+    });
+    all = await executionsOf(SIGN_IN_FLOW);
+    const step = all.find((e) => e.displayName === roleRule)!;
+    await setRequirement(step, 'CONDITIONAL');
+    await addCondition(roleRule, { condUserRole: role, negate: 'false' }, `has ${role}`);
+    const { location } = await this.call('POST', `/authentication/flows/${encodeURIComponent(roleRule)}/executions/execution`, { provider: 'auth-otp-form' });
+    const otp = (await executionsOf(SIGN_IN_FLOW)).find((e) => e.id === location?.split('/').pop())!;
+    await setRequirement(otp, 'REQUIRED');
+
+    await this.call('PUT', '', { browserFlow: SIGN_IN_FLOW });
     return true;
   }
 

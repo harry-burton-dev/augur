@@ -2,7 +2,7 @@ import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
 import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { ensureClients, KeycloakAppClients, parseClientSecrets, retrying, type AppClients } from './clients.ts';
-import { KeycloakDirectory, PLATFORM_ROLES, type Directory } from './directory.ts';
+import { DEPLOYMENT_ADMIN_ROLE, KeycloakDirectory, PLATFORM_ROLES, type Directory } from './directory.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
 
@@ -20,6 +20,7 @@ loadConfigOrExit('identity', [
   { name: 'KEYCLOAK_ADMIN_USER', about: 'Keycloak’s own admin, which identity uses only at start to let its own client manage the realm.' },
   { name: 'KEYCLOAK_ADMIN_PASSWORD', about: 'that admin’s password.', secret: true },
   { name: 'SERVICE_CLIENT_SECRETS', about: 'each platform service’s sign-in secret, client=secret, comma separated, for identity to make their Keycloak clients.', secret: true },
+  { name: 'PLATFORM_ADMIN_USER', about: 'the first admin’s username, who is given the deployment-admin role when nobody has it.' },
   { name: 'ORG_NAME', about: 'what the top floor, the whole organisation, is called (default Organisation).' },
 ]);
 
@@ -76,6 +77,11 @@ if (ownSecret || keycloakAdmin) {
     const made = await keycloak.ensureRoles(PLATFORM_ROLES);
     if (made.length) console.info(`Added the ${made.join(', ')} role${made.length === 1 ? '' : 's'} to the sign-in service.`);
     if (await keycloak.ensureSignInPolicy()) console.info('The sign-in service now slows down repeated wrong passwords.');
+    const { PLATFORM_ADMIN_USER } = process.env;
+    if (PLATFORM_ADMIN_USER && (await keycloak.ensureRoleHolder(DEPLOYMENT_ADMIN_ROLE.name, PLATFORM_ADMIN_USER))) {
+      console.info(`${PLATFORM_ADMIN_USER} is now a deployment admin: they'll set up a one-time code when they next sign in.`);
+    }
+    if (await keycloak.ensureOtpFor(DEPLOYMENT_ADMIN_ROLE.name)) console.info('Deployment admins now sign in with a one-time code as well as their password.');
   };
   // Keycloak may still be starting: keep trying, then make the services' sign-ins.
   retrying(prepare)

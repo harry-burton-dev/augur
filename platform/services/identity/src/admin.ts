@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
-import { DirectoryError, type Directory, type NewPerson, type PersonChanges } from './directory.ts';
+import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson, type PersonChanges } from './directory.ts';
 
 /** Easy to read out or type: no 0/O, 1/l/I. */
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -65,7 +65,8 @@ interface AdminOptions {
 /**
  * People, departments and roles, for admins only. Every change is audited
  * (never a password), and an admin can't lock themselves out: they can't turn
- * off their own sign-in or take away their own admin role.
+ * off their own sign-in or take away their own admin role. Only a deployment admin
+ * can give or take away that role, or change a deployment admin's sign-in.
  */
 export const adminRoutes =
   ({ directory, audit }: AdminOptions) =>
@@ -92,6 +93,11 @@ export const adminRoutes =
     });
 
     const dir = () => directory!;
+    const DEPLOYMENT_ADMIN = DEPLOYMENT_ADMIN_ROLE.name;
+    const isDeploymentAdmin = (req: FastifyRequest) => callerFromHeaders(req.headers)!.roles.includes(DEPLOYMENT_ADMIN);
+    // Only a deployment admin may make one, or change one's role or sign-in, so an admin can't take the deployment over.
+    const deploymentAdminsOnly = (reply: FastifyReply) =>
+      reply.code(403).send({ error: 'forbidden', message: 'Only a deployment admin can give or take away that role, or change a deployment admin’s sign-in.' });
     const actorOf = (req: FastifyRequest) => ({ id: callerFromHeaders(req.headers)!.id, kind: 'user' as const });
 
     /** The change happened either way; a failed audit write is logged, not turned into a failed request. */
@@ -120,6 +126,7 @@ export const adminRoutes =
           roles: body.roles ?? [],
           departments: body.departments ?? [],
         };
+        if (person.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
         const password = temporaryPassword();
         const created = await dir().createPerson(person, password);
         await record(req, 'person.added', created.id, { username: created.username, roles: created.roles, departments: created.departments });
@@ -137,6 +144,10 @@ export const adminRoutes =
         return reply.code(409).send({ error: 'conflict', message: 'You can’t take away your own admin role. Ask another admin.' });
       }
       const before = await dir().person(req.params.id);
+      const held = before.roles.includes(DEPLOYMENT_ADMIN);
+      const touchesRole = changes.roles !== undefined && changes.roles.includes(DEPLOYMENT_ADMIN) !== held;
+      const touchesSignIn = held && ((changes.enabled !== undefined && changes.enabled !== before.enabled) || (changes.email !== undefined && changes.email !== before.email));
+      if ((touchesRole || touchesSignIn) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
       const after = await dir().updatePerson(req.params.id, changes);
       if (changes.enabled !== undefined && changes.enabled !== before.enabled) {
         await record(req, after.enabled ? 'person.enabled' : 'person.disabled', after.id, { username: after.username });
@@ -150,7 +161,8 @@ export const adminRoutes =
       return after;
     });
 
-    app.post<{ Params: { id: string } }>('/people/:id/password', async (req) => {
+    app.post<{ Params: { id: string } }>('/people/:id/password', async (req, reply) => {
+      if ((await dir().person(req.params.id)).roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
       const password = temporaryPassword();
       await dir().resetPassword(req.params.id, password);
       await record(req, 'person.password-reset', req.params.id);
