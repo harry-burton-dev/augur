@@ -205,4 +205,6 @@ export const PLATFORM_TOPICS = {
   appTurnedOff: 'platform.app.turned-off',
   appTurnedOn: 'platform.app.turned-on',
   appRemoved: 'platform.app.removed',
+  appBlocked: 'platform.app.blocked',
+  appRuleCleared: 'platform.app.rule-cleared',
 } as const;

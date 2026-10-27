@@ -3,7 +3,8 @@ import { callerFromHeaders, health, identifyService, packageVersion, recordAudit
 import { adminRoutes } from './admin.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
-import { peopleRoutes } from './people.ts';
+import { mapFor } from './map.ts';
+import { peopleRoutes, principalsOf } from './people.ts';
 import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from './store.ts';
 import { TeamDirectory } from './teams.ts';
 import { floorsFor, MemoryWorkspaceStore, rollupFor, type WorkspaceStore } from './workspaces.ts';
@@ -127,6 +128,29 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       app.get('/me/workspaces', async (req) => {
         await teams?.ready();
         return { workspaces: await floorsFor(workspaces, callerFromHeaders(req.headers)!) };
+      });
+
+      // The caller's map of the org, for Auspex: their floors with who's there and why they can come in, and every other team as a closed door.
+      let names: { list: { id: string; name: string }[]; at: number } | undefined;
+      const everyone = async () => {
+        if (!teams) return [];
+        if (names && Date.now() - names.at < 30_000) return names.list;
+        const list = (await teams.people()).filter((p) => p.enabled).map((p) => ({ id: p.id, name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.username }));
+        names = { list, at: Date.now() };
+        return list;
+      };
+      app.get('/me/map', async (req) => {
+        await teams?.ready();
+        const caller = callerFromHeaders(req.headers)!;
+        const [own, org, all, memberships, folks] = await Promise.all([workspaces.personal(caller.id, caller.name), workspaces.org(), workspaces.teams(), workspaces.memberships(), everyone()]);
+        const nameOf = new Map(folks.map((p) => [p.id, p.name]));
+        nameOf.set(caller.id, caller.name);
+        const mine = memberships.filter((m) => m.person === caller.id).map((m) => m.workspace);
+        return mapFor({
+          person: caller, own, org, teams: all, memberships, names: nameOf,
+          people: folks.length ? folks.map((p) => p.id) : [caller.id],
+          principals: principalsOf(caller.id, all, mine),
+        });
       });
 
       // A floor and every team below it the caller can stand on: what an app rolls up when someone asks to include sub-teams.

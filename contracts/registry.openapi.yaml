@@ -1,13 +1,63 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.20.0
+  version: 1.21.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
 servers:
   - url: /v1
 paths:
+  /me/apps:
+    get:
+      summary: Every app, and whether the caller can use it on their floor, and why
+      description: >
+        For Auspex, which never hides an app for being out of reach. Each app
+        says whether it's on for the floor the caller is on and why (platform,
+        approved, set-here, set-above, blocked, not-for-this-kind,
+        turned-off), the floor whose rule decides it (`by`) and who set that
+        rule and when. An app a role keeps from the caller is listed with
+        `requiredRole` and `hasRole: false`. Only the floor the gateway
+        checked can be asked about.
+      parameters:
+        - { name: workspace, in: query, required: true, schema: { type: string, maxLength: 100 } }
+      responses:
+        "200":
+          description: The caller's apps on that floor
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace, apps]
+                properties:
+                  workspace: { type: string }
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, state]
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        icon: { type: string }
+                        description: { type: string }
+                        floors: { type: array, items: { type: string, enum: [personal, team, org] } }
+                        pillar: { type: boolean }
+                        requiredRole: { type: string }
+                        hasRole: { type: boolean }
+                        state:
+                          type: object
+                          required: [on, why]
+                          properties:
+                            on: { type: boolean }
+                            why: { type: string, enum: [platform, approved, set-here, set-above, blocked, not-for-this-kind, turned-off] }
+                            by: { type: string, description: The floor whose rule decides it }
+                            setBy: { type: string, description: Who set that rule }
+                            setAt: { type: string, format: date-time }
+        "401": { description: No signed-in caller }
+        "403": { description: Not the floor the gateway checked }
+        "404": { description: No such floor }
+        "503": { description: Floors can't be looked up right now }
   /manifest:
     get:
       summary: Apps the caller may open
