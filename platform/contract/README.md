@@ -4,7 +4,7 @@ The shell's promise to apps, tested in a browser. A reference app (`reference-ap
 
 It runs against every build of the reference app:
 
-- **source**: built with today's SDK.
+- **source**: built with today's SDK. There is no `sdk-1.2`: the reference app built against SDK 1.2 was byte-for-byte the build in `sdk-1.1`.
 - **`frozen/sdk-<major>.<minor>/entry.js`**: the reference app as it was built against each earlier SDK minor. These are never rebuilt or replaced, so they stand for apps that were released and not touched since. A shell change that breaks any of them breaks real apps, and fails CI.
 
 ```sh
