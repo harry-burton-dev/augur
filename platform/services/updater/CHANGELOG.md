@@ -1,5 +1,20 @@
 # @augur/updater
 
+## 0.4.0
+
+### Minor Changes
+
+- 8cea360: Checks signatures offline when the deploy folder has a copy of Sigstore's trust root (`releases/trusted_root.json`), which the mirror script now writes. The mirror script also mirrors apps' releases (`mirror-release.mjs apps`) into a feed for `APP_FEED_URL`.
+- 3e3c173: One read key per deployment. With a read:packages token in `secrets/github-read-key` and `GITHUB_READ_USER` in `.env`, the registry checks for new AUGUR and app releases in the feed the Release workflow now keeps beside the images (`ghcr.io/<repo>/feed:latest`, `RELEASE_FEED_URL=oci://…`), and the updater signs Docker in with the same key to pull. The older `release-feed-token` and `image-pull-token` still work. See "The read key" in docs/upgrade.md.
+- 71a6ec6: New settings a release needs are entered on Admin → Updates. **Upgrade to …** has a field for each new setting only a person can give; the registry passes what's entered to the updater (kept in memory until the upgrade ends, never stored, only names audited), and the updater writes it to `.env`, quoted when needed. A new secret (`_SECRET`, `_PASSWORD`, `_TOKEN`) gets no field: Updates says the updater makes it up.
+- 315c78b: The updater now upgrades a server whose deploy files the new release changes, instead of sending it to be upgraded by hand. Each release's updater image carries that release's `infra/deploy`; the updater checks the files against the release file, writes them, starts any part the release adds, and makes again anything that mounts a changed file. Going back puts the old files back. It still stops when a file it would change has been edited on the server. A new required setting ending in `_SECRET`, `_PASSWORD` or `_TOKEN` is made up and added to `.env`. User 1000 now has to be able to write `infra/deploy` (docs/upgrade.md, The updater).
+
+### Patch Changes
+
+- aa1724a: Services check their settings before they start. The service kit's `loadConfig` takes a list of the settings a service reads (`Setting`, plus `commonSettings` for the ones services share). In production, a missing required setting stops the service with one message listing every problem, instead of falling back to a `localhost` address. A secret can be given as a file in `<NAME>_FILE`. `describeConfig` reports each setting and where it came from, never a secret's value, ready for Admin → Deployment.
+- Updated dependencies [aa1724a]
+  - @augur/service-kit@0.8.0
+
 ## 0.3.0
 
 ### Minor Changes
