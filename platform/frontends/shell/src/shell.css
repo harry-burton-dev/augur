@@ -23,3 +23,30 @@ html[data-motion='reduce'] {
 html[data-density='compact'] {
   --space-5: 20px; --space-6: 28px; --space-7: 44px; --space-8: 72px;
 }
+/* A developer on a pull request's preview of the open app: always said, with the way back. */
+.preview-badge {
+  position: fixed;
+  inset-block-end: var(--space-4);
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--surface-raised, var(--slate));
+  border: 1px solid var(--warning, var(--hairline));
+  color: var(--ink);
+  font-size: var(--type-small);
+}
+.preview-badge a, .previews a { color: inherit; }
+.previews ul { list-style: none; margin: var(--space-3) 0 var(--space-5); padding: 0; }
+.previews li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 40px;
+  border-bottom: 1px solid var(--hairline);
+}

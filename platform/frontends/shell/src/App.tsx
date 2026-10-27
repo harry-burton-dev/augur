@@ -14,17 +14,21 @@ import {
   AppSearch,
   HOME_CHANNEL,
   cardsFor,
+  choosePreview,
   hrefFor,
   IntentError,
   needsFor,
   SurfaceMounter,
   type HomeState,
   loadManifest,
+  loadPreviews,
   NotificationActions,
   NotificationFeed,
   orbitMenu,
   ownFloor,
   PreferenceSync,
+  previewLine,
+  previewPr,
   RequestBroker,
   routeIntent,
   screenFor,
@@ -33,6 +37,7 @@ import {
   toShellNotification,
   type ImportEntry,
   type OpenRequest,
+  type PreviewApp,
   type Screen,
   type ServerNotification,
   type Session,
@@ -46,6 +51,8 @@ export interface HostProps {
   eventsUrl?: string;
   /** Where Identity keeps the person's preferences, through the gateway. */
   preferencesUrl?: string;
+  /** Where the registry lists the pull requests' previews a developer may try, through the gateway. */
+  previewsUrl?: string;
   fetchImpl?: typeof fetch;
   importEntry?: ImportEntry;
 }
@@ -59,6 +66,8 @@ const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name,
  * something behind them; floors replace Switch workspace.
  */
 const alphaFunctions = defaultFunctions.filter((f) => f.id !== 'agents');
+/** For an app's developers: its pull requests' previews, to switch to for themselves. */
+const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
 /** The water for each screen: Title on Minimal, Orbit on Deep Ocean, apps on Calm Tide. */
 const waterFor = (screen: Screen | undefined) => (screen?.kind === 'title' ? 'Minimal' : screen?.kind === 'orbit' ? 'Deep Ocean' : 'Calm Tide');
@@ -76,6 +85,7 @@ export function Host({
   manifestUrl = '/api/registry/v1/manifest',
   eventsUrl = '/api/events/v1',
   preferencesUrl = '/api/identity/v1/me/preferences',
+  previewsUrl = '/api/registry/v1/previews',
   fetchImpl = fetch,
   importEntry,
 }: HostProps) {
@@ -94,6 +104,11 @@ export function Host({
   const requestStageRef = useRef<HTMLDivElement>(null);
   const requestMounter = useRef<AppMounter | null>(null);
   const [answering, setAnswering] = useState<OpenRequest | null>(null);
+  /** The previews this person may try, as a developer of their apps; none for everyone else. */
+  const [previewApps, setPreviewApps] = useState<PreviewApp[]>([]);
+  const [previewsOpen, setPreviewsOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const previewsRef = useRef<UiDialog>(null);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
   /** What each notification's buttons raise; the Shell only has their labels. */
@@ -186,6 +201,51 @@ export function Host({
       live = false;
     };
   }, [session, manifestUrl, fetchImpl, attempt, floorId]);
+
+  // Which previews this person may try: asked again with the catalogue, since choosing one changes both.
+  useEffect(() => {
+    let live = true;
+    void session
+      .getToken()
+      .then((token) => loadPreviews(fetchImpl, previewsUrl, token))
+      .then((apps) => live && setPreviewApps(apps));
+    return () => {
+      live = false;
+    };
+  }, [session, fetchImpl, previewsUrl, attempt]);
+
+  /** Switches this person to a pull request's preview of an app, or back to the app, then loads the catalogue again. */
+  const switchPreview = useCallback(
+    async (app: PreviewApp, pr: number | null) => {
+      setSwitching(true);
+      try {
+        await choosePreview(fetchImpl, previewsUrl, await session.getToken(), app.app, pr);
+        shellRef.current?.notify(
+          toShellNotification('platform', {
+            title: pr === null ? `Back to ${app.name} ${app.version}` : `You’re on pull request #${pr}’s preview of ${app.name}`,
+            body: 'Only you. Its service takes your calls within half a minute.',
+          }),
+        );
+        setPreviewsOpen(false);
+        setAttempt((n) => n + 1);
+      } catch (err) {
+        shellRef.current?.notify(toShellNotification('platform', { title: `Couldn’t switch: ${(err as Error).message}` }));
+      } finally {
+        setSwitching(false);
+      }
+    },
+    [fetchImpl, previewsUrl, session],
+  );
+
+  useEffect(() => {
+    const dialog = previewsRef.current;
+    if (!dialog) return;
+    if (previewsOpen) dialog.show();
+    else dialog.close();
+    const onClose = () => setPreviewsOpen(false);
+    dialog.addEventListener('ui-close', onClose);
+    return () => dialog.removeEventListener('ui-close', onClose);
+  }, [previewsOpen]);
 
   // Raising an intent counts up, so the app is mounted to answer it even when the location doesn't change.
   const [raised, setRaised] = useState(0);
@@ -457,10 +517,10 @@ export function Host({
     shell.user = { name: session.user.name, email: session.user.email };
     shell.floors = session.floors;
     shell.floor = floor?.id ?? '';
-    shell.functions = alphaFunctions;
+    shell.functions = previewApps.length ? [...alphaFunctions, PREVIEWS_FUNCTION] : alphaFunctions;
     shell.canSwitchWorkspace = false;
     shell.version = `${__SHELL_VERSION__} · SDK ${SDK_VERSION}`;
-  }, [catalogue, session, floor]);
+  }, [catalogue, session, floor, previewApps]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.
   useEffect(() => {
@@ -535,7 +595,9 @@ export function Host({
       if ((e as CustomEvent<{ what: string }>).detail.what === 'stream') feed.current?.start();
     };
     const onFunction = (e: Event) => {
-      if ((e as CustomEvent<{ id: string }>).detail.id === 'sign-out') void session.signOut();
+      const { id } = (e as CustomEvent<{ id: string }>).detail;
+      if (id === 'sign-out') void session.signOut();
+      else if (id === 'previews') setPreviewsOpen(true);
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
@@ -604,8 +666,33 @@ export function Host({
     };
   }, [manifest, navigate, session, prefs, screen, raise, search]);
 
+  // The open app is a pull request's preview: say so, with the way back.
+  const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
+  const previewOf = previewPr(openApp?.version);
+  const previewing = previewOf !== undefined ? previewApps.find((a) => a.app === openApp?.id) : undefined;
+
   return (
     <ui-shell ref={shellRef} product="AUGUR">
+      {previewOf !== undefined ? (
+        <aside className="preview-badge" role="status">
+          <span>
+            Preview of{' '}
+            {previewing?.previews.find((p) => p.pr === previewOf)?.url ? (
+              <a href={previewing.previews.find((p) => p.pr === previewOf)!.url} target="_blank" rel="noopener noreferrer">
+                pull request #{previewOf}
+              </a>
+            ) : (
+              `pull request #${previewOf}`
+            )}
+            , for you alone
+          </span>
+          {previewing ? (
+            <ui-button kind="tertiary" size="sm" onClick={() => void switchPreview(previewing, null)}>
+              Back to {previewing.version}
+            </ui-button>
+          ) : null}
+        </aside>
+      ) : null}
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
       {screen && screen.kind !== 'app' && manifest?.length ? (
         <ui-centre-menu
@@ -626,6 +713,47 @@ export function Host({
       {!manifest && !problem && <p className="loading">Opening…</p>}
       <ui-dialog ref={dialogRef} size="read" heading={answering?.app.name ?? ''} cancelLabel="Cancel">
         <div ref={requestStageRef} className="request-stage" />
+      </ui-dialog>
+      <ui-dialog
+        ref={previewsRef}
+        size="read"
+        heading="Previews"
+        summary="Pull requests’ builds of the apps you’re a developer of, running beside them on this server. Switching changes the app for you alone, with data of its own."
+        cancelLabel="Close"
+      >
+        {previewApps.map((app) => (
+          <section key={app.app} className="previews" data-previews={app.app}>
+            <ui-heading heading={app.name} summary={app.chosen === undefined ? `You’re on ${app.version}, as everyone is.` : `You’re on pull request #${app.chosen}’s preview.`} size="s" />
+            {app.previews.length ? (
+              <ul>
+                {app.previews.map((p) => (
+                  <li key={p.pr}>
+                    <span>
+                      {p.url ? (
+                        <a href={p.url} target="_blank" rel="noopener noreferrer">
+                          {previewLine(p)}
+                        </a>
+                      ) : (
+                        previewLine(p)
+                      )}
+                    </span>
+                    {app.chosen === p.pr ? (
+                      <ui-button kind="tertiary" size="sm" disabled={switching} onClick={() => void switchPreview(app, null)}>
+                        Back to {app.version}
+                      </ui-button>
+                    ) : (
+                      <ui-button kind="secondary" size="sm" disabled={switching} onClick={() => void switchPreview(app, p.pr)}>
+                        Use it
+                      </ui-button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No pull request of it has a preview running.</p>
+            )}
+          </section>
+        ))}
       </ui-dialog>
     </ui-shell>
   );
