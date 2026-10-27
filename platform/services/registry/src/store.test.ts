@@ -12,6 +12,15 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     store = make();
   });
 
+  it('keeps an app’s upstream while it registers new versions', async () => {
+    await store.put(library, 'library');
+    expect(await store.setUpstream('nothing', 'http://x:1')).toBeUndefined();
+    expect((await store.setUpstream('library', 'http://app-library:8090'))?.upstream).toBe('http://app-library:8090');
+    await store.put({ ...library, version: '0.2.0' }, 'library');
+    expect((await store.records())[0].upstream).toBe('http://app-library:8090');
+    expect((await store.setUpstream('library', null))?.upstream).toBeUndefined();
+  });
+
   it('keeps a version’s first frontend, and forgets them with the app', async () => {
     const first = await store.putFrontend({ app: 'library', version: '0.1.0', digest: 'sha256:a', files: ['entry.js'], bytes: 10, publishedBy: 'library' });
     expect(first).toMatchObject({ app: 'library', version: '0.1.0', digest: 'sha256:a', files: ['entry.js'], bytes: 10 });
@@ -181,7 +190,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

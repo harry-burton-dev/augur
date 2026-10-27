@@ -21,7 +21,8 @@
     "006_upgrades": "a93f5823c7593614",
     "007_upload_limit": "5f47e45676b35056",
     "008_settings": "052493451d39b92b",
-    "009_frontends": "5aeb6fdb89c1b425"
+    "009_frontends": "5aeb6fdb89c1b425",
+    "010_upstream": "2eee2e575a5c38ed"
   },
   "@apps/folio": {
     "001_libraries": "1c5f1dfed17e6277",

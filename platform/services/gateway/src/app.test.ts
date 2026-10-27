@@ -7,6 +7,7 @@ import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { registryUploadLimits, UploadLimitsUnavailable } from './uploads.ts';
+import { registryUpstreams, UpstreamsUnavailable } from './upstreams.ts';
 import { Readable } from 'node:stream';
 
 const issuer = 'http://sign-in.test/realms/platform';
@@ -309,6 +310,59 @@ describe('gateway', () => {
       await expect(lookup(alex)).rejects.toBeInstanceOf(FloorLookupError);
       expect(await lookup(alex)).toEqual([finance]);
     });
+  });
+
+  it('sends an app’s calls wherever the registry says its service is, never over the platform’s own', async () => {
+    let asked = 0;
+    let found: Record<string, string> = { notes: url, registry: 'http://elsewhere.test' };
+    const apps = async () => {
+      asked++;
+      return found;
+    };
+    const app = await buildApp({ upstreams: { registry: url }, auth, apps, uploads: async () => new Map([['notes', 1]]) });
+    const headers = { authorization: `Bearer ${await sign(ada)}` };
+    const res = await app.inject({ method: 'GET', url: '/api/notes/echo?x=1', headers });
+    expect(res.statusCode).toBe(200);
+    // Signed for the app it goes to, the token kept back, as for any other upstream.
+    expect(res.json()['x-user-id']).toBe('u-1');
+    expect(res.json()['x-augur-caller']).toBeTruthy();
+    expect(res.json().authorization).toBeUndefined();
+    // Bodies stream through and are held to what the app may be sent.
+    const big = await app.inject({ method: 'POST', url: '/api/notes/upload', headers: { ...headers, 'content-type': 'application/octet-stream' }, payload: Buffer.alloc(2 * 1024 * 1024) });
+    expect(big.statusCode).toBe(413);
+    const small = await app.inject({ method: 'POST', url: '/api/notes/upload', headers: { ...headers, 'content-type': 'application/octet-stream' }, payload: Buffer.alloc(1000) });
+    expect(small.json()).toEqual({ bytes: 1000 });
+    // A platform service stays where the gateway was started with, whatever the registry says.
+    expect((await app.inject({ method: 'GET', url: '/api/registry/echo', headers })).statusCode).toBe(200);
+    // Nobody signed in gets nothing, and an app the registry doesn't know of is a 404.
+    expect((await app.inject({ method: 'GET', url: '/api/notes/echo' })).statusCode).toBe(401);
+    found = {};
+    expect((await app.inject({ method: 'GET', url: '/api/papers/echo', headers })).statusCode).toBe(404);
+    expect(asked).toBeGreaterThan(0);
+  });
+
+  it('says so when it can’t find out where apps are', async () => {
+    const app = await buildApp({ upstreams: {}, auth, apps: async () => Promise.reject(new UpstreamsUnavailable('down')) });
+    const res = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign(ada)}` } });
+    expect(res.statusCode).toBe(503);
+  });
+
+  it('asks the registry where apps are as the gateway itself, and keeps the last answer through an outage', async () => {
+    const signer = callerSigner();
+    const check = callerCheckFor(signer, 'registry');
+    let now = 0;
+    let up = true;
+    const fetchImpl = (async (_input: string, init?: RequestInit) => {
+      if (!up) throw new Error('refused');
+      const caller = await check(new Headers(init?.headers).get('x-augur-caller') ?? '');
+      return new Response(JSON.stringify({ apps: { notes: `http://notes:8090#${caller.id}` } }));
+    }) as typeof fetch;
+    const upstreamsOf = registryUpstreams({ registryUrl: 'http://registry:8082', signer, ttlMs: 1000, fetchImpl, now: () => now });
+    expect(await upstreamsOf()).toEqual({ notes: 'http://notes:8090#augur:gateway' });
+    up = false;
+    now = 5000;
+    expect(await upstreamsOf()).toEqual({ notes: 'http://notes:8090#augur:gateway' });
+    await expect(registryUpstreams({ registryUrl: 'http://registry:8082', signer, fetchImpl })()).rejects.toBeInstanceOf(UpstreamsUnavailable);
   });
 
   it('reads app services from a name=url list', () => {

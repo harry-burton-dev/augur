@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.16.0
+  version: 1.17.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -347,6 +347,44 @@ paths:
         "409": { description: One of the platform's own apps, or this version already has other files }
         "415": { description: Not sent as application/gzip }
         "501": { description: This deployment doesn't keep frontends by version (FRONTENDS_BUCKET_SECRET isn't set) }
+  /upstreams:
+    get:
+      summary: Where each app's service is, for the gateway (and admins)
+      description: >
+        The upstreams set for apps by what runs them, or by an admin. The
+        gateway asks as itself (its signed caller augur:gateway) and sends
+        /api/{id}/… there for any app not in its APP_UPSTREAMS.
+      responses:
+        "200":
+          description: Upstreams by app id
+          content:
+            application/json:
+              schema: { type: object, required: [apps], properties: { apps: { type: object, additionalProperties: { type: string } } } }
+        "403": { description: Neither the gateway nor an admin }
+  /apps/{id}/upstream:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Say where the gateway reaches an app's service (a platform service or an admin, never the app)
+      description: >
+        http or https, a host and port only, never one of the platform's own
+        parts. null forgets it. Kept when the app registers new versions.
+        Audited as app.upstream-set or app.upstream-cleared.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [url], properties: { url: { type: [string, "null"], maxLength: 300 } } }
+      responses:
+        "200":
+          description: The app as it now is
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogueEntry" }
+        "400": { description: Not an address an app's service can be at }
+        "403": { description: Not a platform service or an admin }
+        "404": { description: No such app }
+        "409": { description: One of the platform's own apps }
   /apps/{id}/pin:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -668,6 +706,7 @@ components:
             awaitingScopes: { type: array, items: { $ref: "#/components/schemas/Scope" }, description: What it asks for that no admin has granted yet }
             uploadLimit: { type: integer, description: "What the gateway lets through to the app's service in one request, in MB" }
             uploadLimitLowered: { type: boolean, description: Set when an admin has lowered it below what the manifest asks }
+            upstream: { type: string, description: "Where the gateway reaches the app's service, when set (PUT /apps/{id}/upstream)" }
     FloorRule:
       type: object
       required: [app, workspace, state, carriesOn, setBy, setAt]

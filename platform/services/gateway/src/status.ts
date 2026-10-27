@@ -32,6 +32,8 @@ export interface Probe {
 
 export interface MonitorOptions {
   probes: Probe[];
+  /** Probes found out on each round, such as apps whose service the registry knows of. */
+  moreProbes?: () => Promise<Probe[]>;
   /** How often every probe is checked. */
   intervalMs?: number;
   /** How long one check may take before it counts as failed. */
@@ -72,6 +74,8 @@ const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
  */
 export class HealthMonitor {
   private readonly probes: Probe[];
+  private readonly moreProbes?: () => Promise<Probe[]>;
+  private found: Probe[] = [];
   private readonly intervalMs: number;
   private readonly timeoutMs: number;
   private readonly slowMs: number;
@@ -82,8 +86,9 @@ export class HealthMonitor {
   private timer?: ReturnType<typeof setInterval>;
   private readonly startedAt: number;
 
-  constructor({ probes, intervalMs = 30_000, timeoutMs = 5_000, slowMs = 2_000, staleMs = 120_000, fetchImpl = (...a) => fetch(...a), now = Date.now }: MonitorOptions) {
+  constructor({ probes, moreProbes, intervalMs = 30_000, timeoutMs = 5_000, slowMs = 2_000, staleMs = 120_000, fetchImpl = (...a) => fetch(...a), now = Date.now }: MonitorOptions) {
     this.probes = probes;
+    this.moreProbes = moreProbes;
     this.intervalMs = intervalMs;
     this.timeoutMs = timeoutMs;
     this.slowMs = slowMs;
@@ -106,7 +111,16 @@ export class HealthMonitor {
   }
 
   async checkAll(): Promise<void> {
-    await Promise.all(this.probes.map((p) => this.check(p)));
+    if (this.moreProbes) {
+      // When they can't be found out this round, the ones found last round are checked again.
+      const found = await this.moreProbes().catch(() => this.found);
+      this.found = found.filter((p) => !this.probes.some((q) => q.name === p.name));
+    }
+    await Promise.all(this.all().map((p) => this.check(p)));
+  }
+
+  private all() {
+    return [...this.probes, ...this.found];
   }
 
   private async check(probe: Probe): Promise<void> {
@@ -129,7 +143,7 @@ export class HealthMonitor {
   snapshot(gateway: { version: string; api: string }): ComponentStatus[] {
     const now = this.now();
     const iso = (t?: number) => (t === undefined ? undefined : new Date(t).toISOString());
-    const rows = this.probes.map((p): ComponentStatus => {
+    const rows = this.all().map((p): ComponentStatus => {
       const s = this.seen.get(p.name) ?? {};
       const quiet = s.seenAt === undefined ? now - this.startedAt >= this.staleMs : now - s.seenAt >= this.staleMs;
       const state: ComponentState = s.problem || (quiet && s.seenAt !== undefined) ? 'down' : s.seenAt === undefined ? (quiet ? 'down' : 'checking') : (s.latencyMs ?? 0) > this.slowMs ? 'slow' : 'up';

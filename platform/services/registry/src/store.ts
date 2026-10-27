@@ -25,6 +25,11 @@ export interface AppRecord {
   uploadLimitMb?: number;
   /** What admins set the app's own settings (its manifest's `settings`) to, by setting id. Unset ones take their default. */
   settings?: Record<string, SettingValue>;
+  /**
+   * Where the gateway sends /api/<id>/… for this app, such as http://app-expenses:8090: set by the platform
+   * service that runs it, or an admin. Unset, the app's service is wherever the gateway's APP_UPSTREAMS says.
+   */
+  upstream?: string;
 }
 
 /** An admin's value for one of an app's settings. */
@@ -154,6 +159,8 @@ export interface AppStore {
   grant(id: string, scopes: Scope[]): Promise<AppRecord | undefined>;
   /** Lowers how much the app may be sent in one request, in MB, or with `null` goes back to what its manifest asks. Undefined when there is no such app. */
   limitUploads(id: string, mb: number | null): Promise<AppRecord | undefined>;
+  /** Sets where the gateway reaches the app's service, or with `null` forgets it. Undefined when there is no such app. */
+  setUpstream(id: string, url: string | null): Promise<AppRecord | undefined>;
   /** Sets one of the app's settings, or with `null` takes the admin's value away. Undefined when there is no such app. */
   setSetting(id: string, setting: string, value: number | null, by: string): Promise<AppRecord | undefined>;
   /** What floors say about apps: one app's, or every app's. */
@@ -270,6 +277,7 @@ export class MemoryAppStore implements AppStore {
       grantedScopes: before?.grantedScopes ?? [...(entry.scopes ?? [])],
       ...(before?.uploadLimitMb !== undefined ? { uploadLimitMb: before.uploadLimitMb } : {}),
       ...(before?.settings ? { settings: before.settings } : {}),
+      ...(before?.upstream ? { upstream: before.upstream } : {}),
     });
     return !before;
   }
@@ -316,6 +324,14 @@ export class MemoryAppStore implements AppStore {
     if (!record) return undefined;
     if (mb === null) delete record.uploadLimitMb;
     else record.uploadLimitMb = mb;
+    return structuredClone(record);
+  }
+
+  async setUpstream(id: string, url: string | null) {
+    const record = this.apps.get(id);
+    if (!record) return undefined;
+    if (url === null) delete record.upstream;
+    else record.upstream = url;
     return structuredClone(record);
   }
 
@@ -469,6 +485,12 @@ export const migrations: { id: string; sql: string }[] = [
         primary key (app_id, version)
       );`,
   },
+  {
+    id: '010_upstream',
+    sql: `
+      -- Where the gateway reaches the app's service, set by whatever runs it; null leaves it to APP_UPSTREAMS.
+      alter table registry.apps add column upstream text;`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -493,6 +515,7 @@ type AppRow = {
   granted_scopes: Scope[];
   upload_limit_mb: number | null;
   settings: Record<string, SettingValue> | null;
+  upstream: string | null;
 };
 
 const fromAppRow = (r: AppRow): AppRecord => ({
@@ -505,6 +528,7 @@ const fromAppRow = (r: AppRow): AppRecord => ({
   grantedScopes: r.granted_scopes,
   ...(r.upload_limit_mb !== null ? { uploadLimitMb: r.upload_limit_mb } : {}),
   ...(r.settings && Object.keys(r.settings).length ? { settings: r.settings } : {}),
+  ...(r.upstream ? { upstream: r.upstream } : {}),
 });
 
 export class PgAppStore implements AppStore {
@@ -671,6 +695,11 @@ export class PgAppStore implements AppStore {
     );
     const { rows } = await this.pool.query<FrontendRow>('select * from registry.app_frontends where app_id = $1 and version = $2', [f.app, f.version]);
     return fromFrontendRow(rows[0]);
+  }
+
+  async setUpstream(id: string, url: string | null) {
+    const { rows } = await this.pool.query<AppRow>('update registry.apps set upstream = $2 where id = $1 returning *', [id, url]);
+    return rows[0] && fromAppRow(rows[0]);
   }
 
   async grant(id: string, scopes: Scope[]) {
