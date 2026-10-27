@@ -1,5 +1,14 @@
 # @augur/home
 
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [70df61e]
+- Updated dependencies [aa0f0f4]
+  - @augur/mfe-sdk@1.4.0
+  - @augur/ui-kit@1.3.0
+
 ## 0.2.3
 
 ### Patch Changes

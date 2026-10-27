@@ -1,5 +1,19 @@
 # @augur/admin
 
+## 0.6.0
+
+### Minor Changes
+
+- f371945: Admin → Apps installs apps from their releases and keeps them up to date: the registry reads app releases every 15 minutes, lists those not installed with what each asks for, and for each installed app follows stable or beta releases, Automatic (fixes and features that ask for nothing new install by themselves), Ask first or Hold. Versions that wait for an admin show under Needs you with why, and each install and removal is followed step by step.
+- 82ce131: Pull requests that change an app get previews: the App previews workflow builds, signs and releases each push as `<x.y.z>-pr.<n>.<run>`, and a server with the app installed runs the newest build beside it (at most three per app, for a week after the last build, gone when the pull request closes) with scratch storage of its own. An admin names an app’s developers in Admin → Apps; each developer can switch to a preview for themselves (`/v1/previews`), which gives them its frontend and sends their calls to it, while everyone else stays on the installed version.
+
+### Patch Changes
+
+- Updated dependencies [70df61e]
+- Updated dependencies [aa0f0f4]
+  - @augur/mfe-sdk@1.4.0
+  - @augur/ui-kit@1.3.0
+
 ## 0.5.0
 
 ### Minor Changes

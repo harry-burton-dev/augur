@@ -1,5 +1,15 @@
 # @augur/contract-tests
 
+## 0.1.4
+
+### Patch Changes
+
+- a69a8fb: Keeps the reference app built against SDK 1.3 (`frozen/sdk-1.3`), so every later shell is tested against it, and runs the Folio intent checks on builds from SDK 1.3 on, the release that added them.
+- Updated dependencies [70df61e]
+- Updated dependencies [aa0f0f4]
+  - @augur/mfe-sdk@1.4.0
+  - @augur/ui-kit@1.3.0
+
 ## 0.1.3
 
 ### Patch Changes

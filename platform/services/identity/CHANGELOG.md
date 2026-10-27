@@ -1,5 +1,20 @@
 # @augur/identity
 
+## 0.6.0
+
+### Minor Changes
+
+- 476907a: Apps' secrets can be worked out instead of written into `.env`. With `APP_SECRETS_KEY` set, the storage container works out each app's database password and bucket secret from it and the app's id (`appSecretFor` in the service kit) when `.env` doesn't name them, and the app runner can set an app's sign-in to the secret it works out (`PUT /v1/admin/apps/{id}/credential`, the updater only). Secrets in `.env` still win.
+
+### Patch Changes
+
+- Updated dependencies [57d3760]
+- Updated dependencies [476907a]
+- Updated dependencies [ef587a4]
+- Updated dependencies [a6b6bca]
+- Updated dependencies [948526d]
+  - @augur/service-kit@0.7.0
+
 ## 0.5.0
 
 ### Minor Changes
