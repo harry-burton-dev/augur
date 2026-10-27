@@ -5,8 +5,9 @@
  */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import type { AppHost, RunnerState } from './runner.ts';
 import type { Server } from './upgrade.ts';
 
@@ -34,6 +35,18 @@ export const HEALTH_URLS: Record<string, string> = {
   // nginx has no /healthz; the shell's page answering is the check.
   web: 'http://web:8080/',
 };
+
+/** Where the updater's image keeps the deploy files of the release it was built for (infra/service.Dockerfile). */
+export const OWN_DEPLOY_DIR = '/augur/deploy';
+
+/** Each file under `root`, by path inside it; undefined for one that isn't there. */
+const readUnder = async (root: string, paths: string[]) => {
+  const files: Record<string, Buffer | undefined> = {};
+  for (const path of paths) files[path] = await readFile(join(root, path)).catch(() => undefined);
+  return files;
+};
+
+const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
 /** Long enough for a pull of every image on a slow line. */
 const COMMAND_MS = 20 * 60_000;
@@ -88,14 +101,58 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
     // Written in place, so it keeps its owner and permissions: the person running `pc` still reads it.
     writeEnv: (text) => writeFile(envFile, text),
     async hashDeployFiles(paths) {
-      const hashes: Record<string, string | undefined> = {};
-      for (const path of paths) {
-        hashes[path] = await readFile(join(dir, path)).then(
-          (bytes) => createHash('sha256').update(bytes).digest('hex'),
-          () => undefined,
-        );
+      const files = await readUnder(dir, paths);
+      return Object.fromEntries(paths.map((path) => [path, files[path] && sha256(files[path])]));
+    },
+    async ownDeployHashes(paths) {
+      if (!(await access(OWN_DEPLOY_DIR).then(() => true, () => false))) return undefined;
+      const files = await readUnder(OWN_DEPLOY_DIR, paths);
+      return Object.fromEntries(paths.map((path) => [path, files[path] && sha256(files[path])]));
+    },
+    readDeployFiles: (paths) => readUnder(dir, paths),
+    async releaseDeployFiles(ref, paths) {
+      // A container made from the image, never started: its files are copied out, then it's removed.
+      const id = (await command('docker', ['create', ref], env())).trim();
+      const into = await mkdtemp(join(tmpdir(), 'augur-deploy-'));
+      try {
+        await command('docker', ['cp', `${id}:${OWN_DEPLOY_DIR}/.`, into], env());
+        return await readUnder(into, paths);
+      } finally {
+        await command('docker', ['rm', id], env()).catch(() => undefined);
+        await rm(into, { recursive: true, force: true });
       }
-      return hashes;
+    },
+    async writeDeployFiles(files) {
+      for (const [path, bytes] of Object.entries(files)) {
+        const to = join(dir, path);
+        if (!bytes) {
+          await rm(to, { force: true });
+          continue;
+        }
+        // Keeps the file's mode, so the person running `pc` can still read it; scripts are runnable.
+        const mode = await stat(to).then((s) => s.mode & 0o777, () => (path.endsWith('.sh') ? 0o755 : 0o644));
+        await mkdir(dirname(to), { recursive: true });
+        await writeFile(`${to}.tmp`, bytes, { mode });
+        await chmod(`${to}.tmp`, mode);
+        await rename(`${to}.tmp`, to);
+      }
+    },
+    async services() {
+      return (await compose(['config', '--services'])).split('\n').map((line) => line.trim()).filter(Boolean);
+    },
+    async mounting(paths) {
+      // A file mounted on its own stays the old one inside a running container until it's made again.
+      const config = JSON.parse(await compose(['config', '--format', 'json'])) as { services: Record<string, { volumes?: { type: string; source?: string }[] }> };
+      const files = paths.map((path) => join(dir, path));
+      return Object.entries(config.services)
+        .filter(([, service]) => (service.volumes ?? []).some((v) => v.type === 'bind' && v.source && files.some((f) => f === v.source || f.startsWith(`${v.source}/`))))
+        .map(([name]) => name);
+    },
+    async remove(services) {
+      await compose(['rm', '--stop', '--force', ...services]);
+    },
+    async recreate(services) {
+      await compose(['up', '-d', '--no-deps', '--force-recreate', ...services]);
     },
     async verifySignature(ref) {
       await command('cosign', verifyArgs(signer.identity, signer.issuer, ref, await trustedRootIn(dir)), env());

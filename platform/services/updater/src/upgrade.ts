@@ -8,6 +8,7 @@
  * Outcomes: `done` (on the new release), `rolled-back` (on the release it started from, whether
  * or not anything was restarted) and `failed` (it couldn't go back either: someone has to look).
  */
+import { createHash, randomBytes } from 'node:crypto';
 import { envValue, withEnvValue } from './env-file.ts';
 
 /** What the registry hands the updater for the open upgrade (GET /v1/platform/upgrade/target). */
@@ -48,6 +49,25 @@ export interface Server {
   writeEnv(text: string): Promise<void>;
   /** The sha256 of each file, by path inside infra/deploy; undefined for one that isn't there. */
   hashDeployFiles(paths: string[]): Promise<Record<string, string | undefined>>;
+  /**
+   * The sha256 of each of the running release's own deploy files, which this updater's image carries;
+   * undefined when it carries none (an updater from before it did).
+   */
+  ownDeployHashes(paths: string[]): Promise<Record<string, string | undefined> | undefined>;
+  /** The server's deploy files as they are now; undefined for one that isn't there. */
+  readDeployFiles(paths: string[]): Promise<Record<string, Buffer | undefined>>;
+  /** These deploy files as the release's updater image (`ref`, by digest, already pulled) carries them. */
+  releaseDeployFiles(ref: string, paths: string[]): Promise<Record<string, Buffer | undefined>>;
+  /** Writes each deploy file whole, or removes it when it's undefined. */
+  writeDeployFiles(files: Record<string, Buffer | undefined>): Promise<void>;
+  /** The services the deployment runs, as its compose.yml and settings have them now. */
+  services(): Promise<string[]>;
+  /** The services that mount any of these deploy files (or a folder holding one). */
+  mounting(paths: string[]): Promise<string[]>;
+  /** Stops and removes these services' containers. */
+  remove(services: string[]): Promise<void>;
+  /** Makes these services' containers again, changed or not, so they read files written since they started. */
+  recreate(services: string[]): Promise<void>;
   /** Throws unless `ref` (an image by digest) was signed by AUGUR's Release workflow. */
   verifySignature(ref: string): Promise<void>;
   /** Takes a fresh backup and returns its file name. */
@@ -79,6 +99,15 @@ const JOBS = new Set<string>(['storage']);
 const WORKERS = new Set<string>(['folio-worker']);
 /** Itself: pulled with the rest, and replaced only after the upgrade has ended (see index.ts). */
 export const UPDATER = 'updater';
+/** Its line to Docker: left running through an upgrade, which it carries. */
+const DOCKER_PROXY = 'docker-proxy';
+
+/**
+ * A setting the updater makes up itself when a release needs it and the server hasn't got it: a long
+ * random string, as infra/deploy/.env.example says of any whose name ends so.
+ */
+export const madeUp = (key: string) => /_(SECRET|PASSWORD|TOKEN)$/.test(key) && key !== 'PLATFORM_ADMIN_PASSWORD';
+const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 /** How long a part has to come back on its new version. */
 export const READY_MS = 120_000;
 const POLL_MS = 2_000;
@@ -142,6 +171,13 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
   const before = await server.readEnv();
   let step: Step = 'preflight';
   let backup: string | undefined;
+  // The release's deploy files that differ from the server's, as the release has them, and as the server had them.
+  let changedFiles: Record<string, Buffer | undefined> = {};
+  let oldFiles: Record<string, Buffer | undefined> = {};
+  // Settings the release needs that the updater makes up, and the services it pulled before writing new files.
+  let settings = before;
+  const madeKeys: string[] = [];
+  let pulledFirst: string[] = [];
 
   const run = async (name: Step, work: () => Promise<string | void>) => {
     step = name;
@@ -156,15 +192,30 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
         throw new StepFailed(`The server’s settings say it runs ${envValue(before, 'PLATFORM_VERSION') ?? 'no version'}, not ${target.from}. Set PLATFORM_VERSION in .env to what it runs.`);
       }
       if (!target.deploy || !target.parts) throw new StepFailed(`AUGUR ${target.version}’s release file couldn’t be read, or names no deploy files, so whether it fits this server isn’t known. Upgrade by hand (docs/upgrade.md).`);
-      const unknown = Object.keys(target.images).filter((s) => s !== UPDATER && !services.includes(s as (typeof services)[number]));
-      if (unknown.length) throw new StepFailed(`AUGUR ${target.version} has parts the updater doesn’t know how to restart (${unknown.join(', ')}). Upgrade by hand (docs/upgrade.md).`);
+      // The release's deploy files that differ from the server's are written by the updater, as long as
+      // the server's are still as the running release left them: one changed by hand is never overwritten.
       const onDisk = await server.hashDeployFiles(Object.keys(target.deploy));
       const changed = Object.entries(target.deploy).filter(([path, hash]) => onDisk[path] !== hash).map(([path]) => path);
       if (changed.length) {
-        throw new StepFailed(`AUGUR ${target.version} changes the server’s own files (${changed.join(', ')}), so it’s upgraded by hand: check out augur@${target.version} and follow docs/upgrade.md.`);
+        const own = await server.ownDeployHashes(changed);
+        if (!own || !target.images[UPDATER]) {
+          throw new StepFailed(`AUGUR ${target.version} changes the server’s own files (${changed.join(', ')}), and this updater can’t write them, so it’s upgraded by hand: check out augur@${target.version} and follow docs/upgrade.md.`);
+        }
+        const edited = changed.filter((path) => onDisk[path] !== undefined && onDisk[path] !== own[path]);
+        if (edited.length) {
+          throw new StepFailed(
+            `${edited.join(', ')} ${edited.length > 1 ? 'have' : 'has'} been changed on the server since AUGUR ${target.from}, and ${target.version} changes ${edited.length > 1 ? 'them' : 'it'} too. Put ${edited.length > 1 ? 'them' : 'it'} back as augur@${target.from} has ${edited.length > 1 ? 'them' : 'it'} (git checkout), or upgrade by hand (docs/upgrade.md).`,
+          );
+        }
+        changedFiles = Object.fromEntries(changed.map((path) => [path, undefined]));
       }
       const missing = (target.required ?? []).filter((key) => key !== 'PLATFORM_VERSION' && !envValue(before, key));
-      if (missing.length) throw new StepFailed(`Set ${missing.join(', ')} in .env first: AUGUR ${target.version} won’t start without ${missing.length > 1 ? 'them' : 'it'}.`);
+      const needYou = missing.filter((key) => !madeUp(key));
+      if (needYou.length) throw new StepFailed(`Set ${needYou.join(', ')} in .env first: AUGUR ${target.version} won’t start without ${needYou.length > 1 ? 'them' : 'it'}.`);
+      for (const key of missing) {
+        settings = withEnvValue(settings, key, randomBytes(32).toString('hex'));
+        madeKeys.push(key);
+      }
       for (const [service, ref] of Object.entries(target.images)) {
         const local = `${imageRepo(before, ref)}/${service}@${digestOf(ref)}`;
         await server.verifySignature(local).catch((err) => {
@@ -184,16 +235,21 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     });
 
     await run('pull', async () => {
-      const pulled = Object.keys(target.images);
-      await server.pull(pulled, target.version).catch((err) => {
-        throw new StepFailed(`The images couldn’t be pulled: ${reason(err)}`);
+      // A part new in this release is pulled once its compose.yml is in place (roll-forward).
+      const running = new Set(await server.services());
+      pulledFirst = Object.keys(target.images).filter((service) => running.has(service));
+      await pullAndCheck(server, target, pulledFirst);
+      const paths = Object.keys(changedFiles);
+      if (!paths.length) return;
+      const updater = `${imageRepo(before, target.images[UPDATER]!)}/${UPDATER}@${digestOf(target.images[UPDATER]!)}`;
+      const files = await server.releaseDeployFiles(updater, paths).catch((err) => {
+        throw new StepFailed(`The release’s deploy files couldn’t be read from its updater image: ${reason(err)}`);
       });
-      for (const service of pulled) {
-        const known = (await server.digests(service, target.version)).map(digestOf);
-        if (!known.includes(digestOf(target.images[service]))) {
-          throw new StepFailed(`The ${service} image pulled for ${target.version} isn’t the one the release names, so nothing was run.`);
-        }
-      }
+      const wrong = paths.filter((path) => !files[path] || sha256(files[path]!) !== target.deploy![path]);
+      if (wrong.length) throw new StepFailed(`The release’s updater image carries ${wrong.join(', ')} other than the release file says, so nothing was changed.`);
+      changedFiles = files;
+      oldFiles = await server.readDeployFiles(paths);
+      return `${paths.join(', ')} to be updated`;
     });
   } catch (err) {
     // Nothing has restarted yet: the server is still on the release it was.
@@ -203,13 +259,33 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     return 'rolled-back';
   }
 
+  // Parts this release adds, and the rest of what the deployment runs (the database, sign-in, storage).
+  let fresh: string[] = [];
+  let others: string[] = [];
   try {
     await run('roll-forward', async () => {
-      await server.writeEnv(withEnvValue(before, 'PLATFORM_VERSION', target.version));
+      const paths = Object.keys(changedFiles);
+      if (paths.length) await server.writeDeployFiles(changedFiles);
+      await server.writeEnv(withEnvValue(settings, 'PLATFORM_VERSION', target.version));
+      const now = await server.services();
+      const rolled = new Set<string>([...services, UPDATER, DOCKER_PROXY]);
+      // Parts new in this release: pulled now that the new compose.yml names them.
+      fresh = Object.keys(target.images).filter((service) => !pulledFirst.includes(service) && now.includes(service));
+      if (fresh.length) await pullAndCheck(server, target, fresh);
+      const added = fresh.filter((service) => !rolled.has(service));
+      // First what the parts stand on: Compose recreates only those whose settings or image changed,
+      // and those that mount a file just written are made again so they read it.
+      others = now.filter((service) => !rolled.has(service) && !added.includes(service));
+      const remount = paths.length ? (await server.mounting(paths)).filter((service) => others.includes(service)) : [];
+      if (others.length) await server.up(others);
+      if (remount.length) await server.recreate(remount);
       for (const service of services) {
         await server.up([service]);
         await ready(server, [service], versionOf);
       }
+      if (added.length) await server.up(added);
+      const notes = [paths.length ? `wrote ${paths.join(', ')}` : '', madeKeys.length ? `made up ${madeKeys.join(', ')} in .env` : '', added.length ? `started ${added.join(', ')}` : ''].filter(Boolean);
+      return notes.length ? `${notes.join('; ')}.` : undefined;
     });
     // Every part again, now that all of them are on it: one that came up early may have fallen over since.
     step = 'verify';
@@ -221,18 +297,50 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     if (err instanceof Withdrawn) throw err;
     const why = reason(err);
     await report({ step, state: 'failed', message: why }).catch(() => undefined);
-    return rollBack(target, server, report, before, services, why, backup);
+    return rollBack(target, server, report, before, services, why, backup, { oldFiles, fresh, others });
+  }
+};
+
+/** Pulls these services' images for the release and checks each is the one it names, by digest. */
+const pullAndCheck = async (server: Server, target: Target, pulled: string[]) => {
+  await server.pull(pulled, target.version).catch((err) => {
+    throw new StepFailed(`The images couldn’t be pulled: ${reason(err)}`);
+  });
+  for (const service of pulled) {
+    const known = (await server.digests(service, target.version)).map(digestOf);
+    if (!known.includes(digestOf(target.images[service]!))) {
+      throw new StepFailed(`The ${service} image pulled for ${target.version} isn’t the one the release names, so nothing was run.`);
+    }
   }
 };
 
 /** Puts every part back on the release it was on. The data stays as the new release left it: see docs/upgrade.md, Going back. */
-const rollBack = async (target: Target, server: Server, report: Reporter, before: string, services: readonly string[], why: string, backup?: string): Promise<Outcome> => {
+const rollBack = async (
+  target: Target,
+  server: Server,
+  report: Reporter,
+  before: string,
+  services: readonly string[],
+  why: string,
+  backup?: string,
+  { oldFiles = {}, fresh = [], others = [] }: { oldFiles?: Record<string, Buffer | undefined>; fresh?: string[]; others?: string[] } = {},
+): Promise<Outcome> => {
   const kept = backup ? ` If ${target.from} has trouble with data ${target.version} changed, restore ${backup} (docs/upgrade.md, Going back).` : '';
   try {
     await report({ step: 'roll-back', state: 'running' }).catch(() => undefined);
+    // Parts the release added go first, while its compose.yml still names them.
+    if (fresh.length) await server.remove(fresh);
+    const paths = Object.keys(oldFiles);
+    if (paths.length) await server.writeDeployFiles(oldFiles);
     await server.writeEnv(before);
-    await server.up([...services]);
-    await ready(server, services, () => undefined);
+    if (others.length) await server.up(others);
+    if (paths.length) {
+      const remount = (await server.mounting(paths)).filter((service) => others.includes(service));
+      if (remount.length) await server.recreate(remount);
+    }
+    const back = services.filter((service) => !fresh.includes(service));
+    await server.up(back);
+    await ready(server, back, () => undefined);
   } catch (err) {
     await report({ step: 'roll-back', state: 'failed', message: `Back on ${target.from} didn’t work either: ${reason(err)} The upgrade had stopped because ${why}${kept}`, outcome: 'failed' });
     return 'failed';

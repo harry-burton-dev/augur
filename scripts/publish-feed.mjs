@@ -10,6 +10,7 @@
 // Needs GITHUB_TOKEN (or GH_TOKEN) that can read the repository's releases.
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
 import semver from 'semver';
 import { asMirrored } from './mirror-release.mjs';
 
@@ -102,10 +103,11 @@ const main = async (args) => {
   console.log(`${out}: ${feed.releases.length} AUGUR releases, ${feed.apps.length} app releases.`);
   if (args.includes('--push')) {
     const ref = `ghcr.io/${REPO.toLowerCase()}/feed:latest`;
+    // ORAS takes a file by its path relative to where it runs, which also names the layer.
     execFileSync(
       'oras',
-      ['push', ref, '--artifact-type', FEED_MEDIA_TYPE, '--annotation', `org.opencontainers.image.source=https://github.com/${REPO}`, `${out}:${FEED_MEDIA_TYPE}`],
-      { stdio: 'inherit' },
+      ['push', ref, '--artifact-type', FEED_MEDIA_TYPE, '--annotation', `org.opencontainers.image.source=https://github.com/${REPO}`, `${basename(out)}:${FEED_MEDIA_TYPE}`],
+      { stdio: 'inherit', cwd: dirname(resolve(out)) },
     );
     console.log(`Pushed ${ref}.`);
   }

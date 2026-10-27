@@ -105,8 +105,8 @@ export const nextRelease = (previous, parts, settings, today) => {
 
 /**
  * The server's own files in infra/deploy as this release has them, by sha256 and path inside it.
- * An updater only applies a release whose files match the server's: when they differ, the release
- * changed how the server runs, and that upgrade is done by hand. Two aren't counted: `.env.example`,
+ * When they differ from the server's, the updater writes the release's, which its updater image
+ * carries, after checking each against these (platform/services/updater). Two aren't counted: `.env.example`,
  * since the server has its own `.env` and `settings` says what that needs, and `compose.build.yml`,
  * which builds images from a checkout instead of running a release's.
  */
@@ -147,14 +147,14 @@ export const notes = (release, parts) => {
   const lines = [`AUGUR ${release.version} (${release.channel}).`, ''];
   if (release.upgradeFrom) lines.push(`Upgrades from AUGUR ${release.upgradeFrom.replace('>=', '')} or later.`, '');
   if (release.breaking.length) lines.push('### Breaking', '', ...release.breaking.map((b) => `- ${b}`), '');
-  if (release.settings.added.length) lines.push('### New settings', '', `Add to your \`.env\` before upgrading (see \`${ENV_EXAMPLE}\`):`, '', ...release.settings.added.map((k) => `- \`${k}\`${release.settings.required.includes(k) ? ' (required)' : ''}`), '');
+  if (release.settings.added.length) lines.push('### New settings', '', `Add to your \`.env\` before upgrading (see \`${ENV_EXAMPLE}\`). The updater makes up a required one ending in _SECRET, _PASSWORD or _TOKEN itself:`, '', ...release.settings.added.map((k) => `- \`${k}\`${release.settings.required.includes(k) ? ' (required)' : ''}`), '');
   if (release.settings.removed.length) lines.push('### Removed settings', '', ...release.settings.removed.map((k) => `- \`${k}\``), '');
   lines.push('### What changed', '');
   for (const name of release.changed) {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('### Running it', '', `Set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/main/docs/upgrade.md).`);
+  lines.push('### Running it', '', `Upgrade from Admin → Updates, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/main/docs/upgrade.md).`);
   return lines.join('\n');
 };
 
