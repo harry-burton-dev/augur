@@ -29,8 +29,23 @@ export interface MenuCategory {
   label: string;
   icon?: string;
   ai?: boolean;
+  /**
+   * The items under it. With none, the category is a choice by itself: the
+   * caption names it, and Enter or a click opens it, reported as an item with
+   * the category's id, label, icon and detail. That is how one child stands
+   * for its parent, rather than repeating it.
+   */
   items: MenuItem[];
+  /** One short line, shown when the category is a choice by itself. */
+  detail?: string;
+  /** Extra words search should find a category that is a choice by itself by. */
+  keywords?: string;
+  /** In Orbit, the larger part the category belongs to, named before it ("Organisation / People"). */
+  section?: string;
 }
+
+/** The item a category with no items stands for. */
+const itself = (cat: MenuCategory): MenuItem => ({ id: cat.id, label: cat.label, icon: cat.icon, detail: cat.detail, keywords: cat.keywords, ai: cat.ai });
 
 /** Title picks the app (a letterbox of fades, chapters, film-title type); Orbit is the menu inside it (a 360° ring). */
 export type MenuVariant = 'orbit' | 'title';
@@ -87,8 +102,10 @@ function placeAt(d: number, at: (d: number) => Place): Place {
 export function searchMenu(categories: MenuCategory[], query: string): Entry[] {
   const q = query.toLowerCase();
   const out: Entry[] = [];
-  for (const cat of categories)
+  for (const cat of categories) {
+    if (!cat.items.length && `${cat.label} ${cat.keywords ?? ''} ${cat.detail ?? ''}`.toLowerCase().includes(q)) out.push({ item: itself(cat), cat });
     for (const item of cat.items) if (`${item.label} ${item.keywords ?? ''} ${cat.label}`.toLowerCase().includes(q)) out.push({ item, cat });
+  }
   return out;
 }
 
@@ -263,7 +280,10 @@ export class UiCentreMenu extends LitElement {
   }
 
   private get current(): Entry | undefined {
-    return this.column[this.focusIndex];
+    const column = this.column;
+    if (column.length) return column[this.focusIndex];
+    const cat = this.cats[this.cat];
+    return !this.query && cat && !cat.items.length ? { item: itself(cat), cat } : undefined;
   }
 
   private get step() {
@@ -559,8 +579,11 @@ export class UiCentreMenu extends LitElement {
   private clickCat(i: number) {
     if (this.suppressClick) return;
     this.use();
+    // a category that is a choice by itself opens on a second click, as an item does
+    const opens = i === this.cat && !this.query && !this.cats[i]?.items.length;
     this.setQuery('');
-    this.setCat(i);
+    if (opens) this.activate();
+    else this.setCat(i);
   }
 
   private clickItem(j: number) {
@@ -802,17 +825,30 @@ export class UiCentreMenu extends LitElement {
     const searching = !!this.query;
     const column = this.column;
     const f = this.focusIndex;
-    const cur = column[f];
+    const cur = this.current;
     const variantClass = this.variant === 'title' ? 'title-variant' : 'orbit';
     const showIntro = this.intro && !this.introDone && !this.reduce;
     const ready = this.size.w > 0;
     const shown = this.spinning ? this.nearestCat() : this.cat;
     const num = String(shown + 1).padStart(2, '0');
-    const catText = searching ? `“${this.query}”` : this.variant === 'title' ? `${num}  /  ${cats[shown].label}` : cats[shown].label;
+    const section = cats[shown].section;
+    const catText = searching
+      ? `“${this.query}”`
+      : this.variant === 'title'
+        ? `${num}  /  ${cats[shown].label}`
+        : section
+          ? `${section}  /  ${cats[shown].label}`
+          : cats[shown].label;
     const title = cur ? cur.item.label : searching ? 'No matches' : '';
     const detail = cur ? (searching ? [cur.cat.label, cur.item.detail].filter(Boolean).join(' · ') : (cur.item.detail ?? '')) : searching ? 'Esc to clear' : '';
     const hintText = 'Scroll or drag to move · Enter to open · Esc to go back';
-    const live = cur ? `${cur.item.label}, ${f + 1} of ${column.length}${searching ? '' : `, ${cats[this.cat].label}`}` : searching ? 'No matches' : '';
+    const live = cur
+      ? column.length
+        ? `${cur.item.label}, ${f + 1} of ${column.length}${searching ? '' : `, ${cats[this.cat].label}`}`
+        : cur.item.label
+      : searching
+        ? 'No matches'
+        : '';
     const places = this.catPlaces();
     const uid = 'm';
 
@@ -867,7 +903,7 @@ export class UiCentreMenu extends LitElement {
             role="listbox"
             tabindex="0"
             aria-label=${searching ? `Results for ${this.query}` : cats[this.cat].label}
-            aria-activedescendant=${cur ? `${uid}-i${f}` : nothing}
+            aria-activedescendant=${column.length ? `${uid}-i${f}` : nothing}
           >
             ${keyed(
               searching ? `q:${this.query}` : `c:${this.cat}`,

@@ -35,6 +35,7 @@ import {
   DEFAULT_UPLOAD_MB,
   entryOriginProblem,
   MAX_UPLOAD_MB,
+  menuWarnings,
   parseOrigin,
   platformApps,
   settingsProblem,
@@ -362,6 +363,8 @@ export const buildApp = async ({
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
           const badVersion = versionProblem(entry) ?? surfaceProblem(entry) ?? settingsProblem(entry);
           if (badVersion) return reply.code(400).send({ error: 'bad_request', message: badVersion });
+          const warnings = menuWarnings(entry);
+          if (warnings.length) req.log.warn({ app: entry.id, warnings }, 'menu breaks the shell principles; accepted');
           const badOrigin = entryOriginProblem(entry, await allowedOrigins());
           if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });
           const conflict = conflictFor(entry, await store.list());

@@ -45,6 +45,21 @@ test.describe('with Folio on', () => {
     await expect(page.locator('ui-centre-menu[variant="title"]')).toBeVisible();
   });
 
+  test('Title shows Folio (Artifacts), which has no areas, as itself, and choosing it opens it', async ({ page }) => {
+    await page.goto('/');
+    const title = page.locator('ui-centre-menu[variant="title"]');
+    await expect(title).toBeVisible();
+    await title.evaluate((menu: HTMLElement & { categories: { id?: string }[]; setCategory(i: number): void }) =>
+      menu.setCategory(menu.categories.findIndex((c) => c.id === 'folio')),
+    );
+    await expect(title.locator('.catlabel')).toContainText('Artifacts');
+    await expect(title.locator('.item')).toHaveCount(0);
+    await expect(title.locator('.caption .title')).toHaveText('Artifacts');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/@me\/folio$/);
+    await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
+  });
+
   test('an app opens a document, and Folio answers', async ({ page }) => {
     since('1.3');
     await page.goto('/reference');

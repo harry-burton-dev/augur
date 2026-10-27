@@ -18,6 +18,8 @@ export interface AppEntry {
   handles?: string[];
   ai?: boolean;
   menu?: AppMenuCategory[];
+  /** The broad parts of what the app covers, which Title lists under it. Menu groups name theirs in `area`. */
+  areas?: AppArea[];
   /** false: the app keeps its own menu inside it and the shell never shows its Orbit. */
   orbit?: boolean;
   /** What the app's service asks to do on the platform, such as "notifications:send". */
@@ -103,8 +105,53 @@ export interface AppMenuCategory {
   label: string;
   icon?: string;
   ai?: boolean;
+  area?: string;
   items: AppMenuItem[];
 }
+
+export interface AppArea {
+  id: string;
+  label: string;
+  icon?: string;
+  detail?: string;
+}
+
+/**
+ * Where an app's menu breaks the shell principles (docs/shell-principles.md):
+ * something repeating the label or icon of what it sits under, a group naming
+ * an area the app doesn't have, an area with no groups. These are warnings:
+ * the manifest is still accepted, so released apps keep working, but the
+ * shell draws them less clearly. An icon left out isn't counted, since the
+ * shell gives it one of its own.
+ */
+export const menuWarnings = (entry: Pick<AppEntry, 'name' | 'icon' | 'menu' | 'areas'>): string[] => {
+  const out: string[] = [];
+  const same = (a: { label: string; icon?: string }, b: { label: string; icon?: string }) =>
+    a.label.trim().toLowerCase() === b.label.trim().toLowerCase() ? 'label' : a.icon && a.icon === b.icon ? 'icon' : undefined;
+  const app = { label: entry.name, icon: entry.icon };
+  const areas = entry.areas ?? [];
+  const ids = new Set<string>();
+  for (const area of areas) {
+    if (ids.has(area.id)) out.push(`${entry.name} has the area "${area.id}" twice.`);
+    ids.add(area.id);
+    const clash = same(area, app);
+    if (clash) out.push(`${entry.name}'s area "${area.label}" has the app's own ${clash}.`);
+    if (!entry.menu?.some((c) => c.area === area.id)) out.push(`${entry.name}'s area "${area.label}" has no menu groups.`);
+  }
+  for (const group of entry.menu ?? []) {
+    const area = areas.find((a) => a.id === group.area);
+    if (group.area && !area) out.push(`${entry.name}'s menu group "${group.label}" names the area "${group.area}", which the app doesn't have.`);
+    const parent = area ?? app;
+    const clash = same(group, parent);
+    if (clash) out.push(`${entry.name}'s menu group "${group.label}" has the ${clash} of ${area ? `its area "${area.label}"` : 'the app'}.`);
+    for (const item of group.items) {
+      const itemClash = same(item, group);
+      if (itemClash) out.push(`${entry.name}'s menu item "${item.label}" has the ${itemClash} of its group "${group.label}".`);
+    }
+  }
+  if (areas.length && entry.menu?.some((c) => !c.area)) out.push(`${entry.name} has areas, but some menu groups don't name one; they show with no area.`);
+  return out;
+};
 
 /**
  * The platform's own apps. They ship with the platform, so they live in code, not in the catalogue table.
@@ -122,33 +169,41 @@ export const platformApps: AppEntry[] = [
     icon: 'admin',
     description: 'People, departments, apps, status, updates and activity',
     requiredRole: 'admin',
+    areas: [
+      { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People and departments' },
+      { id: 'system', label: 'System', icon: 'server', detail: 'Apps, status, updates and activity' },
+    ],
     menu: [
       {
         label: 'People',
         icon: 'people',
+        area: 'organisation',
         items: [
-          { label: 'Everyone', icon: 'people', path: '/people', detail: 'Roles, departments, sign-in', keywords: 'users accounts roles disable' },
+          { label: 'Everyone', icon: 'list', path: '/people', detail: 'Roles, departments, sign-in', keywords: 'users accounts roles disable' },
           { label: 'Add a person', icon: 'user-plus', path: '/people/new', keywords: 'invite create user' },
         ],
       },
       {
         label: 'Departments',
         icon: 'department',
+        area: 'organisation',
         items: [
-          { label: 'All departments', icon: 'department', path: '/departments', detail: 'Names and members', keywords: 'groups teams' },
+          { label: 'All departments', icon: 'list', path: '/departments', detail: 'Names and members', keywords: 'groups teams' },
           { label: 'New department', icon: 'plus', path: '/departments/new', keywords: 'create group team' },
         ],
       },
       {
         label: 'Apps',
         icon: 'apps',
-        items: [{ label: 'All apps', icon: 'apps', path: '/apps', detail: 'Versions, on or off', keywords: 'catalogue registry enable disable' }],
+        area: 'system',
+        items: [{ label: 'All apps', icon: 'list', path: '/apps', detail: 'Versions, on or off', keywords: 'catalogue registry enable disable' }],
       },
       {
         label: 'AUGUR',
         icon: 'pulse',
+        area: 'system',
         items: [
-          { label: 'Status', icon: 'pulse', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },
+          { label: 'Status', icon: 'gauge', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },
           { label: 'Updates', icon: 'download', path: '/updates', detail: 'New AUGUR releases', keywords: 'upgrade release version new' },
           { label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' },
         ],
@@ -221,6 +276,21 @@ export const appEntrySchema = {
       },
     },
     orbit: { type: 'boolean' },
+    areas: {
+      type: 'array',
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'label'],
+        properties: {
+          id: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,39}$' },
+          label: { type: 'string', minLength: 1, maxLength: 40 },
+          icon: { type: 'string', maxLength: 40 },
+          detail: { type: 'string', maxLength: 60 },
+        },
+      },
+    },
     menu: {
       type: 'array',
       maxItems: 8,
@@ -233,6 +303,7 @@ export const appEntrySchema = {
           label: { type: 'string', minLength: 1, maxLength: 40 },
           icon: { type: 'string', maxLength: 40 },
           ai: { type: 'boolean' },
+          area: { type: 'string', maxLength: 40 },
           items: {
             type: 'array',
             minItems: 1,

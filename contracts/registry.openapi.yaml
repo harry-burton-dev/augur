@@ -1121,7 +1121,7 @@ components:
           items: { type: string }
           description: Intent types this app handles, e.g. document.open
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
-        orbit: { type: boolean, description: "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title's chapter still lists its menu, and the band's All apps is the way back to the shell's menu" }
+        orbit: { type: boolean, description: "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Back is the way back to the shell's menu" }
         search: { type: boolean, description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it" }
         storage:
           type: object
@@ -1162,8 +1162,13 @@ components:
         menu:
           type: array
           maxItems: 8
-          description: The app's menu, shown by the shell as Orbit at the app's root and as its chapter in Title
+          description: The app's menu, shown by the shell as Orbit at the app's root. A group with one item opens it directly
           items: { $ref: "#/components/schemas/AppMenuCategory" }
+        areas:
+          type: array
+          maxItems: 6
+          description: "The broad parts of what the app covers, which Title lists under it (SDK 1.5). With fewer than two, Title shows the app alone. Nothing repeats its parent: the registry warns when an area's label or icon matches the app's, a group's its area's, or an item's its group's, and accepts the manifest. See docs/shell-principles.md"
+          items: { $ref: "#/components/schemas/AppArea" }
     FloorKind:
       type: string
       enum: [personal, team, org]
@@ -1191,11 +1196,21 @@ components:
         label: { type: string }
         icon: { type: string, description: A UI kit icon name }
         ai: { type: boolean }
+        area: { type: string, description: The id of the app's area the group belongs to (SDK 1.5) }
         items:
           type: array
           minItems: 1
           maxItems: 12
           items: { $ref: "#/components/schemas/AppMenuItem" }
+    AppArea:
+      type: object
+      required: [id, label]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9-]{0,39}$" }
+        label: { type: string, minLength: 1, maxLength: 40 }
+        icon: { type: string, description: A UI kit icon name, not the app's own }
+        detail: { type: string, maxLength: 60, description: One line on what's in it }
     AppMenuItem:
       type: object
       required: [label, path]

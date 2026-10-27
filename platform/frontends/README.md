@@ -27,22 +27,30 @@ What people see: the top left shows the floor's icon (a person, a group, a build
 
 The shell's own navigation is the design system's centre menu, over the water.
 
-- `/` is **Title**: every app the person can open is a chapter. A chapter's items are the app's menu categories, or the app itself when it has no menu. Enter opens it.
-- An app's root is its **Orbit** when its manifest has a `menu`: categories on a ring, each item opening the app at its `path` (for example `/library/drafts`). An app without a menu opens straight away.
+- `/` is **Title**: every app the person can open is a chapter. A chapter's items are the app's `areas` (SDK 1.5), such as Admin's Organisation and System, each opening the app's Orbit at the area's first group. An app with one area or none is a choice by itself, captioned with its description: nothing is offered twice. Title never lists an app's groups or pages.
+- An app's root is its **Orbit** when its manifest has a `menu`: groups on a ring, kept together by area and named with it ("Organisation / People"), each item opening the app at its `path` (for example `/library/drafts`). A group with one page is that page. While Orbit or the app is open, the area sits under the app's name below the handle. An app without a menu opens straight away.
 - **Esc goes back a step:** from inside an app to its Orbit, from Orbit (or an app with no menu) to Title. It only does so when nothing else used the Esc, so a component that handles Esc itself (an armed button, a filter, a dialog) calls `preventDefault()`.
-- **An app can keep its menu inside it** with `"orbit": false` (SDK 1.4), as Artifacts does with its side rail. The shell then never shows its Orbit: its root opens the app, Title's chapter still lists its menu categories and opens the app at the chosen category's first page, and Esc stays with the app. The way out is **Back** in the band.
+- **An app can keep its menu inside it** with `"orbit": false` (SDK 1.4), as Artifacts does with its side rail. The shell then never shows its Orbit: its root opens the app, choosing one of its areas in Title opens the app at the area's first page, and Esc stays with the app. The way out is **Back** in the band.
 - **The band stays on every screen, and never draws a surface.** It rests on a fade of the `scrim` token over the water or the app. Top left is the floor you're on, its icon and name only. While an app is open, its name sits under the look-up handle (with `area`, the part of it you're in), and **Back** (`ui-back`) goes up one level, to the app's Orbit or to Title. Back and Esc both work it out from where you are (`upFrom`), never per app; an app that keeps its own menu keeps Esc, so Back is its way out. The tab's title names the page, app and floor.
 - **The floor gauge** at the right edge lights the floor you're on and pins the open app beside it, since what an app shows is that floor's. Pointing at it, or tabbing into it, opens it out: each floor's name, who sees what's on it, which one you're on, and which one the app is showing. Changing floor keeps you in the same app, at its start. Until the new floor's catalogue arrives nothing of the old floor's stays mounted, so an app is never shown one floor's data under another's address.
 
 ```json
+"areas": [
+  { "id": "writing", "label": "Writing", "icon": "document", "detail": "Drafts and templates" },
+  { "id": "sharing", "label": "Sharing", "icon": "publish" }
+],
 "menu": [
-  { "label": "Documents", "icon": "document", "items": [
-    { "label": "Drafts", "icon": "document", "path": "/drafts", "detail": "Not published yet" }
+  { "label": "Drafts", "icon": "folder", "area": "writing", "items": [
+    { "label": "All drafts", "icon": "list", "path": "/drafts", "detail": "Not published yet" },
+    { "label": "New draft", "icon": "plus", "path": "/drafts/new" }
+  ] },
+  { "label": "Published", "icon": "inbox", "area": "sharing", "items": [
+    { "label": "Sent out", "icon": "list", "path": "/published" }
   ] }
 ]
 ```
 
-Item paths can't be `/`, since that's the Orbit itself. The water follows the screen: Minimal under Title, Deep Ocean under Orbit, Calm Tide under apps.
+Nothing repeats its parent: an area's label and icon differ from the app's, a group's from its area's, and an item's from its group's. The registry warns when a manifest breaks this, and `pnpm check:manifest` prints the warnings, but accepts it. See [the shell principles](../../docs/shell-principles.md). Item paths can't be `/`, since that's the Orbit itself. The water follows the screen: Minimal under Title, Deep Ocean under Orbit, Calm Tide under apps.
 
 ## What the Shell offers
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
   applyPreferences,
+  areaOf,
   backFrom,
   upFrom,
   titleFor,
@@ -26,6 +27,7 @@ import {
   loadPreviews,
   NotificationActions,
   NotificationFeed,
+  orbitIndexOf,
   orbitMenu,
   ownFloor,
   PreferenceSync,
@@ -75,7 +77,6 @@ const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' }
 const waterFor = (screen: Screen | undefined) => (screen?.kind === 'title' ? 'Minimal' : screen?.kind === 'orbit' ? 'Deep Ocean' : 'Calm Tide');
 
 /** The Orbit category holding the item that opens a path, so going back lands where you came from. */
-const categoryOf = (app: AppManifestEntry, path: string) => Math.max(0, app.menu?.findIndex((c) => c.items.some((it) => it.path === path)) ?? 0);
 
 /**
  * The platform's frame. It owns the Shell, the catalogue of apps, which app is
@@ -423,11 +424,17 @@ export function Host({
       navigate(hrefFor(target.app, target.path));
     };
     const onBack = () => screen.kind === 'orbit' && navigate('/');
+    const onChange = (e: Event) => {
+      const shell = shellRef.current;
+      if (shell && screen.kind === 'orbit') shell.area = (e as CustomEvent<{ category: MenuCategory | null }>).detail.category?.section ?? '';
+    };
     menu.addEventListener('ui-select', onSelect);
     menu.addEventListener('ui-back', onBack);
+    menu.addEventListener('ui-change', onChange);
     return () => {
       menu.removeEventListener('ui-select', onSelect);
       menu.removeEventListener('ui-back', onBack);
+      menu.removeEventListener('ui-change', onChange);
     };
   }, [manifest, screen, navigate]);
 
@@ -439,7 +446,7 @@ export function Host({
     const onKey = (e: KeyboardEvent) => {
       if (shellRef.current?.isOpen || broker.current.current || !escapeIsFree(e)) return;
       e.preventDefault();
-      orbitStart.current = categoryOf(screen.app, screen.path);
+      orbitStart.current = orbitIndexOf(screen.app, screen.path);
       navigate(back);
     };
     window.addEventListener('keydown', onKey);
@@ -453,7 +460,11 @@ export function Host({
   // The band follows where you are: Back names the level above, and the tab says the page, app and floor.
   useEffect(() => {
     const shell = shellRef.current;
-    if (shell) shell.backTo = upFrom(screen)?.label ?? '';
+    if (shell) {
+      shell.backTo = upFrom(screen)?.label ?? '';
+      // inside an app, the area its page is in; Orbit names the area of the group in focus as it moves
+      if (screen?.kind !== 'orbit') shell.area = screen?.kind === 'app' ? (areaOf(screen.app, screen.path)?.label ?? '') : '';
+    }
     if (screen) document.title = titleFor(screen, floor?.name);
   }, [screen, floor]);
 
@@ -619,7 +630,7 @@ export function Host({
       if (e.target !== shell) return; // a menu's own Esc is its business
       const up = upFrom(screen);
       if (!up) return;
-      if (screen?.kind === 'app') orbitStart.current = categoryOf(screen.app, screen.path);
+      if (screen?.kind === 'app') orbitStart.current = orbitIndexOf(screen.app, screen.path);
       navigate(up.to);
     };
     // Going to another floor keeps you in the same app, at its start; its menu or Title stay as they were.
