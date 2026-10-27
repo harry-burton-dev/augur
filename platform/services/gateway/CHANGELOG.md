@@ -1,5 +1,17 @@
 # @augur/gateway
 
+## 0.6.0
+
+### Minor Changes
+
+- c8be97d: The gateway refuses a call to an app that isn't on for the caller where they are. It checks the floor the call names in `X-Workspace-Id`, or the organisation's when it names none. An app is off for someone if it's turned off, blocked on that floor, or needs a role they don't have. Such calls get a 403. Before this, only the shell hid such apps, and a call that named no floor skipped floor rules entirely. The check reads the same catalogue the shell gets from the registry, remembered for 30 seconds per person and floor, and it also supplies each app's upload limit as before.
+
+### Patch Changes
+
+- aa1724a: Services check their settings before they start. The service kit's `loadConfig` takes a list of the settings a service reads (`Setting`, plus `commonSettings` for the ones services share). In production, a missing required setting stops the service with one message listing every problem, instead of falling back to a `localhost` address. A secret can be given as a file in `<NAME>_FILE`. `describeConfig` reports each setting and where it came from, never a secret's value, ready for Admin → Deployment.
+- Updated dependencies [aa1724a]
+  - @augur/service-kit@0.8.0
+
 ## 0.5.0
 
 ### Minor Changes

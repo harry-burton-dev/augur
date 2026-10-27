@@ -1,5 +1,18 @@
 # @augur/identity
 
+## 0.7.0
+
+### Minor Changes
+
+- d318840: Adds the Deployment Admin role (`deployment-admin`). Identity gives it to `PLATFORM_ADMIN_USER` when nobody has it, only a deployment admin can give it, take it away or change a holder's sign-in, and holders sign in with a one-time code as well as their password (identity sets this up in Keycloak's sign-in flow at start).
+- 0a7f2dd: Identity manages the platform realm as its own Keycloak client, which can manage that realm alone, and uses Keycloak's master admin only at start to give it those rights. The realm now slows down repeated wrong passwords (brute-force protection), set in the realm import and turned on at start for existing servers.
+
+### Patch Changes
+
+- aa1724a: Services check their settings before they start. The service kit's `loadConfig` takes a list of the settings a service reads (`Setting`, plus `commonSettings` for the ones services share). In production, a missing required setting stops the service with one message listing every problem, instead of falling back to a `localhost` address. A secret can be given as a file in `<NAME>_FILE`. `describeConfig` reports each setting and where it came from, never a secret's value, ready for Admin → Deployment.
+- Updated dependencies [aa1724a]
+  - @augur/service-kit@0.8.0
+
 ## 0.6.0
 
 ### Minor Changes
