@@ -20,7 +20,7 @@ import {
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor } from './status.ts';
-import { capped, DEFAULT_UPLOAD_MB, registryUploadLimits, TooLarge, UploadLimitsUnavailable, type UploadLimits } from './uploads.ts';
+import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
 import { Readable } from 'node:stream';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
 
@@ -82,8 +82,8 @@ export interface GatewayOptions {
   floors?: FloorLookup;
   /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY, or a new key each start. */
   signer?: CallerSigner;
-  /** How much each app may be sent in one request. Defaults to asking the registry upstream. */
-  uploads?: UploadLimits;
+  /** Which apps a person may use on a floor, and what each may be sent. Defaults to asking the registry upstream. */
+  access?: AppAccess;
   /** Where apps' services are beyond `upstreams`. Defaults to asking the registry upstream. */
   apps?: AppUpstreams;
 }
@@ -96,14 +96,16 @@ export interface GatewayOptions {
  * An app names the floor a request is for with `X-Workspace-Id`. The gateway
  * checks the caller is on it and passes it on with its kind and their role,
  * or refuses the request; services never see a floor the gateway didn't check.
+ * A call to an app is refused unless the app is on for the caller on that floor
+ * (or on the organisation's, when the call names none).
  *
  * The caller also goes in one signed header (`x-augur-caller`) that only the
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, signer = callerSignerFromEnv(), uploads, apps }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, signer = callerSignerFromEnv(), access, apps }: GatewayOptions = {}) => {
   const appUpstreams = apps ?? (upstreams.registry ? registryUpstreams({ registryUrl: upstreams.registry, signer }) : undefined);
-  const uploadLimits = uploads ?? (upstreams.registry ? registryUploadLimits({ registryUrl: upstreams.registry, signer }) : undefined);
+  const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
   const app = Fastify(serviceLogging());
   // Someone reporting a problem can quote it, and it finds the request in every service's logs.
@@ -162,19 +164,42 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     };
   });
 
-  /** Before a call goes on to `name`: sign the caller for it, and hold an app's body to what it may be sent. */
+  /**
+   * The floor an app call is checked on: the one the caller named, or else the organisation's, so a
+   * call without X-Workspace-Id can't reach an app that is off where everyone stands.
+   */
+  const checkedOn = async (caller: Caller): Promise<Caller> => {
+    if (caller.workspace || !floorsOf) return caller;
+    const org = (await floorsOf(caller)).find((f) => f.kind === 'org');
+    return org ? { ...caller, workspace: org } : caller;
+  };
+
+  /**
+   * Before a call goes on to `name`: sign the caller for it. An app is only reached by someone it is on
+   * for, on that floor (not turned off or blocked there, and their role allows it), and its body is held
+   * to what it may be sent.
+   */
   const beforeProxy = async (name: string, req: FastifyRequest, reply: FastifyReply) => {
     req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
-    // Bodies stream through, never held here. An app's are held to what it may be sent; the platform's services set their own.
-    if (PLATFORM_SERVICES.includes(name) || !req.caller || !(req.body instanceof Readable)) return;
-    let mb: number;
+    // The platform's services check their callers themselves.
+    if (PLATFORM_SERVICES.includes(name) || !req.caller) return;
+    let apps: Map<string, { maxUpload?: number }> | undefined;
     try {
-      mb = (uploadLimits ? (await uploadLimits(req.caller)).get(name) : undefined) ?? DEFAULT_UPLOAD_MB;
+      apps = appAccess ? await appAccess(await checkedOn(req.caller)) : undefined;
     } catch (err) {
-      if (!(err instanceof UploadLimitsUnavailable)) throw err;
-      req.log.error({ err: err.message }, 'upload limit check failed');
-      return reply.code(503).send({ error: 'unavailable', message: 'What this app may be sent can’t be checked right now. Try again in a moment.' });
+      if (!(err instanceof AppAccessUnavailable) && !(err instanceof FloorLookupError)) throw err;
+      req.log.error({ err: err.message }, 'app access check failed');
+      if (req.body instanceof Readable) req.body.resume();
+      return reply.code(503).send({ error: 'unavailable', message: 'Whether you can use this app can’t be checked right now. Try again in a moment.' });
     }
+    const allowed = apps?.get(name);
+    if (apps && !allowed) {
+      if (req.body instanceof Readable) req.body.resume();
+      return reply.code(403).send({ error: 'forbidden', message: `${name} isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.` });
+    }
+    // Bodies stream through, never held here.
+    if (!(req.body instanceof Readable)) return;
+    const mb = allowed?.maxUpload ?? DEFAULT_UPLOAD_MB;
     const tooLarge = `This is more than ${name} takes at once (${mb} MB).`;
     const bytes = mb * 1024 * 1024;
     if (Number(req.headers['content-length'] ?? 0) > bytes) {

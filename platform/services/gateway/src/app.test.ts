@@ -6,7 +6,7 @@ import { buildApp, defaultUpstreams, parseUpstreams } from './app.ts';
 import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
-import { registryUploadLimits, UploadLimitsUnavailable } from './uploads.ts';
+import { AppAccessUnavailable, registryAppAccess } from './uploads.ts';
 import { registryUpstreams, UpstreamsUnavailable } from './upstreams.ts';
 import { Readable } from 'node:stream';
 
@@ -197,10 +197,10 @@ describe('gateway', () => {
 
   describe('uploads', () => {
     const MB = 1024 * 1024;
-    const limits = async () => new Map([['folio', 2]]);
+    const limits = async () => new Map<string, { maxUpload?: number }>([['folio', { maxUpload: 2 }], ['other', {}]]);
     const upload = async (app: FastifyInstance, to: string, payload: Buffer | Readable) =>
       app.inject({ method: 'POST', url: `/api/${to}/upload`, headers: { authorization: `Bearer ${await sign(ada)}`, 'content-type': 'application/octet-stream' }, payload });
-    const gateway = (uploads = limits) => buildApp({ upstreams: { folio: url, other: url, registry: url }, auth, uploads, monitor: new HealthMonitor({ probes: [] }) });
+    const gateway = (access = limits) => buildApp({ upstreams: { folio: url, other: url, registry: url }, auth, access, monitor: new HealthMonitor({ probes: [] }) });
 
     it('passes a body up to the app’s limit on to it whole', async () => {
       const res = await upload(await gateway(), 'folio', Buffer.alloc(MB + 5));
@@ -229,20 +229,65 @@ describe('gateway', () => {
     });
 
     it('says so when the limit can’t be checked', async () => {
-      const res = await upload(await gateway(async () => Promise.reject(new UploadLimitsUnavailable('down'))), 'folio', Buffer.alloc(10));
+      const res = await upload(await gateway(async () => Promise.reject(new AppAccessUnavailable('down'))), 'folio', Buffer.alloc(10));
       expect(res.statusCode).toBe(503);
     });
+  });
 
-    it('reads limits from the catalogue the registry gives the person, signed for the registry', async () => {
+  describe('apps on a floor', () => {
+    const org = { id: 'w-org', kind: 'org' as const, role: 'member' as const };
+    const finance = { id: 'w-finance', kind: 'team' as const, role: 'member' as const };
+    const floors: FloorLookup = async () => [org, finance];
+    // Folio is on for everyone; notes only on the finance floor.
+    const access = vi.fn(async (caller: { workspace?: { id: string } }) =>
+      new Map<string, { maxUpload?: number }>(caller.workspace?.id === 'w-finance' ? [['folio', {}], ['notes', {}]] : [['folio', {}]]),
+    );
+    const gateway = () => buildApp({ upstreams: { folio: url, notes: url, registry: url }, auth, floors, access, monitor: new HealthMonitor({ probes: [] }) });
+    const call = async (app: FastifyInstance, to: string, headers: Record<string, string> = {}) =>
+      app.inject({ method: 'GET', url: `/api/${to}/echo`, headers: { authorization: `Bearer ${await sign(ada)}`, ...headers } });
+
+    it('passes a call on to an app that is on for the caller on their floor', async () => {
+      const res = await call(await gateway(), 'notes', { 'x-workspace-id': 'w-finance' });
+      expect(res.statusCode).toBe(200);
+      expect(access).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'u-1', workspace: finance }));
+    });
+
+    it('refuses a call to an app that is off for the caller on that floor', async () => {
+      const app = await gateway();
+      expect((await call(app, 'notes', { 'x-workspace-id': 'w-org' })).statusCode).toBe(403);
+    });
+
+    it('checks a call that names no floor on the organisation’s, without passing that floor on', async () => {
+      const app = await gateway();
+      expect((await call(app, 'notes')).statusCode).toBe(403);
+      expect(access).toHaveBeenLastCalledWith(expect.objectContaining({ workspace: org }));
+      const res = await call(app, 'folio');
+      expect(res.statusCode).toBe(200);
+      expect(res.json()['x-workspace-id']).toBeUndefined();
+    });
+
+    it('leaves the platform’s own services to check their callers', async () => {
+      const app = await buildApp({ upstreams: { registry: url }, auth, floors, access: async () => new Map(), monitor: new HealthMonitor({ probes: [] }) });
+      expect((await call(app, 'registry')).statusCode).toBe(200);
+    });
+
+    it('says so when it can’t find out', async () => {
+      const app = await buildApp({ upstreams: { notes: url }, auth, floors: async () => Promise.reject(new FloorLookupError('down')), access, monitor: new HealthMonitor({ probes: [] }) });
+      expect((await call(app, 'notes')).statusCode).toBe(503);
+    });
+
+    it('reads the catalogue the registry gives the person on that floor, signed for the registry, once while it is fresh', async () => {
       const signer = callerSigner();
-      const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const caller = await callerCheckFor(signer, 'registry')((init?.headers as Record<string, string>)['x-augur-caller']);
         expect(caller.id).toBe('u-1');
+        expect(caller.workspace?.id).toBe('w-finance');
+        expect(String(input)).toBe('http://registry/v1/manifest?workspace=w-finance');
         return Response.json([{ id: 'folio', maxUpload: 200 }, { id: 'home' }]);
       });
-      const lookup = registryUploadLimits({ registryUrl: 'http://registry', signer, fetchImpl: fetchImpl as typeof fetch });
-      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [] };
-      expect(await lookup(alex)).toEqual(new Map([['folio', 200]]));
+      const lookup = registryAppAccess({ registryUrl: 'http://registry', signer, fetchImpl: fetchImpl as typeof fetch });
+      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [], workspace: finance };
+      expect(await lookup(alex)).toEqual(new Map([['folio', { maxUpload: 200 }], ['home', {}]]));
       await lookup(alex);
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
@@ -319,7 +364,7 @@ describe('gateway', () => {
       asked++;
       return { apps: found, previews: {} };
     };
-    const app = await buildApp({ upstreams: { registry: url }, auth, apps, uploads: async () => new Map([['notes', 1]]) });
+    const app = await buildApp({ upstreams: { registry: url }, auth, apps, access: async () => new Map([['notes', { maxUpload: 1 }]]) });
     const headers = { authorization: `Bearer ${await sign(ada)}` };
     const res = await app.inject({ method: 'GET', url: '/api/notes/echo?x=1', headers });
     expect(res.statusCode).toBe(200);
@@ -343,7 +388,7 @@ describe('gateway', () => {
 
   it('sends a developer who chose a pull request’s preview to it, and everyone else to the app', async () => {
     const apps = async () => ({ apps: { notes: 'http://127.0.0.1:9' }, previews: { notes: { 'u-1': url } } });
-    const app = await buildApp({ upstreams: {}, auth, apps, uploads: async () => new Map() });
+    const app = await buildApp({ upstreams: {}, auth, apps, access: async () => new Map([['notes', {}]]) });
     const res = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign(ada)}` } });
     expect(res.statusCode).toBe(200);
     expect(res.json()['x-user-id']).toBe('u-1');
