@@ -38,3 +38,4 @@ await notify({ eventsUrl, credentials, workspace, notification: {
 | App | What it is |
 | --- | --- |
 | `folio/` | Folio, the first pillar app: document libraries on your own floor, a team's or the org's, published for people to read in a readable reader view. |
+| `atlas/` | Data Atlas: the entities the organisation keeps track of, fenced by floor, on an ontology from the Common Core Ontologies. |

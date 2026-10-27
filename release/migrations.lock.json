@@ -27,6 +27,10 @@
     "012_app_follows": "0867e84dc2f2e71a",
     "013_previews": "a4d10aed714138f7"
   },
+  "@apps/atlas": {
+    "001_entities": "7e8edd330db1dea4",
+    "002_starter_ontology": "a562eb8fe4212128"
+  },
   "@apps/folio": {
     "001_libraries": "1c5f1dfed17e6277",
     "002_documents": "13680e35861e3f21",
