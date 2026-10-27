@@ -95,21 +95,27 @@ export const parseClientSecrets = (list: string | undefined): [string, string][]
     })
     .filter(([id, secret]) => id && secret);
 
-/**
- * Makes the clients the server's settings name, and keeps trying while the
- * sign-in service is starting: the platform's services can't sign in until then.
- */
-export const ensureClients = async (clients: AppClients, secrets: [string, string][], log: (message: string) => void, retryMs = 2000, attempts = 60) => {
+/** Runs `work` until it succeeds, for while the sign-in service is starting, and gives up after `attempts`. */
+export const retrying = async <T>(work: () => Promise<T>, retryMs = 2000, attempts = 60): Promise<T> => {
   for (let attempt = 1; ; attempt++) {
     try {
-      for (const [clientId, secret] of secrets) await clients.ensure(clientId, secret);
-      if (secrets.length) log(`Sign-ins ready for ${secrets.map(([id]) => id).join(', ')}.`);
-      return;
+      return await work();
     } catch (err) {
       if (attempt >= attempts) throw err;
       await new Promise((r) => setTimeout(r, retryMs));
     }
   }
+};
+
+/**
+ * Makes the clients the server's settings name, and keeps trying while the
+ * sign-in service is starting: the platform's services can't sign in until then.
+ */
+export const ensureClients = async (clients: AppClients, secrets: [string, string][], log: (message: string) => void, retryMs = 2000, attempts = 60) => {
+  await retrying(async () => {
+    for (const [clientId, secret] of secrets) await clients.ensure(clientId, secret);
+  }, retryMs, attempts);
+  if (secrets.length) log(`Sign-ins ready for ${secrets.map(([id]) => id).join(', ')}.`);
 }
 
 export class MemoryAppClients implements AppClients {
