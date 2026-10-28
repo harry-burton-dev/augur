@@ -1,5 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { base, label } from '../shared.js';
+import { animate, motionMode, tokenEasing, tokenValue } from '../motion.js';
+import { settleSurfaces } from './surface.js';
 import { floorBeside, floorDirection, floorIcon, floorLevel, floorMeaning, floorStack, type ShellFloor } from './floors.js';
 import { statusUrgency, type StatusName } from './status.js';
 import './icon.js';
@@ -420,6 +422,46 @@ export class UiShell extends LitElement {
   /** The element apps mount into. */
   get stage(): HTMLElement {
     return this;
+  }
+
+  /** The open app's name under the handle: where a chosen icon lands when the app opens. */
+  get placeTitle(): HTMLElement | null {
+    return this.renderRoot?.querySelector<HTMLElement>('.place b') ?? null;
+  }
+
+  private get stageBox(): HTMLElement | null {
+    return this.renderRoot?.querySelector<HTMLElement>('.stage') ?? null;
+  }
+
+  /**
+   * The app arrives: it rises a short way into place as it fades in, and the
+   * kit's surfaces in it settle in one after another. Under reduced motion it
+   * only fades. Jumped to its end by any key or press (`finishMotion`).
+   */
+  arrive(): Promise<void> {
+    const box = this.stageBox;
+    if (!box) return Promise.resolve();
+    box.getAnimations().forEach((a) => a.cancel());
+    settleSurfaces(tokenValue('motion-calm', 600));
+    const rise = motionMode() === 'reduce' ? 'none' : `translateY(${tokenValue('travel-near', 24)}px)`;
+    return animate(box, [{ transform: rise, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: tokenValue('motion-slow', 320), easing: tokenEasing('ease-out') });
+  }
+
+  /** The app leaves on Back: it sinks a short way as it fades, in about four fifths of the time it took to arrive. */
+  sink(): Promise<void> {
+    const box = this.stageBox;
+    if (!box) return Promise.resolve();
+    const fall = motionMode() === 'reduce' ? 'none' : `translateY(${tokenValue('travel-near', 24)}px)`;
+    return animate(box, [{ transform: 'none', opacity: 1 }, { transform: fall, opacity: 0 }], {
+      duration: tokenValue('motion-slow', 320) * 0.8,
+      easing: tokenEasing('ease-in'),
+      fill: 'forwards',
+    });
+  }
+
+  /** Put the stage back as it rests, after a move that left it hidden. */
+  settleStage() {
+    this.stageBox?.getAnimations().forEach((a) => a.cancel());
   }
 
   /* ---- lifecycle and keys ---- */

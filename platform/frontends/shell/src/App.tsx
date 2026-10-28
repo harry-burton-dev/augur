@@ -1,5 +1,5 @@
 import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
-import { defaultFunctions, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@augur/ui-kit';
+import { defaultFunctions, finishMotion, liftGhost, moving, type Ghost, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@augur/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
@@ -74,6 +74,8 @@ const alphaFunctions = defaultFunctions.filter((f) => f.id !== 'agents');
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
 /** The water for each screen: Title on Minimal, Orbit on Deep Ocean, apps on Calm Tide. */
+/** How long an app may take to mount before its place says it's opening. */
+const SLOW_APP_MS = 400;
 const waterFor = (screen: Screen | undefined) => (screen?.kind === 'title' ? 'Minimal' : screen?.kind === 'orbit' ? 'Deep Ocean' : 'Calm Tide');
 
 /** The Orbit category holding the item that opens a path, so going back lands where you came from. */
@@ -98,6 +100,10 @@ export function Host({
   /** Where the next menu starts: Title on the app you came from, Orbit on the category you chose or came from. */
   const lastApp = useRef<string | undefined>(undefined);
   const orbitStart = useRef(0);
+  /** What was chosen, lifted from the screen being left, to land on the next one (see "The choice carries you"). */
+  const carried = useRef<Ghost | null>(null);
+  /** A move away is under way: a second choice waits for it rather than starting another. */
+  const leaving = useRef(false);
   const mounter = useRef<AppMounter | null>(null);
   const bus = useMemo(() => createEventBus(), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
@@ -148,6 +154,8 @@ export function Host({
   /** The catalogue, and the floor it's for: until the new floor's arrives, nothing is shown from the last one's. */
   const [catalogue, setCatalogue] = useState<{ floor: string; apps: AppManifestEntry[] } | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
+  /** The open app is taking a while to mount. */
+  const [opening, setOpening] = useState(false);
   const home = ownFloor(session.floors)!;
   /** Every location names its floor: one that doesn't is on the person's own, and the address says so. */
   const settled = useCallback(() => {
@@ -377,6 +385,8 @@ export function Host({
     }
     if (screen.kind !== 'app') {
       void mounter.current.unmount();
+      shellRef.current?.settleStage();
+      setOpening(false);
       setProblem(null);
       if (screen.kind === 'orbit') {
         shellRef.current?.setCurrent(screen.app.id);
@@ -392,9 +402,27 @@ export function Host({
     setProblem(null);
     shellRef.current?.setCurrent(app.id);
     prefs.opened(app.id);
-    mounter.current.mount(app, ctx).catch((err: Error) => {
-      setProblem({ title: `${app.name} didn't open`, summary: err.message, retry: () => setAttempt((n) => n + 1) });
-    });
+    // a slow app's place says it's opening after a moment, rather than sitting blank
+    const slow = setTimeout(() => setOpening(true), SLOW_APP_MS);
+    mounter.current
+      .mount(app, ctx)
+      .then(() => {
+        const shell = shellRef.current;
+        void shell?.arrive();
+        const ghost = carried.current;
+        carried.current = null;
+        void shell?.updateComplete.then(() => ghost?.land(shell.placeTitle?.getBoundingClientRect()));
+      })
+      .catch((err: Error) => {
+        carried.current?.drop();
+        carried.current = null;
+        setProblem({ title: `${app.name} didn't open`, summary: err.message, retry: () => setAttempt((n) => n + 1) });
+      })
+      .finally(() => {
+        clearTimeout(slow);
+        setOpening(false);
+      });
+    return () => clearTimeout(slow);
   }, [manifest, floor, home, where, screen, attempt, contextFor, importEntry, navigate, prefs]);
 
   // Title and Orbit: what they hold, where they start, and where choosing leads.
@@ -413,17 +441,35 @@ export function Host({
     }
     menu.categories = categories;
     menu.background = shellRef.current?.waves ?? null;
-    void menu.updateComplete.then(() => menu.focus());
+    leaving.current = false;
+    void menu.updateComplete.then(async () => {
+      menu.focus();
+      // what was carried here lands on what's now in focus, once the menu has measured itself and drawn
+      await new Promise((r) => requestAnimationFrame(r));
+      await menu.updateComplete;
+      const ghost = carried.current;
+      carried.current = null;
+      void ghost?.land(menu.focusedRect());
+    });
+    /** Step away, carrying what's in focus, then go. */
+    const go = async (to: string, way: 'deeper' | 'back') => {
+      if (leaving.current) return;
+      leaving.current = true;
+      carried.current?.drop();
+      carried.current = liftGhost(menu.focusedIcon());
+      await menu.leave(way);
+      navigate(to);
+    };
     const onSelect = (e: Event) => {
       const { item } = (e as CustomEvent<{ item: MenuItem }>).detail;
-      if (screen.kind === 'orbit') return navigate(hrefFor(screen.app, item.id));
+      if (screen.kind === 'orbit') return void go(hrefFor(screen.app, item.id), 'deeper');
       const target = titleTarget(manifest, item);
       if (!target) return;
       lastApp.current = target.app.id;
       orbitStart.current = target.category;
-      navigate(hrefFor(target.app, target.path));
+      void go(hrefFor(target.app, target.path), 'deeper');
     };
-    const onBack = () => screen.kind === 'orbit' && navigate('/');
+    const onBack = () => screen.kind === 'orbit' && void go('/', 'back');
     const onChange = (e: Event) => {
       const shell = shellRef.current;
       if (shell && screen.kind === 'orbit') shell.area = (e as CustomEvent<{ category: MenuCategory | null }>).detail.category?.section ?? '';
@@ -438,6 +484,32 @@ export function Host({
     };
   }, [manifest, screen, navigate]);
 
+  /** Leave the open app on the way up: its name is carried back to its icon as the app sinks. */
+  const leaveApp = useCallback(
+    async (to: string) => {
+      if (leaving.current) return;
+      leaving.current = true;
+      const shell = shellRef.current;
+      carried.current?.drop();
+      carried.current = liftGhost(shell?.placeTitle);
+      await shell?.sink();
+      leaving.current = false;
+      navigate(to);
+    },
+    [navigate],
+  );
+
+  // A key or a press during a move jumps it to its end: moves never keep anyone waiting.
+  useEffect(() => {
+    const jump = () => moving() && finishMotion();
+    window.addEventListener('keydown', jump, true);
+    window.addEventListener('pointerdown', jump, true);
+    return () => {
+      window.removeEventListener('keydown', jump, true);
+      window.removeEventListener('pointerdown', jump, true);
+    };
+  }, []);
+
   // Esc that nothing else used goes back a step: from inside an app to its Orbit, then to Title. An app that keeps its own menu keeps Esc.
   useEffect(() => {
     if (screen?.kind !== 'app') return;
@@ -447,11 +519,11 @@ export function Host({
       if (shellRef.current?.isOpen || broker.current.current || !escapeIsFree(e)) return;
       e.preventDefault();
       orbitStart.current = orbitIndexOf(screen.app, screen.path);
-      navigate(back);
+      void leaveApp(back);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [screen, navigate]);
+  }, [screen, leaveApp]);
 
   useEffect(() => {
     if (shellRef.current) shellRef.current.background = waterFor(screen);
@@ -630,8 +702,10 @@ export function Host({
       if (e.target !== shell) return; // a menu's own Esc is its business
       const up = upFrom(screen);
       if (!up) return;
-      if (screen?.kind === 'app') orbitStart.current = orbitIndexOf(screen.app, screen.path);
-      navigate(up.to);
+      if (screen?.kind === 'app') {
+        orbitStart.current = orbitIndexOf(screen.app, screen.path);
+        void leaveApp(up.to);
+      } else navigate(up.to);
     };
     // Going to another floor keeps you in the same app, at its start; its menu or Title stay as they were.
     const onFloor = (e: Event) => {
@@ -690,7 +764,7 @@ export function Host({
       shell.removeEventListener('ui-back', onBack);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs, screen, raise, search]);
+  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp]);
 
   // The open app is a pull request's preview: say so, with the way back.
   const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
@@ -736,7 +810,7 @@ export function Host({
           </ui-button>
         </section>
       )}
-      {!manifest && !problem && <p className="loading">Opening…</p>}
+      {((!manifest && !problem) || (opening && !problem)) && <p className="loading">Opening…</p>}
       <ui-dialog ref={dialogRef} size="read" heading={answering?.app.name ?? ''} cancelLabel="Cancel">
         <div ref={requestStageRef} className="request-stage" />
       </ui-dialog>

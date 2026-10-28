@@ -1,7 +1,8 @@
 export { tokens, token, type TokenName } from './generated/tokens.js';
 export { reducedMotion } from './shared.js';
+export { motionMode, finishMotion, moving, liftGhost, type Ghost, type MotionMode } from './motion.js';
 export { UiButton, type ButtonKind } from './components/button.js';
-export { UiSurface, type SurfaceKind } from './components/surface.js';
+export { UiSurface, settleSurfaces, type SurfaceKind } from './components/surface.js';
 export { UiHeading } from './components/heading.js';
 export { UiStatus, statusWords, statusUrgency, type StatusName } from './components/status.js';
 export { UiTextField, type FieldState, type FieldCheck } from './components/text-field.js';

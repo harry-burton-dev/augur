@@ -137,7 +137,7 @@ export class UiList extends LitElement {
       .act:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
       .act:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }
       .act.main { border-color: var(--green); }
-      .skel { display: block; height: 60px; border-bottom: 1px solid var(--hairline); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 5%, transparent), transparent); background-size: 200% 100%; animation: ui-shimmer 1.6s linear infinite; }
+      .skel { display: block; height: 60px; border-bottom: 1px solid var(--hairline); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 5%, transparent), transparent); background-size: 200% 100%; animation: ui-shimmer var(--motion-shimmer) linear infinite; }
       :host([density='compact']) .skel { height: 44px; }
       @keyframes ui-shimmer { to { background-position: -200% 0; } }
     `,

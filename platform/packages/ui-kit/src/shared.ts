@@ -27,8 +27,9 @@ export const base = css`
     50% { width: 30%; }
     100% { left: 100%; width: 0; }
   }
+  /* loops stop, as they do under the page's own setting through the motion tokens (base.css) */
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation-duration: var(--motion-still) !important; }
+    *, *::before, *::after { animation-duration: 0s !important; }
   }
 `;
 
