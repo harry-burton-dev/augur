@@ -1,5 +1,26 @@
 # @augur/contract-tests
 
+## 0.1.5
+
+### Patch Changes
+
+- a96a446: The contract tests run as many builds of the reference app at once as the machine's memory allows (about 2.5 GB each), so a smaller CI runner no longer has one killed part way through.
+- 1580b6b: Keeps the reference app built against SDK 1.4 (`frozen/sdk-1.4`), so every later shell is tested against it, and checks that Title shows an app without areas as itself.
+- Updated dependencies [1580b6b]
+- Updated dependencies [d324552]
+- Updated dependencies [18bf27c]
+- Updated dependencies [f01fcea]
+- Updated dependencies [8f69cb5]
+- Updated dependencies [b556614]
+- Updated dependencies [513e2e9]
+- Updated dependencies [feeffdd]
+- Updated dependencies [ae92eed]
+- Updated dependencies [778b6f9]
+- Updated dependencies [513e2e9]
+- Updated dependencies [28d8775]
+  - @augur/mfe-sdk@1.5.0
+  - @augur/ui-kit@1.4.0
+
 ## 0.1.4
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @augur/events
 
+## 0.5.0
+
+### Minor Changes
+
+- f0d02e2: Floor rules for apps are domain events too: `platform.app.blocked` when an admin blocks an app on a floor and those below it, and `platform.app.rule-cleared` when a floor goes back to following the one above. `PLATFORM_TOPICS` names them.
+
+### Patch Changes
+
+- Updated dependencies [f0d02e2]
+- Updated dependencies [bbdad18]
+  - @augur/service-kit@0.9.0
+
 ## 0.4.3
 
 ### Patch Changes

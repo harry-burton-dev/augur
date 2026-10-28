@@ -1,5 +1,17 @@
 # @augur/models
 
+## 0.3.0
+
+### Minor Changes
+
+- bbdad18: The model gateway turns apps' texts into vectors (`POST /v1/embeddings`, contract 1.1), to match by meaning, when an embedding model is set up (`MODEL_EMBEDDING_NAME`; the stand-in always has one). Each request is one call, recorded as `model.embedded` without the texts. `embedTexts` in the service kit asks for them.
+
+### Patch Changes
+
+- Updated dependencies [f0d02e2]
+- Updated dependencies [bbdad18]
+  - @augur/service-kit@0.9.0
+
 ## 0.2.3
 
 ### Patch Changes

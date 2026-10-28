@@ -1,5 +1,18 @@
 # @augur/identity
 
+## 0.8.0
+
+### Minor Changes
+
+- 8f69cb5: Moving between floors travels: what you're looking at leaves the way you're going (going up, it sinks away; going down, it rises away; across, it slides aside), the host waits for that before taking the app down, and the next floor comes in from the other side. Each arrival plays an area title card in place of the floor-name pill: the kind of floor, its name set large, and who sees what's there. Opening an app plays its card too, the app's name under the floor it opened on, once per app rather than on every page. Cards are built from the floor or app, never written by hand, leave off a kicker that would only repeat the name, ignore the pointer, end on any key, press or scroll, and fade out where they are. A new Area titles switch in Settings turns them off, saved with a person's preferences (`areaTitles` in Identity). `ui-shell` gains `leaveFloor()`; new tokens `travel-floor` (96px) and `motion-title` (2400ms); kit exports `floorKindName` and `FloorDirection`. Under reduced motion nothing travels and cards appear and fade in place.
+- 5bb4315: `GET /v1/me/map`: your map of the org for Auspex. It lists the floors you can stand on with who's there and why you can come in, lets leads see into the teams inside theirs, and shows every other team as a closed door that names only itself, where it sits and its leads.
+
+### Patch Changes
+
+- Updated dependencies [f0d02e2]
+- Updated dependencies [bbdad18]
+  - @augur/service-kit@0.9.0
+
 ## 0.7.0
 
 ### Minor Changes
