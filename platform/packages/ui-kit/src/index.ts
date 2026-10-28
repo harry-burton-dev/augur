@@ -42,8 +42,9 @@ export {
   type ShellFindGroup,
   type ShellView,
   type ShellViewRenderer,
+  type AreaCard,
 } from './components/shell.js';
-export { floorStack, floorBeside, floorDirection, floorIcon, floorLevel, floorMeaning, type ShellFloor, type ShellFloorRef, type FloorKind } from './components/floors.js';
+export { floorStack, floorBeside, floorDirection, floorIcon, floorKindName, floorLevel, floorMeaning, type ShellFloor, type ShellFloorRef, type FloorKind, type FloorDirection } from './components/floors.js';
 export {
   UiWaveBackground,
   wavePresets,

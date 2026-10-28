@@ -2,6 +2,8 @@
 export interface Preferences {
   reduceMotion?: boolean;
   density?: 'comfortable' | 'compact';
+  /** Whether an area title card shows on arriving at a floor or opening an app; on unless false. */
+  areaTitles?: boolean;
   away?: boolean;
   /** App ids, most recent first. */
   recent?: string[];

@@ -402,18 +402,80 @@ describe('floors', () => {
     ]);
   });
 
-  it('says where you arrived, then stops saying it', async () => {
+  const card = () => root().querySelector('.card');
+  const cardText = () => [...card()!.children].map((c) => c.textContent);
+
+  it('plays the floor’s title card, built from the floor, then lets it go', async () => {
     vi.useFakeTimers();
     el.floor = 'org';
     await el.updateComplete;
-    expect(root().querySelector('.lift')!.textContent).toContain('Acme');
+    expect(cardText()).toEqual(['Organisation', 'Acme', 'Everyone in Acme sees what’s here.']);
+    expect(card()!.getAttribute('aria-hidden')).toBe('true');
     expect(root().querySelector('.live')!.textContent).toBe('Up to Acme');
-    expect(el.hasAttribute('moving')).toBe(true);
-    vi.advanceTimersByTime(1500);
+    el.floors = el.floors.map((f) => (f.id === 'org' ? { ...f, name: 'Organisation' } : f));
     await el.updateComplete;
-    expect(root().querySelector('.lift')).toBeNull();
-    expect(el.hasAttribute('moving')).toBe(false);
+    el.floor = 'fin';
+    await el.updateComplete;
+    el.floor = 'org';
+    await el.updateComplete;
+    expect(cardText()).toEqual(['Organisation', 'Everyone in Organisation sees what’s here.']); // the kicker would only repeat the name
+    vi.advanceTimersByTime(2500);
+    await el.updateComplete;
+    expect(card()).toBeNull();
     vi.useRealTimers();
+  });
+
+  it('names an app as it opens, under the floor it opened on, once rather than on every page', async () => {
+    el.current = 'library';
+    await el.updateComplete;
+    void el.arrive();
+    await el.updateComplete;
+    expect(cardText()).toEqual(['Finance', 'Library']);
+    key(window, 'Shift');
+    void el.arrive();
+    await el.updateComplete;
+    expect(card()).toBeNull();
+    el.current = '';
+    await el.updateComplete;
+    el.current = 'library';
+    await el.updateComplete;
+    void el.arrive();
+    await el.updateComplete;
+    expect(cardText()).toEqual(['Finance', 'Library']);
+  });
+
+  it('ends a card at once on any key, press or scroll', async () => {
+    for (const end of [() => key(window, 'Shift'), () => window.dispatchEvent(new PointerEvent('pointerdown')), () => window.dispatchEvent(new WheelEvent('wheel'))]) {
+      el.floor = el.floor === 'org' ? 'fin' : 'org';
+      await el.updateComplete;
+      expect(card()).not.toBeNull();
+      end();
+      await el.updateComplete;
+      expect(card()).toBeNull();
+    }
+  });
+
+  it('shows no cards with Area titles off, and offers the switch in Settings', async () => {
+    el.settings = { ...el.settings, areaTitles: false };
+    el.floor = 'org';
+    await el.updateComplete;
+    expect(card()).toBeNull();
+    expect(root().querySelector('.live')!.textContent).toBe('Up to Acme');
+    const changes = vi.fn();
+    el.addEventListener('ui-setting', (e) => changes((e as CustomEvent).detail));
+    el.openView('settings');
+    await el.updateComplete;
+    const titles = root().querySelector<HTMLButtonElement>('[aria-labelledby="at"]')!;
+    expect(titles.getAttribute('aria-checked')).toBe('false');
+    titles.click();
+    expect(changes).toHaveBeenCalledWith({ key: 'areaTitles', value: true });
+  });
+
+  it('lets the screen leave a floor the way you’re going, and come in on the next', async () => {
+    for (const way of ['up', 'down', 'across'] as const) await expect(el.leaveFloor(way)).resolves.toBeUndefined();
+    el.floor = 'org';
+    await el.updateComplete;
+    await expect(el.arrive()).resolves.toBeUndefined();
   });
 
   it('marks the gauge where something waits, and tags notifications from other floors', async () => {

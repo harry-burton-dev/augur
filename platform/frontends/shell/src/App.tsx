@@ -1,5 +1,5 @@
 import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
-import { defaultFunctions, finishMotion, liftGhost, moving, type Ghost, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@augur/ui-kit';
+import { defaultFunctions, finishMotion, type FloorDirection, liftGhost, moving, type Ghost, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@augur/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
@@ -621,7 +621,7 @@ export function Host({
       const shell = shellRef.current;
       if (!live || !shell) return;
       applyPreferences(p);
-      shell.settings = { reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable' };
+      shell.settings = { reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false };
       shell.away = !!p.away;
       shell.muted = p.muted ?? [];
       shell.recent = [...new Set([...shell.recent, ...(p.recent ?? [])])].slice(0, 6);
@@ -693,7 +693,7 @@ export function Host({
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
-      if (key === 'reduceMotion' || key === 'away') prefs.set(key, !!value);
+      if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles') prefs.set(key, !!value);
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       applyPreferences(prefs.current);
     };
@@ -708,9 +708,12 @@ export function Host({
       } else navigate(up.to);
     };
     // Going to another floor keeps you in the same app, at its start; its menu or Title stay as they were.
-    const onFloor = (e: Event) => {
-      const to = session.floors.find((f) => f.id === (e as CustomEvent<{ id: string }>).detail.id);
+    // What you're looking at leaves the way you're going first, so nothing goes blank partway through.
+    const onFloor = async (e: Event) => {
+      const { id, direction } = (e as CustomEvent<{ id: string; direction: FloorDirection }>).detail;
+      const to = session.floors.find((f) => f.id === id);
       if (!to) return;
+      await shell.leaveFloor(direction);
       navigate(screen && screen.kind !== 'title' ? hrefFor(screen.app) : '/', to);
     };
     // Find: the shell's own pages at once, then each app's content as it answers.

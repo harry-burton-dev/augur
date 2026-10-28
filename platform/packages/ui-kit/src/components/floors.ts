@@ -56,8 +56,13 @@ export function floorBeside(floors: ShellFloor[], current: string, direction: 'u
   return stack[direction === 'up' ? i + 1 : i - 1];
 }
 
+/** What each kind of floor is called, as an area title card's kicker says it. */
+export const floorKindName: Record<FloorKind, string> = { personal: 'Your own floor', team: 'Team', org: 'Organisation' };
+
+export type FloorDirection = 'up' | 'down' | 'across';
+
 /** Which way a move goes: up towards the org, down towards you, or across between teams on the same level. */
-export function floorDirection(from: ShellFloor | undefined, to: ShellFloor): 'up' | 'down' | 'across' {
+export function floorDirection(from: ShellFloor | undefined, to: ShellFloor): FloorDirection {
   if (!from) return 'across';
   const height = (f: ShellFloor) => (f.kind === 'personal' ? 0 : f.kind === 'org' ? 100 : 100 - f.path.length);
   const a = height(from);

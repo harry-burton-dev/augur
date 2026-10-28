@@ -585,6 +585,7 @@ components:
       properties:
         reduceMotion: { type: boolean }
         density: { type: string, enum: [comfortable, compact] }
+        areaTitles: { type: boolean, description: "Area title cards on arriving at a floor or opening an app; on unless false" }
         away: { type: boolean }
         recent:
           type: array
