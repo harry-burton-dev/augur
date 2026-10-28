@@ -181,7 +181,7 @@ services:
       # Admin's Status reads what the backup container last wrote here.
       BACKUP_DIR: /backups
       # Each app's service, name=url: the apps that ship with AUGUR.
-      APP_UPSTREAMS: folio=http://folio:8083
+      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090
     volumes:
       - ./backups:/backups:ro
     depends_on: [identity, registry, events, models]
@@ -204,7 +204,7 @@ services:
       ORG_NAME: ${ORG_NAME:-Organisation}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Identity makes each platform service's sign-in in Keycloak with these secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env}
 
   registry:
     <<: *service
@@ -222,7 +222,7 @@ services:
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEED_URL: ${APP_FEED_URL:-}
       # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.
-      PILLAR_APPS: folio
+      PILLAR_APPS: folio auspex
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
@@ -264,6 +264,24 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       storage: { condition: service_completed_successfully }
+
+  # Auspex, where you are on AUGUR and why you can or can't use things: the second app every deployment
+  # ships with. It keeps nothing of its own (no schema, no bucket), so it gets no database login: it reads
+  # identity, the registry and the last 30 days of events, and remembers them in memory.
+  auspex:
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8090
+      IDENTITY_URL: http://identity:8081
+      EVENTS_URL: http://events:8084
+      REGISTRY_URL: http://registry:8082
+      GATEWAY_URL: http://gateway:8080
+      OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
+      OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
+      SERVICE_CLIENT_SECRET: ${AUSPEX_CLIENT_SECRET}
+    depends_on: [identity, registry, events]
 
   # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
   # It works on the tables Folio's service makes, so it waits for the service to start.

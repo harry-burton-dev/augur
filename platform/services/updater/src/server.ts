@@ -32,6 +32,7 @@ export const HEALTH_URLS: Record<string, string> = {
   models: 'http://models:8085/healthz',
   gateway: 'http://gateway:8080/healthz',
   folio: 'http://folio:8083/healthz',
+  auspex: 'http://auspex:8090/healthz',
   // nginx has no /healthz; the shell's page answering is the check.
   web: 'http://web:8080/',
 };

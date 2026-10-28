@@ -1,9 +1,9 @@
 import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
-  Activity, Anchor, ArrowLeft, ArrowRight, ArrowUpDown, Bell, BellOff, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, CalendarDays, Car, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, GitPullRequest, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Mail, Map as MapIcon, MapPin, Monitor, Palette, Plane, Plus, Power, Search, Ship,
-  Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
+  Activity, Anchor, ArrowLeft, ArrowRight, ArrowUpDown, Ban, Bell, BellOff, Bird, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, CalendarDays, Car, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
+  FileText, Folder, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Palette, Plane, Plus, Power, Search, Ship,
+  Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, User, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
   type IconNode,
 } from 'lucide';
 import { base } from '../shared.js';
@@ -78,6 +78,12 @@ export const icons = {
   // A run of documents that comes out on a cadence, such as a weekly report.
   series: draw(CalendarRange),
   preview: draw(GitPullRequest),
+  // Finding your way round the platform (Auspex): the app, one person, what's closed to you and why, and what changed.
+  explore: draw(Bird),
+  person: draw(User),
+  lock: draw(Lock),
+  blocked: draw(Ban),
+  history: draw(History),
   // Data Atlas: the app itself, and the kinds of thing its entities are.
   atlas: draw(MapIcon),
   vessel: draw(Ship),
