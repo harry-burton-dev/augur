@@ -4,6 +4,8 @@ import { AuspexApi } from './api.js';
 import { pathFor, placeFor, type AuspexApp } from './auspex-app.js';
 import { addressFor, AUSPEX_OPEN, FLOOR_MAP, placeForIntent } from './entry.js';
 import { layoutMap } from './layout.js';
+import { ACCESS_EXPLAIN, explain, readExplain } from './access.js';
+import type { AuspexAccess } from './auspex-access.js';
 import { appLine, ledBy, whoCanAdd, whyHere } from './words.js';
 
 /** Acme: Finance (Payroll, Treasury) and Legal (Contracts, inside it Disputes). Alex is on Payroll. */
@@ -152,5 +154,68 @@ describe('the app', () => {
     expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Legal');
     expect([...el.querySelectorAll('.ax-names li')].map((l) => l.textContent)).toEqual(['Contracts', 'Disputes']);
     expect(el.querySelector('.ax-can')!.textContent).toContain('Lee Park');
+  });
+});
+
+describe('who can open this (access.explain)', () => {
+  const ask = readExplain({
+    thing: { app: 'folio', appName: 'Artifacts', id: 'd-1', title: 'Travel policy', kind: 'document' },
+    audience: [
+      { principal: 'tree:fin', name: 'Finance', level: 'read', via: 'its floor' },
+      { principal: 'team:pay', level: 'edit', via: 'its library', since: '2026-10-01T09:00:00Z' },
+      { principal: 'person:lee', name: 'Lee Park', level: 'manage', via: 'shared with this document' },
+      { principal: 'tree:leg', name: 'Legal', level: 'read', via: 'shared with this document' },
+      { principal: 'nonsense' },
+    ],
+    change: { where: 'Share', allowed: false },
+  })!;
+
+  it('reads only what it can explain', () => {
+    expect(ACCESS_EXPLAIN).toBe('access.explain');
+    expect(readExplain({ thing: { app: 'folio', id: 'd-1' }, audience: [] })).toBeUndefined();
+    expect(readExplain(undefined)).toBeUndefined();
+    expect(ask.audience.map((a) => a.principal)).toEqual(['tree:fin', 'team:pay', 'person:lee', 'tree:leg']);
+    expect(ask.change).toEqual({ where: 'Share', allowed: false });
+  });
+
+  it('counts only people the person may know about, and says when it is at least that', () => {
+    const { entries, people, atLeast, org } = explain(ask, acme);
+    expect(entries.map((e) => e.who)).toEqual(['Finance and the teams inside it', 'Payroll', 'Lee Park', 'Legal and the teams inside it']);
+    expect(entries[1]).toMatchObject({ people: 2 });
+    // Legal is closed to them: its size isn't theirs to know.
+    expect(entries[3].people).toBeUndefined();
+    expect(people).toBe(4);
+    expect(atLeast).toBe(true);
+    expect(org?.name).toBe('Acme');
+  });
+
+  it('says everyone when the org can open it', () => {
+    const all = explain({ ...ask, audience: [{ principal: 'org' }] }, acme);
+    expect(all).toMatchObject({ people: 9, atLeast: false, org: undefined });
+    expect(all.entries[0].who).toBe('Everyone at Acme');
+  });
+
+  it('shows each one, who’s left out, and who can change it, over the app that asked', async () => {
+    await import('./auspex-access.js');
+    const api = new AuspexApi(async () => new Response(JSON.stringify(acme), { status: 200 }));
+    const el = document.createElement('auspex-access') as AuspexAccess;
+    Object.assign(el, { api, ask, appName: 'Artifacts' });
+    document.body.replaceChildren(el);
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+      await el.updateComplete;
+    }
+    expect(el.querySelector('ui-heading')!.getAttribute('summary')).toBe('At least 4 people can open it.');
+    const rows = [...el.querySelectorAll('.ax-who')].map((r) => r.textContent!.replace(/\s+/g, ' ').trim());
+    expect(rows).toHaveLength(5);
+    expect(rows[3]).toContain('You’re not on it, so its size isn’t shown');
+    expect(rows[4]).toContain('Everyone else at Acme');
+    expect(el.querySelector('.ax-can')!.textContent).toContain('Only whoever manages it can change who can open it, in Share.');
+    let done = 0;
+    el.addEventListener('auspex-done', () => done++);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    el.querySelector<HTMLElement>('.ax-can ui-button')!.click();
+    expect(done).toBe(2);
+    expect(el.querySelector('.ax-can ui-button')!.textContent).toBe('Back to Artifacts');
   });
 });

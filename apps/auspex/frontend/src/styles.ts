@@ -137,6 +137,18 @@ export const styles = html`<style>
   .ax-path { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); }
   .ax-path b { color: var(--ink); font-weight: 400; }
 
+  /* Who can open this: asked from another app, over it */
+  .ax-stage.glance { width: min(var(--measure-glance), 100% - 2 * var(--edge)); }
+  auspex-access .ax-pane { background: var(--surface-overlay); box-shadow: var(--shadow-overlay); }
+  .ax-whos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+  .ax-who { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--hairline); }
+  .ax-who:last-child { border-bottom: 0; }
+  .ax-who .txt { display: flex; flex-direction: column; min-width: 0; }
+  .ax-who .t1 { font-size: var(--type-body); line-height: var(--leading-body); }
+  .ax-who .t2 { font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); }
+  .ax-who .lvl { font-size: var(--type-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--ink-muted); white-space: nowrap; }
+  .ax-who.out .t1 { color: var(--ink-muted); }
+
   /* Home's card */
   auspex-glance { display: flex; flex-direction: column; gap: var(--space-4); }
   auspex-glance .ax-climb { display: flex; align-items: center; gap: var(--space-2); }

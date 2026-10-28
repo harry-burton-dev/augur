@@ -31,7 +31,8 @@
   ],
   "handles": [
     "floor.map",
-    "auspex.open"
+    "auspex.open",
+    "access.explain"
   ],
   "orbit": false,
   "menu": [
