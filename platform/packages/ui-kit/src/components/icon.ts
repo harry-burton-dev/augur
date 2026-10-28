@@ -1,9 +1,9 @@
 import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
-  Activity, ArrowLeft, ArrowRight, ArrowUpDown, Bell, BellOff, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, GitPullRequest, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Mail, Monitor, Palette, Plus, Power, Search,
-  Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, UserPlus, UserRound, UsersRound, Video, Wifi, X,
+  Activity, Anchor, ArrowLeft, ArrowRight, ArrowUpDown, Bell, BellOff, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, CalendarDays, Car, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
+  FileText, Folder, GitPullRequest, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Mail, Map as MapIcon, MapPin, Monitor, Palette, Plane, Plus, Power, Search, Ship,
+  Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
   type IconNode,
 } from 'lucide';
 import { base } from '../shared.js';
@@ -78,6 +78,15 @@ export const icons = {
   // A run of documents that comes out on a cadence, such as a weekly report.
   series: draw(CalendarRange),
   preview: draw(GitPullRequest),
+  // Data Atlas: the app itself, and the kinds of thing its entities are.
+  atlas: draw(MapIcon),
+  vessel: draw(Ship),
+  aircraft: draw(Plane),
+  vehicle: draw(Car),
+  place: draw(MapPin),
+  port: draw(Anchor),
+  facility: draw(Warehouse),
+  event: draw(CalendarDays),
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;
