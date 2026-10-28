@@ -1,6 +1,11 @@
 import { LitElement, html, nothing } from 'lit';
 import { ago, type DialogSubmit, type ListItem, type SelectOption } from '@augur/ui-kit';
-import { AtlasError, detailsOf, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
+import type { DocumentRef } from '@augur/mfe-sdk';
+import './atlas-explorer.js';
+import './atlas-knowledge.js';
+import './atlas-ontology.js';
+import './atlas-triage.js';
+import { AtlasError, onEntity, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
 
 type Dialog = 'new' | 'edit' | 'retire';
 
@@ -32,6 +37,9 @@ export class AtlasApp extends LitElement {
     error: { state: true },
     dialog: { state: true },
     newType: { state: true },
+    pickDocument: { attribute: false },
+    openDocument: { attribute: false },
+    userId: { type: String, attribute: 'user-id' },
   };
 
   declare api: AtlasApi;
@@ -52,6 +60,12 @@ export class AtlasApp extends LitElement {
   declare dialog: Dialog | undefined;
   /** The kind being added, which decides the details asked for. */
   declare newType: string;
+  /** Asks the person for a document, for an observation's source (the SDK's pickDocument). */
+  declare pickDocument: (() => Promise<DocumentRef>) | undefined;
+  /** Opens a source in the app that keeps it (the SDK's openDocument). */
+  declare openDocument: ((ref: DocumentRef) => void) | undefined;
+  /** Who is looking: Triage says which proposals are theirs. */
+  declare userId: string;
   private searching: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
@@ -68,6 +82,7 @@ export class AtlasApp extends LitElement {
     this.loading = false;
     this.error = '';
     this.newType = '';
+    this.userId = '';
   }
 
   override createRenderRoot() {
@@ -88,6 +103,9 @@ export class AtlasApp extends LitElement {
       if (place.page === 'entity') {
         this.open = undefined;
         this.open = await this.api.entity(place.id);
+      } else if (place.page === 'explore' || place.page === 'triage' || place.page === 'proposal' || place.page === 'ontology') {
+        // The explorer, Triage and the ontology ask for their own.
+        this.open = undefined;
       } else {
         this.open = undefined;
         await this.list();
@@ -134,7 +152,7 @@ export class AtlasApp extends LitElement {
   /** The fields as the dialog gave them, turned into what the service takes. */
   private fieldsFrom(values: Record<string, string>, type: string): EntityFields {
     const details: Record<string, string> = {};
-    for (const d of this.ontology ? detailsOf(this.ontology, type) : []) details[d.key] = values[`detail:${d.key}`] ?? '';
+    for (const d of this.ontology ? onEntity(this.ontology, type) : []) details[d.key] = values[`detail:${d.key}`] ?? '';
     return { label: values.label, aliases: aliasesFrom(values.aliases ?? ''), description: values.description ?? '', details };
   }
 
@@ -203,7 +221,11 @@ export class AtlasApp extends LitElement {
     }));
     return html`<div class="atlas-head">
         <ui-heading eyebrow=${this.floorName || 'Data Atlas'} heading="Everything here" summary=${this.seeingLine()}></ui-heading>
-        <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'new' })}>Add an entity</ui-button>
+        <div class="atlas-actions">
+          <ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'ontology' })}>Ontology</ui-button>
+          <ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'triage' })}>Triage</ui-button>
+          <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'new' })}>Add an entity</ui-button>
+        </div>
       </div>
       <div class="atlas-filters">
         <ui-text-field label="Find" placeholder="A name, another name, or a code such as an IMO number" .value=${this.q}
@@ -231,11 +253,12 @@ export class AtlasApp extends LitElement {
     const e = this.open;
     if (!e || !this.ontology) return html`${back}<ui-state kind="loading" heading="Opening…"></ui-state>`;
     const type = this.ontology.types.find((t) => t.key === e.type);
-    const details = detailsOf(this.ontology, e.type);
+    const details = onEntity(this.ontology, e.type);
     return html`${back}
       <div class="atlas-head">
         <ui-heading eyebrow=${type?.label ?? e.type} heading=${e.label} summary=${e.description}></ui-heading>
         <div class="atlas-actions">
+          <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'explore', id: e.id })}>Explore around it</ui-button>
           <ui-button kind="secondary" size="sm" ?disabled=${!e.can.edit} @click=${() => (this.dialog = 'edit')}>Edit</ui-button>
           <ui-button kind="ghost" size="sm" ?disabled=${!e.can.retire} @click=${() => (this.dialog = 'retire')}>Retire</ui-button>
         </div>
@@ -256,12 +279,28 @@ export class AtlasApp extends LitElement {
         <dd>${ago(e.createdAt)}</dd>
         ${type ? html`<dt>In the ontology</dt><dd>${type.packTerm} <span class="atlas-key">${type.pack.toUpperCase()}</span></dd>` : nothing}
       </dl>
-      <p class="atlas-note">Observations, facts over time and links to other entities come next.</p>`;
+      <atlas-knowledge .api=${this.api} .entity=${e} .ontology=${this.ontology} .pickDocument=${this.pickDocument}
+        @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}></atlas-knowledge>`;
+  }
+
+  private triagePage() {
+    return html`<atlas-triage .api=${this.api} .ontology=${this.ontology} .place=${this.place} user-id=${this.userId}
+      @atlas-move=${(e: CustomEvent<Place>) => this.move(e.detail)}
+      @atlas-open-document=${(e: CustomEvent<{ ref: DocumentRef }>) => this.openDocument?.(e.detail.ref)}></atlas-triage>`;
+  }
+
+  private explorePage() {
+    const place = this.place;
+    if (place.page !== 'explore') return nothing;
+    return html`<ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'entity', id: place.id })}>Back to its page</ui-button>
+      <atlas-explorer .api=${this.api} .ontology=${this.ontology} centre=${place.id} floor-name=${this.floorName}
+        @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}
+        @atlas-explore=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'explore', id: ev.detail.id })}></atlas-explorer>`;
   }
 
   private detailFields(type: string, values: Record<string, string> = {}) {
     if (!this.ontology) return nothing;
-    return detailsOf(this.ontology, type).map(
+    return onEntity(this.ontology, type).map(
       (d) => html`<ui-text-field slot="fields" name=${`detail:${d.key}`} label=${d.label} optional maxlength="200" hint=${[d.hint, d.identity ? 'Says which one it is: no two entities share it' : ''].filter(Boolean).join('. ')} .value=${values[d.key] ?? ''}></ui-text-field>`,
     );
   }
@@ -302,11 +341,29 @@ export class AtlasApp extends LitElement {
     }
   }
 
+  private page() {
+    switch (this.place.page) {
+      case 'entity':
+        return this.entityPage();
+      case 'explore':
+        return this.explorePage();
+      case 'triage':
+      case 'proposal':
+        return this.triagePage();
+      case 'ontology':
+        return html`<atlas-ontology .api=${this.api} .ontology=${this.ontology} @atlas-ontology=${(e: CustomEvent<Ontology>) => (this.ontology = e.detail)}></atlas-ontology>`;
+      default:
+        return this.listPage();
+    }
+  }
+
   override render() {
     return html`<style>
         /* Data Atlas's own ground: the shell's water stays outside the app. */
         atlas-app { display: block; min-height: 100%; background: var(--slate); }
         atlas-app .atlas-main { max-width: var(--measure-wide); margin: 0 auto; padding: var(--space-6) var(--edge); display: flex; flex-direction: column; gap: var(--space-5); }
+        /* The explorer takes the width it's given: a graph needs room. */
+        atlas-app .atlas-main.atlas-wide { max-width: none; }
         atlas-app .atlas-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
         atlas-app .atlas-actions { display: flex; gap: var(--space-2); }
         atlas-app .atlas-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-4); }
@@ -322,7 +379,7 @@ export class AtlasApp extends LitElement {
         atlas-app .atlas-key { font-size: var(--type-small); color: var(--ink-muted); letter-spacing: 0.04em; }
         @media (max-width: 640px) { atlas-app .atlas-filters { grid-template-columns: minmax(0, 1fr); } }
       </style>
-      <main class="atlas-main">${this.place.page === 'entity' ? this.entityPage() : this.listPage()}</main>
+      <main class="atlas-main ${this.place.page === 'explore' ? 'atlas-wide' : ''}">${this.page()}</main>
       ${this.dialogs()}`;
   }
 }

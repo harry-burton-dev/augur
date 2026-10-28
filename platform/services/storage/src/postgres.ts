@@ -12,11 +12,12 @@ export const schemaFor = (app: string) => app.replace(/-/g, '_');
 
 /**
  * Once per database, by an admin login: the extensions apps may use (pgvector, for
- * embeddings), and nobody but the logins given it may connect or create in public.
+ * embeddings, and pg_trgm, for names spelt nearly alike), and nobody but the logins given it may connect or create in public.
  * A service login can't create extensions on a managed Postgres, so it happens here.
  */
 export async function prepareDatabase(sql: Sql): Promise<void> {
   await sql.query('create extension if not exists vector');
+  await sql.query('create extension if not exists pg_trgm');
   const { rows } = await sql.query<{ db: string }>('select current_database() as db');
   await sql.query(`revoke all on database ${pg.escapeIdentifier(rows[0].db)} from public`);
   await sql.query('revoke create on schema public from public');

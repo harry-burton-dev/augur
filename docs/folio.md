@@ -75,6 +75,8 @@ Opening a document shows it as a page of text. This is its **reader copy**, whic
 
 **Download the original** gives you the file exactly as it was uploaded. Each heading and paragraph has its own address, so you can link straight to part of a document.
 
+To tell Data Atlas about something a document names, such as a ship, a port, a person or an organisation, select the words and choose **Add to Data Atlas** at the side. Data Atlas asks what kind of thing it is and sends it to your floor's Triage, where a lead decides what it is. Nothing is added to what's known until they do.
+
 It can take a moment to make a reader copy. If one couldn't be made, the page says so, and whoever can change the document can ask for it to be made again.
 
 ### Sharing

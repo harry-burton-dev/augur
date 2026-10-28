@@ -95,6 +95,13 @@ const chatSchema = {
   },
 } as const;
 
+const embeddingsSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['input'],
+  properties: { input: { type: 'array', minItems: 1, maxItems: 64, items: { type: 'string', minLength: 1, maxLength: 8000 } } },
+} as const;
+
 const settingsSchema = {
   type: 'object',
   additionalProperties: false,
@@ -157,7 +164,7 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
        * An app's service, by its own token, for itself; or a person through the
        * gateway, talking to an agent: the shell's own, or an AI app's.
        */
-      const askerOf = async (req: FastifyRequest<{ Body: ChatRequest & { agent?: string } }>, reply: FastifyReply): Promise<Asker | undefined> => {
+      const askerOf = async (req: FastifyRequest<{ Body: { agent?: string } }>, reply: FastifyReply, { people = true } = {}): Promise<Asker | undefined> => {
         const workspace = workspaceOf(req);
         let service;
         try {
@@ -176,6 +183,7 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
         }
         const caller = callerFromHeaders(req.headers);
         if (!caller) return void reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
+        if (!people) return void reply.code(403).send({ error: 'forbidden', message: 'Only an app’s own service asks for this, as itself.' });
         const agent = req.body.agent;
         if (!agent) return void reply.code(400).send({ error: 'bad_request', message: 'Name the agent you’re talking to.' });
         if (agent !== ASSISTANT) {
@@ -195,7 +203,7 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
 
       app.get('/settings', async (req, reply) => {
         if (!admin(req, reply)) return reply;
-        return { ...(await store.settings()), ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model } : {}) };
+        return { ...(await store.settings()), ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model, ...(provider.embeddingModel ? { embeddingModel: provider.embeddingModel } : {}) } : {}) };
       });
 
       app.put<{ Body: Partial<Pick<ModelSettings, 'enabled' | 'dailyLimit'>> }>('/settings', { schema: { body: settingsSchema } }, async (req, reply) => {
@@ -218,7 +226,7 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
           return reply.code(503).send({ error: 'unavailable', message: 'The change can’t be recorded in the activity log right now, so it wasn’t made.' });
         }
         const saved = changes.length ? await store.saveSettings(next, caller.id) : before;
-        return { ...saved, ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model } : {}) };
+        return { ...saved, ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model, ...(provider.embeddingModel ? { embeddingModel: provider.embeddingModel } : {}) } : {}) };
       });
 
       app.get('/usage', async (req, reply) => {
@@ -227,42 +235,62 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
         return { dailyLimit, days: await store.usage(daysAgo(6)) };
       });
 
+      /**
+       * What every call goes through: models on, a model set up, the app's calls for
+       * today, and the call recorded before it's made. False when the reply has been sent.
+       */
+      const mayCall = async (req: FastifyRequest, reply: FastifyReply, asker: Asker, detail: Record<string, unknown>, action = 'model.called'): Promise<boolean> => {
+        const settings = await store.settings();
+        if (!settings.enabled) return void reply.code(403).send({ error: 'forbidden', message: 'Models are turned off. An admin can turn them on in Admin.' }), false;
+        if (!provider) return void reply.code(503).send({ error: 'unavailable', message: 'No model is set up on this server.' }), false;
+        if (!audit) return void reply.code(503).send({ error: 'unavailable', message: 'Model calls can’t be recorded, so none are made.' }), false;
+        if (!(await store.take(asker.app, today(), settings.dailyLimit))) {
+          return void reply.code(429).send({ error: 'limit', message: `${asker.app} has used its ${settings.dailyLimit} model calls for today. More are allowed from midnight UTC.` }), false;
+        }
+        // What was asked is never recorded, only that it was, by whom and with what.
+        try {
+          await audit({ actor: asker.actor, app: asker.app, action, detail }, asker.workspace);
+        } catch (err) {
+          req.log.error({ err: (err as Error).message, app: asker.app }, 'model call not recorded');
+          return void reply.code(503).send({ error: 'unavailable', message: 'The call can’t be recorded in the activity log right now, so it wasn’t made.' }), false;
+        }
+        return true;
+      };
+
       app.post<{ Body: ChatRequest & { agent?: string } }>('/chat', { schema: { body: chatSchema } }, async (req, reply) => {
         const asker = await askerOf(req, reply);
         if (!asker) return reply;
-        const settings = await store.settings();
-        if (!settings.enabled) return reply.code(403).send({ error: 'forbidden', message: 'Models are turned off. An admin can turn them on in Admin.' });
-        if (!provider) return reply.code(503).send({ error: 'unavailable', message: 'No model is set up on this server.' });
-        if (!audit) return reply.code(503).send({ error: 'unavailable', message: 'Model calls can’t be recorded, so none are made.' });
-
-        const day = today();
-        if (!(await store.take(asker.app, day, settings.dailyLimit))) {
-          return reply.code(429).send({ error: 'limit', message: `${asker.app} has used its ${settings.dailyLimit} model calls for today. More are allowed from midnight UTC.` });
-        }
         const { messages, tools } = req.body;
-        // What was asked is never recorded, only that it was, by whom and with what.
+        if (!(await mayCall(req, reply, asker, { model: provider?.model, messages: messages.length, ...(tools?.length ? { tools: tools.map((t) => t.name) } : {}) }))) return reply;
+        const day = today();
         try {
-          await audit(
-            {
-              actor: asker.actor,
-              app: asker.app,
-              action: 'model.called',
-              detail: { model: provider.model, messages: messages.length, ...(tools?.length ? { tools: tools.map((t) => t.name) } : {}) },
-            },
-            asker.workspace,
-          );
-        } catch (err) {
-          req.log.error({ err: (err as Error).message, app: asker.app }, 'model call not recorded');
-          return reply.code(503).send({ error: 'unavailable', message: 'The call can’t be recorded in the activity log right now, so it wasn’t made.' });
-        }
-        try {
-          const answer = await provider.chat({ messages, ...(tools?.length ? { tools } : {}) });
+          const answer = await provider!.chat({ messages, ...(tools?.length ? { tools } : {}) });
           await store.addTokens(asker.app, day, answer.usage.inputTokens, answer.usage.outputTokens);
           req.log.info({ app: asker.app, model: answer.model, ...answer.usage, toolCalls: answer.message.toolCalls?.length ?? 0 }, 'model called');
           return answer;
         } catch (err) {
           if (!(err instanceof ProviderError)) throw err;
           req.log.error({ err: err.message, app: asker.app }, 'model call failed');
+          return reply.code(err.status).send({ error: 'provider', message: err.message });
+        }
+      });
+
+      // Text into vectors, to match by meaning: for apps' services, as themselves. Each request is one call.
+      app.post<{ Body: { input: string[]; agent?: string } }>('/embeddings', { schema: { body: embeddingsSchema } }, async (req, reply) => {
+        const asker = await askerOf(req, reply, { people: false });
+        if (!asker) return reply;
+        if (provider && !provider.embed) {
+          return reply.code(503).send({ error: 'unavailable', message: 'No embedding model is set up on this server: set MODEL_EMBEDDING_NAME beside MODEL_API_URL.' });
+        }
+        if (!(await mayCall(req, reply, asker, { model: provider?.embeddingModel, texts: req.body.input.length }, 'model.embedded'))) return reply;
+        try {
+          const answer = await provider!.embed!(req.body.input);
+          await store.addTokens(asker.app, today(), answer.usage.inputTokens, 0);
+          req.log.info({ app: asker.app, model: answer.model, texts: answer.vectors.length }, 'texts embedded');
+          return answer;
+        } catch (err) {
+          if (!(err instanceof ProviderError)) throw err;
+          req.log.error({ err: err.message, app: asker.app }, 'embedding failed');
           return reply.code(err.status).send({ error: 'provider', message: err.message });
         }
       });

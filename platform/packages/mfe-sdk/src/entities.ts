@@ -1,4 +1,5 @@
 import type { Intent, MountContext } from './contract.js';
+import { isDocumentRef, type DocumentRef } from './documents.js';
 import { IntentError } from './intents.js';
 
 /**
@@ -10,6 +11,8 @@ import { IntentError } from './intents.js';
 export const ENTITY_OPEN = 'entity.open';
 export const ENTITY_PICK = 'entity.pick';
 export const ENTITY_EXPLAIN = 'entity.explain';
+/** Offers what a passage names to the app that keeps entities, to be decided there (SDK 1.5): `proposeEntity`. */
+export const ENTITY_PROPOSE = 'entity.propose';
 
 /** One entity, as apps pass it between them: enough to open it and to name it. */
 export interface EntityRef {
@@ -69,4 +72,41 @@ export const pickEntities = async (ctx: Pick<MountContext, 'request'>, pick: Ent
   const refs = Array.isArray(answer) ? answer : [answer];
   if (refs.length === 0 || !refs.every(isEntityRef)) throw new IntentError('The picker answered with something that is not an entity.');
   return pick.multiple ? refs : refs.slice(0, 1);
+};
+
+/** What `proposeEntity` offers: words someone marked in a document, and where they are. */
+export interface EntityProposal {
+  /** The document, and the version the words were read in. */
+  source: DocumentRef;
+  /** The block the words are in, by its anchor in the reader copy (e.g. "p-12"). */
+  anchor?: string;
+  /** The words marked: what names the thing, e.g. "N. Tern". */
+  text: string;
+  /** The sentence or paragraph around them, so whoever decides sees them in context. */
+  context?: string;
+  /** What kind of thing the asking app thinks it is, e.g. "vessel". */
+  type?: string;
+}
+
+/** What the app that takes a proposal answers: the proposal it made, to be decided in its Triage. */
+export interface ProposalReceipt {
+  /** Its id in the app that keeps it. */
+  proposal: string;
+  /** What to call where it went, e.g. "Maritime desk's Triage". */
+  queue: string;
+}
+
+/**
+ * Offers what a passage names to whichever app handles `entity.propose` (Data
+ * Atlas), which asks the person what it is and files it for that floor's leads
+ * to decide. Nothing becomes knowledge until they do. Rejects with
+ * IntentCancelled when the person closes it, and with an IntentError when no
+ * app they can open handles it or the answer isn't a receipt.
+ */
+export const proposeEntity = async (ctx: Pick<MountContext, 'request'>, proposal: EntityProposal): Promise<ProposalReceipt> => {
+  if (!isDocumentRef(proposal.source) || !text(proposal.text, 300)) throw new IntentError('A proposal needs a document and the words that name the thing.');
+  const answer = await ctx.request<unknown>({ type: ENTITY_PROPOSE, payload: proposal } satisfies Intent<EntityProposal>);
+  const r = answer as Record<string, unknown> | null;
+  if (!r || typeof r !== 'object' || !text(r.proposal, 80) || !text(r.queue, 300)) throw new IntentError('Whatever took the proposal answered with something that is not a receipt.');
+  return { proposal: r.proposal as string, queue: r.queue as string };
 };

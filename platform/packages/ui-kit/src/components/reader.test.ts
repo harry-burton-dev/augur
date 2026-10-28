@@ -137,6 +137,19 @@ describe('ui-reader', () => {
     expect(reader.goTo('nowhere')).toBe(false);
   });
 
+  it('says what words are selected, and the block they’re in', async () => {
+    const { reader, root } = await mount(DOC);
+    expect(reader.marked()).toBeUndefined();
+    const words = root.querySelector('strong')!.firstChild!;
+    const range = document.createRange();
+    range.setStart(words, 0);
+    range.setEnd(words, 6);
+    const selection = (root as ShadowRoot & { getSelection?: () => Selection | null }).getSelection?.() ?? document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    expect(reader.marked()).toEqual({ text: 'travel', anchor: 'b2', context: 'Book through the travel desk.' });
+  });
+
   it('follows a link to an anchor in the document', async () => {
     const { reader, root } = await mount(`[Claims](#claims-receipts)\n\n${DOC}`);
     root.querySelector('a')!.click();

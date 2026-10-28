@@ -55,10 +55,12 @@ describe.runIf(process.env.DATABASE_URL)('Data Atlas', () => {
     const res = await call('GET', '/v1/ontology', on('sam', ORG));
     expect(res.statusCode).toBe(200);
     const ontology = res.json();
-    expect(ontology.version).toBe(1);
+    expect(ontology.version).toBe(2);
+    expect(ontology.relations.find((r: { key: string }) => r.key === 'operated-by')).toMatchObject({ label: 'Operated by', inverse: 'Operates', from: ['artifact', 'facility'], to: ['agent'] });
     const vessel = ontology.types.find((t: { key: string }) => t.key === 'vessel');
     expect(vessel).toMatchObject({ label: 'Vessel', parent: 'vehicle', pack: 'cco', packTerm: 'Watercraft', abstract: false });
-    expect(vessel.details.map((d: { key: string }) => d.key)).toEqual(['imo', 'mmsi', 'call-sign']);
+    expect(vessel.details.map((d: { key: string }) => d.key)).toEqual(['imo', 'mmsi', 'call-sign', 'flag', 'vessel-type']);
+    expect(vessel.details.find((d: { key: string }) => d.key === 'flag').onEntity).toBe(false);
     expect(ontology.types.find((t: { key: string }) => t.key === 'agent').abstract).toBe(true);
   });
 
@@ -201,11 +203,12 @@ describe.runIf(process.env.DATABASE_URL)('Data Atlas', () => {
       nodes: [{ ref: { kind: 'entity', id: felix.id, type: 'port', label: 'Harwich' }, state: 'active', floorName: 'Org', depth: 0 }],
       edges: [],
       more: [],
-      unseen: [{ id: mine.id, reason: 'elsewhere', floor: 'person:sam', message: expect.any(String) }],
+      unseen: [{ id: mine.id, reason: 'elsewhere', floor: 'person:sam', message: expect.any(String), near: [] }],
       missing: ['ent_nope'],
     });
+    // Kinds narrow what the walk reaches; the seeds it starts from still show.
     const ports = await call('POST', '/v1/subgraph', on('sam', own('sam')), { seeds: [{ id: felix.id }, { id: mine.id }], types: ['facility'] });
-    expect(ports.json().nodes.map((n: { ref: { id: string } }) => n.ref.id)).toEqual([felix.id]);
+    expect(ports.json().nodes.map((n: { ref: { id: string } }) => n.ref.id)).toEqual([felix.id, mine.id]);
     const deep = await call('POST', '/v1/subgraph', on('sam', ORG), { seeds: [{ id: felix.id }], depth: 4 });
     expect(deep.statusCode).toBe(400);
   });

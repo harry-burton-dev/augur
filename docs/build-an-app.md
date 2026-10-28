@@ -228,6 +228,18 @@ await explainEntity(ctx, ship); // the same, with why it shows from this floor m
 
 When no app the person can open handles `entity.pick`, `pickEntities` rejects with an `IntentError`: keep the control that would use it in sight, disabled, saying so.
 
+An app that shows documents can offer what a passage names with `entity.propose` (`proposeEntity`, SDK 1.5). Data Atlas asks the person what kind of thing it is and files it in the floor's Triage, where a lead decides; nothing is added to what's known until then. `ui-reader`'s `marked()` gives the selected words, the block they're in and its text:
+
+```ts
+import { proposeEntity } from '@augur/mfe-sdk';
+
+const passage = reader.marked(); // { text, anchor, context } or undefined
+if (passage) {
+  const receipt = await proposeEntity(ctx, { source: { app: 'folio', id, version, title }, ...passage });
+  say(`Sent to ${receipt.queue}.`); // { proposal: 'prp_…', queue: 'Maritime desk’s Triage' }
+}
+```
+
 ### Sharing
 
 An app that lets people share things with each other asks identity two things, as itself, with the `people:read` scope.

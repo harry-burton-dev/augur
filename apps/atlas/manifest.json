@@ -18,13 +18,15 @@
   "scopes": [
     "audit:write",
     "people:read",
-    "events:publish"
+    "events:publish",
+    "models:use"
   ],
   "orbit": false,
   "handles": [
     "entity.open",
     "entity.pick",
-    "entity.explain"
+    "entity.explain",
+    "entity.propose"
   ],
   "menu": [
     {
@@ -46,6 +48,22 @@
           "icon": "plus",
           "path": "/entities/new",
           "keywords": "create new add thing"
+        },
+        {
+          "id": "triage",
+          "label": "Triage",
+          "icon": "inbox",
+          "path": "/triage",
+          "detail": "What\u2019s proposed here, waiting for a lead",
+          "keywords": "triage proposals review mentions decide"
+        },
+        {
+          "id": "ontology",
+          "label": "Ontology",
+          "icon": "tag",
+          "path": "/ontology",
+          "detail": "The kinds of thing kept, and the packs they come from",
+          "keywords": "ontology kinds types links packs cco owl vocabulary studio"
         }
       ]
     }

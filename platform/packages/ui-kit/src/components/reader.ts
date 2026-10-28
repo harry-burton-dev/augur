@@ -77,6 +77,13 @@ const markdown = () => {
 
 let shared: MarkdownIt | undefined;
 
+/** Words selected in a reader: what they say, the block they start in, and that block's words. */
+export interface MarkedPassage {
+  text: string;
+  anchor: string;
+  context: string;
+}
+
 /**
  * A document to read, from Markdown, in the kit's reading type: one measure, one
  * rhythm, the same whatever the document was written in. Headings, lists,
@@ -158,6 +165,24 @@ export class UiReader extends LitElement {
     }
     this.atTop = anchor;
     return true;
+  }
+
+  /**
+   * The words selected in the document, if any: the text, the block they start
+   * in (by its anchor) and that block's words, so another app can be told what
+   * was marked and where. Undefined when nothing in this document is selected.
+   */
+  marked(): MarkedPassage | undefined {
+    const root = this.renderRoot as ShadowRoot & { getSelection?: () => Selection | null };
+    const selection = root.getSelection?.() ?? document.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return undefined;
+    const range = selection.getRangeAt(0);
+    const start = range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement;
+    const block = start?.closest<HTMLElement>('[data-block]');
+    if (!block || !root.contains(block)) return undefined;
+    const text = selection.toString().replace(/\s+/g, ' ').trim();
+    if (!text) return undefined;
+    return { text, anchor: block.id, context: (block.textContent ?? '').replace(/\s+/g, ' ').trim() };
   }
 
   private scrollers: EventTarget[] = [];

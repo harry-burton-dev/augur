@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Models
-  version: 1.0.0
+  version: 1.1.0
   description: >
     The model gateway: the only place AUGUR keeps a model provider's key. It
     speaks the OpenAI-style chat completions API to whichever provider the
@@ -15,6 +15,11 @@ info:
     A person reaches it through the gateway (caller in x-user-* headers) from
     the shell's Agents, naming the agent they are talking to: "assistant", the
     shell's own, or an AI app granted models:use on their floor.
+
+    Apps' services may also turn text into vectors (/embeddings, 1.1), to
+    match by meaning, when an embedding model is set up (MODEL_EMBEDDING_NAME;
+    the stand-in always has one). Each request counts as one call and is
+    recorded as model.embedded, with how many texts and never what they say.
 
     Every call is written to the audit log (model.called, with the model, how
     many messages and which tools, never what was said) before it is made; a
@@ -44,6 +49,37 @@ paths:
         "429": { description: The app has used its calls for today }
         "502": { description: The model provider failed or refused; the message says what to check }
         "503": { description: No model is set up, or grants or the audit log can't be reached }
+        "504": { description: The model took too long }
+  /embeddings:
+    post:
+      summary: Turn texts into vectors, to match by meaning (apps' services only, as themselves)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [input]
+              properties:
+                input: { type: array, minItems: 1, maxItems: 64, items: { type: string, minLength: 1, maxLength: 8000 } }
+      responses:
+        "200":
+          description: A vector per text, in the order given, all the same length
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vectors, model, usage]
+                properties:
+                  vectors: { type: array, items: { type: array, items: { type: number } } }
+                  model: { type: string, description: The embedding model, as the provider names it; vectors from different models don't compare }
+                  usage: { type: object, required: [inputTokens], properties: { inputTokens: { type: integer } } }
+        "401": { description: Neither a signed-in person nor a service }
+        "403": { description: Models are off, a person asked, or the app isn't granted models:use there }
+        "429": { description: The app has used its calls for today }
+        "502": { description: The model provider failed or refused; the message says what to check }
+        "503": { description: No model or no embedding model is set up, or grants or the audit log can't be reached }
         "504": { description: The model took too long }
   /status:
     get:
@@ -171,6 +207,7 @@ components:
         ready: { type: boolean, description: A model is set up on this server }
         provider: { type: string, description: 'Where the model is: "openrouter.ai", "stand-in"' }
         model: { type: string }
+        embeddingModel: { type: string, description: The model behind /embeddings, when one is set up }
     Usage:
       type: object
       required: [day, app, calls, inputTokens, outputTokens]

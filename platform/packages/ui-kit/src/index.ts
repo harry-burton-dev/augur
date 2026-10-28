@@ -23,7 +23,7 @@ export { UiDropZone, accepts } from './components/drop-zone.js';
 export { UiTag } from './components/tag.js';
 export { UiTagPicker, type TagOption } from './components/tag-picker.js';
 export { UiFilterBar, filterValue, type FilterDef, type FilterValue } from './components/filter-bar.js';
-export { UiReader, slugFor, type OutlineItem, type ReaderSize, type ReaderWidth } from './components/reader.js';
+export { UiReader, slugFor, type MarkedPassage, type OutlineItem, type ReaderSize, type ReaderWidth } from './components/reader.js';
 export { UiContents } from './components/contents.js';
 export { UiState, type StateKind } from './components/state.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';

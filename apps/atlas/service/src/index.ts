@@ -1,12 +1,22 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appCredentialsFromEnv, appStorageFromEnv, commonSettings, loadConfigOrExit, outboxRelay, publishFrontend, registerApp } from '@augur/service-kit';
+import { appCredentialsFromEnv, appStorageFromEnv, commonSettings, embedTexts, loadConfigOrExit, outboxRelay, publishFrontend, registerApp } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { PgAtlasStore } from './store.ts';
 
 // Every setting Data Atlas reads, checked before it starts (in production, a missing one stops it).
-loadConfigOrExit('atlas', [commonSettings.database, commonSettings.registry, commonSettings.events, commonSettings.issuer, commonSettings.issuerInside, commonSettings.clientSecret, commonSettings.gateway]);
+loadConfigOrExit('atlas', [
+  commonSettings.database,
+  commonSettings.registry,
+  commonSettings.events,
+  commonSettings.issuer,
+  commonSettings.issuerInside,
+  commonSettings.clientSecret,
+  commonSettings.gateway,
+  // Optional: without it Triage matches by keys, names and spelling, and says matching by meaning is off.
+  { ...commonSettings.models, required: false },
+]);
 
 const port = Number(process.env.PORT ?? 8090);
 // The graph lives in Postgres, in Data Atlas's own schema (docs/app-storage.md). There is no stand-in:
@@ -14,7 +24,14 @@ const port = Number(process.env.PORT ?? 8090);
 const { databaseUrl } = appStorageFromEnv();
 if (!databaseUrl) throw new Error('Data Atlas keeps its graph in Postgres: set DATABASE_URL (any Postgres 16 or later will do under pnpm dev:app).');
 const store = await PgAtlasStore.connect(databaseUrl);
-const app = await buildApp({ store });
+const credentials = appCredentialsFromEnv('atlas');
+// Matching by meaning in Triage: vectors from the model gateway, asked for as Data Atlas (models:use).
+const { MODELS_URL } = process.env;
+const embed =
+  MODELS_URL && credentials
+    ? async (input: string[], workspace?: string) => embedTexts({ modelsUrl: MODELS_URL, credentials, workspace, input })
+    : undefined;
+const app = await buildApp({ store, embed });
 await app.listen({ port, host: '0.0.0.0' });
 
 // Put Data Atlas in the platform's catalogue, so the shell can offer it.
@@ -23,7 +40,6 @@ await app.listen({ port, host: '0.0.0.0' });
 // it's in apps/atlas. A released image carries the built frontend too (APP_FRONTEND, or /app/frontend),
 // which it gives the registry first, so the shell loads this version's own copy of it.
 const { REGISTRY_URL, APP_MANIFEST, APP_FRONTEND } = process.env;
-const credentials = appCredentialsFromEnv('atlas');
 if (REGISTRY_URL && credentials) {
   const built = new URL('./manifest.json', import.meta.url);
   const manifest = JSON.parse(readFileSync(APP_MANIFEST ?? (existsSync(built) ? built : new URL('../../manifest.json', import.meta.url)), 'utf8'));

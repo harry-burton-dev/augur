@@ -15,6 +15,7 @@ loadConfigOrExit('models', [
   { name: 'MODEL_API_URL', about: 'an OpenAI-style API for the model behind Agents; without it models stay off.' },
   { name: 'MODEL_API_KEY', about: 'the key to MODEL_API_URL.', secret: true },
   { name: 'MODEL_NAME', about: 'which model MODEL_API_URL serves.' },
+  { name: 'MODEL_EMBEDDING_NAME', about: 'the model at MODEL_API_URL that turns text into vectors, for matching by meaning.' },
 ]);
 
 const port = Number(process.env.PORT ?? 8085);
