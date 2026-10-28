@@ -9,6 +9,9 @@ import type { AuspexAccess } from './auspex-access.js';
 import { plantLine, roomsOf, type AuspexPlant } from './auspex-plant.js';
 import { daysOf, tally, type AuspexReplay } from './auspex-replay.js';
 import type { Part } from './api.js';
+import { layoutCutaway, mayWalk } from './cutaway.js';
+import type { AuspexBuilding } from './auspex-building.js';
+import { INSTALL_STEPS, jobLine, recent, trackOf, UPGRADE_STEPS, upgradeLine, type AppJob } from './jobs.js';
 import { appLine, ledBy, whoCanAdd, whyHere } from './words.js';
 
 /** Acme: Finance (Payroll, Treasury) and Legal (Contracts, inside it Disputes). Alex is on Payroll. */
@@ -320,7 +323,11 @@ describe('the plant room, for admins', () => {
       asked.push(path);
       const body = path.includes('/status')
         ? { components: parts, backups: { state: 'ok', lastBackup: { at: new Date().toISOString(), ok: true } } }
-        : { running: { version: '0.6.0', channel: 'beta' }, feed: 'on', available: { version: '0.7.0' }, needsYou: [{ message: 'x' }] };
+        : path.includes('/jobs')
+          ? { jobs: [{ id: 'j1', app: 'board', action: 'install', release: { version: '1.2.0', channel: 'stable' }, requestedAt: new Date().toISOString(), state: 'running', steps: [{ step: 'verify', state: 'done', at: '' }, { step: 'storage', state: 'running', at: '' }] }] }
+          : path.includes('/app-runner/apps')
+            ? { installed: [{ app: 'board', name: 'Board', version: '1.1.0', previews: [{ pr: 42, version: '1.2.0-pr.42', endsAt: new Date().toISOString() }] }] }
+            : { running: { version: '0.6.0', channel: 'beta' }, feed: 'on', available: { version: '0.7.0' }, needsYou: [{ message: 'x' }], updaterSeenAt: new Date().toISOString() };
       return new Response(JSON.stringify(body), { status: 200 });
     });
     const el = document.createElement('auspex-plant') as AuspexPlant;
@@ -335,11 +342,17 @@ describe('the plant room, for admins', () => {
 
   it('shows every part as a machine with a lamp, and the release against the newest', async () => {
     const { el, asked } = await mount(true);
-    expect(asked.sort()).toEqual(['/api/gateway/v1/status', '/api/registry/v1/platform/updates']);
+    expect(asked.sort()).toEqual(['/api/gateway/v1/status', '/api/registry/v1/app-runner/apps', '/api/registry/v1/app-runner/jobs', '/api/registry/v1/platform/updates']);
+    // What's under way: the install as a track of stops, lit as far as it's got; the preview; and who last asked for work.
+    expect(el.querySelector('.ax-job .t1')!.textContent).toBe('Board 1.2.0: installing');
+    expect([...el.querySelectorAll('.ax-job .stop')].map((s) => s.getAttribute('aria-label'))).toEqual(['Signature: done', 'Storage: under way', 'Sign-in: not yet', 'Start: not yet', 'Health: not yet', 'Switch over: not yet', 'Retire old: not yet']);
+    expect(el.textContent).toContain('Board, pull request 42');
+    expect(el.textContent).toContain('App runner');
+    expect(el.textContent).toContain('Hasn’t asked for work since the registry started, so an install asked for in Admin would wait.');
     expect(el.querySelector('.ax-release')!.getAttribute('aria-label')).toBe('AUGUR 0.6.0 is running; 0.7.0 is out.');
     expect(el.querySelector('.ax-machine.down')!.getAttribute('aria-label')).toBe('folio: Not answering. It didn’t answer in 3 s.');
     expect(el.querySelector('.ax-machine.slow .st')!.textContent).toBe('Slow: 1400 ms');
-    expect(el.querySelectorAll('.ax-machine')).toHaveLength(7);
+    expect(el.querySelectorAll('.ax-machine')).toHaveLength(9);
     expect(el.textContent).toContain('1 thing needs you first');
     el.remove();
   });
@@ -349,5 +362,93 @@ describe('the plant room, for admins', () => {
     expect(asked).toEqual([]);
     expect(el.querySelector('ui-state')!.getAttribute('heading')).toBe('The plant room is for admins');
     el.remove();
+  });
+});
+
+describe('what’s under way in the plant room', () => {
+  it('lights each step as far as a job has got, and words it', () => {
+    expect(trackOf(UPGRADE_STEPS, [{ step: 'preflight', state: 'done', at: '' }, { step: 'backup', state: 'failed', at: '', message: 'Disk full' }]).map((s) => [s.label, s.state])).toEqual([
+      ['Checks', 'done'],
+      ['Backup', 'failed'],
+      ['Fetch', 'waiting'],
+      ['Roll forward', 'waiting'],
+      ['Verify', 'waiting'],
+    ]);
+    // Rolling back shows only once it happens.
+    expect(trackOf(UPGRADE_STEPS, [{ step: 'roll-back', state: 'running', at: '' }]).at(-1)).toMatchObject({ label: 'Roll back', state: 'running' });
+    expect(trackOf(INSTALL_STEPS, [])).toHaveLength(7);
+    const job = { id: 'j', app: 'folio', action: 'remove', requestedAt: '', state: 'failed', steps: [] } as AppJob;
+    expect(jobLine(job, 'Artifacts')).toBe('Artifacts: couldn’t be removed');
+    expect(upgradeLine({ id: 'u', from: '0.7.0', version: '0.8.0', requestedAt: '', state: 'rolled-back', steps: [] })).toBe('AUGUR 0.7.0 to 0.8.0: rolled back, still on 0.7.0');
+  });
+
+  it('keeps a week of finished jobs, newest first', () => {
+    const now = Date.parse('2026-10-28T12:00:00Z');
+    const j = (id: string, state: AppJob['state'], finishedAt?: string) => ({ id, app: 'a', action: 'install', requestedAt: '2026-10-01T00:00:00Z', state, steps: [], ...(finishedAt ? { finishedAt } : {}) }) as AppJob;
+    expect(recent([j('old', 'done', '2026-10-10T00:00:00Z'), j('a', 'done', '2026-10-27T00:00:00Z'), j('live', 'running'), j('b', 'failed', '2026-10-28T00:00:00Z')], now).map((x) => x.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('the building, for leads and admins', () => {
+  it('puts each team in a room above the teams inside it, the org the roof', () => {
+    const laid = layoutCutaway(acme, 'pay')!;
+    const room = new Map(laid.rooms.map((r) => [r.id, r]));
+    expect(laid.storeys).toBe(4);
+    expect(room.get('org')).toMatchObject({ kind: 'org', y: 0, width: 960 });
+    // A room spans exactly the rooms below it.
+    const fin = room.get('fin')!;
+    const kids = ['pay', 'tre'].map((id) => room.get(id)!);
+    expect(Math.min(...kids.map((k) => k.x))).toBeCloseTo(fin.x);
+    expect(Math.max(...kids.map((k) => k.x + k.width))).toBeCloseTo(fin.x + fin.width);
+    expect(kids.every((k) => k.y > fin.y)).toBe(true);
+    expect(room.get('dis')).toMatchObject({ reach: 'closed', depth: 3 });
+    // Only what they may know: no headcount on a closed team.
+    expect(room.get('leg')!.people).toBeUndefined();
+    expect(room.get('pay')).toMatchObject({ reach: 'stand', here: true, lit: true, people: 2 });
+    expect(room.get('fin')!.lit).toBe(true);
+    expect(room.get('leg')!.lit).toBe(false);
+    expect(laid.stairs).toEqual([{ from: 'pay', x: room.get('pay')!.x + room.get('pay')!.width - 18, bottom: laid.ground, top: 0 }]);
+  });
+
+  it('is for admins and anyone who leads a team', () => {
+    expect(mayWalk(acme, 'alex', false)).toBe(false);
+    expect(mayWalk(acme, 'sam', false)).toBe(true);
+    expect(mayWalk(acme, 'alex', true)).toBe(true);
+  });
+
+  it('draws every room as a link, your door on the ground, and the plant room under it for admins', async () => {
+    await import('./auspex-building.js');
+    const el = document.createElement('auspex-building') as AuspexBuilding;
+    Object.assign(el, { map: acme, here: 'pay', admin: true, plant: 'All 9 parts are answering.', plantState: 'up' });
+    document.body.replaceChildren(el);
+    await el.updateComplete;
+    const labels = [...el.querySelectorAll('.room')].map((r) => r.getAttribute('aria-label'));
+    expect(labels).toContain('Payroll. You can go here. 2 people. You’re here.');
+    expect(labels).toContain('Legal. Closed to you.');
+    expect(labels).toContain('Finance. You can go here. 4 people. On your way up.');
+    expect(labels.at(-1)).toMatch(/^Your own floor\. Only you can go in/);
+    expect(el.querySelectorAll('.stair')).toHaveLength(1);
+    expect(el.querySelector('.basement')!.getAttribute('aria-label')).toBe('The plant room. All 9 parts are answering.');
+    let floor = '';
+    el.addEventListener('auspex-floor', (e) => (floor = (e as CustomEvent<{ id: string }>).detail.id));
+    el.querySelector<SVGGElement>('.room.closed')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(floor).toBe('leg');
+    el.admin = false;
+    await el.updateComplete;
+    expect(el.querySelector('.basement')).toBeNull();
+  });
+
+  it('tells anyone else who it’s for', async () => {
+    await import('./auspex-app.js');
+    const api = new AuspexApi(async () => new Response(JSON.stringify(acme), { status: 200 }));
+    const el = document.createElement('auspex-app') as AuspexApp;
+    Object.assign(el, { api, here: 'pay', userId: 'alex', place: placeFor('/building', 'pay') });
+    document.body.replaceChildren(el);
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+      await el.updateComplete;
+    }
+    expect(el.querySelector('ui-state')!.getAttribute('heading')).toBe('The building is for leads and admins');
+    expect(pathFor({ view: 'building' })).toBe('/building');
   });
 });

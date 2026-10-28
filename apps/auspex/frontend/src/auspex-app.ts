@@ -1,9 +1,12 @@
 import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import type { Fact } from '@augur/ui-kit';
 import { usable, type AuspexApi, type Changes, type ClosedTeam, type FloorApp, type MapFloor, type PersonMap } from './api.js';
+import './auspex-building.js';
 import './auspex-map.js';
 import './auspex-plant.js';
 import './auspex-replay.js';
+import { mayWalk } from './cutaway.js';
+import { plantLine } from './auspex-plant.js';
 import { styles } from './styles.js';
 import { appLine, appQuestion, changeLine, daysAgo, floorEyebrow, ledBy, listOf, whoCanAdd, whyHere } from './words.js';
 
@@ -11,7 +14,7 @@ import { appLine, appQuestion, changeLine, daysAgo, floorEyebrow, ledBy, listOf,
  * Where Auspex is: your map, one floor, the answer about one app on one floor,
  * a floor's last 30 days (its leads and admins), or the plant room (admins).
  */
-export type Place = { view: 'where' } | { view: 'floor'; id: string } | { view: 'app'; floor: string; app: string } | { view: 'replay'; id: string } | { view: 'plant' };
+export type Place = { view: 'where' } | { view: 'floor'; id: string } | { view: 'app'; floor: string; app: string } | { view: 'replay'; id: string } | { view: 'plant' } | { view: 'building' };
 
 /** Auspex's own address for a place, below its route. */
 export const pathFor = (place: Place): string => {
@@ -20,6 +23,8 @@ export const pathFor = (place: Place): string => {
       return '/';
     case 'plant':
       return '/plant';
+    case 'building':
+      return '/building';
     case 'floor':
       return `/floors/${encodeURIComponent(place.id)}`;
     case 'replay':
@@ -34,6 +39,7 @@ export const placeFor = (path: string, here: string): Place => {
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0] === 'here') return { view: 'floor', id: here };
   if (parts[0] === 'plant') return { view: 'plant' };
+  if (parts[0] === 'building') return { view: 'building' };
   if (parts[0] === 'floors' && parts[1] && parts[2] === 'replay') return { view: 'replay', id: parts[1] };
   if (parts[0] === 'floors' && parts[1] && parts[2] === 'apps' && parts[3]) return { view: 'app', floor: parts[1], app: parts[3] };
   if (parts[0] === 'floors' && parts[1]) return { view: 'floor', id: parts[1] };
@@ -89,6 +95,8 @@ export class AuspexApp extends LitElement {
   declare failure: string;
   declare showAll: boolean;
 
+  /** The plant room in a line, for the building's basement (admins). */
+  private plant?: { line: string; state: string };
   private apps = new Map<string, Loaded<FloorApp[]>>();
   private changes = new Map<string, Loaded<Changes>>();
   private names = new Map<string, string>();
@@ -158,6 +166,7 @@ export class AuspexApp extends LitElement {
     const place = this.place;
     const floorId = place.view === 'floor' || place.view === 'replay' ? place.id : place.view === 'app' ? place.floor : undefined;
     const floor = floorId ? this.floor(floorId) : undefined;
+    if (place.view === 'building' && this.admin && !this.plant) this.loadPlant();
     if (!floor?.open) return;
     this.loadApps(floor.id);
     if (place.view === 'floor' && floor.kind !== 'personal') this.loadChanges(floor.id);
@@ -178,6 +187,52 @@ export class AuspexApp extends LitElement {
       })
       .catch((err: Error) => this.apps.set(floor, err))
       .finally(() => this.requestUpdate());
+  }
+
+  private loadPlant() {
+    this.plant = { line: 'Checking each part…', state: 'checking' };
+    this.api
+      .status()
+      .then(({ components }) => {
+        const state = components.some((c) => c.state === 'down') ? 'down' : components.some((c) => c.state === 'slow') ? 'slow' : 'up';
+        this.plant = { line: plantLine(components), state };
+      })
+      .catch((err: Error) => (this.plant = { line: `Couldn’t check it: ${err.message}`, state: 'checking' }))
+      .finally(() => this.requestUpdate());
+  }
+
+  // ---- The building --------------------------------------------------------
+
+  private renderBuilding(map: PersonMap) {
+    const org = this.org!;
+    if (!mayWalk(map, this.userId, this.admin))
+      return html`<div class="ax-pane">
+        <ui-heading eyebrow="Auspex" heading="The building" summary="The whole org in cross-section: every team as a room above the teams inside it." size="l" level="1"></ui-heading>
+        <ui-state kind="empty" heading="The building is for leads and admins" body="It shows the shape of the whole org at once, which leads and admins look after. Where you are shows the same teams, and why you can or can’t go into each."></ui-state>
+        ${this.can(html`<ui-button kind="tertiary" @click=${() => this.go({ view: 'where' })}>See where you are</ui-button>`, 'Nothing here changes anything.')}
+      </div>`;
+    const teams = map.floors.filter((f) => f.kind === 'team');
+    const stand = teams.filter((f) => f.open).length;
+    const see = teams.length - stand;
+    const parts = [`go into ${stand}`, see ? `see into ${see}` : '', map.closed.length ? `find ${map.closed.length} closed` : ''].filter(Boolean);
+    const summary = `${org.name} has ${teams.length + map.closed.length} ${teams.length + map.closed.length === 1 ? 'team' : 'teams'}. You ${listOf(parts)}.`;
+    return html`<div class="ax-pane">
+      <ui-heading eyebrow="Auspex" heading="The building" summary=${summary} size="l" level="1"></ui-heading>
+      <div class="ax-map">
+        <auspex-building .map=${map} here=${this.here} ?admin=${this.admin} plant=${this.plant?.line ?? ''} plant-state=${this.plant?.state ?? 'checking'}
+          @auspex-floor=${(e: CustomEvent<{ id: string }>) => this.go({ view: 'floor', id: e.detail.id })} @auspex-plant=${() => this.go({ view: 'plant' })}></auspex-building>
+      </div>
+      <ul class="ax-key" aria-label="What the drawing means">
+        <li><i class="stand"></i>You can go here</li>
+        ${see ? html`<li><i class="see"></i>You can see in</li>` : nothing}
+        ${map.closed.length ? html`<li><i class="closed"></i>Closed to you</li>` : nothing}
+        <li><i class="stairs"></i>Your way up</li>
+      </ul>
+      ${this.can(
+        this.admin ? html`<ui-button kind="tertiary" @click=${() => this.go({ view: 'plant' })}>Open the plant room</ui-button>` : nothing,
+        html`Choose a room to see who’s there and which apps are on. A closed room still says <b>who to ask</b>. Only an admin changes who’s on a team.`,
+      )}
+    </div>`;
   }
 
   private loadChanges(floor: string) {
@@ -239,7 +294,7 @@ export class AuspexApp extends LitElement {
         ${map.closed.length ? html`<li><i class="closed"></i>Closed to you</li>` : nothing}
       </ul>
       ${this.can(
-        this.admin ? html`<ui-button kind="tertiary" @click=${() => this.go({ view: 'plant' })}>Open the plant room</ui-button>` : nothing,
+        mayWalk(map, this.userId, this.admin) ? html`<ui-button kind="tertiary" @click=${() => this.go({ view: 'building' })}>See it as a building</ui-button>` : nothing,
         map.closed.length
           ? html`Choose a floor to see who’s there and which apps you can use on it. A closed team says <b>who to ask</b> to be added.`
           : 'Choose a floor to see who’s there and which apps you can use on it.',
@@ -484,6 +539,7 @@ export class AuspexApp extends LitElement {
     const place = this.place;
     let body: TemplateResult;
     if (place.view === 'where') body = this.renderWhere(map);
+    else if (place.view === 'building') body = this.renderBuilding(map);
     else if (place.view === 'plant') body = html`<div class="ax-pane"><auspex-plant .api=${this.api} ?admin=${this.admin}></auspex-plant></div>`;
     else {
       const id = place.view === 'app' ? place.floor : place.id;
