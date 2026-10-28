@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appCredentialsFromEnv, appStorageFromEnv, commonSettings, loadConfigOrExit, publishFrontend, registerApp } from '@augur/service-kit';
+import { appCredentialsFromEnv, appStorageFromEnv, commonSettings, loadConfigOrExit, outboxRelay, publishFrontend, registerApp } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { PgAtlasStore } from './store.ts';
 
@@ -39,4 +39,12 @@ if (REGISTRY_URL && credentials) {
     .catch((err: Error) => app.log.error(err.message));
 } else {
   app.log.info('REGISTRY_URL or the app’s sign-in (SERVICE_CLIENT_SECRET) is not set, so Data Atlas is not in the catalogue (fine under pnpm dev:app).');
+}
+
+// Tell other apps what happened (atlas.entity.*), from the outbox, once each change has committed.
+const { EVENTS_URL } = process.env;
+if (EVENTS_URL && credentials) {
+  outboxRelay({ pool: PgAtlasStore.outboxPool(databaseUrl), eventsUrl: EVENTS_URL, credentials, onError: (err) => app.log.error({ err: (err as Error).message }, 'could not send events') }).start();
+} else {
+  app.log.info('EVENTS_URL or the app’s sign-in is not set, so Data Atlas’s events wait in its outbox.');
 }

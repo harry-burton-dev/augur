@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import { ago, type DialogSubmit, type ListItem, type SelectOption } from '@augur/ui-kit';
-import { AtlasError, detailsOf, entityLine, pathFor, typeTree, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
+import { AtlasError, detailsOf, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
 
 type Dialog = 'new' | 'edit' | 'retire';
 
@@ -250,6 +250,8 @@ export class AtlasApp extends LitElement {
         )}
         <dt>Kept on</dt>
         <dd>${e.floorName}</dd>
+        <dt>Why it shows here</dt>
+        <dd class=${this.place.page === 'entity' && this.place.explain ? 'atlas-explained' : ''}>${whyShown(e, this.floorKind, this.floorName)}</dd>
         <dt>Added</dt>
         <dd>${ago(e.createdAt)}</dd>
         ${type ? html`<dt>In the ontology</dt><dd>${type.packTerm} <span class="atlas-key">${type.pack.toUpperCase()}</span></dd>` : nothing}
@@ -315,6 +317,8 @@ export class AtlasApp extends LitElement {
         atlas-app .atlas-details dt { color: var(--ink-muted); font-size: var(--type-small); }
         atlas-app .atlas-details dd { margin: 0; font-variant-numeric: tabular-nums; }
         atlas-app .atlas-missing { color: var(--ink-muted); }
+        /* Asked why it shows (entity.explain): the answer is marked, not hidden among the rest. */
+        atlas-app .atlas-details dd.atlas-explained { border-left: 2px solid var(--green); padding-left: var(--space-3); }
         atlas-app .atlas-key { font-size: var(--type-small); color: var(--ink-muted); letter-spacing: 0.04em; }
         @media (max-width: 640px) { atlas-app .atlas-filters { grid-template-columns: minmax(0, 1fr); } }
       </style>

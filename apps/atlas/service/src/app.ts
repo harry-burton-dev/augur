@@ -40,7 +40,12 @@ const DETAILS = { type: 'object', maxProperties: 50, additionalProperties: { typ
 /** A team identity couldn't name: shown as is in lists, left unnamed in sentences. */
 const UNNAMED_TEAM = 'A team';
 const knownName = (name: string) => (name === UNNAMED_TEAM ? undefined : name);
+/** Entity links as apps send them: only the id is read; the rest of an EntityRef may come along. */
+const REFS = { type: 'array', minItems: 1, maxItems: 200, items: { type: 'object', properties: { id: { type: 'string', minLength: 1, maxLength: 64 } }, required: ['id'] } } as const;
 const ID_PARAMS = { type: 'object', properties: { id: { type: 'string', maxLength: 64 } }, required: ['id'] } as const;
+
+/** An entity as a link other apps keep (the SDK's EntityRef). */
+const refOf = (e: Entity) => ({ kind: 'entity' as const, id: e.id, type: e.type, label: e.label });
 
 /** A type and every type below it. */
 const withSubtypes = (ontology: Ontology, type: string) => {
@@ -141,7 +146,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
         return store.ontology();
       });
 
-      app.get<{ Querystring: { q?: string; type?: string; limit?: number; offset?: number } }>(
+      app.get<{ Querystring: { q?: string; type?: string[]; limit?: number; offset?: number } }>(
         '/entities',
         {
           schema: {
@@ -149,7 +154,8 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
               type: 'object',
               properties: {
                 q: { type: 'string', maxLength: 200 },
-                type: { type: 'string', maxLength: 64 },
+                // One kind or several (?type=vessel&type=port); each brings its subkinds.
+                type: { type: 'array', maxItems: 20, items: { type: 'string', maxLength: 64 } },
                 limit: { type: 'integer', minimum: 1, maximum: 200 },
                 offset: { type: 'integer', minimum: 0 },
               },
@@ -160,7 +166,8 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
           const caller = onFloor(req, reply);
           if (!caller) return reply;
           const { floors } = await sight(caller);
-          const types = req.query.type ? withSubtypes(await store.ontology(), req.query.type) : undefined;
+          const ontology = req.query.type?.length ? await store.ontology() : undefined;
+          const types = ontology && [...new Set(req.query.type!.flatMap((t) => withSubtypes(ontology, t)))];
           const { entities, total } = await store.entities({ floors, q: req.query.q, types, limit: req.query.limit, offset: req.query.offset });
           const named = await nameFloors(caller, floors);
           // Which floors' knowledge this is, by name, so the app can say so rather than leave people guessing.
@@ -230,6 +237,77 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
         }
         return { caller, entity };
       };
+
+      /**
+       * For apps that keep entity links (SDK EntityRef): what each id is now, as the caller sees it from
+       * where they stand, so a cached name can be brought up to date. One the caller can't see says why,
+       * rather than vanishing; one that never was says so.
+       */
+      app.post<{ Body: { refs: { id: string }[] } }>(
+        '/entities/resolve',
+        { schema: { body: { type: 'object', properties: { refs: REFS }, required: ['refs'], additionalProperties: false } } },
+        async (req, reply) => {
+          const caller = onFloor(req, reply);
+          if (!caller) return reply;
+          const ids = [...new Set(req.body.refs.map((r) => r.id))];
+          const found = new Map((await store.entitiesById(ids)).map((e) => [e.id, e]));
+          const { principals, floors } = await sight(caller);
+          const named = await nameFloors(caller, [...found.values()].map((e) => e.floor));
+          return {
+            entities: ids.map((id) => {
+              const e = found.get(id);
+              if (!e) return { id, missing: true, message: 'There’s no such entity.' };
+              if (!floors.includes(e.floor)) return { id, hidden: true, ...unseen(e.floor, principals, caller.id, knownName(named(e.floor))) };
+              return { id, ref: refOf(e), state: e.state, floorName: named(e.floor) };
+            }),
+          };
+        },
+      );
+
+      /**
+       * The part of the graph around some entities, as seen from where the caller stands: for Data Atlas's
+       * explorer and the intent app's briefing context. Entities are linked by facts, which come with
+       * observations; until then the answer is the seeds alone, with no edges.
+       */
+      app.post<{ Body: { seeds: { id: string }[]; depth?: number; types?: string[]; relations?: string[]; asOf?: string; limitPerNode?: number } }>(
+        '/subgraph',
+        {
+          schema: {
+            body: {
+              type: 'object',
+              properties: {
+                seeds: { ...REFS, maxItems: 50 },
+                depth: { type: 'integer', minimum: 0, maximum: 3 },
+                types: { type: 'array', maxItems: 50, items: { type: 'string', maxLength: 64 } },
+                relations: { type: 'array', maxItems: 50, items: { type: 'string', maxLength: 64 } },
+                asOf: { type: 'string', format: 'date-time' },
+                limitPerNode: { type: 'integer', minimum: 1, maximum: 200 },
+              },
+              required: ['seeds'],
+              additionalProperties: false,
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = onFloor(req, reply);
+          if (!caller) return reply;
+          const ids = [...new Set(req.body.seeds.map((r) => r.id))];
+          const found = await store.entitiesById(ids);
+          const { principals, floors } = await sight(caller);
+          const named = await nameFloors(caller, found.map((e) => e.floor));
+          const shown = found.filter((e) => floors.includes(e.floor));
+          const ontology = req.body.types?.length ? await store.ontology() : undefined;
+          const types = ontology && new Set(req.body.types!.flatMap((t) => withSubtypes(ontology, t)));
+          return {
+            nodes: shown.filter((e) => !types || types.has(e.type)).map((e) => ({ ref: refOf(e), state: e.state, floorName: named(e.floor), depth: 0 })),
+            edges: [],
+            more: [],
+            // Seeds that don't show from here, and why: left out of the graph, never silently.
+            unseen: found.filter((e) => !floors.includes(e.floor)).map((e) => ({ id: e.id, ...unseen(e.floor, principals, caller.id, knownName(named(e.floor))) })),
+            missing: ids.filter((id) => !found.some((e) => e.id === id)),
+          };
+        },
+      );
 
       app.get<{ Params: { id: string } }>('/entities/:id', { schema: { params: ID_PARAMS } }, async (req, reply) => {
         const found = await seen(req, reply, req.params.id);

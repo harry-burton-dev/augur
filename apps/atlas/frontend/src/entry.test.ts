@@ -1,8 +1,9 @@
 import { createEventBus, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { entityLine, placeFor, pathFor, typeTree, type Entity, type Ontology } from './api.js';
+import { entityLine, placeFor, pathFor, typeTree, whyShown, type Entity, type Ontology } from './api.js';
 import type { AtlasApp } from './atlas-app.js';
-import app, { addressFor } from './entry.js';
+import { kindsOffered } from './atlas-picker.js';
+import app, { addressFor, placeForIntent } from './entry.js';
 
 const floor: Workspace = { id: 't-mar', kind: 'team', name: 'Maritime desk', slug: 'maritime', path: [], role: 'member' };
 
@@ -43,7 +44,7 @@ const TERN: Entity = {
   can: { edit: false, retire: false, why: 'It’s kept on the org floor: go there to change it.' },
 };
 
-const ctx = (fetch: MountContext['fetch'], path = '/'): MountContext => ({
+const ctx = (fetch: MountContext['fetch'], path = '/', more: Partial<MountContext> = {}): MountContext => ({
   user: { id: 'u1', name: 'Sam Okafor', departments: [], roles: [] },
   getToken: async () => 't',
   bus: createEventBus(),
@@ -54,6 +55,7 @@ const ctx = (fetch: MountContext['fetch'], path = '/'): MountContext => ({
   workspace: floor,
   getWorkspace: () => floor,
   fetch,
+  ...more,
 });
 
 const answering = (routes: Record<string, () => Response>) =>
@@ -65,7 +67,7 @@ const answering = (routes: Record<string, () => Response>) =>
 const settle = async (el: HTMLElement) => {
   for (let i = 0; i < 5; i++) {
     await new Promise((r) => setTimeout(r, 0));
-    await (el.querySelector('atlas-app') as AtlasApp | null)?.updateComplete;
+    await ((el.querySelector('atlas-app') ?? el.querySelector('atlas-picker')) as AtlasApp | null)?.updateComplete;
   }
 };
 
@@ -89,6 +91,67 @@ describe('places', () => {
       ['vessel', 2],
     ]);
     expect(entityLine(ONTOLOGY, TERN)).toBe('Vessel · IMO number 9400117 · Kept on Maritime desk');
+  });
+});
+
+describe('entity intents', () => {
+  const REF = { kind: 'entity', id: 'ent_01JBX7Q2W3E4R5T6Y7V8H9Q0PA', type: 'vessel', label: 'Northern Tern' };
+
+  it('starts where entity.open and entity.explain ask, and nowhere for anything else', () => {
+    expect(placeForIntent({ type: 'entity.open', payload: REF })).toEqual({ page: 'entity', id: REF.id });
+    expect(placeForIntent({ type: 'entity.explain', payload: REF })).toEqual({ page: 'entity', id: REF.id, explain: true });
+    expect(placeForIntent({ type: 'entity.open', payload: { id: 'x' } })).toBeUndefined();
+    expect(placeForIntent({ type: 'document.open', payload: REF })).toBeUndefined();
+  });
+
+  it('says why an entity shows from where you stand', () => {
+    expect(whyShown({ floor: 'org', floorName: 'Org' }, 'team', 'Maritime desk')).toMatch(/shows on every floor/);
+    expect(whyShown({ floor: 'tree:t-mar', floorName: 'Maritime desk' }, 'team', 'Maritime desk')).toBe('It’s kept on this floor.');
+    expect(whyShown({ floor: 'tree:t-ops', floorName: 'Operations' }, 'team', 'Maritime desk')).toMatch(/Operations, a floor above this one/);
+    expect(whyShown({ floor: 'tree:t-ops', floorName: 'Operations' }, 'personal', 'You')).toMatch(/Operations, one of your teams/);
+  });
+
+  it('offers the kinds asked for, with the kinds below them', () => {
+    expect(kindsOffered(ONTOLOGY, ['vehicle']).map((t) => t.type.key)).toEqual(['vehicle', 'vessel']);
+    expect(kindsOffered(ONTOLOGY, []).length).toBe(3);
+    expect(kindsOffered(ONTOLOGY, ['nothing'])).toEqual([]);
+  });
+
+  it('picks one entity for another app, answering with an EntityRef', async () => {
+    const fetch = answering({
+      '/api/atlas/v1/ontology': () => Response.json(ONTOLOGY),
+      '/api/atlas/v1/entities': () => Response.json({ entities: [TERN], total: 1, floors: ['org', 'tree:t-mar'], seeing: ['Org', 'Maritime desk'] }),
+    });
+    const respond = vi.fn();
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(fetch, '/', { intent: { type: 'entity.pick', payload: { purpose: 'Bind to this intent', types: ['vessel'] } }, reply: { respond, cancel: vi.fn() } }));
+    await settle(el);
+    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Bind to this intent');
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('type=vessel'), expect.anything());
+    const list = el.querySelector('ui-list')!;
+    list.dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id: TERN.id } } }));
+    expect(respond).toHaveBeenCalledWith({ kind: 'entity', id: TERN.id, type: 'vessel', label: 'Northern Tern' });
+  });
+
+  it('gathers several when asked for more than one, and says what it needs to go on', async () => {
+    const PORT: Entity = { ...TERN, id: 'ent_02', type: 'vessel', label: 'Grey Gull' };
+    const fetch = answering({
+      '/api/atlas/v1/ontology': () => Response.json(ONTOLOGY),
+      '/api/atlas/v1/entities': () => Response.json({ entities: [TERN, PORT], total: 2, floors: ['org'], seeing: ['Org'] }),
+    });
+    const respond = vi.fn();
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(fetch, '/', { intent: { type: 'entity.pick', payload: { multiple: true } }, reply: { respond, cancel: vi.fn() } }));
+    await settle(el);
+    const pick = () => [...el.querySelectorAll('ui-button')].find((b) => b.textContent?.startsWith('Pick')) as HTMLElement & { disabled: boolean };
+    expect(pick().disabled).toBe(true);
+    expect(el.textContent).toMatch(/Pick at least one to go on/);
+    const list = el.querySelector('ui-list')!;
+    for (const id of [TERN.id, PORT.id]) list.dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id } } }));
+    await settle(el);
+    expect(pick().textContent).toBe('Pick these 2');
+    pick().click();
+    expect(respond).toHaveBeenCalledWith([expect.objectContaining({ id: TERN.id }), expect.objectContaining({ id: PORT.id })]);
   });
 });
 

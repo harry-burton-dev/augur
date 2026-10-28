@@ -92,8 +92,11 @@ export class AtlasApi {
     return this.call<Ontology>('GET', '/ontology');
   }
 
-  entities(query: { q?: string; type?: string; limit?: number; offset?: number } = {}) {
-    const params = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]));
+  /** What shows from this floor; `type` takes one kind or several, each with its subkinds. */
+  entities(query: { q?: string; type?: string | string[]; limit?: number; offset?: number } = {}) {
+    const params = new URLSearchParams(
+      Object.entries(query).flatMap(([k, v]) => (v === undefined || v === '' ? [] : (Array.isArray(v) ? v : [v]).map((one) => [k, String(one)]))),
+    );
     return this.call<{ entities: Entity[]; total: number; floors: string[]; seeing: string[] }>('GET', `/entities${params.size ? `?${params}` : ''}`);
   }
 
@@ -115,7 +118,7 @@ export class AtlasApi {
 }
 
 /** Where the person is in Data Atlas, as its address has it. */
-export type Place = { page: 'entities' } | { page: 'new' } | { page: 'entity'; id: string };
+export type Place = { page: 'entities' } | { page: 'new' } | { page: 'entity'; id: string; explain?: boolean };
 
 export const placeFor = (path: string): Place => {
   const [first, second] = path.split('/').filter(Boolean).map(decodeURIComponent);
@@ -156,4 +159,14 @@ export const entityLine = (ontology: Ontology | undefined, e: Entity) => {
         .map((d) => `${d.label} ${e.details[d.key]}`)
     : [];
   return [type?.label ?? e.type, ...keys, `Kept on ${e.floorName}`].join(' · ');
+};
+
+/** Why an entity shows from the floor the person stands on, in a sentence (explain, never hide). */
+export const whyShown = (e: Pick<Entity, 'floor' | 'floorName'>, floorKind: string, floorName: string) => {
+  if (e.floor === 'org') return 'It’s kept on the org floor, and what’s on the org floor shows on every floor.';
+  if (e.floor.startsWith('person:')) return 'It’s kept on your own floor: only you see it.';
+  const team = e.floorName === 'A team' ? 'a team' : e.floorName;
+  if (floorKind === 'personal') return `It’s kept on ${team}, one of your teams. Your own floor shows everything you can reach.`;
+  if (floorKind === 'team' && e.floorName === floorName) return 'It’s kept on this floor.';
+  return `It’s kept on ${team}, a floor above this one, and what’s kept above shows below.`;
 };

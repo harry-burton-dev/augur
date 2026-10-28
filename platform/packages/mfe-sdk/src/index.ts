@@ -15,4 +15,15 @@ export {
   type DocumentRef,
   type LibraryRef,
 } from './documents.js';
+export {
+  ENTITY_EXPLAIN,
+  ENTITY_OPEN,
+  ENTITY_PICK,
+  explainEntity,
+  isEntityRef,
+  openEntity,
+  pickEntities,
+  type EntityPick,
+  type EntityRef,
+} from './entities.js';
 export { SDK_VERSION } from './version.js';

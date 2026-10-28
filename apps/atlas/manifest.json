@@ -17,9 +17,15 @@
   },
   "scopes": [
     "audit:write",
-    "people:read"
+    "people:read",
+    "events:publish"
   ],
   "orbit": false,
+  "handles": [
+    "entity.open",
+    "entity.pick",
+    "entity.explain"
+  ],
   "menu": [
     {
       "id": "atlas",

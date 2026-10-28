@@ -205,6 +205,29 @@ try {
 
 An app that handles `document.open` finds a `DocumentRef` in `ctx.intent.payload`. One that handles `document.pick` gets a `DocumentPick` there and answers with `ctx.reply.respond(ref)`; `pickDocument` checks the answer is a `DocumentRef`.
 
+### Entities from other apps
+
+`entity.open`, `entity.pick` and `entity.explain` are the standard entity intents (SDK 1.5): the real things an organisation knows about, such as a ship, a port or a person. Data Atlas (`atlas`) handles all three. An app that points at things keeps an `EntityRef` and doesn't need to know which app keeps them:
+
+```ts
+import { explainEntity, isIntentCancelled, openEntity, pickEntities } from '@augur/mfe-sdk';
+
+// Ask the person for some: always a checked list, of one unless multiple is set.
+try {
+  const [ship] = await pickEntities(ctx, { purpose: 'Bind to this intent', types: ['vessel'] });
+  keep(ship); // { kind: 'entity', id: 'ent_…', type: 'vessel', label?, at? }
+} catch (err) {
+  if (!isIntentCancelled(err)) throw err;
+}
+
+await openEntity(ctx, ship); // its page in Data Atlas
+await explainEntity(ctx, ship); // the same, with why it shows from this floor marked
+```
+
+`types` takes kinds from the ontology, each with the kinds below it (`vehicle` brings vessels and aircraft). The `label` in a ref is what it was called when kept, so show it, but refresh it with Data Atlas's `POST /api/atlas/v1/entities/resolve` (`{ refs }`), which answers for each one as the person sees it from their floor: its current ref, or `hidden` with the reason and what to do, or `missing`. Data Atlas tells followers `atlas.entity.created`, `.changed` and `.retired`, ids only.
+
+When no app the person can open handles `entity.pick`, `pickEntities` rejects with an `IntentError`: keep the control that would use it in sight, disabled, saying so.
+
 ### Sharing
 
 An app that lets people share things with each other asks identity two things, as itself, with the `people:read` scope.

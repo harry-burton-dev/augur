@@ -146,6 +146,7 @@ describe.runIf(process.env.DATABASE_URL)('Data Atlas', () => {
       expect(await find('q=XXHAL')).toEqual(['Port Halden']);
       expect(await find('type=vehicle')).toEqual(['Northern Tern']);
       expect(await find('type=agent')).toEqual(['Captain R. Imrie']);
+      expect(await find('type=agent&type=vessel')).toEqual(['Captain R. Imrie', 'Northern Tern']);
     });
   });
 
@@ -172,6 +173,53 @@ describe.runIf(process.env.DATABASE_URL)('Data Atlas', () => {
     expect(audited.at(-1)).toMatchObject({ action: 'entity.retired', target: kim.id });
     const again = await call('POST', '/v1/entities', on('ana', team('t-ops')), { type: 'vessel', label: 'Grey Heron', details: { imo: '9111111' } });
     expect(again.statusCode).toBe(201);
+  });
+
+  it('resolves entity links as the caller sees them, saying why one doesn’t show', async () => {
+    const add = async (caller: Caller, label: string) => (await call('POST', '/v1/entities', caller, { type: 'port', label })).json();
+    const felix = await add(on('ana', ORG), 'Felixstowe');
+    const ledger = await add(on('lee', team('t-fin')), 'Finance port');
+    const res = await call('POST', '/v1/entities/resolve', on('sam', team('t-mar')), {
+      refs: [{ kind: 'entity', id: felix.id, type: 'port', label: 'Old name' }, { id: ledger.id }, { id: 'ent_01JBX7Q2W3E4R5T6Y7V8H9Q0PA' }, { id: felix.id }],
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().entities).toEqual([
+      { id: felix.id, ref: { kind: 'entity', id: felix.id, type: 'port', label: 'Felixstowe' }, state: 'active', floorName: 'Org' },
+      { id: ledger.id, hidden: true, reason: 'kept', floor: 'tree:t-fin', message: expect.stringMatching(/Finance floor.*Ask one of its leads/) },
+      { id: 'ent_01JBX7Q2W3E4R5T6Y7V8H9Q0PA', missing: true, message: 'There’s no such entity.' },
+    ]);
+    const empty = await call('POST', '/v1/entities/resolve', on('sam', team('t-mar')), { refs: [] });
+    expect(empty.statusCode).toBe(400);
+  });
+
+  it('answers a subgraph from where the caller stands, with the seeds it can’t show and why', async () => {
+    const felix = (await call('POST', '/v1/entities', on('ana', ORG), { type: 'port', label: 'Harwich' })).json();
+    const mine = (await call('POST', '/v1/entities', on('sam', own('sam')), { type: 'person', label: 'A contact' })).json();
+    const res = await call('POST', '/v1/subgraph', on('sam', ORG), { seeds: [{ id: felix.id }, { id: mine.id }, { id: 'ent_nope' }], depth: 2 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      nodes: [{ ref: { kind: 'entity', id: felix.id, type: 'port', label: 'Harwich' }, state: 'active', floorName: 'Org', depth: 0 }],
+      edges: [],
+      more: [],
+      unseen: [{ id: mine.id, reason: 'elsewhere', floor: 'person:sam', message: expect.any(String) }],
+      missing: ['ent_nope'],
+    });
+    const ports = await call('POST', '/v1/subgraph', on('sam', own('sam')), { seeds: [{ id: felix.id }, { id: mine.id }], types: ['facility'] });
+    expect(ports.json().nodes.map((n: { ref: { id: string } }) => n.ref.id)).toEqual([felix.id]);
+    const deep = await call('POST', '/v1/subgraph', on('sam', ORG), { seeds: [{ id: felix.id }], depth: 4 });
+    expect(deep.statusCode).toBe(400);
+  });
+
+  it('tells other apps what changed, by id only, once the change commits', async () => {
+    const before = (await store.unsent()).length;
+    const gull = (await call('POST', '/v1/entities', on('sam', team('t-mar')), { type: 'vessel', label: 'Gull' })).json();
+    await call('PATCH', `/v1/entities/${gull.id}`, on('sam', team('t-mar')), { label: 'Grey Gull' });
+    await call('POST', `/v1/entities/${gull.id}/retire`, on('sam', team('t-mar')));
+    const refused = await call('POST', '/v1/entities', on('sam', team('t-mar')), { type: 'vessel', label: 'Copy', details: { imo: '9400117' } });
+    expect(refused.statusCode).toBe(409);
+    expect((await store.unsent()).slice(before)).toEqual(
+      ['created', 'changed', 'retired'].map((what) => ({ topic: `atlas.entity.${what}`, workspace: 't-mar', payload: { entity: gull.id, type: 'vessel' } })),
+    );
   });
 
   it('needs a floor to stand on', async () => {
