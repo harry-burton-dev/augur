@@ -49,6 +49,42 @@ export const styles = html`<style>
   .auspex-map .node:hover .name, .auspex-map .node:focus-visible .name { text-decoration: underline; text-underline-offset: 4px; }
   @keyframes ax-ping { from { transform: scale(1); opacity: 0.7; } to { transform: scale(1.8); opacity: 0; } }
 
+  /* The building: the org as a cross-section */
+  .auspex-building { width: 100%; height: auto; display: block; font-family: var(--font-sans); min-width: 560px; }
+  .auspex-building .room { cursor: pointer; outline: none; }
+  .auspex-building .roof { fill: url(#auspex-roof); stroke: var(--floor-org-high); stroke-width: 1; }
+  .auspex-building .org .nm { fill: var(--ink); font-size: var(--type-body); }
+  .auspex-building .org .ct { fill: var(--ink); font-size: var(--type-small); opacity: 0.8; }
+  .auspex-building .wall { stroke-width: 1.5; transition: filter var(--motion-quick) var(--ease-out); }
+  .auspex-building .stand .wall { fill: url(#auspex-room); stroke: var(--floor-team-high); opacity: 0.55; }
+  .auspex-building .stand.lit .wall { opacity: 1; }
+  .auspex-building .see .wall { fill: var(--slate-deep); stroke: var(--floor-team-high); stroke-dasharray: 4 3; }
+  .auspex-building .closed .wall { fill: none; stroke: var(--hairline-strong); }
+  .auspex-building .here .wall { stroke: var(--green); stroke-width: 2.5; }
+  .auspex-building .nm { fill: var(--ink); font-size: var(--type-meta); }
+  .auspex-building .stand .nm, .auspex-building .stand .ct { fill: var(--slate-deep); }
+  .auspex-building .closed .nm { fill: var(--ink-muted); }
+  .auspex-building .ct { fill: var(--ink-muted); font-size: var(--type-small); }
+  .auspex-building .lock { color: var(--ink-muted); }
+  .auspex-building .lock path, .auspex-building .lock rect, .auspex-building .lock circle { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .auspex-building .room:hover .wall, .auspex-building .room:focus-visible .wall { filter: brightness(1.15); }
+  .auspex-building .room:focus-visible .wall, .auspex-building .room:focus-visible .roof, .auspex-building .room:focus-visible .door, .auspex-building .basement:focus-visible rect { stroke: var(--focus); stroke-width: 2.5; }
+  .auspex-building .stair { fill: none; stroke: var(--green); stroke-width: 2; stroke-linejoin: round; pointer-events: none; }
+  .auspex-building .slab { stroke: var(--hairline-strong); stroke-width: 3; }
+  .auspex-building .door { fill: none; stroke: var(--hairline-strong); stroke-width: 1; }
+  .auspex-building .door.mine { fill: url(#auspex-door); stroke: var(--green); stroke-width: 2; }
+  .auspex-building .ground-label { fill: var(--ink-muted); font-size: var(--type-small); }
+  .auspex-building .basement { cursor: pointer; outline: none; }
+  .auspex-building .basement rect { fill: var(--surface-inset); stroke: var(--hairline); }
+  .auspex-building .basement:hover rect { fill: var(--surface-raised); }
+  .auspex-building .basement .nm { font-size: var(--type-meta); }
+  .auspex-building .basement .ct { fill: var(--ink-muted); }
+  .auspex-building .basement .lamp { fill: var(--ink-muted); }
+  .auspex-building .basement.up .lamp { fill: var(--success); }
+  .auspex-building .basement.slow .lamp { fill: var(--warning); }
+  .auspex-building .basement.down .lamp { fill: var(--danger); }
+  .ax-key .stairs { border-radius: 0; height: 10px; border-left: 2px solid var(--green); border-bottom: 2px solid var(--green); }
+
   /* What the marks mean */
   .ax-key { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); margin: 0; padding: 0; list-style: none; }
   .ax-key li { display: inline-flex; align-items: center; gap: var(--space-2); }
@@ -193,6 +229,19 @@ export const styles = html`<style>
   .ax-machine.down { border-color: var(--danger); }
   .ax-machine.down .lamp { background: var(--danger); border-color: var(--danger); animation: ax-blink var(--motion-ping) var(--ease-ping) infinite; }
   .ax-machine.down .st { color: var(--danger); }
+  .ax-jobs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-3); }
+  .ax-job { padding: var(--space-4); border-radius: var(--radius-inset); background: var(--surface-inset); display: flex; flex-direction: column; gap: var(--space-4); }
+  .ax-job .t1 { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); }
+  .ax-track { margin: 0; padding: 0; list-style: none; display: flex; }
+  .ax-track .stop { flex: 1; display: flex; flex-direction: column; align-items: center; gap: var(--space-2); position: relative; min-width: 0; }
+  .ax-track .stop:not(:first-child)::before { content: ""; position: absolute; top: 6px; right: 50%; width: 100%; border-top: 2px solid var(--hairline-strong); }
+  .ax-track .stop.done:not(:first-child)::before, .ax-track .stop.running:not(:first-child)::before, .ax-track .stop.failed:not(:first-child)::before { border-color: var(--success); }
+  .ax-track .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--hairline-strong); background: var(--slate-deep); box-sizing: border-box; position: relative; z-index: 1; }
+  .ax-track .done .dot { background: var(--success); border-color: var(--success); }
+  .ax-track .running .dot { border-color: var(--green); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 25%, transparent); animation: ax-blink var(--motion-ping) var(--ease-ping) infinite; }
+  .ax-track .failed .dot { background: var(--danger); border-color: var(--danger); }
+  .ax-track .lb { font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); text-align: center; overflow-wrap: anywhere; }
+  .ax-track .running .lb, .ax-track .failed .lb { color: var(--ink); }
   @keyframes ax-blink { 50% { opacity: 0.35; } }
 
   /* Home's card */
@@ -209,7 +258,7 @@ export const styles = html`<style>
   @media (prefers-reduced-motion: reduce) {
     .auspex-map .halo.ping { animation: none; display: none; }
     .auspex-map .mark { transition: none; }
-    .ax-rday { transition: none; }
-    .ax-machine.down .lamp { animation: none; }
+    .ax-rday, .auspex-building .wall { transition: none; }
+    .ax-machine.down .lamp, .ax-track .running .dot { animation: none; }
   }
 </style>`;

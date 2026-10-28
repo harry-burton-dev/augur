@@ -58,6 +58,14 @@
           "keywords": "people apps members leads"
         },
         {
+          "id": "building",
+          "label": "The building",
+          "icon": "org",
+          "path": "/building",
+          "detail": "The whole org in cross-section (for leads and admins)",
+          "keywords": "cutaway building teams structure shape lead admin"
+        },
+        {
           "id": "plant",
           "label": "Plant room",
           "icon": "server",
