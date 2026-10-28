@@ -746,6 +746,21 @@ export class PgAtlasStore {
     return rows.map(fromFactRow);
   }
 
+  /** How many links each of these entities has, as the query has them in time: how strongly each is tied in. */
+  async linkCounts(entities: readonly string[], { floors, at, known }: FactQuery): Promise<Map<string, number>> {
+    if (!entities.length) return new Map();
+    const now = new Date().toISOString();
+    const { rows } = await this.pool.query<{ id: string; n: string }>(
+      `select id, count(*) as n from (
+         select entity as id from atlas.facts where entity = any($1) and target is not null and floor = any($4) and ${FACT_IN_TIME}
+         union all
+         select target from atlas.facts where target = any($1) and floor = any($4) and ${FACT_IN_TIME}
+       ) ends group by id`,
+      [entities, at ?? now, known ?? now, floors],
+    );
+    return new Map(rows.map((r) => [r.id, Number(r.n)]));
+  }
+
   /** Every record a fact's line has had, oldest first: the recorded clock, for "as known on". */
   async factHistory(entity: string, floors: readonly string[]): Promise<Fact[]> {
     const { rows } = await this.pool.query<FactRow>(

@@ -203,11 +203,12 @@ describe.runIf(process.env.DATABASE_URL)('Data Atlas', () => {
       nodes: [{ ref: { kind: 'entity', id: felix.id, type: 'port', label: 'Harwich' }, state: 'active', floorName: 'Org', depth: 0 }],
       edges: [],
       more: [],
-      unseen: [{ id: mine.id, reason: 'elsewhere', floor: 'person:sam', message: expect.any(String) }],
+      unseen: [{ id: mine.id, reason: 'elsewhere', floor: 'person:sam', message: expect.any(String), near: [] }],
       missing: ['ent_nope'],
     });
+    // Kinds narrow what the walk reaches; the seeds it starts from still show.
     const ports = await call('POST', '/v1/subgraph', on('sam', own('sam')), { seeds: [{ id: felix.id }, { id: mine.id }], types: ['facility'] });
-    expect(ports.json().nodes.map((n: { ref: { id: string } }) => n.ref.id)).toEqual([felix.id]);
+    expect(ports.json().nodes.map((n: { ref: { id: string } }) => n.ref.id)).toEqual([felix.id, mine.id]);
     const deep = await call('POST', '/v1/subgraph', on('sam', ORG), { seeds: [{ id: felix.id }], depth: 4 });
     expect(deep.statusCode).toBe(400);
   });

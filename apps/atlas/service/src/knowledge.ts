@@ -489,8 +489,10 @@ const ownFact = async (atlas: Atlas, req: FastifyRequest, reply: FastifyReply, i
 /**
  * The graph around some entities from where the caller stands: links true at
  * `asOf`, out to `depth` steps, at most `limitPerNode` links from each entity
- * (the rest counted in `more`). An entity at the far end of a link that doesn't
- * show from here is listed in `unseen` with why, never silently dropped.
+ * (the rest counted in `more`, strongest links kept first, and the links past
+ * the last ring counted there too). An entity at the far end of a link that
+ * doesn't show from here is listed in `unseen` with why and what it is near,
+ * never silently dropped. Each link says how many open disputes it has.
  */
 export const subgraph = async (
   atlas: Atlas,
@@ -508,25 +510,39 @@ export const subgraph = async (
   const keeps = (e: Entity) => shows(e) && (!kinds || kinds.has(e.type));
 
   const nodes = new Map<string, number>();
-  for (const id of ids) if (entities.get(id) && keeps(entities.get(id)!)) nodes.set(id, 0);
+  // The seeds always show when they can be seen: `types` narrows what the walk reaches, not where it starts.
+  for (const id of ids) if (entities.get(id) && shows(entities.get(id)!)) nodes.set(id, 0);
   const edges = new Map<string, Fact>();
-  const more: { entity: string; relation: string; count: number }[] = [];
+  const more: { entity: string; relation: string; direction: 'out' | 'in'; count: number }[] = [];
   const hidden = new Set(ids.filter((id) => entities.get(id) && !shows(entities.get(id)!)));
+  // Which shown entities each hidden one is linked to, so the explorer can say "1 hidden" beside them.
+  const near = new Map<string, Set<string>>();
 
   let frontier = [...nodes.keys()];
-  for (let step = 1; step <= depth && frontier.length; step++) {
+  // One step past `depth` only counts: what lies beyond the last ring is folded into `more`, so the explorer can offer it.
+  for (let step = 1; step <= depth + 1 && frontier.length; step++) {
+    const beyond = step > depth;
     const links = (await store.facts(frontier, { floors: sight.floors, at })).filter((f) => f.target && (!relations?.length || relations.includes(f.property)));
     const ends = links.flatMap((f) => [f.entity, f.target!]).filter((id) => !entities.has(id));
     for (const e of await store.entitiesById([...new Set(ends)])) entities.set(e.id, e);
+    // The strongest links first: those to the ends most linked from here.
+    const degree = await store.linkCounts([...new Set(links.flatMap((f) => [f.entity, f.target!]))], { floors: sight.floors, at });
     const next: string[] = [];
     for (const id of frontier) {
+      const otherOf = (f: Fact) => (f.entity === id ? f.target! : f.entity);
       const own = links.filter((f) => f.entity === id || f.target === id);
-      const shown = own.filter((f) => {
-        const other = entities.get(f.entity === id ? f.target! : f.entity);
-        if (other && !shows(other)) hidden.add(other.id);
-        return other && keeps(other);
-      });
-      for (const f of shown.slice(0, limitPerNode)) {
+      const shown = own
+        .filter((f) => {
+          const other = entities.get(otherOf(f));
+          if (other && !shows(other)) {
+            hidden.add(other.id);
+            near.set(other.id, (near.get(other.id) ?? new Set()).add(id));
+          }
+          return other && keeps(other);
+        })
+        .sort((a, b) => (degree.get(otherOf(b)) ?? 0) - (degree.get(otherOf(a)) ?? 0) || a.property.localeCompare(b.property) || a.id.localeCompare(b.id));
+      const room = beyond ? 0 : limitPerNode;
+      for (const f of shown.slice(0, room)) {
         edges.set(f.id, f);
         const other = f.entity === id ? f.target! : f.entity;
         if (!nodes.has(other)) {
@@ -534,14 +550,29 @@ export const subgraph = async (
           next.push(other);
         }
       }
+      // Counted by relation and which way it points, so "+3 operates" and "+1 operated by" read right.
       const left = new Map<string, number>();
-      for (const f of shown.slice(limitPerNode)) left.set(f.property, (left.get(f.property) ?? 0) + 1);
-      for (const [relation, count] of left) more.push({ entity: id, relation, count });
+      for (const f of shown.slice(room)) {
+        if (beyond && nodes.has(otherOf(f))) continue;
+        const key = `${f.property} ${f.entity === id ? 'out' : 'in'}`;
+        left.set(key, (left.get(key) ?? 0) + 1);
+      }
+      for (const [key, count] of left) {
+        const [relation, direction] = key.split(' ') as [string, 'out' | 'in'];
+        more.push({ entity: id, relation, direction, count });
+      }
     }
     frontier = next;
   }
   // An edge counts only when both its ends are in the answer.
   const kept = [...edges.values()].filter((f) => nodes.has(f.entity) && nodes.has(f.target!));
+  // Open disputes count on a link as they would on the entity page: those raised where the caller can see, or on the caller's floor's own facts.
+  const here = floorPrincipal(caller.id, caller.workspace);
+  const disputed = new Map<string, number>();
+  for (const d of await store.openDisputes(kept.map((f) => f.id))) {
+    const fact = edges.get(d.fact)!;
+    if (sight.floors.includes(d.floor) || fact.floor === here) disputed.set(d.fact, (disputed.get(d.fact) ?? 0) + 1);
+  }
   const named = await atlas.nameFloors(caller, [...[...nodes.keys()].map((id) => entities.get(id)!.floor), ...kept.map((f) => f.floor)]);
   const hiddenNamed = await atlas.nameFloors(caller, [...hidden].map((id) => entities.get(id)!.floor));
   return {
@@ -549,10 +580,14 @@ export const subgraph = async (
       const e = entities.get(id)!;
       return { ref: refOf(e), state: e.state, floorName: named(e.floor), depth: d };
     }),
-    edges: kept.map((f) => ({ id: f.id, from: f.entity, to: f.target!, relation: f.property, floorName: named(f.floor), ...(f.validFrom ? { validFrom: f.validFrom } : {}), ...(f.validTo ? { validTo: f.validTo } : {}) })),
+    edges: kept.map((f) => ({ id: f.id, from: f.entity, to: f.target!, relation: f.property, floorName: named(f.floor), ...(f.validFrom ? { validFrom: f.validFrom } : {}), ...(f.validTo ? { validTo: f.validTo } : {}), disputed: disputed.get(f.id) ?? 0 })),
     more,
     // What doesn't show from here, and why: left out of the graph, never silently.
-    unseen: [...hidden].map((id) => ({ id, ...atlas.unseenFrom(caller, entities.get(id)!.floor, sight.principals, hiddenNamed(entities.get(id)!.floor)) })),
+    unseen: [...hidden].map((id) => ({
+      id,
+      ...atlas.unseenFrom(caller, entities.get(id)!.floor, sight.principals, hiddenNamed(entities.get(id)!.floor)),
+      near: [...(near.get(id) ?? [])].filter((n) => nodes.has(n)),
+    })),
     missing: ids.filter((id) => !entities.has(id)),
   };
 };

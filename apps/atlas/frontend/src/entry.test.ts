@@ -1,8 +1,10 @@
 import { createEventBus, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { entityLine, placeFor, pathFor, typeTree, whyShown, type Entity, type Ontology } from './api.js';
+import { MultiDirectedGraph } from 'graphology';
+import { entityLine, placeFor, pathFor, typeTree, whyShown, type Entity, type Ontology, type Subgraph } from './api.js';
 import type { AtlasApp } from './atlas-app.js';
 import { kindsOffered } from './atlas-picker.js';
+import { foldsOf, hiddenNear, rings, syncGraph, widen } from './graph.js';
 import app, { addressFor, placeForIntent } from './entry.js';
 
 const floor: Workspace = { id: 't-mar', kind: 'team', name: 'Maritime desk', slug: 'maritime', path: [], role: 'member' };
@@ -109,6 +111,8 @@ describe('places', () => {
     expect(placeFor('/')).toEqual({ page: 'entities' });
     expect(placeFor('/entities/new')).toEqual({ page: 'new' });
     expect(placeFor('/entities/ent_01')).toEqual({ page: 'entity', id: 'ent_01' });
+    expect(placeFor('/explore/ent_01')).toEqual({ page: 'explore', id: 'ent_01' });
+    expect(pathFor({ page: 'explore', id: 'ent_01' })).toBe('/explore/ent_01');
     expect(pathFor({ page: 'entity', id: 'ent_01' })).toBe('/entities/ent_01');
     expect(addressFor('/@maritime/atlas/entities', '/entities', { page: 'entity', id: 'ent_01' })).toBe('/@maritime/atlas/entities/ent_01');
   });
@@ -253,5 +257,90 @@ describe('atlas', () => {
     const state = el.querySelector('ui-state')!;
     expect(state.getAttribute('heading')).toBe('You can’t see this from here');
     expect(state.getAttribute('body')).toMatch(/Finance floor/);
+  });
+});
+
+const node = (id: string, label: string, depth: number, floorName = 'Org') => ({ ref: { kind: 'entity' as const, id, type: 'vessel', label }, state: 'active' as const, floorName, depth });
+const AROUND_TERN: Subgraph = {
+  nodes: [node('ent_01', 'Northern Tern', 0, 'Maritime desk'), node('ent_02', 'Halden Shipping', 1), node('ent_03', 'Southern Tern', 1)],
+  edges: [
+    { id: 'fct_a', from: 'ent_01', to: 'ent_02', relation: 'operated-by', floorName: 'Org', disputed: 0 },
+    { id: 'fct_b', from: 'ent_03', to: 'ent_02', relation: 'operated-by', floorName: 'Org', disputed: 1 },
+    { id: 'fct_c', from: 'ent_03', to: 'ent_01', relation: 'operated-by', floorName: 'Org', disputed: 1 },
+  ],
+  more: [{ entity: 'ent_02', relation: 'operated-by', direction: 'in', count: 3 }],
+  unseen: [{ id: 'ent_09', reason: 'kept', floor: 'tree:t-fin', message: 'It’s kept on the Finance floor. Ask one of its leads if you need it.', near: ['ent_02'] }],
+  missing: [],
+};
+const MORE_HALDEN: Subgraph = {
+  nodes: [node('ent_02', 'Halden Shipping', 0), node('ent_04', 'Grey Heron', 1), node('ent_05', 'Osprey', 1), node('ent_06', 'Kittiwake', 1)],
+  edges: ['ent_04', 'ent_05', 'ent_06'].map((id, i) => ({ id: `fct_m${i}`, from: id, to: 'ent_02', relation: 'operated-by', floorName: 'Org', disputed: 0 })),
+  more: [{ entity: 'ent_04', relation: 'operated-by', direction: 'out', count: 1 }],
+  unseen: [],
+  missing: [],
+};
+
+describe('explorer', () => {
+  it('opens a ring at a time, folding the rest into counts that open', () => {
+    const open = widen(undefined, AROUND_TERN, 'ent_01');
+    expect(rings(open).map((r) => [r.depth, r.nodes.map((n) => n.ref.label)])).toEqual([
+      [0, ['Northern Tern']],
+      [1, ['Halden Shipping', 'Southern Tern']],
+    ]);
+    expect(foldsOf(open, 'ent_02')).toEqual([{ entity: 'ent_02', relation: 'operated-by', direction: 'in', count: 3 }]);
+    expect(hiddenNear(open, 'ent_02').map((u) => u.id)).toEqual(['ent_09']);
+    const wider = widen(open, MORE_HALDEN, 'ent_02', 'operated-by');
+    expect(foldsOf(wider, 'ent_02')).toEqual([]);
+    expect(wider.nodes.get('ent_05')).toMatchObject({ depth: 2 });
+    expect(foldsOf(wider, 'ent_04')).toEqual([{ entity: 'ent_04', relation: 'operated-by', direction: 'out', count: 1 }]);
+  });
+
+  it('draws folds and hidden counts as nodes to press, and leaves out disputed links when asked', () => {
+    const open = widen(undefined, AROUND_TERN, 'ent_01');
+    const look = { you: 'g', team: 'amber', org: 'blue', ink: 'i', muted: 'm', line: 'l', disputed: 'w', ground: 'd' };
+    const graph = new MultiDirectedGraph();
+    const added = syncGraph(graph, open, ONTOLOGY, look);
+    expect(added).toEqual(expect.arrayContaining(['ent_01', 'ent_02', 'ent_03', 'fold:ent_02 operated-by in', 'hidden:ent_02']));
+    expect(graph.getNodeAttributes('ent_01')).toMatchObject({ color: 'amber', fixed: true, size: 16 });
+    expect(graph.getNodeAttribute('fold:ent_02 operated-by in', 'label')).toBe('+3 operates');
+    expect(graph.getNodeAttribute('hidden:ent_02', 'label')).toBe('1 hidden');
+    expect(graph.getEdgeAttribute('fct_b', 'color')).toBe('w');
+    const at = graph.getNodeAttributes('ent_02');
+    syncGraph(graph, open, ONTOLOGY, look, { hideDisputed: true });
+    // Southern Tern was reached only by disputed links; the rest keep their places.
+    expect(graph.hasNode('ent_03')).toBe(false);
+    expect(graph.getNodeAttributes('ent_02')).toMatchObject({ x: at.x, y: at.y });
+  });
+
+  it('shows the graph as a list where it can’t be drawn, and opens a fold', async () => {
+    let asked = 0;
+    const bodies: unknown[] = [];
+    const fetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path.startsWith('/api/atlas/v1/ontology')) return Response.json(ONTOLOGY);
+      if (path.startsWith('/api/atlas/v1/subgraph')) {
+        bodies.push(JSON.parse(String(init?.body)));
+        return Response.json(asked++ ? MORE_HALDEN : AROUND_TERN);
+      }
+      return new Response(null, { status: 404 });
+    });
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(fetch, '/explore/ent_01'));
+    await settle(el);
+    const explorer = el.querySelector('atlas-explorer') as HTMLElement & { updateComplete: Promise<unknown> };
+    await explorer.updateComplete;
+    expect(bodies[0]).toEqual({ seeds: [{ id: 'ent_01' }], depth: 1, limitPerNode: 12 });
+    expect(el.textContent).toMatch(/can’t draw the graph \(it needs WebGL\), so it shows as a list/);
+    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Around Northern Tern');
+    expect([...el.querySelectorAll('.atlas-ring')].map((h) => h.textContent)).toEqual(['Centre', 'Ring 1']);
+    const fold = [...el.querySelectorAll('.atlas-fold')].find((b) => b.textContent === '+3 operates') as HTMLButtonElement;
+    fold.click();
+    await settle(el);
+    await explorer.updateComplete;
+    expect(bodies[1]).toEqual({ seeds: [{ id: 'ent_02' }], depth: 1, relations: ['operated-by'], limitPerNode: 200 });
+    expect([...el.querySelectorAll('.atlas-ring')].map((h) => h.textContent)).toEqual(['Centre', 'Ring 1', 'Ring 2']);
+    // What can't be seen says why, beside what it's linked to.
+    ([...el.querySelectorAll('.atlas-fold')].find((b) => b.textContent === '1 hidden') as HTMLButtonElement).click();
+    await explorer.updateComplete;
+    expect(el.querySelector('.atlas-why')!.textContent).toMatch(/Finance floor/);
   });
 });

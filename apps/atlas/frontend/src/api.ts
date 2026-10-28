@@ -244,19 +244,80 @@ export class AtlasApi {
   raise(observation: string, to: string) {
     return this.call<ObservationView>('POST', `/observations/${encodeURIComponent(observation)}/raise`, { to });
   }
+
+  /** The graph around some entities from this floor, a ring at a time. */
+  subgraph(query: SubgraphQuery) {
+    return this.call<Subgraph>('POST', '/subgraph', { ...query, seeds: query.seeds.map((id) => ({ id })) });
+  }
+}
+
+export interface SubgraphQuery {
+  seeds: string[];
+  depth?: number;
+  types?: string[];
+  relations?: string[];
+  asOf?: string;
+  limitPerNode?: number;
+}
+
+export interface GraphNode {
+  ref: { kind: 'entity'; id: string; type: string; label: string };
+  state: Entity['state'];
+  floorName: string;
+  depth: number;
+}
+
+export interface GraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  relation: string;
+  floorName: string;
+  validFrom?: string;
+  validTo?: string;
+  /** Its open disputes that show from here. */
+  disputed: number;
+}
+
+/** Links of one relation from an entity that weren't drawn: too many, or past the last ring. */
+export interface Fold {
+  entity: string;
+  relation: string;
+  /** `out` when the entity is the link's subject ("operated by"), `in` when it's the object ("operates"). */
+  direction: 'out' | 'in';
+  count: number;
+}
+
+export interface GraphUnseen {
+  id: string;
+  reason: 'elsewhere' | 'kept';
+  floor: string;
+  message: string;
+  /** The shown entities it is linked to. */
+  near: string[];
+}
+
+export interface Subgraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  more: Fold[];
+  unseen: GraphUnseen[];
+  missing: string[];
 }
 
 /** Where the person is in Data Atlas, as its address has it. */
-export type Place = { page: 'entities' } | { page: 'new' } | { page: 'entity'; id: string; explain?: boolean };
+export type Place = { page: 'entities' } | { page: 'new' } | { page: 'entity'; id: string; explain?: boolean } | { page: 'explore'; id: string };
 
 export const placeFor = (path: string): Place => {
   const [first, second] = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (first === 'entities' && second === 'new') return { page: 'new' };
   if (first === 'entities' && second) return { page: 'entity', id: second };
+  if (first === 'explore' && second) return { page: 'explore', id: second };
   return { page: 'entities' };
 };
 
-export const pathFor = (place: Place) => (place.page === 'entity' ? `/entities/${encodeURIComponent(place.id)}` : place.page === 'new' ? '/entities/new' : '/entities');
+export const pathFor = (place: Place) =>
+  place.page === 'entity' ? `/entities/${encodeURIComponent(place.id)}` : place.page === 'explore' ? `/explore/${encodeURIComponent(place.id)}` : place.page === 'new' ? '/entities/new' : '/entities';
 
 /** A type's details, its own after those of the kinds above it. */
 export const detailsOf = (ontology: Ontology, type: string): DetailDef[] => {

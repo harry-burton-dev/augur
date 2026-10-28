@@ -200,4 +200,28 @@ describe.runIf(process.env.DATABASE_URL)('What Data Atlas knows', () => {
     expect(await flags('')).toEqual([]);
     expect(await flags(`?known=${encodeURIComponent(before)}`)).toHaveLength(1);
   });
+
+  it('gives the explorer the strongest links first, folds the rest into counts, and counts disputes', async () => {
+    const org = on('ana', ORG_LEAD);
+    const link = async (from: string, property: string, to: string) =>
+      (await call('POST', `/v1/entities/${from}/observations`, org, { property, target: to, source: BY_HAND, accept: true })).json().fact as { id: string };
+    const harbour = await add(org, 'facility', 'Port Halden');
+    const ships = await Promise.all(['Grey Heron', 'Southern Tern', 'Osprey'].map((label) => add(org, 'vessel', label)));
+    for (const ship of ships) await link(ship.id, 'located-at', harbour.id);
+    // Osprey is also operated by Northwind, so it is the most linked of the three.
+    const operated = await link(ships[2].id, 'operated-by', northwind.id);
+    await call('POST', `/v1/facts/${operated.id}/disputes`, org, { note: 'Sold in September.' });
+
+    const graph = (await call('POST', '/v1/subgraph', on('ana', ORG), { seeds: [{ id: harbour.id }], depth: 1, limitPerNode: 2 })).json();
+    expect(graph.nodes.map((n: { ref: { label: string } }) => n.ref.label)).toEqual(['Port Halden', 'Osprey', 'Grey Heron']);
+    // One left over at the port, and what lies past the ring: Osprey's operator.
+    expect(graph.more).toEqual([
+      { entity: harbour.id, relation: 'located-at', direction: 'in', count: 1 },
+      { entity: ships[2].id, relation: 'operated-by', direction: 'out', count: 1 },
+    ]);
+
+    const wider = (await call('POST', '/v1/subgraph', on('ana', ORG), { seeds: [{ id: harbour.id }], depth: 2 })).json();
+    expect(wider.edges.find((e: { id: string }) => e.id === operated.id)).toMatchObject({ relation: 'operated-by', disputed: 1 });
+    expect(wider.edges.filter((e: { disputed: number }) => e.disputed === 0)).toHaveLength(3);
+  });
 });

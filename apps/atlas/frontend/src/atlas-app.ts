@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { ago, type DialogSubmit, type ListItem, type SelectOption } from '@augur/ui-kit';
 import type { DocumentRef } from '@augur/mfe-sdk';
+import './atlas-explorer.js';
 import './atlas-knowledge.js';
 import { AtlasError, onEntity, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
 
@@ -93,6 +94,9 @@ export class AtlasApp extends LitElement {
       if (place.page === 'entity') {
         this.open = undefined;
         this.open = await this.api.entity(place.id);
+      } else if (place.page === 'explore') {
+        // The explorer asks for its own graph.
+        this.open = undefined;
       } else {
         this.open = undefined;
         await this.list();
@@ -241,6 +245,7 @@ export class AtlasApp extends LitElement {
       <div class="atlas-head">
         <ui-heading eyebrow=${type?.label ?? e.type} heading=${e.label} summary=${e.description}></ui-heading>
         <div class="atlas-actions">
+          <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'explore', id: e.id })}>Explore around it</ui-button>
           <ui-button kind="secondary" size="sm" ?disabled=${!e.can.edit} @click=${() => (this.dialog = 'edit')}>Edit</ui-button>
           <ui-button kind="ghost" size="sm" ?disabled=${!e.can.retire} @click=${() => (this.dialog = 'retire')}>Retire</ui-button>
         </div>
@@ -263,6 +268,15 @@ export class AtlasApp extends LitElement {
       </dl>
       <atlas-knowledge .api=${this.api} .entity=${e} .ontology=${this.ontology} .pickDocument=${this.pickDocument}
         @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}></atlas-knowledge>`;
+  }
+
+  private explorePage() {
+    const place = this.place;
+    if (place.page !== 'explore') return nothing;
+    return html`<ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'entity', id: place.id })}>Back to its page</ui-button>
+      <atlas-explorer .api=${this.api} .ontology=${this.ontology} centre=${place.id} floor-name=${this.floorName}
+        @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}
+        @atlas-explore=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'explore', id: ev.detail.id })}></atlas-explorer>`;
   }
 
   private detailFields(type: string, values: Record<string, string> = {}) {
@@ -313,6 +327,8 @@ export class AtlasApp extends LitElement {
         /* Data Atlas's own ground: the shell's water stays outside the app. */
         atlas-app { display: block; min-height: 100%; background: var(--slate); }
         atlas-app .atlas-main { max-width: var(--measure-wide); margin: 0 auto; padding: var(--space-6) var(--edge); display: flex; flex-direction: column; gap: var(--space-5); }
+        /* The explorer takes the width it's given: a graph needs room. */
+        atlas-app .atlas-main.atlas-wide { max-width: none; }
         atlas-app .atlas-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
         atlas-app .atlas-actions { display: flex; gap: var(--space-2); }
         atlas-app .atlas-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-4); }
@@ -328,7 +344,7 @@ export class AtlasApp extends LitElement {
         atlas-app .atlas-key { font-size: var(--type-small); color: var(--ink-muted); letter-spacing: 0.04em; }
         @media (max-width: 640px) { atlas-app .atlas-filters { grid-template-columns: minmax(0, 1fr); } }
       </style>
-      <main class="atlas-main">${this.place.page === 'entity' ? this.entityPage() : this.listPage()}</main>
+      <main class="atlas-main ${this.place.page === 'explore' ? 'atlas-wide' : ''}">${this.place.page === 'entity' ? this.entityPage() : this.place.page === 'explore' ? this.explorePage() : this.listPage()}</main>
       ${this.dialogs()}`;
   }
 }
