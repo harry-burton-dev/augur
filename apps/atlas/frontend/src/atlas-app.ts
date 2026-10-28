@@ -3,6 +3,7 @@ import { ago, type DialogSubmit, type ListItem, type SelectOption } from '@augur
 import type { DocumentRef } from '@augur/mfe-sdk';
 import './atlas-explorer.js';
 import './atlas-knowledge.js';
+import './atlas-triage.js';
 import { AtlasError, onEntity, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
 
 type Dialog = 'new' | 'edit' | 'retire';
@@ -36,6 +37,8 @@ export class AtlasApp extends LitElement {
     dialog: { state: true },
     newType: { state: true },
     pickDocument: { attribute: false },
+    openDocument: { attribute: false },
+    userId: { type: String, attribute: 'user-id' },
   };
 
   declare api: AtlasApi;
@@ -58,6 +61,10 @@ export class AtlasApp extends LitElement {
   declare newType: string;
   /** Asks the person for a document, for an observation's source (the SDK's pickDocument). */
   declare pickDocument: (() => Promise<DocumentRef>) | undefined;
+  /** Opens a source in the app that keeps it (the SDK's openDocument). */
+  declare openDocument: ((ref: DocumentRef) => void) | undefined;
+  /** Who is looking: Triage says which proposals are theirs. */
+  declare userId: string;
   private searching: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
@@ -74,6 +81,7 @@ export class AtlasApp extends LitElement {
     this.loading = false;
     this.error = '';
     this.newType = '';
+    this.userId = '';
   }
 
   override createRenderRoot() {
@@ -94,8 +102,8 @@ export class AtlasApp extends LitElement {
       if (place.page === 'entity') {
         this.open = undefined;
         this.open = await this.api.entity(place.id);
-      } else if (place.page === 'explore') {
-        // The explorer asks for its own graph.
+      } else if (place.page === 'explore' || place.page === 'triage' || place.page === 'proposal') {
+        // The explorer and Triage ask for their own.
         this.open = undefined;
       } else {
         this.open = undefined;
@@ -212,7 +220,10 @@ export class AtlasApp extends LitElement {
     }));
     return html`<div class="atlas-head">
         <ui-heading eyebrow=${this.floorName || 'Data Atlas'} heading="Everything here" summary=${this.seeingLine()}></ui-heading>
-        <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'new' })}>Add an entity</ui-button>
+        <div class="atlas-actions">
+          <ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'triage' })}>Triage</ui-button>
+          <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'new' })}>Add an entity</ui-button>
+        </div>
       </div>
       <div class="atlas-filters">
         <ui-text-field label="Find" placeholder="A name, another name, or a code such as an IMO number" .value=${this.q}
@@ -270,6 +281,12 @@ export class AtlasApp extends LitElement {
         @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}></atlas-knowledge>`;
   }
 
+  private triagePage() {
+    return html`<atlas-triage .api=${this.api} .ontology=${this.ontology} .place=${this.place} user-id=${this.userId}
+      @atlas-move=${(e: CustomEvent<Place>) => this.move(e.detail)}
+      @atlas-open-document=${(e: CustomEvent<{ ref: DocumentRef }>) => this.openDocument?.(e.detail.ref)}></atlas-triage>`;
+  }
+
   private explorePage() {
     const place = this.place;
     if (place.page !== 'explore') return nothing;
@@ -322,6 +339,20 @@ export class AtlasApp extends LitElement {
     }
   }
 
+  private page() {
+    switch (this.place.page) {
+      case 'entity':
+        return this.entityPage();
+      case 'explore':
+        return this.explorePage();
+      case 'triage':
+      case 'proposal':
+        return this.triagePage();
+      default:
+        return this.listPage();
+    }
+  }
+
   override render() {
     return html`<style>
         /* Data Atlas's own ground: the shell's water stays outside the app. */
@@ -344,7 +375,7 @@ export class AtlasApp extends LitElement {
         atlas-app .atlas-key { font-size: var(--type-small); color: var(--ink-muted); letter-spacing: 0.04em; }
         @media (max-width: 640px) { atlas-app .atlas-filters { grid-template-columns: minmax(0, 1fr); } }
       </style>
-      <main class="atlas-main ${this.place.page === 'explore' ? 'atlas-wide' : ''}">${this.place.page === 'entity' ? this.entityPage() : this.place.page === 'explore' ? this.explorePage() : this.listPage()}</main>
+      <main class="atlas-main ${this.place.page === 'explore' ? 'atlas-wide' : ''}">${this.page()}</main>
       ${this.dialogs()}`;
   }
 }

@@ -3,7 +3,7 @@ import type { OnFloor } from './app.ts';
 import type { Audit } from './audit.ts';
 import { floorPrincipal, type Unseen } from './floors.ts';
 import { checkDetail, detailsOf, isA, normaliseDetail, relationsFrom, withSubtypes, type DetailDef, type Ontology, type RelationDef } from './ontology.ts';
-import { refOf, type Entity, type Fact, type Observation, type PgAtlasStore, type Source } from './store.ts';
+import { refOf, type Entity, type Fact, type KeyTakenError, type Observation, type PgAtlasStore, type Source } from './store.ts';
 
 /**
  * What is known about entities: observations (what someone saw or read, as
@@ -22,6 +22,10 @@ export interface Atlas {
   seen(req: FastifyRequest, reply: FastifyReply, id: string): Promise<{ caller: OnFloor; entity: Entity } | undefined>;
   recorded(entry: Parameters<Audit>[0]): unknown;
   unseenFrom(caller: OnFloor, floor: string, principals: readonly string[], floorName: string): Unseen;
+  /** Checks and tidies details against the ontology; the first problem, in words. */
+  tidyDetails(ontology: Ontology, type: string, given: Record<string, string>): Record<string, string> | string;
+  /** A refusal for an identity key another entity holds, naming it when the caller may see it. */
+  keyTaken(caller: OnFloor, err: KeyTakenError): Promise<object>;
 }
 
 /** The other end of a link, as the caller may see it: the entity, or why not. */
@@ -47,11 +51,11 @@ export interface ObservationRights {
   why?: string;
 }
 
-const ID_PARAMS = { type: 'object', properties: { id: { type: 'string', maxLength: 64 } }, required: ['id'] } as const;
-const WHEN = { type: 'string', minLength: 10, maxLength: 40 } as const;
-const NOTE = { type: 'string', maxLength: 2000 } as const;
+export const ID_PARAMS = { type: 'object', properties: { id: { type: 'string', maxLength: 64 } }, required: ['id'] } as const;
+export const WHEN = { type: 'string', minLength: 10, maxLength: 40 } as const;
+export const NOTE = { type: 'string', maxLength: 2000 } as const;
 // One flat shape, checked further in code: Fastify's validator strips unknown properties, which breaks `oneOf`.
-const SOURCE = {
+export const SOURCE = {
   type: 'object',
   properties: {
     kind: { enum: ['person', 'document', 'other'] },
@@ -67,20 +71,22 @@ const SOURCE = {
       additionalProperties: false,
     },
     note: { type: 'string', minLength: 1, maxLength: 500 },
+    // The block of the document it was read in.
+    anchor: { type: 'string', minLength: 1, maxLength: 120 },
   },
   required: ['kind'],
   additionalProperties: false,
 } as const;
 
 /** A source as kept: only what its kind needs, or why it won't do. */
-const sourceOf = (given: { kind: Source['kind']; document?: { app: string; id: string; version?: string; title: string }; note?: string }): Source | string => {
+export const sourceOf = (given: { kind: Source['kind']; document?: { app: string; id: string; version?: string; title: string }; note?: string; anchor?: string }): Source | string => {
   if (given.kind === 'person') return { kind: 'person' };
-  if (given.kind === 'document') return given.document ? { kind: 'document', document: given.document } : 'Say which document it came from.';
+  if (given.kind === 'document') return given.document ? { kind: 'document', document: given.document, ...(given.anchor ? { anchor: given.anchor } : {}) } : 'Say which document it came from.';
   return given.note?.trim() ? { kind: 'other', note: given.note.trim() } : 'Say where it came from.';
 };
 
 /** A time from a request, as ISO; undefined if absent, and `false` if it isn't a time. */
-const when = (value: string | undefined): string | undefined | false => {
+export const when = (value: string | undefined): string | undefined | false => {
   if (value === undefined || value === '') return undefined;
   const ms = Date.parse(value);
   return Number.isNaN(ms) ? false : new Date(ms).toISOString();
@@ -97,8 +103,8 @@ export const propertyOf = (ontology: Ontology, type: string, key: string): Prope
 };
 
 /** Leads accept and raise for a floor; on your own floor, that's you. */
-const leadsHere = (caller: OnFloor) => caller.workspace.kind === 'personal' || caller.workspace.role === 'lead';
-const LEADS_ONLY = 'Only this floor’s leads accept what’s so here, and raise what’s seen to a floor above.';
+export const leadsHere = (caller: OnFloor) => caller.workspace.kind === 'personal' || caller.workspace.role === 'lead';
+export const LEADS_ONLY = 'Only this floor’s leads accept what’s so here, and raise what’s seen to a floor above.';
 
 /** The floors above the one the caller stands on: what an observation here may be raised to. */
 const floorsAbove = (caller: OnFloor, floors: readonly string[]) => {
@@ -107,7 +113,7 @@ const floorsAbove = (caller: OnFloor, floors: readonly string[]) => {
 };
 
 /** Names other entities as the caller may see them, saying why for any they can't. */
-const otherEnds = async (atlas: Atlas, caller: OnFloor, ids: readonly string[], sight: { principals: string[]; floors: string[] }) => {
+export const otherEnds = async (atlas: Atlas, caller: OnFloor, ids: readonly string[], sight: { principals: string[]; floors: string[] }) => {
   const found = new Map((await atlas.store.entitiesById([...new Set(ids)])).map((e) => [e.id, e]));
   const named = await atlas.nameFloors(caller, [...found.values()].map((e) => e.floor));
   return (id: string): OtherEnd => {
@@ -391,7 +397,7 @@ export const knowledgeRoutes = (app: FastifyInstance, atlas: Atlas) => {
  * tidied, or a link to another entity the caller can see, of a kind the link
  * goes to. A refusal, in words, when it won't do.
  */
-const sayable = async (
+export const sayable = async (
   atlas: Atlas,
   caller: OnFloor,
   ontology: Ontology,
@@ -425,7 +431,7 @@ const sayable = async (
 };
 
 /** Records a fact from observations that agree, on the caller's floor, replacing this floor's current record of a detail. */
-const accept = async (
+export const accept = async (
   atlas: Atlas,
   caller: OnFloor,
   entity: Entity,

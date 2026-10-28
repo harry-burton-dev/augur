@@ -19,11 +19,15 @@ export {
   ENTITY_EXPLAIN,
   ENTITY_OPEN,
   ENTITY_PICK,
+  ENTITY_PROPOSE,
   explainEntity,
   isEntityRef,
   openEntity,
   pickEntities,
+  proposeEntity,
   type EntityPick,
+  type EntityProposal,
   type EntityRef,
+  type ProposalReceipt,
 } from './entities.js';
 export { SDK_VERSION } from './version.js';

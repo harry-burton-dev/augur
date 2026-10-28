@@ -5,6 +5,7 @@ import { floorPrincipal, unseen, viewFloors } from './floors.ts';
 import { checkDetail, detailsOf, normaliseDetail, withSubtypes, type Ontology } from './ontology.ts';
 import { peopleFromEnv, type People } from './people.ts';
 import { knowledgeRoutes, subgraph, type Atlas } from './knowledge.ts';
+import { proposalRoutes } from './proposals.ts';
 import { KeyTakenError, refOf, type Entity, type PgAtlasStore } from './store.ts';
 
 /** The major version of the API this service serves. Its routes go under /v1, as the platform's do. */
@@ -148,7 +149,17 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
   };
 
   /** What a floor's knowledge routes need from here. */
-  const atlas: Atlas = { store, onFloor, sight, nameFloors, seen, recorded, unseenFrom: (caller, floor, principals, name) => unseen(floor, principals, caller.id, knownName(name)) };
+  const atlas: Atlas = {
+    store,
+    onFloor,
+    sight,
+    nameFloors,
+    seen,
+    recorded,
+    unseenFrom: (caller, floor, principals, name) => unseen(floor, principals, caller.id, knownName(name)),
+    tidyDetails,
+    keyTaken,
+  };
 
   await app.register(
     async (app) => {
@@ -343,6 +354,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
         return (await view(caller, [retired]))[0];
       });
       knowledgeRoutes(app, atlas);
+      proposalRoutes(app, atlas);
     },
     { prefix: `/${API_VERSION}` },
   );

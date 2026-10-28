@@ -24,7 +24,8 @@
   "handles": [
     "entity.open",
     "entity.pick",
-    "entity.explain"
+    "entity.explain",
+    "entity.propose"
   ],
   "menu": [
     {
@@ -46,6 +47,14 @@
           "icon": "plus",
           "path": "/entities/new",
           "keywords": "create new add thing"
+        },
+        {
+          "id": "triage",
+          "label": "Triage",
+          "icon": "inbox",
+          "path": "/triage",
+          "detail": "What’s proposed here, waiting for a lead",
+          "keywords": "triage proposals review mentions decide"
         }
       ]
     }

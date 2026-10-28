@@ -69,8 +69,86 @@ export class KeyTakenError extends Error {
 /** Where an observation came from. A document is named by the SDK's DocumentRef (`folio` for Artifacts). */
 export type Source =
   | { kind: 'person' }
-  | { kind: 'document'; document: { app: string; id: string; version?: string; title: string } }
+  | { kind: 'document'; document: { app: string; id: string; version?: string; title: string }; anchor?: string }
   | { kind: 'other'; note: string };
+
+/** Who or what made a proposal. Only people do in v1; the extractor and agent runs come later. */
+export type Producer = { kind: 'person'; id: string } | { kind: 'extractor'; engine: string; model?: string } | { kind: 'run'; id: string };
+
+/** Words in a source that seem to name a thing. */
+export interface Mention {
+  key: string;
+  text: string;
+  /** What kind of thing the source seems to say it is. */
+  type?: string;
+  /** The block it's in, by its anchor. */
+  anchor?: string;
+  /** The words around it. */
+  context?: string;
+  /** Identity keys the source gives, e.g. { imo: "9400117" }. */
+  keys?: Record<string, string>;
+}
+
+/** Something the source seems to say about a mention: a detail, or a link to another mention. */
+export interface ProposedObservation {
+  key: string;
+  /** The mention it's about, by key. */
+  about: string;
+  property: string;
+  value?: string;
+  /** The mention it links to, by key. */
+  target?: string;
+  observedAt?: string;
+  grade?: string;
+  note?: string;
+  anchor?: string;
+}
+
+/** Vocabulary the source wanted that the ontology hasn't got: for admins, later (AT7). */
+export interface ProposedTerm {
+  key: string;
+  kind: 'type' | 'detail' | 'relation';
+  name: string;
+  parent?: string;
+  note?: string;
+}
+
+/** An existing entity a mention may be, and why it was offered. */
+export interface Match {
+  entity: string;
+  why: 'key' | 'name' | 'alias';
+  /** For a key: which one, e.g. "IMO number". */
+  detail?: string;
+}
+
+export type MentionDecision = { as: 'link'; entity: string } | { as: 'new'; entity: string } | { as: 'drop' };
+export type ObservationDecision = { as: 'seen'; observation: string } | { as: 'accepted'; observation: string; fact: string } | { as: 'drop' };
+
+export type ProposalItem =
+  | { kind: 'mention'; key: string; body: Mention; matches: Match[]; decision?: MentionDecision; decidedBy?: string; decidedAt?: string }
+  | { kind: 'observation'; key: string; body: ProposedObservation; matches: Match[]; decision?: ObservationDecision; decidedBy?: string; decidedAt?: string }
+  | { kind: 'term'; key: string; body: ProposedTerm; matches: Match[]; decision?: undefined; decidedBy?: string; decidedAt?: string };
+
+/** One source's worth of what it seems to say, waiting on a floor's leads in Triage. */
+export interface Proposal {
+  id: string;
+  floor: string;
+  workspace: string;
+  source: Source;
+  producer: Producer;
+  ontologyVersion: number;
+  state: 'open' | 'finished' | 'withdrawn';
+  createdBy: string;
+  createdAt: string;
+  closedBy?: string;
+  closedAt?: string;
+}
+
+/** A proposal as listed in Triage: how much of it is decided. */
+export interface ProposalSummary extends Proposal {
+  items: number;
+  decided: number;
+}
 
 /**
  * Something someone saw or read about an entity, kept as it was said: never
@@ -308,7 +386,89 @@ export const migrations: { id: string; sql: string }[] = [
       ${knowledgeSql()}
       insert into atlas.outbox (topic, payload) values ('atlas.ontology.changed', '{"version": 2}');`,
   },
+  {
+    id: '005_proposals',
+    sql: `
+      -- The ingest seam: everything a person didn't type straight in arrives as a proposal, one per source,
+      -- and waits in its floor's Triage until that floor's leads decide each item.
+      create table atlas.proposals (
+        id text primary key,
+        floor text not null,
+        workspace_id text not null,
+        source jsonb not null,
+        producer jsonb not null,
+        ontology_version integer not null,
+        state text not null default 'open' check (state in ('open', 'finished', 'withdrawn')),
+        created_by text not null,
+        created_at timestamptz not null default clock_timestamp(),
+        closed_by text,
+        closed_at timestamptz
+      );
+      create index proposals_floor on atlas.proposals (floor, state, created_at desc);
+      create table atlas.proposal_items (
+        proposal text not null references atlas.proposals(id),
+        key text not null,
+        kind text not null check (kind in ('mention', 'observation', 'term')),
+        body jsonb not null,
+        -- Existing entities a mention may be, found when it arrived.
+        matches jsonb not null default '[]',
+        decision jsonb,
+        decided_by text,
+        decided_at timestamptz,
+        sort integer not null default 0,
+        primary key (proposal, key)
+      );`,
+  },
 ];
+
+interface ProposalRow {
+  id: string;
+  floor: string;
+  workspace_id: string;
+  source: Source;
+  producer: Producer;
+  ontology_version: number;
+  state: Proposal['state'];
+  created_by: string;
+  created_at: Date;
+  closed_by: string | null;
+  closed_at: Date | null;
+}
+
+const fromProposalRow = (r: ProposalRow): Proposal => ({
+  id: r.id,
+  floor: r.floor,
+  workspace: r.workspace_id,
+  source: r.source,
+  producer: r.producer,
+  ontologyVersion: r.ontology_version,
+  state: r.state,
+  createdBy: r.created_by,
+  createdAt: r.created_at.toISOString(),
+  ...(r.closed_by ? { closedBy: r.closed_by } : {}),
+  ...(r.closed_at ? { closedAt: r.closed_at.toISOString() } : {}),
+});
+
+interface ItemRow {
+  key: string;
+  kind: ProposalItem['kind'];
+  body: never;
+  matches: Match[];
+  decision: never | null;
+  decided_by: string | null;
+  decided_at: Date | null;
+}
+
+const fromItemRow = (r: ItemRow): ProposalItem =>
+  ({
+    kind: r.kind,
+    key: r.key,
+    body: r.body,
+    matches: r.matches,
+    ...(r.decision ? { decision: r.decision } : {}),
+    ...(r.decided_by ? { decidedBy: r.decided_by } : {}),
+    ...(r.decided_at ? { decidedAt: r.decided_at.toISOString() } : {}),
+  }) as ProposalItem;
 
 /** Adds an event to Data Atlas's outbox, inside the transaction that makes the change it tells of. Ids only, never names. */
 const tell = (client: pg.PoolClient, what: 'created' | 'changed' | 'retired', e: EntityRow) =>
@@ -798,6 +958,89 @@ export class PgAtlasStore {
   /** A connection pool whose search path is Data Atlas's schema, for the outbox relay, which names its table plainly. */
   static outboxPool(connectionString: string) {
     return new pg.Pool({ connectionString, max: 2, options: '-c search_path=atlas' });
+  }
+
+  /** Active entities on these floors that hold an identity key with this value, of any kind that has it. */
+  async byKey(key: string, value: string, floors: readonly string[]): Promise<Entity[]> {
+    const { rows } = await this.pool.query<EntityRow>(
+      `select ${ENTITY_COLUMNS} from atlas.entities where state = 'active' and floor = any($3)
+         and id in (select entity from atlas.entity_keys where key = $1 and upper(value) = upper($2))`,
+      [key, value, floors],
+    );
+    return rows.map(fromRow);
+  }
+
+  /** Active entities on these floors called exactly this, by name or another name, ignoring case. */
+  async byName(name: string, floors: readonly string[], types?: readonly string[]): Promise<Entity[]> {
+    const { rows } = await this.pool.query<EntityRow>(
+      `select ${ENTITY_COLUMNS} from atlas.entities where state = 'active' and floor = any($2) and ($3::text[] is null or type = any($3))
+         and (lower(label) = lower($1) or exists (select 1 from unnest(aliases) a where lower(a) = lower($1)))
+       order by lower(label), id limit 20`,
+      [name, floors, types ?? null],
+    );
+    return rows.map(fromRow);
+  }
+
+  async addProposal(p: Omit<Proposal, 'id' | 'state' | 'createdAt'>, items: ProposalItem[]): Promise<Proposal> {
+    const id = `prp_${ulid()}`;
+    return this.inTransaction(async (client) => {
+      const { rows } = await client.query<ProposalRow>(
+        `insert into atlas.proposals (id, floor, workspace_id, source, producer, ontology_version, created_by) values ($1, $2, $3, $4, $5, $6, $7) returning *`,
+        [id, p.floor, p.workspace, JSON.stringify(p.source), JSON.stringify(p.producer), p.ontologyVersion, p.createdBy],
+      );
+      for (const [n, item] of items.entries()) {
+        await client.query('insert into atlas.proposal_items (proposal, key, kind, body, matches, sort) values ($1, $2, $3, $4, $5, $6)', [
+          id,
+          item.key,
+          item.kind,
+          JSON.stringify(item.body),
+          JSON.stringify(item.matches),
+          n,
+        ]);
+      }
+      return fromProposalRow(rows[0]);
+    });
+  }
+
+  async proposal(id: string): Promise<{ proposal: Proposal; items: ProposalItem[] } | undefined> {
+    const [found, items] = await Promise.all([
+      this.pool.query<ProposalRow>('select * from atlas.proposals where id = $1', [id]),
+      this.pool.query<ItemRow>('select * from atlas.proposal_items where proposal = $1 order by sort', [id]),
+    ]);
+    return found.rows[0] && { proposal: fromProposalRow(found.rows[0]), items: items.rows.map(fromItemRow) };
+  }
+
+  /** A floor's proposals in one state, newest first, with how much of each is decided. */
+  async proposals(floor: string, state: Proposal['state'] | 'closed', limit = 100): Promise<ProposalSummary[]> {
+    const { rows } = await this.pool.query<ProposalRow & { items: string; decided: string }>(
+      `select p.*,
+         (select count(*) from atlas.proposal_items i where i.proposal = p.id and i.kind <> 'term') as items,
+         (select count(*) from atlas.proposal_items i where i.proposal = p.id and i.kind <> 'term' and i.decision is not null) as decided
+       from atlas.proposals p where p.floor = $1 and (p.state = $2 or ($2 = 'closed' and p.state <> 'open'))
+       order by coalesce(p.closed_at, p.created_at) desc limit ${Number(limit)}`,
+      [floor, state],
+    );
+    return rows.map((r) => ({ ...fromProposalRow(r), items: Number(r.items), decided: Number(r.decided) }));
+  }
+
+  /** Records a decision on an item still undecided in an open proposal. Undefined if someone decided it first. */
+  async decide(proposal: string, key: string, decision: MentionDecision | ObservationDecision, by: string): Promise<ProposalItem | undefined> {
+    const { rows } = await this.pool.query<ItemRow>(
+      `update atlas.proposal_items set decision = $3, decided_by = $4, decided_at = now()
+       where proposal = $1 and key = $2 and decision is null and exists (select 1 from atlas.proposals where id = $1 and state = 'open')
+       returning *`,
+      [proposal, key, JSON.stringify(decision), by],
+    );
+    return rows[0] && fromItemRow(rows[0]);
+  }
+
+  /** Finishes or withdraws an open proposal. */
+  async closeProposal(id: string, state: 'finished' | 'withdrawn', by: string): Promise<Proposal | undefined> {
+    const { rows } = await this.pool.query<ProposalRow>(
+      `update atlas.proposals set state = $2, closed_by = $3, closed_at = now() where id = $1 and state = 'open' returning *`,
+      [id, state, by],
+    );
+    return rows[0] && fromProposalRow(rows[0]);
   }
 
   /** Events not yet sent, oldest first: for tests, and to see what's waiting. */

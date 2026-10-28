@@ -5,6 +5,7 @@ import {
   isEntityRef,
   openEntity,
   pickEntities,
+  proposeEntity,
   type EntityRef,
   floorFetch,
   IntentCancelled,
@@ -152,5 +153,16 @@ describe('entity intents', () => {
     await expect(pickEntities({ request: request as MountContext['request'] })).rejects.toMatchObject({ name: 'IntentError' });
     request.mockResolvedValueOnce([{ id: 'x' }]);
     await expect(pickEntities({ request: request as MountContext['request'] })).rejects.toMatchObject({ name: 'IntentError' });
+  });
+
+  it('offers marked words to whatever keeps entities, and checks the receipt', async () => {
+    const source = { app: 'folio', id: 'd7', version: '3', title: 'Maritime weekly 42' };
+    const request = vi.fn(async () => ({ proposal: 'prp_1', queue: 'Maritime desk’s Triage' }) as unknown);
+    const offer = { source, anchor: 'p-12', text: 'N. Tern', context: 'The cargo ship N. Tern was seen alongside.' };
+    await expect(proposeEntity({ request: request as MountContext['request'] }, offer)).resolves.toEqual({ proposal: 'prp_1', queue: 'Maritime desk’s Triage' });
+    expect(request).toHaveBeenCalledWith({ type: 'entity.propose', payload: offer });
+    request.mockResolvedValueOnce({ id: 'x' });
+    await expect(proposeEntity({ request: request as MountContext['request'] }, offer)).rejects.toMatchObject({ name: 'IntentError' });
+    await expect(proposeEntity({ request: request as MountContext['request'] }, { source, text: '' })).rejects.toMatchObject({ name: 'IntentError' });
   });
 });

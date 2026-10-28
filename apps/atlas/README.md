@@ -44,6 +44,13 @@ Under `/api/atlas/v1`, on the floor in `X-Workspace-Id`:
 | `POST /facts/:id/withdraw` | A lead takes back a fact recorded in error; it stays on record as of before |
 | `POST /facts/:id/disputes` | Anyone who sees a fact says why it may be wrong. Shown to those who see the disputer's floor, and to the fact's own floor |
 | `POST /disputes/:id/clear` | Whoever raised it, or the fact's floor's leads |
+| `POST /proposals` | A proposal from a source, filed in this floor's Triage: `{ source, mentions: [{ key, text, type?, anchor?, context?, keys? }], observations?: [{ key, about, property, value \| target, observedAt?, grade?, note?, anchor? }], terms? }`. Each mention comes back with the entities it may be (`matches`, by identity key, name or other name, from this floor). Answers the proposal and the `queue` it went to |
+| `GET /proposals?state=open\|closed` | This floor's Triage: `{ floorName, decide, why?, proposals }`, each with how many of its items are decided |
+| `GET /proposals/:id` | One proposal: its `mentions` and `observations` with their decisions, `terms`, `left` to decide, and `can` (`decide`, `finish`, `withdraw`, and `why` when not) |
+| `POST /proposals/:id/mentions/:key` | A lead decides what a mention names: `{ as: 'link', entity }`, `{ as: 'new', type, label? }` (made on this floor, with the mention's words as another name) or `{ as: 'drop' }` |
+| `POST /proposals/:id/observations/:key` | A lead decides an observation once what it's about is decided: `{ as: 'accepted' \| 'seen' \| 'drop', grade?, observedAt?, note? }`. Accepted records an observation and a fact here; seen records the observation only |
+| `POST /proposals/:id/finish` | A lead closes it once nothing is left to decide |
+| `POST /proposals/:id/withdraw` | Whoever made it, or a lead, takes it back; what was already decided stays |
 | `POST /observations/:id/raise` | A lead copies an observation to a floor above that they're on: `{ to }`. The copy points back to it; the floor above decides whether to accept it |
 
 Every change goes to the audit log as `entity.created`, `entity.changed` or `entity.retired`, and to other apps, through the outbox, as the domain events `atlas.entity.created`, `.changed` and `.retired` with `{ entity, type }`: ids only, so any follower may read them.
@@ -52,10 +59,16 @@ Every change goes to the audit log as `entity.created`, `entity.changed` or `ent
 
 Knowledge is fenced by floor like entities are (Harry, 27 October 2026). An **observation** is what someone saw or read, as they said it, with where it came from and an optional grade; it is never changed. A **fact** is what a floor's leads accept as so, resting on observations, on two clocks: when it is true in the world (`validFrom` to `validTo`) and when the floor recorded it (`recordedAt` until a later record supersedes it). A **link** is a fact whose value is another entity, of a kind the ontology allows (`operated-by`, `located-at`, …). Lower floors never leak up: a team's facts don't show on the org floor. A lead **raises** an observation to a floor above, where it is worth more, and that floor's leads decide whether to accept it. Ontology version 2 adds the starter links and details known only through facts (a vessel's flag), which can't be typed on the entity.
 
+## Triage
+
+Nothing becomes knowledge without a lead deciding (Harry, 27 October 2026; auto-accept waits for the agent runtime). Whatever reads a source, a person now and an extractor later, files a **proposal** in the Triage of the floor it's on: the source, the **mentions** it found (words that seem to name a thing, with the passage around them) and the **observations** it read about them. Data Atlas suggests what each mention may be, by identity key, name or other name, from what shows on that floor. A lead of that floor says what each one is: one already known, a new one made on that floor, or nothing; then accepts each observation as so, keeps it as seen, or drops it, and finishes the proposal. Words the ontology hasn't got (`terms`) are kept for the admins and hold nothing up. In Artifacts, marking words in a document and choosing **Add to Data Atlas** sends a one-mention proposal through the `entity.propose` intent.
+
+Still to come: matching by similar names (`pg_trgm`) and by meaning (AT6), terms handled in the ontology studio (AT7), and observations that follow their source when it's withdrawn (AT8).
+
 ## Explore
 
 `/explore/:id` draws the graph around one entity as seen from this floor, a ring at a time (one to three rings out). Each ring shows each entity's strongest links (those to the most linked entities) and folds the rest, and whatever lies past the last ring, into counts such as "+4 location of" that open in place; nothing loads the whole graph. An entity linked but not visible from here shows as "1 hidden" beside what it's linked to, with why. Kinds, links, "True on" and "Hide disputed" narrow it. Nodes are coloured by the floor they're kept on, as on the floor gauge. It is drawn with Sigma.js on graphology (WebGL), laid out by ForceAtlas2 in a Web Worker, and loaded only when the explorer opens; the same graph is always available as a list, which is also what browsers without WebGL get.
 
 ## Intents
 
-Data Atlas handles the SDK's entity intents (SDK 1.5): `entity.pick` opens a picker over the asking app, narrowed to the `types` asked for, answering with one `EntityRef` (or a list, with `multiple`); `entity.open` opens the entity's page; `entity.explain` opens it with why it shows from this floor marked. Everything is as seen from the floor the person stands on.
+Data Atlas handles the SDK's entity intents (SDK 1.5): `entity.pick` opens a picker over the asking app, narrowed to the `types` asked for, answering with one `EntityRef` (or a list, with `multiple`); `entity.open` opens the entity's page; `entity.explain` opens it with why it shows from this floor marked; `entity.propose` asks what kind of thing the marked words name and files them in the floor's Triage, answering with a `ProposalReceipt`. Everything is as seen from the floor the person stands on.

@@ -80,7 +80,7 @@ export type OtherEnd =
   | { id: string; hidden: true; reason: 'elsewhere' | 'kept'; floor: string; message: string }
   | { id: string; missing: true };
 
-export type Source = { kind: 'person' } | { kind: 'document'; document: { app: string; id: string; version?: string; title: string } } | { kind: 'other'; note: string };
+export type Source = { kind: 'person' } | { kind: 'document'; document: { app: string; id: string; version?: string; title: string }; anchor?: string } | { kind: 'other'; note: string };
 
 export interface Dispute {
   id: string;
@@ -245,10 +245,117 @@ export class AtlasApi {
     return this.call<ObservationView>('POST', `/observations/${encodeURIComponent(observation)}/raise`, { to });
   }
 
+  /** This floor's Triage: open proposals, or those finished and withdrawn. */
+  proposals(state: 'open' | 'closed' = 'open') {
+    return this.call<Triage>('GET', `/proposals?state=${state}`);
+  }
+
+  proposal(id: string) {
+    return this.call<ProposalView>('GET', `/proposals/${encodeURIComponent(id)}`);
+  }
+
+  propose(body: NewProposal) {
+    return this.call<ProposalView & { queue: string }>('POST', '/proposals', body);
+  }
+
+  decideMention(proposal: string, key: string, decision: { as: 'link'; entity: string } | { as: 'new'; type?: string; label?: string } | { as: 'drop' }) {
+    return this.call<ProposalView>('POST', `/proposals/${encodeURIComponent(proposal)}/mentions/${encodeURIComponent(key)}`, decision);
+  }
+
+  decideObservation(proposal: string, key: string, decision: { as: 'accepted' | 'seen' | 'drop'; grade?: string }) {
+    return this.call<ProposalView>('POST', `/proposals/${encodeURIComponent(proposal)}/observations/${encodeURIComponent(key)}`, decision);
+  }
+
+  finishProposal(id: string) {
+    return this.call<ProposalView>('POST', `/proposals/${encodeURIComponent(id)}/finish`);
+  }
+
+  withdrawProposal(id: string) {
+    return this.call<ProposalView>('POST', `/proposals/${encodeURIComponent(id)}/withdraw`);
+  }
+
   /** The graph around some entities from this floor, a ring at a time. */
   subgraph(query: SubgraphQuery) {
     return this.call<Subgraph>('POST', '/subgraph', { ...query, seeds: query.seeds.map((id) => ({ id })) });
   }
+}
+
+export interface Mention {
+  key: string;
+  text: string;
+  type?: string;
+  anchor?: string;
+  context?: string;
+  keys?: Record<string, string>;
+}
+
+export interface ProposedObservation {
+  key: string;
+  about: string;
+  property: string;
+  value?: string;
+  target?: string;
+  observedAt?: string;
+  grade?: string;
+  note?: string;
+  anchor?: string;
+}
+
+export interface NewProposal {
+  source: Source;
+  mentions: Mention[];
+  observations?: ProposedObservation[];
+}
+
+/** An existing entity a mention may be, and why it was offered. */
+export interface MatchView {
+  entity: Extract<OtherEnd, { kind: 'entity' }>;
+  why: 'key' | 'name' | 'alias';
+  detail?: string;
+}
+
+export type MentionView = Mention & {
+  matches: MatchView[];
+  decision?: { as: 'link' | 'new'; entity: OtherEnd } | { as: 'drop' };
+  decidedBy?: string;
+  decidedAt?: string;
+};
+
+export type ProposalObservationView = ProposedObservation & {
+  decision?: { as: 'seen'; observation: string } | { as: 'accepted'; observation: string; fact: string } | { as: 'drop' };
+  decidedAt?: string;
+  /** Whether it can be decided yet, and why not. */
+  ready: boolean;
+  why?: string;
+};
+
+export interface ProposalSummary {
+  id: string;
+  source: Source;
+  producer: { kind: 'person'; id: string } | { kind: string; [k: string]: unknown };
+  state: 'open' | 'finished' | 'withdrawn';
+  createdBy: string;
+  createdAt: string;
+  closedAt?: string;
+  items: number;
+  decided: number;
+}
+
+export interface Triage {
+  floorName: string;
+  decide: boolean;
+  why?: string;
+  proposals: ProposalSummary[];
+}
+
+export interface ProposalView extends Omit<ProposalSummary, 'items' | 'decided'> {
+  floorName: string;
+  ontologyVersion: number;
+  left: number;
+  mentions: MentionView[];
+  observations: ProposalObservationView[];
+  terms: { key: string; kind: 'type' | 'detail' | 'relation'; name: string; parent?: string; note?: string }[];
+  can: { decide: boolean; finish: boolean; withdraw: boolean; why?: string };
 }
 
 export interface SubgraphQuery {
@@ -306,18 +413,40 @@ export interface Subgraph {
 }
 
 /** Where the person is in Data Atlas, as its address has it. */
-export type Place = { page: 'entities' } | { page: 'new' } | { page: 'entity'; id: string; explain?: boolean } | { page: 'explore'; id: string };
+export type Place =
+  | { page: 'entities' }
+  | { page: 'new' }
+  | { page: 'entity'; id: string; explain?: boolean }
+  | { page: 'explore'; id: string }
+  | { page: 'triage' }
+  | { page: 'proposal'; id: string };
 
 export const placeFor = (path: string): Place => {
   const [first, second] = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (first === 'entities' && second === 'new') return { page: 'new' };
   if (first === 'entities' && second) return { page: 'entity', id: second };
   if (first === 'explore' && second) return { page: 'explore', id: second };
+  if (first === 'triage' && second) return { page: 'proposal', id: second };
+  if (first === 'triage') return { page: 'triage' };
   return { page: 'entities' };
 };
 
-export const pathFor = (place: Place) =>
-  place.page === 'entity' ? `/entities/${encodeURIComponent(place.id)}` : place.page === 'explore' ? `/explore/${encodeURIComponent(place.id)}` : place.page === 'new' ? '/entities/new' : '/entities';
+export const pathFor = (place: Place) => {
+  switch (place.page) {
+    case 'entity':
+      return `/entities/${encodeURIComponent(place.id)}`;
+    case 'explore':
+      return `/explore/${encodeURIComponent(place.id)}`;
+    case 'proposal':
+      return `/triage/${encodeURIComponent(place.id)}`;
+    case 'triage':
+      return '/triage';
+    case 'new':
+      return '/entities/new';
+    default:
+      return '/entities';
+  }
+};
 
 /** A type's details, its own after those of the kinds above it. */
 export const detailsOf = (ontology: Ontology, type: string): DetailDef[] => {

@@ -1,11 +1,11 @@
 import { createEventBus, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MultiDirectedGraph } from 'graphology';
-import { entityLine, placeFor, pathFor, typeTree, whyShown, type Entity, type Ontology, type Subgraph } from './api.js';
+import { entityLine, placeFor, pathFor, typeTree, whyShown, type Entity, type Ontology, type ProposalView, type Subgraph } from './api.js';
 import type { AtlasApp } from './atlas-app.js';
 import { kindsOffered } from './atlas-picker.js';
 import { foldsOf, hiddenNear, rings, syncGraph, widen } from './graph.js';
-import app, { addressFor, placeForIntent } from './entry.js';
+import app, { addressFor, placeForIntent, proposalOffer } from './entry.js';
 
 const floor: Workspace = { id: 't-mar', kind: 'team', name: 'Maritime desk', slug: 'maritime', path: [], role: 'member' };
 
@@ -98,7 +98,8 @@ const answering = (routes: Record<string, () => Response>) =>
 const settle = async (el: HTMLElement) => {
   for (let i = 0; i < 5; i++) {
     await new Promise((r) => setTimeout(r, 0));
-    await ((el.querySelector('atlas-app') ?? el.querySelector('atlas-picker')) as AtlasApp | null)?.updateComplete;
+    await ((el.querySelector('atlas-app') ?? el.querySelector('atlas-picker') ?? el.querySelector('atlas-propose')) as AtlasApp | null)?.updateComplete;
+    await (el.querySelector('atlas-triage') as AtlasApp | null)?.updateComplete;
   }
 };
 
@@ -342,5 +343,113 @@ describe('explorer', () => {
     ([...el.querySelectorAll('.atlas-fold')].find((b) => b.textContent === '1 hidden') as HTMLButtonElement).click();
     await explorer.updateComplete;
     expect(el.querySelector('.atlas-why')!.textContent).toMatch(/Finance floor/);
+  });
+});
+
+const PROPOSAL: ProposalView = {
+  id: 'prp_1',
+  source: { kind: 'document', document: { app: 'folio', id: 'd-1', version: '2', title: 'Port report' }, anchor: 'b2' },
+  producer: { kind: 'person', id: 'u2' },
+  state: 'open',
+  createdBy: 'u2',
+  createdAt: '2026-10-27T00:00:00Z',
+  floorName: 'Maritime desk',
+  ontologyVersion: 1,
+  left: 1,
+  mentions: [
+    {
+      key: 'm1', text: 'N. Tern', type: 'vessel', anchor: 'b2', context: 'The N. Tern left Rotterdam on Monday.',
+      matches: [{ entity: { kind: 'entity', id: 'ent_01', type: 'vessel', label: 'Northern Tern', state: 'active', floorName: 'Maritime desk' }, why: 'alias' }],
+    },
+  ],
+  observations: [],
+  terms: [],
+  can: { decide: true, finish: false, withdraw: true, why: 'Decide every mention and observation, then finish it.' },
+};
+
+describe('triage', () => {
+  it('reads and writes Triage’s addresses', () => {
+    expect(placeFor('/triage')).toEqual({ page: 'triage' });
+    expect(placeFor('/triage/prp_1')).toEqual({ page: 'proposal', id: 'prp_1' });
+    expect(pathFor({ page: 'proposal', id: 'prp_1' })).toBe('/triage/prp_1');
+  });
+
+  it('lists what’s waiting, and says who decides when it isn’t you', async () => {
+    const fetch = answering({
+      '/api/atlas/v1/ontology': () => Response.json(ONTOLOGY),
+      '/api/atlas/v1/proposals?state=open': () =>
+        Response.json({ floorName: 'Maritime desk', decide: false, why: 'Only this floor’s leads decide what proposals name.', proposals: [{ ...PROPOSAL, items: 1, decided: 0 }] }),
+      '/api/atlas/v1/proposals?state=closed': () => Response.json({ floorName: 'Maritime desk', decide: false, proposals: [] }),
+    });
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(fetch, '/triage'));
+    await settle(el);
+    expect(el.textContent).toContain('Only this floor’s leads decide');
+    const list = el.querySelector('atlas-triage ui-list') as HTMLElement & { items: { title: string; detail: string }[] };
+    expect(list.items).toEqual([expect.objectContaining({ title: 'Port report', detail: '0 of 1 decided · proposed by someone on this floor · version 2' })]);
+  });
+
+  it('shows a mention in its passage with what it might be, and links it to the one chosen', async () => {
+    let decided: unknown;
+    const fetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path.startsWith('/api/atlas/v1/ontology')) return Response.json(ONTOLOGY);
+      if (path === '/api/atlas/v1/proposals/prp_1/mentions/m1') {
+        decided = JSON.parse(String(init?.body));
+        return Response.json({ ...PROPOSAL, left: 0, mentions: [{ ...PROPOSAL.mentions[0], decision: { as: 'link', entity: PROPOSAL.mentions[0].matches[0].entity } }], can: { decide: true, finish: true, withdraw: true } });
+      }
+      if (path.startsWith('/api/atlas/v1/proposals/prp_1')) return Response.json(PROPOSAL);
+      return new Response(null, { status: 404 });
+    });
+    const raise = vi.fn();
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(fetch, '/triage/prp_1', { raise }));
+    await settle(el);
+    expect(el.querySelector('.atlas-context mark')!.textContent).toBe('N. Tern');
+    const button = (text: string) => [...el.querySelectorAll('ui-button')].find((b) => b.textContent?.trim() === text) as HTMLElement & { disabled: boolean };
+    // Finish waits until everything is decided, and the page says so.
+    expect(button('Finish').disabled).toBe(true);
+    expect(el.textContent).toContain('Decide every mention and observation');
+    button('It’s Northern Tern').click();
+    await settle(el);
+    expect(decided).toEqual({ as: 'link', entity: 'ent_01' });
+    expect(el.querySelector('.atlas-outcome')!.textContent).toContain('Northern Tern');
+    expect(button('Finish').disabled).toBe(false);
+    button('Open the source').click();
+    expect(raise).toHaveBeenCalledWith({ type: 'document.open', payload: { app: 'folio', id: 'd-1', version: '2', title: 'Port report' } });
+  });
+
+  it('takes words another app offers, and files them in this floor’s Triage', async () => {
+    let sent: unknown;
+    const fetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path.startsWith('/api/atlas/v1/ontology')) return Response.json(ONTOLOGY);
+      if (path === '/api/atlas/v1/proposals' && init?.method === 'POST') {
+        sent = JSON.parse(String(init.body));
+        return Response.json({ ...PROPOSAL, queue: 'Maritime desk' }, { status: 201 });
+      }
+      return new Response(null, { status: 404 });
+    });
+    const offer = { source: { app: 'folio', id: 'd-1', version: '2', title: 'Port report' }, anchor: 'b2', text: 'N. Tern', context: 'The N. Tern left Rotterdam on Monday.' };
+    expect(proposalOffer({ type: 'entity.propose', payload: offer })).toEqual(offer);
+    expect(proposalOffer({ type: 'entity.propose', payload: { text: 'x' } })).toBeUndefined();
+    const respond = vi.fn();
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(fetch, '/', { intent: { type: 'entity.propose', payload: offer }, reply: { respond, cancel: vi.fn() } }));
+    await settle(el);
+    expect(el.querySelector('ui-heading')!.getAttribute('summary')).toContain('It goes to Maritime desk’s Triage');
+    (el.querySelector('atlas-propose ui-select') as HTMLElement).dispatchEvent(new CustomEvent('ui-change', { detail: { value: 'vessel' } }));
+    [...el.querySelectorAll('ui-button')].find((b) => b.textContent?.includes('Send to Triage'))!.click();
+    await settle(el);
+    expect(sent).toEqual({
+      source: { kind: 'document', document: offer.source, anchor: 'b2' },
+      mentions: [{ key: 'm1', text: 'N. Tern', type: 'vessel', anchor: 'b2', context: offer.context }],
+    });
+    expect(respond).toHaveBeenCalledWith({ proposal: 'prp_1', queue: 'Maritime desk’s Triage' });
+  });
+
+  it('cancels an offer it can’t read', async () => {
+    const cancel = vi.fn();
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(vi.fn(), '/', { intent: { type: 'entity.propose', payload: { text: '' } }, reply: { respond: vi.fn(), cancel } }));
+    expect(cancel).toHaveBeenCalled();
   });
 });
