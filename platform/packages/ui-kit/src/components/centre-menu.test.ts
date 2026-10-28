@@ -274,4 +274,12 @@ describe('ui-centre-menu', () => {
     await press('ArrowLeft');
     expect(catLabel()).toBe('Help  /  Assistant');
   });
+
+  it('steps aside for a move and resolves, without waiting under reduced motion', async () => {
+    expect(el.focusedIcon()?.getAttribute('name')).toBe('star');
+    await expect(el.leave('deeper')).resolves.toBeUndefined();
+    document.documentElement.dataset.motion = 'reduce';
+    await expect(el.leave('back')).resolves.toBeUndefined();
+    delete document.documentElement.dataset.motion;
+  });
 });

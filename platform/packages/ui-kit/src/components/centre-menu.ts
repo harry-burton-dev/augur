@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from 'lit';
 import { keyed } from 'lit/directives/keyed.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { base, reducedMotion } from '../shared.js';
+import { animate, motionMode, tokenEasing, tokenValue } from '../motion.js';
 import './icon.js';
 
 export interface MenuOption {
@@ -247,6 +248,50 @@ export class UiCentreMenu extends LitElement {
 
   find(q: string) {
     this.setQuery(q);
+  }
+
+  /**
+   * The icon of what's in focus: the focused item's, or the focused
+   * category's when it is a choice by itself. What a move carries across.
+   */
+  focusedIcon(): HTMLElement | null {
+    const root = this.renderRoot;
+    if (!root) return null;
+    return root.querySelector<HTMLElement>('.item.focus ui-icon') ?? root.querySelector<HTMLElement>('.cat.focus ui-icon');
+  }
+
+  /** Where what's in focus rests on screen, for a carried icon to land on; null before the menu has drawn. */
+  focusedRect(): DOMRect | null {
+    const root = this.renderRoot;
+    const el = root?.querySelector<HTMLElement>('.item.focus') ?? root?.querySelector<HTMLElement>('.cat.focus');
+    const rect = el?.getBoundingClientRect();
+    return rect && rect.width ? rect : null;
+  }
+
+  /**
+   * Step aside before the next screen: going deeper, Title's other apps drift
+   * outward and Orbit's ring tips back into the distance; going back, the
+   * menu sinks. Either way it fades. Resolves when done, or at once if the
+   * move is jumped to its end. Under reduced motion it only fades.
+   */
+  leave(way: 'deeper' | 'back' = 'deeper'): Promise<void> {
+    const scene = this.renderRoot?.querySelector<HTMLElement>('.menu');
+    if (!scene) return Promise.resolve();
+    const duration = tokenValue('motion-base', 240) * (way === 'back' ? 0.8 : 1);
+    const easing = tokenEasing('ease-in');
+    const away =
+      motionMode() === 'reduce'
+        ? 'none'
+        : way === 'back'
+          ? `translateY(${tokenValue('travel-near', 24)}px) scale(0.98)`
+          : this.variant === 'orbit'
+            ? 'perspective(900px) rotateX(18deg) scale(0.92)'
+            : 'scale(1.06)';
+    return animate(scene, [{ transform: 'none', opacity: 1, filter: 'none' }, { transform: away, opacity: 0, filter: way === 'deeper' && this.variant === 'orbit' && away !== 'none' ? 'blur(4px)' : 'none' }], {
+      duration,
+      easing,
+      fill: 'forwards',
+    });
   }
 
   /** The focused category, item and query. */

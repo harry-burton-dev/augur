@@ -77,7 +77,7 @@ export class UiState extends LitElement {
       button { color: var(--ink); font: inherit; font-size: var(--type-meta); background: none; border: 0; padding: var(--space-1) 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--green); text-underline-offset: 6px; }
       button:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-key); }
       .run { position: relative; width: min(240px, 60%); height: 1px; background: var(--hairline); overflow: hidden; }
-      .run::after { content: ''; position: absolute; top: 0; height: 1px; background: var(--ink-muted); animation: ui-run 1.4s var(--ease-standard) infinite; }
+      .run::after { content: ''; position: absolute; top: 0; height: 1px; background: var(--ink-muted); animation: ui-run var(--motion-run) var(--ease-standard) infinite; }
       .hidden { visibility: hidden; }
     `,
   ];

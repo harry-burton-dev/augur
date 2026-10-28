@@ -444,4 +444,13 @@ describe('floors', () => {
     expect(rows[2].getAttribute('aria-current')).toBe('location');
     expect([...root().querySelectorAll('.view .link')].map((b) => b.textContent!.trim())).toEqual(['Sign out']);
   });
+
+  it('lets an app arrive and sink, with its name to carry across', async () => {
+    el.current = 'library';
+    await el.updateComplete;
+    expect(el.placeTitle?.textContent).toBe('Library');
+    await expect(el.sink()).resolves.toBeUndefined();
+    el.arrive();
+    el.settleStage();
+  });
 });

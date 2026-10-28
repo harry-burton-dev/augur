@@ -32,3 +32,23 @@
 @media (max-width: 640px) {
   .w-axis { width: min(var(--measure-read), 100% - 2 * var(--edge-tight)); }
 }
+
+/*
+ * Reduced motion, from the system or the page's own setting (data-motion="reduce"
+ * on <html>, which a host sets from a person's preference): one switch for both.
+ * Moves become near-instant, nothing travels, and loops (pings, spinners,
+ * shimmer, the bubble's swirl) stop. Components read these tokens, so the
+ * setting reaches into their shadow roots.
+ */
+html[data-motion='reduce'] {
+  --motion-instant: 0.01ms; --motion-quick: 0.01ms; --motion-base: 0.01ms; --motion-slow: 0.01ms; --motion-calm: 0.01ms;
+  --motion-spin: 0s; --motion-run: 0s; --motion-shimmer: 0s; --motion-ping: 0s; --motion-drift: 0s;
+  --travel-near: 0px;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-instant: 0.01ms; --motion-quick: 0.01ms; --motion-base: 0.01ms; --motion-slow: 0.01ms; --motion-calm: 0.01ms;
+    --motion-spin: 0s; --motion-run: 0s; --motion-shimmer: 0s; --motion-ping: 0s; --motion-drift: 0s;
+    --travel-near: 0px;
+  }
+}
