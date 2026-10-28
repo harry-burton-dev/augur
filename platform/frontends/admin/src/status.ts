@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import type { Fact, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
-import type { AdminApi, BackupStatus, ComponentStatus, PlatformUpdates } from './api.js';
+import type { AdminApi, BackupStatus, ComponentStatus, PlatformUpdates, PublicAccess } from './api.js';
 import { page } from './parts.js';
 
 /** How often the screen asks the gateway again while it is open. The gateway itself checks every 30 seconds. */
@@ -44,6 +44,7 @@ export class AdminStatus extends LitElement {
     components: { state: true },
     loading: { state: true },
     backups: { state: true },
+    publicAccess: { state: true },
     updates: { state: true },
     error: { state: true },
     open: { state: true },
@@ -52,6 +53,7 @@ export class AdminStatus extends LitElement {
   declare api: AdminApi;
   declare components: ComponentStatus[];
   declare backups: BackupStatus | undefined;
+  declare publicAccess: PublicAccess | undefined;
   declare updates: PlatformUpdates | undefined;
   declare loading: boolean;
   declare error: string;
@@ -95,9 +97,10 @@ export class AdminStatus extends LitElement {
       this.error = '';
     }
     try {
-      const { components, backups } = await this.api.status();
+      const { components, backups, publicAccess } = await this.api.status();
       this.components = components;
       this.backups = backups;
+      this.publicAccess = publicAccess;
       this.error = '';
     } catch (err) {
       if (!quiet || !this.components.length) this.error = (err as Error).message;
@@ -150,6 +153,17 @@ export class AdminStatus extends LitElement {
     </div>`;
   }
 
+  /** AUGUR is open to the internet: said first, since anyone with the address can reach sign-in. */
+  private publicNote() {
+    const p = this.publicAccess;
+    if (!p?.open) return nothing;
+    const until = p.until ? new Date(p.until).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+    return html`<div data-public style="padding:var(--space-4) var(--space-4) 0;display:flex;flex-direction:column;gap:var(--space-2)">
+      <ui-status status="warning" label=${until ? `Open to the internet until ${until}` : 'Open to the internet'}></ui-status>
+      <p style="margin:0">Anyone with AUGUR’s address can reach its sign-in page, not only your tailnet. It closes by itself then; to close it now, run <code>infra/deploy/public.sh off</code> on the server.</p>
+    </div>`;
+  }
+
   /** Last night's backup and the last restore test, when the gateway knows about them. */
   private backupFacts() {
     const b = this.backups;
@@ -190,7 +204,7 @@ export class AdminStatus extends LitElement {
           @ui-open=${(e: CustomEvent<{ row: TableRow }>) => (this.open = e.detail.row.id)}
           @ui-retry=${() => this.load()}
         ></ui-table>
-        ${this.updateNote()} ${this.backupFacts()} ${this.details()}`,
+        ${this.publicNote()} ${this.updateNote()} ${this.backupFacts()} ${this.details()}`,
     );
   }
 }
