@@ -59,6 +59,7 @@ The events service publishes these as identity and the registry record the chang
 | `platform.person.disabled`, `platform.person.enabled` | `{ person }` | An admin turns someone's sign-in off or on |
 | `platform.team.created`, `platform.team.renamed` | `{ team, name }` | A team is made or renamed |
 | `platform.team.member-added`, `platform.team.member-removed` | `{ team, person }` | Someone joins or leaves a team |
-| `platform.app.turned-off`, `platform.app.turned-on`, `platform.app.removed` | `{ app }` | An admin turns an app off or on everywhere, or removes it |
+| `platform.app.turned-off`, `platform.app.turned-on`, `platform.app.removed` | `{ app }` | An admin turns an app off or on, everywhere or on one floor (the event's floor), or removes it |
+| `platform.app.blocked`, `platform.app.rule-cleared` | `{ app }` | An admin blocks an app on a floor and every floor below it, or clears a floor's rule so it follows the floor above |
 
 `PLATFORM_TOPICS` in the service kit names them. The API is in [contracts/events.openapi.yaml](../contracts/events.openapi.yaml).

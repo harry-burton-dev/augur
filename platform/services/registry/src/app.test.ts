@@ -534,6 +534,25 @@ describe('registry', () => {
       expect((await app.inject({ method: 'GET', url: '/v1/apps/library/floors', headers: admin })).json()).toEqual([expect.objectContaining({ workspace: 'f', state: 'off', setBy: 'u-1' })]);
     });
 
+    it('tells someone every app and why it is or isn’t theirs on their floor', async () => {
+      const { app, set } = await setup();
+      await app.inject({ method: 'PUT', url: '/v1/apps/notes', headers: as('app-notes'), payload: { ...library, id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', floors: ['personal'] } });
+      await app.inject({ method: 'PUT', url: '/v1/apps/ledger', headers: as('app-ledger'), payload: { ...library, id: 'ledger', name: 'Ledger', route: '/ledger', entry: '/apps/ledger/entry.js', requiredRole: 'finance' } });
+      await set('f', 'blocked');
+      const explain = async (workspace: string) => (await app.inject({ method: 'GET', url: `/v1/me/apps?workspace=${workspace}`, headers: on(workspace) })).json();
+      const onP = await explain('p');
+      const byId = Object.fromEntries(onP.apps.map((a: { id: string }) => [a.id, a]));
+      expect(byId.library.state).toEqual({ on: false, why: 'blocked', by: 'f', setBy: 'u-1', setAt: expect.any(String) });
+      expect(byId.notes.state).toEqual({ on: false, why: 'not-for-this-kind' });
+      expect(byId.notes.floors).toEqual(['personal']);
+      // A role keeps it from them, and it says so rather than vanishing.
+      expect(byId.ledger).toMatchObject({ state: { on: true, why: 'approved' }, requiredRole: 'finance', hasRole: false });
+      expect(byId.home.state).toEqual({ on: true, why: 'platform' });
+      expect((await explain('l')).apps.find((a: { id: string }) => a.id === 'library').state).toEqual({ on: true, why: 'approved' });
+      expect((await app.inject({ method: 'GET', url: '/v1/me/apps?workspace=l', headers: on('f') })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/me/apps?workspace=l' })).statusCode).toBe(401);
+    });
+
     it('can’t answer for a floor without identity', async () => {
       const app = await buildApp({ verifyService });
       expect((await app.inject({ method: 'GET', url: '/v1/manifest?workspace=f', headers: on('f') })).statusCode).toBe(503);

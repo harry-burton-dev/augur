@@ -1,9 +1,9 @@
 import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
-  Activity, ArrowLeft, ArrowRight, ArrowUpDown, Bell, BellOff, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, ChevronDown, Clock, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, Gauge, GitPullRequest, House, Image, Inbox, KeyRound, LayoutGrid, Library, List, ListFilter, Mail, Monitor, Network, Palette, Plus, Power, Search,
-  Send, Server, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, UserPlus, UserRound, UsersRound, Video, Wifi, X,
+  Activity, Anchor, ArrowLeft, ArrowRight, ArrowUpDown, Ban, Bell, BellOff, Bird, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, CalendarDays, Car, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
+  FileText, Folder, Gauge, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, List, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Network, Palette, Pause, Plane, Play, Plus, Power, Search, Server, Ship,
+  Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, User, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
   type IconNode,
 } from 'lucide';
 import { base } from '../shared.js';
@@ -51,6 +51,7 @@ export const icons = {
   // Used by the centre menu.
   star: draw(Star),
   clock: draw(Clock),
+  compass: draw(Compass),
   mail: draw(Mail),
   image: draw(Image),
   music: draw(EighthNotes),
@@ -80,8 +81,26 @@ export const icons = {
   // Admin's areas and lists, so nothing repeats the icon of what it sits under.
   list: draw(List),
   structure: draw(Network),
-  server: draw(Server),
   gauge: draw(Gauge),
+  // Finding your way round the platform (Auspex): the app, one person, what's closed to you and why, and what changed.
+  explore: draw(Bird),
+  person: draw(User),
+  lock: draw(Lock),
+  blocked: draw(Ban),
+  history: draw(History),
+  // Auspex's replay, played and paused, and its plant room: the parts AUGUR runs on.
+  play: draw(Play),
+  pause: draw(Pause),
+  server: draw(Server),
+  // Data Atlas: the app itself, and the kinds of thing its entities are.
+  atlas: draw(MapIcon),
+  vessel: draw(Ship),
+  aircraft: draw(Plane),
+  vehicle: draw(Car),
+  place: draw(MapPin),
+  port: draw(Anchor),
+  facility: draw(Warehouse),
+  event: draw(CalendarDays),
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;

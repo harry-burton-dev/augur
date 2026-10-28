@@ -91,7 +91,7 @@ services:
       OIDC_JWKS_URL: http://keycloak:8080/realms/platform/protocol/openid-connect/certs
       OIDC_AUDIENCE: platform-api
       # Each app's service, name=url. The platform knows no app by name.
-      APP_UPSTREAMS: folio=http://folio:8083
+      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090
     ports: ["8080:8080"]
 
   identity:
@@ -106,7 +106,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       SERVICE_CLIENT_SECRET: platform-local-only-identity
       # The clients identity makes for the platform's services and the sample app, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=platform-local-only-identity,platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio
+      SERVICE_CLIENT_SECRETS: platform-identity=platform-local-only-identity,platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio,app-auspex=platform-local-only-auspex
       <<: *internal
     depends_on: [postgres, keycloak]
 
@@ -118,7 +118,7 @@ services:
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-registry
       # The apps that ship with AUGUR: turned off rather than removed.
-      PILLAR_APPS: folio
+      PILLAR_APPS: folio auspex
       <<: *internal
     depends_on: [postgres]
 
@@ -158,6 +158,18 @@ services:
     volumes: ["../apps/folio/manifest.json:/app/manifest.json:ro"]
     depends_on:
       storage: { condition: service_completed_successfully }
+
+  # Auspex, where you are on AUGUR. It keeps nothing of its own. Its frontend runs with Vite: pnpm dev:app auspex.
+  auspex:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/auspex" } }
+    environment:
+      <<: *internal
+      PORT: 8090
+      SERVICE_CLIENT_SECRET: platform-local-only-auspex
+      APP_MANIFEST: /app/manifest.json
+    volumes: ["../apps/auspex/manifest.json:/app/manifest.json:ro"]
+    depends_on: [identity, registry, events]
 
   # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
   # It works on the tables Folio's service makes, so it waits for the service to start.

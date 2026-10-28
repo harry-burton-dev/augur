@@ -40,6 +40,7 @@ import {
   platformApps,
   settingsProblem,
   surfaceProblem,
+  floorKindsOf,
   unbuiltApps,
   versionProblem,
   type AppEntry,
@@ -223,6 +224,50 @@ export const buildApp = async ({
             .map((r) => ({ ...servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept), maxUpload: uploadLimitOf(r) }));
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
+        },
+      );
+
+      /**
+       * Every app and whether the caller can use it on the floor they're on, with the reason and who set the rule
+       * that decides it: for Auspex, which never hides an app for being out of reach. Apps a role keeps from the
+       * caller are listed too, saying which role; only an app whose origin an admin has stopped allowing is left out,
+       * since it isn't offered to anyone.
+       */
+      app.get<{ Querystring: { workspace: string } }>(
+        '/me/apps',
+        { schema: { querystring: { type: 'object', required: ['workspace'], properties: { workspace: { type: 'string', maxLength: 100 } } } } },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller) return reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to see your apps.' });
+          const { workspace } = req.query;
+          if (caller.workspace?.id !== workspace) {
+            return reply.code(403).send({ error: 'forbidden', message: 'Ask about the floor you’re on, with its X-Workspace-Id.' });
+          }
+          const place = await placeOf(reply, workspace);
+          if (!place) return reply;
+          const allowed = await allowedOrigins();
+          const rules = await store.rules();
+          const platform = platformApps
+            .filter((a) => !unbuiltApps.has(a.id))
+            .map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description, requiredRole: a.requiredRole, state: { on: true, why: 'platform' } as const }));
+          const registered = (await store.records())
+            .filter((r) => !entryOriginProblem(r.entry, allowed))
+            .map((r) => {
+              const state = floorState(r, place, rules);
+              const rule = 'by' in state ? rules.find((x) => x.app === r.entry.id && x.workspace === state.by) : undefined;
+              return {
+                id: r.entry.id, name: r.entry.name, icon: r.entry.icon, description: r.entry.description, requiredRole: r.entry.requiredRole,
+                floors: floorKindsOf(r.entry), pillar: isPillar(r.entry.id) || undefined,
+                state: rule ? { ...state, setBy: rule.setBy, setAt: rule.setAt } : state,
+              };
+            });
+          return {
+            workspace,
+            apps: [...platform, ...registered].map(({ requiredRole, ...a }) => ({
+              ...a,
+              ...(requiredRole ? { requiredRole, hasRole: caller.roles.includes(requiredRole) } : {}),
+            })),
+          };
         },
       );
 

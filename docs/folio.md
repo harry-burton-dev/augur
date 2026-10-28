@@ -89,7 +89,7 @@ Anyone who manages a library, or a document, can let others in with **Share**. Y
 
 ![Who can see a document, and sharing it with someone](images/folio/share.webp)
 
-Whatever has been shared with you appears under **Shared with you** on every floor of yours. Anyone who can see something can also see who else can.
+Whatever has been shared with you appears under **Shared with you** on every floor of yours. Anyone who can see something can also see who else can. **Who can open this, explained** opens Auspex over Artifacts: each person and team with how many people that is, how it reaches them (its floor, its library, or shared with it alone), and everyone else at the org who can't.
 
 ### Publishing
 
