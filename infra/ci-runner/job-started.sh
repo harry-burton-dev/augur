@@ -11,6 +11,8 @@ docker network prune -f > /dev/null
 docker volume prune -af > /dev/null
 docker image prune -af --filter "until=168h" > /dev/null
 docker builder prune -f --filter "until=168h" > /dev/null
+# Turbo's cache (TURBO_CACHE_DIR in ci.yml) the same: tasks' results a week unread go.
+find /home/runner/.cache/turbo -type f -atime +7 -delete 2> /dev/null
 
 # Containers write as other users (Postgres's backups), so this runs through Docker too.
 docker run --rm -v /tmp:/host-tmp busybox:1.37 \
