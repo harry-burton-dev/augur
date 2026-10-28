@@ -21,7 +21,8 @@ jobs:
   preview:
     # A fork's pull request gets no token to push or sign with, so it has no preview.
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    # Builds and pushes images, so only on an x86-64 runner (docs/ci-runner.md, "An Arm runner").
+    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
         with:
