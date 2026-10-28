@@ -6,6 +6,21 @@ on:
 # Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
 # others, such as ["self-hosted","augur-ci"] for our own (docs/ci-runner.md). The same goes for
 # the Release, App previews and Release feed workflows.
+#
+# On our own runner, caches live on its volumes between jobs (the pnpm store, pip's and
+# Playwright's and Docling's caches, turbo's), so the steps that fetch GitHub's cache run only
+# on hosted runners: from our server they downloaded ~1 GB a run at about 7 MB/s.
+
+# A new push to a pull request stops its last run, so the one runner isn't kept busy with it.
+# Pushes to main each run in full.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  # Turbo's cache outside the checkout, which checkout cleans, so a task whose inputs haven't
+  # changed since an earlier run on the runner replays instead of running. Main runs every task.
+  TURBO_CACHE_DIR: /home/runner/.cache/turbo
+  TURBO_FORCE: ${{ github.event_name == 'push' }}
 jobs:
   build-test:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
@@ -32,7 +47,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:boundaries
       - run: pnpm check:versions
@@ -75,29 +90,50 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      # Only when Folio (its worker, or the service whose tables it works on) or this workflow
+      # changed; main runs it always. The job still reports, so it can stay a required check.
+      - name: Does this change Folio?
+        id: folio
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || ! git diff --quiet "origin/$BASE..." -- apps/folio .github/workflows/ci.yml; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Folio is unchanged: nothing to test here."
+          fi
+        env:
+          BASE: ${{ github.base_ref }}
+      - if: steps.folio.outputs.run == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.folio.outputs.run == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/setup-python@v5
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+      - if: steps.folio.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.folio.outputs.run == 'true'
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
+          cache: ${{ runner.environment == 'github-hosted' && 'pip' || '' }}
           cache-dependency-path: apps/folio/worker/pyproject.toml
       # Torch's CPU-only build, as the image has it.
-      - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -e "apps/folio/worker[test]"
-      - uses: actions/cache@v4
+      - if: steps.folio.outputs.run == 'true'
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -e "apps/folio/worker[test]"
+      - if: steps.folio.outputs.run == 'true' && runner.environment == 'github-hosted'
+        uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
           key: docling-models-${{ hashFiles('apps/folio/worker/pyproject.toml') }}
       # The worker works on the tables Folio's service makes.
-      - run: pnpm --filter @apps/folio migrate
-      - run: python -m pytest apps/folio/worker -v
+      - if: steps.folio.outputs.run == 'true'
+        run: pnpm --filter @apps/folio migrate
+      - if: steps.folio.outputs.run == 'true'
+        run: python -m pytest apps/folio/worker -v
         env:
           RUN_PDF_TESTS: "1"
       - name: Did the worker change?
+        if: steps.folio.outputs.run == 'true'
         id: changed
         run: |
           base=${{ github.event_name == 'pull_request' && format('origin/{0}...', github.base_ref) || 'HEAD~1' }}
@@ -119,7 +155,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm create-app scaffold-check --name "Scaffold check"
       - run: pnpm turbo run build --filter="@apps/scaffold-check*" --filter=@augur/registry
@@ -140,7 +176,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
       # The browser is cached by Playwright version. No --with-deps: the runner image
@@ -149,7 +185,8 @@ jobs:
       - name: Playwright version
         id: playwright
         run: echo "version=$(pnpm --filter @augur/contract-tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - if: runner.environment == 'github-hosted'
+        uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
