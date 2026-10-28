@@ -1,4 +1,4 @@
-import type { AppManifestEntry } from '@augur/mfe-sdk';
+import type { AppArea, AppManifestEntry, AppMenuCategory } from '@augur/mfe-sdk';
 import type { MenuCategory, MenuItem, ShellFindResult } from '@augur/ui-kit';
 import { hrefFor, matchRoute } from './routes.js';
 
@@ -29,54 +29,97 @@ const listed = (labels: string[]) =>
   labels.length <= 2 ? labels.join(' and ') : `${labels.slice(0, 2).join(', ')} and ${labels.length - 2} more`;
 
 /**
- * Title: one chapter per app. A chapter's items are the app's menu categories,
- * each opening the app's Orbit there (or, for an app without one, the
- * category's first page); an app without a menu is one item that opens it.
+ * The areas Title lists under an app. One child is the parent: an app with
+ * one area or none shows only itself, so nothing is offered twice.
+ */
+export const areasOf = (app: AppManifestEntry): AppArea[] => ((app.areas?.length ?? 0) >= 2 ? app.areas! : []);
+
+/**
+ * The app's menu groups in the order Orbit shows them: by area, in the order
+ * the app lists its areas, then any group without one. Within an area, the
+ * app's own order.
+ */
+export function orbitGroups(app: AppManifestEntry): AppMenuCategory[] {
+  const order = new Map(areasOf(app).map((a, i) => [a.id, i]));
+  const rank = (g: AppMenuCategory) => order.get(g.area ?? '') ?? order.size;
+  return (app.menu ?? []).map((g, i) => ({ g, i })).sort((a, b) => rank(a.g) - rank(b.g) || a.i - b.i).map(({ g }) => g);
+}
+
+/** Where in Orbit the group holding `path` sits, so going back up lands there. */
+export const orbitIndexOf = (app: AppManifestEntry, path: string) => Math.max(0, orbitGroups(app).findIndex((g) => g.items.some((it) => it.path === path)));
+
+/** The area a page, or Orbit group, is in, when the app shows areas. */
+export function areaOf(app: AppManifestEntry, path: string): AppArea | undefined {
+  const group = app.menu?.find((g) => g.items.some((it) => it.path === path));
+  return areasOf(app).find((a) => a.id === group?.area);
+}
+
+const searchWords = (groups: AppMenuCategory[]) => groups.flatMap((g) => [g.label, ...g.items.map((it) => `${it.label} ${it.keywords ?? ''}`)]).join(' ');
+
+/**
+ * Title: one chapter per app, holding the app's areas. An app with fewer than
+ * two is a choice by itself, captioned with its description. Title never
+ * lists an app's groups or pages; those are Orbit's.
  */
 export function titleMenu(manifest: AppManifestEntry[]): MenuCategory[] {
-  return manifest.map((app) => ({
-    id: app.id,
-    label: app.name,
-    icon: app.icon ?? 'apps',
-    ai: app.ai,
-    items: app.menu?.length
-      ? app.menu.map((cat, i) => ({
-          id: `${app.id}/${i}`,
-          label: cat.label,
-          icon: cat.icon ?? app.icon ?? 'apps',
-          ai: cat.ai,
-          detail: listed(cat.items.map((it) => it.label)),
-          keywords: cat.items.map((it) => `${it.label} ${it.keywords ?? ''}`).join(' '),
-        }))
-      : [{ id: `${app.id}/`, label: app.name, icon: app.icon ?? 'apps', ai: app.ai, detail: app.description }],
-  }));
+  return manifest.map((app) => {
+    const areas = areasOf(app);
+    const chapter = { id: app.id, label: app.name, icon: app.icon ?? 'apps', ai: app.ai };
+    if (!areas.length) return { ...chapter, detail: app.description, keywords: searchWords(app.menu ?? []), items: [] };
+    return {
+      ...chapter,
+      items: areas.map((area) => {
+        const groups = (app.menu ?? []).filter((g) => g.area === area.id);
+        return {
+          id: `${app.id}/${area.id}`,
+          label: area.label,
+          icon: area.icon ?? 'folder',
+          detail: area.detail ?? listed(groups.map((g) => g.label)),
+          keywords: searchWords(groups),
+        };
+      }),
+    };
+  });
 }
 
 /**
- * Where a Title item leads: the app, the Orbit category to start on, and the
- * path to open, which is the category's first page for an app without an Orbit.
+ * Where a Title choice leads: the app, the Orbit group to start on (an area's
+ * first), and, for an app that keeps its own menu, the area's first page.
  */
 export function titleTarget(
   manifest: AppManifestEntry[],
   item: MenuItem,
 ): { app: AppManifestEntry; category: number; path?: string } | undefined {
-  const [id, index] = (item.id ?? '').split('/');
+  const [id, areaId] = (item.id ?? '').split('/');
   const app = manifest.find((a) => a.id === id);
   if (!app) return undefined;
-  const category = index ? Number(index) : 0;
-  const path = hasOrbit(app) ? undefined : app.menu?.[category]?.items[0]?.path;
+  if (!areaId) return { app, category: 0 };
+  const groups = orbitGroups(app);
+  const category = Math.max(0, groups.findIndex((g) => g.area === areaId));
+  const path = hasOrbit(app) ? undefined : groups[category]?.items[0]?.path;
   return { app, category, path };
 }
 
-/** Orbit: the app's own menu. Each item's id is the path it opens. */
+/**
+ * Orbit: the app's own menu, grouped by area, each group naming its area. A
+ * group with one page is that page: choosing it opens the page. Each choice's
+ * id is the path it opens.
+ */
 export function orbitMenu(app: AppManifestEntry): MenuCategory[] {
-  return (app.menu ?? []).map((cat) => ({
-    id: cat.id,
-    label: cat.label,
-    icon: cat.icon ?? 'apps',
-    ai: cat.ai,
-    items: cat.items.map((it) => ({ id: it.path, label: it.label, icon: it.icon ?? cat.icon ?? 'apps', detail: it.detail, keywords: it.keywords, ai: it.ai })),
-  }));
+  const areas = areasOf(app);
+  return orbitGroups(app).map((cat) => {
+    const section = areas.find((a) => a.id === cat.area)?.label;
+    const only = cat.items.length === 1 ? cat.items[0] : undefined;
+    if (only) return { id: only.path, label: cat.label, icon: cat.icon ?? 'apps', ai: cat.ai || only.ai, section, detail: only.detail, keywords: `${only.label} ${only.keywords ?? ''}`, items: [] };
+    return {
+      id: cat.id,
+      label: cat.label,
+      icon: cat.icon ?? 'apps',
+      ai: cat.ai,
+      section,
+      items: cat.items.map((it) => ({ id: it.path, label: it.label, icon: it.icon ?? 'arrow', detail: it.detail, keywords: it.keywords, ai: it.ai })),
+    };
+  });
 }
 
 /**

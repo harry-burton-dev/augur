@@ -12,7 +12,7 @@ if (!existsSync(built)) {
   process.exit(1);
 }
 const { buildApp } = await import(built);
-const { appEntrySchema } = await import(join(root, 'platform/services/registry/dist/manifest.js'));
+const { appEntrySchema, menuWarnings } = await import(join(root, 'platform/services/registry/dist/manifest.js'));
 // Each app registers as itself, as its service would once signed in.
 const registry = await buildApp({ verifyService: async (headers) => ({ kind: 'app', app: String(headers['x-check-app']) }) });
 
@@ -37,6 +37,8 @@ for (const app of readdirSync(join(root, 'apps'), { withFileTypes: true }).filte
     headers: { 'x-check-app': manifest.id ?? app.name },
     payload: manifest,
   });
+  // Accepted all the same, so released apps keep working; see docs/shell-principles.md.
+  for (const w of menuWarnings(manifest)) console.warn(`! ${file}: ${w}`);
   if (res.statusCode >= 300) {
     // The registry refuses unknown fields without naming them; name the top-level ones here.
     const unknown = Object.keys(manifest).filter((k) => !(k in appEntrySchema.properties));

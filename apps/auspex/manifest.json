@@ -39,12 +39,12 @@
     {
       "id": "explore",
       "label": "Explore",
-      "icon": "explore",
+      "icon": "atlas",
       "items": [
         {
           "id": "where",
           "label": "Where you are",
-          "icon": "explore",
+          "icon": "place",
           "path": "/map",
           "detail": "Your floors, and why you can go to each",
           "keywords": "map floors teams org structure"
