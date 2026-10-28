@@ -35,5 +35,11 @@ Under `/api/atlas/v1`, on the floor in `X-Workspace-Id`:
 | `GET /entities/:id` | One entity, with `floorName` and `can` (`edit`, `retire`, and `why` when not) |
 | `PATCH /entities/:id` | Changes it, from the floor it's kept on |
 | `POST /entities/:id/retire` | Takes it out of use (that floor's leads, or whoever added it); its id stays and its keys are freed |
+| `POST /entities/resolve` | For apps keeping entity links: `{ refs: [{ id }] }` (up to 200) → each as the caller sees it now: `{ id, ref, state, floorName }`, `{ id, hidden, reason, message }` or `{ id, missing }` |
+| `POST /subgraph` | `{ seeds, depth ≤ 3, types?, relations?, asOf?, limitPerNode? }` → `{ nodes, edges, more, unseen, missing }` from this floor. Entities are linked by facts, which come with observations (AT3): until then the answer is the seeds, with no edges |
 
-Every change goes to the audit log as `entity.created`, `entity.changed` or `entity.retired`.
+Every change goes to the audit log as `entity.created`, `entity.changed` or `entity.retired`, and to other apps, through the outbox, as the domain events `atlas.entity.created`, `.changed` and `.retired` with `{ entity, type }`: ids only, so any follower may read them.
+
+## Intents
+
+Data Atlas handles the SDK's entity intents (SDK 1.5): `entity.pick` opens a picker over the asking app, narrowed to the `types` asked for, answering with one `EntityRef` (or a list, with `multiple`); `entity.open` opens the entity's page; `entity.explain` opens it with why it shows from this floor marked. Everything is as seen from the floor the person stands on.

@@ -131,7 +131,26 @@ export const migrations: { id: string; sql: string }[] = [
     `,
   },
   { id: '002_starter_ontology', sql: starterSql() },
+  {
+    id: '003_outbox',
+    sql: `
+      -- What Data Atlas tells other apps (atlas.entity.*), sent by the outbox relay once the change commits (docs/domain-events.md).
+      create table atlas.outbox (
+        id bigint generated always as identity primary key,
+        event_id text not null unique default gen_random_uuid()::text,
+        topic text not null,
+        workspace_id text,
+        payload jsonb not null,
+        created_at timestamptz not null default now(),
+        sent_at timestamptz
+      );
+      create index outbox_unsent on atlas.outbox (id) where sent_at is null;`,
+  },
 ];
+
+/** Adds an event to Data Atlas's outbox, inside the transaction that makes the change it tells of. Ids only, never names. */
+const tell = (client: pg.PoolClient, what: 'created' | 'changed' | 'retired', e: EntityRow) =>
+  client.query('insert into atlas.outbox (topic, workspace_id, payload) values ($1, $2, $3)', [`atlas.entity.${what}`, e.workspace_id, JSON.stringify({ entity: e.id, type: e.type })]);
 
 interface EntityRow {
   id: string;
@@ -249,6 +268,13 @@ export class PgAtlasStore {
     return rows[0] && fromRow(rows[0]);
   }
 
+  /** Entities by id, active or retired, in no order; ids that aren't any are left out. */
+  async entitiesById(ids: readonly string[]): Promise<Entity[]> {
+    if (!ids.length) return [];
+    const { rows } = await this.pool.query<EntityRow>(`select ${ENTITY_COLUMNS} from atlas.entities where id = any($1)`, [ids]);
+    return rows.map(fromRow);
+  }
+
   /** Active entities kept on the given floors, by name. */
   async entities({ floors, q, types, limit = 50, offset = 0 }: EntityQuery): Promise<{ entities: Entity[]; total: number }> {
     const where = ["state = 'active'", 'floor = any($1)'];
@@ -283,6 +309,7 @@ export class PgAtlasStore {
         [id, e.type, e.label, e.aliases ?? [], e.description ?? '', e.details ?? {}, e.workspace, e.floor, e.createdBy],
       );
       await this.keepKeys(client, id, e.type, e.details ?? {}, ontology);
+      await tell(client, 'created', rows[0]);
       return fromRow(rows[0]);
     });
   }
@@ -298,6 +325,7 @@ export class PgAtlasStore {
       );
       if (!rows[0]) return undefined;
       if (change.details) await this.keepKeys(client, id, rows[0].type, change.details, ontology);
+      await tell(client, 'changed', rows[0]);
       return fromRow(rows[0]);
     });
   }
@@ -310,8 +338,10 @@ export class PgAtlasStore {
         [id, by],
       );
       // Its identity keys are free again: a retired entity is no longer the thing they name.
-      if (rows[0]) await client.query('delete from atlas.entity_keys where entity = $1', [id]);
-      return rows[0] && fromRow(rows[0]);
+      if (!rows[0]) return undefined;
+      await client.query('delete from atlas.entity_keys where entity = $1', [id]);
+      await tell(client, 'retired', rows[0]);
+      return fromRow(rows[0]);
     });
   }
 
@@ -327,6 +357,17 @@ export class PgAtlasStore {
       if (rows[0]) throw new KeyTakenError(detail, value, rows[0]);
       await client.query('insert into atlas.entity_keys (entity, type, key, value) values ($1, $2, $3, $4)', [id, type, detail.key, value]);
     }
+  }
+
+  /** A connection pool whose search path is Data Atlas's schema, for the outbox relay, which names its table plainly. */
+  static outboxPool(connectionString: string) {
+    return new pg.Pool({ connectionString, max: 2, options: '-c search_path=atlas' });
+  }
+
+  /** Events not yet sent, oldest first: for tests, and to see what's waiting. */
+  async unsent(): Promise<{ topic: string; workspace: string | null; payload: unknown }[]> {
+    const { rows } = await this.pool.query<{ topic: string; workspace_id: string | null; payload: unknown }>('select topic, workspace_id, payload from atlas.outbox where sent_at is null order by id');
+    return rows.map((r) => ({ topic: r.topic, workspace: r.workspace_id, payload: r.payload }));
   }
 
   private async inTransaction<T>(work: (client: pg.PoolClient) => Promise<T>): Promise<T> {

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEventBus,
+  explainEntity,
+  isEntityRef,
+  openEntity,
+  pickEntities,
+  type EntityRef,
   floorFetch,
   IntentCancelled,
   IntentError,
@@ -113,5 +118,39 @@ describe('document intents', () => {
     expect(isDocumentRef({ app: 'folio', id: 'd-1' })).toBe(false);
     expect(isDocumentRef({ ...ref, version: 3 })).toBe(false);
     expect(isDocumentRef(null)).toBe(false);
+  });
+});
+
+describe('entity intents', () => {
+  const tern: EntityRef = { kind: 'entity', id: 'ent_01JBX7Q2W3E4R5T6Y7V8H9Q0PA', type: 'vessel', label: 'Northern Tern' };
+  const port: EntityRef = { kind: 'entity', id: 'ent_01JBX7Q2W3E4R5T6Y7V8H9Q0PB', type: 'port', label: 'Felixstowe' };
+
+  it('knows an EntityRef by its shape', () => {
+    expect(isEntityRef(tern)).toBe(true);
+    expect(isEntityRef({ ...tern, at: '2026-10-27' })).toBe(true);
+    expect(isEntityRef({ ...tern, kind: 'document' })).toBe(false);
+    expect(isEntityRef({ ...tern, id: 'd-1' })).toBe(false);
+    expect(isEntityRef({ ...tern, label: '' })).toBe(false);
+  });
+
+  it('opens and explains an entity through whichever app handles them', async () => {
+    const raise = vi.fn(async () => undefined);
+    await openEntity({ raise }, tern);
+    await explainEntity({ raise }, tern);
+    expect(raise.mock.calls).toEqual([[{ type: 'entity.open', payload: tern }], [{ type: 'entity.explain', payload: tern }]]);
+  });
+
+  it('asks for entities and always answers a checked list', async () => {
+    const request = vi.fn(async () => tern as unknown);
+    await expect(pickEntities({ request: request as MountContext['request'] }, { purpose: 'Bind' })).resolves.toEqual([tern]);
+    expect(request).toHaveBeenCalledWith({ type: 'entity.pick', payload: { purpose: 'Bind' } });
+    request.mockResolvedValueOnce([tern, port]);
+    await expect(pickEntities({ request: request as MountContext['request'] }, { multiple: true })).resolves.toEqual([tern, port]);
+    request.mockResolvedValueOnce([tern, port]);
+    await expect(pickEntities({ request: request as MountContext['request'] })).resolves.toEqual([tern]);
+    request.mockResolvedValueOnce([]);
+    await expect(pickEntities({ request: request as MountContext['request'] })).rejects.toMatchObject({ name: 'IntentError' });
+    request.mockResolvedValueOnce([{ id: 'x' }]);
+    await expect(pickEntities({ request: request as MountContext['request'] })).rejects.toMatchObject({ name: 'IntentError' });
   });
 });
