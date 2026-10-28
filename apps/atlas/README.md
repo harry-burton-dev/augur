@@ -1,5 +1,7 @@
 # Data Atlas
 
+It ships with AUGUR (a pillar app); [docs/atlas.md](../docs/atlas.md) covers running it in a deployment.
+
 The things the organisation keeps track of (ships, ports, organisations, people, places, events) and what is known about them. Artifacts holds what was published, the intent app holds what people mean to do, and Data Atlas holds what those are about. Spec: [Data Atlas](https://claude.ai/artifact/G9XhuREFpYFjLWFqKK8sEF).
 
 | Path | What it is |
@@ -30,6 +32,7 @@ Under `/api/atlas/v1`, on the floor in `X-Workspace-Id`:
 | Route | |
 | --- | --- |
 | `GET /ontology` | The kinds of thing, their details and the ontology's version |
+| `GET /entities/:id/used-by` | What uses an entity from here: intents bound to it (from Mandate's events, ids and roles, named by Mandate as the viewer) and the documents what's known of it came from |
 | `GET /ontology/versions` | Every version: who made it, why, and the changes in it |
 | `GET /ontology/owl` | The ontology as OWL in Turtle, each kind and link saying which pack term it is (`skos:exactMatch`) |
 | `GET /ontology/packs`, `GET /ontology/packs/:id` | The packs to adopt from, and a pack's terms, each saying where it's kept here once adopted. Both say whether the caller may change the ontology, and why not |
@@ -72,7 +75,11 @@ Knowledge is fenced by floor like entities are (Harry, 27 October 2026). An **ob
 
 Nothing becomes knowledge without a lead deciding (Harry, 27 October 2026; auto-accept waits for the agent runtime). Whatever reads a source, a person now and an extractor later, files a **proposal** in the Triage of the floor it's on: the source, the **mentions** it found (words that seem to name a thing, with the passage around them) and the **observations** it read about them. Data Atlas suggests what each mention may be, from what shows on that floor (**resolve**): by identity key, then the name or another name exactly, then names spelt nearly alike (pg_trgm, which the platform puts in every app's database), then meaning. Matching by meaning asks the model gateway for vectors (`models:use`, and an embedding model on the server: `MODEL_EMBEDDING_NAME`, see [docs/agents.md](../../docs/agents.md)) and keeps one per entity, from its name, kind, other names and description, beside the model that made it; it is done again when the entity changes. Each proposal says what was tried and, when matching by meaning or spelling wasn't, why (models off, no embedding model, Data Atlas not granted `models:use` on that floor). A lead of that floor says what each one is: one already known, a new one made on that floor, or nothing; then accepts each observation as so, keeps it as seen, or drops it, and finishes the proposal. Words the ontology hasn't got (`terms`) go to the admins as candidates in the studio and hold nothing up. In Artifacts, marking words in a document and choosing **Add to Data Atlas** sends a one-mention proposal through the `entity.propose` intent.
 
-Still to come: observations that follow their source when it's withdrawn (AT8).
+## Used by, and retraction
+
+Data Atlas follows other apps' events (`events:subscribe`) and keeps its place in them. Mandate's `mandate.intent.entity-bound` and `-unbound` keep a **used by** index: Mandate's bindings stay the truth, and a binding never becomes a fact. The entity page asks Mandate to name those intents as the person (`POST /api/mandate/v1/refs/resolve`), so an intent they can't open still shows, saying which floor keeps it; when Mandate can't be asked, it says how many intents use the entity and why they can't be named.
+
+When Artifacts withdraws or deletes a document (`folio.document.withdrawn`, `folio.document.deleted`), what was read from it is **retracted**: each observation stays as it was said, marked with why, and stops counting as evidence. It can't back a new fact; a fact resting only on retracted observations stays, saying so, until its floor's leads end or withdraw it; an entity whose only evidence was retracted is marked as having no current source and is never deleted. A proposal still waiting on that document says its source is gone, and what it says can only be dropped.
 
 ## The ontology
 

@@ -161,6 +161,30 @@ export interface Proposal {
   closedAt?: string;
   /** How its mentions were last matched; absent on proposals from before matching was said. */
   matching?: Matching;
+  /** Its source was withdrawn or deleted while it waited, said in words. */
+  sourceGone?: string;
+}
+
+/** Something in another app that uses an entity, from that app's events: an intent bound to it, so far. */
+export interface UsedBy {
+  app: string;
+  kind: string;
+  id: string;
+  entity: string;
+  role: string;
+  workspace: string;
+  since: string;
+}
+
+/** A document observations of an entity came from, as far as the caller can see. */
+export interface MentionedIn {
+  app: string;
+  id: string;
+  title: string;
+  observations: number;
+  lastAt: string;
+  /** Every observation from it was retracted: it was withdrawn or deleted. */
+  withdrawn: boolean;
 }
 
 /** A proposal as listed in Triage: how much of it is decided. */
@@ -223,6 +247,8 @@ export interface Observation {
   raisedFrom?: string;
   createdBy: string;
   createdAt: string;
+  /** Its source was withdrawn or deleted: it's kept, but no longer counts as evidence. */
+  retracted?: { at: string; why: string };
 }
 
 /**
@@ -490,6 +516,28 @@ export const migrations: { id: string; sql: string }[] = [
       -- The starter kinds stand for CCO classes: say which, by IRI, so they show as adopted from the pack.
       update atlas.ontology_types set pack_iri = 'http://www.ontologyrepository.com/CommonCoreOntologies/' || replace(pack_term, ' ', '') where pack = 'cco';`,
   },
+  {
+    id: '008_used_by',
+    sql: `
+      -- What other apps use each entity, from their events (an intent bound to it). Theirs is the truth; this only follows it.
+      create table atlas.used_by (
+        app text not null,
+        item_kind text not null,
+        item_id text not null,
+        entity text not null,
+        role text not null,
+        workspace_id text not null,
+        since timestamptz not null default now(),
+        primary key (app, item_kind, item_id, entity, role)
+      );
+      create index used_by_entity on atlas.used_by (entity);
+      -- Where Data Atlas has read other apps' events up to.
+      create table atlas.event_cursor (id integer primary key, seq text not null);
+      -- An observation whose source was withdrawn stays, saying so, and stops counting as evidence.
+      alter table atlas.observations add column retracted_at timestamptz, add column retracted_why text;
+      create index observations_document on atlas.observations ((source->'document'->>'app'), (source->'document'->>'id')) where source->>'kind' = 'document';
+      alter table atlas.proposals add column source_gone text;`,
+  },
 ];
 
 /**
@@ -524,6 +572,7 @@ interface ProposalRow {
   closed_by: string | null;
   closed_at: Date | null;
   matching: Matching | null;
+  source_gone: string | null;
 }
 
 const fromProposalRow = (r: ProposalRow): Proposal => ({
@@ -539,6 +588,7 @@ const fromProposalRow = (r: ProposalRow): Proposal => ({
   ...(r.closed_by ? { closedBy: r.closed_by } : {}),
   ...(r.closed_at ? { closedAt: r.closed_at.toISOString() } : {}),
   ...(r.matching ? { matching: r.matching } : {}),
+  ...(r.source_gone ? { sourceGone: r.source_gone } : {}),
 });
 
 interface ItemRow {
@@ -655,8 +705,10 @@ interface ObservationRow {
   raised_from: string | null;
   created_by: string;
   created_at: Date;
+  retracted_at: Date | null;
+  retracted_why: string | null;
 }
-const OBSERVATION_COLUMNS = 'id, entity, property, value, target, observed_at, floor, workspace_id, source, grade, note, reported_under, raised_from, created_by, created_at';
+const OBSERVATION_COLUMNS = 'id, entity, property, value, target, observed_at, floor, workspace_id, source, grade, note, reported_under, raised_from, created_by, created_at, retracted_at, retracted_why';
 const fromObservationRow = (r: ObservationRow): Observation => ({
   id: r.id,
   entity: r.entity,
@@ -673,6 +725,7 @@ const fromObservationRow = (r: ObservationRow): Observation => ({
   ...(r.raised_from ? { raisedFrom: r.raised_from } : {}),
   createdBy: r.created_by,
   createdAt: r.created_at.toISOString(),
+  ...(r.retracted_at ? { retracted: { at: r.retracted_at.toISOString(), why: r.retracted_why ?? '' } } : {}),
 });
 
 interface FactRow {
@@ -951,6 +1004,71 @@ export class PgAtlasStore {
     } finally {
       client.release();
     }
+  }
+
+  /** Where Data Atlas has read other apps' events up to. */
+  async eventCursor(): Promise<string | undefined> {
+    const { rows } = await this.pool.query<{ seq: string }>('select seq from atlas.event_cursor where id = 1');
+    return rows[0]?.seq;
+  }
+
+  async saveEventCursor(seq: string) {
+    await this.pool.query('insert into atlas.event_cursor (id, seq) values (1, $1) on conflict (id) do update set seq = $1', [seq]);
+  }
+
+  /** Notes that something in another app uses an entity. Doing it twice does no harm. */
+  async bind(u: Omit<UsedBy, 'since'>) {
+    await this.pool.query(
+      'insert into atlas.used_by (app, item_kind, item_id, entity, role, workspace_id) values ($1, $2, $3, $4, $5, $6) on conflict do nothing',
+      [u.app, u.kind, u.id, u.entity, u.role, u.workspace],
+    );
+  }
+
+  /** Forgets that use; without a role, every role it had. */
+  async unbind(u: { app: string; kind: string; id: string; entity: string; role?: string }) {
+    await this.pool.query('delete from atlas.used_by where app = $1 and item_kind = $2 and item_id = $3 and entity = $4 and ($5::text is null or role = $5)', [u.app, u.kind, u.id, u.entity, u.role ?? null]);
+  }
+
+  async usedBy(entity: string): Promise<UsedBy[]> {
+    const { rows } = await this.pool.query<{ app: string; item_kind: string; item_id: string; role: string; workspace_id: string; since: Date }>(
+      'select app, item_kind, item_id, role, workspace_id, since from atlas.used_by where entity = $1 order by since desc limit 200',
+      [entity],
+    );
+    return rows.map((r) => ({ app: r.app, kind: r.item_kind, id: r.item_id, entity, role: r.role, workspace: r.workspace_id, since: r.since.toISOString() }));
+  }
+
+  /** The documents observations of an entity came from, on these floors, the latest first. */
+  async mentionedIn(entity: string, floors: readonly string[]): Promise<MentionedIn[]> {
+    const { rows } = await this.pool.query<{ app: string; id: string; title: string; observations: string; last_at: Date; withdrawn: boolean }>(
+      `select source->'document'->>'app' as app, source->'document'->>'id' as id, max(source->'document'->>'title') as title,
+              count(*) as observations, max(created_at) as last_at, bool_and(retracted_at is not null) as withdrawn
+       from atlas.observations
+       where (entity = $1 or target = $1) and floor = any($2) and source->>'kind' = 'document'
+       group by 1, 2 order by max(created_at) desc limit 100`,
+      [entity, floors],
+    );
+    return rows.map((r) => ({ app: r.app, id: r.id, title: r.title, observations: Number(r.observations), lastAt: r.last_at.toISOString(), withdrawn: r.withdrawn }));
+  }
+
+  /**
+   * A document was withdrawn or deleted in the app that keeps it: what was read
+   * from it stops counting as evidence (it's kept, saying why), and proposals
+   * still waiting on it say so. How many observations and proposals it touched.
+   */
+  async retractDocument(app: string, document: string, why: string): Promise<{ observations: number; proposals: number }> {
+    return this.inTransaction(async (client) => {
+      const observations = await client.query(
+        `update atlas.observations set retracted_at = now(), retracted_why = $3
+         where source->>'kind' = 'document' and source->'document'->>'app' = $1 and source->'document'->>'id' = $2 and retracted_at is null`,
+        [app, document, why],
+      );
+      const proposals = await client.query(
+        `update atlas.proposals set source_gone = $3
+         where state = 'open' and source->>'kind' = 'document' and source->'document'->>'app' = $1 and source->'document'->>'id' = $2`,
+        [app, document, why],
+      );
+      return { observations: observations.rowCount ?? 0, proposals: proposals.rowCount ?? 0 };
+    });
   }
 
   async entity(id: string): Promise<Entity | undefined> {

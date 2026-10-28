@@ -164,6 +164,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
     tidyDetails,
     keyTaken,
     resolver: resolver(store, embed),
+    people,
   };
 
   await app.register(

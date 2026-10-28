@@ -19,6 +19,7 @@
     "audit:write",
     "people:read",
     "events:publish",
+    "events:subscribe",
     "models:use"
   ],
   "orbit": false,

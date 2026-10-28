@@ -33,6 +33,11 @@ x-folio-storage: &folio-storage
   S3_BUCKET: folio
   S3_SECRET_ACCESS_KEY: ${FOLIO_BUCKET_SECRET:?set FOLIO_BUCKET_SECRET in .env}
 
+# Data Atlas's own schema. The storage service makes it a bucket too, as it does every app, though
+# Data Atlas keeps nothing there.
+x-atlas-storage: &atlas-storage
+  DATABASE_URL: postgres://app_atlas:${ATLAS_DATABASE_PASSWORD:?set ATLAS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+
 services:
   # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate. While
   # infra/deploy/public.sh has it open, Tailscale Funnel serves the same address to the internet too
@@ -129,8 +134,8 @@ services:
     environment:
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       GARAGE_ADMIN_URL: http://garage:3903
-      # Folio's, which ships with AUGUR, and any others named in .env.
-      APP_STORAGE: folio ${APP_STORAGE:-}
+      # Folio's and Data Atlas's, which ship with AUGUR, and any others named in .env.
+      APP_STORAGE: folio atlas ${APP_STORAGE:-}
     depends_on:
       postgres: { condition: service_healthy }
       garage: { condition: service_started }
@@ -185,7 +190,7 @@ services:
       # And whether AUGUR is open to the internet, and until when, from what infra/deploy/public.sh wrote.
       PUBLIC_ACCESS_FILE: /run/augur/tailscale/public-until
       # Each app's service, name=url: the apps that ship with AUGUR.
-      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090
+      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086
     volumes:
       - ./backups:/backups:ro
       - ./tailscale:/run/augur/tailscale:ro
@@ -209,7 +214,7 @@ services:
       ORG_NAME: ${ORG_NAME:-Organisation}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Identity makes each platform service's sign-in in Keycloak with these secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env},app-atlas=${ATLAS_CLIENT_SECRET:?set ATLAS_CLIENT_SECRET in .env}
 
   registry:
     <<: *service
@@ -227,7 +232,7 @@ services:
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEED_URL: ${APP_FEED_URL:-}
       # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.
-      PILLAR_APPS: folio auspex
+      PILLAR_APPS: folio auspex atlas
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
@@ -288,6 +293,21 @@ services:
       OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
       SERVICE_CLIENT_SECRET: ${AUSPEX_CLIENT_SECRET}
     depends_on: [identity, registry, events]
+
+  # Data Atlas, the entities the org knows about and how they connect: the third app every deployment
+  # ships with. Its graph lives in Postgres, in its own schema (it uses pg_trgm and pgvector, which the
+  # storage service makes); it follows Mandate's bindings and Artifacts' withdrawals through events.
+  atlas:
+    <<: *service
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    environment:
+      # Its own login comes first: it replaces the platform's DATABASE_URL.
+      <<: [*atlas-storage, *env]
+      PORT: 8086
+      SERVICE_CLIENT_SECRET: ${ATLAS_CLIENT_SECRET}
+    depends_on:
+      postgres: { condition: service_healthy }
+      storage: { condition: service_completed_successfully }
 
   # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
   # It works on the tables Folio's service makes, so it waits for the service to start.

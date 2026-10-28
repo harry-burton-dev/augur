@@ -79,6 +79,7 @@ Home and Admin are built like any app: one ES module the shell imports.
 | `events` | 8084 | Notifications (streamed live to the shell) and the append-only audit log, on Postgres. Only services can write; people read their own notifications. |
 | `models` | 8085 | The model gateway. Holds the AI provider's key (any OpenAI-style API: OpenRouter, LiteLLM, or the stand-in model), records every call in the audit log before making it, and gives each app a number of calls a day. Off until an admin turns it on. |
 | `@apps/folio` | 8083 | The service behind Artifacts (Folio in code): document libraries on each floor, with their folders, in its own schema. |
+| `@apps/atlas` | 8086 | The service behind Data Atlas: the org's entities, what's known of them and how they connect, fenced by floor, in its own schema. |
 
 Keycloak handles sign-in. The gateway passes each service the person calling, signed for that service alone ([Signed caller](docs/signed-caller.md)). Postgres holds data (a schema per service), and Garage is the object store for apps' files ([App storage](docs/app-storage.md)). Each API is described in `contracts/<service>.openapi.yaml`, and its major version is its path prefix (`/v1`).
 
@@ -117,6 +118,7 @@ pnpm check:boundaries
 | Guide | Covers |
 | --- | --- |
 | [Artifacts](docs/folio.md) | Using Artifacts, the document libraries, and running it as an admin |
+| [Data Atlas](docs/atlas.md) | The org's entities and the ontology, and running Data Atlas in a deployment |
 | [Build an app](docs/build-an-app.md) | From `create-app` to an app in the shell |
 | [Ship an app](docs/ship-an-app.md) | From a pull request's preview to servers updating the app by themselves |
 | [App previews](docs/app-previews.md) | Trying a pull request's build of an app on a real server |
