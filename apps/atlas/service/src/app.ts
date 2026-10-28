@@ -6,6 +6,7 @@ import { checkDetail, detailsOf, normaliseDetail, withSubtypes, type Ontology } 
 import { peopleFromEnv, type People } from './people.ts';
 import { knowledgeRoutes, subgraph, type Atlas } from './knowledge.ts';
 import { proposalRoutes } from './proposals.ts';
+import { resolver, type Embed } from './resolve.ts';
 import { KeyTakenError, refOf, type Entity, type PgAtlasStore } from './store.ts';
 
 /** The major version of the API this service serves. Its routes go under /v1, as the platform's do. */
@@ -18,6 +19,8 @@ export interface Options {
   callers?: CallerCheck;
   people?: People;
   audit?: Audit;
+  /** Turns text into vectors through the model gateway, to match by meaning. Without it, Triage says matching by meaning is off. */
+  embed?: Embed;
 }
 
 export type OnFloor = Caller & { workspace: CallerWorkspace };
@@ -46,7 +49,7 @@ const knownName = (name: string) => (name === UNNAMED_TEAM ? undefined : name);
 const REFS = { type: 'array', minItems: 1, maxItems: 200, items: { type: 'object', properties: { id: { type: 'string', minLength: 1, maxLength: 64 } }, required: ['id'] } } as const;
 const ID_PARAMS = { type: 'object', properties: { id: { type: 'string', maxLength: 64 } }, required: ['id'] } as const;
 
-export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), people = peopleFromEnv(), audit }: Options) => {
+export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), people = peopleFromEnv(), audit, embed }: Options) => {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
   const record = audit ?? auditFromEnv((entry) => app.log.info({ audit: entry }, 'audit (no audit log here)'));
   const recorded = (entry: Parameters<Audit>[0]) =>
@@ -159,6 +162,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
     unseenFrom: (caller, floor, principals, name) => unseen(floor, principals, caller.id, knownName(name)),
     tidyDetails,
     keyTaken,
+    resolver: resolver(store, embed),
   };
 
   await app.register(
@@ -233,6 +237,8 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
               ontology,
             );
             void recorded({ actor: caller.id, action: 'entity.created', target: entity.id, workspace: caller.workspace.id, detail: { type: entity.type, label: entity.label } });
+            // Its vector, so it can be matched by meaning: in the background, never holding up the answer.
+            void atlas.resolver.catchUp(ontology);
             return reply.code(201).send((await view(caller, [entity]))[0]);
           } catch (err) {
             if (err instanceof KeyTakenError) return reply.code(409).send(await keyTaken(caller, err));
@@ -334,6 +340,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
             );
             if (!changed) return reply.code(409).send({ error: 'retired', message: 'It was retired while you were changing it.' });
             void recorded({ actor: caller.id, action: 'entity.changed', target: entity.id, workspace: caller.workspace.id, detail: { fields: Object.keys(req.body) } });
+            void atlas.resolver.catchUp(ontology);
             return (await view(caller, [changed]))[0];
           } catch (err) {
             if (err instanceof KeyTakenError) return reply.code(409).send(await keyTaken(caller, err));

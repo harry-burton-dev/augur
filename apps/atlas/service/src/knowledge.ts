@@ -4,6 +4,7 @@ import type { Audit } from './audit.ts';
 import { floorPrincipal, type Unseen } from './floors.ts';
 import { checkDetail, detailsOf, isA, normaliseDetail, relationsFrom, withSubtypes, type DetailDef, type Ontology, type RelationDef } from './ontology.ts';
 import { refOf, type Entity, type Fact, type KeyTakenError, type Observation, type PgAtlasStore, type Source } from './store.ts';
+import type { Resolver } from './resolve.ts';
 
 /**
  * What is known about entities: observations (what someone saw or read, as
@@ -26,6 +27,8 @@ export interface Atlas {
   tidyDetails(ontology: Ontology, type: string, given: Record<string, string>): Record<string, string> | string;
   /** A refusal for an identity key another entity holds, naming it when the caller may see it. */
   keyTaken(caller: OnFloor, err: KeyTakenError): Promise<object>;
+  /** Which existing entities a proposal's mentions may be (resolve.ts). */
+  resolver: Resolver;
 }
 
 /** The other end of a link, as the caller may see it: the entity, or why not. */

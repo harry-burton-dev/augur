@@ -258,6 +258,11 @@ export class AtlasApi {
     return this.call<ProposalView & { queue: string }>('POST', '/proposals', body);
   }
 
+  /** Looks again for what its undecided mentions may be. */
+  matchProposal(id: string) {
+    return this.call<ProposalView>('POST', `/proposals/${encodeURIComponent(id)}/match`);
+  }
+
   decideMention(proposal: string, key: string, decision: { as: 'link'; entity: string } | { as: 'new'; type?: string; label?: string } | { as: 'drop' }) {
     return this.call<ProposalView>('POST', `/proposals/${encodeURIComponent(proposal)}/mentions/${encodeURIComponent(key)}`, decision);
   }
@@ -310,8 +315,20 @@ export interface NewProposal {
 /** An existing entity a mention may be, and why it was offered. */
 export interface MatchView {
   entity: Extract<OtherEnd, { kind: 'entity' }>;
-  why: 'key' | 'name' | 'alias';
+  /** An identity key, the name or another name exactly, a name spelt nearly alike, or meaning. */
+  why: 'key' | 'name' | 'alias' | 'similar' | 'meaning';
+  /** The key's name, or the name it's spelt like. */
   detail?: string;
+  /** How close, 0 to 1, for spelling and meaning. */
+  score?: number;
+}
+
+/** How a proposal's mentions were matched, and why something wasn't tried. */
+export interface Matching {
+  spelling: boolean;
+  meaning: boolean;
+  why?: string;
+  at: string;
 }
 
 export type MentionView = Mention & {
@@ -337,6 +354,7 @@ export interface ProposalSummary {
   createdBy: string;
   createdAt: string;
   closedAt?: string;
+  matching?: Matching;
   items: number;
   decided: number;
 }

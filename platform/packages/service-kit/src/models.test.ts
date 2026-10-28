@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { askModel } from './models.js';
+import { askModel, embedTexts } from './models.js';
 import { ServiceCallError } from './service.js';
 
 const credentials = { name: 'library', getToken: async () => 't' };
@@ -33,5 +33,26 @@ describe('askModel', () => {
     });
     await expect(refused).rejects.toBeInstanceOf(ServiceCallError);
     await expect(refused).rejects.toThrow('Could not ask the model: it answered 429: library has used its 500 model calls for today.');
+  });
+});
+
+describe('embedTexts', () => {
+  it('asks the model gateway for vectors as the app, on its floor', async () => {
+    let sent: { url: string; init: RequestInit } | undefined;
+    const answer = { vectors: [[1, 0]], model: 'e', usage: { inputTokens: 2 } };
+    const got = await embedTexts({
+      modelsUrl: 'http://models:8085',
+      credentials,
+      workspace: 'w-ops',
+      input: ['Northern Tern'],
+      fetchImpl: async (url, init) => {
+        sent = { url: String(url), init: init! };
+        return Response.json(answer);
+      },
+    });
+    expect(got).toEqual(answer);
+    expect(sent!.url).toBe('http://models:8085/v1/embeddings');
+    expect(new Headers(sent!.init.headers).get('x-workspace-id')).toBe('w-ops');
+    expect(JSON.parse(String(sent!.init.body))).toEqual({ input: ['Northern Tern'] });
   });
 });

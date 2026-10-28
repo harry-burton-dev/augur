@@ -249,6 +249,7 @@ services:
       MODEL_API_URL: "${MODEL_API_URL:-}"
       MODEL_API_KEY: "${MODEL_API_KEY:-}"
       MODEL_NAME: "${MODEL_NAME:-}"
+      MODEL_EMBEDDING_NAME: "${MODEL_EMBEDDING_NAME:-}"
 
   # Folio, the document libraries: the app every deployment ships with (a pillar app). It's an ordinary
   # app all the same, with its own sign-in, schema and bucket, and it puts itself in the catalogue when it

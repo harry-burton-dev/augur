@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { ago, type ListItem, type SelectOption } from '@augur/ui-kit';
 import type { DocumentRef, EntityRef } from '@augur/mfe-sdk';
 import './atlas-picker.js';
-import { day, floorWords, isA, propertyLabel, typeTree, type AtlasApi, type MentionView, type Ontology, type Place, type ProposalObservationView, type ProposalView, type Triage } from './api.js';
+import { day, floorWords, isA, propertyLabel, typeTree, type AtlasApi, type MatchView, type Matching, type MentionView, type Ontology, type Place, type ProposalObservationView, type ProposalView, type Triage } from './api.js';
 
 /** A mention's words picked out of the passage around them. */
 const inContext = (context: string, text: string) => {
@@ -11,7 +11,28 @@ const inContext = (context: string, text: string) => {
   return html`${context.slice(0, at)}<mark>${context.slice(at, at + text.length)}</mark>${context.slice(at + text.length)}`;
 };
 
-const WHY: Record<string, string> = { key: 'same', name: 'same name', alias: 'goes by that name' };
+/** Why a match was offered, in words: by key, name, spelling or meaning. */
+const matchWhy = (x: MatchView) => {
+  switch (x.why) {
+    case 'key':
+      return `same ${x.detail ?? 'key'}`;
+    case 'name':
+      return 'same name';
+    case 'alias':
+      return 'goes by that name';
+    case 'similar':
+      return x.detail && x.detail !== x.entity.label ? `goes by “${x.detail}”, spelt alike` : 'spelt alike';
+    case 'meaning':
+      return 'close in meaning';
+  }
+};
+
+/** What was tried to find matches, said plainly, with why anything wasn't. */
+const matchingWords = (m: Matching | undefined) => {
+  if (!m) return '';
+  const tried = ['identity keys', 'names', ...(m.spelling ? ['names spelt nearly alike'] : []), ...(m.meaning ? ['meaning'] : [])];
+  return `Matched by ${tried.slice(0, -1).join(', ')} and ${tried[tried.length - 1]}, ${ago(m.at)}.${m.why ? ` ${m.why}` : ''}`;
+};
 
 /**
  * Triage: where proposals become knowledge. A floor's open proposals, and one
@@ -189,13 +210,14 @@ export class AtlasTriage extends LitElement {
       ${outcome}
       ${decided || p.state !== 'open'
         ? nothing
-        : html`<div class="atlas-choices">
-              ${m.matches.map(
-                (x) => html`<ui-button kind="secondary" size="sm" ?disabled=${!can || waiting} @click=${() => void this.decide(m.key, () => this.api.decideMention(p.id, m.key, { as: 'link', entity: x.entity.id }))}
-                  >It’s ${x.entity.label}</ui-button><span class="atlas-note">${x.why === 'key' ? `same ${x.detail ?? 'key'}` : WHY[x.why]} · ${floorWords(x.entity.floorName)}</span>`,
-              )}
-            </div>
-            ${!m.matches.length ? html`<p class="atlas-note">Nothing that shows from here has this name or its keys.</p>` : nothing}
+        : html`${m.matches.length
+              ? html`<ul class="atlas-matches">
+                  ${m.matches.map(
+                    (x) => html`<li class="atlas-choices"><ui-button kind="secondary" size="sm" ?disabled=${!can || waiting} @click=${() => void this.decide(m.key, () => this.api.decideMention(p.id, m.key, { as: 'link', entity: x.entity.id }))}
+                      >It’s ${x.entity.label}</ui-button><span class="atlas-note">${matchWhy(x)} · ${floorWords(x.entity.floorName)}</span></li>`,
+                  )}
+                </ul>`
+              : html`<p class="atlas-note">Nothing that shows from here has this name, its keys, or one like it.</p>`}
             <div class="atlas-choices">
               <ui-button kind="ghost" size="sm" ?disabled=${!can || waiting} @click=${() => { this.choosing = this.choosing === m.key ? '' : m.key; this.making = ''; }}>Something else…</ui-button>
               <ui-button kind="ghost" size="sm" ?disabled=${!can || waiting || !kinds.length} @click=${() => { this.making = this.making === m.key ? '' : m.key; this.choosing = ''; this.newType = kinds[0]?.value ?? ''; this.newLabel = m.text; }}>A new one</ui-button>
@@ -279,7 +301,16 @@ export class AtlasTriage extends LitElement {
       ${p.can.why ? html`<p class="atlas-note">${p.can.why}</p>` : nothing}
       ${this.refusal && ['finish', 'withdraw'].includes(this.refusal.key) ? html`<p class="atlas-note atlas-refused" role="alert">${this.refusal.message}</p>` : nothing}
       <section aria-label="What it names">
-        <h2 class="atlas-section">What it names</h2>
+        <div class="atlas-head">
+          <h2 class="atlas-section">What it names</h2>
+          ${p.state === 'open'
+            ? html`<ui-button kind="ghost" size="sm" ?disabled=${!p.can.decide || this.busy === 'match' || !p.mentions.some((m) => !m.decision)}
+                title=${!p.can.decide ? (p.can.why ?? '') : !p.mentions.some((m) => !m.decision) ? 'Every mention is decided.' : ''}
+                @click=${() => void this.decide('match', () => this.api.matchProposal(p.id))}>${this.busy === 'match' ? 'Looking…' : 'Look again'}</ui-button>`
+            : nothing}
+        </div>
+        ${p.matching ? html`<p class="atlas-note atlas-matching">${matchingWords(p.matching)}</p>` : nothing}
+        ${this.refusal?.key === 'match' ? html`<p class="atlas-note atlas-refused" role="alert">${this.refusal.message}</p>` : nothing}
         <ul class="atlas-cards">${p.mentions.map((m) => this.mentionCard(p, m))}</ul>
       </section>
       ${p.observations.length
@@ -306,6 +337,8 @@ export class AtlasTriage extends LitElement {
         atlas-triage .atlas-actions, atlas-triage .atlas-choices { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
         atlas-triage .atlas-note { margin: 0; font-size: var(--type-small); color: var(--ink-muted); }
         atlas-triage .atlas-refused { color: var(--danger); }
+        atlas-triage .atlas-matching { margin-bottom: var(--space-3); }
+        atlas-triage .atlas-matches { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }
         atlas-triage .atlas-section { margin: 0 0 var(--space-3); font-size: var(--type-label); font-weight: 400; letter-spacing: var(--tracking-label, 0.2em); text-transform: uppercase; color: var(--ink-muted); }
         atlas-triage .atlas-cards, atlas-triage .atlas-terms { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-3); }
         atlas-triage .atlas-card { background: var(--surface-pane); border-radius: var(--radius-md, 12px); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }

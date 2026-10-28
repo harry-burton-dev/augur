@@ -18,7 +18,8 @@
   "scopes": [
     "audit:write",
     "people:read",
-    "events:publish"
+    "events:publish",
+    "models:use"
   ],
   "orbit": false,
   "handles": [
@@ -53,7 +54,7 @@
           "label": "Triage",
           "icon": "inbox",
           "path": "/triage",
-          "detail": "What’s proposed here, waiting for a lead",
+          "detail": "What\u2019s proposed here, waiting for a lead",
           "keywords": "triage proposals review mentions decide"
         }
       ]

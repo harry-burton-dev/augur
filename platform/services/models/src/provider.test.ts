@@ -56,6 +56,37 @@ describe('the OpenAI-style provider', () => {
   });
 });
 
+describe('embeddings', () => {
+  it('asks the embedding model for a vector per text, in order', async () => {
+    let sent: { url: string; body: { model: string; input: string[] } } | undefined;
+    const provider = openAiCompatible({
+      baseUrl: 'http://litellm:4000/v1',
+      model: 'chat',
+      embeddingModel: 'text-embedding-3-small',
+      fetchImpl: async (url, init) => {
+        sent = { url: String(url), body: JSON.parse(String(init!.body)) };
+        return Response.json({ data: [{ index: 1, embedding: [0, 1] }, { index: 0, embedding: [1, 0] }], usage: { prompt_tokens: 6 } });
+      },
+    });
+    expect(provider.embeddingModel).toBe('text-embedding-3-small');
+    expect(await provider.embed!(['Northern Tern', 'Grey Heron'])).toEqual({ vectors: [[1, 0], [0, 1]], model: 'text-embedding-3-small', usage: { inputTokens: 6 } });
+    expect(sent).toEqual({ url: 'http://litellm:4000/v1/embeddings', body: { model: 'text-embedding-3-small', input: ['Northern Tern', 'Grey Heron'] } });
+    expect(openAiCompatible({ baseUrl: 'http://litellm:4000/v1', model: 'chat' }).embed).toBeUndefined();
+  });
+
+  it('refuses an answer short of a vector for each text', async () => {
+    const provider = openAiCompatible({ baseUrl: 'http://x/v1', model: 'm', embeddingModel: 'e', fetchImpl: async () => Response.json({ data: [{ index: 0, embedding: [1] }] }) });
+    await expect(provider.embed!(['a', 'b'])).rejects.toThrow(/a vector for each text/);
+  });
+
+  it('has the stand-in put texts spelt alike close together', async () => {
+    const { vectors } = await standIn().embed!(['Northern Tern', 'N. Tern', 'Port of Rotterdam']);
+    const cos = (a: number[], b: number[]) => a.reduce((n, x, i) => n + x * b[i], 0);
+    expect(cos(vectors[0], vectors[1])).toBeGreaterThan(cos(vectors[0], vectors[2]));
+    expect(Math.hypot(...vectors[0])).toBeCloseTo(1);
+  });
+});
+
 describe('the stand-in model', () => {
   it('offers the tool that matches what was said, and says what it is otherwise', async () => {
     const model = standIn();
@@ -74,6 +105,7 @@ describe('the model from the server’s settings', () => {
     expect(providerFromEnv({ MODEL_API_URL: 'stand-in' })?.name).toBe('stand-in');
     expect(providerFromEnv({ MODEL_API_URL: 'http://litellm:4000/v1', MODEL_NAME: 'gpt-4o-mini' })).toMatchObject({ name: 'litellm:4000', model: 'gpt-4o-mini' });
     expect(() => providerFromEnv({ MODEL_API_URL: 'http://litellm:4000/v1' })).toThrow(/MODEL_NAME/);
+    expect(providerFromEnv({ MODEL_API_URL: 'http://litellm:4000/v1', MODEL_NAME: 'm', MODEL_EMBEDDING_NAME: 'e' })?.embeddingModel).toBe('e');
     expect(() => providerFromEnv({ MODEL_API_URL: 'litellm' })).toThrow(/http/);
   });
 });

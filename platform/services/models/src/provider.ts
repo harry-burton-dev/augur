@@ -39,11 +39,21 @@ export interface ChatAnswer {
   model: string;
 }
 
+export interface Embeddings {
+  /** One per text, in the order given; all the same length. */
+  vectors: number[][];
+  model: string;
+  usage: { inputTokens: number };
+}
+
 export interface ModelProvider {
   /** Where it is, for admins: "openrouter.ai", "stand-in". */
   name: string;
   model: string;
   chat(request: ChatRequest): Promise<ChatAnswer>;
+  /** The embedding model, when one is set up: what turns text into vectors, to match by meaning. */
+  embeddingModel?: string;
+  embed?(texts: string[]): Promise<Embeddings>;
 }
 
 /** The provider failed or refused; `status` is what to answer the caller with. */
@@ -87,36 +97,43 @@ export interface OpenAiCompatibleOptions {
   baseUrl: string;
   apiKey?: string;
   model: string;
+  /** The model that turns text into vectors (`/embeddings` is added), when the API has one. */
+  embeddingModel?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
 
-export const openAiCompatible = ({ baseUrl, apiKey, model, timeoutMs = 60_000, fetchImpl = fetch }: OpenAiCompatibleOptions): ModelProvider => {
-  const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+export const openAiCompatible = ({ baseUrl, apiKey, model, embeddingModel, timeoutMs = 60_000, fetchImpl = fetch }: OpenAiCompatibleOptions): ModelProvider => {
+  const base = baseUrl.replace(/\/$/, '');
+  /** Posts to the API, turning what goes wrong into words for whoever set it up. */
+  const post = async (path: string, which: string, body: object) => {
+    let res: Response;
+    try {
+      res = await fetchImpl(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (err) {
+      if ((err as Error).name === 'TimeoutError') throw new ProviderError(`The model took longer than ${timeoutMs / 1000} seconds to answer.`, 504);
+      throw new ProviderError(`The model provider can’t be reached (${(err as Error).message}).`);
+    }
+    if (!res.ok) {
+      const why = res.status === 401 || res.status === 403 ? ': check MODEL_API_KEY' : res.status === 404 ? `: check MODEL_API_URL and that it serves ${which}` : '';
+      throw new ProviderError(`The model provider answered ${res.status}${why}.`);
+    }
+    return res;
+  };
   return {
     name: new URL(baseUrl).host,
     model,
     async chat({ messages, tools }) {
-      let res: Response;
-      try {
-        res = await fetchImpl(url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}) },
-          body: JSON.stringify({
-            model,
-            messages: messages.map(toOpenAi),
-            ...(tools?.length ? { tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters ?? { type: 'object', properties: {} } } })) } : {}),
-          }),
-          signal: AbortSignal.timeout(timeoutMs),
-        });
-      } catch (err) {
-        if ((err as Error).name === 'TimeoutError') throw new ProviderError(`The model took longer than ${timeoutMs / 1000} seconds to answer.`, 504);
-        throw new ProviderError(`The model provider can’t be reached (${(err as Error).message}).`);
-      }
-      if (!res.ok) {
-        const why = res.status === 401 || res.status === 403 ? ': check MODEL_API_KEY' : res.status === 404 ? `: check MODEL_API_URL and that it serves ${model}` : '';
-        throw new ProviderError(`The model provider answered ${res.status}${why}.`);
-      }
+      const res = await post('/chat/completions', model, {
+        model,
+        messages: messages.map(toOpenAi),
+        ...(tools?.length ? { tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters ?? { type: 'object', properties: {} } } })) } : {}),
+      });
       const body = (await res.json().catch(() => ({}))) as {
         model?: string;
         choices?: { message?: OpenAiMessage }[];
@@ -131,7 +148,42 @@ export const openAiCompatible = ({ baseUrl, apiKey, model, timeoutMs = 60_000, f
         model: body.model ?? model,
       };
     },
+    ...(embeddingModel
+      ? {
+          embeddingModel,
+          async embed(texts: string[]): Promise<Embeddings> {
+            const res = await post('/embeddings', embeddingModel, { model: embeddingModel, input: texts });
+            const body = (await res.json().catch(() => ({}))) as { model?: string; data?: { index?: number; embedding?: number[] }[]; usage?: { prompt_tokens?: number } };
+            const data = [...(body.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+            const vectors = data.map((d) => d.embedding ?? []);
+            if (vectors.length !== texts.length || vectors.some((v) => !v.length || v.length !== vectors[0].length)) {
+              throw new ProviderError('The model provider answered without a vector for each text.');
+            }
+            return { vectors, model: body.model ?? embeddingModel, usage: { inputTokens: body.usage?.prompt_tokens ?? 0 } };
+          },
+        }
+      : {}),
   };
+};
+
+/** The stand-in's vectors' length. */
+const STAND_IN_DIMENSIONS = 256;
+
+/**
+ * The stand-in's vectors: letter triples hashed into a fixed number of slots
+ * and scaled to length 1. Texts spelt alike come out close; it knows nothing
+ * of meaning, but the whole path can be tried without a provider.
+ */
+const standInVector = (text: string) => {
+  const v = new Array<number>(STAND_IN_DIMENSIONS).fill(0);
+  const t = ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+  for (let i = 0; i + 3 <= t.length; i++) {
+    let h = 2166136261;
+    for (const c of t.slice(i, i + 3)) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    v[(h >>> 0) % STAND_IN_DIMENSIONS] += 1;
+  }
+  const length = Math.hypot(...v) || 1;
+  return v.map((x) => x / length);
 };
 
 const words = (text: string) => text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [];
@@ -146,6 +198,10 @@ const count = (messages: ChatMessage[]) => messages.reduce((n, m) => n + words(m
 export const standIn = (): ModelProvider => ({
   name: 'stand-in',
   model: 'stand-in',
+  embeddingModel: 'stand-in',
+  async embed(texts) {
+    return { vectors: texts.map(standInVector), model: 'stand-in', usage: { inputTokens: texts.reduce((n, t) => n + words(t).length, 0) } };
+  },
   async chat({ messages, tools = [] }) {
     const last = messages[messages.length - 1];
     const answer = (message: ChatAnswer['message']): ChatAnswer => ({

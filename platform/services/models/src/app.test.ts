@@ -161,4 +161,26 @@ describe('models', () => {
       ['2026-10-23', 'assistant', 1],
     ]);
   });
+
+  it('turns an app’s texts into vectors, as one call, recorded without the texts', async () => {
+    const { app, audited, store } = await start();
+    const res = await app.inject({ method: 'POST', url: '/v1/embeddings', headers: await asApp('scribe', 'w-finance'), payload: { input: ['Northern Tern', 'N. Tern'] } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ model: 'stand-in', vectors: [expect.any(Array), expect.any(Array)] });
+    expect(audited).toEqual([{ entry: { actor: { id: 'scribe', kind: 'service' }, app: 'scribe', action: 'model.embedded', detail: { model: 'stand-in', texts: 2 } }, workspace: 'w-finance' }]);
+    expect(JSON.stringify(audited)).not.toContain('Tern');
+    expect((await store.usage('2026-01-01'))[0]).toMatchObject({ app: 'scribe', calls: 1 });
+    // People don't ask for vectors; apps that aren't granted models:use there don't either.
+    expect((await app.inject({ method: 'POST', url: '/v1/embeddings', headers: sam, payload: { input: ['x'] } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/v1/embeddings', headers: await asApp('library', 'w-legal'), payload: { input: ['x'] } })).statusCode).toBe(403);
+  });
+
+  it('says when there’s no embedding model to ask', async () => {
+    const chatOnly: ModelProvider = { ...standIn(), embed: undefined, embeddingModel: undefined };
+    const { app } = await start({ provider: chatOnly });
+    const res = await app.inject({ method: 'POST', url: '/v1/embeddings', headers: await asApp('scribe'), payload: { input: ['x'] } });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().message).toMatch(/MODEL_EMBEDDING_NAME/);
+    expect((await app.inject({ method: 'GET', url: '/v1/settings', headers: alex })).json().embeddingModel).toBeUndefined();
+  });
 });

@@ -2,8 +2,8 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { OnFloor } from './app.ts';
 import { floorPrincipal } from './floors.ts';
 import { ID_PARAMS, LEADS_ONLY, NOTE, SOURCE, WHEN, accept, leadsHere, otherEnds, sayable, sourceOf, when, type Atlas } from './knowledge.ts';
-import { detailsOf, normaliseDetail, withSubtypes, type Ontology } from './ontology.ts';
-import { KeyTakenError, type Entity, type Match, type Mention, type Proposal, type ProposalItem, type ProposedObservation, type ProposedTerm, type Source } from './store.ts';
+import { detailsOf } from './ontology.ts';
+import { KeyTakenError, type Entity, type Mention, type Proposal, type ProposalItem, type ProposedObservation, type ProposedTerm, type Source } from './store.ts';
 
 /**
  * The ingest seam (spec, "Ingest seam"): everything a person didn't type
@@ -66,24 +66,6 @@ export interface ProposalRights {
   withdraw: boolean;
   why?: string;
 }
-
-/** The existing entities a mention may be, from where the proposal is kept: identity keys first, then names. */
-const matchesFor = async (atlas: Atlas, ontology: Ontology, floors: readonly string[], m: Mention): Promise<Match[]> => {
-  const found = new Map<string, Match>();
-  const kinds = m.type && ontology.types.some((t) => t.key === m.type) ? withSubtypes(ontology, m.type) : undefined;
-  for (const [key, raw] of Object.entries(m.keys ?? {})) {
-    if (!raw.trim()) continue;
-    // Tidied as the kind's detail would be ("9 400 117" is 9400117), when the kind is known.
-    const def = kinds?.flatMap((k) => detailsOf(ontology, k)).find((d) => d.key === key && d.identity);
-    const value = def ? normaliseDetail(def, raw) : raw.trim();
-    for (const e of await atlas.store.byKey(key, value, floors)) found.set(e.id, { entity: e.id, why: 'key', detail: def?.label ?? key });
-  }
-  for (const e of await atlas.store.byName(m.text.trim(), floors, kinds)) {
-    if (found.has(e.id)) continue;
-    found.set(e.id, { entity: e.id, why: e.label.toLowerCase() === m.text.trim().toLowerCase() ? 'name' : 'alias' });
-  }
-  return [...found.values()].slice(0, 10);
-};
 
 /** Checks a proposal's parts point at each other properly; the first problem, in words. */
 const shapeProblem = (mentions: Mention[], observations: ProposedObservation[], terms: ProposedTerm[]) => {
@@ -203,14 +185,15 @@ export const proposalRoutes = (app: FastifyInstance, atlas: Atlas) => {
       if (problem) return reply.code(400).send({ error: 'bad-proposal', message: problem });
       const ontology = await store.ontology();
       const { floors } = await atlas.sight(caller);
+      const { matches, matching } = await atlas.resolver.match(ontology, floors, mentions, caller.workspace.id);
       const items: ProposalItem[] = [
-        ...(await Promise.all(mentions.map(async (m) => ({ kind: 'mention' as const, key: m.key, body: m, matches: await matchesFor(atlas, ontology, floors, m) })))),
+        ...mentions.map((m) => ({ kind: 'mention' as const, key: m.key, body: m, matches: matches.get(m.key) ?? [] })),
         ...observations.map((o) => ({ kind: 'observation' as const, key: o.key, body: o, matches: [] })),
         ...terms.map((t) => ({ kind: 'term' as const, key: t.key, body: t, matches: [] })),
       ];
       const floor = floorPrincipal(caller.id, caller.workspace);
       const proposal = await store.addProposal(
-        { floor, workspace: caller.workspace.id, source, producer: { kind: 'person', id: caller.id }, ontologyVersion: ontology.version, createdBy: caller.id },
+        { floor, workspace: caller.workspace.id, source, producer: { kind: 'person', id: caller.id }, ontologyVersion: ontology.version, createdBy: caller.id, matching },
         items,
       );
       void recorded({ actor: caller.id, action: 'proposal.received', target: proposal.id, workspace: caller.workspace.id, detail: { mentions: mentions.length, observations: observations.length } });
@@ -408,6 +391,19 @@ export const proposalRoutes = (app: FastifyInstance, atlas: Atlas) => {
       return after(caller, found.proposal.id);
     },
   );
+
+  /** Looks again for what its undecided mentions may be: since it arrived, entities may have been added, or matching by meaning turned on. */
+  app.post<{ Params: { id: string } }>('/proposals/:id/match', { schema: { params: ID_PARAMS } }, async (req, reply) => {
+    const caller = atlas.onFloor(req, reply);
+    if (!caller) return reply;
+    const found = await workable(caller, reply, req.params.id);
+    if (!found) return reply;
+    const mentions = found.items.filter((i) => i.kind === 'mention' && !i.decision).map((i) => i.body as Mention);
+    const { floors } = await atlas.sight(caller);
+    const { matches, matching } = await atlas.resolver.match(await store.ontology(), floors, mentions, caller.workspace.id);
+    await store.rematch(found.proposal.id, matches, matching);
+    return after(caller, found.proposal.id);
+  });
 
   /** Finishes a proposal once everything in it is decided. */
   app.post<{ Params: { id: string } }>('/proposals/:id/finish', { schema: { params: ID_PARAMS } }, async (req, reply) => {

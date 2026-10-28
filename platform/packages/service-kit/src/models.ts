@@ -56,3 +56,38 @@ export const askModel = async ({ modelsUrl, credentials, workspace, messages, to
     workspace,
     fetchImpl,
   })) as ModelAnswer;
+
+export interface EmbedTextsOptions {
+  /** The model gateway's internal address, e.g. http://models:8085. */
+  modelsUrl: string;
+  credentials: ServiceCredentials;
+  /** The floor it's for; the app needs models:use granted there. */
+  workspace?: string;
+  /** Up to 64 texts, each up to 8000 characters. */
+  input: string[];
+  fetchImpl?: typeof fetch;
+}
+
+export interface Embedded {
+  /** One per text, in the order given. Vectors from different models don't compare: keep `model` beside them. */
+  vectors: number[][];
+  model: string;
+  usage: { inputTokens: number };
+}
+
+/**
+ * Turns texts into vectors through the model gateway, as the app, to match by
+ * meaning. The same rules as askModel: `models:use`, one call a request, and
+ * recorded (without the texts). Throws ServiceCallError, with 503 when no
+ * embedding model is set up on the server.
+ */
+export const embedTexts = async ({ modelsUrl, credentials, workspace, input, fetchImpl }: EmbedTextsOptions): Promise<Embedded> =>
+  (await callService({
+    method: 'POST',
+    url: `${modelsUrl.replace(/\/$/, '')}/v1/embeddings`,
+    credentials,
+    body: { input },
+    what: 'turn text into vectors',
+    workspace,
+    fetchImpl,
+  })) as Embedded;

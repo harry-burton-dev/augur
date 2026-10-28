@@ -27,7 +27,7 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
     return client;
   };
 
-  it('owns its schema, can use pgvector, and can’t reach the platform’s schemas', async () => {
+  it('owns its schema, can use pgvector and pg_trgm, and can’t reach the platform’s schemas', async () => {
     await provisionDatabase(admin, { app, password: 'first-password-123' });
     await admin.query('create schema if not exists storage_test_platform');
     await admin.query('create table if not exists storage_test_platform.secrets (x int)');
@@ -36,6 +36,7 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
       await client.query('create table notes (id int primary key, embedding vector(3))');
       await client.query(`insert into notes values (1, '[1,2,3]')`);
       expect((await client.query(`select ${schemaFor(app)}.notes.id from notes`)).rows).toEqual([{ id: 1 }]);
+      expect((await client.query(`select similarity('Northern Tern', 'N. Tern') > 0.3 as near`)).rows).toEqual([{ near: true }]);
       await expect(client.query('select * from storage_test_platform.secrets')).rejects.toThrow(/permission denied/);
       await expect(client.query('create table public.stray (x int)')).rejects.toThrow(/permission denied/);
     } finally {

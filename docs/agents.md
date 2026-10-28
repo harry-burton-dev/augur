@@ -27,6 +27,8 @@ Some choices:
 
 The gateway also needs its own sign-in, `MODELS_CLIENT_SECRET` (`openssl rand -hex 32`), to check apps' grants and write the audit log. Then `pc up -d`, and turn models on in Admin.
 
+Optionally set `MODEL_EMBEDDING_NAME` too, for matching by meaning (below).
+
 Admin's Status shows the gateway like every service. When a call fails, the person sees why in words (for example "The model provider answered 401: check MODEL_API_KEY"), and the gateway's log has the rest.
 
 ## An app's service asking the model
@@ -51,5 +53,17 @@ console.log(answer.message.content, answer.usage);
 Pass `tools` (a name, a description and a JSON schema for the arguments) and the answer may carry `toolCalls` instead of text: the app does what was asked, then sends the result back as a `tool` message with the call's `toolCallId`. The gateway never does anything itself.
 
 `askModel` throws a `ServiceCallError` whose message says why when models are off (403), the app isn't granted `models:use` on that floor (403), it has used its calls for today (429), or the provider failed (502, 504).
+
+## Matching by meaning
+
+An app's service can also turn texts into vectors with `embedTexts` from `@augur/service-kit`, to find things that mean the same though they're worded differently. Data Atlas uses it in Triage. It needs an embedding model on the server: set `MODEL_EMBEDDING_NAME` beside `MODEL_API_URL` (for example `openai/text-embedding-3-small` on OpenRouter, or whatever your LiteLLM proxy or Ollama serves). The stand-in always has one, which puts texts spelt alike close together but knows nothing of meaning.
+
+```ts
+import { embedTexts } from '@augur/service-kit';
+
+const { vectors, model } = await embedTexts({ modelsUrl: process.env.MODELS_URL!, credentials, workspace, input: ['Northern Tern', 'MV Arctic Dawn'] });
+```
+
+The same rules apply as for `askModel`: `models:use`, one call for each request (up to 64 texts), recorded as `model.embedded` without the texts. Keep `model` beside the vectors you store: vectors from different models don't compare. Without an embedding model the gateway answers 503, saying so.
 
 The gateway's API is in [contracts/models.openapi.yaml](../contracts/models.openapi.yaml).

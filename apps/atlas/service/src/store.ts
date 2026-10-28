@@ -116,9 +116,23 @@ export interface ProposedTerm {
 /** An existing entity a mention may be, and why it was offered. */
 export interface Match {
   entity: string;
-  why: 'key' | 'name' | 'alias';
-  /** For a key: which one, e.g. "IMO number". */
+  /** In the order they're tried: an identity key, the name or another name exactly, a name spelt nearly alike, or meaning. */
+  why: 'key' | 'name' | 'alias' | 'similar' | 'meaning';
+  /** For a key: which one, e.g. "IMO number". For a similar spelling: the name it's like. */
   detail?: string;
+  /** For similar spelling and meaning: how close, from 0 to 1. */
+  score?: number;
+}
+
+/** How a proposal's mentions were matched, so Triage can say what was and wasn't tried, and why. */
+export interface Matching {
+  /** Names spelt nearly alike (pg_trgm). */
+  spelling: boolean;
+  /** Meaning (embeddings through the model gateway). */
+  meaning: boolean;
+  /** Why something wasn't tried, in words. */
+  why?: string;
+  at: string;
 }
 
 export type MentionDecision = { as: 'link'; entity: string } | { as: 'new'; entity: string } | { as: 'drop' };
@@ -142,6 +156,8 @@ export interface Proposal {
   createdAt: string;
   closedBy?: string;
   closedAt?: string;
+  /** How its mentions were last matched; absent on proposals from before matching was said. */
+  matching?: Matching;
 }
 
 /** A proposal as listed in Triage: how much of it is decided. */
@@ -419,7 +435,32 @@ export const migrations: { id: string; sql: string }[] = [
         primary key (proposal, key)
       );`,
   },
+  {
+    id: '006_resolve',
+    sql: `
+      -- How a proposal's mentions were matched, and why something wasn't tried (explain, never hide).
+      alter table atlas.proposals add column matching jsonb;`,
+  },
 ];
+
+/**
+ * What Data Atlas makes beside its migrations once the extensions they need are
+ * there: the platform creates pg_trgm and pgvector in every app's database
+ * (the storage service), which an app's own login can't do. Run at each start,
+ * so a server that gains them later gains these too.
+ */
+const EXTRAS = {
+  spelling: (x: string) => `create index if not exists entities_label_trgm on atlas.entities using gin (lower(label) ${x}.gin_trgm_ops)`,
+  meaning: (x: string) => `create table if not exists atlas.entity_vectors (
+      entity text primary key references atlas.entities(id),
+      -- Vectors from different models don't compare: each is kept with the one that made it.
+      model text not null,
+      -- What was embedded, so a change to the entity is noticed.
+      source text not null,
+      embedding ${x}.vector not null,
+      made_at timestamptz not null default now()
+    )`,
+};
 
 interface ProposalRow {
   id: string;
@@ -433,6 +474,7 @@ interface ProposalRow {
   created_at: Date;
   closed_by: string | null;
   closed_at: Date | null;
+  matching: Matching | null;
 }
 
 const fromProposalRow = (r: ProposalRow): Proposal => ({
@@ -447,6 +489,7 @@ const fromProposalRow = (r: ProposalRow): Proposal => ({
   createdAt: r.created_at.toISOString(),
   ...(r.closed_by ? { closedBy: r.closed_by } : {}),
   ...(r.closed_at ? { closedAt: r.closed_at.toISOString() } : {}),
+  ...(r.matching ? { matching: r.matching } : {}),
 });
 
 interface ItemRow {
@@ -616,13 +659,32 @@ export const newEntityId = () => `ent_${ulid()}`;
 export class PgAtlasStore {
   private readonly pool: pg.Pool;
 
+  /** Which of the extensions resolve uses this database has (see EXTRAS). */
+  can = { spelling: false, meaning: false };
+  /** The schema each is in, quoted: Data Atlas's connections only search its own. */
+  private ext = { spelling: 'public', meaning: 'public' };
+
   private constructor(pool: pg.Pool) {
     this.pool = pool;
+  }
+
+  /** Makes what the extensions allow, and notes which there are. Locally, with a login that may, it creates them too. */
+  async prepareExtras() {
+    for (const [name, ext] of [['spelling', 'pg_trgm'], ['meaning', 'vector']] as const) {
+      // Where the login may (a local Postgres); on a server the platform has made it already, or can't.
+      await this.pool.query(`create extension if not exists ${ext} schema public`).catch(() => undefined);
+      const { rows } = await this.pool.query<{ schema: string }>('select n.nspname as schema from pg_extension e join pg_namespace n on n.oid = e.extnamespace where e.extname = $1', [ext]);
+      this.can[name] = !!rows.length;
+      if (!rows.length) continue;
+      this.ext[name] = pg.escapeIdentifier(rows[0].schema);
+      await this.pool.query(EXTRAS[name](this.ext[name]));
+    }
   }
 
   static async connect(connectionString: string) {
     const store = new PgAtlasStore(new pg.Pool({ connectionString, max: 4, options: '-c search_path=atlas' }));
     await store.migrate();
+    await store.prepareExtras();
     return store;
   }
 
@@ -981,12 +1043,71 @@ export class PgAtlasStore {
     return rows.map(fromRow);
   }
 
+  /**
+   * Active entities on these floors whose name or another name is spelt nearly
+   * like this (pg_trgm), closest first, with how close and the name that's close.
+   * Empty where the database hasn't pg_trgm.
+   */
+  async bySpelling(name: string, floors: readonly string[], { types, without = [], limit = 5, least = 0.3 }: { types?: readonly string[]; without?: readonly string[]; limit?: number; least?: number } = {}) {
+    if (!this.can.spelling) return [];
+    const t = this.ext.spelling;
+    const { rows } = await this.pool.query<EntityRow & { score: number; close: string }>(
+      `select * from (
+         select e.*, n.name as close, ${t}.similarity(lower(n.name), lower($1)) as score,
+                row_number() over (partition by e.id order by ${t}.similarity(lower(n.name), lower($1)) desc) as nth
+         from atlas.entities e cross join lateral (select e.label as name union all select unnest(e.aliases)) n
+         where e.state = 'active' and e.floor = any($2) and ($3::text[] is null or e.type = any($3)) and not (e.id = any($4))
+           and lower(n.name) operator(${t}.%) lower($1)
+       ) found where nth = 1 and score >= $5 order by score desc, id limit ${Number(limit)}`,
+      [name, floors, types ?? null, without, least],
+    );
+    return rows.map((r) => ({ entity: fromRow(r), score: Number(r.score), close: r.close }));
+  }
+
+  /** Active entities with no vector from this model, or one made from what they used to say: the next to embed. */
+  async unembedded(model: string, limit = 64, skip: readonly string[] = []): Promise<Entity[]> {
+    if (!this.can.meaning) return [];
+    const { rows } = await this.pool.query<EntityRow>(
+      `select ${ENTITY_COLUMNS.split(', ').map((c) => `e.${c}`).join(', ')} from atlas.entities e left join atlas.entity_vectors v on v.entity = e.id
+       where e.state = 'active' and not (e.workspace_id = any($2)) and (v.entity is null or v.model <> $1 or v.made_at < e.updated_at) order by e.updated_at limit ${Number(limit)}`,
+      [model, skip],
+    );
+    return rows.map(fromRow);
+  }
+
+  /** Keeps entities' vectors, replacing any older ones. */
+  async saveVectors(model: string, vectors: { entity: string; source: string; embedding: number[] }[]) {
+    for (const v of vectors) {
+      await this.pool.query(
+        `insert into atlas.entity_vectors (entity, model, source, embedding) values ($1, $2, $3, $4::${this.ext.meaning}.vector)
+         on conflict (entity) do update set model = excluded.model, source = excluded.source, embedding = excluded.embedding, made_at = now()`,
+        [v.entity, model, v.source, `[${v.embedding.join(',')}]`],
+      );
+    }
+  }
+
+  /** Active entities on these floors whose vector from this model is nearest this one, nearest first, with how near (cosine, 0 to 1). */
+  async byMeaning(embedding: number[], model: string, floors: readonly string[], { types, without = [], limit = 5, least = 0.6 }: { types?: readonly string[]; without?: readonly string[]; limit?: number; least?: number } = {}) {
+    if (!this.can.meaning) return [];
+    const x = this.ext.meaning;
+    const { rows } = await this.pool.query<EntityRow & { score: number }>(
+      `select * from (
+         select ${ENTITY_COLUMNS.split(', ').map((c) => `e.${c}`).join(', ')}, 1 - (v.embedding operator(${x}.<=>) $1::${x}.vector) as score
+         from atlas.entity_vectors v join atlas.entities e on e.id = v.entity
+         where v.model = $2 and ${x}.vector_dims(v.embedding) = $7 and e.state = 'active' and e.floor = any($3) and ($4::text[] is null or e.type = any($4)) and not (e.id = any($5))
+         order by v.embedding operator(${x}.<=>) $1::${x}.vector limit ${Number(limit)}
+       ) near where score >= $6 order by score desc`,
+      [`[${embedding.join(',')}]`, model, floors, types ?? null, without, least, embedding.length],
+    );
+    return rows.map((r) => ({ entity: fromRow(r), score: Number(r.score) }));
+  }
+
   async addProposal(p: Omit<Proposal, 'id' | 'state' | 'createdAt'>, items: ProposalItem[]): Promise<Proposal> {
     const id = `prp_${ulid()}`;
     return this.inTransaction(async (client) => {
       const { rows } = await client.query<ProposalRow>(
-        `insert into atlas.proposals (id, floor, workspace_id, source, producer, ontology_version, created_by) values ($1, $2, $3, $4, $5, $6, $7) returning *`,
-        [id, p.floor, p.workspace, JSON.stringify(p.source), JSON.stringify(p.producer), p.ontologyVersion, p.createdBy],
+        `insert into atlas.proposals (id, floor, workspace_id, source, producer, ontology_version, created_by, matching) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+        [id, p.floor, p.workspace, JSON.stringify(p.source), JSON.stringify(p.producer), p.ontologyVersion, p.createdBy, p.matching ? JSON.stringify(p.matching) : null],
       );
       for (const [n, item] of items.entries()) {
         await client.query('insert into atlas.proposal_items (proposal, key, kind, body, matches, sort) values ($1, $2, $3, $4, $5, $6)', [
@@ -1032,6 +1153,18 @@ export class PgAtlasStore {
       [proposal, key, JSON.stringify(decision), by],
     );
     return rows[0] && fromItemRow(rows[0]);
+  }
+
+  /** New matches for an open proposal's undecided mentions, and how they were found. */
+  async rematch(proposal: string, matches: Map<string, Match[]>, matching: Matching): Promise<boolean> {
+    return this.inTransaction(async (client) => {
+      const { rowCount } = await client.query(`update atlas.proposals set matching = $2 where id = $1 and state = 'open'`, [proposal, JSON.stringify(matching)]);
+      if (!rowCount) return false;
+      for (const [key, found] of matches) {
+        await client.query(`update atlas.proposal_items set matches = $3 where proposal = $1 and key = $2 and kind = 'mention' and decision is null`, [proposal, key, JSON.stringify(found)]);
+      }
+      return true;
+    });
   }
 
   /** Finishes or withdraws an open proposal. */

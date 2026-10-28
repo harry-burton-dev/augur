@@ -418,6 +418,34 @@ describe('triage', () => {
     expect(raise).toHaveBeenCalledWith({ type: 'document.open', payload: { app: 'folio', id: 'd-1', version: '2', title: 'Port report' } });
   });
 
+  it('says how mentions were matched and why not by meaning, and looks again when asked', async () => {
+    const matched: ProposalView = {
+      ...PROPOSAL,
+      matching: { spelling: true, meaning: false, why: 'Matching by meaning is off: Models are turned off. An admin can turn them on in Admin.', at: '2026-10-27T00:00:00Z' },
+      mentions: [{ ...PROPOSAL.mentions[0], matches: [{ ...PROPOSAL.mentions[0].matches[0], why: 'similar', detail: 'Northern Tern', score: 0.46 }] }],
+    };
+    let looked = 0;
+    const fetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path.startsWith('/api/atlas/v1/ontology')) return Response.json(ONTOLOGY);
+      if (path === '/api/atlas/v1/proposals/prp_1/match' && init?.method === 'POST') {
+        looked++;
+        return Response.json({ ...matched, matching: { spelling: true, meaning: true, at: '2026-10-27T00:00:00Z' } });
+      }
+      if (path.startsWith('/api/atlas/v1/proposals/prp_1')) return Response.json(matched);
+      return new Response(null, { status: 404 });
+    });
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(fetch, '/triage/prp_1'));
+    await settle(el);
+    expect(el.querySelector('.atlas-matching')!.textContent).toMatch(/^Matched by identity keys, names and names spelt nearly alike, .+\. Matching by meaning is off: Models are turned off/);
+    expect(el.textContent).toContain('It’s Northern Tern');
+    expect(el.querySelector('.atlas-matches .atlas-note')!.textContent).toBe('spelt alike · Maritime desk');
+    [...el.querySelectorAll('ui-button')].find((b) => b.textContent?.trim() === 'Look again')!.click();
+    await settle(el);
+    expect(looked).toBe(1);
+    expect(el.querySelector('.atlas-matching')!.textContent).toMatch(/^Matched by identity keys, names, names spelt nearly alike and meaning/);
+  });
+
   it('takes words another app offers, and files them in this floor’s Triage', async () => {
     let sent: unknown;
     const fetch = vi.fn(async (path: string, init?: RequestInit) => {
