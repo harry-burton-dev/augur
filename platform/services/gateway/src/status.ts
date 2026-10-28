@@ -199,6 +199,21 @@ const readJson = async <T>(path: string): Promise<T | undefined> => {
   }
 };
 
+/** Whether AUGUR is open to the internet through Tailscale Funnel, and until when. */
+export interface PublicAccess {
+  open: boolean;
+  until?: string;
+}
+
+/**
+ * What infra/deploy/public.sh last wrote: the time, in Unix seconds, AUGUR is open to the internet
+ * until. No file, or a time gone by, is private; the Tailscale container goes by the same file.
+ */
+export const publicAccess = async (file: string, now = Date.now()): Promise<PublicAccess> => {
+  const seconds = Number((await readFile(file, 'utf8').catch(() => '')).replace(/[^0-9]/g, ''));
+  return seconds * 1000 > now ? { open: true, until: new Date(seconds * 1000).toISOString() } : { open: false };
+};
+
 /**
  * What the backup container last wrote beside the backups: the night's dump
  * (expected within a day) and the weekly restore test (expected within 8 days).
