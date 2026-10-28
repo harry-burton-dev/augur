@@ -346,6 +346,8 @@ export const proposalRoutes = (app: FastifyInstance, atlas: Atlas) => {
       if (!item || item.kind !== 'observation') return reply.code(404).send({ error: 'not-found', message: 'The proposal has no such observation.' });
       if (item.decision) return reply.code(409).send({ error: 'decided', message: 'It has already been decided.' });
       const o = item.body;
+      // What was read from a source that's gone can't become evidence: it can only be dropped.
+      if (found.proposal.sourceGone && req.body.as !== 'drop') return reply.code(409).send({ error: 'source-gone', message: `${found.proposal.sourceGone} What it says can only be dropped now.` });
       if (req.body.as === 'drop') {
         if (!(await store.decide(found.proposal.id, item.key, { as: 'drop' }, caller.id))) return reply.code(409).send({ error: 'decided', message: 'Someone decided it while you were. Look again.' });
         void recorded({ actor: caller.id, action: 'proposal.decided', target: found.proposal.id, workspace: caller.workspace.id, detail: { key: item.key, as: 'drop' } });

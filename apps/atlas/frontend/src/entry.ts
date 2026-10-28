@@ -6,6 +6,9 @@ import './atlas-app.js';
 import './atlas-picker.js';
 import './atlas-propose.js';
 
+/** Mandate's intent for opening an intent (docs/mandate.md). */
+const AIM_OPEN = 'aim.open';
+
 /**
  * Where Data Atlas is in the address bar, so a place in it can be shared, and
  * Back goes to the last one: the shell mounts it again with that path.
@@ -89,6 +92,7 @@ export default defineMicroFrontend({
         user-id=${ctx.user.id}
         .pickDocument=${() => pickDocument(ctx, { purpose: 'Where it was read' })}
         .openDocument=${(ref: Parameters<typeof openDocument>[1]) => void openDocument(ctx, ref)}
+        .openIntent=${(id: string) => void ctx.raise({ type: AIM_OPEN, payload: { id } })}
         @atlas-place=${moved}
       ></atlas-app>`,
       el,

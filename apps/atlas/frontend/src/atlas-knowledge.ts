@@ -248,8 +248,8 @@ export class AtlasKnowledge extends LitElement {
     return facts.map((f) => ({
       id: f.id,
       title: this.says(f),
-      detail: [span(f), `Kept on ${floorWords(f.floorName)}`, f.disputes.length ? `${f.disputes.length === 1 ? 'Disputed' : `${f.disputes.length} disputes`}` : ''].filter(Boolean).join(' · '),
-      status: f.disputes.length ? ('warning' as const) : undefined,
+      detail: [span(f), `Kept on ${floorWords(f.floorName)}`, f.disputes.length ? `${f.disputes.length === 1 ? 'Disputed' : `${f.disputes.length} disputes`}` : '', f.unbacked ? 'Its sources were withdrawn' : ''].filter(Boolean).join(' · '),
+      status: f.disputes.length || f.unbacked ? ('warning' as const) : undefined,
       icon: f.disputes.length ? undefined : f.target ? 'atlas' : 'check',
     }));
   }
@@ -312,6 +312,7 @@ export class AtlasKnowledge extends LitElement {
             <dd>${f.backedBy.length === 1 ? 'One observation' : `${f.backedBy.length} observations`}</dd>
             ${f.note ? html`<dt>Note</dt><dd>${f.note}</dd>` : nothing}
           </dl>
+          ${f.unbacked ? html`<p class="atlas-note">${f.unbacked}</p>` : nothing}
           ${this.otherLine(f.other)}
           ${f.disputes.map(
             (d) => html`<div class="atlas-dispute">
@@ -344,9 +345,10 @@ export class AtlasKnowledge extends LitElement {
             ${o.raisedFrom ? html`<dt>Raised</dt><dd>From a floor below</dd>` : nothing}
             ${o.raisedTo.length ? html`<dt>Raised to</dt><dd>${o.raisedTo.join(', ')}</dd>` : nothing}
           </dl>
+          ${o.retracted ? html`<p class="atlas-note">${o.retracted.why} It’s kept as it was said, ${ago(o.retracted.at)} it stopped counting as evidence.</p>` : nothing}
           ${this.otherLine(o.other)}
           <div class="atlas-actions">
-            <ui-button kind="secondary" size="sm" ?disabled=${!o.can.accept} @click=${() => (this.panel = { kind: 'accept', observation: o })}>Accept as so here</ui-button>
+            <ui-button kind="secondary" size="sm" ?disabled=${!o.can.accept || !!o.retracted} title=${o.retracted ? 'Its source was withdrawn, so it can’t back a fact.' : ''} @click=${() => (this.panel = { kind: 'accept', observation: o })}>Accept as so here</ui-button>
             <ui-button kind="ghost" size="sm" ?disabled=${!o.can.raise} @click=${() => (this.panel = { kind: 'raise', observation: o })}>Raise to a floor above</ui-button>
           </div>
           ${o.can.why ? html`<p class="atlas-note">${o.can.why}</p>` : nothing}
@@ -389,8 +391,9 @@ export class AtlasKnowledge extends LitElement {
     const observations: ListItem[] = (k?.observations ?? []).map((o) => ({
       id: o.id,
       title: this.says(o),
-      detail: [o.observedAt ? `Seen ${day(o.observedAt)}` : `Recorded ${ago(o.createdAt)}`, sourceLine(o.source), o.grade, `On ${floorWords(o.floorName)}`, o.raisedTo.length ? `Raised to ${o.raisedTo.join(', ')}` : ''].filter(Boolean).join(' · '),
+      detail: [o.observedAt ? `Seen ${day(o.observedAt)}` : `Recorded ${ago(o.createdAt)}`, sourceLine(o.source), o.grade, `On ${floorWords(o.floorName)}`, o.raisedTo.length ? `Raised to ${o.raisedTo.join(', ')}` : '', o.retracted ? 'Source withdrawn' : ''].filter(Boolean).join(' · '),
       icon: o.source.kind === 'document' ? 'document' : 'view',
+      ...(o.retracted ? { status: 'warning' as const } : {}),
     }));
     return html`<style>
         atlas-knowledge { display: flex; flex-direction: column; gap: var(--space-5); }
@@ -405,6 +408,7 @@ export class AtlasKnowledge extends LitElement {
         <ui-button kind="secondary" size="sm" ?disabled=${this.entity.state !== 'active'} @click=${() => this.open({ kind: 'observe' })}>Record an observation</ui-button>
       </div>
       ${this.entity.state !== 'active' ? html`<p class="atlas-note">It has been retired, so nothing more is recorded about it.</p>` : nothing}
+      ${k?.noCurrentSource ? html`<p class="atlas-note" role="status">${k.noCurrentSource}</p>` : nothing}
       <div class="atlas-clocks">
         <ui-text-field type="date" label="True on" optional .value=${this.at} hint="The day in the world"
           @ui-change=${(e: CustomEvent<{ value: string }>) => {

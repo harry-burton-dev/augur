@@ -1,3 +1,4 @@
+import type { People } from './people.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { OnFloor } from './app.ts';
 import type { Audit } from './audit.ts';
@@ -29,6 +30,7 @@ export interface Atlas {
   keyTaken(caller: OnFloor, err: KeyTakenError): Promise<object>;
   /** Which existing entities a proposal's mentions may be (resolve.ts). */
   resolver: Resolver;
+  people: People;
 }
 
 /** The other end of a link, as the caller may see it: the entity, or why not. */
@@ -130,6 +132,26 @@ export const otherEnds = async (atlas: Atlas, caller: OnFloor, ids: readonly str
 export const knowledgeRoutes = (app: FastifyInstance, atlas: Atlas) => {
   const { store, recorded } = atlas;
 
+  /**
+   * What uses an entity, from here (spec, "used by"): intents bound to it, from
+   * Mandate's events, and documents what's known of it came from. Intents are
+   * ids and roles: the page asks Mandate to name them as the viewer, so one the
+   * viewer can't open still shows, saying where it's kept.
+   */
+  app.get<{ Params: { id: string } }>('/entities/:id/used-by', { schema: { params: ID_PARAMS } }, async (req, reply) => {
+    const found = await atlas.seen(req, reply, req.params.id);
+    if (!found) return reply;
+    const { caller, entity } = found;
+    const { floors } = await atlas.sight(caller);
+    const [uses, documents] = await Promise.all([store.usedBy(entity.id), store.mentionedIn(entity.id, floors)]);
+    // A team's workspace is the team: name it, so an intent the viewer can't open says where it's kept.
+    const teams = await atlas.people.teamNames([...new Set(uses.map((u) => u.workspace))]).catch(() => new Map<string, string>());
+    return {
+      intents: uses.filter((u) => u.app === 'mandate').map((u) => ({ app: u.app, id: u.id, role: u.role, since: u.since, ...(teams.get(u.workspace) ? { floorName: teams.get(u.workspace) } : {}) })),
+      documents,
+    };
+  });
+
   /** Everything known about an entity from here: facts true at `at` as recorded by `known`, its links both ways, and observations. */
   app.get<{ Params: { id: string }; Querystring: { at?: string; known?: string } }>(
     '/entities/:id/knowledge',
@@ -161,8 +183,12 @@ export const knowledgeRoutes = (app: FastifyInstance, atlas: Atlas) => {
         if (!leadsHere(caller)) return { end: false, withdraw: false, dispute: true, why: 'Only this floor’s leads end or withdraw what it accepts. You can dispute it.' };
         return { end: !f.validTo, withdraw: true, dispute: true, ...(f.validTo ? { why: 'It has already ended.' } : {}) };
       };
+      // Facts whose every observation's source is gone stay, saying so (never silently dropped).
+      const backing = new Map((await store.observationsById([...new Set(facts.flatMap((f) => f.backedBy))])).map((o) => [o.id, o]));
+      const unbacked = (f: Fact) => f.backedBy.length > 0 && f.backedBy.every((id) => backing.get(id)?.retracted);
       const factView = (f: Fact) => ({
         ...f,
+        ...(unbacked(f) ? { unbacked: 'Every source it rested on was withdrawn. It stands until this floor’s leads end or withdraw it.' } : {}),
         direction: f.entity === entity.id ? ('out' as const) : ('in' as const),
         ...(f.target ? { other: others(f.entity === entity.id ? f.target : f.entity) } : {}),
         floorName: named(f.floor),
@@ -184,6 +210,8 @@ export const knowledgeRoutes = (app: FastifyInstance, atlas: Atlas) => {
         // What the caller may do on the floor they stand on, and why not.
         here: { floorName: named(here), accept: leadsHere(caller), ...(leadsHere(caller) ? {} : { why: LEADS_ONLY }) },
         facts: facts.map(factView),
+        // An entity whose only evidence was withdrawn keeps its place, marked as having no current source.
+        ...(observations.length && observations.every((o) => o.retracted) ? { noCurrentSource: 'Everything known of it here came from sources since withdrawn. It stays, with no current source.' } : {}),
         observations: observations.map((o) => ({
           ...o,
           direction: o.entity === entity.id ? ('out' as const) : ('in' as const),
@@ -283,6 +311,8 @@ export const knowledgeRoutes = (app: FastifyInstance, atlas: Atlas) => {
       if (usable.length !== new Set(req.body.backedBy).size) {
         return reply.code(400).send({ error: 'bad-backing', message: 'A fact rests on observations of this entity that show from this floor. One of those given isn’t.' });
       }
+      const gone = usable.find((o) => o.retracted);
+      if (gone) return reply.code(409).send({ error: 'source-gone', message: `${gone.retracted!.why} It’s kept, but can’t back a fact.` });
       if (new Set(usable.map((o) => `${o.property}|${o.value ?? ''}|${o.target ?? ''}`)).size > 1) {
         return reply.code(400).send({ error: 'mixed-backing', message: 'Those observations say different things. Accept the one this floor holds to be so.' });
       }

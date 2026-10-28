@@ -299,6 +299,7 @@ export class AtlasTriage extends LitElement {
         </div>
       </div>
       ${p.can.why ? html`<p class="atlas-note">${p.can.why}</p>` : nothing}
+      ${p.sourceGone && p.state === 'open' ? html`<p class="atlas-note atlas-refused" role="status">${p.sourceGone} What it names can still be decided; what it says can only be dropped.</p>` : nothing}
       ${this.refusal && ['finish', 'withdraw'].includes(this.refusal.key) ? html`<p class="atlas-note atlas-refused" role="alert">${this.refusal.message}</p>` : nothing}
       <section aria-label="What it names">
         <div class="atlas-head">

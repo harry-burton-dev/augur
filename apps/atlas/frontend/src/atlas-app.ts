@@ -5,6 +5,7 @@ import './atlas-explorer.js';
 import './atlas-knowledge.js';
 import './atlas-ontology.js';
 import './atlas-triage.js';
+import './atlas-used-by.js';
 import { AtlasError, onEntity, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
 
 type Dialog = 'new' | 'edit' | 'retire';
@@ -39,6 +40,7 @@ export class AtlasApp extends LitElement {
     newType: { state: true },
     pickDocument: { attribute: false },
     openDocument: { attribute: false },
+    openIntent: { attribute: false },
     userId: { type: String, attribute: 'user-id' },
   };
 
@@ -64,6 +66,8 @@ export class AtlasApp extends LitElement {
   declare pickDocument: (() => Promise<DocumentRef>) | undefined;
   /** Opens a source in the app that keeps it (the SDK's openDocument). */
   declare openDocument: ((ref: DocumentRef) => void) | undefined;
+  /** Opens an intent in Mandate (its aim.open). */
+  declare openIntent: ((id: string) => void) | undefined;
   /** Who is looking: Triage says which proposals are theirs. */
   declare userId: string;
   private searching: ReturnType<typeof setTimeout> | undefined;
@@ -280,7 +284,10 @@ export class AtlasApp extends LitElement {
         ${type ? html`<dt>In the ontology</dt><dd>${type.packTerm} <span class="atlas-key">${type.pack.toUpperCase()}</span></dd>` : nothing}
       </dl>
       <atlas-knowledge .api=${this.api} .entity=${e} .ontology=${this.ontology} .pickDocument=${this.pickDocument}
-        @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}></atlas-knowledge>`;
+        @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}></atlas-knowledge>
+      <atlas-used-by .api=${this.api} entity=${e.id}
+        @atlas-open-intent=${(ev: CustomEvent<{ id: string }>) => this.openIntent?.(ev.detail.id)}
+        @atlas-open-document=${(ev: CustomEvent<{ ref: DocumentRef }>) => this.openDocument?.(ev.detail.ref)}></atlas-used-by>`;
   }
 
   private triagePage() {

@@ -193,6 +193,8 @@ export interface FactView {
   recordedAt: string;
   disputes: Dispute[];
   can: { end: boolean; withdraw: boolean; dispute: boolean; why?: string };
+  /** Every observation it rests on was retracted, said in words. */
+  unbacked?: string;
 }
 
 /** An observation as the caller sees it: what someone saw or read, as they said it. */
@@ -215,6 +217,8 @@ export interface ObservationView {
   createdBy: string;
   createdAt: string;
   can: { accept: boolean; raise: boolean; raiseTo: { floor: string; name: string }[]; why?: string };
+  /** Its source was withdrawn or deleted: kept, no longer evidence. */
+  retracted?: { at: string; why: string };
 }
 
 export interface Knowledge {
@@ -224,6 +228,21 @@ export interface Knowledge {
   here: { floorName: string; accept: boolean; why?: string };
   facts: FactView[];
   observations: ObservationView[];
+  /** Everything known of it here came from sources since withdrawn. */
+  noCurrentSource?: string;
+}
+
+/** What uses an entity: intents bound to it (ids, named by Mandate) and documents what's known came from. */
+export interface UsedBy {
+  intents: { app: string; id: string; role: string; since: string; floorName?: string }[];
+  documents: { app: string; id: string; title: string; observations: number; lastAt: string; withdrawn: boolean }[];
+}
+
+/** An intent as Mandate names it for this person: a title, or that they can't open it. */
+export interface IntentName {
+  id: string;
+  label?: string;
+  canOpen: boolean;
 }
 
 export interface NewObservation {
@@ -402,6 +421,17 @@ export class AtlasApi {
     return res.text();
   }
 
+  usedBy(id: string) {
+    return this.call<UsedBy>('GET', `/entities/${encodeURIComponent(id)}/used-by`);
+  }
+
+  /** Asks Mandate, as the person, to name intents: those they can't open come back unnamed. */
+  async nameIntents(ids: string[]): Promise<IntentName[]> {
+    const res = await this.fetchOnFloor('/api/mandate/v1/refs/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids }) });
+    if (!res.ok) throw new AtlasError('Mandate isn’t open to you on this floor, so the intents can’t be named.', res.status);
+    return ((await res.json()) as { refs: IntentName[] }).refs;
+  }
+
   /** The graph around some entities from this floor, a ring at a time. */
   subgraph(query: SubgraphQuery) {
     return this.call<Subgraph>('POST', '/subgraph', { ...query, seeds: query.seeds.map((id) => ({ id })) });
@@ -478,6 +508,8 @@ export interface ProposalSummary {
   createdAt: string;
   closedAt?: string;
   matching?: Matching;
+  /** Its source was withdrawn or deleted while it waited. */
+  sourceGone?: string;
   items: number;
   decided: number;
 }

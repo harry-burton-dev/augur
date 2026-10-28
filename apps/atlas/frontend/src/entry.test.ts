@@ -101,6 +101,7 @@ const settle = async (el: HTMLElement) => {
     await ((el.querySelector('atlas-app') ?? el.querySelector('atlas-picker') ?? el.querySelector('atlas-propose')) as AtlasApp | null)?.updateComplete;
     await (el.querySelector('atlas-triage') as AtlasApp | null)?.updateComplete;
     await (el.querySelector('atlas-ontology') as AtlasApp | null)?.updateComplete;
+    await (el.querySelector('atlas-used-by') as AtlasApp | null)?.updateComplete;
   }
 };
 
@@ -529,5 +530,49 @@ describe('ontology', () => {
     expect((el.querySelector('atlas-ontology ui-tag') as HTMLElement & { label: string }).label).toBe('Kept as Vessel');
     const adopt = [...el.querySelectorAll<HTMLElement & { disabled: boolean }>('atlas-ontology ui-button')].find((b) => b.textContent === 'Adopt…')!;
     expect(adopt.disabled).toBe(true);
+  });
+});
+
+describe('used by', () => {
+  const USED = {
+    intents: [
+      { app: 'mandate', id: 'int_1', role: 'subject', since: '2026-10-27T00:00:00Z' },
+      { app: 'mandate', id: 'int_2', role: 'resource', since: '2026-10-27T00:00:00Z', floorName: 'Ops planning' },
+    ],
+    documents: [{ app: 'folio', id: 'd-1', title: 'Port report', observations: 2, lastAt: '2026-10-27T00:00:00Z', withdrawn: true }],
+  };
+  const known = { ...KNOWN, noCurrentSource: 'Everything known of it here came from sources since withdrawn. It stays, with no current source.' };
+  const routes = (mandate: () => Response) => ({
+    '/api/atlas/v1/ontology': () => Response.json(ONTOLOGY),
+    '/api/atlas/v1/entities/ent_01/knowledge': () => Response.json(known),
+    '/api/atlas/v1/entities/ent_01/used-by': () => Response.json(USED),
+    '/api/atlas/v1/entities/ent_01': () => Response.json(TERN),
+    '/api/mandate/v1/refs/resolve': mandate,
+  });
+  const lists = (el: HTMLElement) => [...el.querySelectorAll('atlas-used-by ui-list')] as (HTMLElement & { items: { id: string; title: string; detail: string; disabled?: boolean }[] })[];
+
+  it('names intents through Mandate as the person, keeps the ones they can’t open in sight, and opens the rest', async () => {
+    const raise = vi.fn();
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(answering(routes(() => Response.json({ refs: [{ id: 'int_1', label: 'Operation Alpha', canOpen: true }, { id: 'int_2', canOpen: false }] }))), '/entities/ent_01', { raise }));
+    await settle(el);
+    await settle(el);
+    const [intents, documents] = lists(el);
+    expect(intents.items).toEqual([
+      expect.objectContaining({ id: 'int_1', title: 'Operation Alpha', detail: expect.stringMatching(/^Intent · its subject · bound/) }),
+      expect.objectContaining({ id: 'int_2', title: 'An intent you can’t open', detail: expect.stringContaining('kept on Ops planning, ask its lead'), disabled: true }),
+    ]);
+    expect(documents.items[0]).toMatchObject({ title: 'Port report', detail: expect.stringContaining('2 observations from it · since withdrawn') });
+    expect(el.textContent).toContain('It stays, with no current source.');
+    intents.dispatchEvent(new CustomEvent('ui-open', { detail: { item: intents.items[0] } }));
+    expect(raise).toHaveBeenCalledWith({ type: 'aim.open', payload: { id: 'int_1' } });
+  });
+
+  it('says how many intents use it when Mandate can’t be asked', async () => {
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(answering(routes(() => new Response(null, { status: 403 }))), '/entities/ent_01'));
+    await settle(el);
+    await settle(el);
+    expect(el.textContent).toContain('2 intents use it. Mandate isn’t open to you on this floor, so the intents can’t be named.');
   });
 });
