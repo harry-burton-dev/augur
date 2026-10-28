@@ -56,6 +56,14 @@
           "path": "/here",
           "detail": "Who’s here and which apps you can use",
           "keywords": "people apps members leads"
+        },
+        {
+          "id": "plant",
+          "label": "Plant room",
+          "icon": "server",
+          "path": "/plant",
+          "detail": "Is every part of AUGUR answering (for admins)",
+          "keywords": "status health services versions backups admin"
         }
       ]
     }

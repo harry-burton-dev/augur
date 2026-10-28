@@ -55,6 +55,7 @@ export default defineMicroFrontend({
         .api=${apiFor(ctx)}
         here=${ctx.workspace.id}
         user-id=${ctx.user.id}
+        ?admin=${ctx.user.roles.includes('admin')}
         .place=${placeForIntent(ctx.intent, ctx.workspace.id) ?? placeFor(ctx.path, ctx.workspace.id)}
         @auspex-place=${moved}
       ></auspex-app>`,
