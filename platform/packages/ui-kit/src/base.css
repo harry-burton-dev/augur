@@ -43,12 +43,12 @@
 html[data-motion='reduce'] {
   --motion-instant: 0.01ms; --motion-quick: 0.01ms; --motion-base: 0.01ms; --motion-slow: 0.01ms; --motion-calm: 0.01ms;
   --motion-spin: 0s; --motion-run: 0s; --motion-shimmer: 0s; --motion-ping: 0s; --motion-drift: 0s;
-  --travel-near: 0px;
+  --travel-near: 0px; --travel-floor: 0px;
 }
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-instant: 0.01ms; --motion-quick: 0.01ms; --motion-base: 0.01ms; --motion-slow: 0.01ms; --motion-calm: 0.01ms;
     --motion-spin: 0s; --motion-run: 0s; --motion-shimmer: 0s; --motion-ping: 0s; --motion-drift: 0s;
-    --travel-near: 0px;
+    --travel-near: 0px; --travel-floor: 0px;
   }
 }

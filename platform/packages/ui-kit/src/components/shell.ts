@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { base, label } from '../shared.js';
 import { animate, motionMode, tokenEasing, tokenValue } from '../motion.js';
 import { settleSurfaces } from './surface.js';
-import { floorBeside, floorDirection, floorIcon, floorLevel, floorMeaning, floorStack, type ShellFloor } from './floors.js';
+import { floorBeside, floorDirection, floorIcon, floorKindName, floorLevel, floorMeaning, floorStack, type FloorDirection, type ShellFloor } from './floors.js';
 import { statusUrgency, type StatusName } from './status.js';
 import './icon.js';
 import './menu.js';
@@ -170,7 +170,8 @@ export class UiShell extends LitElement {
     area: { type: String },
     floors: { attribute: false },
     floor: { type: String },
-    arrival: { state: true },
+    card: { state: true },
+    said: { state: true },
     version: { type: String },
     background: { type: String, reflect: true },
     isOpen: { type: Boolean, reflect: true, attribute: 'open' },
@@ -208,7 +209,8 @@ export class UiShell extends LitElement {
   declare findResults: ShellFindResult[];
   /** The groups of `findResults` in the order they're shown, each with whether it's still coming. */
   declare findGroups: ShellFindGroup[];
-  declare settings: { reduceMotion?: boolean; density?: 'comfortable' | 'compact' };
+  /** A person's settings. `areaTitles` (on unless false) shows an area title card on arriving at a floor or opening an app. */
+  declare settings: { reduceMotion?: boolean; density?: 'comfortable' | 'compact'; areaTitles?: boolean };
   declare away: boolean;
   /** Whether Account offers Switch workspace; a host with one workspace turns it off. Floors replace it. */
   declare canSwitchWorkspace: boolean;
@@ -228,8 +230,10 @@ export class UiShell extends LitElement {
   declare area: string;
   /** The id of the floor the person is on. Setting a new one plays the move. */
   declare floor: string;
-  /** The floor just arrived on, shown for a moment like a lift's display. */
-  declare arrival: { name: string; words: string } | null;
+  /** The area title card showing now, if any: arriving on a floor or opening an app. */
+  declare card: AreaCard | null;
+  /** Where you just arrived, in words, for screen readers. */
+  declare said: string;
   /** What's running, shown in Settings; the host sets it. */
   declare version: string;
   /** The water's preset (Calm Tide unless a screen has a reason), or `none` for the still ground. */
@@ -245,7 +249,11 @@ export class UiShell extends LitElement {
   private returnFocus: HTMLElement | null = null;
   private clock: ReturnType<typeof setInterval> | undefined;
   private arriveTimer: ReturnType<typeof setTimeout> | undefined;
-  private arrivalTimer: ReturnType<typeof setTimeout> | undefined;
+  private cardTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The way the last floor move went, until the next screen has come in from the other side. */
+  private inbound: FloorDirection | undefined;
+  /** The app last arrived in, so its card plays once on opening it, not on every page of it. */
+  private arrivedIn = '';
   /** The team last stood on, so going up from your own floor goes back there. */
   private lastTeam: string | undefined;
 
@@ -270,14 +278,15 @@ export class UiShell extends LitElement {
     this.streamError = '';
     this.findResults = [];
     this.findGroups = [];
-    this.settings = { reduceMotion: false, density: 'comfortable' };
+    this.settings = { reduceMotion: false, density: 'comfortable', areaTitles: true };
     this.away = false;
     this.canSwitchWorkspace = true;
     this.floors = [];
     this.backTo = '';
     this.area = '';
     this.floor = '';
-    this.arrival = null;
+    this.card = null;
+    this.said = '';
     this.version = '';
     this.background = 'Calm Tide';
     this.isOpen = false;
@@ -437,14 +446,49 @@ export class UiShell extends LitElement {
    * The app arrives: it rises a short way into place as it fades in, and the
    * kit's surfaces in it settle in one after another. Under reduced motion it
    * only fades. Jumped to its end by any key or press (`finishMotion`).
+   * Opening an app, rather than another page of the one open, plays its title
+   * card: the app's name, under the floor it opened on.
    */
   arrive(): Promise<void> {
     const box = this.stageBox;
     if (!box) return Promise.resolve();
+    const app = this.openNow;
+    if (app && this.arrivedIn !== app.id) {
+      this.arrivedIn = app.id;
+      if (!this.inbound) this.showCard({ kind: 'app', kick: this.currentFloor?.name ?? this.product, name: app.name });
+    }
     box.getAnimations().forEach((a) => a.cancel());
     settleSurfaces(tokenValue('motion-calm', 600));
+    if (this.inbound) return this.enterFloor(box);
     const rise = motionMode() === 'reduce' ? 'none' : `translateY(${tokenValue('travel-near', 24)}px)`;
     return animate(box, [{ transform: rise, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: tokenValue('motion-slow', 320), easing: tokenEasing('ease-out') });
+  }
+
+  /**
+   * The leaving half of a move between floors: what you're looking at goes
+   * the way you're going. Going up, it sinks away; going down, it rises away;
+   * across, it slides aside. The host waits for this before it takes the app
+   * down, so nothing goes blank partway through. Under reduced motion it fades.
+   */
+  leaveFloor(direction: FloorDirection): Promise<void> {
+    const box = this.stageBox;
+    if (!box) return Promise.resolve();
+    box.getAnimations().forEach((a) => a.cancel());
+    return animate(box, [{ transform: 'none', opacity: 1 }, { transform: travel(direction, 1), opacity: 0 }], {
+      duration: tokenValue('motion-slow', 320),
+      easing: tokenEasing('ease-in'),
+      fill: 'forwards',
+    });
+  }
+
+  /** The arriving half: the new floor comes in from the other side. */
+  private enterFloor(box: HTMLElement): Promise<void> {
+    const direction = this.inbound!;
+    this.inbound = undefined;
+    return animate(box, [{ transform: travel(direction, -1), opacity: 0 }, { transform: 'none', opacity: 1 }], {
+      duration: tokenValue('motion-calm', 600),
+      easing: tokenEasing('ease-out'),
+    });
   }
 
   /** The app leaves on Back: it sinks a short way as it fades, in about four fifths of the time it took to arrive. */
@@ -461,8 +505,33 @@ export class UiShell extends LitElement {
 
   /** Put the stage back as it rests, after a move that left it hidden. */
   settleStage() {
-    this.stageBox?.getAnimations().forEach((a) => a.cancel());
+    const box = this.stageBox;
+    box?.getAnimations().forEach((a) => a.cancel());
+    if (box && this.inbound) void this.enterFloor(box);
   }
+
+  /**
+   * Show an area title card for a moment. Cards are generated from the floor
+   * or app arrived at (docs/shell-principles.md, "Arrivals are generated"),
+   * never written by hand; the Area titles setting turns them off.
+   */
+  private showCard(card: AreaCard) {
+    clearTimeout(this.cardTimer);
+    if (this.settings.areaTitles === false) {
+      this.card = null;
+      return;
+    }
+    // Nothing repeats its parent: a kicker that only says the name again goes.
+    this.card = card.kick.toLowerCase() === card.name.toLowerCase() ? { ...card, kick: '' } : card;
+    this.cardTimer = setTimeout(() => (this.card = null), tokenValue('motion-title', 2400));
+  }
+
+  /** Any key, press or scroll ends the card at once: it never keeps anyone waiting. */
+  private endCard = () => {
+    if (!this.card) return;
+    clearTimeout(this.cardTimer);
+    this.card = null;
+  };
 
   /* ---- lifecycle and keys ---- */
 
@@ -485,18 +554,21 @@ export class UiShell extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     window.addEventListener('keydown', this.onWindowKey);
+    for (const type of ['keydown', 'pointerdown', 'wheel'] as const) window.addEventListener(type, this.endCard, { capture: true, passive: true });
     this.clock = setInterval(() => (this.now = Date.now()), 30_000);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener('keydown', this.onWindowKey);
+    for (const type of ['keydown', 'pointerdown', 'wheel'] as const) window.removeEventListener(type, this.endCard, { capture: true });
     clearInterval(this.clock);
     clearTimeout(this.arriveTimer);
-    clearTimeout(this.arrivalTimer);
+    clearTimeout(this.cardTimer);
   }
 
   override willUpdate(changed: Map<string, unknown>) {
+    if (changed.has('current') && this.current !== this.arrivedIn) this.arrivedIn = '';
     if (!changed.has('floor')) return;
     const here = this.currentFloor;
     // Remember the deepest team on your way, so going up and back down retraces it.
@@ -505,16 +577,11 @@ export class UiShell extends LitElement {
     const before = changed.get('floor') as string | undefined;
     const from = this.floors.find((f) => f.id === before);
     if (!here || !before || !from) return;
-    // A move between floors: the water travels, the app fades in on the new floor, and the floor's name shows for a moment.
+    // A move between floors: the water travels, the next screen comes in from the other side, and the floor's card plays.
     const direction = floorDirection(from, here);
-    const words = direction === 'up' ? `Up to ${here.name}` : direction === 'down' ? (here.kind === 'personal' ? 'Down to you' : `Down to ${here.name}`) : here.name;
-    this.arrival = { name: here.name, words };
-    this.toggleAttribute('moving', true);
-    clearTimeout(this.arrivalTimer);
-    this.arrivalTimer = setTimeout(() => {
-      this.arrival = null;
-      this.removeAttribute('moving');
-    }, 1400);
+    this.said = direction === 'up' ? `Up to ${here.name}` : direction === 'down' ? (here.kind === 'personal' ? 'Down to you' : `Down to ${here.name}`) : here.name;
+    this.inbound = direction;
+    this.showCard({ kind: 'floor', kick: floorKindName[here.kind], name: here.name, line: floorMeaning(here) });
     void this.updateComplete.then(() => this.waves?.move(direction));
   }
 
@@ -849,11 +916,17 @@ export class UiShell extends LitElement {
       .gauge button:not([aria-current]) .label b { color: var(--ink-muted); font-weight: 400; }
       .gauge button:hover .label b { color: var(--ink); }
       @keyframes label-in { from { opacity: 0; transform: translateX(6px); } }
-      .lift { position: absolute; z-index: 5; left: 50%; top: calc(var(--band-top) + var(--space-5)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border-radius: var(--radius-pill); background: var(--surface-overlay); border: 1px solid var(--hairline); color: var(--ink); font-size: var(--type-small); letter-spacing: var(--tracking-mark); text-transform: uppercase; pointer-events: none; animation: lift var(--motion-calm) var(--s-ease); }
-      .lift ui-icon { color: var(--floor-mark); }
-      @keyframes lift { from { opacity: 0; transform: translate(-50%, -8px); } }
-      :host([moving]) .stage { animation: arrive var(--motion-calm) var(--s-ease); }
-      @keyframes arrive { from { opacity: 0; } }
+      /* The area title card: fades in, holds, and fades out where it is. It ignores the pointer and covers nothing you need. */
+      .card { position: absolute; z-index: 5; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); text-align: center; pointer-events: none; animation: card-life var(--motion-title) var(--ease-standard) both; }
+      .card::before { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(60% 40% at 50% 50%, color-mix(in srgb, var(--slate-deep) 72%, transparent), transparent); }
+      .card .kick { display: flex; align-items: center; gap: var(--space-4); font-size: var(--type-meta); letter-spacing: var(--tracking-mark); text-transform: uppercase; color: var(--floor-mark); margin-right: calc(var(--tracking-mark) * -1); animation: card-in var(--motion-calm) var(--ease-standard) var(--motion-base) both; }
+      .card .kick::before, .card .kick::after { content: ''; width: var(--space-7); height: 1px; background: linear-gradient(to right, transparent, var(--floor-mark)); }
+      .card .kick::after { transform: scaleX(-1); }
+      .card .name { margin: 0; font-size: var(--type-display-fluid); line-height: var(--leading-display-fluid); font-weight: 200; letter-spacing: var(--tracking-title); text-transform: uppercase; color: var(--ink); margin-right: calc(var(--tracking-title) * -1); animation: card-track calc(var(--motion-calm) * 2) var(--ease-out) both; }
+      .card .line { font-size: var(--type-small); color: var(--ink-muted); animation: card-in var(--motion-calm) var(--ease-standard) var(--motion-calm) both; }
+      @keyframes card-life { 0% { opacity: 0; } 10% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes card-track { from { letter-spacing: calc(var(--tracking-title) * 2); opacity: 0; filter: blur(8px); } }
+      @keyframes card-in { from { opacity: 0; } }
       .floors { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
       .floors .row[aria-current] { color: var(--ink); }
       .floors .row ui-icon { color: var(--ink-muted); }
@@ -869,7 +942,7 @@ export class UiShell extends LitElement {
         .dome > button, :host([open]) .dome > button { transform: translate(-50%, -50%); transition: opacity var(--motion-base); }
         .thread::after, .orb.needs::after { animation: none; }
         .view { animation: none; }
-        .lift, :host([moving]) .stage, .gauge .label { animation: none; }
+        .card .name, .card .kick, .card .line, .gauge .label { animation: none; }
       }
     `,
   ];
@@ -1197,7 +1270,7 @@ export class UiShell extends LitElement {
         <button class="link" @click=${() => this.emit('ui-function', { id: 'sign-out' })}>Sign out</button></div>`;
   }
 
-  private setSetting(key: 'reduceMotion' | 'density', value: unknown) {
+  private setSetting(key: 'reduceMotion' | 'density' | 'areaTitles', value: unknown) {
     this.settings = { ...this.settings, [key]: value };
     this.emit('ui-setting', { key, value });
   }
@@ -1206,6 +1279,8 @@ export class UiShell extends LitElement {
     const s = this.settings;
     return html`<div class="pair"><span id="rm">Reduce motion</span>
         <button class="switch" role="switch" aria-labelledby="rm" aria-checked=${s.reduceMotion ? 'true' : 'false'} @click=${() => this.setSetting('reduceMotion', !s.reduceMotion)}></button></div>
+      <div class="pair"><span id="at">Area titles</span>
+        <button class="switch" role="switch" aria-labelledby="at" aria-checked=${s.areaTitles === false ? 'false' : 'true'} @click=${() => this.setSetting('areaTitles', s.areaTitles === false)}></button></div>
       <div class="pair"><span>Density</span>
         <div class="seg" role="group" aria-label="Density">
           ${(['comfortable', 'compact'] as const).map(
@@ -1255,7 +1330,9 @@ export class UiShell extends LitElement {
         : nothing}</div>
       ${this.renderBand()}
       ${this.renderGauge()}
-      ${this.arrival ? html`<div class="lift" aria-hidden="true"><ui-icon name=${floorIcon[this.currentFloor?.kind ?? 'personal']} size="16"></ui-icon>${this.arrival.name}</div>` : nothing}
+      ${this.card
+        ? html`<div class="card ${this.card.kind}" aria-hidden="true">${this.card.kick ? html`<span class="kick">${this.card.kick}</span>` : nothing}<p class="name">${this.card.name}</p>${this.card.line ? html`<span class="line">${this.card.line}</span>` : nothing}</div>`
+        : nothing}
       <div class="stage" part="stage"><slot></slot></div>
       <div class="sky ${mood}" role="dialog" aria-modal="true" aria-label="Shell" aria-hidden=${this.isOpen ? 'false' : 'true'} ?inert=${!this.isOpen}
         @keydown=${this.onSkyKey}
@@ -1271,9 +1348,24 @@ export class UiShell extends LitElement {
           : nothing}
         <button class="esc" tabindex="-1" @click=${() => (this.view ? this.closeView() : this.close())}><kbd>Esc</kbd>${this.view ? 'Back' : 'Close'}</button>
       </div>
-      <div class="live" aria-live="polite">${this.isOpen ? `${cap.title}. ${cap.line}` : (this.arrival?.words ?? '')}</div>
+      <div class="live" aria-live="polite">${this.isOpen ? `${cap.title}. ${cap.line}` : this.said}</div>
     `;
   }
+}
+
+/** An area title card: the kind of place or the floor above, its name large, and who sees it. */
+export interface AreaCard {
+  kind: 'floor' | 'app';
+  kick: string;
+  name: string;
+  line?: string;
+}
+
+/** Where the stage sits as it leaves (1) or before it comes in (-1) on a move between floors. */
+function travel(direction: FloorDirection, way: 1 | -1): string {
+  if (motionMode() === 'reduce') return 'none';
+  const far = tokenValue('travel-floor', 96) * way;
+  return direction === 'up' ? `translateY(${far}px)` : direction === 'down' ? `translateY(${-far}px)` : `translateX(${-far}px)`;
 }
 
 if (!customElements.get('ui-shell')) customElements.define('ui-shell', UiShell);

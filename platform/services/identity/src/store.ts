@@ -5,6 +5,8 @@ import { workspaceMigrations } from './workspaces.ts';
 export interface Preferences {
   reduceMotion?: boolean;
   density?: 'comfortable' | 'compact';
+  /** Whether area title cards show on arriving at a floor or opening an app; on unless false. */
+  areaTitles?: boolean;
   away?: boolean;
   /** App ids, most recent first. */
   recent?: string[];
