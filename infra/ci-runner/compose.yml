@@ -1,0 +1,68 @@
+# AUGUR's self-hosted GitHub Actions runner, so CI uses no GitHub-hosted minutes.
+# Its own compose project, apart from AUGUR's: it runs its own Docker daemon, so jobs'
+# containers, ports and clean-ups never touch AUGUR's. Setup in docs/ci-runner.md.
+#
+#   docker compose -f infra/ci-runner/compose.yml --env-file infra/ci-runner/.env up -d --build
+name: augur-ci
+
+x-runner: &runner
+  build: .
+  restart: unless-stopped
+  # For the Docker daemon inside it. See "Security" in docs/ci-runner.md.
+  privileged: true
+  environment: &env
+    RUNNER_SCOPE: repo
+    REPO_URL: ${REPO_URL:?set REPO_URL in .env}
+    LABELS: augur-ci
+    RUN_AS_ROOT: "false"
+    START_DOCKER_SERVICE: "true"
+    UNSET_CONFIG_VARS: "true"
+    # Registers once, with a one-hour token, and keeps its own credentials after that.
+    CONFIGURED_ACTIONS_RUNNER_FILES_DIR: /runner-config
+    DISABLE_AUTOMATIC_DEREGISTRATION: "true"
+    RUNNER_WORKDIR: /home/runner/work
+  cpus: ${CI_CPUS:-4}
+  mem_limit: ${CI_MEMORY:-8g}
+  logging:
+    driver: json-file
+    options: { max-size: 10m, max-file: "3" }
+
+services:
+  runner:
+    <<: *runner
+    hostname: augur-ci-1
+    environment:
+      <<: *env
+      RUNNER_NAME: ${RUNNER_NAME:-augur-ci-1}
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+    volumes:
+      - config-1:/runner-config
+      - docker-1:/var/lib/docker
+      - work-1:/home/runner/work
+      - cache-1:/home/runner/.cache
+
+  # A second runner, so a pull request's jobs run two at a time:
+  #   COMPOSE_PROFILES=two docker compose ... up -d --build
+  runner-2:
+    <<: *runner
+    profiles: [two]
+    hostname: augur-ci-2
+    environment:
+      <<: *env
+      RUNNER_NAME: ${RUNNER_2_NAME:-augur-ci-2}
+      RUNNER_TOKEN: ${RUNNER_2_TOKEN:-}
+    volumes:
+      - config-2:/runner-config
+      - docker-2:/var/lib/docker
+      - work-2:/home/runner/work
+      - cache-2:/home/runner/.cache
+
+volumes:
+  config-1:
+  docker-1:
+  work-1:
+  cache-1:
+  config-2:
+  docker-2:
+  work-2:
+  cache-2:
