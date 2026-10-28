@@ -7,7 +7,7 @@ import { html } from 'lit';
  * the week as a line of days.
  */
 export const styles = html`<style>
-  auspex-app { display: block; color: var(--ink); font-family: var(--font-sans); }
+  auspex-app, auspex-access { display: block; color: var(--ink); font-family: var(--font-sans); }
   .ax-stage { width: min(var(--measure-wide), 100% - 2 * var(--edge)); margin: 0 auto; padding: var(--space-6) 0 var(--space-8); display: flex; flex-direction: column; gap: var(--space-5); }
   .ax-pane { background: var(--surface-pane); backdrop-filter: blur(var(--surface-blur)); -webkit-backdrop-filter: blur(var(--surface-blur)); border-radius: var(--radius-card); padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
   .ax-label { font-size: var(--type-label); line-height: var(--leading-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--ink-muted); margin: 0; font-weight: 400; }
@@ -137,6 +137,64 @@ export const styles = html`<style>
   .ax-path { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); }
   .ax-path b { color: var(--ink); font-weight: 400; }
 
+  /* Who can open this: asked from another app, over it */
+  .ax-stage.glance { width: min(var(--measure-glance), 100% - 2 * var(--edge)); }
+  auspex-access .ax-pane { background: var(--surface-overlay); box-shadow: var(--shadow-overlay); }
+  .ax-whos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+  .ax-who { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--hairline); }
+  .ax-who:last-child { border-bottom: 0; }
+  .ax-who .txt { display: flex; flex-direction: column; min-width: 0; }
+  .ax-who .t1 { font-size: var(--type-body); line-height: var(--leading-body); }
+  .ax-who .t2 { font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); }
+  .ax-who .lvl { font-size: var(--type-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--ink-muted); white-space: nowrap; }
+  .ax-who.out .t1 { color: var(--ink-muted); }
+
+  /* The replay: a month of days, each a column of marks, played forward */
+  .ax-replay { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); align-items: end; gap: 3px; border-bottom: 1px solid var(--hairline-strong); padding-bottom: var(--space-2); }
+  .ax-rday { border: 0; background: none; padding: var(--space-1) 0; cursor: pointer; display: flex; justify-content: center; border-radius: var(--radius-inset); min-height: calc(var(--tallest) * 11px + var(--space-2)); align-items: flex-end; transition: opacity var(--motion-quick) var(--ease-out); }
+  .ax-rday:hover, .ax-rday:focus-visible { background: var(--surface-inset); }
+  .ax-rday:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .ax-rday.later { opacity: 0.25; }
+  .ax-rday.picked { background: var(--surface-raised); box-shadow: inset 0 -2px 0 var(--green); }
+  .ax-rday .marks { display: flex; flex-direction: column-reverse; gap: 3px; align-items: center; }
+  .ax-rday i, .ax-key i.people, .ax-key i.app, .ax-key i.blocked, .ax-key i.team { width: 8px; height: 8px; display: block; border-radius: 50%; background: var(--floor-team-high); }
+  .ax-rday i.app, .ax-key i.app { border-radius: 2px; background: var(--floor-org-high); }
+  .ax-rday i.team, .ax-key i.team { background: none; border: 1.5px solid var(--floor-team-high); box-sizing: border-box; }
+  .ax-rday i.blocked, .ax-key i.blocked { border-radius: 1px; background: var(--danger); transform: rotate(45deg) scale(0.85); }
+  .ax-scrub { display: flex; align-items: center; gap: var(--space-4); }
+  .ax-scrub input[type=range] { flex: 1; min-width: 0; accent-color: var(--green); }
+  .ax-scrub .when { min-width: 5em; text-align: right; }
+  .ax-tally { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .ax-tally li { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3); border-radius: var(--radius-pill); background: var(--surface-inset); font-size: var(--type-meta); line-height: var(--leading-meta); }
+  .ax-tally li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--floor-team-high); }
+  .ax-tally li.lead { background: none; padding-left: 0; color: var(--ink-muted); }
+  .ax-tally li.lead::before { display: none; }
+  .ax-tally li.app::before { border-radius: 2px; background: var(--floor-org-high); }
+  .ax-tally li.team::before { background: none; border: 1.5px solid var(--floor-team-high); box-sizing: border-box; }
+
+  /* The plant room: each part a machine with a lamp, its version and a meter of how fast it answered */
+  auspex-plant, auspex-replay { display: flex; flex-direction: column; gap: var(--space-5); }
+  .ax-orb.plant { background: none; border: 1.5px solid var(--hairline-strong); color: var(--ink); }
+  .ax-release { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); padding: var(--space-4); border-radius: var(--radius-inset); background: var(--surface-inset); }
+  .ax-release .ver { display: flex; flex-direction: column; font-size: var(--type-title-s); line-height: var(--leading-title-s); font-variant-numeric: tabular-nums; }
+  .ax-release .ver.out { color: var(--green); }
+  .ax-release .arrow { color: var(--ink-muted); }
+  .ax-machines { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); }
+  .ax-machine { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "lamp nm ver" "meter meter meter" "st st st"; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-4); border-radius: var(--radius-inset); background: var(--surface-inset); border: 1px solid transparent; }
+  .ax-machine .lamp { grid-area: lamp; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--ink-muted); box-sizing: border-box; }
+  .ax-machine .nm { grid-area: nm; font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+  .ax-machine .ver { grid-area: ver; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .ax-machine .meter { grid-area: meter; height: 3px; border-radius: var(--radius-pill); background: var(--hairline); overflow: hidden; }
+  .ax-machine .meter i { display: block; height: 100%; background: var(--success); border-radius: inherit; }
+  .ax-machine .st { grid-area: st; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
+  .ax-machine.up .lamp { background: var(--success); border-color: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent); }
+  .ax-machine.slow .lamp { background: var(--warning); border-color: var(--warning); }
+  .ax-machine.slow .meter i { background: var(--warning); }
+  .ax-machine.down { border-color: var(--danger); }
+  .ax-machine.down .lamp { background: var(--danger); border-color: var(--danger); animation: ax-blink var(--motion-ping) var(--ease-ping) infinite; }
+  .ax-machine.down .st { color: var(--danger); }
+  @keyframes ax-blink { 50% { opacity: 0.35; } }
+
   /* Home's card */
   auspex-glance { display: flex; flex-direction: column; gap: var(--space-4); }
   auspex-glance .ax-climb { display: flex; align-items: center; gap: var(--space-2); }
@@ -151,5 +209,7 @@ export const styles = html`<style>
   @media (prefers-reduced-motion: reduce) {
     .auspex-map .halo.ping { animation: none; display: none; }
     .auspex-map .mark { transition: none; }
+    .ax-rday { transition: none; }
+    .ax-machine.down .lamp { animation: none; }
   }
 </style>`;

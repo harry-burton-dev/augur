@@ -4,6 +4,11 @@ import { AuspexApi } from './api.js';
 import { pathFor, placeFor, type AuspexApp } from './auspex-app.js';
 import { addressFor, AUSPEX_OPEN, FLOOR_MAP, placeForIntent } from './entry.js';
 import { layoutMap } from './layout.js';
+import { ACCESS_EXPLAIN, explain, readExplain } from './access.js';
+import type { AuspexAccess } from './auspex-access.js';
+import { plantLine, roomsOf, type AuspexPlant } from './auspex-plant.js';
+import { daysOf, tally, type AuspexReplay } from './auspex-replay.js';
+import type { Part } from './api.js';
 import { appLine, ledBy, whoCanAdd, whyHere } from './words.js';
 
 /** Acme: Finance (Payroll, Treasury) and Legal (Contracts, inside it Disputes). Alex is on Payroll. */
@@ -152,5 +157,197 @@ describe('the app', () => {
     expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Legal');
     expect([...el.querySelectorAll('.ax-names li')].map((l) => l.textContent)).toEqual(['Contracts', 'Disputes']);
     expect(el.querySelector('.ax-can')!.textContent).toContain('Lee Park');
+  });
+});
+
+describe('who can open this (access.explain)', () => {
+  const ask = readExplain({
+    thing: { app: 'folio', appName: 'Artifacts', id: 'd-1', title: 'Travel policy', kind: 'document' },
+    audience: [
+      { principal: 'tree:fin', name: 'Finance', level: 'read', via: 'its floor' },
+      { principal: 'team:pay', level: 'edit', via: 'its library', since: '2026-10-01T09:00:00Z' },
+      { principal: 'person:lee', name: 'Lee Park', level: 'manage', via: 'shared with this document' },
+      { principal: 'tree:leg', name: 'Legal', level: 'read', via: 'shared with this document' },
+      { principal: 'nonsense' },
+    ],
+    change: { where: 'Share', allowed: false },
+  })!;
+
+  it('reads only what it can explain', () => {
+    expect(ACCESS_EXPLAIN).toBe('access.explain');
+    expect(readExplain({ thing: { app: 'folio', id: 'd-1' }, audience: [] })).toBeUndefined();
+    expect(readExplain(undefined)).toBeUndefined();
+    expect(ask.audience.map((a) => a.principal)).toEqual(['tree:fin', 'team:pay', 'person:lee', 'tree:leg']);
+    expect(ask.change).toEqual({ where: 'Share', allowed: false });
+  });
+
+  it('counts only people the person may know about, and says when it is at least that', () => {
+    const { entries, people, atLeast, org } = explain(ask, acme);
+    expect(entries.map((e) => e.who)).toEqual(['Finance and the teams inside it', 'Payroll', 'Lee Park', 'Legal and the teams inside it']);
+    expect(entries[1]).toMatchObject({ people: 2 });
+    // Legal is closed to them: its size isn't theirs to know.
+    expect(entries[3].people).toBeUndefined();
+    expect(people).toBe(4);
+    expect(atLeast).toBe(true);
+    expect(org?.name).toBe('Acme');
+  });
+
+  it('says everyone when the org can open it', () => {
+    const all = explain({ ...ask, audience: [{ principal: 'org' }] }, acme);
+    expect(all).toMatchObject({ people: 9, atLeast: false, org: undefined });
+    expect(all.entries[0].who).toBe('Everyone at Acme');
+  });
+
+  it('shows each one, who’s left out, and who can change it, over the app that asked', async () => {
+    await import('./auspex-access.js');
+    const api = new AuspexApi(async () => new Response(JSON.stringify(acme), { status: 200 }));
+    const el = document.createElement('auspex-access') as AuspexAccess;
+    Object.assign(el, { api, ask, appName: 'Artifacts' });
+    document.body.replaceChildren(el);
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+      await el.updateComplete;
+    }
+    expect(el.querySelector('ui-heading')!.getAttribute('summary')).toBe('At least 4 people can open it.');
+    const rows = [...el.querySelectorAll('.ax-who')].map((r) => r.textContent!.replace(/\s+/g, ' ').trim());
+    expect(rows).toHaveLength(5);
+    expect(rows[3]).toContain('You’re not on it, so its size isn’t shown');
+    expect(rows[4]).toContain('Everyone else at Acme');
+    expect(el.querySelector('.ax-can')!.textContent).toContain('Only whoever manages it can change who can open it, in Share.');
+    let done = 0;
+    el.addEventListener('auspex-done', () => done++);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    el.querySelector<HTMLElement>('.ax-can ui-button')!.click();
+    expect(done).toBe(2);
+    expect(el.querySelector('.ax-can ui-button')!.textContent).toBe('Back to Artifacts');
+  });
+});
+
+describe('the replay, for leads and admins', () => {
+  const now = new Date('2026-10-28T12:00:00').getTime();
+  const at = (daysBack: number, hour = 10) => new Date(now - daysBack * 86_400_000).toISOString().replace(/T.*/, `T${String(hour).padStart(2, '0')}:00:00`);
+  const changes = [
+    { at: at(0), kind: 'joined' as const, floor: 'pay', person: 'alex' },
+    { at: at(2), kind: 'app-blocked' as const, floor: 'pay', app: 'agents' },
+    { at: at(2, 9), kind: 'left' as const, floor: 'pay', person: 'kim' },
+    { at: at(29), kind: 'team-renamed' as const, floor: 'pay', name: 'Payroll' },
+    { at: at(31), kind: 'joined' as const, floor: 'pay', person: 'old' },
+  ];
+
+  it('lays the month out a day at a time and adds it up', () => {
+    const days = daysOf(changes, now);
+    expect(days).toHaveLength(30);
+    expect(days[0]!.changes.map((c) => c.kind)).toEqual(['team-renamed']);
+    expect(days[27]!.changes.map((c) => c.kind)).toEqual(['left', 'app-blocked']);
+    expect(days[29]!.changes.map((c) => c.kind)).toEqual(['joined']);
+    expect(tally(days).map((t) => t.words)).toEqual(['1 joined', '1 left', '1 app change', '1 team change']);
+    expect(tally(days.slice(0, 1)).map((t) => t.words)).toEqual(['1 team change']);
+  });
+
+  it('plays forward and lets a day be picked', async () => {
+    await import('./auspex-replay.js');
+    const api = new AuspexApi(async (path) => {
+      expect(path).toBe('/api/auspex/v1/changes?days=30');
+      return new Response(JSON.stringify({ days: 30, changes: [{ at: new Date().toISOString(), kind: 'joined', floor: 'pay', person: 'alex' }], names: { alex: 'Alex Kim' } }), { status: 200 });
+    });
+    const el = document.createElement('auspex-replay') as AuspexReplay;
+    Object.assign(el, { api, floor: acme.floors[2] });
+    document.body.replaceChildren(el);
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+      await el.updateComplete;
+    }
+    expect(el.querySelector('ui-heading')!.getAttribute('summary')).toBe('1 change on Payroll: 1 joined.');
+    expect(el.querySelectorAll('.ax-rday')).toHaveLength(30);
+    expect(el.querySelector('.ax-events')!.textContent).toContain('Alex Kim joined');
+    el.querySelectorAll<HTMLButtonElement>('.ax-rday')[3]!.click();
+    await el.updateComplete;
+    expect(el.day).toBe(3);
+    expect(el.querySelectorAll('.ax-rday.later')).toHaveLength(26);
+    expect(el.querySelector('#ax-replay-day + p')!.textContent).toBe('Nothing changed on Payroll that day.');
+    el.play();
+    expect(el.playing).toBe(true);
+    el.play();
+    expect(el.playing).toBe(false);
+  });
+
+  it('is offered to a floor’s leads, and explained to everyone else', async () => {
+    await import('./auspex-app.js');
+    const api = new AuspexApi(async (path) => new Response(JSON.stringify(path.includes('/me/map') ? acme : path.includes('/me/apps') ? { apps } : { days: 7, changes: [], names: {} }), { status: 200 }));
+    const show = async (props: object) => {
+      const el = document.createElement('auspex-app') as AuspexApp;
+      Object.assign(el, { api, here: 'pay', place: { view: 'floor', id: 'pay' }, ...props });
+      document.body.replaceChildren(el);
+      for (let i = 0; i < 8; i++) {
+        await new Promise((r) => setTimeout(r, 5));
+        await el.updateComplete;
+      }
+      return el;
+    };
+    const lead = await show({ userId: 'sam' });
+    expect([...lead.querySelectorAll('ui-button')].map((b) => b.textContent)).toContain('Replay the last 30 days');
+    const member = await show({ userId: 'alex' });
+    expect(member.querySelector('.ax-section:last-of-type')!.textContent).toContain('Payroll’s leads and admins can replay its last 30 days.');
+    expect(placeFor('/floors/pay/replay', 'pay')).toEqual({ view: 'replay', id: 'pay' });
+    expect(pathFor({ view: 'replay', id: 'pay' })).toBe('/floors/pay/replay');
+  });
+});
+
+describe('the plant room, for admins', () => {
+  const parts: Part[] = [
+    { name: 'registry', kind: 'service', state: 'up', version: '0.7.0', latencyMs: 12 },
+    { name: 'gateway', kind: 'gateway', state: 'up', version: '0.7.0', latencyMs: 3 },
+    { name: 'folio', kind: 'app', state: 'down', problem: 'It didn’t answer in 3 s.' },
+    { name: 'identity', kind: 'service', state: 'slow', version: '0.7.0', latencyMs: 1400 },
+    { name: 'sign-in', kind: 'sign-in', state: 'up', latencyMs: 40 },
+  ];
+
+  it('puts each part in its room and says how many need someone', () => {
+    expect(roomsOf(parts).map((r) => [r.label, r.parts.map((p) => p.name)])).toEqual([
+      ['The way in', ['gateway', 'sign-in']],
+      ['Services', ['identity', 'registry']],
+      ['Apps’ services', ['folio']],
+    ]);
+    expect(plantLine(parts)).toBe('1 not answering, 1 slow of 5 parts.');
+    expect(plantLine(parts.slice(0, 2))).toBe('All 2 parts are answering.');
+    expect(placeFor('/plant', 'pay')).toEqual({ view: 'plant' });
+  });
+
+  const mount = async (admin: boolean) => {
+    await import('./auspex-plant.js');
+    const asked: string[] = [];
+    const api = new AuspexApi(async (path) => {
+      asked.push(path);
+      const body = path.includes('/status')
+        ? { components: parts, backups: { state: 'ok', lastBackup: { at: new Date().toISOString(), ok: true } } }
+        : { running: { version: '0.6.0', channel: 'beta' }, feed: 'on', available: { version: '0.7.0' }, needsYou: [{ message: 'x' }] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    const el = document.createElement('auspex-plant') as AuspexPlant;
+    Object.assign(el, { api, admin });
+    document.body.replaceChildren(el);
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+      await el.updateComplete;
+    }
+    return { el, asked };
+  };
+
+  it('shows every part as a machine with a lamp, and the release against the newest', async () => {
+    const { el, asked } = await mount(true);
+    expect(asked.sort()).toEqual(['/api/gateway/v1/status', '/api/registry/v1/platform/updates']);
+    expect(el.querySelector('.ax-release')!.getAttribute('aria-label')).toBe('AUGUR 0.6.0 is running; 0.7.0 is out.');
+    expect(el.querySelector('.ax-machine.down')!.getAttribute('aria-label')).toBe('folio: Not answering. It didn’t answer in 3 s.');
+    expect(el.querySelector('.ax-machine.slow .st')!.textContent).toBe('Slow: 1400 ms');
+    expect(el.querySelectorAll('.ax-machine')).toHaveLength(7);
+    expect(el.textContent).toContain('1 thing needs you first');
+    el.remove();
+  });
+
+  it('tells anyone else what it is, and asks for nothing', async () => {
+    const { el, asked } = await mount(false);
+    expect(asked).toEqual([]);
+    expect(el.querySelector('ui-state')!.getAttribute('heading')).toBe('The plant room is for admins');
+    el.remove();
   });
 });

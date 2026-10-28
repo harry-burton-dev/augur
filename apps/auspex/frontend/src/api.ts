@@ -88,6 +88,39 @@ export interface Changes {
   names: Record<string, string>;
 }
 
+/** One part of AUGUR as the gateway last found it (the gateway's `/status`, for admins). */
+export interface Part {
+  name: string;
+  kind: 'gateway' | 'service' | 'app' | 'sign-in';
+  state: 'up' | 'slow' | 'down' | 'checking';
+  version?: string;
+  latencyMs?: number;
+  checkedAt?: string;
+  seenAt?: string;
+  problem?: string;
+}
+
+export interface BackupRun {
+  at: string;
+  ok: boolean;
+  problem?: string;
+}
+
+export interface PlantStatus {
+  components: Part[];
+  /** Absent when the gateway isn't told where backups are. */
+  backups?: { state: 'ok' | 'attention'; problem?: string; lastBackup?: BackupRun; lastRestoreTest?: BackupRun };
+}
+
+/** The running release and the newest one out (the registry's Updates view, for admins). */
+export interface PlantUpdates {
+  running: { version: string; channel: 'stable' | 'beta' };
+  feed: 'on' | 'off';
+  problem?: string;
+  available?: { version: string; released?: string };
+  needsYou: { message: string }[];
+}
+
 /** Whether the person can use an app on a floor: on there, and they have any role it needs. */
 export const usable = (app: FloorApp) => app.state.on && app.hasRole !== false;
 
@@ -124,6 +157,16 @@ export class AuspexApi {
 
   changes(floor: string, days = 7) {
     return this.get<Changes>(`/api/auspex/v1/changes?days=${days}`, floor);
+  }
+
+  /** Admins only: every part of AUGUR and whether it's answering, and the backups. */
+  status() {
+    return this.get<PlantStatus>('/api/gateway/v1/status');
+  }
+
+  /** Admins only: the running release, and whether a newer one is out. */
+  updates() {
+    return this.get<PlantUpdates>('/api/registry/v1/platform/updates');
   }
 
   async names(ids: string[]) {
