@@ -12,7 +12,7 @@ One container, `augur-ci-1`, in its own compose project (`augur-ci`), apart from
 - **Its own Docker daemon.** Jobs' service containers (Postgres), image builds and test containers run inside it, so a job's ports, container names and clean-ups never touch AUGUR's containers on the same server.
 - **A fresh start for each job.** Before each job it removes every container, network and volume the last one left, and empties `/tmp`, as a hosted runner's new machine would. Images and build layers stay a week as a cache, so builds after the first are quicker than on GitHub's runners.
 - **Caches that stay.** The pnpm store, pip's, Playwright's and Docling's caches and turbo's task cache live on its volumes from job to job, so on it the workflows skip GitHub's cache (which came down from GitHub at about 7 MB/s, a gigabyte a run), and a build, typecheck or test whose inputs haven't changed replays its last result. Pushes to `main` run every task anyway (`TURBO_FORCE`).
-- **Limits**: 4 CPUs and 8 GB by default (`CI_CPUS`, `CI_MEMORY` in its `.env`), so a build never starves AUGUR. The contract tests run as many builds of the reference app at once as that memory allows (about 2.5 GB each: three at 8 GB), so more memory makes them quicker.
+- **Limits**: 4 CPUs and 8 GB by default (`CI_CPUS`, `CI_MEMORY` in its `.env`), so a build never starves AUGUR. The contract tests run as many builds of the reference app at once as that memory allows (about 2.5 GB each: three at 8 GB), so more memory makes them quicker. CI's builds, typechecks and tests likewise run about one turbo task per 2 GB (three at 8 GB; tests two at most).
 
 It isn't on AUGUR's network or the tailnet, and it needs no inbound port: the runner calls out to GitHub over HTTPS for work.
 

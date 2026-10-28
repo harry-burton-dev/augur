@@ -56,12 +56,33 @@ jobs:
       - name: Every change says how it is released
         if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
         run: pnpm changeset status --since=origin/${{ github.base_ref }}
-      - run: pnpm build
+      # Turbo's default of ten tasks at once is too many for our 8 GB runner on a shared server:
+      # builds were killed for memory, and tests timed out and deadlocked in Postgres. About 2 GB a
+      # task (a Vite build, or a package's tests), after 1.5 GB for Postgres and the runner, and no
+      # more than the CPUs: three on the 8 GB runner, four on GitHub's. Tests run two at most, as
+      # they share the one database. More memory (CI_MEMORY) makes this quicker by itself.
+      - name: How many tasks at once
+        id: fit
+        run: |
+          node -e '
+            const os = require("node:os"), fs = require("node:fs");
+            const limit = process.constrainedMemory?.();
+            const memory = limit && limit < os.totalmem() ? limit : os.totalmem();
+            let cpus = os.availableParallelism();
+            try {
+              const [quota, period] = fs.readFileSync("/sys/fs/cgroup/cpu.max", "utf8").trim().split(" ");
+              if (quota !== "max") cpus = Math.min(cpus, Math.ceil(quota / period));
+            } catch {}
+            const n = Math.max(1, Math.min(cpus, Math.floor((memory - 1.5e9) / 2e9)));
+            console.log(`${n} tasks at once (${(memory / 1e9).toFixed(1)} GB, ${cpus} CPUs), tests ${Math.min(n, 2)}`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `tasks=${n}\ntests=${Math.min(n, 2)}\n`);
+          '
+      - run: pnpm build --concurrency=${{ steps.fit.outputs.tasks }}
       # Every app's manifest, against the registry's own rules.
       - run: pnpm check:manifest
       - run: pnpm check:migrations
-      - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm typecheck --concurrency=${{ steps.fit.outputs.tasks }}
+      - run: pnpm test --concurrency=${{ steps.fit.outputs.tests }}
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
       - run: pnpm --filter @augur/ui-kit build-storybook
