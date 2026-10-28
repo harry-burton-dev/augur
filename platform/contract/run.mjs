@@ -3,6 +3,7 @@
 //   pnpm --filter @augur/contract-tests test:contract
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
+import { totalmem } from 'node:os';
 import { join } from 'node:path';
 
 const here = new URL('.', import.meta.url).pathname;
@@ -22,32 +23,45 @@ const label = (target) => `${target.name}, Folio ${target.folio ? 'on' : 'off'}`
 
 // Side by side, each with its own shell on its own port, so three builds take
 // about as long as one. Each build's output is printed whole once it finishes.
-const results = await Promise.all(
-  targets.map(
-    (target, i) =>
-      new Promise((resolve) => {
-        const run = spawn('pnpm', ['exec', 'playwright', 'test'], {
-          cwd: here,
-          env: {
-            ...process.env,
-            DEV_APP: join(here, 'reference-app'),
-            CONTRACT_TARGET: target.name,
-            CONTRACT_PORT: String(5180 + i),
-            CONTRACT_FOLIO: target.folio ? 'on' : 'off',
-            CONTRACT_FOLIO_PORT: String(8190 + i),
-            FORCE_COLOR: process.env.FORCE_COLOR ?? '1',
-            ...target.env,
-          },
-        });
-        let output = '';
-        run.stdout.on('data', (chunk) => (output += chunk));
-        run.stderr.on('data', (chunk) => (output += chunk));
-        run.on('close', (status) => {
-          console.log(`\n── The reference app built from ${label(target)} ──\n${output}`);
-          resolve({ name: label(target), ok: status === 0 });
-        });
-      }),
-  ),
+// Each run (a shell, Folio's service, two browsers) takes up to about 2.5 GB, so a
+// machine or container with less memory runs fewer at once rather than having the
+// kernel kill one part way through (as on an 8 GB self-hosted runner, docs/ci-runner.md).
+const constrained = process.constrainedMemory?.();
+const memory = constrained && constrained < totalmem() ? constrained : totalmem();
+const atOnce = Math.max(1, Math.min(targets.length, Math.floor(memory / 2.5e9)));
+console.log(`${targets.length} runs of the reference app, ${atOnce} at a time (${(memory / 1e9).toFixed(1)} GB).`);
+const run = (target, i) =>
+  new Promise((resolve) => {
+    const child = spawn('pnpm', ['exec', 'playwright', 'test'], {
+      cwd: here,
+      env: {
+        ...process.env,
+        DEV_APP: join(here, 'reference-app'),
+        CONTRACT_TARGET: target.name,
+        CONTRACT_PORT: String(5180 + i),
+        CONTRACT_FOLIO: target.folio ? 'on' : 'off',
+        CONTRACT_FOLIO_PORT: String(8190 + i),
+        FORCE_COLOR: process.env.FORCE_COLOR ?? '1',
+        ...target.env,
+      },
+    });
+    let output = '';
+    child.stdout.on('data', (chunk) => (output += chunk));
+    child.stderr.on('data', (chunk) => (output += chunk));
+    child.on('close', (status) => {
+      console.log(`\n── The reference app built from ${label(target)} ──\n${output}`);
+      resolve({ name: label(target), ok: status === 0 });
+    });
+  });
+const results = [];
+let next = 0;
+await Promise.all(
+  Array.from({ length: atOnce }, async () => {
+    while (next < targets.length) {
+      const i = next++;
+      results[i] = await run(targets[i], i);
+    }
+  }),
 );
 const failed = results.filter((r) => !r.ok).map((r) => r.name);
 if (failed.length) {
