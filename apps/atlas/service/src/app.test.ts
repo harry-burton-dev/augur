@@ -55,10 +55,12 @@ describe.runIf(process.env.DATABASE_URL)('Data Atlas', () => {
     const res = await call('GET', '/v1/ontology', on('sam', ORG));
     expect(res.statusCode).toBe(200);
     const ontology = res.json();
-    expect(ontology.version).toBe(1);
+    expect(ontology.version).toBe(2);
+    expect(ontology.relations.find((r: { key: string }) => r.key === 'operated-by')).toMatchObject({ label: 'Operated by', inverse: 'Operates', from: ['artifact', 'facility'], to: ['agent'] });
     const vessel = ontology.types.find((t: { key: string }) => t.key === 'vessel');
     expect(vessel).toMatchObject({ label: 'Vessel', parent: 'vehicle', pack: 'cco', packTerm: 'Watercraft', abstract: false });
-    expect(vessel.details.map((d: { key: string }) => d.key)).toEqual(['imo', 'mmsi', 'call-sign']);
+    expect(vessel.details.map((d: { key: string }) => d.key)).toEqual(['imo', 'mmsi', 'call-sign', 'flag', 'vessel-type']);
+    expect(vessel.details.find((d: { key: string }) => d.key === 'flag').onEntity).toBe(false);
     expect(ontology.types.find((t: { key: string }) => t.key === 'agent').abstract).toBe(true);
   });
 

@@ -1,4 +1,4 @@
-import { ENTITY_EXPLAIN, ENTITY_OPEN, ENTITY_PICK, defineMicroFrontend, isEntityRef, type EntityPick, type EntityRef, type Intent, type MountContext } from '@augur/mfe-sdk';
+import { ENTITY_EXPLAIN, ENTITY_OPEN, ENTITY_PICK, defineMicroFrontend, isEntityRef, pickDocument, type EntityPick, type EntityRef, type Intent, type MountContext } from '@augur/mfe-sdk';
 import { html, render } from 'lit';
 import '@augur/ui-kit';
 import { AtlasApi, pathFor, placeFor, type Place } from './api.js';
@@ -56,6 +56,7 @@ export default defineMicroFrontend({
         floor-name=${ctx.workspace.name}
         floor-kind=${ctx.workspace.kind}
         .place=${placeForIntent(ctx.intent) ?? placeFor(ctx.path)}
+        .pickDocument=${() => pickDocument(ctx, { purpose: 'Where it was read' })}
         @atlas-place=${moved}
       ></atlas-app>`,
       el,

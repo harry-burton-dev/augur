@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { ulid } from 'ulid';
-import { detailsOf, starterSql, type DetailDef, type Ontology, type TypeDef } from './ontology.ts';
+import { detailsOf, knowledgeSql, starterSql, type DetailDef, type Ontology, type RelationDef, type TypeDef } from './ontology.ts';
 
 /**
  * One real thing the organisation keeps track of: a ship, a port, a company.
@@ -64,6 +64,91 @@ export class KeyTakenError extends Error {
     this.value = value;
     this.holder = holder;
   }
+}
+
+/** Where an observation came from. A document is named by the SDK's DocumentRef (`folio` for Artifacts). */
+export type Source =
+  | { kind: 'person' }
+  | { kind: 'document'; document: { app: string; id: string; version?: string; title: string } }
+  | { kind: 'other'; note: string };
+
+/**
+ * Something someone saw or read about an entity, kept as it was said: never
+ * changed, never removed. It sits on the floor it was recorded on; a lead may
+ * raise a copy to a floor above, where it is worth more (Harry's Q2 answer).
+ */
+export interface Observation {
+  /** `obs_` and a ULID. */
+  id: string;
+  entity: string;
+  /** A detail's key, or a link's (`operated-by`). */
+  property: string;
+  /** For a detail. */
+  value?: string;
+  /** For a link: the entity at the other end. */
+  target?: string;
+  /** When it was seen to be so; without it, when it was recorded. */
+  observedAt?: string;
+  floor: string;
+  workspace: string;
+  source: Source;
+  /** NATO-style grading: the source's reliability (A to F), then the information's credibility (1 to 6), such as "B2". */
+  grade?: string;
+  note: string;
+  /** The intent it was reported under (an intent app's ref), reserved for the intent app. */
+  reportedUnder?: unknown;
+  /** The observation this is a raised copy of. */
+  raisedFrom?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/**
+ * What a floor accepts as so, with two clocks: when it is true in the world
+ * (`validFrom` to `validTo`, either open) and when the floor recorded it
+ * (`recordedAt`, until `supersededAt` when a later record replaces it). Records
+ * are never changed: ending or correcting one writes a new record.
+ */
+export interface Fact {
+  /** `fct_` and a ULID. */
+  id: string;
+  entity: string;
+  property: string;
+  value?: string;
+  target?: string;
+  validFrom?: string;
+  validTo?: string;
+  floor: string;
+  workspace: string;
+  /** The observations it rests on. */
+  backedBy: string[];
+  note: string;
+  recordedAt: string;
+  supersededAt?: string;
+  supersededBy?: string;
+  createdBy: string;
+}
+
+/** Someone saying a fact may be wrong, and why. It stays until they, or the fact's floor's leads, clear it. */
+export interface Dispute {
+  id: string;
+  fact: string;
+  floor: string;
+  note: string;
+  by: string;
+  at: string;
+  clearedBy?: string;
+  clearedAt?: string;
+}
+
+export type NewObservation = Omit<Observation, 'id' | 'createdAt'>;
+export type NewFact = Omit<Fact, 'id' | 'recordedAt' | 'supersededAt' | 'supersededBy'>;
+
+/** Which records show: those on these floors, true at `at` and recorded as of `known` (both default to now). */
+export interface FactQuery {
+  floors: readonly string[];
+  at?: string;
+  known?: string;
 }
 
 /** Each change to the database, in order. A shipped one never changes: add another. */
@@ -146,6 +231,83 @@ export const migrations: { id: string; sql: string }[] = [
       );
       create index outbox_unsent on atlas.outbox (id) where sent_at is null;`,
   },
+  {
+    id: '004_knowledge',
+    sql: `
+      -- Details known only through facts, not typed on the entity.
+      alter table atlas.ontology_details add column on_entity boolean not null default true;
+      -- The kinds of link between entities.
+      create table atlas.ontology_relations (
+        key text primary key,
+        label text not null,
+        inverse text not null,
+        from_types text[] not null,
+        to_types text[] not null,
+        pack text not null,
+        pack_term text not null,
+        pack_iri text,
+        sort integer not null default 0
+      );
+      -- What people saw or read, as they said it. Rows are only ever added.
+      create table atlas.observations (
+        id text primary key,
+        entity text not null references atlas.entities(id),
+        property text not null,
+        value text,
+        target text references atlas.entities(id),
+        observed_at timestamptz,
+        floor text not null,
+        workspace_id text not null,
+        source jsonb not null,
+        grade text check (grade ~ '^[A-F][1-6]$'),
+        note text not null default '',
+        reported_under jsonb,
+        raised_from text references atlas.observations(id),
+        -- Reserved for protective markings, should AUGUR take them up.
+        marking jsonb,
+        created_by text not null,
+        created_at timestamptz not null default now(),
+        check ((value is null) <> (target is null))
+      );
+      create index observations_entity on atlas.observations (entity, created_at desc);
+      create index observations_target on atlas.observations (target) where target is not null;
+      -- What a floor accepts as so, on two clocks. A record is never changed, only superseded by a later one.
+      create table atlas.facts (
+        id text primary key,
+        entity text not null references atlas.entities(id),
+        property text not null,
+        value text,
+        target text references atlas.entities(id),
+        valid_from timestamptz,
+        valid_to timestamptz,
+        floor text not null,
+        workspace_id text not null,
+        backed_by text[] not null default '{}',
+        note text not null default '',
+        marking jsonb,
+        created_by text not null,
+        recorded_at timestamptz not null default clock_timestamp(),
+        superseded_at timestamptz,
+        superseded_by text,
+        check ((value is null) <> (target is null)),
+        check (valid_to is null or valid_from is null or valid_to > valid_from)
+      );
+      create index facts_entity on atlas.facts (entity) where superseded_at is null;
+      create index facts_target on atlas.facts (target) where target is not null and superseded_at is null;
+      create table atlas.fact_disputes (
+        id text primary key,
+        fact text not null references atlas.facts(id),
+        floor text not null,
+        note text not null,
+        by_person text not null,
+        at timestamptz not null default now(),
+        cleared_by text,
+        cleared_at timestamptz
+      );
+      create index fact_disputes_fact on atlas.fact_disputes (fact) where cleared_at is null;
+      ${knowledgeSql()}
+      insert into atlas.outbox (topic, payload) values ('atlas.ontology.changed', '{"version": 2}');`,
+  },
 ];
 
 /** Adds an event to Data Atlas's outbox, inside the transaction that makes the change it tells of. Ids only, never names. */
@@ -170,6 +332,103 @@ interface EntityRow {
 
 const ENTITY_COLUMNS = 'id, type, label, aliases, description, details, workspace_id, floor, state, created_by, created_at, updated_by, updated_at';
 
+interface ObservationRow {
+  id: string;
+  entity: string;
+  property: string;
+  value: string | null;
+  target: string | null;
+  observed_at: Date | null;
+  floor: string;
+  workspace_id: string;
+  source: Source;
+  grade: string | null;
+  note: string;
+  reported_under: unknown;
+  raised_from: string | null;
+  created_by: string;
+  created_at: Date;
+}
+const OBSERVATION_COLUMNS = 'id, entity, property, value, target, observed_at, floor, workspace_id, source, grade, note, reported_under, raised_from, created_by, created_at';
+const fromObservationRow = (r: ObservationRow): Observation => ({
+  id: r.id,
+  entity: r.entity,
+  property: r.property,
+  ...(r.value !== null ? { value: r.value } : {}),
+  ...(r.target !== null ? { target: r.target } : {}),
+  ...(r.observed_at ? { observedAt: r.observed_at.toISOString() } : {}),
+  floor: r.floor,
+  workspace: r.workspace_id,
+  source: r.source,
+  ...(r.grade ? { grade: r.grade } : {}),
+  note: r.note,
+  ...(r.reported_under ? { reportedUnder: r.reported_under } : {}),
+  ...(r.raised_from ? { raisedFrom: r.raised_from } : {}),
+  createdBy: r.created_by,
+  createdAt: r.created_at.toISOString(),
+});
+
+interface FactRow {
+  id: string;
+  entity: string;
+  property: string;
+  value: string | null;
+  target: string | null;
+  valid_from: Date | null;
+  valid_to: Date | null;
+  floor: string;
+  workspace_id: string;
+  backed_by: string[];
+  note: string;
+  recorded_at: Date;
+  superseded_at: Date | null;
+  superseded_by: string | null;
+  created_by: string;
+}
+const FACT_COLUMNS = 'id, entity, property, value, target, valid_from, valid_to, floor, workspace_id, backed_by, note, recorded_at, superseded_at, superseded_by, created_by';
+const fromFactRow = (r: FactRow): Fact => ({
+  id: r.id,
+  entity: r.entity,
+  property: r.property,
+  ...(r.value !== null ? { value: r.value } : {}),
+  ...(r.target !== null ? { target: r.target } : {}),
+  ...(r.valid_from ? { validFrom: r.valid_from.toISOString() } : {}),
+  ...(r.valid_to ? { validTo: r.valid_to.toISOString() } : {}),
+  floor: r.floor,
+  workspace: r.workspace_id,
+  backedBy: r.backed_by,
+  note: r.note,
+  recordedAt: r.recorded_at.toISOString(),
+  ...(r.superseded_at ? { supersededAt: r.superseded_at.toISOString() } : {}),
+  ...(r.superseded_by ? { supersededBy: r.superseded_by } : {}),
+  createdBy: r.created_by,
+});
+
+interface DisputeRow {
+  id: string;
+  fact: string;
+  floor: string;
+  note: string;
+  by_person: string;
+  at: Date;
+  cleared_by: string | null;
+  cleared_at: Date | null;
+}
+const fromDisputeRow = (r: DisputeRow): Dispute => ({
+  id: r.id,
+  fact: r.fact,
+  floor: r.floor,
+  note: r.note,
+  by: r.by_person,
+  at: r.at.toISOString(),
+  ...(r.cleared_by ? { clearedBy: r.cleared_by } : {}),
+  ...(r.cleared_at ? { clearedAt: r.cleared_at.toISOString() } : {}),
+});
+
+/** The SQL that keeps facts true at `at` ($2) and recorded as of `known` ($3). */
+const FACT_IN_TIME = `(valid_from is null or valid_from <= $2) and (valid_to is null or valid_to > $2)
+  and recorded_at <= $3 and (superseded_at is null or superseded_at > $3)`;
+
 const fromRow = (r: EntityRow): Entity => ({
   id: r.id,
   type: r.type,
@@ -185,6 +444,10 @@ const fromRow = (r: EntityRow): Entity => ({
   updatedBy: r.updated_by,
   updatedAt: r.updated_at.toISOString(),
 });
+
+/** An entity as a link other apps keep (the SDK's EntityRef). */
+export const refOf = (e: Entity) => ({ kind: 'entity' as const, id: e.id, type: e.type, label: e.label });
+
 
 /** A new entity's id: `ent_` and a ULID, so ids sort by when they were made. */
 export const newEntityId = () => `ent_${ulid()}`;
@@ -239,10 +502,13 @@ export class PgAtlasStore {
       this.pool.query<{ key: string; parent: string | null; label: string; plural: string; abstract: boolean; icon: string; pack: string; pack_term: string }>(
         'select key, parent, label, plural, abstract, icon, pack, pack_term from atlas.ontology_types order by sort, key',
       ),
-      this.pool.query<{ type: string; key: string; label: string; kind: DetailDef['kind']; identity: boolean; pattern: string | null; hint: string | null }>(
-        'select type, key, label, kind, identity, pattern, hint from atlas.ontology_details order by type, sort, key',
+      this.pool.query<{ type: string; key: string; label: string; kind: DetailDef['kind']; identity: boolean; pattern: string | null; hint: string | null; on_entity: boolean }>(
+        'select type, key, label, kind, identity, pattern, hint, on_entity from atlas.ontology_details order by type, sort, key',
       ),
     ]);
+    const relations = await this.pool.query<{ key: string; label: string; inverse: string; from_types: string[]; to_types: string[]; pack: string; pack_term: string }>(
+      'select key, label, inverse, from_types, to_types, pack, pack_term from atlas.ontology_relations order by sort, key',
+    );
     return {
       version: version.rows[0].version,
       types: types.rows.map(
@@ -257,8 +523,19 @@ export class PgAtlasStore {
           packTerm: t.pack_term,
           details: details.rows
             .filter((d) => d.type === t.key)
-            .map((d) => ({ key: d.key, label: d.label, kind: d.kind, identity: d.identity, ...(d.pattern ? { pattern: d.pattern } : {}), ...(d.hint ? { hint: d.hint } : {}) })),
+            .map((d) => ({
+              key: d.key,
+              label: d.label,
+              kind: d.kind,
+              identity: d.identity,
+              ...(d.pattern ? { pattern: d.pattern } : {}),
+              ...(d.hint ? { hint: d.hint } : {}),
+              ...(d.on_entity ? {} : { onEntity: false }),
+            })),
         }),
+      ),
+      relations: relations.rows.map(
+        (r): RelationDef => ({ key: r.key, label: r.label, inverse: r.inverse, from: r.from_types, to: r.to_types, pack: r.pack, packTerm: r.pack_term }),
       ),
     };
   }
@@ -357,6 +634,150 @@ export class PgAtlasStore {
       if (rows[0]) throw new KeyTakenError(detail, value, rows[0]);
       await client.query('insert into atlas.entity_keys (entity, type, key, value) values ($1, $2, $3, $4)', [id, type, detail.key, value]);
     }
+  }
+
+  /** Records what someone saw or read. Observations are only ever added. */
+  async addObservation(o: NewObservation): Promise<Observation> {
+    const { rows } = await this.pool.query<ObservationRow>(
+      `insert into atlas.observations (id, entity, property, value, target, observed_at, floor, workspace_id, source, grade, note, reported_under, raised_from, created_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) returning ${OBSERVATION_COLUMNS}`,
+      [
+        `obs_${ulid()}`,
+        o.entity,
+        o.property,
+        o.value ?? null,
+        o.target ?? null,
+        o.observedAt ?? null,
+        o.floor,
+        o.workspace,
+        JSON.stringify(o.source),
+        o.grade ?? null,
+        o.note,
+        o.reportedUnder === undefined ? null : JSON.stringify(o.reportedUnder),
+        o.raisedFrom ?? null,
+        o.createdBy,
+      ],
+    );
+    return fromObservationRow(rows[0]);
+  }
+
+  async observation(id: string): Promise<Observation | undefined> {
+    const { rows } = await this.pool.query<ObservationRow>(`select ${OBSERVATION_COLUMNS} from atlas.observations where id = $1`, [id]);
+    return rows[0] && fromObservationRow(rows[0]);
+  }
+
+  async observationsById(ids: readonly string[]): Promise<Observation[]> {
+    if (!ids.length) return [];
+    const { rows } = await this.pool.query<ObservationRow>(`select ${OBSERVATION_COLUMNS} from atlas.observations where id = any($1)`, [ids]);
+    return rows.map(fromObservationRow);
+  }
+
+  /** Observations about an entity, or naming it as a link's other end, on these floors, newest first. */
+  async observations(entity: string, floors: readonly string[], limit = 100): Promise<Observation[]> {
+    const { rows } = await this.pool.query<ObservationRow>(
+      `select ${OBSERVATION_COLUMNS} from atlas.observations where (entity = $1 or target = $1) and floor = any($2) order by coalesce(observed_at, created_at) desc, id desc limit ${Number(limit)}`,
+      [entity, floors],
+    );
+    return rows.map(fromObservationRow);
+  }
+
+  /** Whether a raised copy of this observation is already on that floor. */
+  async raisedTo(observation: string, floor: string): Promise<Observation | undefined> {
+    const { rows } = await this.pool.query<ObservationRow>(`select ${OBSERVATION_COLUMNS} from atlas.observations where raised_from = $1 and floor = $2`, [observation, floor]);
+    return rows[0] && fromObservationRow(rows[0]);
+  }
+
+  /**
+   * Records a fact. `replaces` are the floor's current records it takes over from
+   * (on the recorded clock); if any was replaced meanwhile, nothing is recorded.
+   */
+  async addFact(f: NewFact, replaces: readonly string[] = []): Promise<Fact | undefined> {
+    const id = `fct_${ulid()}`;
+    return this.inTransaction(async (client) => {
+      if (replaces.length) {
+        const { rowCount } = await client.query(
+          'update atlas.facts set superseded_at = clock_timestamp(), superseded_by = $2 where id = any($1) and superseded_at is null',
+          [replaces, id],
+        );
+        if (rowCount !== replaces.length) return undefined;
+      }
+      const { rows } = await client.query<FactRow>(
+        `insert into atlas.facts (id, entity, property, value, target, valid_from, valid_to, floor, workspace_id, backed_by, note, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning ${FACT_COLUMNS}`,
+        [id, f.entity, f.property, f.value ?? null, f.target ?? null, f.validFrom ?? null, f.validTo ?? null, f.floor, f.workspace, f.backedBy, f.note, f.createdBy],
+      );
+      return fromFactRow(rows[0]);
+    });
+  }
+
+  /** Takes a fact back from now on: its record is superseded by nothing. */
+  async withdrawFact(id: string): Promise<Fact | undefined> {
+    const { rows } = await this.pool.query<FactRow>(
+      `update atlas.facts set superseded_at = clock_timestamp() where id = $1 and superseded_at is null returning ${FACT_COLUMNS}`,
+      [id],
+    );
+    return rows[0] && fromFactRow(rows[0]);
+  }
+
+  async fact(id: string): Promise<Fact | undefined> {
+    const { rows } = await this.pool.query<FactRow>(`select ${FACT_COLUMNS} from atlas.facts where id = $1`, [id]);
+    return rows[0] && fromFactRow(rows[0]);
+  }
+
+  /** The floor's current records for one of an entity's details: what a new record of it replaces. */
+  async currentFacts(entity: string, property: string, floor: string): Promise<Fact[]> {
+    const { rows } = await this.pool.query<FactRow>(
+      `select ${FACT_COLUMNS} from atlas.facts where entity = $1 and property = $2 and floor = $3 and superseded_at is null`,
+      [entity, property, floor],
+    );
+    return rows.map(fromFactRow);
+  }
+
+  /** Facts about these entities, or linking to them, as the query has them in time. */
+  async facts(entities: readonly string[], { floors, at, known }: FactQuery): Promise<Fact[]> {
+    if (!entities.length) return [];
+    const now = new Date().toISOString();
+    const { rows } = await this.pool.query<FactRow>(
+      `select ${FACT_COLUMNS} from atlas.facts
+       where (entity = any($1) or target = any($1)) and floor = any($4) and ${FACT_IN_TIME}
+       order by property, recorded_at desc`,
+      [entities, at ?? now, known ?? now, floors],
+    );
+    return rows.map(fromFactRow);
+  }
+
+  /** Every record a fact's line has had, oldest first: the recorded clock, for "as known on". */
+  async factHistory(entity: string, floors: readonly string[]): Promise<Fact[]> {
+    const { rows } = await this.pool.query<FactRow>(
+      `select ${FACT_COLUMNS} from atlas.facts where (entity = $1 or target = $1) and floor = any($2) order by recorded_at, id`,
+      [entity, floors],
+    );
+    return rows.map(fromFactRow);
+  }
+
+  async addDispute(d: Omit<Dispute, 'id' | 'at'>): Promise<Dispute> {
+    const { rows } = await this.pool.query<DisputeRow>(
+      'insert into atlas.fact_disputes (id, fact, floor, note, by_person) values ($1, $2, $3, $4, $5) returning *',
+      [`dsp_${ulid()}`, d.fact, d.floor, d.note, d.by],
+    );
+    return fromDisputeRow(rows[0]);
+  }
+
+  async dispute(id: string): Promise<Dispute | undefined> {
+    const { rows } = await this.pool.query<DisputeRow>('select * from atlas.fact_disputes where id = $1', [id]);
+    return rows[0] && fromDisputeRow(rows[0]);
+  }
+
+  /** Disputes on these facts that no one has cleared. */
+  async openDisputes(facts: readonly string[]): Promise<Dispute[]> {
+    if (!facts.length) return [];
+    const { rows } = await this.pool.query<DisputeRow>('select * from atlas.fact_disputes where fact = any($1) and cleared_at is null order by at', [facts]);
+    return rows.map(fromDisputeRow);
+  }
+
+  async clearDispute(id: string, by: string): Promise<Dispute | undefined> {
+    const { rows } = await this.pool.query<DisputeRow>('update atlas.fact_disputes set cleared_by = $2, cleared_at = now() where id = $1 and cleared_at is null returning *', [id, by]);
+    return rows[0] && fromDisputeRow(rows[0]);
   }
 
   /** A connection pool whose search path is Data Atlas's schema, for the outbox relay, which names its table plainly. */

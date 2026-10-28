@@ -2,9 +2,10 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { callerCheckFromEnv, callerFromHeaders, health, packageVersion, signedCallers, type Caller, type CallerCheck, type CallerWorkspace } from '@augur/service-kit';
 import { auditFromEnv, type Audit } from './audit.ts';
 import { floorPrincipal, unseen, viewFloors } from './floors.ts';
-import { checkDetail, detailsOf, normaliseDetail, type Ontology } from './ontology.ts';
+import { checkDetail, detailsOf, normaliseDetail, withSubtypes, type Ontology } from './ontology.ts';
 import { peopleFromEnv, type People } from './people.ts';
-import { KeyTakenError, type Entity, type PgAtlasStore } from './store.ts';
+import { knowledgeRoutes, subgraph, type Atlas } from './knowledge.ts';
+import { KeyTakenError, refOf, type Entity, type PgAtlasStore } from './store.ts';
 
 /** The major version of the API this service serves. Its routes go under /v1, as the platform's do. */
 export const API_VERSION = 'v1';
@@ -18,7 +19,7 @@ export interface Options {
   audit?: Audit;
 }
 
-type OnFloor = Caller & { workspace: CallerWorkspace };
+export type OnFloor = Caller & { workspace: CallerWorkspace };
 
 /** What the caller may do with an entity, so the app offers only what will work, and says why not otherwise. */
 export interface EntityRights {
@@ -43,19 +44,6 @@ const knownName = (name: string) => (name === UNNAMED_TEAM ? undefined : name);
 /** Entity links as apps send them: only the id is read; the rest of an EntityRef may come along. */
 const REFS = { type: 'array', minItems: 1, maxItems: 200, items: { type: 'object', properties: { id: { type: 'string', minLength: 1, maxLength: 64 } }, required: ['id'] } } as const;
 const ID_PARAMS = { type: 'object', properties: { id: { type: 'string', maxLength: 64 } }, required: ['id'] } as const;
-
-/** An entity as a link other apps keep (the SDK's EntityRef). */
-const refOf = (e: Entity) => ({ kind: 'entity' as const, id: e.id, type: e.type, label: e.label });
-
-/** A type and every type below it. */
-const withSubtypes = (ontology: Ontology, type: string) => {
-  const found = new Set([type]);
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const t of ontology.types) if (t.parent && found.has(t.parent) && !found.has(t.key)) found.add(t.key), (grew = true);
-  }
-  return [...found];
-};
 
 export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), people = peopleFromEnv(), audit }: Options) => {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
@@ -117,6 +105,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
     for (const [key, raw] of Object.entries(given)) {
       const def = defs.get(key);
       if (!def) return `A ${ontology.types.find((t) => t.key === type)?.label.toLowerCase() ?? type} has no detail called “${key}”.`;
+      if (def.onEntity === false) return `${def.label} is known through what people observe, floor by floor: record an observation of it instead.`;
       if (!raw.trim()) continue;
       const value = normaliseDetail(def, raw);
       const problem = checkDetail(def, value);
@@ -138,6 +127,28 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
     const why = unseen(holder.floor, principals, caller.id, knownName(named(holder.floor)));
     return { error: 'key-taken', message: `${what} is already another entity’s. ${why.message}`, holder: { id: holder.id, hidden: true, reason: why.reason } };
   };
+
+  /** The entity, if the caller may see it from where they stand; else a refusal saying why, already sent. */
+  const seen = async (req: FastifyRequest, reply: FastifyReply, id: string) => {
+    const caller = onFloor(req, reply);
+    if (!caller) return undefined;
+    const entity = await store.entity(id);
+    if (!entity) {
+      reply.code(404).send({ error: 'not-found', message: 'There’s no such entity.' });
+      return undefined;
+    }
+    const { principals, floors } = await sight(caller);
+    if (!floors.includes(entity.floor)) {
+      const named = await nameFloors(caller, [entity.floor]);
+      const why = unseen(entity.floor, principals, caller.id, knownName(named(entity.floor)));
+      reply.code(403).send({ error: 'unseen', ...why, id });
+      return undefined;
+    }
+    return { caller, entity };
+  };
+
+  /** What a floor's knowledge routes need from here. */
+  const atlas: Atlas = { store, onFloor, sight, nameFloors, seen, recorded, unseenFrom: (caller, floor, principals, name) => unseen(floor, principals, caller.id, knownName(name)) };
 
   await app.register(
     async (app) => {
@@ -219,25 +230,6 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
         },
       );
 
-      /** The entity, if the caller may see it from where they stand; else a refusal saying why, already sent. */
-      const seen = async (req: FastifyRequest, reply: FastifyReply, id: string) => {
-        const caller = onFloor(req, reply);
-        if (!caller) return undefined;
-        const entity = await store.entity(id);
-        if (!entity) {
-          reply.code(404).send({ error: 'not-found', message: 'There’s no such entity.' });
-          return undefined;
-        }
-        const { principals, floors } = await sight(caller);
-        if (!floors.includes(entity.floor)) {
-          const named = await nameFloors(caller, [entity.floor]);
-          const why = unseen(entity.floor, principals, caller.id, knownName(named(entity.floor)));
-          reply.code(403).send({ error: 'unseen', ...why, id });
-          return undefined;
-        }
-        return { caller, entity };
-      };
-
       /**
        * For apps that keep entity links (SDK EntityRef): what each id is now, as the caller sees it from
        * where they stand, so a cached name can be brought up to date. One the caller can't see says why,
@@ -266,8 +258,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
 
       /**
        * The part of the graph around some entities, as seen from where the caller stands: for Data Atlas's
-       * explorer and the intent app's briefing context. Entities are linked by facts, which come with
-       * observations; until then the answer is the seeds alone, with no edges.
+       * explorer and the intent app's briefing context. Entities are linked by facts whose value is an entity.
        */
       app.post<{ Body: { seeds: { id: string }[]; depth?: number; types?: string[]; relations?: string[]; asOf?: string; limitPerNode?: number } }>(
         '/subgraph',
@@ -291,21 +282,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
         async (req, reply) => {
           const caller = onFloor(req, reply);
           if (!caller) return reply;
-          const ids = [...new Set(req.body.seeds.map((r) => r.id))];
-          const found = await store.entitiesById(ids);
-          const { principals, floors } = await sight(caller);
-          const named = await nameFloors(caller, found.map((e) => e.floor));
-          const shown = found.filter((e) => floors.includes(e.floor));
-          const ontology = req.body.types?.length ? await store.ontology() : undefined;
-          const types = ontology && new Set(req.body.types!.flatMap((t) => withSubtypes(ontology, t)));
-          return {
-            nodes: shown.filter((e) => !types || types.has(e.type)).map((e) => ({ ref: refOf(e), state: e.state, floorName: named(e.floor), depth: 0 })),
-            edges: [],
-            more: [],
-            // Seeds that don't show from here, and why: left out of the graph, never silently.
-            unseen: found.filter((e) => !floors.includes(e.floor)).map((e) => ({ id: e.id, ...unseen(e.floor, principals, caller.id, knownName(named(e.floor))) })),
-            missing: ids.filter((id) => !found.some((e) => e.id === id)),
-          };
+          return subgraph(atlas, caller, { ...req.body, seeds: req.body.seeds.map((r) => r.id) });
         },
       );
 
@@ -365,6 +342,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
         void recorded({ actor: caller.id, action: 'entity.retired', target: entity.id, workspace: caller.workspace.id, detail: { type: entity.type, label: entity.label } });
         return (await view(caller, [retired]))[0];
       });
+      knowledgeRoutes(app, atlas);
     },
     { prefix: `/${API_VERSION}` },
   );

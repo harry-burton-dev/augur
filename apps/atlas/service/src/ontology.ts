@@ -23,6 +23,27 @@ export interface DetailDef {
   pattern?: string;
   /** How a person would recognise one, shown under the field. */
   hint?: string;
+  /**
+   * False for a detail known only through facts, over time and floor by floor
+   * (a vessel's flag), rather than typed on the entity itself. Absent means true.
+   */
+  onEntity?: boolean;
+}
+
+/**
+ * A kind of link from one entity to another: "operated by", "located at". A
+ * link is a fact whose value is an entity, so it has the same two clocks, floor
+ * and backing as any fact. Read backwards, it uses `inverse`.
+ */
+export interface RelationDef {
+  key: string;
+  label: string;
+  inverse: string;
+  /** Kinds it may start from, and end at; each takes its subkinds too. */
+  from: string[];
+  to: string[];
+  pack: string;
+  packTerm: string;
 }
 
 export interface TypeDef {
@@ -44,6 +65,7 @@ export interface TypeDef {
 export interface Ontology {
   version: number;
   types: TypeDef[];
+  relations: RelationDef[];
 }
 
 const text = (key: string, label: string, more: Partial<DetailDef> = {}): DetailDef => ({ key, label, kind: 'text', identity: false, ...more });
@@ -141,6 +163,65 @@ export const starterSql = () =>
       ),
     ),
   ].join('\n');
+
+/**
+ * Version 2, as migration 004 writes it (never edit it either): the kinds of
+ * link between entities, and details known only through facts. The links are
+ * AUGUR's own starter set, named plainly; loading the CCO pack (AT7) maps them
+ * onto CCO's object properties.
+ */
+export const STARTER_RELATIONS: readonly RelationDef[] = [
+  { key: 'owned-by', label: 'Owned by', inverse: 'Owns', from: ['artifact', 'facility'], to: ['agent'], pack: 'augur', packTerm: 'owned by' },
+  { key: 'operated-by', label: 'Operated by', inverse: 'Operates', from: ['artifact', 'facility'], to: ['agent'], pack: 'augur', packTerm: 'operated by' },
+  { key: 'member-of', label: 'Member of', inverse: 'Has member', from: ['person'], to: ['organization'], pack: 'augur', packTerm: 'member of' },
+  { key: 'part-of', label: 'Part of', inverse: 'Has part', from: ['organization'], to: ['organization'], pack: 'augur', packTerm: 'part of' },
+  { key: 'located-at', label: 'Located at', inverse: 'Location of', from: ['agent', 'artifact', 'facility', 'event'], to: ['place', 'facility'], pack: 'augur', packTerm: 'located at' },
+  { key: 'took-part-in', label: 'Took part in', inverse: 'Involved', from: ['agent', 'artifact'], to: ['event'], pack: 'augur', packTerm: 'took part in' },
+];
+
+export const KNOWLEDGE_DETAILS: readonly { type: string; detail: DetailDef }[] = [
+  { type: 'vessel', detail: text('flag', 'Flag state', { onEntity: false, hint: 'The state it sails under' }) },
+  { type: 'vessel', detail: text('vessel-type', 'Type of vessel', { onEntity: false, hint: 'Such as bulk carrier or tug' }) },
+  { type: 'person', detail: text('nationality', 'Nationality', { onEntity: false }) },
+  { type: 'organization', detail: text('country', 'Country', { onEntity: false, hint: 'Where it is registered or based' }) },
+  { type: 'event', detail: { key: 'when', label: 'When', kind: 'date', identity: false, onEntity: false } },
+];
+
+const textArray = (values: readonly string[]) => `array[${values.map(literal).join(', ')}]::text[]`;
+
+/** Version 2 as SQL, for migration 004. */
+export const knowledgeSql = () =>
+  [
+    "insert into atlas.ontology_versions (version, note) values (2, 'Links between entities, and details known through facts');",
+    ...STARTER_RELATIONS.map(
+      (r, sort) =>
+        `insert into atlas.ontology_relations (key, label, inverse, from_types, to_types, pack, pack_term, sort) values (${literal(r.key)}, ${literal(r.label)}, ${literal(r.inverse)}, ${textArray(r.from)}, ${textArray(r.to)}, ${literal(r.pack)}, ${literal(r.packTerm)}, ${sort});`,
+    ),
+    ...KNOWLEDGE_DETAILS.map(
+      ({ type, detail: d }, i) =>
+        `insert into atlas.ontology_details (type, key, label, kind, identity, pattern, hint, sort, on_entity) values (${literal(type)}, ${literal(d.key)}, ${literal(d.label)}, ${literal(d.kind)}, false, ${literal(d.pattern)}, ${literal(d.hint)}, ${100 + i}, false);`,
+    ),
+  ].join('\n');
+
+/** A type and every type below it. */
+export const withSubtypes = (ontology: Ontology, type: string) => {
+  const found = new Set([type]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const t of ontology.types) if (t.parent && found.has(t.parent) && !found.has(t.key)) found.add(t.key), (grew = true);
+  }
+  return [...found];
+};
+
+/** True when `type` is `kind` or a kind below it. */
+export const isA = (ontology: Ontology, type: string, kind: string) => {
+  const byKey = new Map(ontology.types.map((t) => [t.key, t]));
+  for (let t = byKey.get(type); t; t = t.parent ? byKey.get(t.parent) : undefined) if (t.key === kind) return true;
+  return false;
+};
+
+/** The kinds of link that may start from an entity of this type. */
+export const relationsFrom = (ontology: Ontology, type: string) => ontology.relations.filter((r) => r.from.some((k) => isA(ontology, type, k)));
 
 /** A type's details, its own after those of the kinds above it. */
 export const detailsOf = (ontology: Ontology, type: string): DetailDef[] => {

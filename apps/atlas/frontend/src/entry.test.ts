@@ -21,9 +21,13 @@ const ONTOLOGY: Ontology = {
       icon: 'vessel',
       pack: 'cco',
       packTerm: 'Watercraft',
-      details: [{ key: 'imo', label: 'IMO number', kind: 'text', identity: true, pattern: '\\d{7}' }],
+      details: [
+        { key: 'imo', label: 'IMO number', kind: 'text', identity: true, pattern: '\\d{7}' },
+        { key: 'flag', label: 'Flag state', kind: 'text', identity: false, onEntity: false },
+      ],
     },
   ],
+  relations: [{ key: 'operated-by', label: 'Operated by', inverse: 'Operates', from: ['artifact'], to: ['agent'], pack: 'augur', packTerm: 'operated by' }],
 };
 
 const TERN: Entity = {
@@ -42,6 +46,31 @@ const TERN: Entity = {
   updatedBy: 'u1',
   updatedAt: '2026-10-27T00:00:00Z',
   can: { edit: false, retire: false, why: 'It’s kept on the org floor: go there to change it.' },
+};
+
+const KNOWN = {
+  at: null,
+  known: null,
+  here: { floorName: 'Maritime desk', accept: false, why: 'Only this floor’s leads accept what’s so here, and raise what’s seen to a floor above.' },
+  facts: [
+    {
+      id: 'fct_1', entity: 'ent_01', property: 'flag', value: 'Liberia', direction: 'out', validFrom: '2026-09-01T00:00:00.000Z', floor: 'tree:t-ops', floorName: 'Operations',
+      backedBy: ['obs_1'], note: '', recordedAt: '2026-10-27T00:00:00Z',
+      disputes: [{ id: 'dsp_1', fact: 'fct_1', floorName: 'Maritime desk', note: 'AIS says otherwise.', by: 'u2', at: '2026-10-27T00:00:00Z', mine: false }],
+      can: { end: false, withdraw: false, dispute: true, why: 'It’s kept on Operations: its leads end or withdraw it there. You can dispute it from here.' },
+    },
+    {
+      id: 'fct_2', entity: 'ent_01', property: 'operated-by', target: 'ent_09', direction: 'out', other: { id: 'ent_09', hidden: true, reason: 'kept', floor: 'tree:t-fin', message: 'It’s kept on the Finance floor. Ask one of its leads if you need it.' },
+      floor: 'tree:t-mar', floorName: 'Maritime desk', backedBy: ['obs_2'], note: '', recordedAt: '2026-10-27T00:00:00Z', disputes: [], can: { end: false, withdraw: false, dispute: true },
+    },
+  ],
+  observations: [
+    {
+      id: 'obs_1', entity: 'ent_01', property: 'flag', value: 'Liberia', direction: 'out', observedAt: '2026-09-01T00:00:00.000Z', floor: 'tree:t-mar', floorName: 'Maritime desk',
+      source: { kind: 'document', document: { app: 'folio', id: 'd-1', title: 'Port report' } }, grade: 'B2', note: '', raisedTo: ['Operations'], createdBy: 'u1', createdAt: '2026-10-27T00:00:00Z',
+      can: { accept: false, raise: false, raiseTo: [], why: 'Only this floor’s leads accept what’s so here, and raise what’s seen to a floor above.' },
+    },
+  ],
 };
 
 const ctx = (fetch: MountContext['fetch'], path = '/', more: Partial<MountContext> = {}): MountContext => ({
@@ -172,7 +201,11 @@ describe('atlas', () => {
   });
 
   it('shows an entity, with what can’t be done and why, instead of hiding it', async () => {
-    const fetch = answering({ '/api/atlas/v1/ontology': () => Response.json(ONTOLOGY), '/api/atlas/v1/entities/ent_01': () => Response.json(TERN) });
+    const fetch = answering({
+      '/api/atlas/v1/ontology': () => Response.json(ONTOLOGY),
+      '/api/atlas/v1/entities/ent_01/knowledge': () => Response.json(KNOWN),
+      '/api/atlas/v1/entities/ent_01': () => Response.json(TERN),
+    });
     const el = document.body.appendChild(document.createElement('div'));
     await app.mount(el, ctx(fetch, '/entities/ent_01'));
     await settle(el);
@@ -180,6 +213,33 @@ describe('atlas', () => {
     const edit = [...el.querySelectorAll('ui-button')].find((b) => b.textContent === 'Edit') as HTMLElement & { disabled: boolean };
     expect(edit.disabled).toBe(true);
     expect(el.textContent).toMatch(/kept on the org floor: go there/);
+    await settle(el);
+    const [facts, links, observations] = [...el.querySelectorAll('atlas-knowledge ui-list')] as (HTMLElement & { items: { title: string; detail: string }[] })[];
+    expect(facts.items).toEqual([expect.objectContaining({ title: 'Flag state: Liberia', detail: 'Since 1 Sep 2026 · Kept on Operations · Disputed' })]);
+    expect(links.items).toEqual([expect.objectContaining({ title: 'Operated by an entity you can’t see from here' })]);
+    expect(observations.items).toEqual([expect.objectContaining({ title: 'Flag state: Liberia', detail: 'Seen 1 Sep 2026 · From Port report · B2 · On Maritime desk · Raised to Operations' })]);
+    expect(el.textContent).toMatch(/Only this floor’s leads accept/);
+  });
+
+  it('opens a fact with what can’t be done to it and why', async () => {
+    const fetch = answering({
+      '/api/atlas/v1/ontology': () => Response.json(ONTOLOGY),
+      '/api/atlas/v1/entities/ent_01/knowledge': () => Response.json(KNOWN),
+      '/api/atlas/v1/entities/ent_01': () => Response.json(TERN),
+    });
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(fetch, '/entities/ent_01'));
+    await settle(el);
+    await settle(el);
+    el.querySelector('atlas-knowledge ui-list')!.dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id: 'fct_1' } } }));
+    await settle(el);
+    await (el.querySelector('atlas-knowledge') as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const dialog = el.querySelector('atlas-knowledge ui-dialog')!;
+    expect(dialog.getAttribute('heading')).toBe('Flag state: Liberia');
+    expect(dialog.textContent).toMatch(/Disputed from Maritime desk/);
+    const end = [...dialog.querySelectorAll('ui-button')].find((b) => b.textContent === 'It has ended') as HTMLElement & { disabled: boolean };
+    expect(end.disabled).toBe(true);
+    expect(dialog.textContent).toMatch(/kept on Operations: its leads end or withdraw it there/);
   });
 
   it('says why an entity can’t be seen from here', async () => {

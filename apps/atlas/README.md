@@ -36,9 +36,21 @@ Under `/api/atlas/v1`, on the floor in `X-Workspace-Id`:
 | `PATCH /entities/:id` | Changes it, from the floor it's kept on |
 | `POST /entities/:id/retire` | Takes it out of use (that floor's leads, or whoever added it); its id stays and its keys are freed |
 | `POST /entities/resolve` | For apps keeping entity links: `{ refs: [{ id }] }` (up to 200) → each as the caller sees it now: `{ id, ref, state, floorName }`, `{ id, hidden, reason, message }` or `{ id, missing }` |
-| `POST /subgraph` | `{ seeds, depth ≤ 3, types?, relations?, asOf?, limitPerNode? }` → `{ nodes, edges, more, unseen, missing }` from this floor. Entities are linked by facts, which come with observations (AT3): until then the answer is the seeds, with no edges |
+| `POST /subgraph` | `{ seeds, depth ≤ 3, types?, relations?, asOf?, limitPerNode? }` → `{ nodes, edges, more, unseen, missing }` from this floor: links true at `asOf`, walked out to `depth` steps, at most `limitPerNode` from each entity (the rest counted in `more`). An entity at the far end that doesn't show from here is in `unseen`, with why |
+| `GET /entities/:id/knowledge?at=&known=` | What's known from this floor: `facts` (with `direction`, the `other` end of a link, `disputes`, and `can`), `observations` (with `can`: accept, raise and where to), and `here` (whether the caller may accept). `at` moves the valid clock, `known` the recorded one; both default to now |
+| `POST /entities/:id/observations` | `{ property, value \| target, observedAt?, source, grade?, note?, accept? }`, recorded on this floor and never changed. `source` is `{ kind: 'person' }`, `{ kind: 'document', document: DocumentRef }` or `{ kind: 'other', note }`; `grade` is NATO style, such as `B2`; `accept` (leads) records it as a fact here in the same step |
+| `POST /entities/:id/facts` | A lead accepts observations that agree as so on this floor: `{ backedBy, validFrom?, validTo?, note? }`. A detail has one value per floor at a time, so this replaces the floor's current record of it; links may be many |
+| `POST /facts/:id/end` | A lead says when it stopped being so (`validTo`, default now): a new record, the old one superseded |
+| `POST /facts/:id/withdraw` | A lead takes back a fact recorded in error; it stays on record as of before |
+| `POST /facts/:id/disputes` | Anyone who sees a fact says why it may be wrong. Shown to those who see the disputer's floor, and to the fact's own floor |
+| `POST /disputes/:id/clear` | Whoever raised it, or the fact's floor's leads |
+| `POST /observations/:id/raise` | A lead copies an observation to a floor above that they're on: `{ to }`. The copy points back to it; the floor above decides whether to accept it |
 
 Every change goes to the audit log as `entity.created`, `entity.changed` or `entity.retired`, and to other apps, through the outbox, as the domain events `atlas.entity.created`, `.changed` and `.retired` with `{ entity, type }`: ids only, so any follower may read them.
+
+## What's known
+
+Knowledge is fenced by floor like entities are (Harry, 27 October 2026). An **observation** is what someone saw or read, as they said it, with where it came from and an optional grade; it is never changed. A **fact** is what a floor's leads accept as so, resting on observations, on two clocks: when it is true in the world (`validFrom` to `validTo`) and when the floor recorded it (`recordedAt` until a later record supersedes it). A **link** is a fact whose value is another entity, of a kind the ontology allows (`operated-by`, `located-at`, …). Lower floors never leak up: a team's facts don't show on the org floor. A lead **raises** an observation to a floor above, where it is worth more, and that floor's leads decide whether to accept it. Ontology version 2 adds the starter links and details known only through facts (a vessel's flag), which can't be typed on the entity.
 
 ## Intents
 

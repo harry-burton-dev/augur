@@ -1,6 +1,8 @@
 import { LitElement, html, nothing } from 'lit';
 import { ago, type DialogSubmit, type ListItem, type SelectOption } from '@augur/ui-kit';
-import { AtlasError, detailsOf, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
+import type { DocumentRef } from '@augur/mfe-sdk';
+import './atlas-knowledge.js';
+import { AtlasError, onEntity, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
 
 type Dialog = 'new' | 'edit' | 'retire';
 
@@ -32,6 +34,7 @@ export class AtlasApp extends LitElement {
     error: { state: true },
     dialog: { state: true },
     newType: { state: true },
+    pickDocument: { attribute: false },
   };
 
   declare api: AtlasApi;
@@ -52,6 +55,8 @@ export class AtlasApp extends LitElement {
   declare dialog: Dialog | undefined;
   /** The kind being added, which decides the details asked for. */
   declare newType: string;
+  /** Asks the person for a document, for an observation's source (the SDK's pickDocument). */
+  declare pickDocument: (() => Promise<DocumentRef>) | undefined;
   private searching: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
@@ -134,7 +139,7 @@ export class AtlasApp extends LitElement {
   /** The fields as the dialog gave them, turned into what the service takes. */
   private fieldsFrom(values: Record<string, string>, type: string): EntityFields {
     const details: Record<string, string> = {};
-    for (const d of this.ontology ? detailsOf(this.ontology, type) : []) details[d.key] = values[`detail:${d.key}`] ?? '';
+    for (const d of this.ontology ? onEntity(this.ontology, type) : []) details[d.key] = values[`detail:${d.key}`] ?? '';
     return { label: values.label, aliases: aliasesFrom(values.aliases ?? ''), description: values.description ?? '', details };
   }
 
@@ -231,7 +236,7 @@ export class AtlasApp extends LitElement {
     const e = this.open;
     if (!e || !this.ontology) return html`${back}<ui-state kind="loading" heading="Opening…"></ui-state>`;
     const type = this.ontology.types.find((t) => t.key === e.type);
-    const details = detailsOf(this.ontology, e.type);
+    const details = onEntity(this.ontology, e.type);
     return html`${back}
       <div class="atlas-head">
         <ui-heading eyebrow=${type?.label ?? e.type} heading=${e.label} summary=${e.description}></ui-heading>
@@ -256,12 +261,13 @@ export class AtlasApp extends LitElement {
         <dd>${ago(e.createdAt)}</dd>
         ${type ? html`<dt>In the ontology</dt><dd>${type.packTerm} <span class="atlas-key">${type.pack.toUpperCase()}</span></dd>` : nothing}
       </dl>
-      <p class="atlas-note">Observations, facts over time and links to other entities come next.</p>`;
+      <atlas-knowledge .api=${this.api} .entity=${e} .ontology=${this.ontology} .pickDocument=${this.pickDocument}
+        @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}></atlas-knowledge>`;
   }
 
   private detailFields(type: string, values: Record<string, string> = {}) {
     if (!this.ontology) return nothing;
-    return detailsOf(this.ontology, type).map(
+    return onEntity(this.ontology, type).map(
       (d) => html`<ui-text-field slot="fields" name=${`detail:${d.key}`} label=${d.label} optional maxlength="200" hint=${[d.hint, d.identity ? 'Says which one it is: no two entities share it' : ''].filter(Boolean).join('. ')} .value=${values[d.key] ?? ''}></ui-text-field>`,
     );
   }
