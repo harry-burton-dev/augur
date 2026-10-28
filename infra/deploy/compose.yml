@@ -34,16 +34,18 @@ x-folio-storage: &folio-storage
   S3_SECRET_ACCESS_KEY: ${FOLIO_BUCKET_SECRET:?set FOLIO_BUCKET_SECRET in .env}
 
 services:
-  # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate.
+  # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate. While
+  # infra/deploy/public.sh has it open, Tailscale Funnel serves the same address to the internet too
+  # (tailscale/start.sh; docs/deploy.md, "Open AUGUR to the internet for a while").
   tailscale:
     image: tailscale/tailscale:v1.76.6
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/config/start.sh"]
     hostname: ${TS_HOSTNAME:-platform}
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in .env}
       TS_HOSTNAME: ${TS_HOSTNAME:-platform}
       TS_STATE_DIR: /var/lib/tailscale
-      TS_SERVE_CONFIG: /config/serve.json
       TS_USERSPACE: "true"
     volumes:
       - tailscale:/var/lib/tailscale
@@ -180,10 +182,13 @@ services:
       OIDC_AUDIENCE: platform-api
       # Admin's Status reads what the backup container last wrote here.
       BACKUP_DIR: /backups
+      # And whether AUGUR is open to the internet, and until when, from what infra/deploy/public.sh wrote.
+      PUBLIC_ACCESS_FILE: /run/augur/tailscale/public-until
       # Each app's service, name=url: the apps that ship with AUGUR.
       APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090
     volumes:
       - ./backups:/backups:ro
+      - ./tailscale:/run/augur/tailscale:ro
     depends_on: [identity, registry, events, models]
 
   identity:

@@ -39,12 +39,12 @@
     {
       "id": "explore",
       "label": "Explore",
-      "icon": "explore",
+      "icon": "atlas",
       "items": [
         {
           "id": "where",
           "label": "Where you are",
-          "icon": "explore",
+          "icon": "place",
           "path": "/map",
           "detail": "Your floors, and why you can go to each",
           "keywords": "map floors teams org structure"
@@ -56,6 +56,14 @@
           "path": "/here",
           "detail": "Who’s here and which apps you can use",
           "keywords": "people apps members leads"
+        },
+        {
+          "id": "building",
+          "label": "The building",
+          "icon": "org",
+          "path": "/building",
+          "detail": "The whole org in cross-section (for leads and admins)",
+          "keywords": "cutaway building teams structure shape lead admin"
         },
         {
           "id": "plant",

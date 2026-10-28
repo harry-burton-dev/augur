@@ -1,6 +1,7 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it } from 'vitest';
-import { backFrom, escapeIsFree, findPages, orbitMenu, screenFor, titleFor, titleMenu, titleTarget, upFrom } from './index.js';
+import type { MenuCategory } from '@augur/ui-kit';
+import { areaOf, backFrom, escapeIsFree, findPages, orbitIndexOf, orbitMenu, screenFor, titleFor, titleMenu, titleTarget, upFrom } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -21,7 +22,24 @@ const board = app('board', '/board', {
 const home = app('home', '/home', { icon: 'home', description: 'What needs you' });
 /** Keeps its menu inside it: the shell shows no Orbit for it. */
 const shelf = app('shelf', '/shelf', { orbit: false, menu: board.menu });
-const manifest = [home, board, shelf];
+/** Two areas, so Title lists them; groups listed out of area order. */
+const desk = app('desk', '/desk', {
+  icon: 'admin',
+  areas: [
+    { id: 'org', label: 'Organisation', icon: 'structure', detail: 'People and teams' },
+    { id: 'sys', label: 'System', icon: 'server' },
+  ],
+  menu: [
+    { label: 'People', icon: 'people', area: 'org', items: [{ label: 'Everyone', icon: 'list', path: '/people' }, { label: 'Add', icon: 'plus', path: '/people/new' }] },
+    { label: 'Apps', icon: 'apps', area: 'sys', items: [{ label: 'All apps', icon: 'list', path: '/apps', detail: 'On or off' }] },
+    { label: 'Teams', icon: 'department', area: 'org', items: [{ label: 'All teams', icon: 'list', path: '/teams' }, { label: 'New team', icon: 'plus', path: '/teams/new' }] },
+  ],
+});
+const manifest = [home, board, shelf, desk];
+
+/** Every child in a menu next to the parent it sits under, chapter or group first. */
+const pairs = (menu: MenuCategory[], parent?: { label: string; icon?: string }) =>
+  menu.flatMap((c) => [...(parent ? [[parent, c]] : []), ...c.items.map((it) => [c, it])]) as [{ label: string; icon?: string }, { label: string; icon?: string }][];
 
 describe('screenFor', () => {
   it('shows Title at the root, Orbit at a root with a menu, and the app everywhere else', () => {
@@ -40,35 +58,69 @@ describe('screenFor', () => {
 });
 
 describe('titleMenu', () => {
-  it('makes each app a chapter, its menu categories the items', () => {
+  it('lists an app’s areas, and shows an app with fewer than two as itself', () => {
     const title = titleMenu(manifest);
-    expect(title.map((c) => c.label)).toEqual(['Home', 'Board', 'Shelf']);
-    expect(title[0].items).toEqual([{ id: 'home/', label: 'Home', icon: 'home', ai: undefined, detail: 'What needs you' }]);
-    expect(title[1].items.map((i) => [i.label, i.detail])).toEqual([
-      ['Labels', 'All labels, New and 1 more'],
-      ['Colours', 'Browse'],
+    expect(title.map((c) => c.label)).toEqual(['Home', 'Board', 'Shelf', 'Desk']);
+    expect(title[0]).toMatchObject({ id: 'home', label: 'Home', icon: 'home', detail: 'What needs you', items: [] });
+    // a menu with no areas stays in Orbit: Title never lists groups
+    expect(title[1].items).toEqual([]);
+    expect(title[1].keywords).toContain('palette');
+    expect(title[3].items.map((i) => [i.id, i.label, i.icon, i.detail])).toEqual([
+      ['desk/org', 'Organisation', 'structure', 'People and teams'],
+      ['desk/sys', 'System', 'server', 'Apps'],
     ]);
-    expect(title[1].items[1].keywords).toContain('palette');
   });
 
-  it('leads each item back to its app and Orbit category', () => {
-    const [homeChapter, boardChapter] = titleMenu(manifest);
-    expect(titleTarget(manifest, homeChapter.items[0])).toEqual({ app: home, category: 0 });
-    expect(titleTarget(manifest, boardChapter.items[1])).toEqual({ app: board, category: 1 });
-    expect(titleTarget(manifest, { label: 'Gone', id: 'gone/0' })).toBeUndefined();
+  it('leads an app to its start, and an area to its first group in Orbit', () => {
+    const title = titleMenu(manifest);
+    expect(titleTarget(manifest, { id: 'board', label: 'Board' })).toEqual({ app: board, category: 0 });
+    expect(titleTarget(manifest, title[3].items[0])).toEqual({ app: desk, category: 0 });
+    expect(titleTarget(manifest, title[3].items[1])).toEqual({ app: desk, category: 2 });
+    expect(titleTarget(manifest, { label: 'Gone', id: 'gone/x' })).toBeUndefined();
   });
 
-  it('opens an app that keeps its own menu at the chosen category’s first page', () => {
-    const shelfChapter = titleMenu(manifest)[2];
-    expect(titleTarget(manifest, shelfChapter.items[1])).toEqual({ app: shelf, category: 1, path: '/colours' });
+  it('opens an app that keeps its own menu at the area’s first page', () => {
+    const own = app('own', '/own', { orbit: false, areas: desk.areas, menu: desk.menu });
+    expect(titleTarget([own], { id: 'own/sys', label: 'System' })).toEqual({ app: own, category: 2, path: '/apps' });
+    expect(titleTarget([own], { id: 'own', label: 'Own' })).toEqual({ app: own, category: 0 });
+  });
+
+  it('never repeats a parent’s label or icon, for any app here', () => {
+    for (const menu of [titleMenu(manifest), ...manifest.map(orbitMenu)])
+      for (const [parent, child] of pairs(menu)) {
+        expect(child.label, `${parent.label} > ${child.label}`).not.toBe(parent.label);
+        expect(child.icon, `${parent.label} > ${child.label}`).not.toBe(parent.icon);
+      }
   });
 });
 
 describe('orbitMenu', () => {
-  it('carries each item’s path as its id, and the category icon down', () => {
+  it('carries each item’s path as its id, without borrowing the group’s icon', () => {
     const orbit = orbitMenu(board);
-    expect(orbit[0].items[1]).toMatchObject({ id: '/labels/new', label: 'New', icon: 'star' });
-    expect(orbit[1].icon).toBe('apps');
+    expect(orbit[0].items[1]).toMatchObject({ id: '/labels/new', label: 'New', icon: 'arrow' });
+  });
+
+  it('makes a group with one page that page', () => {
+    const colours = orbitMenu(board)[1];
+    expect(colours).toMatchObject({ id: '/colours', label: 'Colours', icon: 'apps', items: [] });
+  });
+
+  it('keeps an area’s groups together, each naming its area', () => {
+    const orbit = orbitMenu(desk);
+    expect(orbit.map((c) => [c.section, c.label])).toEqual([
+      ['Organisation', 'People'],
+      ['Organisation', 'Teams'],
+      ['System', 'Apps'],
+    ]);
+    expect(orbitMenu(board).map((c) => c.section)).toEqual([undefined, undefined]);
+  });
+
+  it('finds the group and area a page is in', () => {
+    expect(orbitIndexOf(desk, '/teams/new')).toBe(1);
+    expect(orbitIndexOf(desk, '/apps')).toBe(2);
+    expect(orbitIndexOf(desk, '/nowhere')).toBe(0);
+    expect(areaOf(desk, '/apps')?.label).toBe('System');
+    expect(areaOf(board, '/labels')).toBeUndefined();
   });
 });
 

@@ -32,12 +32,12 @@
     {
       "id": "atlas",
       "label": "Atlas",
-      "icon": "atlas",
+      "icon": "structure",
       "items": [
         {
           "id": "entities",
           "label": "Everything here",
-          "icon": "atlas",
+          "icon": "list",
           "path": "/entities",
           "detail": "The entities you can see from this floor",
           "keywords": "entities things ships people places organisations"

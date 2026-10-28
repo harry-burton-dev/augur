@@ -24,16 +24,24 @@ export interface AppManifestEntry {
   /** The app is an AI: the menus draw it as a bubble. */
   ai?: boolean;
   /**
-   * The app's menu. The shell shows it as Orbit at the app's root, and as the
-   * app's chapter in Title; choosing an item opens the app at its `path`.
-   * Without one, the app opens straight away.
+   * The app's menu. The shell shows it as Orbit at the app's root; choosing
+   * an item opens the app at its `path`. A group with one item opens it
+   * directly. Without a menu, the app opens straight away.
    */
   menu?: AppMenuCategory[];
   /**
+   * The broad parts of what the app covers, such as Admin's Organisation and
+   * System (SDK 1.5): what Title lists under the app. Each menu group names
+   * its `area`. With fewer than two, Title shows the app alone, never a
+   * doubled item. Nothing repeats its parent: an area's label and icon differ
+   * from the app's. See docs/shell-principles.md.
+   */
+  areas?: AppArea[];
+  /**
    * `false`: the app keeps its own menu inside it, so the shell never shows
-   * its Orbit. Title's chapter for it still lists its menu, and choosing an
-   * item opens the app there; its root opens the app itself, Esc doesn't
-   * leave it, and the way back to the shell is the top bar's All apps (SDK 1.4).
+   * its Orbit. Choosing it or one of its areas in Title opens the app there;
+   * its root opens the app itself, Esc doesn't leave it, and the way back to
+   * the shell is the top bar's Back (SDK 1.4).
    */
   orbit?: boolean;
   /** The kinds of floor the app works on. Without it, every kind. */
@@ -115,7 +123,20 @@ export interface AppMenuCategory {
   label: string;
   icon?: string;
   ai?: boolean;
+  /** The `id` of the app's area the group belongs to (SDK 1.5). */
+  area?: string;
   items: AppMenuItem[];
+}
+
+/** One broad part of what an app covers, listed in Title (SDK 1.5). */
+export interface AppArea {
+  /** Unique in the app; menu groups name it in `area`. */
+  id: string;
+  label: string;
+  /** A UI kit icon name, not the app's own. */
+  icon?: string;
+  /** One line on what's in it. Without one, Title names the area's first groups. */
+  detail?: string;
 }
 
 export interface User {

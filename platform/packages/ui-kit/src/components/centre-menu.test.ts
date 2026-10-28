@@ -249,4 +249,29 @@ describe('ui-centre-menu', () => {
       expect(opacities.filter((o) => o > 0 && o < 0.55), variant).toEqual([]);
     }
   });
+
+  it('opens a category with no items as a choice by itself, and finds it by name', async () => {
+    const select = vi.fn();
+    el.addEventListener('ui-select', (e) => select((e as CustomEvent).detail.item));
+    el.variant = 'title';
+    el.categories = [...categories, { id: 'notes', label: 'Notes', icon: 'document', detail: 'Jottings', keywords: 'memo', items: [] }];
+    el.setCategory(3);
+    await el.updateComplete;
+    expect(root().querySelectorAll('.item')).toHaveLength(0);
+    expect(caption()).toBe('Notes');
+    expect(root().querySelector('.caption .detail')!.textContent).toBe('Jottings');
+    await press('Enter');
+    expect(select).toHaveBeenLastCalledWith({ id: 'notes', label: 'Notes', icon: 'document', detail: 'Jottings', keywords: 'memo', ai: undefined });
+    root().querySelectorAll<HTMLElement>('.cat')[3].click();
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(searchMenu(el.categories, 'memo').map((e) => e.item.label)).toEqual(['Notes']);
+  });
+
+  it('names the section a category is in, in Orbit', async () => {
+    el.categories = categories.map((c, i) => ({ ...c, section: i < 2 ? 'Work' : 'Help' }));
+    await el.updateComplete;
+    expect(catLabel()).toBe('Work  /  Home');
+    await press('ArrowLeft');
+    expect(catLabel()).toBe('Help  /  Assistant');
+  });
 });

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gateway
-  version: 1.3.0
+  version: 1.4.0
   description: >
     The gateway's own API, beside the services it forwards to. Reached at
     /api/gateway/v1 by a signed-in caller. Everything else under /api/<service>
@@ -40,6 +40,7 @@ paths:
                 properties:
                   components: { type: array, items: { $ref: "#/components/schemas/ComponentStatus" } }
                   backups: { $ref: "#/components/schemas/BackupStatus" }
+                  publicAccess: { $ref: "#/components/schemas/PublicAccess" }
         "401": { description: No signed-in caller }
         "403": { description: Not an admin }
   /caller-keys:
@@ -94,6 +95,13 @@ components:
         file: { type: string }
         bytes: { type: integer }
         problem: { type: string }
+    PublicAccess:
+      type: object
+      description: Whether AUGUR is open to the internet through Tailscale Funnel (infra/deploy/public.sh). Absent when the gateway isn't told.
+      required: [open]
+      properties:
+        open: { type: boolean }
+        until: { type: string, format: date-time, description: When it closes by itself }
     BackupStatus:
       type: object
       required: [state]

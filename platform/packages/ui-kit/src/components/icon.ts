@@ -2,7 +2,7 @@ import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
   Activity, Anchor, ArrowLeft, ArrowRight, ArrowUpDown, Ban, Bell, BellOff, Bird, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, CalendarDays, Car, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Palette, Pause, Plane, Play, Plus, Power, Search, Server, Ship,
+  FileText, Folder, Gauge, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, List, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Network, Palette, Pause, Plane, Play, Plus, Power, Search, Server, Ship,
   Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, User, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
   type IconNode,
 } from 'lucide';
@@ -78,6 +78,10 @@ export const icons = {
   // A run of documents that comes out on a cadence, such as a weekly report.
   series: draw(CalendarRange),
   preview: draw(GitPullRequest),
+  // Admin's areas and lists, so nothing repeats the icon of what it sits under.
+  list: draw(List),
+  structure: draw(Network),
+  gauge: draw(Gauge),
   // Finding your way round the platform (Auspex): the app, one person, what's closed to you and why, and what changed.
   explore: draw(Bird),
   person: draw(User),

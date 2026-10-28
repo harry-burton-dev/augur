@@ -161,6 +161,19 @@ describe('admin', () => {
       const dialog = el.querySelector('ui-dialog')!;
       expect(dialog.getAttribute('summary')).toBe('It can’t be reached.');
       expect(dialog.textContent).toContain('People can’t use library while its service is down');
+      expect(el.querySelector('[data-public]')).toBeNull();
+      el.remove();
+    });
+
+    it('says first when AUGUR is open to the internet, until when, and how to close it', async () => {
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ components: [part('gateway', 'up', { kind: 'gateway' })], publicAccess: { open: true, until: '2026-10-28T18:00:00Z' } }), { status: 200 }));
+      const el = document.createElement('admin-status') as AdminStatus;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.publicAccess?.open).toBe(true));
+      await el.updateComplete;
+      expect(el.querySelector('[data-public] ui-status')!.getAttribute('label')).toMatch(/^Open to the internet until /);
+      expect(el.querySelector('[data-public]')!.textContent).toContain('infra/deploy/public.sh off');
       el.remove();
     });
   });

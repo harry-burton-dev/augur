@@ -5,6 +5,8 @@
  * changed lately comes from Auspex's own service.
  */
 
+import type { Installs, PlatformUpgrade, RunnerJobs } from './jobs.js';
+
 export type FloorKind = 'personal' | 'team' | 'org';
 export type MemberRole = 'member' | 'lead';
 
@@ -119,6 +121,10 @@ export interface PlantUpdates {
   problem?: string;
   available?: { version: string; released?: string };
   needsYou: { message: string }[];
+  /** The upgrade asked for, while it's waiting or under way, and for a week after. */
+  upgrade?: PlatformUpgrade;
+  /** When the deployment's updater last asked for work, since the registry started. */
+  updaterSeenAt?: string;
 }
 
 /** Whether the person can use an app on a floor: on there, and they have any role it needs. */
@@ -167,6 +173,16 @@ export class AuspexApi {
   /** Admins only: the running release, and whether a newer one is out. */
   updates() {
     return this.get<PlantUpdates>('/api/registry/v1/platform/updates');
+  }
+
+  /** Admins only: the app runner's recent installs and removals. */
+  runnerJobs() {
+    return this.get<RunnerJobs>('/api/registry/v1/app-runner/jobs');
+  }
+
+  /** Admins only: the apps the app runner installed, and their running previews. */
+  installs() {
+    return this.get<Installs>('/api/registry/v1/app-runner/apps');
   }
 
   async names(ids: string[]) {

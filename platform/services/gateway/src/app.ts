@@ -19,7 +19,7 @@ import {
 } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
-import { backupStatus, HealthMonitor, probesFor } from './status.ts';
+import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
 import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
 import { Readable } from 'node:stream';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
@@ -78,6 +78,8 @@ export interface GatewayOptions {
   monitor?: HealthMonitor;
   /** Where the backup container writes its results (BACKUP_DIR). Without it Status says nothing about backups. */
   backupDir?: string;
+  /** What infra/deploy/public.sh writes (PUBLIC_ACCESS_FILE). Without it Status says nothing about the internet. */
+  publicAccessFile?: string;
   /** Which floors a caller is on. Defaults to asking the identity upstream. */
   floors?: FloorLookup;
   /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY, or a new key each start. */
@@ -103,7 +105,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, signer = callerSignerFromEnv(), access, apps }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, signer = callerSignerFromEnv(), access, apps }: GatewayOptions = {}) => {
   const appUpstreams = apps ?? (upstreams.registry ? registryUpstreams({ registryUrl: upstreams.registry, signer }) : undefined);
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
@@ -161,6 +163,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     return {
       components: statusMonitor.snapshot({ version, api: API_VERSION }),
       ...(backupDir ? { backups: await backupStatus(backupDir) } : {}),
+      ...(publicAccessFile ? { publicAccess: await publicAccess(publicAccessFile) } : {}),
     };
   });
 

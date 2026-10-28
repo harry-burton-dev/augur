@@ -156,10 +156,18 @@ export interface BackupStatus {
   lastRestoreTest?: { at: string; ok: boolean; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
 }
 
+/** Whether AUGUR is open to the internet, from infra/deploy/public.sh (see contracts/gateway.openapi.yaml). */
+export interface PublicAccess {
+  open: boolean;
+  until?: string;
+}
+
 export interface PlatformStatus {
   components: ComponentStatus[];
   /** Absent when the gateway isn't told where backups are. */
   backups?: BackupStatus;
+  /** Absent when the gateway isn't told where to look. */
+  publicAccess?: PublicAccess;
 }
 
 /** An AUGUR release as Updates shows it (see contracts/registry.openapi.yaml). */

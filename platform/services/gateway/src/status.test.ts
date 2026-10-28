@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { backupStatus, HealthMonitor, probesFor } from './status.ts';
+import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
 
 const gateway = { version: '0.2.0', api: 'v1' };
 
@@ -128,5 +128,24 @@ describe('backupStatus', () => {
       'The last restore test failed: Sign-in came back with nobody in it.',
     );
     expect(await problem({ 'last-backup.json': backup, 'restore-test.json': { ...restored, at: '2026-10-12T02:00:00Z' } })).toMatch(/over a week/);
+  });
+});
+
+describe('publicAccess', () => {
+  const now = Date.parse('2026-10-28T16:00:00Z');
+  const file = async (body?: string) => {
+    const path = join(await mkdtemp(join(tmpdir(), 'public-')), 'public-until');
+    if (body !== undefined) await writeFile(path, body);
+    return path;
+  };
+
+  it('is open until the time public.sh wrote, while it is still to come', async () => {
+    expect(await publicAccess(await file(`${Date.parse('2026-10-28T18:00:00Z') / 1000}\n`), now)).toEqual({ open: true, until: '2026-10-28T18:00:00.000Z' });
+  });
+
+  it('is private with no file, an empty one, or a time gone by', async () => {
+    expect(await publicAccess(await file(), now)).toEqual({ open: false });
+    expect(await publicAccess(await file(''), now)).toEqual({ open: false });
+    expect(await publicAccess(await file(`${Date.parse('2026-10-28T15:00:00Z') / 1000}`), now)).toEqual({ open: false });
   });
 });
