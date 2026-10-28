@@ -2,7 +2,7 @@ import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
   Activity, Anchor, ArrowLeft, ArrowRight, ArrowUpDown, Ban, Bell, BellOff, Bird, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, CalendarDays, Car, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Palette, Plane, Plus, Power, Search, Ship,
+  FileText, Folder, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Palette, Pause, Plane, Play, Plus, Power, Search, Server, Ship,
   Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, User, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
   type IconNode,
 } from 'lucide';
@@ -84,6 +84,10 @@ export const icons = {
   lock: draw(Lock),
   blocked: draw(Ban),
   history: draw(History),
+  // Auspex's replay, played and paused, and its plant room: the parts AUGUR runs on.
+  play: draw(Play),
+  pause: draw(Pause),
+  server: draw(Server),
   // Data Atlas: the app itself, and the kinds of thing its entities are.
   atlas: draw(MapIcon),
   vessel: draw(Ship),

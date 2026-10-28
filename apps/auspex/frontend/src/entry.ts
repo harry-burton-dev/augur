@@ -1,7 +1,9 @@
 import { defineMicroFrontend, type Intent, type MountContext } from '@augur/mfe-sdk';
 import { html, render } from 'lit';
 import '@augur/ui-kit';
+import { ACCESS_EXPLAIN, readExplain } from './access.js';
 import { AuspexApi } from './api.js';
+import './auspex-access.js';
 import { pathFor, placeFor, type Place } from './auspex-app.js';
 import './auspex-app.js';
 import './auspex-glance.js';
@@ -34,6 +36,13 @@ const apiFor = (ctx: MountContext) => new AuspexApi((path, init) => ctx.fetch(pa
 /** Auspex: where you are on AUGUR. What the shell mounts at /auspex. */
 export default defineMicroFrontend({
   mount(el: HTMLElement, ctx: MountContext) {
+    // Another app asked who can open one of its things: Auspex answers over it, and goes back when done.
+    const ask = ctx.intent?.type === ACCESS_EXPLAIN ? readExplain(ctx.intent.payload) : undefined;
+    if (ask && ctx.reply) {
+      const reply = ctx.reply;
+      render(html`<auspex-access .api=${apiFor(ctx)} .ask=${ask} app-name=${ask.thing.appName ?? ''} @auspex-done=${() => reply.cancel()}></auspex-access>`, el);
+      return;
+    }
     let mountedAt = ctx.path;
     const moved = (e: CustomEvent<Place>) => {
       const to = addressFor(window.location.pathname, mountedAt, e.detail);
@@ -46,6 +55,7 @@ export default defineMicroFrontend({
         .api=${apiFor(ctx)}
         here=${ctx.workspace.id}
         user-id=${ctx.user.id}
+        ?admin=${ctx.user.roles.includes('admin')}
         .place=${placeForIntent(ctx.intent, ctx.workspace.id) ?? placeFor(ctx.path, ctx.workspace.id)}
         @auspex-place=${moved}
       ></auspex-app>`,

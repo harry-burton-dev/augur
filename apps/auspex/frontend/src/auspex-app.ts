@@ -2,20 +2,39 @@ import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import type { Fact } from '@augur/ui-kit';
 import { usable, type AuspexApi, type Changes, type ClosedTeam, type FloorApp, type MapFloor, type PersonMap } from './api.js';
 import './auspex-map.js';
+import './auspex-plant.js';
+import './auspex-replay.js';
 import { styles } from './styles.js';
 import { appLine, appQuestion, changeLine, daysAgo, floorEyebrow, ledBy, listOf, whoCanAdd, whyHere } from './words.js';
 
-/** Where Auspex is: your map, one floor, or the answer about one app on one floor. */
-export type Place = { view: 'where' } | { view: 'floor'; id: string } | { view: 'app'; floor: string; app: string };
+/**
+ * Where Auspex is: your map, one floor, the answer about one app on one floor,
+ * a floor's last 30 days (its leads and admins), or the plant room (admins).
+ */
+export type Place = { view: 'where' } | { view: 'floor'; id: string } | { view: 'app'; floor: string; app: string } | { view: 'replay'; id: string } | { view: 'plant' };
 
 /** Auspex's own address for a place, below its route. */
-export const pathFor = (place: Place): string =>
-  place.view === 'where' ? '/' : place.view === 'floor' ? `/floors/${encodeURIComponent(place.id)}` : `/floors/${encodeURIComponent(place.floor)}/apps/${encodeURIComponent(place.app)}`;
+export const pathFor = (place: Place): string => {
+  switch (place.view) {
+    case 'where':
+      return '/';
+    case 'plant':
+      return '/plant';
+    case 'floor':
+      return `/floors/${encodeURIComponent(place.id)}`;
+    case 'replay':
+      return `/floors/${encodeURIComponent(place.id)}/replay`;
+    case 'app':
+      return `/floors/${encodeURIComponent(place.floor)}/apps/${encodeURIComponent(place.app)}`;
+  }
+};
 
 /** The place an address names; `/here` is the floor they're on. Anything else is the map. */
 export const placeFor = (path: string, here: string): Place => {
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0] === 'here') return { view: 'floor', id: here };
+  if (parts[0] === 'plant') return { view: 'plant' };
+  if (parts[0] === 'floors' && parts[1] && parts[2] === 'replay') return { view: 'replay', id: parts[1] };
   if (parts[0] === 'floors' && parts[1] && parts[2] === 'apps' && parts[3]) return { view: 'app', floor: parts[1], app: parts[3] };
   if (parts[0] === 'floors' && parts[1]) return { view: 'floor', id: parts[1] };
   return { view: 'where' };
@@ -53,6 +72,7 @@ export class AuspexApp extends LitElement {
     place: { attribute: false },
     here: { type: String },
     userId: { type: String, attribute: 'user-id' },
+    admin: { type: Boolean },
     map: { state: true },
     failure: { state: true },
     showAll: { state: true },
@@ -63,6 +83,8 @@ export class AuspexApp extends LitElement {
   /** The floor they're on now. */
   declare here: string;
   declare userId: string;
+  /** They have the admin role: the plant room, and every floor's replay they stand on. */
+  declare admin: boolean;
   declare map: PersonMap | undefined;
   declare failure: string;
   declare showAll: boolean;
@@ -76,6 +98,7 @@ export class AuspexApp extends LitElement {
     this.place = { view: 'where' };
     this.here = '';
     this.userId = '';
+    this.admin = false;
     this.failure = '';
     this.showAll = false;
   }
@@ -133,7 +156,7 @@ export class AuspexApp extends LitElement {
     const map = this.map;
     if (!map || !this.api) return;
     const place = this.place;
-    const floorId = place.view === 'floor' ? place.id : place.view === 'app' ? place.floor : undefined;
+    const floorId = place.view === 'floor' || place.view === 'replay' ? place.id : place.view === 'app' ? place.floor : undefined;
     const floor = floorId ? this.floor(floorId) : undefined;
     if (!floor?.open) return;
     this.loadApps(floor.id);
@@ -166,6 +189,13 @@ export class AuspexApp extends LitElement {
       .catch((err: Error) => this.changes.set(floor, err))
       .finally(() => this.requestUpdate());
   }
+
+  /** The replay is for a floor's leads and admins, on a team or the org they stand on. */
+  private mayReplay(f: MapFloor) {
+    return f.open && f.kind !== 'personal' && (this.admin || (f.why.kind === 'member' && f.why.role === 'lead') || Boolean(f.members?.some((m) => m.id === this.userId && m.role === 'lead')));
+  }
+
+  private appName = (id: string) => [...this.apps.values()].flatMap((a) => (Array.isArray(a) ? a : [])).find((a) => a.id === id)?.name ?? id;
 
   private can(actions: TemplateResult | typeof nothing, why: TemplateResult | string) {
     return html`<div class="ax-can">
@@ -209,7 +239,7 @@ export class AuspexApp extends LitElement {
         ${map.closed.length ? html`<li><i class="closed"></i>Closed to you</li>` : nothing}
       </ul>
       ${this.can(
-        nothing,
+        this.admin ? html`<ui-button kind="tertiary" @click=${() => this.go({ view: 'plant' })}>Open the plant room</ui-button>` : nothing,
         map.closed.length
           ? html`Choose a floor to see who’s there and which apps you can use on it. A closed team says <b>who to ask</b> to be added.`
           : 'Choose a floor to see who’s there and which apps you can use on it.',
@@ -226,7 +256,8 @@ export class AuspexApp extends LitElement {
     const list = Array.isArray(apps) ? apps : undefined;
     const week = changes && !(changes instanceof Error) ? changes : undefined;
     const title = f.kind === 'personal' ? 'Your own floor' : f.name;
-    const summary = [whyHere(f, org.name) + '.', ledBy(f.leads.filter(() => f.kind === 'team'), this.userId)].filter(Boolean).join(' ');
+    // Said once: a lead's reason for being here and who leads it can be the same sentence.
+    const summary = [...new Set([whyHere(f, org.name) + '.', ledBy(f.leads.filter(() => f.kind === 'team'), this.userId)].filter(Boolean))].join(' ');
     const facts: Fact[] = [
       ...(f.kind !== 'personal' ? [{ value: f.people, label: f.people === 1 ? 'Person' : 'People' }] : []),
       ...(f.open ? [{ value: list ? list.filter(usable).length : '…', label: 'Apps you can use' }] : []),
@@ -243,12 +274,12 @@ export class AuspexApp extends LitElement {
       ${f.open ? this.renderApps(f, apps) : html`<p class="ax-muted ax-meta">You can see who’s on ${f.name}, ${f.why.kind === 'admin' ? 'as an admin' : `as a lead of ${f.why.kind === 'leads-above' ? f.why.team.name : 'a team above it'}`}. Its apps and what changes on it are for the people on it.</p>`}
       ${f.members?.length ? this.renderPeople(f) : nothing}
       ${f.kind === 'org' ? html`<p class="ax-muted ax-meta">Everyone at ${f.name} is here: ${f.people} ${f.people === 1 ? 'person' : 'people'}. Auspex shows people on the teams you share with them, and nothing else about them.</p>` : nothing}
-      ${f.open && f.kind !== 'personal' ? this.renderWeek(changes) : nothing}
+      ${f.open && f.kind !== 'personal' ? this.renderWeek(f, changes) : nothing}
       ${this.can(
         firstNo ? html`<ui-button kind="tertiary" @click=${() => this.go({ view: 'app', floor: f.id, app: firstNo.id })}>${appQuestion(firstNo, title)}</ui-button>` : nothing,
         f.kind === 'personal'
           ? 'Choose an app to see why you can or can’t use it here.'
-          : html`Choose an app to see why. You can’t change who’s here or which apps are on: <b>an admin</b> does${f.leads.length ? `, and ${listOf(f.leads.map((l) => (l.id === this.userId ? 'you' : l.name)))} ${f.leads.length > 1 ? 'lead' : 'leads'} ${f.name}` : ''}.`,
+          : html`Choose an app to see why. You can’t change who’s here or which apps are on: <b>an admin</b> does${f.leads.length ? `, and ${listOf(f.leads.map((l) => (l.id === this.userId ? 'you' : l.name)))} ${f.leads.length > 1 || f.leads[0]?.id === this.userId ? 'lead' : 'leads'} ${f.name}` : ''}.`,
       )}
     </div>`;
   }
@@ -295,14 +326,14 @@ export class AuspexApp extends LitElement {
     </section>`;
   }
 
-  private renderWeek(changes: Loaded<Changes>) {
+  private renderWeek(f: MapFloor, changes: Loaded<Changes>) {
     if (changes instanceof Error) return html`<ui-state kind="error" size="line" heading="Couldn’t see what changed" body=${changes.message}></ui-state>`;
     if (!changes) return nothing;
     const now = Date.now();
     const today = new Date(now);
     today.setHours(0, 0, 0, 0);
     const days = Array.from({ length: 7 }, (_, i) => new Date(today.getTime() - (6 - i) * DAY));
-    const appName = (id: string) => [...this.apps.values()].flatMap((a) => (Array.isArray(a) ? a : [])).find((a) => a.id === id)?.name ?? id;
+    const appName = this.appName;
     return html`<section class="ax-section" aria-labelledby="ax-week">
       <h2 class="ax-label" id="ax-week">This week</h2>
       <div class="ax-week" aria-hidden="true">
@@ -322,6 +353,9 @@ export class AuspexApp extends LitElement {
             ${changes.changes.slice(0, TOLD).map((c) => html`<li><span>${changeLine(c, changes.names, appName)}</span><span>${daysAgo(c.at, now)}</span></li>`)}
           </ul>`
         : html`<p class="ax-muted ax-meta">Nothing changed here this week.</p>`}
+      ${this.mayReplay(f)
+        ? html`<div><ui-button kind="tertiary" size="sm" @click=${() => this.go({ view: 'replay', id: f.id })}>Replay the last 30 days</ui-button></div>`
+        : html`<p class="ax-muted ax-meta">${f.name}’s leads and admins can replay its last 30 days.</p>`}
     </section>`;
   }
 
@@ -450,13 +484,16 @@ export class AuspexApp extends LitElement {
     const place = this.place;
     let body: TemplateResult;
     if (place.view === 'where') body = this.renderWhere(map);
+    else if (place.view === 'plant') body = html`<div class="ax-pane"><auspex-plant .api=${this.api} ?admin=${this.admin}></auspex-plant></div>`;
     else {
-      const id = place.view === 'floor' ? place.id : place.floor;
+      const id = place.view === 'app' ? place.floor : place.id;
       const floor = this.floor(id);
       const closed = floor ? undefined : this.closedTeam(id);
       if (closed) body = this.renderClosed(closed);
       else if (!floor) body = html`<div class="ax-pane"><ui-state kind="empty" heading="No such floor" body="It may have been removed, or the link is wrong." action="See where you are" @ui-action=${() => this.go({ view: 'where' })}></ui-state></div>`;
       else if (place.view === 'app' && floor.open) body = this.renderApp(floor, place.app);
+      else if (place.view === 'replay' && this.mayReplay(floor))
+        body = html`<div class="ax-pane"><auspex-replay .api=${this.api} .floor=${floor} .appName=${this.appName}></auspex-replay></div>`;
       else body = this.renderFloor(floor);
     }
     return html`${styles}<div class="ax-stage">${body}</div>`;
