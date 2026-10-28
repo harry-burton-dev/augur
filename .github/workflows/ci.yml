@@ -3,9 +3,12 @@ on:
   pull_request:
   push:
     branches: [main]
+# Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
+# others, such as ["self-hosted","augur-ci"] for our own (docs/ci-runner.md). The same goes for
+# the Release, App previews and Release feed workflows.
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     # The registry's Postgres store is tested against a real database.
     services:
       postgres:
@@ -52,7 +55,7 @@ jobs:
   # schema, PDFs included (Docling fetches its models once; they're cached), and its image
   # when the worker changed.
   folio-worker:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     services:
       postgres:
         image: pgvector/pgvector:0.8.0-pg17
@@ -109,7 +112,7 @@ jobs:
 
   # The developer kit still makes an app that builds, passes its tests and is accepted by the registry.
   app-scaffold:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -130,7 +133,7 @@ jobs:
   # as built against each earlier SDK minor, mounted by the real shell, with
   # Folio (which ships with AUGUR) on and off.
   contract:
-    runs-on: ubuntu-24.04 # Playwright 1.56 has no browsers for ubuntu-latest (26.04) yet
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }} # Playwright 1.56 has no browsers for ubuntu-latest (26.04) yet
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -155,7 +158,7 @@ jobs:
 
   # The server setup in infra/deploy: the compose file is valid and the images build.
   deploy-images:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
       - name: Compose file is valid
