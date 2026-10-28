@@ -47,6 +47,12 @@ COMPOSE_PROFILES=two docker compose -f compose.yml --env-file .env up -d --build
 
 Each has its own Docker daemon and volumes, and its own `CI_CPUS` and `CI_MEMORY`.
 
+## An Arm runner
+
+A runner on an Arm machine (the Surface, `augur-ci-surface`) takes CI's jobs like any other, but images it built would be Arm only. So the two workflows that build and push images, Release and App previews' `preview` job, pick their runner from `RELEASE_RUNNER` before `CI_RUNNER`. With `RELEASE_RUNNER` set to `["self-hosted","augur-ci","X64"]` they only run on an x86-64 runner (GitHub adds the `X64` or `ARM64` label itself). Unset, they follow `CI_RUNNER` as before.
+
+On Windows the runner is the same compose project under Docker Desktop's WSL2 engine. In `.env`, set `RUNNER_NAME=augur-ci-surface` and `CI_CPUS`/`CI_MEMORY` to fit the laptop, and cap WSL2's VM in `%UserProfile%\.wslconfig` (`memory=`, `processors=`) a little above them. It takes jobs only while the laptop is awake with Docker Desktop running; jobs queued while it's off go to the other runner.
+
 ## Looking after it
 
 - **The runner updates itself** when GitHub releases a new version. To update the image (new system libraries), pull this folder again and run step 4's `up -d --build`.
