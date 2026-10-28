@@ -7,6 +7,7 @@ import { peopleFromEnv, type People } from './people.ts';
 import { knowledgeRoutes, subgraph, type Atlas } from './knowledge.ts';
 import { proposalRoutes } from './proposals.ts';
 import { resolver, type Embed } from './resolve.ts';
+import { studioRoutes } from './studio.ts';
 import { KeyTakenError, refOf, type Entity, type PgAtlasStore } from './store.ts';
 
 /** The major version of the API this service serves. Its routes go under /v1, as the platform's do. */
@@ -362,6 +363,7 @@ export const buildApp = async ({ store, callers = callerCheckFromEnv('atlas'), p
       });
       knowledgeRoutes(app, atlas);
       proposalRoutes(app, atlas);
+      studioRoutes(app, atlas);
     },
     { prefix: `/${API_VERSION}` },
   );

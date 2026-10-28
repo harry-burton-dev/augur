@@ -100,6 +100,7 @@ const settle = async (el: HTMLElement) => {
     await new Promise((r) => setTimeout(r, 0));
     await ((el.querySelector('atlas-app') ?? el.querySelector('atlas-picker') ?? el.querySelector('atlas-propose')) as AtlasApp | null)?.updateComplete;
     await (el.querySelector('atlas-triage') as AtlasApp | null)?.updateComplete;
+    await (el.querySelector('atlas-ontology') as AtlasApp | null)?.updateComplete;
   }
 };
 
@@ -479,5 +480,54 @@ describe('triage', () => {
     const el = document.body.appendChild(document.createElement('div'));
     await app.mount(el, ctx(vi.fn(), '/', { intent: { type: 'entity.propose', payload: { text: '' } }, reply: { respond: vi.fn(), cancel } }));
     expect(cancel).toHaveBeenCalled();
+  });
+});
+
+describe('ontology', () => {
+  const PACKS = { govern: false, why: 'Only admins change the ontology for now. You can read it, its packs and its history.', packs: [{ id: 'cco', name: 'Common Core Ontologies (profile)', version: '1.5', licence: 'BSD-3-Clause', source: 'https://github.com/CommonCoreOntology/CommonCoreOntologies', terms: 21, builtIn: true, loadedAt: '2026-10-27T00:00:00Z' }] };
+  const answer = (more: Record<string, () => Response> = {}) =>
+    answering({
+      ...more,
+      '/api/atlas/v1/ontology/packs/cco': () =>
+        Response.json({ ...PACKS.packs[0], terms: [{ iri: 'cco:Watercraft', kind: 'class', label: 'Watercraft', adopted: 'vessel' }, { iri: 'cco:Weapon', kind: 'class', label: 'Weapon', parent: 'cco:Artifact' }] }),
+      '/api/atlas/v1/ontology/packs': () => Response.json(PACKS),
+      '/api/atlas/v1/ontology/versions': () => Response.json({ versions: [{ version: 1, note: 'Starter profile', changes: [], madeAt: '2026-10-27T00:00:00Z' }] }),
+      '/api/atlas/v1/ontology/candidates': () => Response.json({ govern: false, why: PACKS.why, waiting: 2, candidates: [] }),
+      '/api/atlas/v1/ontology': () => Response.json(ONTOLOGY),
+    });
+  const tab = (el: HTMLElement, word: string) => [...el.querySelectorAll<HTMLElement>('atlas-ontology .atlas-tabs ui-button')].find((b) => b.textContent?.startsWith(word))!;
+
+  it('reads and writes its address', () => {
+    expect(placeFor('/ontology')).toEqual({ page: 'ontology' });
+    expect(pathFor({ page: 'ontology' })).toBe('/ontology');
+  });
+
+  it('shows everyone the kinds and where they come from, saying who can change them, and how many words wait', async () => {
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(answer(), '/ontology'));
+    await settle(el);
+    expect(el.textContent).toContain('Only admins change the ontology');
+    expect(el.textContent).toContain('CCO · Watercraft');
+    expect(el.textContent).toContain('IMO number (says which one), Flag state (through facts)');
+    const add = [...el.querySelectorAll<HTMLElement & { disabled: boolean }>('atlas-ontology ui-button')].find((b) => b.textContent === 'Add a kind')!;
+    expect(add.disabled).toBe(true);
+    expect(add.title).toContain('Only admins');
+    tab(el, 'Asked for').click();
+    await settle(el);
+    expect(el.textContent).toContain('2 words that sources asked for wait for an admin');
+  });
+
+  it('opens a pack, showing what’s kept and offering the rest to admins only', async () => {
+    const el = document.body.appendChild(document.createElement('div'));
+    await app.mount(el, ctx(answer(), '/ontology'));
+    await settle(el);
+    tab(el, 'Packs').click();
+    await settle(el);
+    expect(el.textContent).toContain('Version 1.5 · BSD-3-Clause · 21 terms · comes with Data Atlas');
+    [...el.querySelectorAll<HTMLElement>('atlas-ontology ui-button')].find((b) => b.textContent === 'Open')!.click();
+    await settle(el);
+    expect((el.querySelector('atlas-ontology ui-tag') as HTMLElement & { label: string }).label).toBe('Kept as Vessel');
+    const adopt = [...el.querySelectorAll<HTMLElement & { disabled: boolean }>('atlas-ontology ui-button')].find((b) => b.textContent === 'Adopt…')!;
+    expect(adopt.disabled).toBe(true);
   });
 });

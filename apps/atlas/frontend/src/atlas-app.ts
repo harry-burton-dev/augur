@@ -3,6 +3,7 @@ import { ago, type DialogSubmit, type ListItem, type SelectOption } from '@augur
 import type { DocumentRef } from '@augur/mfe-sdk';
 import './atlas-explorer.js';
 import './atlas-knowledge.js';
+import './atlas-ontology.js';
 import './atlas-triage.js';
 import { AtlasError, onEntity, entityLine, pathFor, typeTree, whyShown, type AtlasApi, type Entity, type EntityFields, type Ontology, type Place } from './api.js';
 
@@ -102,8 +103,8 @@ export class AtlasApp extends LitElement {
       if (place.page === 'entity') {
         this.open = undefined;
         this.open = await this.api.entity(place.id);
-      } else if (place.page === 'explore' || place.page === 'triage' || place.page === 'proposal') {
-        // The explorer and Triage ask for their own.
+      } else if (place.page === 'explore' || place.page === 'triage' || place.page === 'proposal' || place.page === 'ontology') {
+        // The explorer, Triage and the ontology ask for their own.
         this.open = undefined;
       } else {
         this.open = undefined;
@@ -221,6 +222,7 @@ export class AtlasApp extends LitElement {
     return html`<div class="atlas-head">
         <ui-heading eyebrow=${this.floorName || 'Data Atlas'} heading="Everything here" summary=${this.seeingLine()}></ui-heading>
         <div class="atlas-actions">
+          <ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'ontology' })}>Ontology</ui-button>
           <ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'triage' })}>Triage</ui-button>
           <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'new' })}>Add an entity</ui-button>
         </div>
@@ -348,6 +350,8 @@ export class AtlasApp extends LitElement {
       case 'triage':
       case 'proposal':
         return this.triagePage();
+      case 'ontology':
+        return html`<atlas-ontology .api=${this.api} .ontology=${this.ontology} @atlas-ontology=${(e: CustomEvent<Ontology>) => (this.ontology = e.detail)}></atlas-ontology>`;
       default:
         return this.listPage();
     }

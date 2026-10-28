@@ -11,7 +11,7 @@ The things the organisation keeps track of (ships, ports, organisations, people,
 ## What it keeps
 
 - **Entities**, each with an `ent_` + ULID id for life, a kind from the ontology, a name, other names, a description and details. Details marked as identity keys (an IMO number, a UN/LOCODE) belong to one entity only, whatever its floor.
-- **The ontology**: a starter profile of the [Common Core Ontologies](https://github.com/CommonCoreOntology/CommonCoreOntologies) (BSD-3). Each kind names the CCO class it stands for, so the full pack can be loaded later without renaming anything. Admins change the ontology, for now.
+- **The ontology**: a starter profile of the [Common Core Ontologies](https://github.com/CommonCoreOntology/CommonCoreOntologies) (BSD-3). Each kind names the pack term it stands for, by IRI, so it exports as that. Admins change the ontology, for now, in the studio (see [The ontology](#the-ontology)).
 
 ## Fenced by floor
 
@@ -30,6 +30,14 @@ Under `/api/atlas/v1`, on the floor in `X-Workspace-Id`:
 | Route | |
 | --- | --- |
 | `GET /ontology` | The kinds of thing, their details and the ontology's version |
+| `GET /ontology/versions` | Every version: who made it, why, and the changes in it |
+| `GET /ontology/owl` | The ontology as OWL in Turtle, each kind and link saying which pack term it is (`skos:exactMatch`) |
+| `GET /ontology/packs`, `GET /ontology/packs/:id` | The packs to adopt from, and a pack's terms, each saying where it's kept here once adopted. Both say whether the caller may change the ontology, and why not |
+| `POST /ontology/packs` | An admin loads a pack from OWL in Turtle (`turtle`, with `id`, `name`, `version`, `licence`); loading again under the same id replaces it |
+| `POST /ontology/adopt` | An admin adopts a pack term (`pack`, `iri`) as a kind, detail or kind of link, saying what the pack doesn't (its parent, how a link reads backwards) |
+| `POST /ontology/changes` | An admin adds or renames kinds, details and kinds of link: one new version |
+| `GET /ontology/candidates` | Words sources asked for that the ontology hasn't got, most asked first; admins see them, everyone else how many wait |
+| `POST /ontology/candidates/decide` | An admin adopts a candidate (as the change given) or dismisses it, for every proposal that asked |
 | `GET /entities?q=&type=&limit=&offset=` | What shows from this floor, by name, other name or identity key; `type` takes its subtypes too. `seeing` names the floors it comes from |
 | `POST /entities` | Adds one on this floor: `{ type, label, aliases?, description?, details? }` |
 | `GET /entities/:id` | One entity, with `floorName` and `can` (`edit`, `retire`, and `why` when not) |
@@ -62,9 +70,15 @@ Knowledge is fenced by floor like entities are (Harry, 27 October 2026). An **ob
 
 ## Triage
 
-Nothing becomes knowledge without a lead deciding (Harry, 27 October 2026; auto-accept waits for the agent runtime). Whatever reads a source, a person now and an extractor later, files a **proposal** in the Triage of the floor it's on: the source, the **mentions** it found (words that seem to name a thing, with the passage around them) and the **observations** it read about them. Data Atlas suggests what each mention may be, from what shows on that floor (**resolve**): by identity key, then the name or another name exactly, then names spelt nearly alike (pg_trgm, which the platform puts in every app's database), then meaning. Matching by meaning asks the model gateway for vectors (`models:use`, and an embedding model on the server: `MODEL_EMBEDDING_NAME`, see [docs/agents.md](../../docs/agents.md)) and keeps one per entity, from its name, kind, other names and description, beside the model that made it; it is done again when the entity changes. Each proposal says what was tried and, when matching by meaning or spelling wasn't, why (models off, no embedding model, Data Atlas not granted `models:use` on that floor). A lead of that floor says what each one is: one already known, a new one made on that floor, or nothing; then accepts each observation as so, keeps it as seen, or drops it, and finishes the proposal. Words the ontology hasn't got (`terms`) are kept for the admins and hold nothing up. In Artifacts, marking words in a document and choosing **Add to Data Atlas** sends a one-mention proposal through the `entity.propose` intent.
+Nothing becomes knowledge without a lead deciding (Harry, 27 October 2026; auto-accept waits for the agent runtime). Whatever reads a source, a person now and an extractor later, files a **proposal** in the Triage of the floor it's on: the source, the **mentions** it found (words that seem to name a thing, with the passage around them) and the **observations** it read about them. Data Atlas suggests what each mention may be, from what shows on that floor (**resolve**): by identity key, then the name or another name exactly, then names spelt nearly alike (pg_trgm, which the platform puts in every app's database), then meaning. Matching by meaning asks the model gateway for vectors (`models:use`, and an embedding model on the server: `MODEL_EMBEDDING_NAME`, see [docs/agents.md](../../docs/agents.md)) and keeps one per entity, from its name, kind, other names and description, beside the model that made it; it is done again when the entity changes. Each proposal says what was tried and, when matching by meaning or spelling wasn't, why (models off, no embedding model, Data Atlas not granted `models:use` on that floor). A lead of that floor says what each one is: one already known, a new one made on that floor, or nothing; then accepts each observation as so, keeps it as seen, or drops it, and finishes the proposal. Words the ontology hasn't got (`terms`) go to the admins as candidates in the studio and hold nothing up. In Artifacts, marking words in a document and choosing **Add to Data Atlas** sends a one-mention proposal through the `entity.propose` intent.
 
-Still to come: terms handled in the ontology studio (AT7), and observations that follow their source when it's withdrawn (AT8).
+Still to come: observations that follow their source when it's withdrawn (AT8).
+
+## The ontology
+
+Everyone can read the ontology on its own page: the kinds, their details, the kinds of link, the packs they come from and every version. Admins change it there (Harry, 27 October 2026: admins govern it for now; more governance later), and anyone else sees the same page with the controls off and a line saying why. Kinds, details and kinds of link are only ever **added or renamed**, and a link's kinds only widen, so nothing already kept stops fitting. Each change is a new version, written to the audit log (`ontology.changed`) and told to other apps (`atlas.ontology.changed`).
+
+**Packs** are vocabularies to adopt terms from (Harry's Q5: a military ontology, pluggable). A profile of CCO comes with Data Atlas; an org loads its own as OWL in Turtle, read with [N3.js](https://github.com/rdfjs/N3.js): the full CCO, or MIP MIM where it has it (MIP's licence is the org's to check, so it doesn't ship here). A pack's classes become kinds to adopt, its object properties kinds of link and its datatype properties details. Adopting fills in what the pack says (the parent, a link's kinds when they're kept here) and asks for the rest. **Candidates** are the words proposals asked for, gathered by kind and name however many times they were asked; adopting one tells every proposal that asked. The whole ontology exports as OWL, so it can go back into Protégé or another tool.
 
 ## Explore
 

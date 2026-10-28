@@ -33,7 +33,8 @@
     "003_outbox": "e9521d907cd6fff0",
     "004_knowledge": "1f93bdad07a47ed1",
     "005_proposals": "7c617105ab65c3a8",
-    "006_resolve": "230c9309519f62c3"
+    "006_resolve": "230c9309519f62c3",
+    "007_studio": "5c3fe4189caaf79a"
   },
   "@apps/folio": {
     "001_libraries": "1c5f1dfed17e6277",

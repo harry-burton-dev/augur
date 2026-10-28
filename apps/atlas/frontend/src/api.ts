@@ -9,6 +9,8 @@ export interface DetailDef {
   hint?: string;
   /** False when it's known only through facts, not typed on the entity. */
   onEntity?: boolean;
+  /** The pack term it was adopted from, by IRI. */
+  packIri?: string;
 }
 
 /** A kind of link from one entity to another, read forwards (`label`) or backwards (`inverse`). */
@@ -20,6 +22,7 @@ export interface RelationDef {
   to: string[];
   pack: string;
   packTerm: string;
+  packIri?: string;
 }
 
 export interface TypeDef {
@@ -31,7 +34,86 @@ export interface TypeDef {
   icon: string;
   pack: string;
   packTerm: string;
+  packIri?: string;
   details: DetailDef[];
+}
+
+/** One change an admin makes to the ontology: kinds, details and links are added or renamed, never taken away. */
+export type OntologyChange =
+  | { op: 'add-type'; type: Omit<TypeDef, 'details'> }
+  | { op: 'edit-type'; key: string; label?: string; plural?: string; icon?: string }
+  | { op: 'add-detail'; type: string; detail: DetailDef }
+  | { op: 'edit-detail'; type: string; key: string; label?: string; hint?: string }
+  | { op: 'add-relation'; relation: RelationDef }
+  | { op: 'edit-relation'; key: string; label?: string; inverse?: string; from?: string[]; to?: string[] };
+
+/** Whether the person may change the ontology, and why not. */
+export interface Governs {
+  govern: boolean;
+  why?: string;
+}
+
+export interface PackSummary {
+  id: string;
+  name: string;
+  version: string;
+  licence: string;
+  source: string;
+  terms: number;
+  builtIn: boolean;
+  loadedBy?: string;
+  loadedAt: string;
+}
+
+export interface PackTerm {
+  iri: string;
+  kind: 'class' | 'relation' | 'detail';
+  label: string;
+  parent?: string;
+  domain?: string[];
+  range?: string[];
+  note?: string;
+  /** Where it's kept here, when it has been adopted: a kind's or link's key, or kind.detail. */
+  adopted?: string;
+}
+
+export interface Pack extends Omit<PackSummary, 'terms' | 'loadedBy' | 'loadedAt'> {
+  terms: PackTerm[];
+}
+
+export interface OntologyVersion {
+  version: number;
+  note: string;
+  changedBy?: string;
+  changes: OntologyChange[];
+  madeAt: string;
+}
+
+/** A word sources keep asking for that the ontology hasn't got, and where adopting it would start. */
+export interface TermCandidate {
+  kind: 'type' | 'detail' | 'relation';
+  name: string;
+  asked: number;
+  firstAt: string;
+  lastAt: string;
+  parents: string[];
+  note?: string;
+  start: OntologyChange;
+}
+
+/** What an admin says when adopting a pack term, over what the pack gives. */
+export interface Adoption {
+  pack: string;
+  iri: string;
+  label?: string;
+  plural?: string;
+  icon?: string;
+  parent?: string;
+  type?: string;
+  kind?: DetailDef['kind'];
+  from?: string[];
+  to?: string[];
+  inverse?: string;
 }
 
 export interface Ontology {
@@ -279,6 +361,47 @@ export class AtlasApi {
     return this.call<ProposalView>('POST', `/proposals/${encodeURIComponent(id)}/withdraw`);
   }
 
+  packs() {
+    return this.call<Governs & { packs: PackSummary[] }>('GET', '/ontology/packs');
+  }
+
+  pack(id: string) {
+    return this.call<Pack>('GET', `/ontology/packs/${encodeURIComponent(id)}`);
+  }
+
+  /** Loads a pack from Turtle, or a newer copy of one loaded before. */
+  loadPack(pack: { id: string; name: string; version: string; licence: string; source?: string; turtle: string }) {
+    return this.call<PackSummary>('POST', '/ontology/packs', pack);
+  }
+
+  versions() {
+    return this.call<{ versions: OntologyVersion[] }>('GET', '/ontology/versions');
+  }
+
+  candidates() {
+    return this.call<Governs & { waiting: number; candidates: TermCandidate[] }>('GET', '/ontology/candidates');
+  }
+
+  changeOntology(changes: OntologyChange[], note?: string) {
+    return this.call<{ version: number; ontology: Ontology }>('POST', '/ontology/changes', { changes, ...(note ? { note } : {}) });
+  }
+
+  adopt(adoption: Adoption) {
+    return this.call<{ version: number; ontology: Ontology }>('POST', '/ontology/adopt', adoption);
+  }
+
+  /** Adopts a word sources asked for, as the change given, or dismisses it. */
+  decideCandidate(c: Pick<TermCandidate, 'kind' | 'name'>, decision: { as: 'adopt'; change: OntologyChange } | { as: 'dismiss' }) {
+    return this.call<{ version: number; ontology: Ontology } | { dismissed: number }>('POST', '/ontology/candidates/decide', { kind: c.kind, name: c.name, ...decision });
+  }
+
+  /** The ontology as OWL in Turtle, to save. */
+  async owl() {
+    const res = await this.fetchOnFloor('/api/atlas/v1/ontology/owl');
+    if (!res.ok) throw new AtlasError('Data Atlas isn’t answering. Try again in a moment.', res.status);
+    return res.text();
+  }
+
   /** The graph around some entities from this floor, a ring at a time. */
   subgraph(query: SubgraphQuery) {
     return this.call<Subgraph>('POST', '/subgraph', { ...query, seeds: query.seeds.map((id) => ({ id })) });
@@ -437,7 +560,8 @@ export type Place =
   | { page: 'entity'; id: string; explain?: boolean }
   | { page: 'explore'; id: string }
   | { page: 'triage' }
-  | { page: 'proposal'; id: string };
+  | { page: 'proposal'; id: string }
+  | { page: 'ontology' };
 
 export const placeFor = (path: string): Place => {
   const [first, second] = path.split('/').filter(Boolean).map(decodeURIComponent);
@@ -446,6 +570,7 @@ export const placeFor = (path: string): Place => {
   if (first === 'explore' && second) return { page: 'explore', id: second };
   if (first === 'triage' && second) return { page: 'proposal', id: second };
   if (first === 'triage') return { page: 'triage' };
+  if (first === 'ontology') return { page: 'ontology' };
   return { page: 'entities' };
 };
 
@@ -459,6 +584,8 @@ export const pathFor = (place: Place) => {
       return `/triage/${encodeURIComponent(place.id)}`;
     case 'triage':
       return '/triage';
+    case 'ontology':
+      return '/ontology';
     case 'new':
       return '/entities/new';
     default:
@@ -564,3 +691,16 @@ export const span = (f: { validFrom?: string; validTo?: string }) =>
 
 /** Where an observation came from, in a few words. */
 export const sourceLine = (s: Source) => (s.kind === 'person' ? 'Seen or heard by whoever recorded it' : s.kind === 'document' ? `From ${s.document.title}` : s.note);
+
+/** A key from a name: "Patrol Boat" is patrol-boat. */
+export const keyFrom = (name: string) =>
+  name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/^(\d)/, 'x-$1')
+    .slice(0, 48) || 'term';
+
+/** A plural for a kind's name, for a start the admin can change. */
+export const pluralOf = (label: string) => (/[^aeiou]y$/i.test(label) ? `${label.slice(0, -1)}ies` : /(ss|us|x|z|ch|sh)$/i.test(label) ? `${label}es` : /s$/i.test(label) ? label : `${label}s`);

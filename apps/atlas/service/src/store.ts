@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { ulid } from 'ulid';
-import { detailsOf, knowledgeSql, starterSql, type DetailDef, type Ontology, type RelationDef, type TypeDef } from './ontology.ts';
+import { detailsOf, knowledgeSql, starterSql, type DetailDef, type Ontology, type OntologyChange, type RelationDef, type TypeDef } from './ontology.ts';
+import { BUILT_IN_PACKS, type Pack } from './packs.ts';
 
 /**
  * One real thing the organisation keeps track of: a ship, a port, a company.
@@ -104,7 +105,7 @@ export interface ProposedObservation {
   anchor?: string;
 }
 
-/** Vocabulary the source wanted that the ontology hasn't got: for admins, later (AT7). */
+/** Vocabulary the source wanted that the ontology hasn't got: for admins, in the studio's candidates (AT7). */
 export interface ProposedTerm {
   key: string;
   kind: 'type' | 'detail' | 'relation';
@@ -137,11 +138,13 @@ export interface Matching {
 
 export type MentionDecision = { as: 'link'; entity: string } | { as: 'new'; entity: string } | { as: 'drop' };
 export type ObservationDecision = { as: 'seen'; observation: string } | { as: 'accepted'; observation: string; fact: string } | { as: 'drop' };
+/** What an admin made of a term: adopted into a version of the ontology as `key`, or dismissed. */
+export type TermDecision = { as: 'adopted'; version: number; key: string } | { as: 'dismissed'; note?: string };
 
 export type ProposalItem =
   | { kind: 'mention'; key: string; body: Mention; matches: Match[]; decision?: MentionDecision; decidedBy?: string; decidedAt?: string }
   | { kind: 'observation'; key: string; body: ProposedObservation; matches: Match[]; decision?: ObservationDecision; decidedBy?: string; decidedAt?: string }
-  | { kind: 'term'; key: string; body: ProposedTerm; matches: Match[]; decision?: undefined; decidedBy?: string; decidedAt?: string };
+  | { kind: 'term'; key: string; body: ProposedTerm; matches: Match[]; decision?: TermDecision; decidedBy?: string; decidedAt?: string };
 
 /** One source's worth of what it seems to say, waiting on a floor's leads in Triage. */
 export interface Proposal {
@@ -164,6 +167,31 @@ export interface Proposal {
 export interface ProposalSummary extends Proposal {
   items: number;
   decided: number;
+}
+
+/** A version of the ontology: who made it, why, and what changed. */
+export interface OntologyVersion {
+  version: number;
+  note: string;
+  /** Absent for those that came with Data Atlas. */
+  changedBy?: string;
+  changes: OntologyChange[];
+  madeAt: string;
+}
+
+/** A pack as listed: what it is, without its terms. */
+export type PackSummary = Omit<Pack, 'terms'> & { terms: number; builtIn: boolean; loadedBy?: string; loadedAt: string };
+
+/** A term sources keep asking for that the ontology hasn't got, however many times, from wherever. */
+export interface TermCandidate {
+  kind: ProposedTerm['kind'];
+  name: string;
+  /** How many proposals asked for it, and when first and last. */
+  asked: number;
+  firstAt: string;
+  lastAt: string;
+  parents: string[];
+  note?: string;
 }
 
 /**
@@ -441,6 +469,27 @@ export const migrations: { id: string; sql: string }[] = [
       -- How a proposal's mentions were matched, and why something wasn't tried (explain, never hide).
       alter table atlas.proposals add column matching jsonb;`,
   },
+  {
+    id: '007_studio',
+    sql: `
+      -- Who changed the ontology, and how: a version is the changes an admin made together.
+      alter table atlas.ontology_versions add column changed_by text, add column changes jsonb not null default '[]';
+      alter table atlas.ontology_details add column pack text, add column pack_term text, add column pack_iri text;
+      -- Vocabularies to adopt terms from: those that come with Data Atlas, and Turtle an admin loads.
+      create table atlas.ontology_packs (
+        id text primary key,
+        name text not null,
+        version text not null,
+        licence text not null,
+        source text not null,
+        terms jsonb not null,
+        built_in boolean not null default false,
+        loaded_by text,
+        loaded_at timestamptz not null default now()
+      );
+      -- The starter kinds stand for CCO classes: say which, by IRI, so they show as adopted from the pack.
+      update atlas.ontology_types set pack_iri = 'http://www.ontologyrepository.com/CommonCoreOntologies/' || replace(pack_term, ' ', '') where pack = 'cco';`,
+  },
 ];
 
 /**
@@ -512,6 +561,61 @@ const fromItemRow = (r: ItemRow): ProposalItem =>
     ...(r.decided_by ? { decidedBy: r.decided_by } : {}),
     ...(r.decided_at ? { decidedAt: r.decided_at.toISOString() } : {}),
   }) as ProposalItem;
+
+/** Decides every undecided ask for a term, by its kind and name in any case. */
+const decideTerms = async (client: pg.PoolClient, kind: ProposedTerm['kind'], name: string, decision: TermDecision, by: string) => {
+  const { rowCount } = await client.query(
+    `update atlas.proposal_items set decision = $3, decided_by = $4, decided_at = now()
+     where kind = 'term' and decision is null and body->>'kind' = $1 and lower(body->>'name') = lower($2)`,
+    [kind, name, JSON.stringify(decision), by],
+  );
+  return rowCount ?? 0;
+};
+
+/** Writes one checked change to the ontology's tables. */
+const applyChange = async (client: pg.PoolClient, c: OntologyChange) => {
+  switch (c.op) {
+    case 'add-type': {
+      const t = c.type;
+      await client.query(
+        `insert into atlas.ontology_types (key, parent, label, plural, abstract, icon, pack, pack_term, pack_iri, sort)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, (select coalesce(max(sort), 0) + 1 from atlas.ontology_types))`,
+        [t.key, t.parent ?? null, t.label, t.plural, t.abstract, t.icon, t.pack, t.packTerm, t.packIri ?? null],
+      );
+      return;
+    }
+    case 'edit-type':
+      await client.query('update atlas.ontology_types set label = coalesce($2, label), plural = coalesce($3, plural), icon = coalesce($4, icon) where key = $1', [c.key, c.label ?? null, c.plural ?? null, c.icon ?? null]);
+      return;
+    case 'add-detail': {
+      const d = c.detail;
+      await client.query(
+        `insert into atlas.ontology_details (type, key, label, kind, identity, pattern, hint, on_entity, pack_iri, sort)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, (select coalesce(max(sort), 0) + 1 from atlas.ontology_details where type = $1))`,
+        [c.type, d.key, d.label, d.kind, d.identity, d.pattern ?? null, d.hint ?? null, d.onEntity !== false, d.packIri ?? null],
+      );
+      return;
+    }
+    case 'edit-detail':
+      await client.query('update atlas.ontology_details set label = coalesce($3, label), hint = coalesce($4, hint) where type = $1 and key = $2', [c.type, c.key, c.label ?? null, c.hint ?? null]);
+      return;
+    case 'add-relation': {
+      const r = c.relation;
+      await client.query(
+        `insert into atlas.ontology_relations (key, label, inverse, from_types, to_types, pack, pack_term, pack_iri, sort)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, (select coalesce(max(sort), 0) + 1 from atlas.ontology_relations))`,
+        [r.key, r.label, r.inverse, r.from, r.to, r.pack, r.packTerm, r.packIri ?? null],
+      );
+      return;
+    }
+    case 'edit-relation':
+      await client.query(
+        'update atlas.ontology_relations set label = coalesce($2, label), inverse = coalesce($3, inverse), from_types = coalesce($4, from_types), to_types = coalesce($5, to_types) where key = $1',
+        [c.key, c.label ?? null, c.inverse ?? null, c.from ?? null, c.to ?? null],
+      );
+      return;
+  }
+};
 
 /** Adds an event to Data Atlas's outbox, inside the transaction that makes the change it tells of. Ids only, never names. */
 const tell = (client: pg.PoolClient, what: 'created' | 'changed' | 'retired', e: EntityRow) =>
@@ -685,6 +789,7 @@ export class PgAtlasStore {
     const store = new PgAtlasStore(new pg.Pool({ connectionString, max: 4, options: '-c search_path=atlas' }));
     await store.migrate();
     await store.prepareExtras();
+    await store.seedPacks();
     return store;
   }
 
@@ -721,15 +826,15 @@ export class PgAtlasStore {
   async ontology(): Promise<Ontology> {
     const [version, types, details] = await Promise.all([
       this.pool.query<{ version: number }>('select coalesce(max(version), 0) as version from atlas.ontology_versions'),
-      this.pool.query<{ key: string; parent: string | null; label: string; plural: string; abstract: boolean; icon: string; pack: string; pack_term: string }>(
-        'select key, parent, label, plural, abstract, icon, pack, pack_term from atlas.ontology_types order by sort, key',
+      this.pool.query<{ key: string; parent: string | null; label: string; plural: string; abstract: boolean; icon: string; pack: string; pack_term: string; pack_iri: string | null }>(
+        'select key, parent, label, plural, abstract, icon, pack, pack_term, pack_iri from atlas.ontology_types order by sort, key',
       ),
-      this.pool.query<{ type: string; key: string; label: string; kind: DetailDef['kind']; identity: boolean; pattern: string | null; hint: string | null; on_entity: boolean }>(
-        'select type, key, label, kind, identity, pattern, hint, on_entity from atlas.ontology_details order by type, sort, key',
+      this.pool.query<{ type: string; key: string; label: string; kind: DetailDef['kind']; identity: boolean; pattern: string | null; hint: string | null; on_entity: boolean; pack_iri: string | null }>(
+        'select type, key, label, kind, identity, pattern, hint, on_entity, pack_iri from atlas.ontology_details order by type, sort, key',
       ),
     ]);
-    const relations = await this.pool.query<{ key: string; label: string; inverse: string; from_types: string[]; to_types: string[]; pack: string; pack_term: string }>(
-      'select key, label, inverse, from_types, to_types, pack, pack_term from atlas.ontology_relations order by sort, key',
+    const relations = await this.pool.query<{ key: string; label: string; inverse: string; from_types: string[]; to_types: string[]; pack: string; pack_term: string; pack_iri: string | null }>(
+      'select key, label, inverse, from_types, to_types, pack, pack_term, pack_iri from atlas.ontology_relations order by sort, key',
     );
     return {
       version: version.rows[0].version,
@@ -743,6 +848,7 @@ export class PgAtlasStore {
           icon: t.icon,
           pack: t.pack,
           packTerm: t.pack_term,
+          ...(t.pack_iri ? { packIri: t.pack_iri } : {}),
           details: details.rows
             .filter((d) => d.type === t.key)
             .map((d) => ({
@@ -753,13 +859,98 @@ export class PgAtlasStore {
               ...(d.pattern ? { pattern: d.pattern } : {}),
               ...(d.hint ? { hint: d.hint } : {}),
               ...(d.on_entity ? {} : { onEntity: false }),
+              ...(d.pack_iri ? { packIri: d.pack_iri } : {}),
             })),
         }),
       ),
       relations: relations.rows.map(
-        (r): RelationDef => ({ key: r.key, label: r.label, inverse: r.inverse, from: r.from_types, to: r.to_types, pack: r.pack, packTerm: r.pack_term }),
+        (r): RelationDef => ({ key: r.key, label: r.label, inverse: r.inverse, from: r.from_types, to: r.to_types, pack: r.pack, packTerm: r.pack_term, ...(r.pack_iri ? { packIri: r.pack_iri } : {}) }),
       ),
     };
+  }
+
+  /** Keeps the packs that come with Data Atlas as this release has them. Run at each start. */
+  async seedPacks() {
+    for (const p of BUILT_IN_PACKS) {
+      await this.pool.query(
+        `insert into atlas.ontology_packs (id, name, version, licence, source, terms, built_in) values ($1, $2, $3, $4, $5, $6, true)
+         on conflict (id) do update set name = $2, version = $3, licence = $4, source = $5, terms = $6 where atlas.ontology_packs.built_in`,
+        [p.id, p.name, p.version, p.licence, p.source, JSON.stringify(p.terms)],
+      );
+    }
+  }
+
+  async packs(): Promise<PackSummary[]> {
+    const { rows } = await this.pool.query<{ id: string; name: string; version: string; licence: string; source: string; terms: number; built_in: boolean; loaded_by: string | null; loaded_at: Date }>(
+      'select id, name, version, licence, source, jsonb_array_length(terms) as terms, built_in, loaded_by, loaded_at from atlas.ontology_packs order by built_in desc, name',
+    );
+    return rows.map((r) => ({ id: r.id, name: r.name, version: r.version, licence: r.licence, source: r.source, terms: Number(r.terms), builtIn: r.built_in, ...(r.loaded_by ? { loadedBy: r.loaded_by } : {}), loadedAt: r.loaded_at.toISOString() }));
+  }
+
+  async pack(id: string): Promise<(Pack & { builtIn: boolean }) | undefined> {
+    const { rows } = await this.pool.query<{ id: string; name: string; version: string; licence: string; source: string; terms: Pack['terms']; built_in: boolean }>(
+      'select id, name, version, licence, source, terms, built_in from atlas.ontology_packs where id = $1',
+      [id],
+    );
+    return rows[0] && { id: rows[0].id, name: rows[0].name, version: rows[0].version, licence: rows[0].licence, source: rows[0].source, terms: rows[0].terms, builtIn: rows[0].built_in };
+  }
+
+  /** Loads a pack, or a newer copy of one an admin loaded before. False if the id is a built-in pack's. */
+  async savePack(p: Pack, by: string): Promise<boolean> {
+    const { rowCount } = await this.pool.query(
+      `insert into atlas.ontology_packs (id, name, version, licence, source, terms, loaded_by) values ($1, $2, $3, $4, $5, $6, $7)
+       on conflict (id) do update set name = $2, version = $3, licence = $4, source = $5, terms = $6, loaded_by = $7, loaded_at = now() where not atlas.ontology_packs.built_in`,
+      [p.id, p.name, p.version, p.licence, p.source, JSON.stringify(p.terms), by],
+    );
+    return !!rowCount;
+  }
+
+  async versions(limit = 100): Promise<OntologyVersion[]> {
+    const { rows } = await this.pool.query<{ version: number; note: string; changed_by: string | null; changes: OntologyChange[]; made_at: Date }>(
+      `select version, note, changed_by, changes, made_at from atlas.ontology_versions order by version desc limit ${Number(limit)}`,
+    );
+    return rows.map((r) => ({ version: r.version, note: r.note, ...(r.changed_by ? { changedBy: r.changed_by } : {}), changes: r.changes, madeAt: r.made_at.toISOString() }));
+  }
+
+  /**
+   * Makes a new version of the ontology from changes already checked
+   * (studio.ts), tells other apps, and decides the candidate terms it adopts.
+   * The new version's number.
+   */
+  async changeOntology(changes: OntologyChange[], by: string, note: string, adopts: { kind: ProposedTerm['kind']; name: string; key: string }[] = []): Promise<number> {
+    return this.inTransaction(async (client) => {
+      await client.query("select pg_advisory_xact_lock(hashtext('atlas.ontology'))");
+      const { rows } = await client.query<{ version: number }>('select coalesce(max(version), 0) + 1 as version from atlas.ontology_versions');
+      const version = rows[0].version;
+      for (const c of changes) await applyChange(client, c);
+      await client.query('insert into atlas.ontology_versions (version, note, changed_by, changes) values ($1, $2, $3, $4)', [version, note, by, JSON.stringify(changes)]);
+      await client.query("insert into atlas.outbox (topic, payload) values ('atlas.ontology.changed', $1)", [JSON.stringify({ version })]);
+      for (const a of adopts) await decideTerms(client, a.kind, a.name, { as: 'adopted', version, key: a.key }, by);
+      return version;
+    });
+  }
+
+  /** Terms sources asked for that no admin has decided yet, the most asked for first. */
+  async termCandidates(limit = 200): Promise<TermCandidate[]> {
+    const { rows } = await this.pool.query<{ kind: ProposedTerm['kind']; name: string; asked: string; first_at: Date; last_at: Date; parents: (string | null)[]; note: string | null }>(
+      `select i.body->>'kind' as kind, min(i.body->>'name') as name, count(*) as asked, min(p.created_at) as first_at, max(p.created_at) as last_at,
+              array_agg(distinct i.body->>'parent') as parents, max(i.body->>'note') as note
+       from atlas.proposal_items i join atlas.proposals p on p.id = i.proposal
+       where i.kind = 'term' and i.decision is null
+       group by i.body->>'kind', lower(i.body->>'name')
+       order by count(*) desc, max(p.created_at) desc limit ${Number(limit)}`,
+    );
+    return rows.map((r) => ({ kind: r.kind, name: r.name, asked: Number(r.asked), firstAt: r.first_at.toISOString(), lastAt: r.last_at.toISOString(), parents: r.parents.filter((x): x is string => !!x), ...(r.note ? { note: r.note } : {}) }));
+  }
+
+  /** Decides every undecided ask for a term at once. How many there were. */
+  async decideTerm(kind: ProposedTerm['kind'], name: string, decision: TermDecision, by: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      return await decideTerms(client, kind, name, decision, by);
+    } finally {
+      client.release();
+    }
   }
 
   async entity(id: string): Promise<Entity | undefined> {

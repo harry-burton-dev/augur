@@ -28,6 +28,8 @@ export interface DetailDef {
    * (a vessel's flag), rather than typed on the entity itself. Absent means true.
    */
   onEntity?: boolean;
+  /** The pack term it was adopted from, by IRI (AT7). */
+  packIri?: string;
 }
 
 /**
@@ -44,6 +46,7 @@ export interface RelationDef {
   to: string[];
   pack: string;
   packTerm: string;
+  packIri?: string;
 }
 
 export interface TypeDef {
@@ -59,8 +62,22 @@ export interface TypeDef {
   /** The ontology pack it comes from, and the pack's own name for it. */
   pack: string;
   packTerm: string;
+  packIri?: string;
   details: DetailDef[];
 }
+
+/**
+ * One change an admin makes to the ontology in the studio (AT7). Kinds, details
+ * and kinds of link are only ever added or renamed, never taken away or
+ * narrowed, so nothing already kept stops fitting it.
+ */
+export type OntologyChange =
+  | { op: 'add-type'; type: Omit<TypeDef, 'details'> }
+  | { op: 'edit-type'; key: string; label?: string; plural?: string; icon?: string }
+  | { op: 'add-detail'; type: string; detail: DetailDef }
+  | { op: 'edit-detail'; type: string; key: string; label?: string; hint?: string }
+  | { op: 'add-relation'; relation: RelationDef }
+  | { op: 'edit-relation'; key: string; label?: string; inverse?: string; from?: string[]; to?: string[] };
 
 export interface Ontology {
   version: number;
