@@ -60,7 +60,7 @@ Give each deployment its own key, so you can take one away without touching the 
 **Once, in GitHub:**
 
 1. Sign up for the deployments' account and turn on two-factor authentication for it.
-2. As the repository's owner, give that account **Read** on each package: open **Packages** on your profile, then each of `feed`, `web`, `gateway`, `identity`, `registry`, `events`, `models`, `storage`, `folio`, `folio-worker`, `auspex`, `updater` and each app under `apps/`, and under **Package settings → Manage access → Invite**, add the account with the **Read** role. Don't add it to the repository itself: on a repository owned by a personal account every collaborator can push. (If the repository moves to an organisation, giving the account the **Read** role on the repository covers every package that inherits its access.) A package made later, such as a new app's, needs the same once, after its first release.
+2. As the repository's owner, give that account **Read** on each package: open **Packages** on your profile, then each of `feed`, `web`, `gateway`, `identity`, `registry`, `events`, `models`, `storage`, `folio`, `folio-worker`, `auspex`, `atlas`, `updater` and each app under `apps/`, and under **Package settings → Manage access → Invite**, add the account with the **Read** role. Don't add it to the repository itself: on a repository owned by a personal account every collaborator can push. (If the repository moves to an organisation, giving the account the **Read** role on the repository covers every package that inherits its access.) A package made later, such as a new app's, needs the same once, after its first release.
 
 **For each deployment:**
 
@@ -78,6 +78,10 @@ Give each deployment its own key, so you can take one away without touching the 
 To take a deployment's access away, delete its token in the account's **Settings → Developer settings → Personal access tokens**; the others carry on. When a token is near its expiry, make a new one and repeat step 2.
 
 A deployment that pulls from a mirror ([mirror.md](mirror.md)) has no use for a read key: its feed and images are in your own registry.
+
+### Data Atlas ships with AUGUR
+
+Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from the Updates page makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). See [atlas.md](atlas.md).
 
 ### Auspex ships with AUGUR
 

@@ -24,5 +24,7 @@ services:
     build: { context: ../.., dockerfile: apps/folio/worker/Dockerfile }
   auspex:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/auspex" } }
+  atlas:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/atlas" } }
   updater:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, target: updater, args: { PACKAGE: "@augur/updater" } }

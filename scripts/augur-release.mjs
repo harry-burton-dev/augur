@@ -34,7 +34,7 @@ const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
  * The apps that ship with AUGUR (pillar apps), by their folder under apps/. Each is an ordinary app,
  * but the release builds its images and pins its versions, so its packages are parts too.
  */
-export const PILLAR_APPS = ['folio', 'auspex'];
+export const PILLAR_APPS = ['folio', 'auspex', 'atlas'];
 
 /** Every part of the platform, by package name, with its version and where it lives. */
 export const readParts = () => {

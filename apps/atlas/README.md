@@ -1,5 +1,7 @@
 # Data Atlas
 
+It ships with AUGUR (a pillar app); [docs/atlas.md](../docs/atlas.md) covers running it in a deployment.
+
 The things the organisation keeps track of (ships, ports, organisations, people, places, events) and what is known about them. Artifacts holds what was published, the intent app holds what people mean to do, and Data Atlas holds what those are about. Spec: [Data Atlas](https://claude.ai/artifact/G9XhuREFpYFjLWFqKK8sEF).
 
 | Path | What it is |

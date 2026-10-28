@@ -94,7 +94,7 @@ export interface Server {
  * logins and buckets, then stops), then the services others call, then the apps that ship with
  * AUGUR, the front door last.
  */
-export const ROLL_ORDER = ['storage', 'identity', 'registry', 'events', 'models', 'folio', 'folio-worker', 'auspex', 'gateway', 'web'] as const;
+export const ROLL_ORDER = ['storage', 'identity', 'registry', 'events', 'models', 'folio', 'folio-worker', 'auspex', 'atlas', 'gateway', 'web'] as const;
 /** Parts that do their work and stop, rather than serve: ready once they've stopped without an error. */
 const JOBS = new Set<string>(['storage']);
 /** Parts that work in the background and answer nothing: ready once they're running and stay up. */
