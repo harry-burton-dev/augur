@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appSecretFor } from '@augur/service-kit';
 import { appRunner, appsProject, containerEnv, publishersFrom, READY_MS, RETIRE_MS, type AppHost, type AppJob, type JobReport, type PlatformCalls, type RunnerState } from './runner.ts';
+import { releaseIdentity } from './signers.ts';
 
 const KEY = 'k'.repeat(64);
 const ENV = `PLATFORM_URL=https://augur.example\nAPP_SECRETS_KEY=${KEY}\n`;
@@ -103,7 +104,7 @@ describe('the app runner', () => {
   it('installs an app: checks its signature, gives it storage and a sign-in, starts it, then lists it', async () => {
     const t = setup();
     expect(await t.run(install('1.0.0'))).toBe('done');
-    expect(t.did).toEqual(['verify https://github.com/o/r/.github/workflows/release.yml@refs/heads/main', 'storage notes', 'start app-notes-blue']);
+    expect(t.did).toEqual([`verify ${releaseIdentity('o/r/.github/workflows/release.yml')}`, 'storage notes', 'start app-notes-blue']);
     expect(t.calls.did).toEqual([`credential notes ${appSecretFor(KEY, 'notes', 'sign-in').slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
     expect(t.state().apps.notes).toEqual({ active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: true, bucket: false } } });
     expect(t.reports.at(-1)).toMatchObject({ step: 'retire', outcome: 'done', message: 'Notes 1.0.0 is installed.' });

@@ -62,10 +62,14 @@ export class CommandFailed extends Error {}
  */
 export const TRUSTED_ROOT = 'releases/trusted_root.json';
 
-/** cosign's arguments to check `ref` was signed by `identity`, offline when there's a trust root to check against. */
+/**
+ * cosign's arguments to check `ref` was signed by `identity`, offline when there's a trust root to check against.
+ * An identity that starts with `^` is a pattern (cosign's --certificate-identity-regexp), such as a workflow
+ * on any of the branches releases are made from (releaseIdentity).
+ */
 export const verifyArgs = (identity: string, issuer: string, ref: string, trustedRoot?: string) => [
   'verify',
-  '--certificate-identity',
+  identity.startsWith('^') ? '--certificate-identity-regexp' : '--certificate-identity',
   identity,
   '--certificate-oidc-issuer',
   issuer,

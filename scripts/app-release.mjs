@@ -192,7 +192,8 @@ const main = async () => {
         ? `A preview of ${release.manifest.name} from pull request #${preview.pr}${preview.title ? `, ${preview.title}` : ''}. It runs beside the app for its developers, and goes when the pull request closes.\n`
         : `${release.manifest.name} ${release.version} (${release.channel}).\n\n${release.notes || '_No changelog entry._'}\n`,
     );
-    const beta = release.channel !== 'stable';
+    // Made on preview, a release is a pre-release until it is promoted to production (scripts/promote.mjs).
+    const beta = release.channel !== 'stable' || process.env.RELEASE_BRANCH === 'preview';
     // A pull request's merge commit isn't on a branch, so its preview is tagged on the pull request's head.
     const target = process.env.RELEASE_TARGET || git('rev-parse', 'HEAD');
     execFileSync('gh', ['release', 'create', tag, '--target', target, '--title', `${release.manifest.name} ${release.version}`, '--notes-file', notesFile, ...(beta ? ['--prerelease'] : ['--latest=false']), asset], { cwd: root, stdio: 'inherit' });

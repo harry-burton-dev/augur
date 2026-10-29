@@ -12,6 +12,7 @@ import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appRunner } from './runner.ts';
 import { composeAppHost, composeServer } from './server.ts';
+import { releaseIdentity } from './signers.ts';
 import { runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
 
 // Every setting the updater reads, checked before it starts (in production, a missing one stops it).
@@ -28,8 +29,8 @@ loadConfigOrExit('updater', [
 ]);
 
 const POLL_MS = 30_000;
-/** This repository's Release workflow, which signs every image it publishes (infra/release-images.sh). */
-const RELEASE_SIGNER = 'https://github.com/harry-burton-dev/im-platform/.github/workflows/release.yml@refs/heads/main';
+/** This repository's Release workflow, which signs every image it publishes (infra/release-images.sh), on any branch releases are made from. */
+const RELEASE_SIGNER = releaseIdentity('harry-burton-dev/im-platform/.github/workflows/release.yml');
 const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
 /** The deployment's read key, which the registry checks for releases with too (docs/upgrade.md). */
 const READ_KEY_FILE = '/run/secrets/augur/github-read-key';
