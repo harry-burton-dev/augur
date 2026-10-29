@@ -17,7 +17,7 @@ const release = (version: string, c = 'a', more: object = {}) => ({
 const install = (version: string, c = 'a', more: object = {}): AppJob => ({ id: `j-${version}`, app: 'notes', action: 'install', release: release(version, c, more), state: 'requested' });
 
 /** A server that runs whatever it's told; a container answers on the version its image was released as. */
-const fakeHost = (env = ENV) => {
+const fakeHost = (env = ENV, network?: string) => {
   let state: RunnerState = { apps: {} };
   const did: string[] = [];
   const running = new Map<string, string>();
@@ -28,6 +28,7 @@ const fakeHost = (env = ENV) => {
   let clock = 0;
   const host: AppHost = {
     readEnv: async () => env,
+    platformNetwork: async () => network,
     readState: async () => structuredClone(state),
     async writeProject(s, p, files) {
       state = structuredClone(s);
@@ -86,8 +87,8 @@ const fakeCalls = () => {
   return { calls, did, refuse: () => (refuseRegister = true) };
 };
 
-const setup = (env = ENV) => {
-  const h = fakeHost(env);
+const setup = (env = ENV, network?: string) => {
+  const h = fakeHost(env, network);
   const c = fakeCalls();
   let now = new Date('2026-10-27T12:00:00Z');
   const runner = appRunner({ host: h.host, calls: c.calls, publishers: [PUBLISHER], now: () => now });
@@ -207,6 +208,20 @@ describe('settings', () => {
     const project = appsProject({ apps: { notes: { active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: false, bucket: false } } } } }, 'net');
     expect(project.networks).toEqual({ platform: { external: true, name: 'net' } });
     expect(project.services['app-notes-blue']).toMatchObject({ image: image('a'), cap_drop: ['ALL'], security_opt: ['no-new-privileges:true'], env_file: ['./app-notes-blue.env'] });
+  });
+
+  it('puts apps on the network the platform is on, unless APPS_NETWORK names one', async () => {
+    const asked = setup(ENV, 'augur_default');
+    await asked.run(install('1.0.0'));
+    expect(asked.project()!.networks.platform.name).toBe('augur_default');
+
+    const named = setup(`${ENV}APPS_NETWORK=mine\n`, 'augur_default');
+    await named.run(install('1.0.0'));
+    expect(named.project()!.networks.platform.name).toBe('mine');
+
+    const unknown = setup();
+    await unknown.run(install('1.0.0'));
+    expect(unknown.project()!.networks.platform.name).toBe('platform_default');
   });
 
   it('runs a pull request’s build beside the app, signed in as it with scratch storage, and replaces it in place', async () => {
