@@ -1,5 +1,22 @@
 # @augur/shell
 
+## 0.9.0
+
+### Minor Changes
+
+- d68128b: Every app now stands on the same ground, the flat slate Artifacts is drawn on, instead of on the Calm Tide water. Title and Orbit keep their water. `ui-shell`'s still ground (`background="none"`) is that flat slate now. Moving to another floor while inside an app no longer shows the water during the move, because the ground stays as it was while the next floor's catalogue loads.
+- 7ee3531: Back in the top bar is gone. Beside the floor, two round buttons go to **Home** and to **All apps** (Title) from any screen, inside an app or not, and the one you're on is marked. On a floor without Home, Home stays and says why. New `ui-shell` property `navs` (`ShellNav[]`) and event `ui-nav`; `backTo` and `ui-back` still work for a host that sets them, but the shell no longer does. This also fixes the way out of an app opened from Title or Orbit doing nothing, because the shell still thought the move in was under way. Esc goes up one level as before.
+- a9cfcf7: The floor gauge opens out smoothly. Pointing at it or tabbing into it, each floor's label grows from nothing to its size while it fades in, the gaps widen, and the pinned app icon shrinks away, so nothing jumps. It closes the same way. In an app that shows the same on every floor, the gauge rests: it stays in view, dimmed, and pointing at it says why, and Page Up and Page Down don't move floors. Apps say this with the new manifest field `sameOnEveryFloor` (SDK 1.6, registry contract 1.22.0), and Admin sets it. `ShellApp` gains `sameOnEveryFloor`, and `ui-shell` gains `floorsRest`.
+
+### Patch Changes
+
+- Updated dependencies [d68128b]
+- Updated dependencies [7ee3531]
+- Updated dependencies [d52bfce]
+- Updated dependencies [a9cfcf7]
+  - @augur/ui-kit@1.5.0
+  - @augur/mfe-sdk@1.6.0
+
 ## 0.8.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@augur/ui-kit",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "description": "Design tokens, base CSS and web components rebuilt from the Claude Design system (working name Wave).",
