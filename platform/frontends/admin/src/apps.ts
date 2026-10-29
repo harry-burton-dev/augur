@@ -3,7 +3,7 @@ import semver from 'semver';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
 import { ApiError, fullName, type AdminApi, type AllowedOrigin, type AppChannel, type AppInstalls, type AppPolicy, type AppSettingValue, type AppVersion, type CatalogueApp, type Department, type FloorChoice, type FloorRule, type InstalledApp, type IssuedSignIn, type Person } from './api.js';
-import { asksWords, CHANNEL_CHOICES, JOB_REFRESH_MS, jobOpen, jobSteps, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
+import { asksWords, channelChoices, JOB_REFRESH_MS, jobOpen, jobSteps, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
 import { line, page, section } from './parts.js';
 
 /** Where an app stands: off, on, or on but unable to open in this platform. */
@@ -657,7 +657,8 @@ export class AdminApps extends LitElement {
       <ui-select
         data-channel
         label="New releases"
-        .options=${CHANNEL_CHOICES}
+        hint=${this.installs?.channelNote ?? ''}
+        .options=${channelChoices(this.installs?.ring)}
         .value=${installed.channel}
         @ui-change=${(e: CustomEvent<{ value: AppChannel }>) => this.follow(installed, e.detail.value, installed.policy)}
       ></ui-select>
@@ -740,7 +741,7 @@ export class AdminApps extends LitElement {
                       .filter((a) => !jobOpen(a.job))
                       .map((a) =>
                         line(
-                          html`${a.name} ${a.version}${a.channel === 'beta' ? ' (beta)' : ''}<span style="color:var(--ink-muted);font-size:var(--type-small)">${a.description ? ` · ${a.description}` : ''}${a.job?.state === 'failed' ? ` · ${jobWords(a.job)}` : ''}</span>`,
+                          html`${a.name} ${a.version}${a.channel === 'beta' ? ' (preview)' : ''}<span style="color:var(--ink-muted);font-size:var(--type-small)">${a.description ? ` · ${a.description}` : ''}${a.job?.state === 'failed' ? ` · ${jobWords(a.job)}` : ''}</span>`,
                           html`<ui-button kind="secondary" size="sm" ?disabled=${Boolean(a.problem)} reason=${a.problem ?? ''} @click=${() => this.askInstall(a.app, a.version)}>Install</ui-button>`,
                         ),
                       )

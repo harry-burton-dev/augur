@@ -22,7 +22,7 @@ Once Version packages is merged and nothing is waiting, the Release workflow ope
 
 Merging it runs the Release workflow on `preview`: each new version is built, pushed and signed, then released as a GitHub pre-release with its release file, and the feed is published. Servers following beta (the preview server) see it at their next check. Production servers, which follow stable, don't.
 
-The preview server follows beta for AUGUR by itself while AUGUR is 0.x. A production server must follow stable: set `RELEASE_CHANNEL=stable` in its `.env`, since AUGUR's own release file says beta while it is 0.x. For an app, choose **New releases: betas too** on the installed app in Admin → Apps, so preview releases of it install there.
+The preview server follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, choose **New releases: betas too** on the installed app in Admin → Apps, so preview releases of it install there.
 
 ## Promote to production
 
@@ -40,9 +40,21 @@ For a fix production can't wait for: branch `hotfix/<what>` from `production`, m
 
 Releases are signed by the Release workflow on the branch it ran on. The updater and the mirror take a signature from `release.yml` on `main`, `preview` or `production` (`releaseIdentity` in `platform/services/updater/src/signers.ts`), and still refuse any other branch or workflow. `main` stays on the list for releases made before it was renamed.
 
+## Server rings
+
+Each server says what kind it is with `SERVER_RING` in `.env`. It is set there and not in Admin, so no admin session can change it.
+
+| | `preview` (the preview server) | `production` (every other deployment, and the default) |
+| --- | --- | --- |
+| AUGUR follows | preview releases (beta) by default; `RELEASE_CHANNEL=stable` for production ones only | production releases (stable) only; `RELEASE_CHANNEL=beta` is ignored, and Updates says so |
+| An app follows | production releases, or preview releases too (Admin → Apps, **New releases**) | production releases only; **Preview releases too** stays in the list, greyed, saying why |
+| Pull requests' builds | run for an app's developers | don't run, unless `ALLOW_PR_PREVIEWS=on` |
+
+It is a required setting from the release that brings it: **Upgrade to …** asks for it, and the preflight stops a by-hand upgrade until it's set. Set `SERVER_RING=preview` on the preview server, and `production` everywhere else.
+
 ## What's left to build
 
-Dev builds of every merge to `dev`, server rings (`SERVER_RING`), and channels named dev, preview and production in place of beta and stable come next; then the Updates page's history, changelogs and Go back, feature previews, and the live dev loop. Until channels are renamed, **beta** means on preview and **stable** means on production.
+Dev builds of every merge to `dev` and signed promotion records come next; then the Updates page's history, changelogs and Go back, feature previews, and the live dev loop. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
 
 ## Once, in GitHub (the repository's owner)
 

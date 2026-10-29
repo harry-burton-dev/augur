@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
+import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { AppUpdateChecker, newestOn, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
 import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore, type RunningPreview } from './store.ts';
@@ -92,6 +93,10 @@ export interface AppRunnerRouteOptions {
   pillars: string[];
   /** The app feed: releases admins can install, and newer ones for what's installed. */
   updates: AppUpdateChecker;
+  /** What kind of server this is: a production one follows stable releases only. */
+  ring?: Ring;
+  /** Whether pull requests' builds run beside apps for their developers. */
+  allowPrPreviews?: boolean;
   /** The SDK this AUGUR's shell speaks, which a release's `sdk` range must cover to install by itself. */
   sdkVersion: string;
   /** Records what happens without a request, such as an update starting by itself. */
@@ -107,12 +112,16 @@ export interface AppRunnerRouteOptions {
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, pillars, updates, sdkVersion, audit, serviceOf, record, now = () => new Date() }: AppRunnerRouteOptions) =>
+  ({ store, pillars, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, now = () => new Date() }: AppRunnerRouteOptions) =>
   async (app: FastifyInstance) => {
     /** When the runner last asked what to do; it lives only as long as this process. */
     let runnerSeenAt: string | undefined;
 
-    const followOf = (follows: AppFollow[], id: string): Pick<AppFollow, 'channel' | 'policy'> => follows.find((f) => f.app === id) ?? { channel: 'stable', policy: 'automatic' };
+    /** How an app follows releases: by default stable on Automatic. A production server never follows beta, whatever was chosen before. */
+    const followOf = (follows: AppFollow[], id: string): Pick<AppFollow, 'channel' | 'policy'> => {
+      const { channel, policy } = follows.find((f) => f.app === id) ?? { channel: 'stable' as const, policy: 'automatic' as const };
+      return { channel: takesPreview(ring) ? channel : 'stable', policy };
+    };
 
     /**
      * After each check of the feed: every installed app on Automatic whose channel has a newer release
@@ -156,7 +165,7 @@ export const appRunnerRoutes =
         else if (Date.parse(p.startedAt) + PREVIEW_MS <= at) await remove(p, 'Its last build is a week old.');
       }
       for (const { app: id, release: current } of installed) {
-        if (!developers.some((d) => d.app === id)) continue;
+        if (!allowPrPreviews || !developers.some((d) => d.app === id)) continue;
         const jobs = await store.appJobs(id);
         const busy = (pr: number) => jobs.some((j) => j.pr === pr && (j.state === 'requested' || j.state === 'running'));
         const starting = jobs.filter((j) => j.action === 'preview' && (j.state === 'requested' || j.state === 'running'));
@@ -190,6 +199,9 @@ export const appRunnerRoutes =
         ...(problem ? { problem } : {}),
         ...(runnerSeenAt ? { runnerSeenAt } : {}),
         sdkVersion,
+        ring,
+        previewsAllowed: allowPrPreviews,
+        ...(takesPreview(ring) ? {} : { channelNote: PRODUCTION_ONLY }),
         installed: installed.map(({ app: id, release, installedAt }) => {
           const follow = followOf(follows, id);
           const newest = newestOn(releases, id, follow.channel);
@@ -210,7 +222,7 @@ export const appRunnerRoutes =
         }),
         available: [...new Set(releases.map((r) => r.app))]
           .filter((id) => !installedIds.has(id) && !pillars.includes(id))
-          .map((id) => newestOn(releases, id, 'stable') ?? newestOn(releases, id, 'beta'))
+          .map((id) => newestOn(releases, id, 'stable') ?? (takesPreview(ring) ? newestOn(releases, id, 'beta') : undefined))
           .filter((r): r is NonNullable<typeof r> => Boolean(r?.release?.service))
           .map((r) => ({
             app: r.app,
@@ -324,6 +336,7 @@ export const appRunnerRoutes =
         const caller = admin(req, reply);
         if (!caller) return reply;
         if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
+        if (req.body.channel === 'beta' && !takesPreview(ring)) return reply.code(409).send({ error: 'production_server', message: PRODUCTION_ONLY });
         await store.setFollow({ app: req.params.id, ...req.body, setBy: caller.id });
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.updates-set', target: req.params.id, detail: { ...req.body } });
         await autoUpdate();

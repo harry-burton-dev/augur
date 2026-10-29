@@ -42,6 +42,22 @@ const app = (id: string, sdk: string, enabled = true): AppRecord => ({
   grantedScopes: [],
 });
 
+describe('the server’s ring', () => {
+  it('a preview server follows beta by itself, a production server only ever stable', async () => {
+    const releases = [release('0.3.0', 'stable'), release('0.4.0')];
+    const preview = new UpdateChecker({ feed: async () => releases, running: { version: '0.2.0', channel: 'beta' }, ring: 'preview' });
+    await preview.check();
+    expect(updatesView({ checker: preview, apps: [] })).toMatchObject({ ring: 'preview', channel: 'beta', available: { version: '0.4.0' } });
+
+    const production = new UpdateChecker({ feed: async () => releases, running: { version: '0.2.0', channel: 'beta' }, ring: 'production', channel: 'beta' });
+    await production.check();
+    const view = updatesView({ checker: production, apps: [] });
+    expect(view).toMatchObject({ ring: 'production', channel: 'stable', available: { version: '0.3.0' }, channelNote: expect.stringContaining('RELEASE_CHANNEL=beta is ignored') });
+    // A production server can't follow beta, so it isn't told of one.
+    expect(view.beta).toBeUndefined();
+  });
+});
+
 describe('the release feed', () => {
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 

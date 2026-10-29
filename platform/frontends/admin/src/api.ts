@@ -216,6 +216,9 @@ export interface Upgrade {
 export interface PlatformUpdates {
   running: { version: string; channel: 'stable' | 'beta' };
   channel: 'stable' | 'beta';
+  /** What kind of server this is (SERVER_RING), which bounds the channel. */
+  ring?: 'preview' | 'production';
+  channelNote?: string;
   /** Off when the deployment set RELEASE_FEED_URL=off. */
   feed: 'on' | 'off';
   checkedAt?: string;
@@ -304,6 +307,10 @@ export interface AppInstalls {
   problem?: string;
   runnerSeenAt?: string;
   sdkVersion: string;
+  /** What kind of server this is (SERVER_RING): a production one follows stable releases only. */
+  ring?: 'preview' | 'production';
+  previewsAllowed?: boolean;
+  channelNote?: string;
   installed: InstalledApp[];
   available: AvailableApp[];
 }

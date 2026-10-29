@@ -229,6 +229,8 @@ services:
       # Admin's Updates page: where new AUGUR releases are listed, and which ones to follow.
       RELEASE_FEED_URL: ${RELEASE_FEED_URL:-}
       RELEASE_CHANNEL: ${RELEASE_CHANNEL:-}
+      SERVER_RING: ${SERVER_RING:-}
+      ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEED_URL: ${APP_FEED_URL:-}
       # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.

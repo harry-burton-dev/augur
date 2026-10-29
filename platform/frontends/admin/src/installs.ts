@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit';
 import type { SelectOption } from '@augur/ui-kit';
-import type { AppJob, AppJobStepState, AppPolicy, AvailableApp, InstalledApp } from './api.js';
+import type { AppInstalls, AppJob, AppJobStepState, AppPolicy, AvailableApp, InstalledApp } from './api.js';
 import { line } from './parts.js';
 
 /** How often Apps asks again while the app runner has a job waiting or under way. */
@@ -19,9 +19,12 @@ export const STEP_WORDS: Record<AppJobStepState['step'], string> = {
   remove: 'Stop and remove its containers',
 };
 
-export const CHANNEL_CHOICES: SelectOption[] = [
-  { value: 'stable', label: 'Stable releases' },
-  { value: 'beta', label: 'Beta releases too' },
+/** Which releases an app follows: production (stable) only, or preview (beta) too, which a production server never takes. */
+export const channelChoices = (ring: AppInstalls['ring'] = 'preview'): SelectOption[] => [
+  { value: 'stable', label: 'Production releases' },
+  ring === 'production'
+    ? { value: 'beta', label: 'Preview releases too', detail: 'Not on a production server', disabled: true }
+    : { value: 'beta', label: 'Preview releases too' },
 ];
 
 export const POLICY_CHOICES: SelectOption[] = [
