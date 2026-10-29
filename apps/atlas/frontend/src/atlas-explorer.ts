@@ -308,7 +308,7 @@ export class AtlasExplorer extends LitElement {
             ${links.map(
               (l) => html`<li>
                 <span class="atlas-relation">${l.label}</span>
-                <button class="atlas-link" @click=${() => (this.selected = l.other.ref.id)}>${l.other.ref.label}</button>
+                <ui-ref .ref=${l.other.ref} @ui-open=${() => (this.selected = l.other.ref.id)}></ui-ref>
                 ${l.edge.disputed ? html`<span class="atlas-disputed">disputed</span>` : nothing}
               </li>`,
             )}

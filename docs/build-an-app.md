@@ -99,6 +99,7 @@ Apps show more than the shell does, but each thing in them still says little: **
 | `ui-details` | The properties of the thing that's open. Empty values say "Not known"; `explained` marks the one someone asked about |
 | `ui-timeline` | History as `{ at, who, what }`, grouped Today, Yesterday, Tue 27 Oct |
 | `ui-path` | Line of sight: steps from the top floor down to `here`, each opening on `ui-open` |
+| `ui-ref`, `ui-refs` | Things from other apps (an `EntityRef`, `DocumentRef`, intent, person or team) as chips: the kind's icon, the name, a floor dot when it's kept elsewhere. On `ui-open`, raise the matching intent (`openEntity`, `openDocument`); `removable` fires `ui-remove`. Give `closed-count` and `closed-reason` for the ones the person can't open |
 
 ## 4. The service
 

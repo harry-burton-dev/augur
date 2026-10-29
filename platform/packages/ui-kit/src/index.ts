@@ -38,6 +38,7 @@ export { UiTally, type TallyCount } from './components/tally.js';
 export { UiDetails, type Detail } from './components/details.js';
 export { UiTimeline, dayWords, type TimelineItem } from './components/timeline.js';
 export { UiPath, type PathStep } from './components/path.js';
+export { UiRef, UiRefs, refIcon, refName, type RefKind, type RefShown } from './components/ref.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,

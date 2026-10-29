@@ -414,7 +414,7 @@ describe('triage', () => {
     button('It’s Northern Tern').click();
     await settle(el);
     expect(decided).toEqual({ as: 'link', entity: 'ent_01' });
-    expect(el.querySelector('.atlas-outcome')!.textContent).toContain('Northern Tern');
+    expect(el.querySelector<HTMLElementTagNameMap['ui-ref']>('.atlas-outcome ui-ref')!.ref.label).toBe('Northern Tern');
     expect(button('Finish').disabled).toBe(false);
     button('Open the source').click();
     expect(raise).toHaveBeenCalledWith({ type: 'document.open', payload: { app: 'folio', id: 'd-1', version: '2', title: 'Port report' } });

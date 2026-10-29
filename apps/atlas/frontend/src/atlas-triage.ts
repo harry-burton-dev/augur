@@ -201,7 +201,7 @@ export class AtlasTriage extends LitElement {
       : decided.as === 'drop'
         ? html`<p class="atlas-outcome">Dropped: it isn’t a thing worth keeping.</p>`
         : 'kind' in decided.entity
-          ? html`<p class="atlas-outcome">${decided.as === 'new' ? 'Made new: ' : 'It’s '}<button class="atlas-link" @click=${() => this.move({ page: 'entity', id: decided.entity.id })}>${'label' in decided.entity ? decided.entity.label : ''}</button>
+          ? html`<p class="atlas-outcome">${decided.as === 'new' ? 'Made new: ' : 'It’s '}<ui-ref .ref=${{ kind: 'entity', id: decided.entity.id, label: 'label' in decided.entity ? decided.entity.label : '', ...('type' in decided.entity ? { type: decided.entity.type } : {}) }} @ui-open=${() => this.move({ page: 'entity', id: decided.entity.id })}></ui-ref>
               <span class="atlas-note">${'floorName' in decided.entity ? `· kept on ${floorWords(decided.entity.floorName)}` : ''}</span></p>`
           : html`<p class="atlas-outcome">${'message' in decided.entity ? decided.entity.message : 'It’s no longer there.'}</p>`;
     const kinds = this.kindsFor(m);
@@ -350,8 +350,6 @@ export class AtlasTriage extends LitElement {
         atlas-triage .atlas-context mark { background: none; color: var(--ink); text-decoration: underline; text-decoration-color: var(--green); text-underline-offset: 3px; }
         atlas-triage .atlas-outcome { margin: 0; color: var(--ink); }
         atlas-triage .atlas-make { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: var(--space-3); align-items: end; }
-        atlas-triage .atlas-link { background: none; border: 0; padding: 0; color: var(--ink); font: inherit; text-decoration: underline; text-decoration-color: var(--hairline-strong); text-underline-offset: 3px; cursor: pointer; }
-        atlas-triage .atlas-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
         @media (max-width: 640px) { atlas-triage .atlas-make { grid-template-columns: minmax(0, 1fr); } }
       </style>
       ${this.place.page === 'proposal' ? this.proposalPage() : this.listPage()}`;
