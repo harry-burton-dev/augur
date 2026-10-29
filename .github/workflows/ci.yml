@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev, preview, production]
 # Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
 # others, such as ["self-hosted","augur-ci"] for our own (docs/ci-runner.md). The same goes for
 # the Release, App previews and Release feed workflows.
@@ -12,7 +12,7 @@ on:
 # on hosted runners: from our server they downloaded ~1 GB a run at about 7 MB/s.
 
 # A new push to a pull request stops its last run, so the one runner isn't kept busy with it.
-# Pushes to main each run in full.
+# Pushes to dev, preview and production each run in full.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Changesets compares the branch with main to find what it changes.
+          # Changesets compares the branch with its base to find what it changes.
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -54,8 +54,16 @@ jobs:
       - run: pnpm check:versions
       - run: pnpm check:release
       - run: pnpm test:scripts
+      # Into preview and production only dev, promotions, back-merges and hotfixes go, all versioned
+      # already (docs/release-channels.md).
+      - name: May it go into its branch?
+        if: github.event_name == 'pull_request'
+        run: node scripts/promote.mjs check-pr
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
       - name: Every change says how it is released
-        if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/') && github.base_ref != 'preview' && github.base_ref != 'production'
         run: pnpm changeset status --since=origin/${{ github.base_ref }}
       # Turbo's default of ten tasks at once is too many for our 8 GB runner on a shared server:
       # builds were killed for memory, and tests timed out and deadlocked in Postgres. About 2 GB a
@@ -113,7 +121,7 @@ jobs:
         with:
           fetch-depth: 0
       # Only when Folio (its worker, or the service whose tables it works on) or this workflow
-      # changed; main runs it always. The job still reports, so it can stay a required check.
+      # changed; pushes run it always. The job still reports, so it can stay a required check.
       - name: Does this change Folio?
         id: folio
         run: |

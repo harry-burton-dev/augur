@@ -16,6 +16,7 @@
  */
 import { appSecretFor } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
+import { releaseIdentity } from './signers.ts';
 
 /** What an app's release file says (scripts/app-release.mjs); only what the runner reads. */
 export interface AppRelease {
@@ -137,11 +138,11 @@ const previewUpstream = (id: string) => `http://${previewService(id)}:${APP_PORT
 /** The prefix of an app's own settings in .env, as the storage container reads them: "team-notes" → TEAM_NOTES. */
 const envPrefix = (app: string) => app.toUpperCase().replace(/-/g, '_');
 /**
- * A workflow's certificate identity, as cosign checks it: the workflow file on the main branch, or
- * for a pull request's build, on that pull request's merge ref, so a build is only ever taken as the
- * pull request it says it is.
+ * A workflow's certificate identity, as cosign checks it: the workflow file on a branch releases are
+ * made from (main, preview or production), or for a pull request's build, on that pull request's merge
+ * ref, so a build is only ever taken as the pull request it says it is.
  */
-export const signerIdentity = (publisher: string, pr?: number) => `https://github.com/${publisher}@${pr === undefined ? 'refs/heads/main' : `refs/pull/${pr}/merge`}`;
+export const signerIdentity = (publisher: string, pr?: number) => (pr === undefined ? releaseIdentity(publisher) : `https://github.com/${publisher}@refs/pull/${pr}/merge`);
 /** The workflow that builds pull requests' previews, in a repository trusted to publish apps. */
 export const PREVIEW_WORKFLOW = '.github/workflows/app-preview.yml';
 

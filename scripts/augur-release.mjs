@@ -202,9 +202,11 @@ const main = () => {
     writeFileSync(asset, `${JSON.stringify({ ...previous, images, deploy }, null, 2)}\n`);
     const notesFile = join(dir, 'notes.md');
     writeFileSync(notesFile, notes(previous, parts));
+    // Made on preview, a release is a pre-release until it is promoted to production (scripts/promote.mjs).
+    const pre = previous.channel === 'beta' || process.env.RELEASE_BRANCH === 'preview';
     execFileSync(
       'gh',
-      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${previous.version}${previous.channel === 'beta' ? ' (beta)' : ''}`, '--notes-file', notesFile, ...(previous.channel === 'beta' ? ['--prerelease'] : ['--latest']), asset],
+      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${previous.version}${previous.channel === 'beta' ? ' (beta)' : ''}`, '--notes-file', notesFile, ...(pre ? ['--prerelease'] : ['--latest']), asset],
       { cwd: root, stdio: 'inherit' },
     );
     console.log(`Released ${tag}.`);

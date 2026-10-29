@@ -1,7 +1,11 @@
 name: Release
+# Release channels (docs/release-channels.md): on dev it keeps the Version packages PR and, once
+# that's merged, Promote to preview; on preview it builds, signs and releases each unit as a
+# pre-release; on production it marks the promoted release as on production, building only a
+# hotfix's new version. main does what it did before the branches, until it is renamed production.
 on:
   push:
-    branches: [main]
+    branches: [main, dev, preview, production]
 concurrency: release-${{ github.ref }}
 permissions:
   contents: write
@@ -14,7 +18,7 @@ jobs:
     # Builds and pushes images, so only on an x86-64 runner (docs/ci-runner.md, "An Arm runner").
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
     outputs:
-      released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') }}
+      released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') || steps.promoted.outputs.promoted == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,8 +36,31 @@ jobs:
       # While changesets are waiting, keeps one "Version packages" PR open that bumps
       # versions and writes changelogs. Merging that PR tags each released package
       # (e.g. @augur/registry@0.2.0) and makes a GitHub release for it.
+      # On dev, versions are cut but nothing is released: the Version packages PR only.
+      - uses: changesets/action@v1
+        id: dev-changesets
+        if: github.ref_name == 'dev'
+        with:
+          title: Version packages
+          commit: Version packages
+          version: pnpm version-packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Promote to preview
+        if: github.ref_name == 'dev' && steps.dev-changesets.outputs.hasChangesets == 'false'
+        run: node scripts/promote.mjs preview-pr
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      # A promotion merged into production: its release is on production now, with no rebuild.
+      - name: Mark what was promoted
+        id: promoted
+        if: github.ref_name == 'production'
+        run: node scripts/promote.mjs production
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       - uses: changesets/action@v1
         id: changesets
+        if: github.ref_name != 'dev'
         with:
           title: Version packages
           commit: Version packages
@@ -66,6 +93,7 @@ jobs:
         if: steps.augur.outputs.new == 'true'
         run: node scripts/augur-release.mjs publish "$RUNNER_TEMP/images.json"
         env:
+          RELEASE_BRANCH: ${{ github.ref_name }}
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       # Apps in apps/ that don't ship with AUGUR are released on their own, whenever their version
       # moves: each gets a signed bundle (service image and frontend) and the GitHub release
@@ -95,6 +123,7 @@ jobs:
             node scripts/app-release.mjs publish "$id" "$RUNNER_TEMP/$id.json"
           done
         env:
+          RELEASE_BRANCH: ${{ github.ref_name }}
           PENDING: ${{ steps.apps.outputs.pending }}
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
   # Deployments learn of what was just released from the feed beside the images, read with their read key.
