@@ -149,6 +149,9 @@ describe('registry', () => {
     expect((await put({ ...library, ai: false, menu, orbit: false })).statusCode).toBe(201);
     expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu, orbit: false, maxUpload: 10 });
     expect((await put({ ...library, menu, orbit: 'no' })).statusCode).toBe(400);
+    expect((await put({ ...library, sameOnEveryFloor: true })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, sameOnEveryFloor: true, maxUpload: 10 });
+    expect((await put({ ...library, sameOnEveryFloor: 'yes' })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'All', path: '/' }] }] })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Empty', items: [] }] })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'Reports', path: '/r', colour: 'red' }] }] })).statusCode).toBe(400);

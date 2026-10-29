@@ -40,6 +40,8 @@ export interface ShellApp {
   icon?: string;
   /** AI apps carry the bubble. */
   ai?: boolean;
+  /** It shows the same on every floor, so the gauge rests while it's open and says why. */
+  sameOnEveryFloor?: boolean;
 }
 
 export interface ShellAgent {
@@ -432,8 +434,18 @@ export class UiShell extends LitElement {
     return this.floors.find((f) => f.id === this.floor);
   }
 
-  /** Asks the host to go one floor up or down the gauge. False when there is no floor that way. */
+  /**
+   * Why the gauge rests, when it does: the open app shows the same on every
+   * floor, so moving would change nothing. It stays in view and says so.
+   */
+  get floorsRest(): string {
+    const app = this.openNow;
+    return app?.sameOnEveryFloor ? `${app.name} is the same on every floor` : '';
+  }
+
+  /** Asks the host to go one floor up or down the gauge. False when there is no floor that way, or the gauge rests. */
   moveFloor(direction: 'up' | 'down'): boolean {
+    if (this.floorsRest) return false;
     const to = floorBeside(this.floors, this.floor, direction, this.lastTeam);
     if (!to) return false;
     this.goToFloor(to.id);
@@ -946,27 +958,38 @@ export class UiShell extends LitElement {
       .gauge ol { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
       .gauge ol::before { content: ''; position: absolute; top: var(--space-4); bottom: var(--space-4); right: 13.5px; width: 1px; background: var(--hairline); }
       :host([open]) .gauge { opacity: 0; pointer-events: none; }
-      .gauge button { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); color: var(--ink-muted); text-align: right; }
+      .gauge button { position: relative; display: flex; align-items: center; justify-content: flex-end; color: var(--ink-muted); text-align: right; }
       .gauge .notch { position: relative; flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--slate-deep); border: 1px solid var(--hairline); transition: color var(--motion-quick), border-color var(--motion-quick); }
       .gauge button:hover .notch, .gauge button:focus-visible .notch { color: var(--ink); border-color: var(--hairline-strong); }
       .gauge button:focus-visible { outline: 0; }
       .gauge button:focus-visible .notch { box-shadow: 0 0 0 2px var(--focus); }
       .gauge .dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--floor-mark, var(--green)); border: 2px solid var(--slate-deep); }
       .gauge button[aria-current] .notch { color: var(--floor-mark); border-color: var(--floor-mark); box-shadow: 0 0 12px color-mix(in srgb, var(--floor-mark) 45%, transparent); }
-      .gauge .pinned { flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-right: calc(var(--space-2) * -1); border-radius: var(--radius-key); color: var(--ink); background: color-mix(in srgb, var(--floor-mark) 22%, var(--slate-deep)); border: 1px solid var(--floor-mark); }
-      .gauge .label { display: none; flex-direction: column; align-items: flex-end; gap: 2px; width: 240px; font-size: var(--type-small); line-height: var(--leading-small); letter-spacing: normal; text-transform: none; }
+      .gauge .pinned { flex: none; display: grid; place-items: center; width: 22px; height: 22px; margin-right: var(--space-1); overflow: hidden; border-radius: var(--radius-key); color: var(--ink); background: color-mix(in srgb, var(--floor-mark) 22%, var(--slate-deep)); border: 1px solid var(--floor-mark); transition: width var(--motion-base) var(--ease-standard), margin var(--motion-base) var(--ease-standard), opacity var(--motion-quick) var(--ease-standard), border-width var(--motion-base) var(--ease-standard); }
+      /* Opening out is one smooth move: each label's box grows from nothing to its size, in both directions, as it fades in, so nothing jumps */
+      .gauge .label { display: grid; grid-template: minmax(0, 0fr) / minmax(0, 0fr); overflow: hidden; opacity: 0; font-size: var(--type-small); line-height: var(--leading-small); letter-spacing: normal; text-transform: none;
+        transition: grid-template-rows var(--motion-base) var(--ease-standard), grid-template-columns var(--motion-base) var(--ease-standard), opacity var(--motion-quick) var(--ease-standard); }
+      .gauge .label > span { box-sizing: border-box; width: calc(240px + var(--space-3)); min-height: 0; padding-right: var(--space-3); display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
       .gauge .label b { display: flex; align-items: baseline; gap: var(--space-2); font-weight: 500; color: var(--ink); }
       .gauge .label em { font-style: normal; font-size: var(--type-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--floor-mark); }
       .gauge .label em.waiting { color: var(--ink-muted); }
       .gauge .label .bound { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-1); color: var(--ink); }
       .gauge .label .bound ui-icon { color: var(--floor-mark); }
       .gauge:hover, .gauge:has(:focus-visible) { background: color-mix(in srgb, var(--slate-deep) 94%, transparent); backdrop-filter: blur(12px); border-color: var(--hairline); box-shadow: 0 12px 40px rgb(0 0 0 / 0.35); }
+      .gauge ol { transition: gap var(--motion-base) var(--ease-standard); }
       .gauge:hover ol, .gauge:has(:focus-visible) ol { gap: var(--space-4); }
-      .gauge:hover .label, .gauge:has(:focus-visible) .label { display: flex; animation: label-in var(--motion-base) var(--ease-standard); }
-      .gauge:hover .pinned, .gauge:has(:focus-visible) .pinned { display: none; }
+      .gauge:hover .label, .gauge:has(:focus-visible) .label { grid-template: minmax(0, 1fr) / minmax(0, 1fr); opacity: 1; transition-delay: 0s, 0s, var(--motion-instant); }
+      .gauge:hover .pinned, .gauge:has(:focus-visible) .pinned { width: 0; margin-right: 0; opacity: 0; border-width: 0; }
+      /* resting: the open app is the same on every floor, so the gauge stays in view, dimmed, and says why when you point at it */
+      .gauge .why { display: grid; grid-template: minmax(0, 0fr) / minmax(0, 0fr); justify-content: end; overflow: hidden; opacity: 0; margin: 0; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink); text-align: right;
+        transition: grid-template-rows var(--motion-base) var(--ease-standard), grid-template-columns var(--motion-base) var(--ease-standard), opacity var(--motion-quick) var(--ease-standard), margin var(--motion-base) var(--ease-standard); }
+      .gauge .why > span { box-sizing: border-box; width: calc(240px + var(--space-3) + 28px); min-height: 0; }
+      .gauge.rest:hover .why, .gauge.rest:has(:focus-visible) .why { grid-template: minmax(0, 1fr) / minmax(0, 1fr); opacity: 1; margin-bottom: var(--space-4); transition-delay: 0s, 0s, var(--motion-instant), 0s; }
+      .gauge.rest button[aria-disabled='true'] { cursor: not-allowed; }
+      .gauge.rest button[aria-disabled='true'] .notch, .gauge.rest button[aria-disabled='true'] .label { opacity: 0.5; }
+      .gauge.rest button[aria-disabled='true']:hover .notch { color: var(--ink-muted); border-color: var(--hairline); }
       .gauge button:not([aria-current]) .label b { color: var(--ink-muted); font-weight: 400; }
       .gauge button:hover .label b { color: var(--ink); }
-      @keyframes label-in { from { opacity: 0; transform: translateX(6px); } }
       /* The area title card: fades in, holds, and fades out where it is. It ignores the pointer and covers nothing you need. */
       .card { position: absolute; z-index: 5; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-4); text-align: center; pointer-events: none; animation: card-life var(--motion-title) var(--ease-standard) both; }
       .card::before { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(60% 40% at 50% 50%, color-mix(in srgb, var(--slate-deep) 72%, transparent), transparent); }
@@ -1000,7 +1023,7 @@ export class UiShell extends LitElement {
         .dome > button, :host([open]) .dome > button { transform: translate(-50%, -50%); transition: opacity var(--motion-base); }
         .thread::after, .orb.needs::after { animation: none; }
         .view { animation: none; }
-        .card .name, .card .kick, .card .line, .gauge .label { animation: none; }
+        .card .name, .card .kick, .card .line { animation: none; }
       }
     `,
   ];
@@ -1095,19 +1118,22 @@ export class UiShell extends LitElement {
     const tab = this.isOpen ? '-1' : '0';
     const waiting = this.waitingByFloor();
     const app = this.openNow;
-    return html`<nav class="gauge" aria-label="Floors" ?inert=${this.isOpen}>
+    const rest = this.floorsRest;
+    return html`<nav class="gauge ${rest ? 'rest' : ''}" aria-label="Floors" ?inert=${this.isOpen}>
+      ${rest ? html`<p class="why" id="floors-rest"><span>${rest}, so moving floors wouldn’t change it.</span></p>` : nothing}
       <ol>
         ${stack.map((f) => {
           const count = waiting.get(f.id) ?? 0;
           const name = f.kind === 'personal' ? 'Your own floor' : f.name;
           const here = f.id === this.floor;
           return html`<li><button tabindex=${tab} aria-label=${[name, here ? 'you’re here' : '', count ? `${count} waiting` : ''].filter(Boolean).join(', ')}
-            aria-describedby=${`floor-${f.id}`} aria-current=${here ? 'location' : nothing} ?data-waiting=${count > 0} @click=${() => this.goToFloor(f.id)}>
-            <span class="label" id=${`floor-${f.id}`}>
+            aria-describedby=${rest ? `floors-rest floor-${f.id}` : `floor-${f.id}`} aria-current=${here ? 'location' : nothing} aria-disabled=${rest && !here ? 'true' : nothing}
+            ?data-waiting=${count > 0} @click=${() => !rest && this.goToFloor(f.id)}>
+            <span class="label" id=${`floor-${f.id}`}><span>
               <b>${name} ${here ? html`<em>You’re here</em>` : count ? html`<em class="waiting">${count} waiting</em>` : nothing}</b>
               <span>${floorMeaning(f)}</span>
-              ${here && app ? html`<span class="bound"><ui-icon name=${app.icon ?? 'apps'} size="14"></ui-icon>${app.name} is showing this floor</span>` : nothing}
-            </span>
+              ${here && app && !rest ? html`<span class="bound"><ui-icon name=${app.icon ?? 'apps'} size="14"></ui-icon>${app.name} is showing this floor</span>` : nothing}
+            </span></span>
             ${here && app ? html`<span class="pinned" aria-hidden="true"><ui-icon name=${app.icon ?? 'apps'} size="12"></ui-icon></span>` : nothing}
             <span class="notch"><ui-icon name=${floorIcon[f.kind]} size="14"></ui-icon>${count ? html`<span class="dot"></span>` : nothing}</span>
           </button></li>`;
