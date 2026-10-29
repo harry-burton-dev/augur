@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.23.0
+  version: 1.24.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -917,7 +917,24 @@ components:
                   channel: { type: string, enum: [stable, beta] }
                   notesUrl: { type: string }
                   needs: { type: array, items: { type: string }, description: "Why it waits for an admin; empty when it can install by itself" }
+                  changes: { type: array, items: { $ref: "#/components/schemas/Change" } }
               job: { $ref: "#/components/schemas/AppJob" }
+              changes: { type: array, items: { $ref: "#/components/schemas/Change" }, description: What changed in the version it runs }
+              history:
+                type: array
+                description: Its jobs, newest first (at most 20)
+                items:
+                  type: object
+                  required: [id, action, requestedBy, requestedAt, state]
+                  properties:
+                    id: { type: string }
+                    action: { type: string, enum: [install, remove, preview, preview-remove] }
+                    version: { type: string }
+                    requestedBy: { type: string, description: "A person's id, or automatic" }
+                    requestedAt: { type: string, format: date-time }
+                    state: { type: string, enum: [requested, running, done, failed, cancelled] }
+                    message: { type: string }
+                    finishedAt: { type: string, format: date-time }
               developers: { type: array, items: { type: string }, description: "Who may try its previews, by person id" }
               previews: { type: array, items: { $ref: "#/components/schemas/Preview" } }
         available:
@@ -1095,6 +1112,7 @@ components:
         beta: { $ref: "#/components/schemas/ReleaseSummary", description: "On stable: a beta newer than anything stable" }
         next: { type: string, description: The release to upgrade to next; one on the way when the newest can't be reached straight }
         upgrade: { $ref: "#/components/schemas/Upgrade", description: The upgrade asked for, while it's open and for a week after }
+        history: { type: array, items: { $ref: "#/components/schemas/UpgradeHistoryEntry" }, description: Every upgrade asked for, newest first (at most 50) }
         updaterSeenAt: { type: string, format: date-time, description: When the updater last asked for work, since the registry started }
         needsYou:
           type: array
@@ -1120,6 +1138,29 @@ components:
         released: { type: string }
         notesUrl: { type: string, format: uri }
         breaking: { type: array, items: { type: string } }
+        changes: { type: array, items: { $ref: "#/components/schemas/Change" }, description: "What changed in it, each change once; absent for a release made before changelogs were attached" }
+    Change:
+      type: object
+      required: [kind, text, parts]
+      properties:
+        id: { type: string, description: "Changesets' commit hash: the same change in two parts has the same id" }
+        kind: { type: string, enum: [major, minor, patch] }
+        text: { type: string, description: The changeset's words, as Markdown }
+        parts: { type: array, items: { type: string } }
+    UpgradeHistoryEntry:
+      type: object
+      required: [id, from, version, requestedBy, requestedAt, state]
+      properties:
+        id: { type: string }
+        from: { type: string }
+        version: { type: string }
+        requestedBy: { type: string }
+        requestedByName: { type: string }
+        requestedAt: { type: string, format: date-time }
+        state: { type: string, enum: [requested, running, done, rolled-back, failed, cancelled] }
+        message: { type: string }
+        finishedAt: { type: string, format: date-time }
+        backup: { type: string, description: The backup the updater took first }
     CatalogueEntry:
       allOf:
         - $ref: "#/components/schemas/AppManifestEntry"

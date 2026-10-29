@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import type { AppRecord } from './store.ts';
-import { FeedProblem, releaseFeed, UpdateChecker, updatesView, type FeedRelease, type ReleaseManifest } from './updates.ts';
+import { FeedProblem, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRelease, type ReleaseManifest } from './updates.ts';
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
@@ -40,6 +40,20 @@ const app = (id: string, sdk: string, enabled = true): AppRecord => ({
   registeredAt: '2026-10-01T00:00:00Z',
   updatedAt: '2026-10-01T00:00:00Z',
   grantedScopes: [],
+});
+
+describe('the history of upgrades', () => {
+  it('names the backup each one took', () => {
+    const at = '2026-10-29T00:00:00Z';
+    expect(historyEntry({ id: 'u', from: '0.8.0', version: '0.9.0', images: {}, requestedBy: 'u-1', requestedAt: at, state: 'done', steps: [{ step: 'backup', state: 'done', message: 'platform-2026-10-29T0000.sql.gz, restored and checked', at }] })).toEqual({
+      id: 'u', from: '0.8.0', version: '0.9.0', requestedBy: 'u-1', requestedAt: at, state: 'done', backup: 'platform-2026-10-29T0000.sql.gz',
+    });
+  });
+
+  it('gives each newer release its changes, from the changelogs its release file carries', async () => {
+    const view = updatesView({ checker: await checked([release('0.3.0', 'beta', { changelogs: { '@augur/registry': '### Minor Changes\n\n- abcdef1: Shows history.' } })]), apps: [] });
+    expect(view.available?.changes).toEqual([{ id: 'abcdef1', kind: 'minor', text: 'Shows history.', parts: ['@augur/registry'] }]);
+  });
 });
 
 describe('the server’s ring', () => {
@@ -240,6 +254,9 @@ describe('upgrading', () => {
     const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
     expect(page.upgrade.state).toBe('rolled-back');
     expect(page.updaterSeenAt).toBeDefined();
+    // The history keeps it, with who asked by name, without the images.
+    expect(page.history).toEqual([expect.objectContaining({ from: '0.2.0', version: '0.3.0', requestedBy: 'u-1', requestedByName: 'Alex', state: 'rolled-back' })]);
+    expect(page.history[0].images).toBeUndefined();
     expect(entries.map((e) => `${e.action} ${e.target} by ${e.actor.id}`)).toEqual(['platform.upgrade-requested 0.3.0 by u-1', 'platform.upgrade-rolled-back 0.3.0 by updater']);
   });
 

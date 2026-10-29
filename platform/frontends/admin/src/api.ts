@@ -170,6 +170,14 @@ export interface PlatformStatus {
   publicAccess?: PublicAccess;
 }
 
+/** One change in a changelog, and the parts it moved (registry's changes.ts). */
+export interface Change {
+  id?: string;
+  kind: 'major' | 'minor' | 'patch';
+  text: string;
+  parts: string[];
+}
+
 /** An AUGUR release as Updates shows it (see contracts/registry.openapi.yaml). */
 export interface ReleaseSummary {
   version: string;
@@ -177,6 +185,21 @@ export interface ReleaseSummary {
   released?: string;
   notesUrl?: string;
   breaking: string[];
+  changes?: Change[];
+}
+
+/** One upgrade in the Updates page's history. */
+export interface UpdateHistoryEntry {
+  id: string;
+  from: string;
+  version: string;
+  requestedBy: string;
+  requestedByName?: string;
+  requestedAt: string;
+  state: 'requested' | 'running' | 'done' | 'rolled-back' | 'failed' | 'cancelled';
+  message?: string;
+  finishedAt?: string;
+  backup?: string;
 }
 
 /** Something to do or know before upgrading. */
@@ -230,6 +253,8 @@ export interface PlatformUpdates {
   needsYou: NeedsYou[];
   /** The upgrade asked for, while it's waiting or under way, and for a week after. */
   upgrade?: Upgrade;
+  /** Every upgrade asked for, newest first. */
+  history?: UpdateHistoryEntry[];
   /** When the deployment's updater last asked for work, since the registry started. */
   updaterSeenAt?: string;
 }
@@ -257,6 +282,18 @@ export interface AppJob {
 }
 
 export type AppChannel = 'stable' | 'beta';
+
+/** One of an app's jobs, as its history shows it. */
+export interface AppHistoryEntry {
+  id: string;
+  action: 'install' | 'remove' | 'preview' | 'preview-remove';
+  version?: string;
+  requestedBy: string;
+  requestedAt: string;
+  state: 'requested' | 'running' | 'done' | 'failed' | 'cancelled';
+  message?: string;
+  finishedAt?: string;
+}
 export type AppPolicy = 'automatic' | 'ask' | 'hold';
 
 /** An app the app runner installed, and how it takes new releases. */
@@ -268,8 +305,12 @@ export interface InstalledApp {
   channel: AppChannel;
   policy: AppPolicy;
   /** The newest release on its channel, when newer; `needs` says why it waits for an admin. */
-  update?: { version: string; channel: AppChannel; notesUrl?: string; needs: string[] };
+  update?: { version: string; channel: AppChannel; notesUrl?: string; needs: string[]; changes?: Change[] };
   job?: AppJob;
+  /** What changed in the version it runs. */
+  changes?: Change[];
+  /** Its jobs, newest first: installs, updates, going back and removals. */
+  history?: AppHistoryEntry[];
   /** Who may try its pull requests' previews, by person id. */
   developers?: string[];
   previews?: AppPreview[];

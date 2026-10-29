@@ -52,9 +52,15 @@ Each server says what kind it is with `SERVER_RING` in `.env`. It is set there a
 
 It is a required setting from the release that brings it: **Upgrade to …** asks for it, and the preflight stops a by-hand upgrade until it's set. Set `SERVER_RING=preview` on the preview server, and `production` everywhere else.
 
+## History and changelogs
+
+**Admin → Updates** lists every upgrade asked for, newest first: from and to, who asked, how it ended (done, went back by itself, stopped partway), how long it took and the backup it took first. Above it, **What's new since** your version gathers every change between yours and the newest release, once each however many parts it moved, breaking changes first. Each release carries its changed parts' changelogs (`changelogs` in `augur-release.json`) for this; releases made before that link to their notes on GitHub instead.
+
+**Admin → Apps**, on an installed app, shows what's new in the version waiting and the app's history: each install, update and removal, by whom or by itself.
+
 ## What's left to build
 
-Dev builds of every merge to `dev` and signed promotion records come next; then the Updates page's history, changelogs and Go back, feature previews, and the live dev loop. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
+Dev builds of every merge to `dev` and signed promotion records come next; then Go back, feature previews, and the live dev loop. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
 
 ## Once, in GitHub (the repository's owner)
 

@@ -34,7 +34,7 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
   });
 
   it('keeps one upgrade open at a time, with each step it took', async () => {
-    const ask = (id: string) => store.requestUpgrade({ id, from: '0.2.0', version: '0.3.0', images: { web: 'web@sha256:aa' }, requestedBy: 'u-1' });
+    const ask = (id: string) => store.requestUpgrade({ id, from: '0.2.0', version: '0.3.0', images: { web: 'web@sha256:aa' }, requestedBy: 'u-1', requestedByName: 'Alex' });
     expect(await store.upgrade()).toBeUndefined();
     expect(await ask('up-1')).toBe(true);
     expect(await ask('up-2')).toBe(false);
@@ -49,6 +49,9 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await ask('up-3')).toBe(true);
     expect(await store.cancelUpgrade('up-3')).toBe(true);
     expect((await store.upgrade())?.state).toBe('cancelled');
+    // The history keeps every one, newest first, with who asked.
+    expect((await store.upgrades()).map((u) => `${u.id} ${u.state} ${u.requestedByName}`)).toEqual(['up-3 cancelled Alex', 'up-1 done Alex']);
+    expect((await store.upgrades(1)).map((u) => u.id)).toEqual(['up-3']);
   });
 
   it('keeps one job open per app for the app runner, oldest first', async () => {

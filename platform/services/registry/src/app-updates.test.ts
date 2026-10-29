@@ -121,7 +121,23 @@ describe('installs and updates in Admin → Apps', () => {
     // It failed, so it isn't tried again by itself.
     await t.check(feedOf(release('1.0.0'), release('1.1.0')));
     expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
-    expect((await t.view()).installed[0].update).toEqual({ version: '1.1.0', channel: 'stable', needs: [] });
+    expect((await t.view()).installed[0].update).toEqual({ version: '1.1.0', channel: 'stable', needs: [], changes: [] });
+    // Its history: the install, then the update that failed, newest first.
+    expect((await t.view()).installed[0].history.map((h: { version: string; state: string; requestedBy: string }) => [h.version, h.state, h.requestedBy])).toEqual([
+      ['1.1.0', 'failed', 'automatic'],
+      ['1.0.0', 'done', 'u-1'],
+    ]);
+  });
+
+  it('shows what changed in the version it runs and in the one waiting', async () => {
+    const notes = (text: string) => `### Minor Changes\n\n- abcdef1: ${text}\n\n### Patch Changes\n\n- Updated dependencies [abcdef1]\n  - @augur/mfe-sdk@1.6.0`;
+    const t = await setup(feedOf({ ...release('1.0.0'), notes: notes('Lists notes by date.') }));
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await t.runNext();
+    await t.check(feedOf({ ...release('1.0.0'), notes: notes('Lists notes by date.') }, { ...release('2.0.0'), notes: notes('Tags notes.') }));
+    const installed = (await t.view()).installed[0];
+    expect(installed.changes).toEqual([{ id: 'abcdef1', kind: 'minor', text: 'Lists notes by date.', parts: ['notes'] }]);
+    expect(installed.update.changes).toEqual([{ id: 'abcdef1', kind: 'minor', text: 'Tags notes.', parts: ['notes'] }]);
   });
 
   it('waits for an admin when a version asks for more, or the app is on Ask first or Hold', async () => {
