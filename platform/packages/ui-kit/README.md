@@ -35,6 +35,11 @@ import '@augur/ui-kit';
 | `ui-app-frame` | An app's page: the slate ground, a rail, the main column and an aside |
 | `ui-page-head` | Trail, eyebrow, title, one line of summary, two actions and ⋯ |
 | `ui-section` | A labelled part with its count, one action and a why; folds after five |
+| `ui-card`, `ui-cards` | One thing in a grid: title, mark, floor dot and name, one line of meta, at most one line that matters; unavailable cards stay and say why |
+| `ui-tally` | Counts as a short bar of segments; words only for the total and what needs attention |
+| `ui-details` | Label and value pairs; unknown values say so; folds after eight |
+| `ui-timeline` | What happened, grouped by day in words, newest first; five then "Earlier" |
+| `ui-path` | Where something sits on the floors above it, one disc per floor, you are here ringed |
 | `ui-glance` | A quick look before you go in: veil, sheet, card, split, title; hairline or bubble; loading, error, empty |
 | `ui-shell` | The frame apps run in: the band, the water, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
 | `ui-wave-background` | The water: navy and green bands over slate. Calm Tide by default; Deep Ocean, Aurora, Sonar Line, Minimal and Split Field as variants. `pulse()` swells it |

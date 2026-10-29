@@ -33,6 +33,11 @@ export { UiCan, type CanAction, type CanBlocked } from './components/can.js';
 export { UiAppFrame, type FrameMeasure } from './components/app-frame.js';
 export { UiPageHead, type TrailStep, type PageAction } from './components/page-head.js';
 export { UiSection } from './components/section.js';
+export { UiCard, UiCards, floorMark } from './components/card.js';
+export { UiTally, type TallyCount } from './components/tally.js';
+export { UiDetails, type Detail } from './components/details.js';
+export { UiTimeline, dayWords, type TimelineItem } from './components/timeline.js';
+export { UiPath, type PathStep } from './components/path.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,
