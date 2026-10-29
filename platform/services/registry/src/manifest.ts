@@ -22,6 +22,8 @@ export interface AppEntry {
   areas?: AppArea[];
   /** false: the app keeps its own menu inside it and the shell never shows its Orbit. */
   orbit?: boolean;
+  /** true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why. */
+  sameOnEveryFloor?: boolean;
   /** What the app's service asks to do on the platform, such as "notifications:send". */
   scopes?: Scope[];
   /** The kinds of floor the app works on. Without it, every kind. */
@@ -169,6 +171,8 @@ export const platformApps: AppEntry[] = [
     icon: 'admin',
     description: 'People, departments, apps, status, updates and activity',
     requiredRole: 'admin',
+    // people, departments, apps and the system are the organisation's, whichever floor you stand on
+    sameOnEveryFloor: true,
     areas: [
       { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People and departments' },
       { id: 'system', label: 'System', icon: 'server', detail: 'Apps, status, updates and activity' },
@@ -276,6 +280,7 @@ export const appEntrySchema = {
       },
     },
     orbit: { type: 'boolean' },
+    sameOnEveryFloor: { type: 'boolean' },
     areas: {
       type: 'array',
       maxItems: 6,

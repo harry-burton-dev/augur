@@ -377,6 +377,25 @@ describe('floors', () => {
     expect(notches[1].getAttribute('aria-current')).toBe('location');
   });
 
+  it('rests the gauge in an app that’s the same on every floor, keeping it in view and saying why', async () => {
+    el.apps = el.apps.map((a) => (a.id === 'admin' ? { ...a, sameOnEveryFloor: true } : a));
+    el.current = 'admin';
+    await el.updateComplete;
+    expect(root().querySelector('.gauge .why')!.textContent).toBe('Admin is the same on every floor, so moving floors wouldn’t change it.');
+    const notches = [...root().querySelectorAll<HTMLButtonElement>('.gauge button')];
+    expect(notches.map((b) => b.getAttribute('aria-disabled'))).toEqual(['true', null, 'true']);
+    const go = vi.fn();
+    el.addEventListener('ui-floor', go);
+    notches[0].click();
+    key(window, 'PageUp', { altKey: true });
+    expect(go).not.toHaveBeenCalled();
+    expect(el.moveFloor('up')).toBe(false);
+    el.current = 'library';
+    await el.updateComplete;
+    expect(root().querySelector('.gauge .why')).toBeNull();
+    expect(el.moveFloor('up')).toBe(true);
+  });
+
   it('says on the gauge who sees each floor, and which floor the open app is showing', async () => {
     const labels = [...root().querySelectorAll('.gauge .label')].map((l) => l.textContent!.replace(/\s+/g, ' ').trim());
     expect(labels).toEqual([

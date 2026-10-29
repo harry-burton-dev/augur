@@ -63,7 +63,7 @@ export interface HostProps {
 
 type Problem = { title: string; summary: string; retry: () => void; action?: string };
 
-const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai });
+const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai, sameOnEveryFloor: a.sameOnEveryFloor });
 
 /**
  * What the Shell offers. Agents stay off until they are designed and have

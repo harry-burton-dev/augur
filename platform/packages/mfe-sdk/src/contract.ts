@@ -41,9 +41,15 @@ export interface AppManifestEntry {
    * `false`: the app keeps its own menu inside it, so the shell never shows
    * its Orbit. Choosing it or one of its areas in Title opens the app there;
    * its root opens the app itself, Esc doesn't leave it, and the way back to
-   * the shell is the top bar's Back (SDK 1.4).
+   * the shell is the top bar's Home and All apps (SDK 1.4).
    */
   orbit?: boolean;
+  /**
+   * `true`: the app shows the same on every floor, as Admin does, so moving
+   * floors inside it would change nothing. The shell's floor gauge rests while
+   * it's open, staying in view and saying why (SDK 1.6).
+   */
+  sameOnEveryFloor?: boolean;
   /** The kinds of floor the app works on. Without it, every kind. */
   floors?: WorkspaceKind[];
   /**
