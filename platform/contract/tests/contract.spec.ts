@@ -81,6 +81,7 @@ test('mounts on the person’s own floor unless the address names another', asyn
 });
 
 test('an app sits on the still ground, and moving floors inside it never shows the water', async ({ page }) => {
+  since('1.1'); // the app says which floor it's on from SDK 1.1
   await page.goto('/@me/reference');
   await expect(check(page, 'floor')).toHaveText('You (me, personal, lead) dev-me');
   const shell = page.locator('ui-shell');
