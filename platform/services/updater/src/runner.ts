@@ -78,6 +78,8 @@ export interface RunnerState {
 export interface AppHost {
   /** The deployment's settings file, .env. */
   readEnv(): Promise<string>;
+  /** The network the platform's own containers share, as Docker names it, or undefined if it can't tell. */
+  platformNetwork(): Promise<string | undefined>;
   readState(): Promise<RunnerState>;
   /** Writes the state, the apps' Compose project made from it and each container's settings file. */
   writeProject(state: RunnerState, project: object, envFiles: Record<string, string>): Promise<void>;
@@ -118,7 +120,7 @@ export interface RunnerOptions {
 
 /** The port every app's service listens on in its container. */
 export const APP_PORT = 8080;
-/** The network the platform's project makes: apps join it to reach the gateway, Postgres and Garage. */
+/** The network the platform's project makes, when it's named `platform` and the updater can't ask: apps join it to reach the gateway, Postgres and Garage. */
 export const DEFAULT_NETWORK = 'platform_default';
 /** How long a new version has to answer on its version. */
 export const READY_MS = 180_000;
@@ -246,7 +248,12 @@ const notReady = (release: AppRelease, seen?: { version?: string }) =>
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 500);
 
 export const appRunner = ({ host, calls, publishers, now = () => new Date() }: RunnerOptions) => {
-  const save = async (state: RunnerState, env: string) => host.writeProject(state, appsProject(state, envValue(env, 'APPS_NETWORK') || DEFAULT_NETWORK), envFilesFor(state, env));
+  // APPS_NETWORK wins; otherwise the network the updater itself is on, asked once, since a project run under
+  // another name (COMPOSE_PROJECT_NAME, -p) doesn't make platform_default.
+  let found: Promise<string | undefined> | undefined;
+  const network = async (env: string) =>
+    envValue(env, 'APPS_NETWORK') || (await (found ??= host.platformNetwork().catch(() => undefined))) || DEFAULT_NETWORK;
+  const save = async (state: RunnerState, env: string) => host.writeProject(state, appsProject(state, await network(env)), envFilesFor(state, env));
 
   /** Stops old versions whose time is up. */
   const retireDue = async () => {

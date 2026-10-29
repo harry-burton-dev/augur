@@ -6,7 +6,8 @@ import {
   applyPreferences,
   areaOf,
   backFrom,
-  upFrom,
+  navsFor,
+  navTarget,
   titleFor,
   escapeIsFree,
   findPages,
@@ -401,6 +402,8 @@ export function Host({
       return;
     }
     const { app, path } = screen;
+    // whatever move brought you here has ended: the way out mustn't think one is still under way
+    leaving.current = false;
     lastApp.current = app.id;
     const intent = pendingIntent.current;
     pendingIntent.current = undefined;
@@ -545,16 +548,16 @@ export function Host({
     void shell.updateComplete.then(() => menuRef.current && (menuRef.current.background = shell.waves));
   }, [screen]);
 
-  // The band follows where you are: Back names the level above, and the tab says the page, app and floor.
+  // The band follows where you are: Home and Title mark the one you're on, and the tab says the page, app and floor.
   useEffect(() => {
     const shell = shellRef.current;
     if (shell) {
-      shell.backTo = upFrom(screen)?.label ?? '';
+      shell.navs = navsFor(screen, manifest ?? []);
       // inside an app, the area its page is in; Orbit names the area of the group in focus as it moves
       if (screen?.kind !== 'orbit') shell.area = screen?.kind === 'app' ? (areaOf(screen.app, screen.path)?.label ?? '') : '';
     }
     if (screen) document.title = titleFor(screen, floor?.name);
-  }, [screen, floor]);
+  }, [screen, floor, manifest]);
 
   useEffect(() => () => void mounter.current?.unmount(), []);
 
@@ -713,15 +716,13 @@ export function Host({
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       applyPreferences(prefs.current);
     };
-    // Back in the band: up one level, wherever you are.
-    const onBack = (e: Event) => {
-      if (e.target !== shell) return; // a menu's own Esc is its business
-      const up = upFrom(screen);
-      if (!up) return;
-      if (screen?.kind === 'app') {
-        orbitStart.current = orbitIndexOf(screen.app, screen.path);
-        void leaveApp(up.to);
-      } else navigate(up.to);
+    // Home and Title in the band: straight there, from whatever screen you're on.
+    const onNav = (e: Event) => {
+      const to = navTarget((e as CustomEvent<{ id: string }>).detail.id, manifest ?? []);
+      if (!to) return;
+      if (screen?.kind === 'app') return void leaveApp(to);
+      // Title or Orbit steps aside first, as it does for Back
+      void (menuRef.current?.leave('back') ?? Promise.resolve()).then(() => navigate(to));
     };
     // Going to another floor keeps you in the same app, at its start; its menu or Title stay as they were.
     // What you're looking at leaves the way you're going first, so nothing goes blank partway through.
@@ -761,7 +762,7 @@ export function Host({
     shell.addEventListener('ui-setting', onSetting);
     shell.addEventListener('ui-find', onFind);
     shell.addEventListener('ui-floor', onFloor);
-    shell.addEventListener('ui-back', onBack);
+    shell.addEventListener('ui-nav', onNav);
     shell.addEventListener('ui-pick', onPick);
     shell.addEventListener('ui-notification-action', onAction);
     shell.addEventListener('ui-mute', onMute);
@@ -780,7 +781,7 @@ export function Host({
       shell.removeEventListener('ui-setting', onSetting);
       shell.removeEventListener('ui-find', onFind);
       shell.removeEventListener('ui-floor', onFloor);
-      shell.removeEventListener('ui-back', onBack);
+      shell.removeEventListener('ui-nav', onNav);
       shell.removeEventListener('ui-pick', onPick);
     };
   }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp]);

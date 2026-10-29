@@ -371,6 +371,28 @@ describe('floors', () => {
     expect(up).toHaveBeenCalledOnce();
   });
 
+  it('draws Home and Title from any screen, marks where you are, and says why one can’t be used', async () => {
+    expect(root().querySelector('.navs')).toBeNull();
+    el.navs = [
+      { id: 'home', label: 'Home', icon: 'home', unavailable: 'Home isn’t on this floor' },
+      { id: 'title', label: 'All apps', icon: 'apps', current: true },
+    ];
+    await el.updateComplete;
+    const [home, title] = [...root().querySelectorAll<HTMLButtonElement>('.nav')];
+    expect(home.getAttribute('aria-label')).toBe('Home. Home isn’t on this floor');
+    expect(home.getAttribute('aria-disabled')).toBe('true');
+    expect(title.getAttribute('aria-current')).toBe('page');
+    const go = vi.fn();
+    el.addEventListener('ui-nav', go);
+    home.click();
+    title.click();
+    expect(go).not.toHaveBeenCalled();
+    el.navs = [{ id: 'home', label: 'Home', icon: 'home' }];
+    await el.updateComplete;
+    root().querySelector<HTMLButtonElement>('.nav')!.click();
+    expect(go.mock.calls[0][0].detail).toEqual({ id: 'home' });
+  });
+
   it('draws the gauge from the org down to your own floor, lit where you are', () => {
     const notches = [...root().querySelectorAll('.gauge button')];
     expect(notches.map((b) => b.getAttribute('aria-label'))).toEqual(['Acme', 'Finance, you’re here', 'Your own floor']);

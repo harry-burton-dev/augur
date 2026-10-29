@@ -187,7 +187,7 @@ curl -X POST https://<platform>/api/registry/v1/app-runner/jobs -H "authorizatio
 
 Pull requests that change an app can run as previews beside it, for the app's developers alone, each with scratch storage of its own: see [app-previews.md](app-previews.md).
 
-Apps join the platform's network (`platform_default`; set `APPS_NETWORK` in `.env` if your project has another name), so `pc down` can't remove that network while they run: stop them first with `docker compose -p augur-apps -f infra/deploy/apps/compose.yml down`. They restart by themselves with Docker, like the platform.
+Apps join the platform's network: the one the updater itself is on, usually `platform_default` (`APPS_NETWORK` in `.env` names another). So `pc down` can't remove that network while they run: stop them first with `docker compose -p augur-apps -f infra/deploy/apps/compose.yml down`. They restart by themselves with Docker, like the platform.
 
 ### Images from releases (the first `augur@` release)
 
