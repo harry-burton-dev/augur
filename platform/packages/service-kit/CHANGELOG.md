@@ -1,5 +1,12 @@
 # @augur/service-kit
 
+## 0.9.0
+
+### Minor Changes
+
+- f0d02e2: Floor rules for apps are domain events too: `platform.app.blocked` when an admin blocks an app on a floor and those below it, and `platform.app.rule-cleared` when a floor goes back to following the one above. `PLATFORM_TOPICS` names them.
+- bbdad18: The model gateway turns apps' texts into vectors (`POST /v1/embeddings`, contract 1.1), to match by meaning, when an embedding model is set up (`MODEL_EMBEDDING_NAME`; the stand-in always has one). Each request is one call, recorded as `model.embedded` without the texts. `embedTexts` in the service kit asks for them.
+
 ## 0.8.0
 
 ### Minor Changes

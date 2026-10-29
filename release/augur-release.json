@@ -1,10 +1,12 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "channel": "beta",
-  "released": "2026-10-27",
+  "released": "2026-10-28",
   "upgradeFrom": ">=0.1.0",
   "changed": [
+    "@augur/mfe-sdk",
     "@augur/service-kit",
+    "@augur/ui-kit",
     "@augur/events",
     "@augur/gateway",
     "@augur/identity",
@@ -13,8 +15,14 @@
     "@augur/storage",
     "@augur/updater",
     "@augur/admin",
+    "@augur/home",
     "@augur/shell",
-    "@apps/folio"
+    "@apps/folio-frontend",
+    "@apps/folio",
+    "@apps/auspex-frontend",
+    "@apps/auspex",
+    "@apps/atlas-frontend",
+    "@apps/atlas"
   ],
   "breaking": [],
   "settings": {
@@ -38,6 +46,10 @@
       "FOLIO_CLIENT_SECRET",
       "FOLIO_DATABASE_PASSWORD",
       "FOLIO_BUCKET_SECRET",
+      "AUSPEX_CLIENT_SECRET",
+      "ATLAS_CLIENT_SECRET",
+      "ATLAS_DATABASE_PASSWORD",
+      "ATLAS_BUCKET_SECRET",
       "PLATFORM_ADMIN_USER",
       "PLATFORM_ADMIN_PASSWORD",
       "PLATFORM_ADMIN_EMAIL",
@@ -51,6 +63,7 @@
       "MODEL_API_URL",
       "MODEL_API_KEY",
       "MODEL_NAME",
+      "MODEL_EMBEDDING_NAME",
       "APP_STORAGE",
       "NOTES_DATABASE_PASSWORD",
       "NOTES_BUCKET_SECRET",
@@ -86,6 +99,10 @@
       "FOLIO_CLIENT_SECRET",
       "FOLIO_DATABASE_PASSWORD",
       "FOLIO_BUCKET_SECRET",
+      "AUSPEX_CLIENT_SECRET",
+      "ATLAS_CLIENT_SECRET",
+      "ATLAS_DATABASE_PASSWORD",
+      "ATLAS_BUCKET_SECRET",
       "PLATFORM_ADMIN_USER",
       "PLATFORM_ADMIN_PASSWORD",
       "PLATFORM_ADMIN_EMAIL",
@@ -94,61 +111,71 @@
       "PLATFORM_ADMIN_DEPARTMENT"
     ],
     "added": [
-      "API_RATE_PER_SECOND",
-      "API_RATE_BURST",
-      "SSO_RATE_PER_SECOND",
-      "SSO_RATE_BURST",
-      "MAX_UPLOAD_MB",
-      "KEYCLOAK_CONSOLE",
-      "GITHUB_READ_USER"
+      "AUSPEX_CLIENT_SECRET",
+      "ATLAS_CLIENT_SECRET",
+      "ATLAS_DATABASE_PASSWORD",
+      "ATLAS_BUCKET_SECRET",
+      "MODEL_EMBEDDING_NAME"
     ],
     "removed": []
   },
   "parts": {
     "@augur/mfe-sdk": {
-      "version": "1.4.0"
+      "version": "1.5.0"
     },
     "@augur/service-kit": {
-      "version": "0.8.0"
+      "version": "0.9.0"
     },
     "@augur/ui-kit": {
-      "version": "1.3.0"
+      "version": "1.4.0"
     },
     "@augur/events": {
-      "version": "0.4.3"
+      "version": "0.5.0"
     },
     "@augur/gateway": {
-      "version": "0.6.0"
+      "version": "0.7.0"
     },
     "@augur/identity": {
-      "version": "0.7.0"
-    },
-    "@augur/models": {
-      "version": "0.2.3"
-    },
-    "@augur/registry": {
       "version": "0.8.0"
     },
+    "@augur/models": {
+      "version": "0.3.0"
+    },
+    "@augur/registry": {
+      "version": "0.9.0"
+    },
     "@augur/storage": {
-      "version": "0.2.1"
+      "version": "0.3.0"
     },
     "@augur/updater": {
-      "version": "0.4.0"
+      "version": "0.4.1"
     },
     "@augur/admin": {
-      "version": "0.7.0"
+      "version": "0.8.0"
     },
     "@augur/home": {
-      "version": "0.2.4"
+      "version": "0.2.5"
     },
     "@augur/shell": {
-      "version": "0.7.0"
+      "version": "0.8.0"
     },
     "@apps/folio-frontend": {
-      "version": "0.2.0"
+      "version": "0.3.0"
     },
     "@apps/folio": {
-      "version": "0.2.1"
+      "version": "0.2.2"
+    },
+    "@apps/auspex-frontend": {
+      "version": "0.1.0"
+    },
+    "@apps/auspex": {
+      "version": "0.1.0"
+    },
+    "@apps/atlas-frontend": {
+      "version": "0.1.0"
+    },
+    "@apps/atlas": {
+      "version": "0.1.0"
     }
   }
 }

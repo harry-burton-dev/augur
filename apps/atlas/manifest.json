@@ -3,7 +3,7 @@
   "name": "Data Atlas",
   "route": "/atlas",
   "entry": "/apps/atlas/entry.js",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "sdk": "^1.4.0",
   "description": "The things your organisation knows about, and what is known of them",
   "icon": "atlas",
@@ -55,7 +55,7 @@
           "label": "Triage",
           "icon": "inbox",
           "path": "/triage",
-          "detail": "What\u2019s proposed here, waiting for a lead",
+          "detail": "What’s proposed here, waiting for a lead",
           "keywords": "triage proposals review mentions decide"
         },
         {

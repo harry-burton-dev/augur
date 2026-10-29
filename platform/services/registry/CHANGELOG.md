@@ -1,5 +1,22 @@
 # @augur/registry
 
+## 0.9.0
+
+### Minor Changes
+
+- 1580b6b: Title shows what an app covers, not how to get around in it. An app may name up to six `areas` in its manifest (SDK 1.5), and each menu group its `area`. Title lists an app's areas, each opening its Orbit at the area's first group; an app with one area or none is a choice by itself, captioned with its description, so nothing is offered twice. Orbit keeps an area's groups together and names the area before the group ("Organisation / People"), and the area sits under the app's name below the handle. A group with one page is that page. Nothing repeats the label or icon of what it sits under: the registry warns when a manifest does (`menuWarnings`, also printed by `pnpm check:manifest`) and still accepts it. Admin has two areas, Organisation and System, with new kit icons `list`, `structure`, `server` and `gauge`. `ui-centre-menu` takes a category with no items as a choice by itself, and a category `section` that Orbit names before it.
+- 5bb4315: `GET /v1/me/apps?workspace=`: every app and whether you can use it on the floor you're on, with the reason, the floor whose rule decides it and who set that rule and when. Apps a role keeps from you are listed too, saying which role, so Auspex never hides an app for being out of reach.
+
+### Patch Changes
+
+- Updated dependencies [1580b6b]
+- Updated dependencies [f0d02e2]
+- Updated dependencies [bbdad18]
+- Updated dependencies [778b6f9]
+- Updated dependencies [513e2e9]
+  - @augur/mfe-sdk@1.5.0
+  - @augur/service-kit@0.9.0
+
 ## 0.8.0
 
 ### Minor Changes

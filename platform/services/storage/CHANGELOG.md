@@ -1,5 +1,17 @@
 # @augur/storage
 
+## 0.3.0
+
+### Minor Changes
+
+- bbdad18: App databases get pg_trgm beside pgvector, so apps can match names spelt nearly alike (`similarity()`, trigram indexes).
+
+### Patch Changes
+
+- Updated dependencies [f0d02e2]
+- Updated dependencies [bbdad18]
+  - @augur/service-kit@0.9.0
+
 ## 0.2.1
 
 ### Patch Changes

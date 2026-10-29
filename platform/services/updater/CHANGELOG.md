@@ -1,5 +1,15 @@
 # @augur/updater
 
+## 0.4.1
+
+### Patch Changes
+
+- eef32c2: Data Atlas ships with AUGUR: its own container, schema and sign-in in every deployment, and the updater restarts it and waits for it to answer.
+- b556614: The updater restarts Auspex, which now ships with AUGUR, and waits for it to answer.
+- Updated dependencies [f0d02e2]
+- Updated dependencies [bbdad18]
+  - @augur/service-kit@0.9.0
+
 ## 0.4.0
 
 ### Minor Changes
