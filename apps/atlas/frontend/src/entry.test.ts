@@ -200,7 +200,7 @@ describe('atlas', () => {
     const el = document.body.appendChild(document.createElement('div'));
     await app.mount(el, ctx(fetch));
     await settle(el);
-    expect(el.querySelector('ui-heading')!.getAttribute('summary')).toMatch(/floors above it shows: Org, Maritime desk/);
+    expect(el.querySelector('ui-page-head')!.getAttribute('summary')).toMatch(/floors above it shows: Org, Maritime desk/);
     const list = el.querySelector('ui-list') as HTMLElement & { items: { title: string; detail: string }[] };
     expect(list.items).toEqual([expect.objectContaining({ title: 'Northern Tern', detail: 'Vessel · IMO number 9400117 · Kept on Maritime desk' })]);
     await app.unmount!(el);
@@ -216,10 +216,10 @@ describe('atlas', () => {
     const el = document.body.appendChild(document.createElement('div'));
     await app.mount(el, ctx(fetch, '/entities/ent_01'));
     await settle(el);
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Northern Tern');
-    const edit = [...el.querySelectorAll('ui-button')].find((b) => b.textContent === 'Edit') as HTMLElement & { disabled: boolean };
+    expect(el.querySelector('ui-page-head')!.getAttribute('heading')).toBe('Northern Tern');
+    const edit = (el.querySelector('ui-page-head') as HTMLElement & { actions: { label: string; disabled?: boolean; reason?: string }[] }).actions.find((a) => a.label === 'Edit')!;
     expect(edit.disabled).toBe(true);
-    expect(edit.getAttribute('reason')).toMatch(/kept on the org floor: go there/);
+    expect(edit.reason).toMatch(/kept on the org floor: go there/);
     await settle(el);
     const [facts, links, observations] = [...el.querySelectorAll('atlas-knowledge ui-list')] as (HTMLElement & { items: { title: string; detail: string }[] })[];
     expect(facts.items).toEqual([expect.objectContaining({ title: 'Flag state: Liberia', detail: 'Since 1 Sep 2026 · Kept on Operations · Disputed' })]);
@@ -333,7 +333,7 @@ describe('explorer', () => {
     await explorer.updateComplete;
     expect(bodies[0]).toEqual({ seeds: [{ id: 'ent_01' }], depth: 1, limitPerNode: 12 });
     expect(el.textContent).toMatch(/can’t draw the graph \(it needs WebGL\), so it shows as a list/);
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Around Northern Tern');
+    expect(el.querySelector('ui-page-head')!.getAttribute('heading')).toBe('Around Northern Tern');
     expect([...el.querySelectorAll('.atlas-ring')].map((h) => h.textContent)).toEqual(['Centre', 'Ring 1']);
     const fold = [...el.querySelectorAll('.atlas-fold')].find((b) => b.textContent === '+3 operates') as HTMLButtonElement;
     fold.click();

@@ -533,9 +533,9 @@ export class AuspexApp extends LitElement {
   }
 
   override render() {
-    if (this.failure) return html`${styles}<div class="ax-stage"><ui-state kind="error" heading="Couldn’t load your map" body=${this.failure} action="Try again" @ui-action=${() => void this.load()}></ui-state></div>`;
+    if (this.failure) return html`${styles}<ui-app-frame><ui-state kind="error" heading="Couldn’t load your map" body=${this.failure} action="Try again" @ui-action=${() => void this.load()}></ui-state></ui-app-frame>`;
     const map = this.map;
-    if (!map || !this.org) return html`${styles}<div class="ax-stage"><ui-state kind="loading" heading="Finding where you are"></ui-state></div>`;
+    if (!map || !this.org) return html`${styles}<ui-app-frame><ui-state kind="loading" heading="Finding where you are"></ui-state></ui-app-frame>`;
     const place = this.place;
     let body: TemplateResult;
     if (place.view === 'where') body = this.renderWhere(map);
@@ -552,7 +552,7 @@ export class AuspexApp extends LitElement {
         body = html`<div class="ax-pane"><auspex-replay .api=${this.api} .floor=${floor} .appName=${this.appName}></auspex-replay></div>`;
       else body = this.renderFloor(floor);
     }
-    return html`${styles}<div class="ax-stage">${body}</div>`;
+    return html`${styles}<ui-app-frame>${body}</ui-app-frame>`;
   }
 }
 

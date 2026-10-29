@@ -10,6 +10,7 @@ const source = JSON.parse(readFileSync(join(root, 'tokens/tokens.json'), 'utf8')
 
 const families = ['color', 'effect', 'radius', 'shadow', 'spacing', 'structure', 'tracking', 'motion'];
 const flat = new Map();
+const rem = (value) => (/^\d+(\.\d+)?px$/.test(value) ? `${parseFloat(value) / 16}rem` : value);
 for (const family of families) {
   for (const token of source[family]?.tokens ?? []) flat.set(token.name, token.value);
 }
@@ -17,8 +18,9 @@ for (const [name, value] of Object.entries(source.type?.families ?? {})) flat.se
 for (const group of source.type?.groups ?? []) {
   for (const style of group.styles ?? []) {
     const role = style.name.replace(/^w-text-/, '');
-    flat.set(`type-${role}`, style.fontSize);
-    flat.set(`leading-${role}`, style.lineHeight);
+    // Type is emitted in rem (16px = 1rem), so a reader's own browser text size scales it as well as zoom.
+    flat.set(`type-${role}`, rem(style.fontSize));
+    flat.set(`leading-${role}`, rem(style.lineHeight));
     flat.set(`weight-${role}`, String(style.fontWeight));
     if (style.letterSpacing) flat.set(`tracking-${role}`, style.letterSpacing);
   }
