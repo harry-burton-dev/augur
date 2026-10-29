@@ -50,6 +50,7 @@ jobs:
           cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:boundaries
+      - run: pnpm check:reasons
       - run: pnpm check:versions
       - run: pnpm check:release
       - run: pnpm test:scripts

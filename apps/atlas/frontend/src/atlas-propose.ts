@@ -97,7 +97,7 @@ export class AtlasPropose extends LitElement {
       ${this.failure ? html`<p class="atlas-note atlas-refused" role="alert">${this.failure}</p>` : nothing}
       <div class="atlas-actions">
         <ui-button kind="ghost" size="sm" @click=${() => this.dispatchEvent(new CustomEvent('atlas-cancel', { bubbles: true }))}>Cancel</ui-button>
-        <ui-button kind="primary" size="sm" ?disabled=${this.busy} @click=${() => void this.send()}>${this.busy ? 'Sending…' : 'Send to Triage'}</ui-button>
+        <ui-button kind="primary" size="sm" ?busy=${this.busy} busy-label="Sending…" @click=${() => void this.send()}>Send to Triage</ui-button>
       </div>`;
   }
 }

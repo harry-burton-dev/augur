@@ -219,7 +219,7 @@ describe('atlas', () => {
     expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Northern Tern');
     const edit = [...el.querySelectorAll('ui-button')].find((b) => b.textContent === 'Edit') as HTMLElement & { disabled: boolean };
     expect(edit.disabled).toBe(true);
-    expect(el.textContent).toMatch(/kept on the org floor: go there/);
+    expect(edit.getAttribute('reason')).toMatch(/kept on the org floor: go there/);
     await settle(el);
     const [facts, links, observations] = [...el.querySelectorAll('atlas-knowledge ui-list')] as (HTMLElement & { items: { title: string; detail: string }[] })[];
     expect(facts.items).toEqual([expect.objectContaining({ title: 'Flag state: Liberia', detail: 'Since 1 Sep 2026 · Kept on Operations · Disputed' })]);
@@ -246,7 +246,7 @@ describe('atlas', () => {
     expect(dialog.textContent).toMatch(/Disputed from Maritime desk/);
     const end = [...dialog.querySelectorAll('ui-button')].find((b) => b.textContent === 'It has ended') as HTMLElement & { disabled: boolean };
     expect(end.disabled).toBe(true);
-    expect(dialog.textContent).toMatch(/kept on Operations: its leads end or withdraw it there/);
+    expect(end.getAttribute('reason')).toMatch(/kept on Operations: its leads end or withdraw it there/);
   });
 
   it('says why an entity can’t be seen from here', async () => {
@@ -410,7 +410,7 @@ describe('triage', () => {
     const button = (text: string) => [...el.querySelectorAll('ui-button')].find((b) => b.textContent?.trim() === text) as HTMLElement & { disabled: boolean };
     // Finish waits until everything is decided, and the page says so.
     expect(button('Finish').disabled).toBe(true);
-    expect(el.textContent).toContain('Decide every mention and observation');
+    expect(button('Finish').getAttribute('reason')).toContain('Decide every mention and observation');
     button('It’s Northern Tern').click();
     await settle(el);
     expect(decided).toEqual({ as: 'link', entity: 'ent_01' });
@@ -512,7 +512,7 @@ describe('ontology', () => {
     expect(el.textContent).toContain('IMO number (says which one), Flag state (through facts)');
     const add = [...el.querySelectorAll<HTMLElement & { disabled: boolean }>('atlas-ontology ui-button')].find((b) => b.textContent === 'Add a kind')!;
     expect(add.disabled).toBe(true);
-    expect(add.title).toContain('Only admins');
+    expect(add.getAttribute('reason')).toContain('Only admins');
     tab(el, 'Asked for').click();
     await settle(el);
     expect(el.textContent).toContain('2 words that sources asked for wait for an admin');

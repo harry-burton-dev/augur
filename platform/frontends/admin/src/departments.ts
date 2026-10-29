@@ -139,7 +139,7 @@ export class AdminDepartments extends LitElement {
           ? members.map(
               (p) => html`<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);min-height:40px;border-bottom:1px solid var(--hairline)">
                 <span style="color:var(--ink)">${fullName(p)}<span style="color:var(--ink-muted);font-size:var(--type-small)"> ${p.email ?? ''}</span></span>
-                <ui-button kind="tertiary" size="sm" ?disabled=${this.working} @click=${() => this.membership(department, p.id, false)}>Remove</ui-button>
+                <ui-button kind="tertiary" size="sm" ?busy=${this.working} @click=${() => this.membership(department, p.id, false)}>Remove</ui-button>
               </div>`,
             )
           : html`<p>No one is in ${department.name} yet.</p>`}
@@ -182,7 +182,7 @@ export class AdminDepartments extends LitElement {
           @ui-open=${(e: CustomEvent<{ row: TableRow }>) => (this.open = e.detail.row.id)}
           @ui-retry=${() => this.load()}
         >
-          <ui-button slot="actions" kind="secondary" size="sm" ?disabled=${this.loading || Boolean(this.error)} @click=${() => (this.adding = true)}>New department</ui-button>
+          <ui-button slot="actions" kind="secondary" size="sm" ?disabled=${this.loading || Boolean(this.error)} reason=${this.error ? 'Departments couldn’t be loaded. Try again first.' : 'Wait for the departments to load.'} @click=${() => (this.adding = true)}>New department</ui-button>
         </ui-table>
         ${this.adding && !this.loading && !this.error
           ? html`<ui-dialog

@@ -284,8 +284,8 @@ export class AtlasKnowledge extends LitElement {
             }}></ui-select>
           ${this.sourceKind === 'document'
             ? html`<div slot="fields" class="atlas-row">
-                <ui-button kind="secondary" size="sm" ?disabled=${!this.pickDocument} @click=${() => void this.askForDocument()}>${this.document ? 'Pick another' : 'Pick the document'}</ui-button>
-                <span class="atlas-note">${this.document ? this.document.title : this.pickDocument ? 'None picked yet.' : 'No app here keeps documents, so none can be picked.'}</span>
+                <ui-button kind="secondary" size="sm" ?disabled=${!this.pickDocument} reason="No app here keeps documents, so none can be picked." @click=${() => void this.askForDocument()}>${this.document ? 'Pick another' : 'Pick the document'}</ui-button>
+                <span class="atlas-note">${this.document ? this.document.title : this.pickDocument ? 'None picked yet.' : ''}</span>
               </div>`
             : this.sourceKind === 'other'
               ? html`<ui-text-field slot="fields" name="sourceNote" label="Where" required maxlength="500" placeholder="Such as a call with the harbour master"></ui-text-field>`
@@ -326,11 +326,10 @@ export class AtlasKnowledge extends LitElement {
             </div>`,
           )}
           <div class="atlas-actions">
-            <ui-button kind="secondary" size="sm" ?disabled=${!f.can.dispute} @click=${() => (this.panel = { kind: 'dispute', fact: f })}>Dispute</ui-button>
-            <ui-button kind="ghost" size="sm" ?disabled=${!f.can.end} @click=${() => (this.panel = { kind: 'end', fact: f })}>It has ended</ui-button>
-            <ui-button kind="ghost" size="sm" ?disabled=${!f.can.withdraw} @click=${() => (this.panel = { kind: 'withdraw', fact: f })}>Withdraw</ui-button>
+            <ui-button kind="secondary" size="sm" ?disabled=${!f.can.dispute} reason=${f.can.why ?? 'You can’t dispute it from here.'} @click=${() => (this.panel = { kind: 'dispute', fact: f })}>Dispute</ui-button>
+            <ui-button kind="ghost" size="sm" ?disabled=${!f.can.end} reason=${f.can.why ?? 'Only the floor that holds it can end it.'} @click=${() => (this.panel = { kind: 'end', fact: f })}>It has ended</ui-button>
+            <ui-button kind="ghost" size="sm" ?disabled=${!f.can.withdraw} reason=${f.can.why ?? 'Only the floor that holds it can withdraw it.'} @click=${() => (this.panel = { kind: 'withdraw', fact: f })}>Withdraw</ui-button>
           </div>
-          ${f.can.why ? html`<p class="atlas-note">${f.can.why}</p>` : nothing}
         </ui-dialog>`;
       }
       case 'observation': {
@@ -348,10 +347,10 @@ export class AtlasKnowledge extends LitElement {
           ${o.retracted ? html`<p class="atlas-note">${o.retracted.why} It’s kept as it was said, ${ago(o.retracted.at)} it stopped counting as evidence.</p>` : nothing}
           ${this.otherLine(o.other)}
           <div class="atlas-actions">
-            <ui-button kind="secondary" size="sm" ?disabled=${!o.can.accept || !!o.retracted} title=${o.retracted ? 'Its source was withdrawn, so it can’t back a fact.' : ''} @click=${() => (this.panel = { kind: 'accept', observation: o })}>Accept as so here</ui-button>
-            <ui-button kind="ghost" size="sm" ?disabled=${!o.can.raise} @click=${() => (this.panel = { kind: 'raise', observation: o })}>Raise to a floor above</ui-button>
+            <ui-button kind="secondary" size="sm" ?disabled=${!o.can.accept || !!o.retracted}
+              reason=${o.retracted ? 'Its source was withdrawn, so it can’t back a fact.' : (o.can.why ?? 'You can’t accept it on this floor.')} @click=${() => (this.panel = { kind: 'accept', observation: o })}>Accept as so here</ui-button>
+            <ui-button kind="ghost" size="sm" ?disabled=${!o.can.raise} reason=${o.can.why ?? 'There’s no floor above you can raise it to.'} @click=${() => (this.panel = { kind: 'raise', observation: o })}>Raise to a floor above</ui-button>
           </div>
-          ${o.can.why ? html`<p class="atlas-note">${o.can.why}</p>` : nothing}
         </ui-dialog>`;
       }
       case 'accept':
@@ -405,7 +404,7 @@ export class AtlasKnowledge extends LitElement {
       </style>
       <div class="atlas-head">
         <ui-heading size="s" level="2" heading="What’s known" summary=${`Facts each floor holds, ${when}. Each says which floor holds it: a team’s working view sits beside the org’s confirmed record.`}></ui-heading>
-        <ui-button kind="secondary" size="sm" ?disabled=${this.entity.state !== 'active'} @click=${() => this.open({ kind: 'observe' })}>Record an observation</ui-button>
+        <ui-button kind="secondary" size="sm" ?disabled=${this.entity.state !== 'active'} reason="It has been retired, so nothing more is recorded about it." @click=${() => this.open({ kind: 'observe' })}>Record an observation</ui-button>
       </div>
       ${this.entity.state !== 'active' ? html`<p class="atlas-note">It has been retired, so nothing more is recorded about it.</p>` : nothing}
       ${k?.noCurrentSource ? html`<p class="atlas-note" role="status">${k.noCurrentSource}</p>` : nothing}

@@ -512,7 +512,7 @@ export class AdminApps extends LitElement {
       ${note ? html`<p>${note}</p>` : nothing}
       ${this.saveError ? html`<p style="color:var(--danger)">${this.saveError}</p>` : nothing}
       <div>
-        <ui-button kind="secondary" size="sm" ?disabled=${this.choice === current} ?busy=${this.saving} @click=${() => this.useChoice(app)}>
+        <ui-button kind="secondary" size="sm" ?disabled=${this.choice === current} reason="That’s what it uses now. Choose another version first." ?busy=${this.saving} @click=${() => this.useChoice(app)}>
           ${this.choice === NEWEST ? 'Follow new versions' : `Use version ${this.choice}`}
         </ui-button>
       </div>`;
@@ -589,7 +589,7 @@ export class AdminApps extends LitElement {
             ? origins.map(
                 (o) => html`<div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);min-height:40px;border-bottom:1px solid var(--hairline)">
                   <span style="color:var(--ink)">${o.origin}<span style="color:var(--ink-muted);font-size:var(--type-small)"> since ${day(o.addedAt)}</span></span>
-                  <ui-button kind="tertiary" size="sm" ?disabled=${this.working} @click=${() => this.removeOrigin(o.origin)}>Remove</ui-button>
+                  <ui-button kind="tertiary" size="sm" ?busy=${this.working} @click=${() => this.removeOrigin(o.origin)}>Remove</ui-button>
                 </div>`,
               )
             : html`<p>No other sites yet, so apps can only load from the platform itself.</p>`}
@@ -701,7 +701,7 @@ export class AdminApps extends LitElement {
           )
         : nothing}
       ${this.installsError ? html`<p role="alert" style="color:var(--danger)">${this.installsError}</p>` : nothing}
-      <div><ui-button data-uninstall kind="tertiary" size="sm" ?disabled=${jobOpen(installed.job)} @click=${() => (this.confirmRemove = installed)}>Remove from the server</ui-button></div>
+      <div><ui-button data-uninstall kind="tertiary" size="sm" ?disabled=${jobOpen(installed.job)} reason="Wait for the server to finish its current job with this app." @click=${() => (this.confirmRemove = installed)}>Remove from the server</ui-button></div>
     </div>`;
   }
 
@@ -741,7 +741,7 @@ export class AdminApps extends LitElement {
                       .map((a) =>
                         line(
                           html`${a.name} ${a.version}${a.channel === 'beta' ? ' (beta)' : ''}<span style="color:var(--ink-muted);font-size:var(--type-small)">${a.description ? ` · ${a.description}` : ''}${a.job?.state === 'failed' ? ` · ${jobWords(a.job)}` : ''}</span>`,
-                          html`<ui-button kind="secondary" size="sm" ?disabled=${Boolean(a.problem)} @click=${() => this.askInstall(a.app, a.version)}>Install</ui-button>`,
+                          html`<ui-button kind="secondary" size="sm" ?disabled=${Boolean(a.problem)} reason=${a.problem ?? ''} @click=${() => this.askInstall(a.app, a.version)}>Install</ui-button>`,
                         ),
                       )
                   : html`<p style="margin:0">Nothing new to install.${i.checkedAt ? ` Checked ${new Date(i.checkedAt).toLocaleString()}.` : ''}</p>`}

@@ -263,11 +263,10 @@ export class AtlasApp extends LitElement {
         <ui-heading eyebrow=${type?.label ?? e.type} heading=${e.label} summary=${e.description}></ui-heading>
         <div class="atlas-actions">
           <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'explore', id: e.id })}>Explore around it</ui-button>
-          <ui-button kind="secondary" size="sm" ?disabled=${!e.can.edit} @click=${() => (this.dialog = 'edit')}>Edit</ui-button>
-          <ui-button kind="ghost" size="sm" ?disabled=${!e.can.retire} @click=${() => (this.dialog = 'retire')}>Retire</ui-button>
+          <ui-button kind="secondary" size="sm" ?disabled=${!e.can.edit} reason=${e.can.why ?? 'You can’t edit what this floor keeps.'} @click=${() => (this.dialog = 'edit')}>Edit</ui-button>
+          <ui-button kind="ghost" size="sm" ?disabled=${!e.can.retire} reason=${e.can.why ?? 'You can’t retire what this floor keeps.'} @click=${() => (this.dialog = 'retire')}>Retire</ui-button>
         </div>
       </div>
-      ${e.can.why ? html`<p class="atlas-note">${e.can.why}</p>` : nothing}
       ${e.state === 'retired' ? html`<p class="atlas-note atlas-retired">Retired ${ago(e.updatedAt)}. Its id stays, so whatever points at it still says what it was.</p>` : nothing}
       ${e.aliases.length ? html`<div class="atlas-tags">${e.aliases.map((a) => html`<ui-tag quiet label=${a}></ui-tag>`)}</div>` : nothing}
       <dl class="atlas-details">

@@ -10,8 +10,10 @@ export interface MenuAction {
   /** Shown at the end; pressing it while the menu is open picks the item. */
   key?: string;
   danger?: boolean;
-  /** Can't be used now: shown at 40% and skipped by the arrows. Prefer leaving it out. */
+  /** Can't be used now: shown at 40% and skipped by the arrows. Give a `reason`, and don't leave it out. */
   disabled?: boolean;
+  /** Why it can't be used now, in one sentence, shown under its name. */
+  reason?: string;
 }
 
 export type MenuEntry = MenuAction | '-';
@@ -194,7 +196,11 @@ export class UiMenu extends LitElement {
       }
       button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
       button:focus-visible { outline: 0; box-shadow: inset 0 0 0 1.5px var(--focus); }
-      button[disabled] { opacity: 0.4; cursor: default; }
+      button[disabled] { cursor: default; }
+      button[disabled] > * { opacity: 0.4; }
+      button[disabled] > .name { opacity: 1; }
+      button[disabled] > .name > b { opacity: 0.4; font-weight: inherit; }
+      .why { display: block; font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
       button.danger { color: var(--danger); }
       ui-icon { color: var(--ink-muted); }
       button.danger ui-icon { color: var(--danger); }
@@ -210,7 +216,7 @@ export class UiMenu extends LitElement {
         isAction(it)
           ? html`<button role="menuitem" class=${it.danger ? 'danger' : ''} ?disabled=${it.disabled} tabindex="-1" @click=${() => this.pick(it)}>
               ${it.icon ? html`<ui-icon name=${it.danger ? 'error' : it.icon} size="16"></ui-icon>` : it.danger ? html`<ui-icon name="error" size="16"></ui-icon>` : nothing}
-              <span class="name">${it.label}</span>
+              <span class="name">${it.disabled ? html`<b>${it.label}</b>` : it.label}${it.disabled && it.reason ? html`<span class="why">${it.reason}</span>` : nothing}</span>
               ${it.key ? html`<kbd>${it.key}</kbd>` : nothing}
             </button>`
           : html`<hr role="separator" />`,

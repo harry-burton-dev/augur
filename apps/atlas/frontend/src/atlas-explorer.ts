@@ -277,7 +277,7 @@ export class AtlasExplorer extends LitElement {
   }
 
   private foldButton(fold: Fold) {
-    return html`<ui-button kind="secondary" size="sm" ?disabled=${this.busy} @click=${() => void this.openFold(fold)}
+    return html`<ui-button kind="secondary" size="sm" ?busy=${this.busy} @click=${() => void this.openFold(fold)}
       >Open ${fold.count} more ${this.foldWord(fold)}</ui-button>`;
   }
 
@@ -317,7 +317,7 @@ export class AtlasExplorer extends LitElement {
       ${hidden.length ? html`<p class="atlas-note">${hidden.length} more linked ${hidden.length === 1 ? 'one doesn’t' : 'ones don’t'} show from here. <button class="atlas-link" @click=${() => (this.selected = `${HIDDEN}${n.ref.id}`)}>Why</button></p>` : nothing}
       <div class="atlas-panel-actions">
         ${folds.map((f) => this.foldButton(f))}
-        <ui-button kind="secondary" size="sm" ?disabled=${centre} @click=${() => this.emit('atlas-explore', n.ref.id)}>Make it the centre</ui-button>
+        <ui-button kind="secondary" size="sm" ?disabled=${centre} reason="It’s already the centre." @click=${() => this.emit('atlas-explore', n.ref.id)}>Make it the centre</ui-button>
         <ui-button kind="ghost" size="sm" @click=${() => this.emit('atlas-open-entity', n.ref.id)}>Open its page</ui-button>
       </div>
       ${centre ? html`<p class="atlas-note">It’s the centre already.</p>` : nothing}
