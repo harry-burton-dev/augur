@@ -34,15 +34,26 @@ test.describe('with Folio on', () => {
     await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
   });
 
-  test('Folio (Artifacts) opens straight in with its own menu, keeps Esc, and Back goes up to Title', async ({ page }) => {
+  test('Folio (Artifacts) opens straight in with its own menu, keeps Esc, and the band goes to Title or Home', async ({ page }) => {
     await page.goto('/@me/folio');
     await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
     await expect(page.locator('ui-centre-menu')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/\/@me\/folio$/);
-    await page.locator('ui-shell').locator('.back').click();
+    const band = page.locator('ui-shell');
+    await band.getByRole('button', { name: 'All apps', exact: true }).click();
     await expect(page).toHaveURL(/\/@me$/);
-    await expect(page.locator('ui-centre-menu[variant="title"]')).toBeVisible();
+    const title = page.locator('ui-centre-menu[variant="title"]');
+    await expect(title).toBeVisible();
+    // into an app from Title, then straight out to Home: the way out works after any way in
+    await title.evaluate((menu: HTMLElement & { categories: { id?: string }[]; setCategory(i: number): void }) =>
+      menu.setCategory(menu.categories.findIndex((c) => c.id === 'folio')),
+    );
+    await page.keyboard.press('Enter');
+    await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
+    await band.getByRole('button', { name: 'Home', exact: true }).click();
+    await expect(page).toHaveURL(/\/@me\/home$/);
+    await expect(band.getByRole('button', { name: 'Home, you’re here' })).toBeVisible();
   });
 
   test('Title shows Folio (Artifacts), which has no areas, as itself, and choosing it opens it', async ({ page }) => {

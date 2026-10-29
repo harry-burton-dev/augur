@@ -1,5 +1,5 @@
 import type { AppArea, AppManifestEntry, AppMenuCategory } from '@augur/mfe-sdk';
-import type { MenuCategory, MenuItem, ShellFindResult } from '@augur/ui-kit';
+import type { MenuCategory, MenuItem, ShellFindResult, ShellNav } from '@augur/ui-kit';
 import { hrefFor, matchRoute } from './routes.js';
 
 /**
@@ -131,6 +131,31 @@ export function upFrom(screen: Screen | undefined): { to: string; label: string 
   if (!screen || screen.kind === 'title') return undefined;
   if (screen.kind === 'app' && hasOrbit(screen.app) && screen.path !== '/') return { to: hrefFor(screen.app), label: `${screen.app.name}’s menu` };
   return { to: '/', label: 'all apps' };
+}
+
+/** The app Home is: the one with the id `home`, when this floor has it. */
+export const homeApp = (manifest: AppManifestEntry[]) => manifest.find((a) => a.id === 'home');
+
+/**
+ * The ways to go from every screen, the same everywhere: Home, and Title
+ * (every app). The one you're on is marked; Home says so when this floor
+ * hasn't got it, rather than going missing.
+ */
+export function navsFor(screen: Screen | undefined, manifest: AppManifestEntry[]): ShellNav[] {
+  const home = homeApp(manifest);
+  return [
+    home
+      ? { id: 'home', label: 'Home', icon: 'home', current: screen?.kind !== 'title' && screen?.app.id === home.id }
+      : { id: 'home', label: 'Home', icon: 'home', unavailable: 'Home isn’t on this floor' },
+    { id: 'title', label: 'All apps', icon: 'apps', current: screen?.kind === 'title' },
+  ];
+}
+
+/** Where a nav goes: Home's start, or Title. */
+export function navTarget(id: string, manifest: AppManifestEntry[]): string | undefined {
+  if (id === 'title') return '/';
+  const home = id === 'home' ? homeApp(manifest) : undefined;
+  return home && hrefFor(home);
 }
 
 /**

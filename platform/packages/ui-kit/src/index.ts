@@ -38,6 +38,7 @@ export {
   type ShellApp,
   type ShellAgent,
   type ShellFunction,
+  type ShellNav,
   type ShellFindResult,
   type ShellFindGroup,
   type ShellView,

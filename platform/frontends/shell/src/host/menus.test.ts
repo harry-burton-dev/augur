@@ -1,7 +1,7 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it } from 'vitest';
 import type { MenuCategory } from '@augur/ui-kit';
-import { areaOf, backFrom, escapeIsFree, findPages, orbitIndexOf, orbitMenu, screenFor, titleFor, titleMenu, titleTarget, upFrom } from './index.js';
+import { areaOf, backFrom, navsFor, navTarget, escapeIsFree, findPages, orbitIndexOf, orbitMenu, screenFor, titleFor, titleMenu, titleTarget, upFrom } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -121,6 +121,24 @@ describe('orbitMenu', () => {
     expect(orbitIndexOf(desk, '/nowhere')).toBe(0);
     expect(areaOf(desk, '/apps')?.label).toBe('System');
     expect(areaOf(board, '/labels')).toBeUndefined();
+  });
+});
+
+describe('navsFor', () => {
+  it('offers Home and every app from any screen, marking the one you’re on', () => {
+    const all = [home, board, shelf];
+    const ids = (screen: Parameters<typeof navsFor>[0]) => navsFor(screen, all).map((n) => `${n.id}${n.current ? '*' : ''}`);
+    expect(ids({ kind: 'title' })).toEqual(['home', 'title*']);
+    expect(ids({ kind: 'app', app: home, path: '/' })).toEqual(['home*', 'title']);
+    expect(ids({ kind: 'app', app: shelf, path: '/labels' })).toEqual(['home', 'title']);
+    expect(ids({ kind: 'orbit', app: board })).toEqual(['home', 'title']);
+    expect(navTarget('home', all)).toBe('/home');
+    expect(navTarget('title', all)).toBe('/');
+  });
+
+  it('keeps Home where a floor hasn’t got it, and says why', () => {
+    expect(navsFor({ kind: 'title' }, [board])[0]).toMatchObject({ id: 'home', unavailable: 'Home isn’t on this floor' });
+    expect(navTarget('home', [board])).toBeUndefined();
   });
 });
 
