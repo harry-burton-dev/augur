@@ -335,6 +335,11 @@ export function Host({
     [session, bus, raise, request, floor, home, fetchImpl],
   );
 
+  // The answering app mounts once per request. Its context is read when it opens, so the
+  // catalogue loading again, or anything else that makes a new context, doesn't mount it a
+  // second time under the person's hands (it reaches the current floor through getWorkspace).
+  const contextForRef = useRef(contextFor);
+  contextForRef.current = contextFor;
   useEffect(() => {
     const dialog = dialogRef.current;
     const stage = requestStageRef.current;
@@ -348,10 +353,10 @@ export function Host({
     const { app, intent } = answering;
     const reply: IntentReply = { respond: (result) => broker.current.respond(result), cancel: () => broker.current.cancel() };
     dialog.show();
-    requestMounter.current.mount(app, contextFor(app, '/', intent, reply)).catch((err: Error) => {
+    requestMounter.current.mount(app, contextForRef.current(app, '/', intent, reply)).catch((err: Error) => {
       broker.current.cancel(new IntentError(`${app.name} didn't open: ${err.message}`));
     });
-  }, [answering, contextFor, importEntry]);
+  }, [answering, importEntry]);
 
   // Closing the dialog without an answer cancels the request.
   useEffect(() => {
