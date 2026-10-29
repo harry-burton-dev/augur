@@ -451,8 +451,8 @@ export class AtlasExplorer extends LitElement {
         atlas-explorer .atlas-panel-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
         @media (max-width: 1100px) { atlas-explorer .atlas-explore { grid-template-columns: minmax(0, 1fr); } }
       </style>
-      <ui-heading eyebrow=${this.floorName ? `${this.floorName} · Explore` : 'Explore'} heading=${label ? `Around ${label}` : 'Explore'}
-        summary="What it’s linked to, as seen from this floor, a ring at a time. Each ring shows the strongest links; the rest fold into counts you can open."></ui-heading>
+      <ui-page-head eyebrow=${this.floorName ? `${this.floorName} · Explore` : 'Explore'} heading=${label ? `Around ${label}` : 'Explore'}
+        summary="What it’s linked to, as seen from this floor, a ring at a time."></ui-page-head>
       ${this.body()}`;
   }
 }

@@ -522,8 +522,8 @@ export class AtlasOntology extends LitElement {
         @media (max-width: 640px) { atlas-ontology .atlas-row { grid-template-columns: auto minmax(0, 1fr); } atlas-ontology .atlas-row > :last-child:not(.atlas-what) { grid-column: 2; } }
       </style>
       <div class="atlas-head">
-        <ui-heading eyebrow=${o ? `Data Atlas · Version ${o.version}` : 'Data Atlas'} heading="The ontology"
-          summary="The kinds of thing Data Atlas keeps, what’s known of them and how they link, adopted from packs such as the Common Core Ontologies."></ui-heading>
+        <ui-page-head eyebrow=${o ? `Data Atlas · Version ${o.version}` : 'Data Atlas'} heading="The ontology"
+          summary="The kinds of thing Data Atlas keeps, what’s known of them and how they link."></ui-page-head>
         <div class="atlas-actions">
           <ui-button kind="ghost" size="sm" ?disabled=${!o} reason="The ontology is still loading." @click=${() => void this.exportOwl()}>Export as OWL</ui-button>
           <ui-button kind="secondary" size="sm" ?disabled=${!govern} reason=${this.rights.why ?? 'Only admins change the ontology.'} @click=${() => this.addOwn('type')}>Add a kind</ui-button>

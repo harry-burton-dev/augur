@@ -91,6 +91,9 @@ Apps show more than the shell does, but each thing in them still says little: **
 | `ui-notice` | One sentence in a page that needs attention, with one action: `tone` needs, warning, refused or info |
 | `ui-note` | A quiet line that explains; `why` keeps the longer reason one press away; `live` for an action's result ("Saved.") |
 | `ui-can` | What you can do from here (up to two actions), and who can do the rest |
+| `ui-app-frame` | The page: the slate ground, an optional `rail` slot, the main column and an optional `aside` slot. `measure` is `wide`, `read` or `full` |
+| `ui-page-head` | The trail of what it's inside, eyebrow, title, one line of summary, and its `.actions`: two show (one primary at most), the rest go in ⋯ |
+| `ui-section` | A labelled part with its count, one quiet `action` and a `why`; shows five children and folds the rest behind "3 more" |
 
 ## 4. The service
 

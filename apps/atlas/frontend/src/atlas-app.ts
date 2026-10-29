@@ -223,14 +223,14 @@ export class AtlasApp extends LitElement {
       icon: this.ontology?.types.find((t) => t.key === e.type)?.icon ?? 'atlas',
       meta: e.aliases.length ? `aka ${e.aliases[0]}` : undefined,
     }));
-    return html`<div class="atlas-head">
-        <ui-heading eyebrow=${this.floorName || 'Data Atlas'} heading="Everything here" summary=${this.seeingLine()}></ui-heading>
-        <div class="atlas-actions">
-          <ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'ontology' })}>Ontology</ui-button>
-          <ui-button kind="ghost" size="sm" @click=${() => this.move({ page: 'triage' })}>Triage</ui-button>
-          <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'new' })}>Add an entity</ui-button>
-        </div>
-      </div>
+    const pages: Record<string, Place> = { new: { page: 'new' }, triage: { page: 'triage' }, ontology: { page: 'ontology' } };
+    return html`<ui-page-head eyebrow=${this.floorName || 'Data Atlas'} heading="Everything here" summary=${this.seeingLine()}
+        .actions=${[
+          { id: 'new', label: 'Add an entity', kind: 'secondary' },
+          { id: 'triage', label: 'Triage', kind: 'ghost' },
+          { id: 'ontology', label: 'Ontology' },
+        ]}
+        @ui-action=${(e: CustomEvent<{ action: { id: string } }>) => this.move(pages[e.detail.action.id])}></ui-page-head>
       <div class="atlas-filters">
         <ui-text-field label="Find" placeholder="A name, another name, or a code such as an IMO number" .value=${this.q}
           @ui-input=${(e: CustomEvent<{ value: string }>) => this.search(e.detail.value)}></ui-text-field>
@@ -258,15 +258,24 @@ export class AtlasApp extends LitElement {
     if (!e || !this.ontology) return html`${back}<ui-state kind="loading" heading="Opening…"></ui-state>`;
     const type = this.ontology.types.find((t) => t.key === e.type);
     const details = onEntity(this.ontology, e.type);
-    return html`${back}
-      <div class="atlas-head">
-        <ui-heading eyebrow=${type?.label ?? e.type} heading=${e.label} summary=${e.description}></ui-heading>
-        <div class="atlas-actions">
-          <ui-button kind="secondary" size="sm" @click=${() => this.move({ page: 'explore', id: e.id })}>Explore around it</ui-button>
-          <ui-button kind="secondary" size="sm" ?disabled=${!e.can.edit} reason=${e.can.why ?? 'You can’t edit what this floor keeps.'} @click=${() => (this.dialog = 'edit')}>Edit</ui-button>
-          <ui-button kind="ghost" size="sm" ?disabled=${!e.can.retire} reason=${e.can.why ?? 'You can’t retire what this floor keeps.'} @click=${() => (this.dialog = 'retire')}>Retire</ui-button>
-        </div>
-      </div>
+    const run: Record<string, () => void> = {
+      explore: () => this.move({ page: 'explore', id: e.id }),
+      edit: () => (this.dialog = 'edit'),
+      retire: () => (this.dialog = 'retire'),
+    };
+    return html`<ui-page-head
+        .trail=${[{ id: 'entities', label: 'Everything here' }]}
+        eyebrow=${type?.label ?? e.type}
+        heading=${e.label}
+        summary=${e.description}
+        .actions=${[
+          { id: 'explore', label: 'Explore around it' },
+          { id: 'edit', label: 'Edit', disabled: !e.can.edit, reason: e.can.why ?? 'You can’t edit what this floor keeps.' },
+          { id: 'retire', label: 'Retire', kind: 'ghost', disabled: !e.can.retire, reason: e.can.why ?? 'You can’t retire what this floor keeps.' },
+        ]}
+        @ui-trail=${() => this.move({ page: 'entities' })}
+        @ui-action=${(ev: CustomEvent<{ action: { id: string } }>) => run[ev.detail.action.id]?.()}
+      ></ui-page-head>
       ${e.state === 'retired' ? html`<p class="atlas-note atlas-retired">Retired ${ago(e.updatedAt)}. Its id stays, so whatever points at it still says what it was.</p>` : nothing}
       ${e.aliases.length ? html`<div class="atlas-tags">${e.aliases.map((a) => html`<ui-tag quiet label=${a}></ui-tag>`)}</div>` : nothing}
       <dl class="atlas-details">
@@ -365,11 +374,7 @@ export class AtlasApp extends LitElement {
 
   override render() {
     return html`<style>
-        /* Data Atlas's own ground: the shell's water stays outside the app. */
-        atlas-app { display: block; min-height: 100%; background: var(--slate); }
-        atlas-app .atlas-main { max-width: var(--measure-wide); margin: 0 auto; padding: var(--space-6) var(--edge); display: flex; flex-direction: column; gap: var(--space-5); }
-        /* The explorer takes the width it's given: a graph needs room. */
-        atlas-app .atlas-main.atlas-wide { max-width: none; }
+        atlas-app { display: block; min-height: 100%; }
         atlas-app .atlas-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
         atlas-app .atlas-actions { display: flex; gap: var(--space-2); }
         atlas-app .atlas-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-4); }
@@ -385,7 +390,8 @@ export class AtlasApp extends LitElement {
         atlas-app .atlas-key { font-size: var(--type-small); color: var(--ink-muted); letter-spacing: 0.04em; }
         @media (max-width: 640px) { atlas-app .atlas-filters { grid-template-columns: minmax(0, 1fr); } }
       </style>
-      <main class="atlas-main ${this.place.page === 'explore' ? 'atlas-wide' : ''}">${this.page()}</main>
+      <!-- The explorer takes the width it's given: a graph needs room. -->
+      <ui-app-frame measure=${this.place.page === 'explore' ? 'full' : 'wide'}>${this.page()}</ui-app-frame>
       ${this.dialogs()}`;
   }
 }

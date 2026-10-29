@@ -167,8 +167,8 @@ export class AtlasTriage extends LitElement {
       meta: ago(p.closedAt ?? p.createdAt),
     });
     const where = t ? floorWords(t.floorName) : 'this floor';
-    return html`<ui-heading eyebrow=${t ? `${t.floorName} · Triage` : 'Triage'} heading="What’s waiting to be decided"
-        summary=${`Proposals made on ${where}: what a source seems to name and say. Nothing is added to what’s known until a lead decides.`}></ui-heading>
+    return html`<ui-page-head eyebrow=${t ? `${t.floorName} · Triage` : 'Triage'} heading="What’s waiting to be decided"
+        summary=${`Proposals made on ${where}. Nothing is added until a lead decides.`}></ui-page-head>
       ${t?.why ? html`<p class="atlas-note">${t.why}</p>` : nothing}
       <ui-list label="Open proposals" .noun=${['proposal', 'proposals']} .items=${(t?.proposals ?? []).map(row)} ?loading=${this.loading} error=${this.failure}
         empty="Nothing is waiting. Proposals arrive when someone marks a name in a document in Artifacts and chooses Add to Data Atlas."
@@ -289,8 +289,8 @@ export class AtlasTriage extends LitElement {
     const state = p.state === 'finished' ? 'Finished.' : p.state === 'withdrawn' ? 'Withdrawn.' : '';
     return html`${back}
       <div class="atlas-head">
-        <ui-heading eyebrow=${`${p.floorName} · Triage`} heading=${this.sourceTitle(p)}
-          summary=${`Proposed by ${this.who(p.createdBy)} ${ago(p.createdAt)}${version}. ${state}`.trim()}></ui-heading>
+        <ui-page-head eyebrow=${`${p.floorName} · Triage`} heading=${this.sourceTitle(p)}
+          summary=${`Proposed by ${this.who(p.createdBy)} ${ago(p.createdAt)}${version}. ${state}`.trim()}></ui-page-head>
         <div class="atlas-actions">
           ${source.kind === 'document'
             ? html`<ui-button kind="secondary" size="sm" @click=${() => this.dispatchEvent(new CustomEvent('atlas-open-document', { detail: { ref: source.document as DocumentRef }, bubbles: true }))}>Open the source</ui-button>`

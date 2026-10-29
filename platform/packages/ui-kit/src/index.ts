@@ -30,6 +30,9 @@ export { kitDev, warnNoReason } from './reason.js';
 export { UiNotice, type NoticeTone } from './components/notice.js';
 export { UiNote } from './components/note.js';
 export { UiCan, type CanAction, type CanBlocked } from './components/can.js';
+export { UiAppFrame, type FrameMeasure } from './components/app-frame.js';
+export { UiPageHead, type TrailStep, type PageAction } from './components/page-head.js';
+export { UiSection } from './components/section.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,

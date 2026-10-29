@@ -32,6 +32,9 @@ import '@augur/ui-kit';
 | `ui-notice` | One sentence in a page that needs attention, with one action: needs, warning, refused, info |
 | `ui-note` | A quiet line that explains, with its `why` one press away; `live` for an action's result |
 | `ui-can` | What you can do from here, and who can do the rest |
+| `ui-app-frame` | An app's page: the slate ground, a rail, the main column and an aside |
+| `ui-page-head` | Trail, eyebrow, title, one line of summary, two actions and ⋯ |
+| `ui-section` | A labelled part with its count, one action and a why; folds after five |
 | `ui-glance` | A quick look before you go in: veil, sheet, card, split, title; hairline or bubble; loading, error, empty |
 | `ui-shell` | The frame apps run in: the band, the water, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
 | `ui-wave-background` | The water: navy and green bands over slate. Calm Tide by default; Deep Ocean, Aurora, Sonar Line, Minimal and Split Field as variants. `pulse()` swells it |
