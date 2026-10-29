@@ -50,7 +50,7 @@ The shell's own navigation is the design system's centre menu, over the water.
 ]
 ```
 
-Nothing repeats its parent: an area's label and icon differ from the app's, a group's from its area's, and an item's from its group's. The registry warns when a manifest breaks this, and `pnpm check:manifest` prints the warnings, but accepts it. See [the shell principles](../../docs/shell-principles.md). Item paths can't be `/`, since that's the Orbit itself. The water follows the screen: Minimal under Title, Deep Ocean under Orbit, Calm Tide under apps.
+Nothing repeats its parent: an area's label and icon differ from the app's, a group's from its area's, and an item's from its group's. The registry warns when a manifest breaks this, and `pnpm check:manifest` prints the warnings, but accepts it. See [the shell principles](../../docs/shell-principles.md). Item paths can't be `/`, since that's the Orbit itself. The ground follows the screen: Minimal water under Title, Deep Ocean under Orbit, and under every app the same still slate Artifacts sits on (`background="none"`), so no app floats on water. Between screens, as on the way to another floor while its catalogue loads, the ground stays as it was, so the water never shows partway through a move inside an app.
 
 ## What the Shell offers
 

@@ -74,10 +74,16 @@ const alphaFunctions = defaultFunctions.filter((f) => f.id !== 'agents');
 /** For an app's developers: its pull requests' previews, to switch to for themselves. */
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
-/** The water for each screen: Title on Minimal, Orbit on Deep Ocean, apps on Calm Tide. */
 /** How long an app may take to mount before its place says it's opening. */
 const SLOW_APP_MS = 400;
-const waterFor = (screen: Screen | undefined) => (screen?.kind === 'title' ? 'Minimal' : screen?.kind === 'orbit' ? 'Deep Ocean' : 'Calm Tide');
+/**
+ * The ground for each screen: Title on Minimal water, Orbit on Deep Ocean, and
+ * every app on the same still ground, the slate Artifacts sits on, so no app
+ * floats on water and none differs from another.
+ */
+const waterFor = (screen: Screen) => (screen.kind === 'title' ? 'Minimal' : screen.kind === 'orbit' ? 'Deep Ocean' : 'none');
+/** Before the catalogue says what's at an address: Title's water at the root, the still ground anywhere else. */
+const waterAt = (path: string) => (path === '/' || path === '' ? 'Minimal' : 'none');
 
 /** The Orbit category holding the item that opens a path, so going back lands where you came from. */
 
@@ -528,8 +534,18 @@ export function Host({
     return () => window.removeEventListener('keydown', onKey);
   }, [screen, leaveApp]);
 
+  // Between screens (on the way to another floor, while its catalogue loads) the ground stays as it was,
+  // so an app's still ground never gives way to water partway through a move.
   useEffect(() => {
-    if (shellRef.current) shellRef.current.background = waterFor(screen);
+    if (shellRef.current && !screen) shellRef.current.background = waterAt(where.path);
+    // once, for the first address, before anything has loaded
+  }, []);
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell || !screen) return;
+    shell.background = waterFor(screen);
+    // coming up from an app the water is new: Title and Orbit swell this one
+    void shell.updateComplete.then(() => menuRef.current && (menuRef.current.background = shell.waves));
   }, [screen]);
 
   // The band follows where you are: Home and Title mark the one you're on, and the tab says the page, app and floor.
