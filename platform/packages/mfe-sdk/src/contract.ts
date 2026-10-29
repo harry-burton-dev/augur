@@ -164,6 +164,12 @@ export interface WorkspaceRef {
   name: string;
   /** The word in links, `/@finance/…`; the person's own floor is always `me`. */
   slug: string;
+  /**
+   * Teams only: what the team's level is called, "Department" right below the
+   * org and "Team" below that unless an admin renamed them (SDK 1.6). Say it
+   * where you'd say "team"; `kind` stays `team` at every level.
+   */
+  level?: string;
 }
 
 /**

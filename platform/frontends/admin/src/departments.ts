@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import type { DialogSubmit, TableColumn, TableRow, UiDialog } from '@augur/ui-kit';
-import { departmentPath, fullName, type AdminApi, type Department, type Person } from './api.js';
+import { departmentPath, fullName, levelOf, type AdminApi, type Department, type Person, type TeamLevels } from './api.js';
 import { page } from './parts.js';
 
 const TOP = '';
@@ -8,7 +8,8 @@ const TOP = '';
 /**
  * Departments: add one (at the top or inside another), rename it, and choose
  * who is in it. A person's department reaches apps as the `departments` claim
- * when they next sign in.
+ * when they next sign in. Each level has a name, Department at the top and
+ * Team inside it unless renamed here, which people see on their floors.
  */
 export class AdminDepartments extends LitElement {
   static override properties = {
@@ -20,6 +21,8 @@ export class AdminDepartments extends LitElement {
     error: { state: true },
     open: { state: true },
     working: { state: true },
+    levels: { state: true },
+    naming: { state: true },
   };
 
   declare api: AdminApi;
@@ -33,6 +36,10 @@ export class AdminDepartments extends LitElement {
   declare open: string | undefined;
   /** A member being added or removed. */
   declare working: boolean;
+  /** What each level is called; until it loads, the defaults. */
+  declare levels: TeamLevels;
+  /** The Level names dialog is open. */
+  declare naming: boolean;
 
   constructor() {
     super();
@@ -42,6 +49,8 @@ export class AdminDepartments extends LitElement {
     this.loading = true;
     this.error = '';
     this.working = false;
+    this.levels = { levels: ['Department', 'Team'], max: 5 };
+    this.naming = false;
   }
 
   override createRenderRoot() {
@@ -57,6 +66,8 @@ export class AdminDepartments extends LitElement {
     this.error = '';
     try {
       [this.departments, this.people] = await Promise.all([this.api.departments(), this.api.people()]);
+      // the names are shown beside each department; without them the defaults stand and say so
+      this.levels = await this.api.levels().catch(() => this.levels);
     } catch (err) {
       this.error = (err as Error).message;
     } finally {
@@ -66,6 +77,7 @@ export class AdminDepartments extends LitElement {
 
   private readonly columns: TableColumn[] = [
     { key: 'name', label: 'Department', sortable: true },
+    { key: 'level', label: 'Level', sortable: true },
     { key: 'members', label: 'Members', kind: 'number', sortable: true, sortFirst: 'desc' },
     { key: 'within', label: 'Inside', sortable: true },
   ];
@@ -95,6 +107,41 @@ export class AdminDepartments extends LitElement {
     const renamed = await this.api.renameDepartment(this.open!, values.name.trim());
     this.departments = this.departments.map((d) => (d.id === renamed.id ? { ...d, name: renamed.name } : d));
   };
+
+  private submitLevels: DialogSubmit = async (values) => {
+    const names = Array.from({ length: this.levels.max }, (_, i) => (values[`level${i + 1}`] ?? '').trim());
+    const last = names.reduce((n, name, i) => (name ? i + 1 : n), 0);
+    if (names.slice(0, last).some((n) => !n)) throw new Error('Name every level down to the last one you name: a level can’t be left without a name in between.');
+    this.levels = await this.api.setLevels(names.slice(0, last));
+  };
+
+  private levelNames() {
+    if (!this.naming) return nothing;
+    const { levels, max } = this.levels;
+    return html`<ui-dialog
+      open
+      eyebrow="Departments"
+      heading="Level names"
+      summary=${`What each level of department is called, from the top. People see the name on their floor, and a level deeper than the last name takes that one. Up to ${max} levels.`}
+      action-label="Save"
+      busy-label="Saving…"
+      .submit=${this.submitLevels}
+      @ui-close=${() => (this.naming = false)}
+    >
+      ${Array.from(
+        { length: max },
+        (_, i) => html`<ui-text-field
+          slot="fields"
+          name=${`level${i + 1}`}
+          label=${i === 0 ? 'At the top' : `Level ${i + 1}`}
+          ?required=${i === 0}
+          ?optional=${i > 0}
+          .value=${levels[i] ?? ''}
+          .hint=${i >= levels.length ? `Without a name, it’s called ${levels[levels.length - 1]}` : ''}
+        ></ui-text-field>`,
+      )}
+    </ui-dialog>`;
+  }
 
   private async membership(department: Department, person: string, add: boolean) {
     const dialog = this.querySelector<UiDialog>('ui-dialog');
@@ -163,6 +210,7 @@ export class AdminDepartments extends LitElement {
     const rows: TableRow[] = this.departments.map((d) => ({
       id: d.id,
       name: departmentPath(d.id, this.departments),
+      level: levelOf(d.id, this.departments, this.levels.levels),
       members: d.members.length,
       within: d.parentId ? departmentPath(d.parentId, this.departments) : '',
     }));
@@ -170,7 +218,7 @@ export class AdminDepartments extends LitElement {
     return page(
       'Admin',
       'Departments',
-      'Who belongs where. A department can sit inside another.',
+      `Who belongs where. A department can sit inside another: ${this.levels.levels.join(', then ')}.`,
       html`<ui-table
           noun="departments"
           filterable
@@ -182,6 +230,7 @@ export class AdminDepartments extends LitElement {
           @ui-open=${(e: CustomEvent<{ row: TableRow }>) => (this.open = e.detail.row.id)}
           @ui-retry=${() => this.load()}
         >
+          <ui-button slot="actions" kind="tertiary" size="sm" ?disabled=${this.loading || Boolean(this.error)} @click=${() => (this.naming = true)}>Level names</ui-button>
           <ui-button slot="actions" kind="secondary" size="sm" ?disabled=${this.loading || Boolean(this.error)} @click=${() => (this.adding = true)}>New department</ui-button>
         </ui-table>
         ${this.adding && !this.loading && !this.error
@@ -198,7 +247,7 @@ export class AdminDepartments extends LitElement {
               <ui-select slot="fields" name="parent" label="Inside" optional .options=${this.parentOptions()} .value=${TOP}></ui-select>
             </ui-dialog>`
           : nothing}
-        ${this.details()}`,
+        ${this.details()}${this.levelNames()}`,
     );
   }
 }

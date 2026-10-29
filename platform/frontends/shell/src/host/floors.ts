@@ -43,5 +43,5 @@ export async function loadFloors(fetchImpl: typeof fetch, url: string, token: st
   const body = (await res.json()) as { workspaces?: Workspace[] };
   const floors = (body.workspaces ?? []).filter((f) => typeof f?.id === 'string' && typeof f.slug === 'string' && Array.isArray(f.path));
   if (!ownFloor(floors)) throw new FloorsError('The platform sent an answer the shell could not read.');
-  return floors.map(({ id, kind, name, slug, path, role }) => ({ id, kind, name, slug, path, role }));
+  return floors.map(({ id, kind, name, slug, path, role, level }) => ({ id, kind, name, slug, path, role, ...(typeof level === 'string' ? { level } : {}) }));
 }

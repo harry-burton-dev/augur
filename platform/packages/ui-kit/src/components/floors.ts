@@ -11,6 +11,8 @@ export interface ShellFloorRef {
   id: string;
   kind: FloorKind;
   name: string;
+  /** Teams only: what the team's level is called, such as Department or Team. Said where the kind would be. */
+  level?: string;
 }
 
 export interface ShellFloor extends ShellFloorRef {
@@ -20,6 +22,31 @@ export interface ShellFloor extends ShellFloorRef {
 
 /** The icon for each kind of floor: a person, a group, a building. */
 export const floorIcon: Record<FloorKind, string> = { personal: 'account', team: 'people', org: 'org' };
+
+/**
+ * How a floor looks: its own, a department (the first level of team below the
+ * org), a team below that, or the org. Each look has its own colours
+ * (`floor-*` tokens) and icon, so two levels never look the same, whatever
+ * an admin calls them.
+ */
+export type FloorTone = 'you' | 'department' | 'team' | 'org';
+
+/** How many levels of team down from the org a floor is: 1 for a department, 0 off the team tree. */
+export const teamDepth = (f: ShellFloor) => (f.kind === 'team' ? f.path.filter((p) => p.kind === 'team').length : 0);
+
+export const floorTone = (f: ShellFloor): FloorTone =>
+  f.kind === 'personal' ? 'you' : f.kind === 'org' ? 'org' : teamDepth(f) <= 1 ? 'department' : 'team';
+
+const toneIcon: Record<FloorTone, string> = { you: 'account', department: 'department', team: 'people', org: 'org' };
+
+/** A floor's icon: a person, a department's building, a team's group, the org's. */
+export const floorIconOf = (f: ShellFloor) => toneIcon[floorTone(f)];
+
+/**
+ * What a floor is called as a kind: a team's level name from identity, or,
+ * without one, Department or Team by its depth; else the kind's (`floorKindName`).
+ */
+export const floorKindOf = (f: ShellFloor) => (f.kind === 'team' ? f.level || (teamDepth(f) <= 1 ? 'Department' : 'Team') : floorKindName[f.kind]);
 
 /** Where the water sits on each kind of floor: your own high and close, the org low. */
 export const floorLevel: Record<FloorKind, number> = { personal: -0.06, team: 0, org: 0.1 };

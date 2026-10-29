@@ -8,6 +8,7 @@ import { headline, stateOf, type AdminStatus } from './status.js';
 import { headline as updatesHeadline, type AdminUpdates } from './updates.js';
 import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
+import type { AdminDepartments } from './departments.js';
 
 const finance: Department = { id: 'd-1', name: 'Finance', members: ['u-1'] };
 const payroll: Department = { id: 'd-2', name: 'Payroll', parentId: 'd-1', members: [] };
@@ -25,6 +26,7 @@ const gateway = () => {
     if (url === '/api/identity/v1/admin/people' && method === 'GET') return json([alex, sam]);
     if (url === '/api/identity/v1/admin/departments') return json([finance, payroll]);
     if (url === '/api/identity/v1/admin/roles') return json([{ name: 'admin' }, { name: 'editor' }]);
+    if (url === '/api/identity/v1/admin/levels') return json(method === 'PUT' ? { levels: body.levels, max: 5 } : { levels: ['Department', 'Team'], max: 5 });
     if (url === '/api/identity/v1/admin/people' && method === 'POST') {
       return json({ person: { ...sam, id: 'u-3', ...body, username: 'jo', enabled: true, invited: true }, temporaryPassword: 'abcd-efgh-jkmn' }, 201);
     }
@@ -122,6 +124,32 @@ describe('admin', () => {
     expect(appStatus(app, '1.0.0')).toMatchObject({ status: 'warning', label: 'Won’t open' });
     expect(appStatus({ ...app, sdk: '^1.0.0' }, '1.0.0')).toMatchObject({ status: 'done', label: 'On' });
     expect(appStatus({ ...app, enabled: false }, '1.0.0')).toMatchObject({ status: 'paused', label: 'Off' });
+  });
+
+  it('says each department’s level, and lets an admin rename the levels', async () => {
+    const { api, sent } = gateway();
+    document.body.innerHTML = '<admin-departments></admin-departments>';
+    const departments = document.querySelector('admin-departments') as AdminDepartments;
+    Object.assign(departments, { api });
+    await settle(departments);
+    const table = departments.querySelector('ui-table') as UiTable;
+    expect(table.rows.map((r) => [r.name, r.level])).toEqual([
+      ['Finance', 'Department'],
+      ['Finance / Payroll', 'Team'],
+    ]);
+    departments.naming = true;
+    await settle(departments);
+    const dialog = departments.querySelector('ui-dialog') as UiDialog;
+    const field = (name: string) => departments.querySelector(`[name="${name}"]`) as HTMLElement & { value: string };
+    field('level1').value = 'Division';
+    field('level2').value = '';
+    field('level3').value = 'Crew';
+    expect(await dialog.confirm()).toBe(false); // a level can't be left unnamed between two named ones
+    field('level2').value = 'Squadron';
+    expect(await dialog.confirm()).toBe(true);
+    await settle(departments);
+    expect(sent.find((c) => c.method === 'PUT')!.body).toEqual({ levels: ['Division', 'Squadron', 'Crew'] });
+    expect(table.rows.map((r) => r.level)).toEqual(['Division', 'Squadron']);
   });
 
   it('names a department with the ones it sits inside', () => {

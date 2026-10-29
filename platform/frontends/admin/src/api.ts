@@ -370,6 +370,9 @@ export class AdminApi {
   departments = () => this.call<Department[]>('GET', '/api/identity/v1/admin/departments');
   addDepartment = (name: string, parentId?: string) =>
     this.call<Department>('POST', '/api/identity/v1/admin/departments', { name, ...(parentId ? { parentId } : {}) });
+  /** What each level of department is called, from the top, and how many levels there can be. */
+  levels = () => this.call<TeamLevels>('GET', '/api/identity/v1/admin/levels');
+  setLevels = (levels: string[]) => this.call<TeamLevels>('PUT', '/api/identity/v1/admin/levels', { levels });
   renameDepartment = (id: string, name: string) => this.call<Department>('PATCH', `/api/identity/v1/admin/departments/${encodeURIComponent(id)}`, { name });
   addMember = (department: string, person: string) =>
     this.call<void>('PUT', `/api/identity/v1/admin/departments/${encodeURIComponent(department)}/members/${encodeURIComponent(person)}`);
@@ -437,6 +440,22 @@ export class AdminApi {
 }
 
 export const fullName = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => `${p.firstName} ${p.lastName}`.trim() || p.username;
+
+/** The names of the levels of department, the first right below the org; a deeper level takes the last name. */
+export interface TeamLevels {
+  levels: string[];
+  max: number;
+}
+
+/** How deep a department sits: 1 at the top. */
+export const departmentDepth = (id: string, all: Department[]): number => {
+  let depth = 0;
+  for (let at = all.find((d) => d.id === id); at && depth < 20; at = at.parentId ? all.find((d) => d.id === at!.parentId) : undefined) depth++;
+  return depth;
+};
+
+/** The name of the level a department sits at. */
+export const levelOf = (id: string, all: Department[], levels: string[]) => levels[Math.min(departmentDepth(id, all), levels.length) - 1] ?? '';
 
 /** "Finance / Payroll": a department's name with the ones it sits inside. */
 export const departmentPath = (id: string, all: Department[]): string => {
