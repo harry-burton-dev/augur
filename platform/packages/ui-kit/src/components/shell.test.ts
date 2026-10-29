@@ -516,7 +516,36 @@ describe('floors', () => {
     for (const way of ['up', 'down', 'across'] as const) await expect(el.leaveFloor(way)).resolves.toBeUndefined();
     el.floor = 'org';
     await el.updateComplete;
-    await expect(el.arrive()).resolves.toBeUndefined();
+    const arrived = el.arrive();
+    key(window, 'Shift'); // the floor's card, ended early
+    await expect(arrived).resolves.toBeUndefined();
+  });
+
+  it('keeps what’s behind a title card unseen until the card has gone, then lets it come in', async () => {
+    vi.useFakeTimers();
+    const stage = root().querySelector<HTMLElement>('.stage')!;
+    el.current = 'library';
+    await el.updateComplete;
+    let done = false;
+    void el.arrive().then(() => (done = true));
+    await el.updateComplete;
+    expect(card()).not.toBeNull();
+    expect(stage.style.opacity).toBe('0');
+    vi.advanceTimersByTime(1200);
+    await Promise.resolve();
+    expect(stage.style.opacity).toBe('0');
+    // a floor's card replacing the app's: what's behind waits for that one too
+    el.floor = 'org';
+    await el.updateComplete;
+    vi.advanceTimersByTime(1300);
+    await Promise.resolve();
+    expect(stage.style.opacity).toBe('0');
+    vi.advanceTimersByTime(1200);
+    await el.updateComplete;
+    expect(card()).toBeNull();
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(stage.style.opacity).toBe(''));
+    await vi.waitFor(() => expect(done).toBe(true));
   });
 
   it('marks the gauge where something waits, and tags notifications from other floors', async () => {
