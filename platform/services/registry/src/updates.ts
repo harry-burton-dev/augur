@@ -2,9 +2,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
+import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import type { AppRecord } from './store.ts';
 
-/** Which releases a deployment follows: stable only, or beta too (every release starts on beta). */
+/**
+ * Which releases a deployment follows: stable (promoted to production) only, or beta too (on preview;
+ * every release starts there). Admin calls them Production and Preview (docs/release-channels.md).
+ */
 export type Channel = 'stable' | 'beta';
 
 /** An AUGUR release file, as scripts/augur-release.mjs writes it and the Release workflow attaches it. */
@@ -234,16 +238,23 @@ export interface CheckResult {
 export class UpdateChecker {
   readonly running: { version: string; channel: Channel };
   readonly channel: Channel;
+  readonly ring: Ring;
+  /** Why the channel isn't the one asked for, when it isn't. */
+  readonly channelNote?: string;
   private readonly feed?: ReleaseFeed;
   private readonly now: () => Date;
   private last: CheckResult = { releases: [] };
   private inFlight?: Promise<CheckResult>;
   private timer?: ReturnType<typeof setInterval>;
 
-  constructor({ feed, running, channel, now = () => new Date() }: { feed?: ReleaseFeed; running: { version: string; channel: Channel }; channel?: Channel; now?: () => Date }) {
+  constructor({ feed, running, channel, ring = 'preview', now = () => new Date() }: { feed?: ReleaseFeed; running: { version: string; channel: Channel }; channel?: Channel; ring?: Ring; now?: () => Date }) {
     this.feed = feed;
     this.running = running;
-    this.channel = channel ?? running.channel;
+    this.ring = ring;
+    // A preview server follows preview unless told otherwise; a production server only ever stable.
+    const wanted = channel ?? (takesPreview(ring) ? 'beta' : 'stable');
+    this.channel = takesPreview(ring) ? wanted : 'stable';
+    if (wanted !== this.channel) this.channelNote = `${PRODUCTION_ONLY} RELEASE_CHANNEL=beta is ignored.`;
     this.now = now;
   }
 
@@ -322,6 +333,9 @@ export interface PartChange {
 export interface UpdatesView {
   running: { version: string; channel: Channel };
   channel: Channel;
+  /** What kind of server this is (SERVER_RING), which bounds the channel. */
+  ring: Ring;
+  channelNote?: string;
   feed: 'on' | 'off';
   checkedAt?: string;
   problem?: string;
@@ -357,11 +371,12 @@ const reachable = (r: FeedRelease, running: string) => r.manifest !== undefined 
 export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: AppRecord[] }): UpdatesView => {
   const { running, channel } = checker;
   const { checkedAt, problem, releases } = checker.result;
-  const base = { running, channel, feed: checker.on ? ('on' as const) : ('off' as const), ...(checkedAt ? { checkedAt } : {}), ...(problem ? { problem } : {}) };
+  const base = { running, channel, ring: checker.ring, ...(checker.channelNote ? { channelNote: checker.channelNote } : {}), feed: checker.on ? ('on' as const) : ('off' as const), ...(checkedAt ? { checkedAt } : {}), ...(problem ? { problem } : {}) };
   const onChannel = (r: FeedRelease) => channel === 'beta' || r.channel === 'stable';
   const newer = releases.filter((r) => onChannel(r) && semver.gt(r.version, running.version)).sort((a, b) => semver.rcompare(a.version, b.version));
   const newestBeta = releases.filter((r) => r.channel === 'beta' && semver.gt(r.version, newer[0]?.version ?? running.version)).sort((a, b) => semver.rcompare(a.version, b.version))[0];
-  const beta = channel === 'stable' && newestBeta ? summary(newestBeta) : undefined;
+  // Only a preview server can switch to it, so only one is told of it.
+  const beta = channel === 'stable' && takesPreview(checker.ring) && newestBeta ? summary(newestBeta) : undefined;
   if (!newer.length) return { ...base, newer: [], ...(beta ? { beta } : {}), needsYou: [] };
 
   const available = newer[0];

@@ -3,7 +3,8 @@ import type { Fact } from '@augur/ui-kit';
 import { ApiError, type AdminApi, type PlatformUpdates, type Upgrade, type UpgradeStepState } from './api.js';
 import { line, page, section } from './parts.js';
 
-const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Stable' : 'Beta');
+/** Stable releases are on production, beta ones on preview (docs/release-channels.md). */
+const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Production' : 'Preview');
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 /** How often the page asks again while an upgrade is waiting or under way. */
@@ -195,6 +196,7 @@ export class AdminUpdates extends LitElement {
   private facts(u: PlatformUpdates) {
     const facts: Fact[] = [
       { label: 'Running', value: `AUGUR ${u.running.version}` },
+      ...(u.ring ? [{ label: 'Server', value: u.ring === 'production' ? 'Production' : 'Preview' }] : []),
       { label: 'Following', value: `${channelWord(u.channel)} releases` },
       ...(u.available ? [{ label: 'Newest', value: `AUGUR ${u.available.version}${u.available.released ? `, ${day(u.available.released)}` : ''}` }] : []),
       ...(u.feed === 'on' ? [{ label: 'Last checked', value: u.checkedAt ? new Date(u.checkedAt).toLocaleString() : 'Not yet' }] : []),
@@ -296,7 +298,7 @@ export class AdminUpdates extends LitElement {
               ${u.newer.map((r) =>
                 line(
                   r.notesUrl ? html`<a href=${r.notesUrl} target="_blank" rel="noopener" style="color:var(--ink)">AUGUR ${r.version}</a>` : `AUGUR ${r.version}`,
-                  [r.channel === 'beta' ? 'Beta' : 'Stable', day(r.released), r.breaking.length ? 'Breaking' : ''].filter(Boolean).join(' · '),
+                  [channelWord(r.channel), day(r.released), r.breaking.length ? 'Breaking' : ''].filter(Boolean).join(' · '),
                 ),
               )}
             </div>`,
@@ -316,7 +318,8 @@ export class AdminUpdates extends LitElement {
               </p>`,
           )
         : nothing}
-      ${u.beta ? html`<p style="margin:0;color:var(--ink-muted)">AUGUR ${u.beta.version} is out on beta. To follow beta, set <code>RELEASE_CHANNEL=beta</code> in <code>.env</code>.</p>` : nothing}
+      ${u.channelNote ? html`<p data-channel-note style="margin:0;color:var(--ink-muted)">${u.channelNote}</p>` : nothing}
+      ${u.beta ? html`<p style="margin:0;color:var(--ink-muted)">AUGUR ${u.beta.version} is out on preview. To follow preview releases, set <code>RELEASE_CHANNEL=beta</code> in <code>.env</code>.</p>` : nothing}
     `;
   }
 

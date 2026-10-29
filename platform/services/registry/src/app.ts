@@ -92,6 +92,8 @@ export interface RegistryOptions {
    * /apps/<id>/<version>/. Without it apps are served from wherever their manifests' `entry` says.
    */
   frontendFiles?: FrontendFiles;
+  /** Whether pull requests' builds run for apps' developers: always on a preview server, by ALLOW_PR_PREVIEWS on a production one. */
+  allowPrPreviews?: boolean;
   /** The app feed, for the app runner's installs and updates (Admin → Apps). Without one nothing is offered. */
   appUpdates?: AppUpdateChecker;
 }
@@ -167,6 +169,7 @@ export const buildApp = async ({
   pillars = [],
   frontendFiles,
   appUpdates = new AppUpdateChecker(),
+  allowPrPreviews = true,
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
@@ -396,7 +399,7 @@ export const buildApp = async ({
       const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
-      await app.register(appRunnerRoutes({ store, pillars, updates: appUpdates, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
+      await app.register(appRunnerRoutes({ store, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(
         '/apps/:id',

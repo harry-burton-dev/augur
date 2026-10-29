@@ -79,6 +79,10 @@ To take a deployment's access away, delete its token in the account's **Settings
 
 A deployment that pulls from a mirror ([mirror.md](mirror.md)) has no use for a read key: its feed and images are in your own registry.
 
+### Server rings
+
+A new required setting, `SERVER_RING`: `preview` on the server that runs what's on its way to production, `production` on every other (docs/release-channels.md). **Upgrade to …** has a field for it. A production server follows stable releases only, and runs no pull requests' builds unless `ALLOW_PR_PREVIEWS=on`.
+
 ### Data Atlas ships with AUGUR
 
 Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from the Updates page makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). See [atlas.md](atlas.md).
