@@ -1,28 +1,19 @@
 {
-  "version": "0.7.0",
+  "version": "0.8.0",
   "channel": "beta",
-  "released": "2026-10-28",
+  "released": "2026-10-29",
   "upgradeFrom": ">=0.1.0",
   "changed": [
     "@augur/mfe-sdk",
-    "@augur/service-kit",
     "@augur/ui-kit",
-    "@augur/events",
-    "@augur/gateway",
-    "@augur/identity",
-    "@augur/models",
     "@augur/registry",
-    "@augur/storage",
     "@augur/updater",
     "@augur/admin",
     "@augur/home",
     "@augur/shell",
     "@apps/folio-frontend",
-    "@apps/folio",
     "@apps/auspex-frontend",
-    "@apps/auspex",
-    "@apps/atlas-frontend",
-    "@apps/atlas"
+    "@apps/atlas-frontend"
   ],
   "breaking": [],
   "settings": {
@@ -110,24 +101,18 @@
       "PLATFORM_ADMIN_LAST_NAME",
       "PLATFORM_ADMIN_DEPARTMENT"
     ],
-    "added": [
-      "AUSPEX_CLIENT_SECRET",
-      "ATLAS_CLIENT_SECRET",
-      "ATLAS_DATABASE_PASSWORD",
-      "ATLAS_BUCKET_SECRET",
-      "MODEL_EMBEDDING_NAME"
-    ],
+    "added": [],
     "removed": []
   },
   "parts": {
     "@augur/mfe-sdk": {
-      "version": "1.5.0"
+      "version": "1.6.0"
     },
     "@augur/service-kit": {
       "version": "0.9.0"
     },
     "@augur/ui-kit": {
-      "version": "1.4.0"
+      "version": "1.5.0"
     },
     "@augur/events": {
       "version": "0.5.0"
@@ -142,37 +127,37 @@
       "version": "0.3.0"
     },
     "@augur/registry": {
-      "version": "0.9.0"
+      "version": "0.10.0"
     },
     "@augur/storage": {
       "version": "0.3.0"
     },
     "@augur/updater": {
-      "version": "0.4.1"
+      "version": "0.4.2"
     },
     "@augur/admin": {
-      "version": "0.8.0"
+      "version": "0.8.1"
     },
     "@augur/home": {
-      "version": "0.2.5"
+      "version": "0.2.6"
     },
     "@augur/shell": {
-      "version": "0.8.0"
+      "version": "0.9.0"
     },
     "@apps/folio-frontend": {
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     "@apps/folio": {
       "version": "0.2.2"
     },
     "@apps/auspex-frontend": {
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     "@apps/auspex": {
       "version": "0.1.0"
     },
     "@apps/atlas-frontend": {
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     "@apps/atlas": {
       "version": "0.1.0"
