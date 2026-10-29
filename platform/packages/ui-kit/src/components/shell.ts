@@ -273,6 +273,9 @@ export class UiShell extends LitElement {
   private inbound: FloorDirection | undefined;
   /** The app last arrived in, so its card plays once on opening it, not on every page of it. */
   private arrivedIn = '';
+  /** Settles when the card showing now has ended. */
+  private cardEnd: Promise<void> = Promise.resolve();
+  private cardEnded: (() => void) | undefined;
   /** The team last stood on, so going up from your own floor goes back there. */
   private lastTeam: string | undefined;
 
@@ -467,7 +470,8 @@ export class UiShell extends LitElement {
    * kit's surfaces in it settle in one after another. Under reduced motion it
    * only fades. Jumped to its end by any key or press (`finishMotion`).
    * Opening an app, rather than another page of the one open, plays its title
-   * card: the app's name, under the floor it opened on.
+   * card: the app's name, under the floor it opened on. While a card shows,
+   * the app waits behind it unseen, and comes in once the card has faded.
    */
   arrive(): Promise<void> {
     const box = this.stageBox;
@@ -478,10 +482,33 @@ export class UiShell extends LitElement {
       if (!this.inbound) this.showCard({ kind: 'app', kick: this.currentFloor?.name ?? this.product, name: app.name });
     }
     box.getAnimations().forEach((a) => a.cancel());
-    settleSurfaces(tokenValue('motion-calm', 600));
-    if (this.inbound) return this.enterFloor(box);
-    const rise = motionMode() === 'reduce' ? 'none' : `translateY(${tokenValue('travel-near', 24)}px)`;
-    return animate(box, [{ transform: rise, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: tokenValue('motion-slow', 320), easing: tokenEasing('ease-out') });
+    return this.afterCard(box, () => {
+      settleSurfaces(tokenValue('motion-calm', 600));
+      if (this.inbound) return this.enterFloor(box);
+      const rise = motionMode() === 'reduce' ? 'none' : `translateY(${tokenValue('travel-near', 24)}px)`;
+      return animate(box, [{ transform: rise, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: tokenValue('motion-slow', 320), easing: tokenEasing('ease-out') });
+    });
+  }
+
+  /**
+   * A title card plays alone: what's behind it stays unseen until the card has
+   * faded, then comes in. Without a card it comes in at once.
+   */
+  private afterCard(box: HTMLElement, comeIn: () => Promise<void>): Promise<void> {
+    if (!this.card) {
+      box.style.removeProperty('opacity');
+      return comeIn();
+    }
+    box.style.opacity = '0';
+    return this.cardGone().then(() => {
+      box.style.removeProperty('opacity');
+      return comeIn();
+    });
+  }
+
+  /** Resolves once no card is showing: a card that replaces another waits for that one too. */
+  private async cardGone() {
+    while (this.card) await this.cardEnd;
   }
 
   /**
@@ -527,7 +554,7 @@ export class UiShell extends LitElement {
   settleStage() {
     const box = this.stageBox;
     box?.getAnimations().forEach((a) => a.cancel());
-    if (box && this.inbound) void this.enterFloor(box);
+    if (box && this.inbound) void this.afterCard(box, () => this.enterFloor(box));
   }
 
   /**
@@ -537,13 +564,13 @@ export class UiShell extends LitElement {
    */
   private showCard(card: AreaCard) {
     clearTimeout(this.cardTimer);
-    if (this.settings.areaTitles === false) {
-      this.card = null;
-      return;
-    }
+    if (this.settings.areaTitles === false) return this.endCard();
+    // the card it replaces has ended, and what waited on that one now waits on this
+    this.cardEnded?.();
+    this.cardEnd = new Promise((resolve) => (this.cardEnded = resolve));
     // Nothing repeats its parent: a kicker that only says the name again goes.
     this.card = card.kick.toLowerCase() === card.name.toLowerCase() ? { ...card, kick: '' } : card;
-    this.cardTimer = setTimeout(() => (this.card = null), tokenValue('motion-title', 2400));
+    this.cardTimer = setTimeout(this.endCard, tokenValue('motion-title', 2400));
   }
 
   /** Any key, press or scroll ends the card at once: it never keeps anyone waiting. */
@@ -551,6 +578,8 @@ export class UiShell extends LitElement {
     if (!this.card) return;
     clearTimeout(this.cardTimer);
     this.card = null;
+    this.cardEnded?.();
+    this.cardEnded = undefined;
   };
 
   /* ---- lifecycle and keys ---- */
