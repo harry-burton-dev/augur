@@ -236,7 +236,7 @@ export class UiShell extends LitElement {
   declare said: string;
   /** What's running, shown in Settings; the host sets it. */
   declare version: string;
-  /** The water's preset (Calm Tide unless a screen has a reason), or `none` for the still ground. */
+  /** The water's preset (Calm Tide unless a screen has a reason), or `none` for the still ground: the flat slate apps sit on. */
   declare background: string;
   declare isOpen: boolean;
   /** The function open under the dome, or '' for the dome itself. */
@@ -720,6 +720,8 @@ export class UiShell extends LitElement {
       button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
       button:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 3px; border-radius: var(--radius-key); }
       .ground { position: absolute; inset: 0; z-index: 0; background: radial-gradient(120% 90% at 50% 40%, var(--slate), var(--slate-deep)); transition: transform var(--motion-calm) var(--s-ease), filter var(--motion-calm) var(--s-ease); }
+      /* the still ground apps sit on: the flat slate of an app's own page, so where an app ends and the shell begins never shows */
+      :host([background='none']) .ground, :host([background='']) .ground { background: var(--slate); }
       /* The stage starts below the band, as apps expect, and its top edge fades in so there's no hard line where it begins. */
       .stage { position: absolute; inset: var(--band-top) 0 0; z-index: 1; isolation: isolate; overflow: auto; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--space-4)); mask-image: linear-gradient(to bottom, transparent, #000 var(--space-4)); transform-origin: 50% 100%; transition: transform var(--motion-calm) var(--s-ease), filter var(--motion-calm) var(--s-ease); }
       /* looking up: the water and the app tip away below you and go dark */

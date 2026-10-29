@@ -80,6 +80,23 @@ test('mounts on the person’s own floor unless the address names another', asyn
   await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
 });
 
+test('an app sits on the still ground, and moving floors inside it never shows the water', async ({ page }) => {
+  await page.goto('/@me/reference');
+  await expect(check(page, 'floor')).toHaveText('You (me, personal, lead) dev-me');
+  const shell = page.locator('ui-shell');
+  await expect(shell).toHaveAttribute('background', 'none');
+  await shell.evaluate((el) => {
+    const seen: string[] = [];
+    (window as unknown as { grounds: string[] }).grounds = seen;
+    new MutationObserver(() => seen.push(el.getAttribute('background') ?? '')).observe(el, { attributes: true, attributeFilter: ['background'] });
+    el.dispatchEvent(new CustomEvent('ui-floor', { detail: { id: 'dev-org', direction: 'up' } }));
+  });
+  await expect(page).toHaveURL(/\/@org\/reference$/);
+  await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
+  expect(await page.evaluate(() => (window as unknown as { grounds: string[] }).grounds.filter((g) => g !== 'none'))).toEqual([]);
+  await expect(shell).toHaveAttribute('background', 'none');
+});
+
 test('fetch sends the token and the floor the app is on', async ({ page }) => {
   since('1.1');
   await page.route('**/api/reference/v1/floor', (route) => {
