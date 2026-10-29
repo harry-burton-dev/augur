@@ -305,13 +305,11 @@ export class AtlasKnowledge extends LitElement {
       case 'fact': {
         const f = p.fact;
         return html`<ui-dialog open size="read" eyebrow=${`Kept on ${floorWords(f.floorName)}`} heading=${this.says(f)} summary=${span(f)} cancel-label="Close" @ui-close=${close}>
-          <dl class="atlas-details">
-            <dt>Recorded</dt>
-            <dd>${ago(f.recordedAt)}</dd>
-            <dt>Rests on</dt>
-            <dd>${f.backedBy.length === 1 ? 'One observation' : `${f.backedBy.length} observations`}</dd>
-            ${f.note ? html`<dt>Note</dt><dd>${f.note}</dd>` : nothing}
-          </dl>
+          <ui-details .items=${[
+            { label: 'Recorded', value: ago(f.recordedAt) },
+            { label: 'Rests on', value: f.backedBy.length === 1 ? 'One observation' : `${f.backedBy.length} observations` },
+            ...(f.note ? [{ label: 'Note', value: f.note }] : []),
+          ]}></ui-details>
           ${f.unbacked ? html`<p class="atlas-note">${f.unbacked}</p>` : nothing}
           ${this.otherLine(f.other)}
           ${f.disputes.map(
@@ -335,15 +333,13 @@ export class AtlasKnowledge extends LitElement {
       case 'observation': {
         const o = p.observation;
         return html`<ui-dialog open size="read" eyebrow=${`Recorded on ${floorWords(o.floorName)}`} heading=${this.says(o)} summary=${sourceLine(o.source)} cancel-label="Close" @ui-close=${close}>
-          <dl class="atlas-details">
-            <dt>Seen</dt>
-            <dd>${o.observedAt ? day(o.observedAt) : `Not said; recorded ${ago(o.createdAt)}`}</dd>
-            <dt>Grade</dt>
-            <dd>${o.grade ?? 'Not graded'}</dd>
-            ${o.note ? html`<dt>Note</dt><dd>${o.note}</dd>` : nothing}
-            ${o.raisedFrom ? html`<dt>Raised</dt><dd>From a floor below</dd>` : nothing}
-            ${o.raisedTo.length ? html`<dt>Raised to</dt><dd>${o.raisedTo.join(', ')}</dd>` : nothing}
-          </dl>
+          <ui-details .items=${[
+            { label: 'Seen', value: o.observedAt ? day(o.observedAt) : `Not said; recorded ${ago(o.createdAt)}` },
+            { label: 'Grade', value: o.grade ?? 'Not graded' },
+            ...(o.note ? [{ label: 'Note', value: o.note }] : []),
+            ...(o.raisedFrom ? [{ label: 'Raised', value: 'From a floor below' }] : []),
+            ...(o.raisedTo.length ? [{ label: 'Raised to', value: o.raisedTo.join(', ') }] : []),
+          ]}></ui-details>
           ${o.retracted ? html`<p class="atlas-note">${o.retracted.why} It’s kept as it was said, ${ago(o.retracted.at)} it stopped counting as evidence.</p>` : nothing}
           ${this.otherLine(o.other)}
           <div class="atlas-actions">

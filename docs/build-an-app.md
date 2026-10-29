@@ -94,6 +94,11 @@ Apps show more than the shell does, but each thing in them still says little: **
 | `ui-app-frame` | The page: the slate ground, an optional `rail` slot, the main column and an optional `aside` slot. `measure` is `wide`, `read` or `full` |
 | `ui-page-head` | The trail of what it's inside, eyebrow, title, one line of summary, and its `.actions`: two show (one primary at most), the rest go in ⋯ |
 | `ui-section` | A labelled part with its count, one quiet `action` and a `why`; shows five children and folds the rest behind "3 more" |
+| `ui-card` in `ui-cards` | One thing in a grid. Its floor is a dot in the floor's colour with the floor's name (never a coloured edge), `.meta` takes up to three facts, `note` is the one line that changes what you'd do. A `ui-tally` goes in its `tally` slot. `unavailable` with a `reason` keeps it in the grid, locked, saying why |
+| `ui-tally` | Counts drawn as segments, one per thing. Mark the counts that need attention `loud`; only those, and the total, are said in words |
+| `ui-details` | The properties of the thing that's open. Empty values say "Not known"; `explained` marks the one someone asked about |
+| `ui-timeline` | History as `{ at, who, what }`, grouped Today, Yesterday, Tue 27 Oct |
+| `ui-path` | Line of sight: steps from the top floor down to `here`, each opening on `ui-open` |
 
 ## 4. The service
 

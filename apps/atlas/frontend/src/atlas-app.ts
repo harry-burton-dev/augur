@@ -1,5 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
-import { ago, type DialogSubmit, type ListItem, type SelectOption } from '@augur/ui-kit';
+import { ago, type Detail, type DialogSubmit, type ListItem, type SelectOption } from '@augur/ui-kit';
 import type { DocumentRef } from '@augur/mfe-sdk';
 import './atlas-explorer.js';
 import './atlas-knowledge.js';
@@ -278,19 +278,13 @@ export class AtlasApp extends LitElement {
       ></ui-page-head>
       ${e.state === 'retired' ? html`<p class="atlas-note atlas-retired">Retired ${ago(e.updatedAt)}. Its id stays, so whatever points at it still says what it was.</p>` : nothing}
       ${e.aliases.length ? html`<div class="atlas-tags">${e.aliases.map((a) => html`<ui-tag quiet label=${a}></ui-tag>`)}</div>` : nothing}
-      <dl class="atlas-details">
-        ${details.map(
-          (d) => html`<dt>${d.label}</dt>
-            <dd>${e.details[d.key] ?? html`<span class="atlas-missing">Not known</span>`}${d.identity ? html` <span class="atlas-key">identity key</span>` : nothing}</dd>`,
-        )}
-        <dt>Kept on</dt>
-        <dd>${e.floorName}</dd>
-        <dt>Why it shows here</dt>
-        <dd class=${this.place.page === 'entity' && this.place.explain ? 'atlas-explained' : ''}>${whyShown(e, this.floorKind, this.floorName)}</dd>
-        <dt>Added</dt>
-        <dd>${ago(e.createdAt)}</dd>
-        ${type ? html`<dt>In the ontology</dt><dd>${type.packTerm} <span class="atlas-key">${type.pack.toUpperCase()}</span></dd>` : nothing}
-      </dl>
+      <ui-details .items=${[
+        ...details.map((d) => ({ label: d.label, value: e.details[d.key] ?? '', ...(d.identity ? { note: 'identity key' } : {}) })),
+        { label: 'Kept on', value: e.floorName },
+        { label: 'Why it shows here', value: whyShown(e, this.floorKind, this.floorName), explained: this.place.page === 'entity' && !!this.place.explain },
+        { label: 'Added', value: ago(e.createdAt) },
+        ...(type ? [{ label: 'In the ontology', value: type.packTerm, note: type.pack.toUpperCase() }] : []),
+      ] satisfies Detail[]} limit=${this.place.page === 'entity' && this.place.explain ? 0 : 8}></ui-details>
       <atlas-knowledge .api=${this.api} .entity=${e} .ontology=${this.ontology} .pickDocument=${this.pickDocument}
         @atlas-open-entity=${(ev: CustomEvent<{ id: string }>) => this.move({ page: 'entity', id: ev.detail.id })}></atlas-knowledge>
       <atlas-used-by .api=${this.api} entity=${e.id}
@@ -381,13 +375,6 @@ export class AtlasApp extends LitElement {
         atlas-app .atlas-note { margin: 0; font-size: var(--type-small); color: var(--ink-muted); }
         atlas-app .atlas-retired { color: var(--ink); }
         atlas-app .atlas-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-        atlas-app .atlas-details { display: grid; grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr); gap: var(--space-2) var(--space-5); margin: 0; }
-        atlas-app .atlas-details dt { color: var(--ink-muted); font-size: var(--type-small); }
-        atlas-app .atlas-details dd { margin: 0; font-variant-numeric: tabular-nums; }
-        atlas-app .atlas-missing { color: var(--ink-muted); }
-        /* Asked why it shows (entity.explain): the answer is marked, not hidden among the rest. */
-        atlas-app .atlas-details dd.atlas-explained { border-left: 2px solid var(--green); padding-left: var(--space-3); }
-        atlas-app .atlas-key { font-size: var(--type-small); color: var(--ink-muted); letter-spacing: 0.04em; }
         @media (max-width: 640px) { atlas-app .atlas-filters { grid-template-columns: minmax(0, 1fr); } }
       </style>
       <!-- The explorer takes the width it's given: a graph needs room. -->
