@@ -100,6 +100,9 @@ Apps show more than the shell does, but each thing in them still says little: **
 | `ui-timeline` | History as `{ at, who, what }`, grouped Today, Yesterday, Tue 27 Oct |
 | `ui-path` | Line of sight: steps from the top floor down to `here`, each opening on `ui-open` |
 | `ui-ref`, `ui-refs` | Things from other apps (an `EntityRef`, `DocumentRef`, intent, person or team) as chips: the kind's icon, the name, a floor dot when it's kept elsewhere. On `ui-open`, raise the matching intent (`openEntity`, `openDocument`); `removable` fires `ui-remove`. Give `closed-count` and `closed-reason` for the ones the person can't open |
+| `ui-date` | A day, value YYYY-MM-DD. It shows "Fri 13 Nov · in 15 days", reads "13 nov", "friday", "end of month" or "+2w", and `empty` says what no day means ("Today", "Still holds"). `.quick` takes up to four choices. Works in `ui-dialog` like a text field |
+| `ui-people-picker` | Give it `.search` (people and teams by name, through the SDK) and, if some can't be chosen, `.check` returning why. Fires `ui-pick`; with `multiple`, chosen ones gather as chips in `.value` |
+| `ui-editor` | For writing more than a line. Its value is Markdown with mentions as `[@Name](person:id)` links, and `.refs` lists them. Give `.mentionSource` to turn on `@` and `#`. `guide="2 sentences"` counts and never blocks. Show what it writes with `ui-prose` |
 
 ## 4. The service
 

@@ -101,6 +101,7 @@ export const icons = {
   port: draw(Anchor),
   facility: draw(Warehouse),
   event: draw(CalendarDays),
+  calendar: draw(CalendarDays),
   // App kit: a neutral notice, a line of explanation.
   info: draw(Info),
 } satisfies Record<string, SVGTemplateResult>;

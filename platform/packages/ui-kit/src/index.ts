@@ -39,6 +39,10 @@ export { UiDetails, type Detail } from './components/details.js';
 export { UiTimeline, dayWords, type TimelineItem } from './components/timeline.js';
 export { UiPath, type PathStep } from './components/path.js';
 export { UiRef, UiRefs, refIcon, refName, type RefKind, type RefShown } from './components/ref.js';
+export { UiDate, parseDay, dayName, dayDistance, isoDay, type DateQuick } from './components/date.js';
+export { UiPeoplePicker, type Principal, type PrincipalSearch } from './components/people-picker.js';
+export { UiEditor, readMentions, writeMentions, type MentionResult, type MentionSource } from './components/editor.js';
+export { UiProse, plainText } from './components/prose.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,
