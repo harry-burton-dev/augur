@@ -40,6 +40,7 @@ import '@augur/ui-kit';
 | `ui-details` | Label and value pairs; unknown values say so; folds after eight |
 | `ui-timeline` | What happened, grouped by day in words, newest first; five then "Earlier" |
 | `ui-path` | Where something sits on the floors above it, one disc per floor, you are here ringed |
+| `ui-ref`, `ui-refs` | A thing from any app as a chip that opens where you are; what you can't open is counted, never dropped |
 | `ui-glance` | A quick look before you go in: veil, sheet, card, split, title; hairline or bubble; loading, error, empty |
 | `ui-shell` | The frame apps run in: the band, the water, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
 | `ui-wave-background` | The water: navy and green bands over slate. Calm Tide by default; Deep Ocean, Aurora, Sonar Line, Minimal and Split Field as variants. `pulse()` swells it |
