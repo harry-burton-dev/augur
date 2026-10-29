@@ -717,6 +717,12 @@ export const day = (iso: string) => {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
 
+/** The quick choices beside a day in the world that has already happened. */
+export const PAST_DAYS = [
+  { label: 'Today', value: 'today' },
+  { label: 'Yesterday', value: 'yesterday' },
+];
+
 /** When a fact holds, in words. */
 export const span = (f: { validFrom?: string; validTo?: string }) =>
   f.validFrom && f.validTo ? `${day(f.validFrom)} to ${day(f.validTo)}` : f.validFrom ? `Since ${day(f.validFrom)}` : f.validTo ? `Until ${day(f.validTo)}` : 'No dates given';

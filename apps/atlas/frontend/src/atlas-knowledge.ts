@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { isIntentCancelled, type DocumentRef } from '@augur/mfe-sdk';
 import { ago, type DialogSubmit, type ListItem, type SelectOption } from '@augur/ui-kit';
 import {
+  PAST_DAYS,
   day,
   floorWords,
   propertiesOf,
@@ -272,7 +273,7 @@ export class AtlasKnowledge extends LitElement {
               ? html`<ui-select slot="fields" name="target" label=${chosen.label} .options=${this.targets} .value=${this.targets[0].value}></ui-select>`
               : html`<p slot="fields" class="atlas-note">Nothing it can link to shows from this floor yet. Add the entity first, or go to a floor where it shows.</p>`
             : html`<ui-text-field slot="fields" name="value" label=${chosen?.label ?? 'Value'} required maxlength="200" hint=${chosen?.detail?.hint ?? ''}></ui-text-field>`}
-          <ui-text-field slot="fields" name="observedAt" type="date" label="When it was seen" optional hint="Leave blank for today"></ui-text-field>
+          <ui-date slot="fields" name="observedAt" label="When it was seen" optional empty="Today" .quick=${PAST_DAYS}></ui-date>
           <ui-select slot="fields" label="Where it came from" .value=${this.sourceKind}
             .options=${[
               { value: 'person', label: 'I saw or heard it' },
@@ -352,8 +353,8 @@ export class AtlasKnowledge extends LitElement {
       case 'accept':
         return html`<ui-dialog open eyebrow=${this.knowledge?.here.floorName ?? ''} heading="Accept it as so here" summary=${`${this.says(p.observation)}. This floor will hold it as a fact, resting on this observation.`}
           action-label="Accept it" busy-label="Accepting…" .submit=${this.submitAccept} @ui-close=${close}>
-          <ui-text-field slot="fields" name="validFrom" type="date" label="True from" optional hint=${p.observation.observedAt ? `Leave blank for when it was seen, ${day(p.observation.observedAt)}` : 'Leave blank if not known'}></ui-text-field>
-          <ui-text-field slot="fields" name="validTo" type="date" label="Until" optional hint="Leave blank while it holds"></ui-text-field>
+          <ui-date slot="fields" name="validFrom" label="True from" optional empty=${p.observation.observedAt ? `When it was seen, ${day(p.observation.observedAt)}` : 'Not known'} .quick=${PAST_DAYS}></ui-date>
+          <ui-date slot="fields" name="validTo" label="Until" optional empty="Still holds" .quick=${[]}></ui-date>
           <ui-text-field slot="fields" name="note" label="Note" optional multiline maxlength="2000"></ui-text-field>
         </ui-dialog>`;
       case 'raise':
@@ -364,7 +365,7 @@ export class AtlasKnowledge extends LitElement {
       case 'end':
         return html`<ui-dialog open eyebrow=${p.fact.floorName} heading="When did it end?" summary=${`${this.says(p.fact)}. It stays true for the time before, and the record of it stays.`}
           action-label="End it" busy-label="Ending…" .submit=${this.submitEnd} @ui-close=${close}>
-          <ui-text-field slot="fields" name="validTo" type="date" label="Ended on" optional hint="Leave blank for today"></ui-text-field>
+          <ui-date slot="fields" name="validTo" label="Ended on" optional empty="Today" .quick=${PAST_DAYS}></ui-date>
         </ui-dialog>`;
       case 'withdraw':
         return html`<ui-dialog open danger eyebrow=${p.fact.floorName} heading="Withdraw it?" action-label="Withdraw" busy-label="Withdrawing…" .submit=${this.submitWithdraw} @ui-close=${close}>
@@ -405,18 +406,18 @@ export class AtlasKnowledge extends LitElement {
       ${this.entity.state !== 'active' ? html`<p class="atlas-note">It has been retired, so nothing more is recorded about it.</p>` : nothing}
       ${k?.noCurrentSource ? html`<p class="atlas-note" role="status">${k.noCurrentSource}</p>` : nothing}
       <div class="atlas-clocks">
-        <ui-text-field type="date" label="True on" optional .value=${this.at} hint="The day in the world"
+        <ui-date label="True on" optional empty="Today" .quick=${PAST_DAYS} .value=${this.at} hint="The day in the world"
           @ui-change=${(e: CustomEvent<{ value: string }>) => {
             if (e.detail.value === this.at) return;
             this.at = e.detail.value;
             void this.load();
-          }}></ui-text-field>
-        <ui-text-field type="date" label="As recorded by" optional .value=${this.known} hint="What was on record that day"
+          }}></ui-date>
+        <ui-date label="As recorded by" optional empty="Today" .quick=${PAST_DAYS} .value=${this.known} hint="What was on record that day"
           @ui-change=${(e: CustomEvent<{ value: string }>) => {
             if (e.detail.value === this.known) return;
             this.known = e.detail.value;
             void this.load();
-          }}></ui-text-field>
+          }}></ui-date>
       </div>
       <ui-list label="Facts" density="compact" .noun=${['fact', 'facts']} .items=${this.factRows(details)} ?loading=${!k && !this.failure} error=${this.failure}
         empty="No floor you can see holds a fact about it yet. Facts come from observations a floor’s leads accept."

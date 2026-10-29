@@ -41,6 +41,10 @@ import '@augur/ui-kit';
 | `ui-timeline` | What happened, grouped by day in words, newest first; five then "Earlier" |
 | `ui-path` | Where something sits on the floors above it, one disc per floor, you are here ringed |
 | `ui-ref`, `ui-refs` | A thing from any app as a chip that opens where you are; what you can't open is counted, never dropped |
+| `ui-date` | A day said and typed in words ("Fri 13 Nov · in 15 days", "friday", "+2w"), with quick choices and a calendar one press away |
+| `ui-people-picker` | Find people and teams by name; ones you can't add stay, dimmed, with why |
+| `ui-editor` | Writing more than a line: Markdown, no toolbar at rest, a bar on a selection, `@` and `#` mentions saved as refs, a soft length guide |
+| `ui-prose` | Shows what `ui-editor` writes, mentions as chips; none of it read as HTML |
 | `ui-glance` | A quick look before you go in: veil, sheet, card, split, title; hairline or bubble; loading, error, empty |
 | `ui-shell` | The frame apps run in: the band, the water, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
 | `ui-wave-background` | The water: navy and green bands over slate. Calm Tide by default; Deep Ocean, Aurora, Sonar Line, Minimal and Split Field as variants. `pulse()` swells it |

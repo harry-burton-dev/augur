@@ -3,7 +3,7 @@ import type { SelectOption } from '@augur/ui-kit';
 import { MultiDirectedGraph } from 'graphology';
 import type Sigma from 'sigma';
 import type FA2Layout from 'graphology-layout-forceatlas2/worker';
-import { floorWords, type AtlasApi, type Fold, type GraphNode, type Ontology, type Subgraph } from './api.js';
+import { PAST_DAYS, floorWords, type AtlasApi, type Fold, type GraphNode, type Ontology, type Subgraph } from './api.js';
 import { FOLD, HIDDEN, foldsOf, hiddenNear, hoverDrawer, linksOf, rings, syncGraph, widen, type Explored, type Look } from './graph.js';
 
 /** Links drawn from each entity before the rest fold into a count. */
@@ -374,12 +374,12 @@ export class AtlasExplorer extends LitElement {
         }}></ui-checkbox-group>
       <ui-toggle label="Hide disputed" .checked=${this.hideDisputed} hint="Disputed links, and what only they reach"
         @ui-change=${(e: CustomEvent<{ checked: boolean }>) => (this.hideDisputed = e.detail.checked)}></ui-toggle>
-      <ui-text-field type="date" label="True on" optional .value=${this.at} hint="The day in the world; empty is today"
+      <ui-date label="True on" optional empty="Today" .quick=${PAST_DAYS} .value=${this.at} hint="The day in the world"
         @ui-change=${(e: CustomEvent<{ value: string }>) => {
           if (e.detail.value === this.at) return;
           this.at = e.detail.value;
           void this.load();
-        }}></ui-text-field>
+        }}></ui-date>
     </aside>`;
   }
 
