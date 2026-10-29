@@ -57,6 +57,21 @@ export interface ShellFunction {
   icon: string;
 }
 
+/**
+ * A way to go that works from every screen, drawn as a round button top left
+ * beside the floor: Home, Title. The one you're on is marked, and one that
+ * can't be used stays and says why.
+ */
+export interface ShellNav {
+  id: string;
+  label: string;
+  icon: string;
+  /** You're here already. */
+  current?: boolean;
+  /** Why it can't be used now, said instead of hiding it. */
+  unavailable?: string;
+}
+
 export interface ShellFindResult {
   id: string;
   title: string;
@@ -127,7 +142,8 @@ const isTyping = (e: Event) => {
  * @slot - the stage, where the current app mounts
  * @fires ui-toggle - detail `{ open }`
  * @fires ui-open-app - detail `{ id }`
- * @fires ui-back - Back in the band was pressed: the host goes up one level, to where `backTo` names
+ * @fires ui-nav - detail `{ id }` when one of `navs` is pressed; the host goes there from wherever you are
+ * @fires ui-back - Back in the band was pressed (only with `backTo`, kept for hosts that still set it)
  * @fires ui-open-notification - detail `{ notification }`
  * @fires ui-notification-action - detail `{ notification, index }` when one of its actions is pressed; the Shell closes and the host does it
  * @fires ui-notifications - detail `{ notifications, muted }` after either changed, however it changed, for a host that shows them elsewhere too
@@ -166,6 +182,7 @@ export class UiShell extends LitElement {
     settings: { attribute: false },
     away: { type: Boolean },
     canSwitchWorkspace: { attribute: false },
+    navs: { attribute: false },
     backTo: { type: String, attribute: 'back-to' },
     area: { type: String },
     floors: { attribute: false },
@@ -221,8 +238,10 @@ export class UiShell extends LitElement {
    * kind of floor gives the water its own colours and height.
    */
   declare floors: ShellFloor[];
+  /** The ways to go from anywhere, top left beside the floor (see `ShellNav`). */
+  declare navs: ShellNav[];
   /**
-   * Where Back goes, in words ("Admin's menu", "all apps"); empty hides Back.
+   * @deprecated The shell uses `navs` now. Where Back goes, in words ("Admin's menu", "all apps"); empty hides Back.
    * The host works it out from where you are: Back is always up one level.
    */
   declare backTo: string;
@@ -285,6 +304,7 @@ export class UiShell extends LitElement {
     this.away = false;
     this.canSwitchWorkspace = true;
     this.floors = [];
+    this.navs = [];
     this.backTo = '';
     this.area = '';
     this.floor = '';
@@ -965,6 +985,13 @@ export class UiShell extends LitElement {
       .back { flex: none; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border-radius: var(--radius-pill); border: 1px solid var(--hairline-strong); font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink); transition: background var(--motion-quick); }
       .back:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
       .back:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--focus); }
+      .navs { flex: none; display: flex; gap: var(--space-2); }
+      .nav { width: var(--space-5); height: var(--space-5); display: grid; place-items: center; border-radius: var(--radius-pill); border: 1px solid var(--hairline-strong); color: var(--ink); transition: background var(--motion-quick), border-color var(--motion-quick); }
+      .nav:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+      .nav:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--focus); }
+      .nav[aria-current] { border-color: var(--floor-mark, var(--ink)); color: var(--floor-mark, var(--ink)); }
+      .nav[aria-disabled="true"] { color: var(--ink-muted); opacity: 0.5; cursor: not-allowed; }
+      .nav[aria-disabled="true"]:hover { background: none; }
       @media (max-width: 640px) { .mark span, .back span, .place span { display: none; } .dome > button { left: calc(50% + var(--x) * 0.6); } }
       @media (prefers-reduced-motion: reduce) {
         :host([open]) .stage, :host([open]) .ground, .fade, :host([open]) .fade { transform: none; }
@@ -984,7 +1011,7 @@ export class UiShell extends LitElement {
     const time = new Date(this.now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const tab = this.isOpen ? '-1' : '0';
     return html`<header class="band" ?inert=${this.isOpen}>
-      <div class="left">${this.renderWhere()}${this.renderBack(tab)}</div>
+      <div class="left">${this.renderWhere()}${this.renderNavs(tab)}${this.renderBack(tab)}</div>
       <button class="handle" aria-label="Open the shell" tabindex=${tab} @click=${() => this.open()}><i></i></button>
       ${this.renderPlace()}
       <div class="right">
@@ -997,6 +1024,25 @@ export class UiShell extends LitElement {
   /** The app that's open, when one is: `current` among `apps`. */
   get openNow(): ShellApp | undefined {
     return this.current ? this.apps.find((a) => a.id === this.current) : undefined;
+  }
+
+  /** Home and Title, beside where you are: each goes there from any screen. */
+  private renderNavs(tab: string) {
+    if (!this.navs.length) return nothing;
+    return html`<nav class="navs" aria-label="Go to">
+      ${this.navs.map((n) => {
+        const label = n.unavailable ? `${n.label}. ${n.unavailable}` : n.current ? `${n.label}, you’re here` : n.label;
+        return html`<button
+          class="nav"
+          tabindex=${tab}
+          aria-label=${label}
+          title=${n.unavailable ?? n.label}
+          aria-current=${n.current ? 'page' : nothing}
+          aria-disabled=${n.unavailable ? 'true' : nothing}
+          @click=${() => !n.unavailable && !n.current && this.emit('ui-nav', { id: n.id })}
+        ><ui-icon name=${n.icon} size="16"></ui-icon></button>`;
+      })}
+    </nav>`;
   }
 
   /** Back, beside where you are: up one level, the same as Esc. Hidden when there's nowhere up to go. */

@@ -6,7 +6,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { AppHost, RunnerState } from './runner.ts';
 import type { Server } from './upgrade.ts';
@@ -224,8 +224,20 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
   const apps = (args: string[]) => command('docker', ['compose', '-p', 'augur-apps', '-f', join(appsDir, 'compose.yml'), ...args], env());
   const platform = (args: string[]) => command('docker', ['compose', '-f', join(dir, 'compose.yml'), '--env-file', join(dir, '.env'), ...args], env());
 
+  const docker = (args: string[]) => command('docker', args, env());
+
   return {
     readEnv: () => readFile(join(dir, '.env'), 'utf8'),
+    async platformNetwork() {
+      // The updater is one of the platform's containers (its hostname is its id), so its project's default network,
+      // whatever the project is called, is the one Compose labels "default" among the networks it's on.
+      const networks = Object.keys(JSON.parse(await docker(['container', 'inspect', '--format', '{{json .NetworkSettings.Networks}}', hostname()])) as object);
+      for (const name of networks) {
+        const role = await docker(['network', 'inspect', '--format', '{{index .Labels "com.docker.compose.network"}}', name]);
+        if (role.trim() === 'default') return name;
+      }
+      return undefined;
+    },
     async readState() {
       const text = await readFile(join(appsDir, 'state.json'), 'utf8').catch(() => undefined);
       return text ? (JSON.parse(text) as RunnerState) : { apps: {} };
