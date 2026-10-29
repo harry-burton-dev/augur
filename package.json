@@ -22,7 +22,8 @@
     "release": "changeset tag",
     "check:manifest": "node scripts/check-manifests.mjs",
     "create-app": "node scripts/create-app.mjs",
-    "dev:app": "node scripts/dev-app.mjs"
+    "dev:app": "node scripts/dev-app.mjs",
+    "check:reasons": "node scripts/check-reasons.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",

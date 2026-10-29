@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { base } from '../shared.js';
+import { reasonStyles, warnNoReason } from '../reason.js';
 
 export type ButtonKind = 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger';
 
@@ -22,6 +23,7 @@ export class UiButton extends LitElement {
     size: { type: String, reflect: true },
     ai: { type: Boolean, reflect: true },
     disabled: { type: Boolean, reflect: true },
+    reason: { type: String, reflect: true },
     busy: { type: Boolean, reflect: true },
     busyLabel: { type: String, attribute: 'busy-label' },
     once: { type: Boolean },
@@ -34,6 +36,8 @@ export class UiButton extends LitElement {
   declare size: 'md' | 'sm';
   declare ai: boolean;
   declare disabled: boolean;
+  /** Why it's disabled, in one sentence. It stays focusable, and the reason shows on hover and focus and is read aloud. */
+  declare reason: string;
   declare busy: boolean;
   declare busyLabel: string;
   declare once: boolean;
@@ -49,6 +53,7 @@ export class UiButton extends LitElement {
     this.size = 'md';
     this.ai = false;
     this.disabled = false;
+    this.reason = '';
     this.busy = false;
     this.busyLabel = '';
     this.once = false;
@@ -64,6 +69,10 @@ export class UiButton extends LitElement {
       this.disarm();
     });
     this.addEventListener('focusout', () => this.disarm());
+  }
+
+  override updated() {
+    warnNoReason(this, this.disabled, this.reason, this.textContent ?? '');
   }
 
   override disconnectedCallback() {
@@ -99,8 +108,9 @@ export class UiButton extends LitElement {
 
   static override styles = [
     base,
+    reasonStyles,
     css`
-      :host { display: inline-block; }
+      :host { display: inline-block; position: relative; }
       :host([hidden]) { display: none; }
       button {
         position: relative;
@@ -128,7 +138,9 @@ export class UiButton extends LitElement {
       }
       button:active { transform: scale(0.97); }
       button:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 3px; }
-      :host([disabled]) button { opacity: 0.4; cursor: default; pointer-events: none; }
+      :host([disabled]) button { opacity: 0.4; cursor: default; }
+      :host([disabled]:not([reason])) button,
+      :host([disabled][reason='']) button { pointer-events: none; }
       :host([busy]) button { cursor: progress; }
       :host([size='sm']) button { min-height: 36px; font-size: var(--type-small); line-height: var(--leading-small); }
 
@@ -214,11 +226,14 @@ export class UiButton extends LitElement {
     const ai = this.ai && (this.kind === 'primary' || this.kind === 'secondary');
     const classes = [this.kind, ai ? 'ai' : '', this.armed ? 'armed' : ''].join(' ');
     const showBusy = this.busy && this.busyLabel;
+    const reasoned = this.disabled && Boolean(this.reason);
     return html`<button
       part="button"
       class=${classes}
       type=${this.type}
-      ?disabled=${this.disabled}
+      ?disabled=${this.disabled && !reasoned}
+      aria-disabled=${reasoned ? 'true' : nothing}
+      aria-describedby=${reasoned ? 'reason' : nothing}
       aria-busy=${this.busy ? 'true' : 'false'}
       aria-live=${this.kind === 'danger' ? 'polite' : nothing}
     >
@@ -228,7 +243,7 @@ export class UiButton extends LitElement {
         : showBusy
           ? html`<span>${this.busyLabel}</span>`
           : html`<slot></slot>`}
-    </button>`;
+    </button>${reasoned ? html`<span class="reason" id="reason" role="tooltip">${this.reason}</span>` : nothing}`;
   }
 }
 

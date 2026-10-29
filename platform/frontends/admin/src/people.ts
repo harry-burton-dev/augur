@@ -213,7 +213,7 @@ export class AdminPeople extends LitElement {
           @ui-open=${(e: CustomEvent<{ row: TableRow }>) => (this.editing = this.people.find((p) => p.id === e.detail.row.id))}
           @ui-retry=${() => this.load()}
         >
-          <ui-button slot="actions" kind="secondary" size="sm" ?disabled=${this.loading || Boolean(this.error)} @click=${() => (this.adding = true)}>Add a person</ui-button>
+          <ui-button slot="actions" kind="secondary" size="sm" ?disabled=${this.loading || Boolean(this.error)} reason=${this.error ? 'People couldn’t be loaded. Try again first.' : 'Wait for people to load.'} @click=${() => (this.adding = true)}>Add a person</ui-button>
         </ui-table>
         ${this.adding && !this.loading && !this.error
           ? html`<ui-dialog

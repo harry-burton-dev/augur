@@ -9,7 +9,7 @@ declare module 'react' {
       'ui-shell': Element<UiShell, { product?: string }>;
       'ui-centre-menu': Element<UiCentreMenu, { variant?: 'orbit' | 'title'; label?: string }>;
       'ui-heading': Element<UiHeading, { heading?: string; summary?: string; eyebrow?: string; size?: 's' | 'm' | 'l' }>;
-      'ui-button': Element<UiButton, { kind?: string; size?: 'sm' | 'md' }>;
+      'ui-button': Element<UiButton, { kind?: string; size?: 'sm' | 'md'; busy?: boolean; reason?: string }>;
       'ui-dialog': Element<UiDialog, { heading?: string; summary?: string; size?: 'decision' | 'glance' | 'read'; cancelLabel?: string }>;
     }
   }

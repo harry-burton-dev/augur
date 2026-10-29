@@ -26,6 +26,10 @@ export { UiFilterBar, filterValue, type FilterDef, type FilterValue } from './co
 export { UiReader, slugFor, type MarkedPassage, type OutlineItem, type ReaderSize, type ReaderWidth } from './components/reader.js';
 export { UiContents } from './components/contents.js';
 export { UiState, type StateKind } from './components/state.js';
+export { kitDev, warnNoReason } from './reason.js';
+export { UiNotice, type NoticeTone } from './components/notice.js';
+export { UiNote } from './components/note.js';
+export { UiCan, type CanAction, type CanBlocked } from './components/can.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,

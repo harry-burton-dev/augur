@@ -74,6 +74,24 @@ Everything you need from outside your app comes through `ctx`:
 
 Build screens from the kit's components (run `pnpm --filter @augur/ui-kit storybook` to see them) and its tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of the kit or Lit: the shell serves one copy to every app, and `vite.config.ts` keeps `lit`, `lit/*` and `@augur/ui-kit` out of your bundle. Anything else you import, you bundle.
 
+### The app kit
+
+Apps show more than the shell does, but each thing in them still says little: **show the shape, say one line, open the rest.** The kit's App group in Storybook holds the parts for it, and they keep these rules for you:
+
+- **One line per thing.** A title and one line of meta; a second line only when it changes what you'd do.
+- **Marks before words, words before sentences.** A colour never stands alone.
+- **Counts until asked.** Show five, then "8 more".
+- **Things open; text doesn't link.** A row has at most two actions, as words.
+- **Explain on demand.** The reason sits behind the line (`ui-note why="…"`), not in a paragraph above the form.
+- **Nothing is obtuse.** A control you can't use now stays, dimmed, and says why: give every `ui-button` and `ui-icon-button` that can be disabled a `reason` ("Only its leads can pass it down."), and list rows, list actions and menu entries a `reason` too. It stays focusable and shows on hover and focus. If it's only waiting for a request, use `busy` instead. `pnpm check:reasons` fails a platform screen that disables a control without one, and the kit warns on localhost.
+- **One heading, one primary.**
+
+| Part | For |
+| --- | --- |
+| `ui-notice` | One sentence in a page that needs attention, with one action: `tone` needs, warning, refused or info |
+| `ui-note` | A quiet line that explains; `why` keeps the longer reason one press away; `live` for an action's result ("Saved.") |
+| `ui-can` | What you can do from here (up to two actions), and who can do the rest |
+
 ## 4. The service
 
 `service/src/app.ts` serves `/healthz` for operators, and the app's API under `/v1`. The gateway checks the sign-in token and passes on who is calling, signed for your service alone. The scaffold's `signedCallers` hook checks that signature, so `callerFromHeaders` only ever reads the person the gateway signed (see [Signed caller](signed-caller.md)):
@@ -257,6 +275,7 @@ pnpm build
 pnpm --filter "@apps/expenses*" test
 pnpm check:manifest
 pnpm check:boundaries
+pnpm check:reasons
 pnpm check:versions
 pnpm changeset        # say what changed in @apps/expenses and @apps/expenses-frontend
 ```

@@ -395,7 +395,7 @@ export class AtlasOntology extends LitElement {
               </div>
               ${t.adopted
                 ? html`<ui-tag quiet icon="check" label=${`Kept as ${t.kind === 'class' ? this.label(t.adopted) : t.adopted}`}></ui-tag>`
-                : html`<ui-button kind="secondary" size="sm" ?disabled=${!govern} title=${govern ? '' : (this.rights.why ?? '')} @click=${() => this.adoptTerm(p, t)}>Adopt…</ui-button>`}
+                : html`<ui-button kind="secondary" size="sm" ?disabled=${!govern} reason=${this.rights.why ?? 'Only admins change the ontology.'} @click=${() => this.adoptTerm(p, t)}>Adopt…</ui-button>`}
             </li>`,
           )}
         </ul>
@@ -419,7 +419,7 @@ export class AtlasOntology extends LitElement {
       </ul>
       <div class="atlas-head">
         <p class="atlas-note">Load your org’s own vocabulary, such as MIP MIM or the full CCO, as OWL in Turtle. Its classes and properties can then be adopted here.</p>
-        <ui-button kind="secondary" size="sm" ?disabled=${!govern} title=${govern ? '' : (this.rights.why ?? '')} @click=${() => (this.turtle = undefined)}>Load a pack…</ui-button>
+        <ui-button kind="secondary" size="sm" ?disabled=${!govern} reason=${this.rights.why ?? 'Only admins change the ontology.'} @click=${() => (this.turtle = undefined)}>Load a pack…</ui-button>
       </div>`;
   }
 
@@ -525,9 +525,9 @@ export class AtlasOntology extends LitElement {
         <ui-heading eyebrow=${o ? `Data Atlas · Version ${o.version}` : 'Data Atlas'} heading="The ontology"
           summary="The kinds of thing Data Atlas keeps, what’s known of them and how they link, adopted from packs such as the Common Core Ontologies."></ui-heading>
         <div class="atlas-actions">
-          <ui-button kind="ghost" size="sm" ?disabled=${!o} @click=${() => void this.exportOwl()}>Export as OWL</ui-button>
-          <ui-button kind="secondary" size="sm" ?disabled=${!govern} title=${govern ? '' : (this.rights.why ?? '')} @click=${() => this.addOwn('type')}>Add a kind</ui-button>
-          <ui-button kind="secondary" size="sm" ?disabled=${!govern} title=${govern ? '' : (this.rights.why ?? '')} @click=${() => this.addOwn('relation')}>Add a kind of link</ui-button>
+          <ui-button kind="ghost" size="sm" ?disabled=${!o} reason="The ontology is still loading." @click=${() => void this.exportOwl()}>Export as OWL</ui-button>
+          <ui-button kind="secondary" size="sm" ?disabled=${!govern} reason=${this.rights.why ?? 'Only admins change the ontology.'} @click=${() => this.addOwn('type')}>Add a kind</ui-button>
+          <ui-button kind="secondary" size="sm" ?disabled=${!govern} reason=${this.rights.why ?? 'Only admins change the ontology.'} @click=${() => this.addOwn('relation')}>Add a kind of link</ui-button>
         </div>
       </div>
       ${this.rights.why ? html`<p class="atlas-note">${this.rights.why}</p>` : nothing}

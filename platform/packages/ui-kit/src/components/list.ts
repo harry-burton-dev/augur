@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { base, label } from '../shared.js';
+import { reasonBox } from '../reason.js';
 import type { StatusName } from './status.js';
 import './icon.js';
 import './state.js';
@@ -8,6 +9,10 @@ import './state.js';
 export interface ListAction {
   id: string;
   label: string;
+  /** Can't be used now: it stays, dimmed, and says why on hover and focus. */
+  disabled?: boolean;
+  /** Why it can't be used, in one sentence. */
+  reason?: string;
 }
 
 export interface ListItem {
@@ -27,6 +32,8 @@ export interface ListItem {
   actions?: ListAction[];
   /** Shown at 40%, can't be opened. */
   disabled?: boolean;
+  /** Why it can't be opened, in one sentence. It takes the detail line's place, so it's always seen. */
+  reason?: string;
 }
 
 /**
@@ -108,6 +115,7 @@ export class UiList extends LitElement {
   static override styles = [
     base,
     label,
+    reasonBox,
     css`
       :host { display: block; }
       .bar { display: flex; align-items: center; min-height: 40px; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--hairline); }
@@ -120,7 +128,8 @@ export class UiList extends LitElement {
       :host([density='compact']) .row { min-height: 44px; }
       .row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
       .row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--focus); }
-      .row[disabled] { opacity: 0.4; cursor: default; }
+      .row[disabled] { cursor: default; }
+      .row[disabled] > :not(.text), .row[disabled] .text > b, .row[disabled] .text > span:not(.why) { opacity: 0.4; }
       .lead { flex: none; position: relative; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--ink-muted); }
       .lead.needs { background: var(--green); border-color: var(--green); opacity: 0.75; }
       .lead.needs.first { opacity: 1; }
@@ -137,6 +146,12 @@ export class UiList extends LitElement {
       .act:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
       .act:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }
       .act.main { border-color: var(--green); }
+      .act[disabled], .act[aria-disabled='true'] { opacity: 0.4; cursor: default; }
+      .act[aria-disabled='true']:hover { background: none; }
+      .act-wrap { position: relative; flex: none; display: inline-flex; }
+      .act-wrap .reason { left: auto; right: 0; }
+      .act-wrap:hover .reason, .act-wrap:focus-within .reason { opacity: 1; transform: none; }
+      .why { color: var(--ink-muted); }
       .skel { display: block; height: 60px; border-bottom: 1px solid var(--hairline); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 5%, transparent), transparent); background-size: 200% 100%; animation: ui-shimmer var(--motion-shimmer) linear infinite; }
       :host([density='compact']) .skel { height: 44px; }
       @keyframes ui-shimmer { to { background-position: -200% 0; } }
@@ -166,13 +181,18 @@ export class UiList extends LitElement {
                 ${item.icon && !item.status
                   ? html`<ui-icon class="mark" name=${item.icon} size="16"></ui-icon>`
                   : html`<span class="lead ${item.status ?? ''} ${item.id === pinging ? 'first' : ''}" aria-hidden="true"></span>`}
-                <span class="text"><b>${item.title}</b>${item.detail ? html`<span>${item.detail}</span>` : nothing}</span>
+                <span class="text"><b>${item.title}</b>${item.disabled && item.reason
+                  ? html`<span class="why">${item.reason}</span>`
+                  : item.detail ? html`<span>${item.detail}</span>` : nothing}</span>
                 ${item.meta ? html`<span class="meta">${item.meta}</span>` : nothing}
               </button>
-              ${(item.actions ?? []).slice(0, 2).map(
-                (action, i) => html`<button class="act ${i === 0 && item.status === 'needs' ? 'main' : ''}" ?disabled=${item.disabled}
-                  aria-label=${`${action.label}: ${item.title}`} @click=${() => this.emit('ui-action', { item, action })}>${action.label}</button>`,
-              )}
+              ${(item.actions ?? []).slice(0, 2).map((action, i) => {
+                const off = Boolean(item.disabled || action.disabled);
+                const why = action.disabled ? action.reason : undefined;
+                return html`<span class="act-wrap"><button class="act ${i === 0 && item.status === 'needs' && !off ? 'main' : ''}" ?disabled=${off && !why}
+                  aria-disabled=${why ? 'true' : nothing} aria-label=${`${action.label}: ${item.title}`} aria-description=${why ?? nothing}
+                  @click=${() => !off && this.emit('ui-action', { item, action })}>${action.label}</button>${why ? html`<span class="reason" aria-hidden="true">${why}</span>` : nothing}</span>`;
+              })}
             </li>`,
           )}
         </ul>`,

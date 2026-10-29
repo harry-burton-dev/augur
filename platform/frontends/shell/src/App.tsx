@@ -858,11 +858,11 @@ export function Host({
                       )}
                     </span>
                     {app.chosen === p.pr ? (
-                      <ui-button kind="tertiary" size="sm" disabled={switching} onClick={() => void switchPreview(app, null)}>
+                      <ui-button kind="tertiary" size="sm" busy={switching} onClick={() => void switchPreview(app, null)}>
                         Back to {app.version}
                       </ui-button>
                     ) : (
-                      <ui-button kind="secondary" size="sm" disabled={switching} onClick={() => void switchPreview(app, p.pr)}>
+                      <ui-button kind="secondary" size="sm" busy={switching} onClick={() => void switchPreview(app, p.pr)}>
                         Use it
                       </ui-button>
                     )}

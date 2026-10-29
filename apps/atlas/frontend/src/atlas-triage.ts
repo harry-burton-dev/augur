@@ -192,6 +192,7 @@ export class AtlasTriage extends LitElement {
 
   private mentionCard(p: ProposalView, m: MentionView) {
     const can = p.can.decide;
+    const why = p.can.why ?? 'Only this floor’s leads decide what’s added.';
     const waiting = this.busy === m.key;
     const refusal = this.refusal?.key === m.key ? this.refusal.message : '';
     const decided = m.decision;
@@ -213,15 +214,15 @@ export class AtlasTriage extends LitElement {
         : html`${m.matches.length
               ? html`<ul class="atlas-matches">
                   ${m.matches.map(
-                    (x) => html`<li class="atlas-choices"><ui-button kind="secondary" size="sm" ?disabled=${!can || waiting} @click=${() => void this.decide(m.key, () => this.api.decideMention(p.id, m.key, { as: 'link', entity: x.entity.id }))}
+                    (x) => html`<li class="atlas-choices"><ui-button kind="secondary" size="sm" ?disabled=${!can} reason=${why} ?busy=${waiting} @click=${() => void this.decide(m.key, () => this.api.decideMention(p.id, m.key, { as: 'link', entity: x.entity.id }))}
                       >It’s ${x.entity.label}</ui-button><span class="atlas-note">${matchWhy(x)} · ${floorWords(x.entity.floorName)}</span></li>`,
                   )}
                 </ul>`
               : html`<p class="atlas-note">Nothing that shows from here has this name, its keys, or one like it.</p>`}
             <div class="atlas-choices">
-              <ui-button kind="ghost" size="sm" ?disabled=${!can || waiting} @click=${() => { this.choosing = this.choosing === m.key ? '' : m.key; this.making = ''; }}>Something else…</ui-button>
-              <ui-button kind="ghost" size="sm" ?disabled=${!can || waiting || !kinds.length} @click=${() => { this.making = this.making === m.key ? '' : m.key; this.choosing = ''; this.newType = kinds[0]?.value ?? ''; this.newLabel = m.text; }}>A new one</ui-button>
-              <ui-button kind="ghost" size="sm" ?disabled=${!can || waiting} @click=${() => void this.decide(m.key, () => this.api.decideMention(p.id, m.key, { as: 'drop' }))}>Drop it</ui-button>
+              <ui-button kind="ghost" size="sm" ?disabled=${!can} reason=${why} ?busy=${waiting} @click=${() => { this.choosing = this.choosing === m.key ? '' : m.key; this.making = ''; }}>Something else…</ui-button>
+              <ui-button kind="ghost" size="sm" ?disabled=${!can || !kinds.length} reason=${!can ? why : 'No kind in the ontology fits it yet.'} ?busy=${waiting} @click=${() => { this.making = this.making === m.key ? '' : m.key; this.choosing = ''; this.newType = kinds[0]?.value ?? ''; this.newLabel = m.text; }}>A new one</ui-button>
+              <ui-button kind="ghost" size="sm" ?disabled=${!can} reason=${why} ?busy=${waiting} @click=${() => void this.decide(m.key, () => this.api.decideMention(p.id, m.key, { as: 'drop' }))}>Drop it</ui-button>
             </div>
             ${this.choosing === m.key
               ? html`<atlas-picker .api=${this.api} purpose=${`What “${m.text}” is`} .types=${m.type ? [m.type] : []}
@@ -233,7 +234,7 @@ export class AtlasTriage extends LitElement {
                   <ui-select label="Kind" .options=${kinds} .value=${this.newType} @ui-change=${(e: CustomEvent<{ value: string }>) => (this.newType = e.detail.value)}></ui-select>
                   <ui-text-field label="Name" .value=${this.newLabel} maxlength="200"
                     @ui-input=${(e: CustomEvent<{ value: string }>) => (this.newLabel = e.detail.value)}></ui-text-field>
-                  <ui-button kind="primary" size="sm" ?disabled=${waiting || !this.newLabel.trim()}
+                  <ui-button kind="primary" size="sm" ?disabled=${!this.newLabel.trim()} reason="Give it a name first." ?busy=${waiting}
                     @click=${() => void this.decide(m.key, () => this.api.decideMention(p.id, m.key, { as: 'new', type: this.newType, label: this.newLabel.trim() }))}>Add it here</ui-button>
                 </div>
                 <p class="atlas-note">Made on ${floorWords(p.floorName)}. If you change its name, “${m.text}” is kept as another name for it.</p>`
@@ -258,6 +259,7 @@ export class AtlasTriage extends LitElement {
 
   private observationCard(p: ProposalView, o: ProposalObservationView) {
     const can = p.can.decide && o.ready;
+    const why = !p.can.decide ? (p.can.why ?? 'Only this floor’s leads decide what’s added.') : (o.why ?? 'Decide what it names first.');
     const waiting = this.busy === o.key;
     const refusal = this.refusal?.key === o.key ? this.refusal.message : '';
     const decided = o.decision;
@@ -268,11 +270,10 @@ export class AtlasTriage extends LitElement {
         ? html`<p class="atlas-outcome">${decided.as === 'accepted' ? 'Accepted as so on this floor.' : decided.as === 'seen' ? 'Kept as seen: an observation, not yet accepted as so.' : 'Dropped.'}</p>`
         : p.state === 'open'
           ? html`<div class="atlas-choices">
-              <ui-button kind="secondary" size="sm" ?disabled=${!can || waiting} @click=${() => void this.decide(o.key, () => this.api.decideObservation(p.id, o.key, { as: 'accepted' }))}>Accept as so</ui-button>
-              <ui-button kind="ghost" size="sm" ?disabled=${!can || waiting} @click=${() => void this.decide(o.key, () => this.api.decideObservation(p.id, o.key, { as: 'seen' }))}>Keep as seen</ui-button>
-              <ui-button kind="ghost" size="sm" ?disabled=${!p.can.decide || waiting} @click=${() => void this.decide(o.key, () => this.api.decideObservation(p.id, o.key, { as: 'drop' }))}>Drop it</ui-button>
-            </div>
-            ${o.why && p.can.decide ? html`<p class="atlas-note">${o.why}</p>` : nothing}`
+              <ui-button kind="secondary" size="sm" ?disabled=${!can} reason=${why} ?busy=${waiting} @click=${() => void this.decide(o.key, () => this.api.decideObservation(p.id, o.key, { as: 'accepted' }))}>Accept as so</ui-button>
+              <ui-button kind="ghost" size="sm" ?disabled=${!can} reason=${why} ?busy=${waiting} @click=${() => void this.decide(o.key, () => this.api.decideObservation(p.id, o.key, { as: 'seen' }))}>Keep as seen</ui-button>
+              <ui-button kind="ghost" size="sm" ?disabled=${!p.can.decide} reason=${why} ?busy=${waiting} @click=${() => void this.decide(o.key, () => this.api.decideObservation(p.id, o.key, { as: 'drop' }))}>Drop it</ui-button>
+            </div>`
           : nothing}
       ${refusal ? html`<p class="atlas-note atlas-refused" role="alert">${refusal}</p>` : nothing}
     </li>`;
@@ -294,20 +295,20 @@ export class AtlasTriage extends LitElement {
           ${source.kind === 'document'
             ? html`<ui-button kind="secondary" size="sm" @click=${() => this.dispatchEvent(new CustomEvent('atlas-open-document', { detail: { ref: source.document as DocumentRef }, bubbles: true }))}>Open the source</ui-button>`
             : nothing}
-          <ui-button kind="primary" size="sm" ?disabled=${!p.can.finish || this.busy === 'finish'} @click=${() => void this.decide('finish', () => this.api.finishProposal(p.id))}>Finish</ui-button>
-          <ui-button kind="ghost" size="sm" ?disabled=${!p.can.withdraw || this.busy === 'withdraw'} @click=${() => void this.decide('withdraw', () => this.api.withdrawProposal(p.id))}>Withdraw</ui-button>
+          <ui-button kind="primary" size="sm" ?disabled=${!p.can.finish} reason=${p.can.why ?? 'Decide everything it names and says first.'} ?busy=${this.busy === 'finish'} @click=${() => void this.decide('finish', () => this.api.finishProposal(p.id))}>Finish</ui-button>
+          <ui-button kind="ghost" size="sm" ?disabled=${!p.can.withdraw} reason=${p.can.why ?? 'Only the person who proposed it can withdraw it.'} ?busy=${this.busy === 'withdraw'} @click=${() => void this.decide('withdraw', () => this.api.withdrawProposal(p.id))}>Withdraw</ui-button>
         </div>
       </div>
-      ${p.can.why ? html`<p class="atlas-note">${p.can.why}</p>` : nothing}
       ${p.sourceGone && p.state === 'open' ? html`<p class="atlas-note atlas-refused" role="status">${p.sourceGone} What it names can still be decided; what it says can only be dropped.</p>` : nothing}
       ${this.refusal && ['finish', 'withdraw'].includes(this.refusal.key) ? html`<p class="atlas-note atlas-refused" role="alert">${this.refusal.message}</p>` : nothing}
       <section aria-label="What it names">
         <div class="atlas-head">
           <h2 class="atlas-section">What it names</h2>
           ${p.state === 'open'
-            ? html`<ui-button kind="ghost" size="sm" ?disabled=${!p.can.decide || this.busy === 'match' || !p.mentions.some((m) => !m.decision)}
-                title=${!p.can.decide ? (p.can.why ?? '') : !p.mentions.some((m) => !m.decision) ? 'Every mention is decided.' : ''}
-                @click=${() => void this.decide('match', () => this.api.matchProposal(p.id))}>${this.busy === 'match' ? 'Looking…' : 'Look again'}</ui-button>`
+            ? html`<ui-button kind="ghost" size="sm" ?disabled=${!p.can.decide || !p.mentions.some((m) => !m.decision)}
+                reason=${!p.can.decide ? (p.can.why ?? 'Only this floor’s leads decide what’s added.') : 'Every mention is decided.'}
+                ?busy=${this.busy === 'match'} busy-label="Looking…"
+                @click=${() => void this.decide('match', () => this.api.matchProposal(p.id))}>Look again</ui-button>`
             : nothing}
         </div>
         ${p.matching ? html`<p class="atlas-note atlas-matching">${matchingWords(p.matching)}</p>` : nothing}
