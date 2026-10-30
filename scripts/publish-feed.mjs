@@ -23,7 +23,7 @@ export const AUGUR_RELEASES_KEPT = 20;
 export const APP_RELEASES_KEPT = 4;
 /** How many pull requests' previews it holds, each pull request's newest build only. */
 export const PREVIEWS_KEPT = 20;
-/** How many of each app's newest dev builds it holds, apart from its releases. */
+/** How many of AUGUR's, and each app's, newest dev builds it holds, apart from their releases. */
 export const DEV_BUILDS_KEPT = 2;
 
 const AUGUR_TAG = /^augur@(.+)$/;
@@ -32,17 +32,18 @@ const PREVIEW = /-pr\.(\d+)\.\d+$/;
 const DEV = /-dev\.\d+$/;
 
 /**
- * Which releases go in the feed, newest first: AUGUR's newest few, each app's newest few, and each pull
+ * Which releases go in the feed, newest first: AUGUR's newest few and its newest dev builds, each app's newest few, and each pull
  * request's newest preview build (the app runner runs those for the app's developers), and each app's
  * newest dev builds, which don't push its releases out.
  */
 export const chooseReleases = (releases) => {
   const listed = releases.filter((r) => !r.draft && typeof r.tag_name === 'string');
-  const augur = listed
+  const augurAll = listed
     .map((r) => ({ release: r, version: AUGUR_TAG.exec(r.tag_name)?.[1] }))
     .filter((x) => x.version && semver.valid(x.version))
-    .sort((a, b) => semver.rcompare(a.version, b.version))
-    .slice(0, AUGUR_RELEASES_KEPT);
+    .sort((a, b) => semver.rcompare(a.version, b.version));
+  // AUGUR's dev builds, for the workbench, don't push its releases out either.
+  const augur = [...augurAll.filter((x) => !DEV.test(x.version)).slice(0, AUGUR_RELEASES_KEPT), ...augurAll.filter((x) => DEV.test(x.version)).slice(0, DEV_BUILDS_KEPT)].sort((a, b) => semver.rcompare(a.version, b.version));
   const apps = listed
     .map((r) => ({ release: r, m: APP_TAG.exec(r.tag_name) }))
     .filter((x) => x.m && semver.valid(x.m[2]))

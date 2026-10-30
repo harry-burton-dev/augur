@@ -29,8 +29,8 @@ export const releaseIdentity = (workflow) => `^${escape(`https://github.com/${wo
 export const SIGNER = releaseIdentity(`${REPO}/.github/workflows/release.yml`);
 const ISSUER = 'https://token.actions.githubusercontent.com';
 
-/** A release file as the mirror's feed holds it: its channel and notes as GitHub has them now. */
-export const asMirrored = (manifest, release) => ({ ...manifest, channel: release.prerelease ? 'beta' : 'stable', notesUrl: release.html_url });
+/** A release file as the mirror's feed holds it: its channel and notes as GitHub has them now (a dev build stays one, by version). */
+export const asMirrored = (manifest, release) => ({ ...manifest, channel: /-dev\.\d+$/.test(manifest.version) ? 'dev' : release.prerelease ? 'beta' : 'stable', notesUrl: release.html_url });
 
 /** The feed with `manifest` in it, newest first, replacing an earlier copy of the same release. */
 export const withRelease = (feed, manifest) => ({

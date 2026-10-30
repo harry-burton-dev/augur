@@ -19,7 +19,7 @@ loadConfigOrExit('registry', [
   { name: 'GITHUB_READ_USER', about: 'the GitHub account the deployment’s read key (secrets/github-read-key) belongs to.' },
   { name: 'GITHUB_READ_KEY', about: 'the deployment’s read key, a GitHub token with read:packages, usually in secrets/github-read-key.', secret: true },
   { name: 'RELEASE_FEED_URL', about: 'where new AUGUR releases are listed, or off.' },
-  { name: 'RELEASE_CHANNEL', about: 'stable or beta (default: beta on a preview server, stable on a production one, which takes nothing else).' },
+  { name: 'RELEASE_CHANNEL', about: 'stable, beta or dev (default: dev on the workbench, beta on a preview server, stable on a production one, which takes nothing else; only the workbench takes dev).' },
   { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
   { name: 'ALLOW_PR_PREVIEWS', about: 'on: run pull requests’ builds for apps’ developers on a production server too.' },
   { name: 'APP_FEED_URL', about: 'where new versions of apps are listed, or off.' },
@@ -54,13 +54,13 @@ if (!floors) console.warn('SERVICE_CLIENT_SECRET is not set: the catalogue can�
 // New AUGUR releases: with the deployment's read key, the feed the Release workflow keeps beside the images
 // on GitHub's container registry; without one, this repo's GitHub releases (with RELEASE_FEED_TOKEN's older
 // Contents: read token); or a mirror's feed. RELEASE_FEED_URL=off checks none.
-// RELEASE_CHANNEL is stable or beta; by default the channel of the release this registry ships in.
+// RELEASE_CHANNEL is stable, beta or dev; by default the channel of the release this registry ships in.
 // Compose passes unset settings as empty strings.
 const readKey = readKeyFromEnv();
 const githubFeed = readKey ? DEFAULT_OCI_FEED_URL : DEFAULT_FEED_URL;
 const feedUrl = process.env.RELEASE_FEED_URL || githubFeed;
 const channel = (process.env.RELEASE_CHANNEL || undefined) as Channel | undefined;
-if (channel && channel !== 'stable' && channel !== 'beta') throw new Error('RELEASE_CHANNEL is stable or beta.');
+if (channel && !['stable', 'beta', 'dev'].includes(channel)) throw new Error('RELEASE_CHANNEL is stable, beta or dev.');
 // What kind of server this is: a production one follows stable only and runs no pull requests' builds.
 const ring = ringFrom(process.env.SERVER_RING);
 const allowPrPreviews = takesPreview(ring) || process.env.ALLOW_PR_PREVIEWS === 'on';

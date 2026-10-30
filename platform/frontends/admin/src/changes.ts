@@ -55,7 +55,7 @@ export const historyList = (history: UpdateHistoryEntry[]) =>
             html`<span style="display:flex;flex-direction:column;padding:var(--space-2) 0">
               <span>${h.from} → ${h.version} · ${OUTCOME_WORDS[h.state]}</span>
               <span style="color:var(--ink-muted);font-size:var(--type-small)"
-                >${[h.requestedByName ? `Asked by ${h.requestedByName}` : 'Asked by an admin', took ? `took ${took} min` : '', h.backup ? `backup ${h.backup}` : '', h.message ?? ''].filter(Boolean).join(' · ')}</span
+                >${[h.requestedBy === 'automatic' ? 'By itself (a dev build on the workbench)' : h.requestedByName ? `Asked by ${h.requestedByName}` : 'Asked by an admin', took ? `took ${took} min` : '', h.backup ? `backup ${h.backup}` : '', h.message ?? ''].filter(Boolean).join(' · ')}</span
               >
             </span>`,
             day(h.requestedAt),

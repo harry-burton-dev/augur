@@ -47,7 +47,7 @@ import {
   type AppEntry,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
-import { goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
+import { automaticDevUpgrade, goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
@@ -868,7 +868,19 @@ export const buildApp = async ({
       app.get('/platform/upgrade/target', async (req, reply) => {
         if (!(await isUpdater(req, reply))) return reply;
         updaterSeenAt = new Date().toISOString();
-        const upgrade = await store.upgrade();
+        let upgrade = await store.upgrade();
+        // The workbench takes AUGUR's dev builds by itself, as it would after an admin asked, backup first.
+        if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') {
+          const view = updatesView({ checker: updates, apps: await store.records() });
+          const version = automaticDevUpgrade(view, await store.upgrades());
+          const images = version ? updates.result.releases.find((r) => r.version === version)?.manifest?.images ?? {} : {};
+          if (version && Object.keys(images).length && (await store.requestUpgrade({ id: randomUUID(), from: view.running.version, version, images, requestedBy: 'automatic' }))) {
+            upgradeSettings = undefined;
+            req.log.info({ from: view.running.version, to: version }, 'dev build upgrade requested');
+            await record(req, { actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'platform.upgrade-requested', target: version, detail: { from: view.running.version, automatic: true } });
+            upgrade = await store.upgrade();
+          }
+        }
         if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') return reply.code(204).send();
         const { id, from, version, images, state } = upgrade;
         const manifest = updates.result.releases.find((r) => r.version === version)?.manifest;

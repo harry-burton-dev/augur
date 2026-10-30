@@ -21,9 +21,9 @@ describe('server rings', () => {
     expect(takesAugurDevBuilds('production')).toBe(false);
   });
 
-  it('follows preview releases on the workbench, and makes feature previews opt-in there', () => {
+  it('follows AUGUR’s dev builds on the workbench, and makes feature previews opt-in there', () => {
     const running = { version: '0.12.0', channel: 'beta' as const };
-    expect(new UpdateChecker({ running, ring: 'dev' }).channel).toBe('beta');
+    expect(new UpdateChecker({ running, ring: 'dev' }).channel).toBe('dev');
     expect(new UpdateChecker({ running, ring: 'production' }).channel).toBe('stable');
     expect(defaultMode('dev')).toBe('opt-in');
     expect(defaultMode('production')).toBe('off');

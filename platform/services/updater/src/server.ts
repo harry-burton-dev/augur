@@ -160,8 +160,8 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
     async recreate(services) {
       await compose(['up', '-d', '--no-deps', '--force-recreate', ...services]);
     },
-    async verifySignature(ref) {
-      await command('cosign', verifyArgs(signer.identity, signer.issuer, ref, await trustedRootIn(dir)), env());
+    async verifySignature(ref, identity = signer.identity) {
+      await command('cosign', verifyArgs(identity, signer.issuer, ref, await trustedRootIn(dir)), env());
     },
     async backup() {
       const said = await compose(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--now']);

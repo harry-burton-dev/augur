@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import type { AppRecord } from './store.ts';
-import { FeedProblem, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRelease, type ReleaseManifest } from './updates.ts';
+import { automaticDevUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRelease, type ReleaseManifest } from './updates.ts';
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
@@ -22,7 +22,7 @@ const manifest = (version: string, more: Partial<ReleaseManifest> = {}): Release
   parts: { '@augur/registry': { version }, '@augur/mfe-sdk': { version: '1.1.0' } },
   ...more,
 });
-const release = (version: string, channel: 'beta' | 'stable' = 'beta', more: Partial<ReleaseManifest> = {}): FeedRelease => ({
+const release = (version: string, channel: 'beta' | 'stable' | 'dev' = 'beta', more: Partial<ReleaseManifest> = {}): FeedRelease => ({
   version,
   channel,
   notesUrl: `https://github.com/o/r/releases/tag/augur@${version}`,
@@ -88,6 +88,45 @@ describe('the server’s ring', () => {
     expect(view).toMatchObject({ ring: 'production', channel: 'stable', available: { version: '0.3.0' }, channelNote: expect.stringContaining('RELEASE_CHANNEL=beta is ignored') });
     // A production server can't follow beta, so it isn't told of one.
     expect(view.beta).toBeUndefined();
+  });
+
+  it('the workbench follows AUGUR’s dev builds by itself; no other server takes them', async () => {
+    const releases = [release('0.3.0', 'stable'), release('0.4.0'), release('0.4.1-dev.48', 'dev')];
+    const make = (ring: 'dev' | 'preview' | 'production', channel?: 'dev') => new UpdateChecker({ feed: async () => releases, running: { version: '0.2.0', channel: 'beta' }, ring, channel });
+    const workbench = make('dev');
+    await workbench.check();
+    expect(updatesView({ checker: workbench, apps: [] })).toMatchObject({ ring: 'dev', channel: 'dev', available: { version: '0.4.1-dev.48' }, newer: [{ version: '0.4.1-dev.48' }, { version: '0.4.0' }, { version: '0.3.0' }] });
+
+    const preview = make('preview', 'dev');
+    await preview.check();
+    expect(updatesView({ checker: preview, apps: [] })).toMatchObject({ channel: 'beta', available: { version: '0.4.0' }, channelNote: expect.stringContaining('Only the workbench') });
+    const production = make('production', 'dev');
+    await production.check();
+    expect(updatesView({ checker: production, apps: [] })).toMatchObject({ channel: 'stable', available: { version: '0.3.0' }, channelNote: expect.stringContaining('RELEASE_CHANNEL=dev is ignored') });
+  });
+
+  it('dev takes every release, beta all but dev builds, stable only stable', () => {
+    expect([follows('dev', 'dev'), follows('dev', 'beta'), follows('dev', 'stable')]).toEqual([true, true, true]);
+    expect([follows('beta', 'dev'), follows('beta', 'beta'), follows('beta', 'stable')]).toEqual([false, true, true]);
+    expect([follows('stable', 'dev'), follows('stable', 'beta'), follows('stable', 'stable')]).toEqual([false, false, true]);
+  });
+
+  it('the workbench upgrades to a dev build by itself only when nothing needs a person, and only once', async () => {
+    const workbench = async (releases: FeedRelease[], ring: 'dev' | 'preview' = 'dev') => {
+      const checker = new UpdateChecker({ feed: async () => releases, running: { version: '0.4.0', channel: 'beta' }, ring, ...(ring === 'preview' ? { channel: 'beta' as const } : {}) });
+      await checker.check();
+      return updatesView({ checker, apps: [] });
+    };
+    const dev = release('0.4.1-dev.48', 'dev');
+    expect(automaticDevUpgrade(await workbench([dev]), [])).toBe('0.4.1-dev.48');
+    expect(automaticDevUpgrade(await workbench([dev]), [{ version: '0.4.1-dev.48', state: 'rolled-back' }])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([dev], 'preview'), [])).toBeUndefined();
+    // A release, rather than a dev build, waits for an admin even on the workbench.
+    expect(automaticDevUpgrade(await workbench([release('0.5.0')]), [])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.49', 'dev', { breaking: ['@augur/mfe-sdk: SDK 2.'] })]), [])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.50', 'dev', { settings: settings(['MODELS_URL'], ['MODELS_URL']) })]), [])).toBeUndefined();
+    // One the updater makes up itself doesn't need a person.
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.51', 'dev', { settings: settings(['MODELS_CLIENT_SECRET'], ['MODELS_CLIENT_SECRET']) })]), [])).toBe('0.4.1-dev.51');
   });
 });
 
@@ -315,6 +354,21 @@ describe('upgrading', () => {
     await server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, step: 'preflight', state: 'failed', outcome: 'rolled-back' } });
     await ask({});
     expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json().settings).toBeUndefined();
+  });
+
+  it('on the workbench, asks the updater for a new dev build by itself, and audits it', async () => {
+    const entries: { action: string; target?: string; actor: { id: string } }[] = [];
+    const updates = new UpdateChecker({ feed: async () => [release('0.2.1-dev.48', 'dev', { images }), release('0.2.0')], running: { version: '0.2.0', channel: 'beta' }, ring: 'dev' });
+    await updates.check();
+    const server = await buildApp({ verifyService, updates, audit: async (e) => void entries.push(e) });
+    const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
+    expect(target).toMatchObject({ version: '0.2.1-dev.48', from: '0.2.0', images, state: 'requested' });
+    expect(entries.map((e) => `${e.action} ${e.target} by ${e.actor.id}`)).toEqual(['platform.upgrade-requested 0.2.1-dev.48 by registry']);
+    const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
+    expect(page.history[0]).toMatchObject({ requestedBy: 'automatic', version: '0.2.1-dev.48' });
+    // Taken back by an admin, it isn't asked for again.
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).statusCode).toBe(200);
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
   });
 
   it('lets an admin take back an upgrade nothing has started', async () => {

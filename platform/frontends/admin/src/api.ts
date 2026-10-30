@@ -180,10 +180,13 @@ export interface Change {
   parts: string[];
 }
 
+/** stable is on production, beta on preview, dev a dev build that only the workbench takes. */
+export type ReleaseChannel = 'stable' | 'beta' | 'dev';
+
 /** An AUGUR release as Updates shows it (see contracts/registry.openapi.yaml). */
 export interface ReleaseSummary {
   version: string;
-  channel: 'stable' | 'beta';
+  channel: ReleaseChannel;
   released?: string;
   notesUrl?: string;
   breaking: string[];
@@ -193,7 +196,7 @@ export interface ReleaseSummary {
 /** An earlier release the server could go back to. */
 export interface GoBackTarget {
   version: string;
-  channel: 'stable' | 'beta';
+  channel: ReleaseChannel;
   released?: string;
   problem?: string;
   breakingAfter?: string;
@@ -248,8 +251,8 @@ export interface Upgrade {
 }
 
 export interface PlatformUpdates {
-  running: { version: string; channel: 'stable' | 'beta' };
-  channel: 'stable' | 'beta';
+  running: { version: string; channel: ReleaseChannel };
+  channel: ReleaseChannel;
   /** What kind of server this is (SERVER_RING), which bounds the channel. */
   ring?: 'dev' | 'preview' | 'production';
   channelNote?: string;
