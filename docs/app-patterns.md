@@ -91,7 +91,9 @@ Someone who reaches something through several floors sees it in **one place**: t
 
 - Your app's own menu on the left, screens not records: **Home** first (what needs you on this floor, what's new since you looked), then your main screen, then **Shared with you** and **Find**.
 - The main screen shows the tree as something to walk into: cards for what holds things, rows for content, a breadcrumb, and a details panel for the selected record (metadata, who can see it, tags, relationships, lifecycle, its chain up the floors).
-- Use the kit's pieces for these (`ui-lifecycle`, `ui-chain`, `ui-details`), not your own.
+- Use the kit's pieces for these, not your own: `ui-cards` for what holds things, `ui-details` for a record's properties, `ui-lifecycle` for where it is in its lifecycle (with a button for each move the person may make, and why when there are none), and `ui-path` for its chain up the floors, with the floor that owns it marked.
+- Publishing up is a dialog on the record: where it is now and who owns it, each step it took (to take back, for whoever published it), and the floors above it, each one it can't go to still listed with why. Artifacts' `folio-publish-up` is the one to copy.
+- Whatever was published up to a floor shows on that floor under **From below** until its leads give it a place.
 
 ## Checklist for a new app
 
