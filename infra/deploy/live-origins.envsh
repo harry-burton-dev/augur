@@ -1,9 +1,15 @@
 #!/bin/sh
 # Live on the workbench (docs/release-channels.md): on a dev server only, the shell may load an app's
-# frontend from a developer's own machine on the tailnet, and its dev server's reload socket. nginx's
-# entrypoint sources this before it fills in default.conf.template, so ${LIVE_ORIGINS} is set here.
+# frontend from a developer's own machine, and its dev server's reload socket. Only from machines on the
+# workbench's own tailnet, the one in PLATFORM_URL (https://<machine>.<tailnet>.ts.net): every Tailscale
+# user's machines are under *.ts.net, so that alone would let the shell run scripts from anyone's.
+# nginx's entrypoint sources this before it fills in default.conf.template, so ${LIVE_ORIGINS} is set here.
+export LIVE_ORIGINS=""
 if [ "${SERVER_RING:-}" = "dev" ]; then
-  export LIVE_ORIGINS="https://*.ts.net wss://*.ts.net"
-else
-  export LIVE_ORIGINS=""
+  tailnet=$(printf '%s' "${PLATFORM_URL:-}" | tr 'A-Z' 'a-z' | sed -nE 's#^https://[a-z0-9-]+\.([a-z0-9-]+)\.ts\.net(:[0-9]+)?(/.*)?$#\1#p')
+  if [ -n "$tailnet" ]; then
+    export LIVE_ORIGINS="https://*.${tailnet}.ts.net wss://*.${tailnet}.ts.net"
+  else
+    echo "live-origins: PLATFORM_URL (${PLATFORM_URL:-unset}) isn't https://<machine>.<tailnet>.ts.net, so no machine may load an app live." >&2
+  fi
 fi

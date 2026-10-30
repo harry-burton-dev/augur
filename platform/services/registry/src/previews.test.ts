@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
+import { tailnetOf } from './live.ts';
 import { appFeed, AppUpdateChecker, newestOn, previewsIn, type AppFeedRelease } from './app-updates.ts';
 import { MemoryAppStore, type AppRelease } from './store.ts';
 import { UpdateChecker } from './updates.ts';
@@ -29,14 +30,14 @@ const verifyService = async (headers: Record<string, string | string[] | undefin
   headers.authorization === 'Bearer platform-updater' ? { kind: 'platform' as const, name: 'updater' } : undefined;
 const runner = { authorization: 'Bearer platform-updater' };
 
-const setup = async (ring?: 'dev' | 'preview') => {
+const setup = async (ring?: 'dev' | 'preview', tailnet: string | null = 'tail1234') => {
   let feed = feedOf(release('1.0.0'));
   let minutes = 0;
   const now = () => new Date(Date.UTC(2026, 9, 27, 12, minutes++));
   const checker = new AppUpdateChecker(async () => feed, now);
   const store = new MemoryAppStore();
   const entries: { action: string; detail?: Record<string, unknown> }[] = [];
-  const server = await buildApp({ store, verifyService, appUpdates: checker, audit: async (e) => void entries.push(e), ...(ring ? { updates: new UpdateChecker({ running: { version: '0.12.0', channel: 'beta' }, ring }) } : {}) });
+  const server = await buildApp({ store, verifyService, appUpdates: checker, audit: async (e) => void entries.push(e), tailnet: tailnet ?? undefined, ...(ring ? { updates: new UpdateChecker({ running: { version: '0.12.0', channel: 'beta' }, ring }) } : {}) });
   await checker.check();
   const next = () => server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner });
   /** Plays the runner: takes the next job and says it went as `outcome`, a preview answering at `upstream`. */
@@ -149,6 +150,10 @@ describe('live on the workbench', () => {
     expect((await live(t, 'u-3', entry)).statusCode).toBe(403);
     expect((await live(t, 'u-2', 'http://laptop.tail1234.ts.net/entry.ts')).statusCode).toBe(400);
     expect((await live(t, 'u-2', 'https://evil.example/entry.ts')).statusCode).toBe(400);
+    // Every Tailscale user's machines are on *.ts.net: only this workbench's own tailnet is let in.
+    const elsewhere = await live(t, 'u-2', 'https://laptop.tail9999.ts.net/entry.ts');
+    expect(elsewhere.statusCode).toBe(400);
+    expect(elsewhere.json().message).toContain('tail1234.ts.net');
     expect((await live(t, 'u-2', entry)).statusCode).toBe(204);
     expect((await t.server.inject({ method: 'GET', url: '/v1/previews', headers: person('u-2') })).json().apps[0]).toMatchObject({ app: 'notes', live: entry });
     expect((await catalogue(t, 'u-2')).find((a: { id: string }) => a.id === 'notes')).toMatchObject({ entry });
@@ -163,5 +168,20 @@ describe('live on the workbench', () => {
     await t.developers(['u-2']);
     expect((await live(t, 'u-2', entry)).json().message).toContain('Only the workbench');
     expect((await t.server.inject({ method: 'GET', url: '/v1/previews', headers: person('u-2') })).json().apps[0].liveProblem).toContain('SERVER_RING=dev');
+  });
+
+  it('says why not on a workbench that isn’t at a Tailscale address', async () => {
+    const t = await setup('dev', null);
+    await t.developers(['u-2']);
+    expect((await live(t, 'u-2', entry)).statusCode).toBe(409);
+    expect((await t.server.inject({ method: 'GET', url: '/v1/previews', headers: person('u-2') })).json().apps[0].liveProblem).toContain('PLATFORM_URL');
+  });
+
+  it('finds the tailnet in PLATFORM_URL', () => {
+    expect(tailnetOf('https://augur.tail1234.ts.net')).toBe('tail1234');
+    expect(tailnetOf('https://Augur.Tail1234.ts.net:443/')).toBe('tail1234');
+    expect(tailnetOf('https://augur.example.org')).toBeUndefined();
+    expect(tailnetOf('https://tail1234.ts.net')).toBeUndefined();
+    expect(tailnetOf(undefined)).toBeUndefined();
   });
 });

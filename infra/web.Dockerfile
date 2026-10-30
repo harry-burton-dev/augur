@@ -23,7 +23,7 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine AS web
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 # Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
 ENV APP_ORIGINS=""
-# Set from SERVER_RING when the container starts (infra/deploy/live-origins.envsh): *.ts.net on the workbench only.
+# Set from SERVER_RING and PLATFORM_URL when the container starts (infra/deploy/live-origins.envsh): the workbench's own tailnet, on the workbench only.
 ENV LIVE_ORIGINS="" SERVER_RING=""
 COPY --chmod=755 infra/deploy/live-origins.envsh /docker-entrypoint.d/15-live-origins.envsh
 # What the front door holds callers to (infra/deploy/nginx.conf). Requests a second from one address,

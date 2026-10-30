@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
 import { changesIn } from './changes.ts';
-import { LIVE_ONLY_ON_DEV, LiveOverrides, liveUrlProblem } from './live.ts';
+import { LiveOverrides } from './live.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
@@ -326,7 +326,7 @@ export const appRunnerRoutes =
               previews: previews.map(previewView),
               // Live on the workbench: loading it from the developer's own machine, or why it can't here.
               ...(from ? { live: from } : {}),
-              ...(live.allowed ? {} : { liveProblem: LIVE_ONLY_ON_DEV }),
+              ...(live.problem ? { liveProblem: live.problem } : {}),
             };
           }),
       };
@@ -357,10 +357,10 @@ export const appRunnerRoutes =
         const caller = callerFromHeaders(req.headers);
         if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to load an app from your machine.' });
         const { id } = req.params;
-        if (!live.allowed) return reply.code(409).send({ error: 'conflict', message: LIVE_ONLY_ON_DEV });
+        if (live.problem) return reply.code(409).send({ error: 'conflict', message: live.problem });
         if (!(await store.developers(id)).some((d) => d.person === caller.id)) return reply.code(403).send({ error: 'forbidden', message: `Only ${id}’s developers can load it from their machine. An admin adds them in Admin → Apps.` });
         const { url } = req.body;
-        const problem = url === null ? undefined : liveUrlProblem(url);
+        const problem = url === null ? undefined : live.urlProblem(url);
         if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         live.set(caller.id, id, url);
         req.log.info({ by: caller.id, app: id, url }, url === null ? 'live stopped' : 'live started');
