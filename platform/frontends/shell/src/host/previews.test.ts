@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { chooseFeaturePreview, choosable, choosePreview, featureLine, loadFeaturePreviews, loadPreviews, previewLine, previewPr } from './previews.js';
+import { chooseFeaturePreview, choosable, chooseLive, choosePreview, featureLine, loadFeaturePreviews, loadPreviews, previewLine, previewPr } from './previews.js';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const notes = { app: 'notes', name: 'Notes', version: '1.0.0', chosen: 12, previews: [{ pr: 12, version: '1.1.0-pr.12.3', title: 'Tags', startedAt: '2026-10-27T12:00:00Z', endsAt: '2026-11-03T12:00:00Z' }] };
@@ -26,6 +26,17 @@ describe('previews', () => {
     expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/previews/notes', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ pr: 12 }) }));
     await choosePreview(fetchImpl as unknown as typeof fetch, '/api/registry/v1/previews', 't', 'notes', null);
     await expect(choosePreview(fetchImpl as unknown as typeof fetch, '/api/registry/v1/previews', 't', 'notes', 7)).rejects.toThrow('No preview of pull request 7 is running.');
+  });
+
+  it('loads an app from your machine and stops, saying why when it can’t', async () => {
+    const entry = 'https://laptop.tail1.ts.net/@fs/apps/notes/frontend/src/entry.ts';
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) =>
+      JSON.parse(String(init?.body)).url === 'nope' ? json({ message: 'Only the workbench (SERVER_RING=dev) loads an app from your machine.' }, 409) : new Response(null, { status: 204 }),
+    );
+    await chooseLive(fetchImpl as unknown as typeof fetch, '/api/registry/v1/previews', 't', 'notes', entry);
+    expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/previews/notes/live', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ url: entry }) }));
+    await chooseLive(fetchImpl as unknown as typeof fetch, '/api/registry/v1/previews', 't', 'notes', null);
+    await expect(chooseLive(fetchImpl as unknown as typeof fetch, '/api/registry/v1/previews', 't', 'notes', 'nope')).rejects.toThrow('Only the workbench');
   });
 });
 

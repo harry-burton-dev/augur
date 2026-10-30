@@ -19,6 +19,7 @@ import {
   HOME_CHANNEL,
   cardsFor,
   choosePreview,
+  chooseLive,
   chooseFeaturePreview,
   choosable,
   featureLine,
@@ -262,6 +263,29 @@ export function Host({
       }
     },
     [fetchImpl, featurePreviewsUrl, session],
+  );
+
+  /** Loads an app from this person's own machine (Live on the workbench), or stops, then loads the catalogue again. */
+  const switchLive = useCallback(
+    async (app: PreviewApp, entry: string | null) => {
+      setSwitching(true);
+      try {
+        await chooseLive(fetchImpl, previewsUrl, await session.getToken(), app.app, entry);
+        shellRef.current?.notify(
+          toShellNotification('platform', {
+            title: entry === null ? `Back to ${app.name} ${app.version}` : `${app.name} is loading from your machine`,
+            body: entry === null ? 'Everyone’s version again.' : 'Only for you, with the real sign-in, floors and data. Save a file and it reloads.',
+          }),
+        );
+        setPreviewsOpen(false);
+        setAttempt((n) => n + 1);
+      } catch (err) {
+        shellRef.current?.notify(toShellNotification('platform', { title: `Couldn’t switch: ${(err as Error).message}` }));
+      } finally {
+        setSwitching(false);
+      }
+    },
+    [fetchImpl, previewsUrl, session],
   );
 
   /** Switches this person to a pull request's preview of an app, or back to the app, then loads the catalogue again. */
@@ -942,10 +966,58 @@ export function Host({
             ) : (
               <p>No pull request of it has a preview running.</p>
             )}
+            <LiveFromMyMachine app={app} busy={switching} onChoose={(entry) => void switchLive(app, entry)} />
           </section>
         ))}
       </ui-dialog>
     </ui-shell>
+  );
+}
+
+/**
+ * Live on the workbench: load the app's frontend from your own machine's `pnpm dev:app <id> --live`, for you
+ * alone. Elsewhere it stays in the list and says why (explain, never hide).
+ */
+function LiveFromMyMachine({ app, busy, onChoose }: { app: PreviewApp; busy: boolean; onChoose: (entry: string | null) => void }) {
+  const [entry, setEntry] = useState('');
+  if (app.live) {
+    return (
+      <div className="live" data-live={app.app}>
+        <span>
+          Loading from your machine
+          <br />
+          <small>{app.live}</small>
+        </span>
+        <ui-button kind="tertiary" size="sm" busy={busy} onClick={() => onChoose(null)}>
+          Back to {app.version}
+        </ui-button>
+      </div>
+    );
+  }
+  if (app.liveProblem) {
+    return (
+      <p className="live" data-live={app.app}>
+        <small>Live from my machine: {app.liveProblem}</small>
+      </p>
+    );
+  }
+  return (
+    <form
+      className="live"
+      data-live={app.app}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (entry.trim()) onChoose(entry.trim());
+      }}
+    >
+      <label>
+        <small>Live from my machine: the address <code>pnpm dev:app {app.app} --live</code> prints</small>
+        <input type="url" value={entry} placeholder="https://your-machine.ts.net/…/entry.ts" onChange={(e) => setEntry(e.currentTarget.value)} />
+      </label>
+      <ui-button kind="secondary" size="sm" busy={busy} disabled={!entry.trim()} reason="Paste the address first." onClick={() => entry.trim() && onChoose(entry.trim())}>
+        Load it
+      </ui-button>
+    </form>
   );
 }
 

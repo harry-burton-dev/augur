@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.30.0
+  version: 1.31.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -979,6 +979,8 @@ paths:
                         version: { type: string, description: The installed version }
                         chosen: { type: integer }
                         previews: { type: array, items: { $ref: "#/components/schemas/Preview" } }
+                        live: { type: string, description: "Live on the workbench: the entry on the caller's own machine the shell loads instead of the app" }
+                        liveProblem: { type: string, description: "Why the app can't be loaded from the caller's machine here (only the workbench, SERVER_RING=dev, does)" }
         "401": { description: Not signed in }
   /previews/{id}:
     put:
@@ -1002,6 +1004,30 @@ paths:
         "401": { description: Not signed in }
         "403": { description: Not one of the app's developers }
         "404": { description: No preview of that pull request is running }
+  /previews/{id}/live:
+    put:
+      summary: Load an app's frontend from the caller's own machine, for them alone (Live on the workbench)
+      description: >
+        Only on the workbench (SERVER_RING=dev), whose front door lets the shell load scripts from *.ts.net.
+        The shell is given `url` as the app's entry for the caller until they send `null` or the registry
+        restarts. The app's service stays the installed one.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties: { url: { type: [string, "null"], maxLength: 2048, description: "https://<machine>.ts.net/…/entry.ts, as pnpm dev:app <id> --live prints it" } }
+      responses:
+        "204": { description: Loading it from there, or stopped }
+        "400": { description: Not an app entry on a machine on the tailnet }
+        "401": { description: Not signed in }
+        "403": { description: Not one of the app's developers }
+        "409": { description: This server isn't the workbench }
 components:
   schemas:
     AppInstalls:

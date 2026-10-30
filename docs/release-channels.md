@@ -112,11 +112,21 @@ Vite and Storybook already change what you see as you save. `pnpm dev:app <id>` 
 - `DEV_PREVIEWS=all` (or ids, comma separated) turns the app's feature previews on for the stand-in person.
 - `DEV_HOST=0.0.0.0` opens the dev server to other machines on the tailnet (any `*.ts.net` name, plus `DEV_ALLOWED_HOSTS`), such as your phone.
 
+### Live on the workbench
+
+`pnpm dev:app <id> --live` puts your app's frontend, from source on your machine, into the workbench's real shell: real sign-in, floors, data and the installed service, for you alone.
+
+1. Once, on your machine: `tailscale serve --bg 5173`, so the dev server answers on `https://<your machine>.<tailnet>.ts.net`.
+2. Run `pnpm dev:app <id> --live`. It prints the address of the app's entry, such as `https://laptop.tail1234.ts.net/@fs/…/apps/<id>/frontend/src/entry.ts`.
+3. On the workbench, open the shell's **Previews**, find the app, paste it into **Live from my machine** and press **Load it**. Save a file and the page reloads. **Back to …** stops it.
+
+Only the app's developers (Admin → Apps) can, and only on the workbench: the registry refuses it unless `SERVER_RING=dev`, and only there does the front door's Content Security Policy let the shell load scripts from `https://*.ts.net` (and its reload socket from `wss://*.ts.net`). Anywhere else Previews still shows it, saying why. The address must be https on a `*.ts.net` name and end in `.js` or `.ts`. It's kept in memory, so a registry restart puts you back on the app. The app's service is the installed one: to try service changes, open a pull request and use its preview. The kit and shared modules your entry imports come from your machine too, so a kit change shows as you make it.
+
 For the kit on its own, `pnpm --filter @augur/ui-kit storybook`. Every pull request's CI run keeps its Storybook for 14 days: download **storybook** from the run's artifacts, unzip it and serve the folder (`npx serve`).
 
 ## What's left to build
 
-Loading an app's frontend from a developer's machine on the preview server (a local override, which needs its own content security rules), signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
+Signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
 
 ## Once, in GitHub (the repository's owner)
 

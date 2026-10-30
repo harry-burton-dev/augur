@@ -174,6 +174,12 @@ export default defineConfig({
     ...(process.env.DEV_HOST
       ? { host: process.env.DEV_HOST, allowedHosts: ['.ts.net', ...(process.env.DEV_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)] }
       : {}),
+    // Live on the workbench (`pnpm dev:app <id> --live`): the workbench's shell loads the app's entry from
+    // here, through `tailscale serve` at https://<DEV_LIVE_HOST>, so its pages on *.ts.net may fetch it, and
+    // the reload socket goes back to this machine rather than to the page's own address.
+    ...(process.env.DEV_LIVE_HOST
+      ? { cors: { origin: /^https:\/\/[a-z0-9.-]+\.ts\.net$/ }, hmr: { host: process.env.DEV_LIVE_HOST, protocol: 'wss', clientPort: 443 } }
+      : {}),
     // The app's own service first: the first matching prefix wins.
     proxy: { ...dev?.proxy, '/api': process.env.GATEWAY_URL ?? 'http://localhost:8080' },
   },
