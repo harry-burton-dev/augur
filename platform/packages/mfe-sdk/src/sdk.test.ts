@@ -22,6 +22,9 @@ import {
   type DocumentRef,
   type MountContext,
   type Workspace,
+  isUnitRef,
+  openUnit,
+  type UnitRef,
 } from './index.js';
 
 describe('event bus', () => {
@@ -119,6 +122,25 @@ describe('document intents', () => {
     expect(isDocumentRef({ app: 'folio', id: 'd-1' })).toBe(false);
     expect(isDocumentRef({ ...ref, version: 3 })).toBe(false);
     expect(isDocumentRef(null)).toBe(false);
+  });
+});
+
+describe('unit intent', () => {
+  const ref: UnitRef = { kind: 'unit', app: 'folio', id: 'l-1/f-reports', level: 'series', name: 'Reports' };
+
+  it('opens a unit through whichever app handles unit.open', async () => {
+    const raise = vi.fn(async () => undefined);
+    await openUnit({ raise }, ref);
+    expect(raise).toHaveBeenCalledWith({ type: 'unit.open', payload: ref });
+  });
+
+  it('knows a UnitRef when it sees one, at a level of the shape', () => {
+    expect(isUnitRef(ref)).toBe(true);
+    expect(isUnitRef({ ...ref, level: 'file', id: 'l-1/d-1' })).toBe(true);
+    expect(isUnitRef({ ...ref, level: 'folder' })).toBe(false);
+    expect(isUnitRef({ ...ref, kind: 'entity' })).toBe(false);
+    expect(isUnitRef({ ...ref, name: '' })).toBe(false);
+    expect(isUnitRef(undefined)).toBe(false);
   });
 });
 

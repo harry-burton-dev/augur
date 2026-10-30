@@ -46,7 +46,7 @@ await ctx.request({
 });
 ```
 
-The app sends who it lets in, as it already shows them; Auspex adds what it knows about the floors. `principal` is `person:<id>`, `team:<id>`, `tree:<id>` or `org`; entries it can't read are left out. Artifacts raises it from **Who can see it**. When no app handles it, the asking app says so and keeps its own list.
+The app sends who it lets in, as it already shows them; Auspex adds what it knows about the floors. `principal` is `person:<id>`, `team:<id>`, `tree:<id>` or `org`; entries it can't read are left out. Artifacts raises it from **Who can see it**. When no app handles it, the asking app says so and keeps its own list. Something published up the floors adds `chain` (the floors it came up through, from where it was made) and `shows` (the states it shows there) to its entry, and Auspex says "Up from Payroll through Finance, showing Complete and Issued".
 
 ## Running it
 
