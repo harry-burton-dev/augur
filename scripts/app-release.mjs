@@ -231,7 +231,7 @@ const main = async () => {
         ? `A preview of ${release.manifest.name} from pull request #${preview.pr}${preview.title ? `, ${preview.title}` : ''}. It runs beside the app for its developers, and goes when the pull request closes.\n`
         : dev
           ? `A dev build of ${release.manifest.name}, from ${process.env.RELEASE_TARGET || 'dev'} on dev. Only a preview server set to take dev builds of it installs it.\n`
-          : `${release.manifest.name} ${release.version} (${release.channel}).\n\n${release.notes || '_No changelog entry._'}\n`,
+          : `${release.manifest.name} ${release.version}.\n\n${release.notes || '_No changelog entry._'}\n`,
     );
     // Made on preview, a release is a pre-release until it is promoted to production (scripts/promote.mjs).
     const beta = release.channel !== 'stable' || process.env.RELEASE_BRANCH === 'preview';
