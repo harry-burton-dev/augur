@@ -28,6 +28,7 @@ platform/                 everything the platform owns; never imports from apps/
     ui-kit/               design tokens + Lit web components (and Storybook)
     mfe-sdk/              the contract between shell and apps
     service-kit/          helpers every backend service uses
+    records/              the rules every app's records share (levels, lifecycle, access, tags, links, publishing up)
   services/
     gateway/              the only public entry for APIs
     identity/             people, teams, floors, preferences
@@ -68,6 +69,7 @@ Home and Admin are built like any app: one ES module the shell imports.
 | `@augur/ui-kit` | Every visual. Tokens come from `tokens/tokens.json` (the only file to edit; `pnpm --filter @augur/ui-kit tokens` regenerates the rest). Storybook: `pnpm --filter @augur/ui-kit storybook`. |
 | `@augur/mfe-sdk` | What an app gets from the shell: `defineMicroFrontend`, the mount context (`ctx.person`, `ctx.workspace`, `ctx.fetch`, `notify`, `raise`/`request` intents, event bus), and the manifest types. Breaking it breaks apps, so it is versioned carefully. |
 | `@augur/service-kit` | For backend services: read the caller the gateway verified, sign in as the service itself, register an app, send notifications and audit entries, check floors and grants, logging. |
+| `@augur/records` | The rules every app's records share, for services and frontends alike: levels a tree is built from, lifecycles, read/edit/manage down a tree, tags, relationships, and publishing up the floors with one owner. See [App patterns](docs/app-patterns.md). |
 
 ### Services
 

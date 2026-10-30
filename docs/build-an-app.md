@@ -282,6 +282,10 @@ An app that lets people share things with each other asks identity two things, a
 
 The platform has a **publisher** role for people who may put things out beyond their own team, to the whole org or to any team. An app checks it in the caller's `roles`; an admin gives it in Admin, People. Identity adds the role to the sign-in service when it starts, so a server set up before it gets it too.
 
+### Records like Artifacts'
+
+If your app keeps things people organise, version and publish, keep them the way Artifacts does: levels, a lifecycle on each version, grants that reach down, tags, relationships and publishing up the floors with one owner. [App patterns](app-patterns.md) sets out each one and the tables to keep, and `@augur/records` holds the rules.
+
 ## 6. Before you open a pull request
 
 ```sh
