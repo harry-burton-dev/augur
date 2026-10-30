@@ -1,10 +1,9 @@
 {
-  "version": "0.8.0",
+  "version": "0.9.0",
   "channel": "beta",
-  "released": "2026-10-29",
+  "released": "2026-10-30",
   "upgradeFrom": ">=0.1.0",
   "changed": [
-    "@augur/mfe-sdk",
     "@augur/ui-kit",
     "@augur/registry",
     "@augur/updater",
@@ -67,7 +66,9 @@
       "APP_ORIGINS",
       "GITHUB_READ_USER",
       "RELEASE_FEED_URL",
+      "SERVER_RING",
       "RELEASE_CHANNEL",
+      "ALLOW_PR_PREVIEWS",
       "COMPOSE_PROFILES",
       "PLATFORM_DIR",
       "UPDATER_CLIENT_SECRET",
@@ -99,9 +100,13 @@
       "PLATFORM_ADMIN_EMAIL",
       "PLATFORM_ADMIN_FIRST_NAME",
       "PLATFORM_ADMIN_LAST_NAME",
-      "PLATFORM_ADMIN_DEPARTMENT"
+      "PLATFORM_ADMIN_DEPARTMENT",
+      "SERVER_RING"
     ],
-    "added": [],
+    "added": [
+      "SERVER_RING",
+      "ALLOW_PR_PREVIEWS"
+    ],
     "removed": []
   },
   "parts": {
@@ -112,7 +117,7 @@
       "version": "0.9.0"
     },
     "@augur/ui-kit": {
-      "version": "1.5.0"
+      "version": "1.6.0"
     },
     "@augur/events": {
       "version": "0.5.0"
@@ -127,37 +132,37 @@
       "version": "0.3.0"
     },
     "@augur/registry": {
-      "version": "0.10.0"
+      "version": "0.11.0"
     },
     "@augur/storage": {
       "version": "0.3.0"
     },
     "@augur/updater": {
-      "version": "0.4.2"
+      "version": "0.5.0"
     },
     "@augur/admin": {
-      "version": "0.8.1"
-    },
-    "@augur/home": {
-      "version": "0.2.6"
-    },
-    "@augur/shell": {
       "version": "0.9.0"
     },
+    "@augur/home": {
+      "version": "0.2.7"
+    },
+    "@augur/shell": {
+      "version": "0.9.1"
+    },
     "@apps/folio-frontend": {
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     "@apps/folio": {
       "version": "0.2.2"
     },
     "@apps/auspex-frontend": {
-      "version": "0.1.1"
+      "version": "0.1.2"
     },
     "@apps/auspex": {
       "version": "0.1.0"
     },
     "@apps/atlas-frontend": {
-      "version": "0.1.1"
+      "version": "0.1.2"
     },
     "@apps/atlas": {
       "version": "0.1.0"
