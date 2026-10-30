@@ -75,6 +75,13 @@ const sharedModulesMap = (): Plugin => {
   return {
     name: 'shared-modules',
     enforce: 'pre',
+    // `pnpm dev:app <id> --kit` rebuilds the kit and shared-build/ as they change: the page reloads with the new import map.
+    configureServer(server) {
+      if (process.env.DEV_KIT !== 'watch') return;
+      const map = join(dir, 'importmap.json');
+      server.watcher.add(map);
+      server.watcher.on('change', (file) => file === map && server.ws.send({ type: 'full-reload' }));
+    },
     config: (_config, { command }) => {
       dev = command === 'serve';
       return dev ? {} : { build: { rollupOptions: { external: isSharedModule } } };
@@ -105,7 +112,11 @@ const devApp = (dir: string | undefined) => {
   const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; [key: string]: unknown };
   const roles = (process.env.DEV_ROLES ?? '').split(',').map((r) => r.trim()).filter(Boolean);
   // DEV_APP_ENTRY serves a built entry instead of the source (the contract tests mount frozen builds).
-  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs${resolve(dir, 'frontend/src/entry.ts')}` };
+  // DEV_PREVIEWS turns the app's feature previews on for the stand-in person: ids, comma separated, or `all`.
+  const previews = ((manifest.previews ?? []) as { id: string }[]).map((p) => p.id);
+  const asked = (process.env.DEV_PREVIEWS ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+  const previewsOn = asked.includes('all') ? previews : previews.filter((p) => asked.includes(p));
+  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs${resolve(dir, 'frontend/src/entry.ts')}`, ...(previewsOn.length ? { previewsOn } : {}) };
   const caller = {
     'x-user-id': 'dev-person',
     'x-user-name': encodeURIComponent('Dev Person'),
@@ -159,6 +170,10 @@ export default defineConfig({
   define: { __SHELL_VERSION__: JSON.stringify(version), ...dev?.define },
   server: {
     port: 5173,
+    // DEV_HOST=0.0.0.0 opens it to other machines, such as your phone or the preview server, on the tailnet (*.ts.net) or DEV_ALLOWED_HOSTS.
+    ...(process.env.DEV_HOST
+      ? { host: process.env.DEV_HOST, allowedHosts: ['.ts.net', ...(process.env.DEV_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)] }
+      : {}),
     // The app's own service first: the first matching prefix wins.
     proxy: { ...dev?.proxy, '/api': process.env.GATEWAY_URL ?? 'http://localhost:8080' },
   },

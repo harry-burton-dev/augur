@@ -31,6 +31,7 @@ Open http://localhost:5173/expenses. This is the real shell and the real UI kit,
 Nothing else of the platform runs, so the shell stands in for it:
 
 - You are signed in as **Dev Person**, in the Development department, with the role your manifest's `requiredRole` asks for. `DEV_ROLES=admin pnpm dev:app expenses` adds roles.
+- `pnpm dev:app expenses --kit` also rebuilds the UI kit and its tokens as you change them and reloads the page; `DEV_PREVIEWS=all` turns your feature previews on; `DEV_HOST=0.0.0.0` opens it to your other machines on the tailnet ([release-channels.md](release-channels.md#the-live-dev-loop)).
 - You're on your own floor (`/@me/expenses`); `/@org/expenses` puts your app on the org's.
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
 - The catalogue is Home and your app. Home (`/@me/home`) shows what your app's `ctx.notify({ needsYou: true })` sends, and your glance card if you have one. `ctx.raise` and `ctx.request` reach your app when it `handles` the intent, and otherwise fail the way they do when no app handles one.
