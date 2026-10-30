@@ -42,13 +42,15 @@ For a fix production can't wait for: branch `hotfix/<what>` from `production`, m
 
 Releases are signed by the Release workflow on the branch it ran on. The updater and the mirror take a signature from `release.yml` on `main`, `preview` or `production` (`releaseIdentity` in `platform/services/updater/src/signers.ts`), and still refuse any other branch or workflow. `main` stays on the list for releases made before it was renamed.
 
+AUGUR's dev builds are signed by `augur-dev.yml` on `dev`, which the updater takes only for a dev build, and only on the workbench ([AUGUR dev builds](#augur-dev-builds)).
+
 ## Server rings
 
 Each server says what kind it is with `SERVER_RING` in `.env`. It is set there and not in Admin, so no admin session can change it.
 
 | | `dev` (the workbench) | `preview` (a staging server) | `production` (every other deployment, and the default) |
 | --- | --- | --- | --- |
-| AUGUR follows | preview releases (beta) by default, and AUGUR's own dev builds once they exist ([Upgrade Centre plan](https://claude.ai/artifact/K6A9Z3hGLy8TSLgNNxwaDi)) | preview releases (beta) by default; `RELEASE_CHANNEL=stable` for production ones only | production releases (stable) only; `RELEASE_CHANNEL=beta` is ignored, and Updates says so |
+| AUGUR follows | AUGUR's own dev builds, taken by itself, and every release (`RELEASE_CHANNEL=dev`, the default; see [AUGUR dev builds](#augur-dev-builds)) | preview releases (beta) by default; `RELEASE_CHANNEL=stable` for production ones only | production releases (stable) only; `RELEASE_CHANNEL=beta` is ignored, and Updates says so |
 | An app follows | production releases, preview releases too, or dev builds too (Admin → Apps, **New releases**) | the same | production releases only; **Preview releases too** and **Dev builds too** stay in the list, greyed, saying why |
 | Pull requests' builds | run for an app's developers | the same | don't run, unless `ALLOW_PR_PREVIEWS=on` |
 | Feature previews nobody chose for | opt-in | opt-in | off |
@@ -74,6 +76,14 @@ Every merge into `dev` that changes a runner app (Mandate today) builds it at on
 Only a dev or preview server takes them. On the installed app in Admin → Apps, choose **New releases: Dev builds too**; with **Automatic**, each dev build installs at the server's next check (blue/green, as any install). Before each one, the updater takes a backup of the database, since a dev build runs on the server's real data; the install's first step names the file. On a production server the choice stays in the list, greyed, saying why; the registry refuses one, and the updater refuses to install a dev build unless `.env` says `SERVER_RING=dev` or `preview`.
 
 Because a dev build has run its migrations on the preview server, a migration is frozen once it's on `dev`, not only once it's released: CI on a pull request into `dev` fails if it changes or removes one that's already there (`MIGRATIONS_FROZEN_AT=origin/dev pnpm check:migrations`). Add a new migration instead.
+
+## AUGUR dev builds
+
+AUGUR itself gets a dev build of every merge into `dev` that changes the platform, the apps that ship with it (Folio, Auspex, Data Atlas) or how it's deployed: **AUGUR dev builds** (`.github/workflows/augur-dev.yml`) builds, pushes and signs every image as a release does and makes the pre-release `augur@<next patch>-dev.<run>` (such as `0.12.1-dev.48` after `0.12.0`). Its parts keep the last release's versions, since nothing is versioned until the Version packages PR; what it changes, what's breaking and its notes come from the changesets waiting (`node scripts/augur-release.mjs dev <run>`). AUGUR keeps its three newest dev builds, and the feed its two newest beside its releases.
+
+Only the workbench takes them. With `SERVER_RING=dev`, the registry follows the dev channel by default (`RELEASE_CHANNEL=dev`), which holds dev builds and every release. When a dev build is next and nothing needs a person (no breaking change, and no new required setting the updater can't make up), the registry asks the updater for it by itself, and it runs as any upgrade: backup first, then roll forward, rolling back if it doesn't come up. The history says **By itself**. A dev build that didn't finish, or that an admin took back or went back from, is never asked for again by itself: it waits for an admin, as does a release. A dev build with something that needs you waits on Updates, saying what.
+
+The updater checks a dev build's images against the AUGUR dev builds workflow on `refs/heads/dev` (`AUGUR_DEV_SIGNER` in the updater overrides it), not the Release workflow, and refuses one unless `.env` says `SERVER_RING=dev`. On a preview or production server `RELEASE_CHANNEL=dev` is ignored, and Updates says so.
 
 ## Feature previews
 

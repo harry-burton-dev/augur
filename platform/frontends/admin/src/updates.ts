@@ -5,7 +5,7 @@ import { changeList, gatherChanges, historyList } from './changes.js';
 import { line, page, section } from './parts.js';
 
 /** Stable releases are on production, beta ones on preview (docs/release-channels.md). */
-const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Production' : 'Preview');
+const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Production' : c === 'dev' ? 'Dev build' : 'Preview');
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 /** How often the page asks again while an upgrade is waiting or under way. */
@@ -258,8 +258,8 @@ export class AdminUpdates extends LitElement {
   private facts(u: PlatformUpdates) {
     const facts: Fact[] = [
       { label: 'Running', value: `AUGUR ${u.running.version}` },
-      ...(u.ring ? [{ label: 'Server', value: u.ring === 'production' ? 'Production' : 'Preview' }] : []),
-      { label: 'Following', value: `${channelWord(u.channel)} releases` },
+      ...(u.ring ? [{ label: 'Server', value: u.ring === 'production' ? 'Production' : u.ring === 'dev' ? 'Workbench' : 'Preview' }] : []),
+      { label: 'Following', value: u.channel === 'dev' ? 'Dev builds, taken by itself, and releases' : `${channelWord(u.channel)} releases` },
       ...(u.available ? [{ label: 'Newest', value: `AUGUR ${u.available.version}${u.available.released ? `, ${day(u.available.released)}` : ''}` }] : []),
       ...(u.feed === 'on' ? [{ label: 'Last checked', value: u.checkedAt ? new Date(u.checkedAt).toLocaleString() : 'Not yet' }] : []),
     ];

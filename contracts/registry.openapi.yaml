@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.28.0
+  version: 1.29.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -1263,7 +1263,7 @@ components:
               required: { type: boolean }
               madeUp: { type: boolean, description: "For kind setting: a secret the updater makes up itself" }
               app: { type: string, description: The app that won't run on the new SDK, for kind app }
-    ReleaseChannel: { type: string, enum: [stable, beta], description: "stable is on production, beta on preview (docs/release-channels.md)" }
+    ReleaseChannel: { type: string, enum: [stable, beta, dev], description: "stable is on production, beta on preview, dev a dev build of the dev branch that only the workbench takes (docs/release-channels.md)" }
     ServerRing: { type: string, enum: [dev, preview, production], description: "What kind of server this is (SERVER_RING in .env): dev is the workbench, which also runs AUGUR's dev builds; a production one takes only releases promoted to production" }
     ReleaseSummary:
       type: object

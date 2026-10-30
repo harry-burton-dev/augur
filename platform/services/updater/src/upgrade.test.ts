@@ -52,8 +52,8 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
     mounting: async (paths) => (paths.includes('keycloak/realm.json') ? ['keycloak'] : []),
     recreate: async (services) => void did.push(`recreate ${services.join(' ')}`),
     remove: async (services) => void did.push(`remove ${services.join(' ')}`),
-    verifySignature: async (ref) => {
-      did.push(`verify ${ref}`);
+    verifySignature: async (ref, identity) => {
+      did.push(`verify ${ref}${identity ? ` as ${identity}` : ''}`);
       if (breaks.sign && ref.includes('/web@')) throw new Error('no matching signatures');
     },
     backup: async () => {
@@ -83,7 +83,7 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
     },
     wait: async () => {},
   };
-  return { server, did, disk, env: () => env, rolledBack: () => rolledBack };
+  return { server, did, disk, env: () => env, setEnv: (text: string) => void (env = text), rolledBack: () => rolledBack };
 };
 
 const run = async (t: Target, server: Server) => {
@@ -93,6 +93,32 @@ const run = async (t: Target, server: Server) => {
 };
 
 describe('an upgrade', () => {
+  it('runs an AUGUR dev build only on the workbench, signed by the dev builds workflow on dev', async () => {
+    const devIdentity = 'https://github.com/o/r/.github/workflows/augur-dev.yml@refs/heads/dev';
+    const dev = target({ version: '0.3.0-dev.48' });
+    const elsewhere = fakeServer();
+    const refused: Report[] = [];
+    await runUpgrade(dev, elsewhere.server, async (r) => void refused.push(r), { devIdentity });
+    expect(refused.find((r) => r.step === 'preflight' && r.state === 'failed')?.message).toContain('0.3.0-dev.48 is a dev build of AUGUR, and only the workbench (SERVER_RING=dev in .env) runs those.');
+    expect(elsewhere.did).toEqual([]);
+
+    const workbench = fakeServer();
+    workbench.setEnv(`${workbench.env()}SERVER_RING=dev\n`);
+    const reports: Report[] = [];
+    const outcome = await runUpgrade(dev, workbench.server, async (r) => void reports.push(r), { devIdentity });
+    expect(reports.filter((r) => r.state === 'failed').map((r) => r.message)).toEqual([]);
+    expect(outcome).toBe('done');
+    const verified = workbench.did.filter((d) => d.startsWith('verify'));
+    expect(verified).toHaveLength(5);
+    expect(verified.every((d) => d.endsWith(` as ${devIdentity}`))).toBe(true);
+
+    // A release is still checked against the Release workflow, on the workbench too.
+    const release = fakeServer();
+    release.setEnv(`${release.env()}SERVER_RING=dev\n`);
+    await run(target(), release.server);
+    expect(release.did.filter((d) => d.startsWith('verify')).some((d) => d.includes(' as '))).toBe(false);
+  });
+
   it('checks, backs up, pulls, then restarts each part in order on the new release', async () => {
     const fake = fakeServer();
     const { outcome, steps, last, reports } = await run(target(), fake.server);

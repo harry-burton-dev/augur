@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { deployFiles, nextRelease, versionModule } from './augur-release.mjs';
+import { deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, versionModule } from './augur-release.mjs';
 
 const settings = { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL'] };
 const first = nextRelease(undefined, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-10-23');
@@ -61,4 +61,39 @@ test('the deploy files are the server’s own, by hash, without .env.example or 
   const files = deployFiles(['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'docs/deploy.md']);
   assert.deepEqual(Object.keys(files), ['backup/backup.sh', 'compose.yml']);
   assert.match(files['compose.yml'], /^[0-9a-f]{64}$/);
+});
+
+test('a changeset is read for its bumps and what it says', () => {
+  assert.deepEqual(parseChangeset('---\n"@augur/registry": minor\n\'@augur/admin\': patch\n---\n\nA third ring.\n'), { bumps: { '@augur/registry': 'minor', '@augur/admin': 'patch' }, summary: 'A third ring.' });
+  assert.deepEqual(parseChangeset('---\n---\n\nNothing to release.\n'), { bumps: {}, summary: 'Nothing to release.' });
+  assert.equal(parseChangeset('no frontmatter'), undefined);
+});
+
+test('a dev build is the next patch then the run, with what the changesets waiting say', () => {
+  const parts = { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } };
+  const changesets = [
+    { bumps: { '@augur/registry': 'minor' }, summary: 'Dev builds.' },
+    { bumps: { '@augur/registry': 'patch', '@apps/gone': 'patch' }, summary: 'A fix\nover two lines.' },
+  ];
+  const build = devBuild(first, parts, settings, changesets, 48, '2026-10-30');
+  assert.equal(build.version, '0.1.1-dev.48');
+  assert.equal(build.channel, 'dev');
+  assert.equal(build.upgradeFrom, first.upgradeFrom);
+  assert.deepEqual(build.changed, ['@augur/registry']);
+  assert.deepEqual(build.breaking, []);
+  assert.equal(build.changelogs['@augur/registry'], '#### Minor Changes\n\n- Dev builds.\n\n#### Patch Changes\n\n- A fix\n  over two lines.');
+  assert.deepEqual(build.parts, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } });
+  assert.throws(() => devBuild(first, parts, settings, [], 'x', '2026-10-30'), /run is a number/);
+});
+
+test('a dev build with a major changeset is breaking, and needs the last release first', () => {
+  const build = devBuild(first, { '@augur/mfe-sdk': { version: '1.1.0' } }, settings, [{ bumps: { '@augur/mfe-sdk': 'major' }, summary: 'SDK 2.\nMore.' }], 3, '2026-10-30');
+  assert.deepEqual(build.breaking, ['@augur/mfe-sdk: SDK 2.']);
+  assert.equal(build.upgradeFrom, '>=0.1.0');
+});
+
+test('only the newest few of AUGUR’s dev builds are kept, and never a release', () => {
+  const tags = ['augur@0.12.0', 'augur@0.12.1-dev.40', 'augur@0.12.1-dev.48', 'augur@0.12.1-dev.9', 'augur@0.13.1-dev.50', 'app/notes@0.1.1-dev.3'];
+  assert.deepEqual(oldDevBuilds(tags), ['augur@0.12.1-dev.9']);
+  assert.deepEqual(oldDevBuilds(tags, ['augur@0.12.1-dev.9'], 1), ['augur@0.12.1-dev.48', 'augur@0.12.1-dev.40']);
 });

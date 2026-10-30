@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { verifyArgs } from './server.ts';
-import { releaseIdentity } from './signers.ts';
+import { augurDevIdentity, isDevBuild, releaseIdentity } from './signers.ts';
 
 describe('release signers', () => {
   const identity = releaseIdentity('o/r/.github/workflows/release.yml');
@@ -20,5 +20,12 @@ describe('release signers', () => {
   it('are checked as a pattern, while an exact identity stays exact', () => {
     expect(verifyArgs(identity, 'issuer', 'x@sha256:aa').slice(0, 3)).toEqual(['verify', '--certificate-identity-regexp', identity]);
     expect(verifyArgs('https://github.com/o/r/x@refs/pull/1/merge', 'issuer', 'x@sha256:aa')[1]).toBe('--certificate-identity');
+  });
+
+  it('know AUGUR’s dev builds by version, and who signs them', () => {
+    expect(isDevBuild('0.12.1-dev.48')).toBe(true);
+    expect(isDevBuild('0.12.1')).toBe(false);
+    expect(isDevBuild('0.12.1-pr.3.4')).toBe(false);
+    expect(augurDevIdentity('o/r')).toBe('https://github.com/o/r/.github/workflows/augur-dev.yml@refs/heads/dev');
   });
 });
