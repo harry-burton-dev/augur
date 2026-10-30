@@ -71,6 +71,8 @@ services:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
       # Keycloak's own admin console, at PLATFORM_URL/sso/admin: open serves it; it's closed otherwise.
       KEYCLOAK_CONSOLE: ${KEYCLOAK_CONSOLE:-closed}
+      # On the workbench (dev) only, the shell may load an app from a developer's machine on the tailnet.
+      SERVER_RING: ${SERVER_RING:-}
     depends_on: [gateway, keycloak]
 
   # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.

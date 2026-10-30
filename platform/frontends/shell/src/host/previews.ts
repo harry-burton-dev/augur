@@ -16,6 +16,10 @@ export interface PreviewApp {
   version: string;
   chosen?: number;
   previews: Preview[];
+  /** Live on the workbench: the entry on this person's own machine the shell loads instead of the app. */
+  live?: string;
+  /** Why it can't be loaded from their machine here: only the workbench does. */
+  liveProblem?: string;
 }
 
 /** A pull request's build's version: <x.y.z>-pr.<number>.<run>. */
@@ -51,6 +55,19 @@ export async function choosePreview(fetchImpl: typeof fetch, url: string, token:
     method: 'PUT',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ pr }),
+  });
+  if (!res.ok) {
+    const said = ((await res.json().catch(() => ({}))) as { message?: string }).message;
+    throw new Error(said ?? `The registry answered ${res.status}.`);
+  }
+}
+
+/** Loads an app's frontend from this person's own machine (`pnpm dev:app <id> --live`), or with `null` stops. */
+export async function chooseLive(fetchImpl: typeof fetch, url: string, token: string, app: string, entry: string | null): Promise<void> {
+  const res = await fetchImpl(`${url}/${encodeURIComponent(app)}/live`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ url: entry }),
   });
   if (!res.ok) {
     const said = ((await res.json().catch(() => ({}))) as { message?: string }).message;

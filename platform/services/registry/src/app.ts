@@ -47,6 +47,7 @@ import {
   type AppEntry,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
+import { LiveOverrides } from './live.ts';
 import { lineView, type PipelineReader } from './pipeline.ts';
 import { automaticDevUpgrade, goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
@@ -180,6 +181,7 @@ export const buildApp = async ({
   portalUrl,
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
+  const live = new LiveOverrides(updates.ring);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
@@ -236,7 +238,10 @@ export const buildApp = async ({
             // for a developer trying one of its pull requests, that build's. And the feature previews on for this person (SDK 1.7).
             .map((r) => {
               const on = previewsOnFor(r, optIns, updates.ring, at);
-              return { ...servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
+              const served = servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept);
+              // Live on the workbench: this developer's own machine's frontend, in place of any build.
+              const from = live.of(caller?.id, r.entry.id);
+              return { ...served, ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
             });
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
@@ -413,7 +418,7 @@ export const buildApp = async ({
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record }));
-      await app.register(appRunnerRoutes({ store, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
+      await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(
         '/apps/:id',

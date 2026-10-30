@@ -3,6 +3,7 @@ import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { appFeed, AppUpdateChecker, newestOn, previewsIn, type AppFeedRelease } from './app-updates.ts';
 import { MemoryAppStore, type AppRelease } from './store.ts';
+import { UpdateChecker } from './updates.ts';
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const release = (version: string, more: Partial<AppRelease> = {}): AppRelease => ({
@@ -28,14 +29,14 @@ const verifyService = async (headers: Record<string, string | string[] | undefin
   headers.authorization === 'Bearer platform-updater' ? { kind: 'platform' as const, name: 'updater' } : undefined;
 const runner = { authorization: 'Bearer platform-updater' };
 
-const setup = async () => {
+const setup = async (ring?: 'dev' | 'preview') => {
   let feed = feedOf(release('1.0.0'));
   let minutes = 0;
   const now = () => new Date(Date.UTC(2026, 9, 27, 12, minutes++));
   const checker = new AppUpdateChecker(async () => feed, now);
   const store = new MemoryAppStore();
   const entries: { action: string; detail?: Record<string, unknown> }[] = [];
-  const server = await buildApp({ store, verifyService, appUpdates: checker, audit: async (e) => void entries.push(e) });
+  const server = await buildApp({ store, verifyService, appUpdates: checker, audit: async (e) => void entries.push(e), ...(ring ? { updates: new UpdateChecker({ running: { version: '0.12.0', channel: 'beta' }, ring }) } : {}) });
   await checker.check();
   const next = () => server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner });
   /** Plays the runner: takes the next job and says it went as `outcome`, a preview answering at `upstream`. */
@@ -134,5 +135,33 @@ describe('pull requests’ previews', () => {
 
     const install = await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: admin(), payload: { action: 'install', release: release('1.1.0-pr.4.1') } });
     expect(install.json().message).toMatch(/pull request’s build/);
+  });
+});
+
+describe('live on the workbench', () => {
+  const entry = 'https://laptop.tail1234.ts.net/@fs/home/me/augur/apps/notes/frontend/src/entry.ts';
+  const live = (t: Awaited<ReturnType<typeof setup>>, id: string, url: string | null) => t.server.inject({ method: 'PUT', url: '/v1/previews/notes/live', headers: person(id), payload: { url } });
+  const catalogue = async (t: Awaited<ReturnType<typeof setup>>, id: string) => (await t.server.inject({ method: 'GET', url: '/v1/manifest', headers: person(id) })).json();
+
+  it('loads an app from its developer’s own machine, for them alone, only on the workbench', async () => {
+    const t = await setup('dev');
+    await t.developers(['u-2']);
+    expect((await live(t, 'u-3', entry)).statusCode).toBe(403);
+    expect((await live(t, 'u-2', 'http://laptop.tail1234.ts.net/entry.ts')).statusCode).toBe(400);
+    expect((await live(t, 'u-2', 'https://evil.example/entry.ts')).statusCode).toBe(400);
+    expect((await live(t, 'u-2', entry)).statusCode).toBe(204);
+    expect((await t.server.inject({ method: 'GET', url: '/v1/previews', headers: person('u-2') })).json().apps[0]).toMatchObject({ app: 'notes', live: entry });
+    expect((await catalogue(t, 'u-2')).find((a: { id: string }) => a.id === 'notes')).toMatchObject({ entry });
+    // Nobody else is touched.
+    expect((await catalogue(t, 'u-3')).find((a: { id: string }) => a.id === 'notes')?.entry).not.toBe(entry);
+    expect((await live(t, 'u-2', null)).statusCode).toBe(204);
+    expect((await catalogue(t, 'u-2')).find((a: { id: string }) => a.id === 'notes')?.entry).not.toBe(entry);
+  });
+
+  it('says why not on any other server', async () => {
+    const t = await setup('preview');
+    await t.developers(['u-2']);
+    expect((await live(t, 'u-2', entry)).json().message).toContain('Only the workbench');
+    expect((await t.server.inject({ method: 'GET', url: '/v1/previews', headers: person('u-2') })).json().apps[0].liveProblem).toContain('SERVER_RING=dev');
   });
 });
