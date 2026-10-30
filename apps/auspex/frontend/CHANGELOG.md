@@ -1,5 +1,12 @@
 # @apps/auspex-frontend
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [5b2c80c]
+  - @augur/mfe-sdk@1.7.0
+
 ## 0.1.2
 
 ### Patch Changes

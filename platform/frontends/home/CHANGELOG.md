@@ -1,5 +1,12 @@
 # @augur/home
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [5b2c80c]
+  - @augur/mfe-sdk@1.7.0
+
 ## 0.2.7
 
 ### Patch Changes
