@@ -156,6 +156,23 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
     stop();
   });
 
+  it('listens again when Postgres drops its connection, so open streams don’t go quiet', async () => {
+    // As a Postgres restart would: end every connection that's listening.
+    await admin.query(`select pg_terminate_backend(pid) from pg_stat_activity where query like 'listen %' and pid <> pg_backend_pid()`);
+    const heard: Notification[] = [];
+    const stop = other.subscribe((n) => heard.push(n));
+    await expect
+      .poll(
+        async () => {
+          await store.addNotifications({ ...review, recipients: ['u-10'] });
+          return heard.length > 0;
+        },
+        { timeout: 10_000, interval: 500 },
+      )
+      .toBe(true);
+    stop();
+  });
+
   it('never hands out an event while an earlier one could still commit below it', async () => {
     const slow = await admin.connect();
     try {

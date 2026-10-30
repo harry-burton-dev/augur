@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
-import type { NewAuditEntry, NewNotification, NotificationAction, NotificationLevel } from '@augur/service-kit';
+import { steadyPool, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
 export interface EventFloor {
@@ -345,11 +345,12 @@ const fromAuditRow = (r: AuditRow): AuditEntry => ({
 export class PgEventStore implements EventStore {
   private emitter = new EventEmitter().setMaxListeners(0);
   private listening?: pg.PoolClient;
+  private closed = false;
 
   constructor(private readonly pool: pg.Pool) {}
 
   static async connect(connectionString: string) {
-    const store = new PgEventStore(new pg.Pool({ connectionString }));
+    const store = new PgEventStore(steadyPool(new pg.Pool({ connectionString })));
     await store.migrate();
     await store.listen();
     return store;
@@ -377,10 +378,30 @@ export class PgEventStore implements EventStore {
     }
   }
 
-  /** Holds one connection open to hear about notifications added by any instance. */
-  async listen() {
-    this.listening = await this.pool.connect();
-    this.listening.on('notification', (msg) => {
+  /**
+   * Holds one connection open to hear about notifications added by any instance. When Postgres
+   * restarts or drops it, it listens again on a new one, waiting a little longer each try, so open
+   * streams don't go quiet for good. What was sent while it was gone is kept, and shows on the next load.
+   */
+  async listen(retryMs = 1000) {
+    const client = await this.pool.connect();
+    this.listening = client;
+    let lost = false;
+    const again = (why: string) => {
+      if (lost || this.closed) return;
+      lost = true;
+      console.error(`The notification stream lost its database connection (${why}); listening again.`);
+      if (this.listening === client) this.listening = undefined;
+      client.release(true);
+      const retry = (ms: number) =>
+        setTimeout(() => {
+          if (!this.closed) this.listen(retryMs).catch(() => retry(Math.min(ms * 2, 30_000)));
+        }, ms).unref();
+      retry(retryMs);
+    };
+    client.on('error', (err) => again(err.message));
+    client.on('end', () => again('it ended'));
+    client.on('notification', (msg) => {
       if (msg.channel !== CHANNEL || !msg.payload) return;
       const sent = JSON.parse(msg.payload) as Notification | { ref: string };
       if (!('ref' in sent)) return void this.emitter.emit('notification', sent);
@@ -390,7 +411,7 @@ export class PgEventStore implements EventStore {
         .then(({ rows }) => rows[0] && this.emitter.emit('notification', fromRow(rows[0])))
         .catch(() => undefined);
     });
-    await this.listening.query(`listen ${CHANNEL}`);
+    await client.query(`listen ${CHANNEL}`);
   }
 
   async addNotifications(n: NewNotification, floor?: EventFloor) {
@@ -509,6 +530,7 @@ export class PgEventStore implements EventStore {
   }
 
   async close() {
+    this.closed = true;
     this.listening?.release();
     await this.pool.end();
   }
