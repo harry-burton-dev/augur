@@ -2,7 +2,7 @@
 // every deployment) and each deployment's Upgrade Centre (this server's place on the line). It sits
 // beside the release feed on GitHub's container registry, read with the same read key:
 //   node scripts/pipeline.mjs [--out pipeline.json] [--push]
-//      in the Pipeline workflow, in a checkout with dev, preview and production fetched: writes the feed,
+//      in the Pipeline workflow, in a checkout with origin/dev, preview and production fetched: writes the feed,
 //      and with --push pushes it as ghcr.io/<repo>/feed:pipeline
 // It holds each unit's version on each branch, its newest dev build and pull requests' previews, the
 // changesets waiting on dev, the pull requests merged between each branch and the next, and the open
@@ -12,7 +12,7 @@ import { writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 import semver from 'semver';
 import { readApps } from './app-release.mjs';
-import { pendingChangesets, readParts } from './augur-release.mjs';
+import { parseChangeset, readParts } from './augur-release.mjs';
 import { AUGUR, promotionOf, versionsFrom } from './promote.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -120,8 +120,14 @@ const main = (args) => {
   const versions = Object.fromEntries(BRANCHES.map((b) => [b, versionsFrom(read(b), appIds)]));
   const appPackages = Object.fromEntries(apps.flatMap((a) => [a.service, a.frontend].filter(Boolean).map((p) => [p.name, a.id])));
   const augurParts = Object.keys(readParts());
-  // The changesets waiting are dev's: this checkout is dev.
-  const changesets = pendingChangesets().map((c) => ({ ...c, units: unitsOf(c.bumps, augurParts, appPackages) }));
+  // The changesets waiting are dev's, whichever commit this checkout is.
+  const changesets = git('ls-tree', '--name-only', `${ref('dev')}:.changeset`)
+    .split('\n')
+    .filter((f) => f.endsWith('.md') && f !== 'README.md')
+    .sort()
+    .map((f) => ({ id: f.slice(0, -'.md'.length), ...parseChangeset(read('dev')(`.changeset/${f}`) ?? '') }))
+    .filter((c) => c.bumps)
+    .map((c) => ({ ...c, units: unitsOf(c.bumps, augurParts, appPackages) }));
   const merges = Object.fromEntries(
     BRANCHES.slice(0, -1).map((from, i) => [from, mergesFrom(git('log', '--first-parent', '--format=%s%x1f%b%x1f%cI%x1e', `${ref(BRANCHES[i + 1])}..${ref(from)}`))]),
   );
