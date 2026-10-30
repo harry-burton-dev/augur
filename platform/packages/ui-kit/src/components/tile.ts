@@ -11,6 +11,9 @@ import './icon.js';
  * plus, named for what it makes ("New collection"). Put it first among the
  * empty squares, so making one is where the next one would go.
  *
+ * Its actions aren't on it: right-click it (or press the context-menu key)
+ * and the app opens a `ui-radial-menu` around it.
+ *
  * @fires ui-open - it was pressed
  */
 export class UiTile extends LitElement {
@@ -19,6 +22,7 @@ export class UiTile extends LitElement {
     icon: { type: String },
     picture: { type: String },
     add: { type: Boolean, reflect: true },
+    selected: { type: Boolean, reflect: true },
   };
 
   declare heading: string;
@@ -28,6 +32,8 @@ export class UiTile extends LitElement {
   declare picture: string;
   /** The empty tile that makes a new one. */
   declare add: boolean;
+  /** Its radial menu is open on it: it shows as the one chosen. */
+  declare selected: boolean;
 
   constructor() {
     super();
@@ -35,6 +41,7 @@ export class UiTile extends LitElement {
     this.icon = '';
     this.picture = '';
     this.add = false;
+    this.selected = false;
   }
 
   static override styles = [
@@ -59,6 +66,7 @@ export class UiTile extends LitElement {
       }
       .tile:hover { border-color: var(--hairline-strong); transform: translateY(-1px); }
       .tile:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }
+      :host([selected]) .tile { border-color: var(--focus); background: var(--surface-raised); }
       :host([add]) .tile { border-style: dashed; background: none; justify-content: center; align-items: center; color: var(--ink-muted); }
       :host([add]) .tile:hover { color: var(--ink); }
       .mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--radius-inset); background: var(--surface-inset); color: var(--ink-muted); }
