@@ -147,6 +147,9 @@ importers:
       '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../../platform/packages/mfe-sdk
+      '@augur/records':
+        specifier: workspace:*
+        version: link:../../../platform/packages/records
       '@augur/ui-kit':
         specifier: workspace:*
         version: link:../../../platform/packages/ui-kit
@@ -169,6 +172,9 @@ importers:
 
   apps/folio/service:
     dependencies:
+      '@augur/records':
+        specifier: workspace:*
+        version: link:../../../platform/packages/records
       '@augur/service-kit':
         specifier: workspace:*
         version: link:../../../platform/packages/service-kit

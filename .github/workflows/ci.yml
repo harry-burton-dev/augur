@@ -165,7 +165,9 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: docling-models-${{ hashFiles('apps/folio/worker/pyproject.toml') }}
-      # The worker works on the tables Folio's service makes.
+      # The worker works on the tables Folio's service makes, which needs the packages Folio's store is built on.
+      - if: steps.folio.outputs.run == 'true'
+        run: pnpm turbo run build --filter="@apps/folio^..."
       - if: steps.folio.outputs.run == 'true'
         run: pnpm --filter @apps/folio migrate
       - if: steps.folio.outputs.run == 'true'
