@@ -4,6 +4,7 @@ import { SDK_VERSION } from '@augur/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
 import { ApiError, fullName, type AdminApi, type AllowedOrigin, type AppChannel, type AppInstalls, type AppPolicy, type AppSettingValue, type AppVersion, type CatalogueApp, type Department, type FloorChoice, type FloorRule, type InstalledApp, type IssuedSignIn, type Person } from './api.js';
 import { asksWords, channelChoices, JOB_REFRESH_MS, jobOpen, jobSteps, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
+import { appHistoryList, changeList } from './changes.js';
 import { line, page, section } from './parts.js';
 
 /** Where an app stands: off, on, or on but unable to open in this platform. */
@@ -679,7 +680,9 @@ export class AdminApps extends LitElement {
               ? nothing
               : html`<div><ui-button data-update kind="secondary" size="sm" @click=${() => this.askInstall(installed.app, installed.update!.version)}>Install ${installed.update.version}</ui-button></div>`}`
         : nothing}
+      ${installed.update?.changes?.length ? section(`What’s new in ${installed.update.version}`, changeList(installed.update.changes, () => installed.name)) : nothing}
       ${installed.job ? html`<p style="margin:0" data-job>${jobWords(installed.job)}</p>${jobOpen(installed.job) || installed.job.state === 'failed' ? jobSteps(installed.job) : nothing}` : nothing}
+      ${installed.history?.length ? section('History', appHistoryList(installed.history)) : nothing}
       <ui-tag-picker
         data-developers
         label="Developers"

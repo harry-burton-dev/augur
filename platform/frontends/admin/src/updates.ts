@@ -1,6 +1,7 @@
 import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import type { Fact } from '@augur/ui-kit';
 import { ApiError, type AdminApi, type PlatformUpdates, type Upgrade, type UpgradeStepState } from './api.js';
+import { changeList, gatherChanges, historyList } from './changes.js';
 import { line, page, section } from './parts.js';
 
 /** Stable releases are on production, beta ones on preview (docs/release-channels.md). */
@@ -290,6 +291,7 @@ export class AdminUpdates extends LitElement {
             html`<div data-needs>${u.needsYou.map((n) => line(html`<ui-status status=${n.kind === 'setting' && (!n.required || n.madeUp) ? 'queued' : 'needs'} mark-only></ui-status> ${n.message}`))}</div>`,
           )
         : nothing}
+      ${a ? section(`What’s new since ${u.running.version}`, changeList(gatherChanges(u.newer.map((r) => r.changes)))) : nothing}
       ${a?.parts.length ? section(`What changes in ${a.version}`, html`<div data-parts>${a.parts.map((p) => line(p.name, p.from ? `${p.from} → ${p.to}` : p.to))}</div>`) : nothing}
       ${u.newer.length > 1
         ? section(
@@ -318,6 +320,7 @@ export class AdminUpdates extends LitElement {
               </p>`,
           )
         : nothing}
+      ${u.history ? section('History', historyList(u.history)) : nothing}
       ${u.channelNote ? html`<p data-channel-note style="margin:0;color:var(--ink-muted)">${u.channelNote}</p>` : nothing}
       ${u.beta ? html`<p style="margin:0;color:var(--ink-muted)">AUGUR ${u.beta.version} is out on preview. To follow preview releases, set <code>RELEASE_CHANNEL=beta</code> in <code>.env</code>.</p>` : nothing}
     `;

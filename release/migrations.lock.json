@@ -25,7 +25,8 @@
     "010_upstream": "2eee2e575a5c38ed",
     "011_app_jobs": "42247cc8425b22c2",
     "012_app_follows": "0867e84dc2f2e71a",
-    "013_previews": "a4d10aed714138f7"
+    "013_previews": "a4d10aed714138f7",
+    "014_upgrade_names": "ff96e379d0f8e3bd"
   },
   "@apps/atlas": {
     "001_entities": "7e8edd330db1dea4",

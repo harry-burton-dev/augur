@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
+import { changesIn } from './changes.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { AppUpdateChecker, newestOn, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
@@ -64,6 +65,8 @@ const OUTCOME_ACTIONS: Record<AppJob['action'], Record<AppJobOutcome, string>> =
   'preview-remove': { done: 'app.preview-removed', failed: 'app.preview-remove-failed' },
 };
 
+/** How many of an app's jobs its history in Admin → Apps lists. */
+const APP_HISTORY_LISTED = 20;
 /** How many pull requests' previews one app runs at once. */
 export const MAX_PREVIEWS = 3;
 /** How long a preview runs after its pull request's last build. */
@@ -213,9 +216,11 @@ export const appRunnerRoutes =
             installedAt,
             ...follow,
             ...(newest?.release && semver.gt(newest.version, release.version)
-              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release, sdkVersion) } }
+              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release, sdkVersion), changes: changesIn(newest.release.notes ?? '', id) } }
               : {}),
             ...(job ? { job } : {}),
+            changes: changesIn(release.notes ?? '', id),
+            history: jobs.filter((j) => j.app === id && j.pr === undefined).slice(0, APP_HISTORY_LISTED).map(historyOf),
             developers: developers.filter((d) => d.app === id).map((d) => d.person),
             previews: running.filter((p) => p.app === id).map(previewView),
           };
@@ -238,6 +243,18 @@ export const appRunnerRoutes =
           })),
       };
     };
+
+    /** A job as an app's history shows it: what was asked, from and to, by whom, and how it ended. */
+    const historyOf = (j: AppJob) => ({
+      id: j.id,
+      action: j.action,
+      ...(j.release ? { version: j.release.version } : {}),
+      requestedBy: j.requestedBy,
+      requestedAt: j.requestedAt,
+      state: j.state,
+      ...(j.message ? { message: j.message } : {}),
+      ...(j.finishedAt ? { finishedAt: j.finishedAt } : {}),
+    });
 
     /** A running preview as people are shown it. */
     const previewView = (p: RunningPreview) => ({

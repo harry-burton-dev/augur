@@ -115,6 +115,8 @@ export interface Upgrade {
   /** Each part's image by digest, from the release file: all the updater will run. */
   images: Record<string, string>;
   requestedBy: string;
+  /** Who asked, by name, as they were signed in then; absent on upgrades asked for before names were kept. */
+  requestedByName?: string;
   requestedAt: string;
   state: 'requested' | 'running' | 'done' | 'rolled-back' | 'failed' | 'cancelled';
   steps: UpgradeStepState[];
@@ -274,8 +276,10 @@ export interface AppStore {
   clearRule(app: string, workspace: string): Promise<boolean>;
   /** The latest upgrade asked for, whatever its state. */
   upgrade(): Promise<Upgrade | undefined>;
+  /** Every upgrade asked for, newest first, at most `limit`: the Updates page's history. */
+  upgrades(limit?: number): Promise<Upgrade[]>;
   /** Records an upgrade to run; false when one is already waiting or under way. */
-  requestUpgrade(upgrade: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy'>): Promise<boolean>;
+  requestUpgrade(upgrade: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName'>): Promise<boolean>;
   /**
    * Records a step of the open upgrade `id`, which starts it, and with `outcome` ends it.
    * Undefined when `id` isn't the open upgrade.
@@ -318,6 +322,8 @@ const withStep = <S extends { step: string }>(steps: S[], step: S) => [...steps.
 const isOpen = (u?: { state: string }) => u?.state === 'requested' || u?.state === 'running';
 /** How many of the runner's jobs are listed. */
 const APP_JOBS_LISTED = 50;
+/** How many upgrades the Updates page's history lists. */
+const UPGRADES_LISTED = 50;
 
 /** For tests, and for running the registry locally without Postgres. Forgets everything on restart. */
 export class MemoryAppStore implements AppStore {
@@ -325,7 +331,7 @@ export class MemoryAppStore implements AppStore {
   private history = new Map<string, AppVersion[]>();
   private allowed = new Map<string, AllowedOrigin>();
   private floorRules: FloorRule[] = [];
-  private upgrades: Upgrade[] = [];
+  private upgradeList: Upgrade[] = [];
   private kept: StoredFrontend[] = [];
   private jobs: AppJob[] = [];
   private following = new Map<string, AppFollow>();
@@ -428,18 +434,22 @@ export class MemoryAppStore implements AppStore {
   }
 
   async upgrade() {
-    const last = this.upgrades.at(-1);
+    const last = this.upgradeList.at(-1);
     return last && structuredClone(last);
   }
 
-  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy'>) {
-    if (isOpen(this.upgrades.at(-1))) return false;
-    this.upgrades.push({ ...u, requestedAt: new Date().toISOString(), state: 'requested', steps: [] });
+  async upgrades(limit = UPGRADES_LISTED) {
+    return structuredClone(this.upgradeList.slice(-limit).reverse());
+  }
+
+  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName'>) {
+    if (isOpen(this.upgradeList.at(-1))) return false;
+    this.upgradeList.push({ ...u, requestedAt: new Date().toISOString(), state: 'requested', steps: [] });
     return true;
   }
 
   async progressUpgrade(id: string, step: Omit<UpgradeStepState, 'at'>, outcome?: { state: UpgradeOutcome; message?: string }) {
-    const u = this.upgrades.at(-1);
+    const u = this.upgradeList.at(-1);
     if (!u || u.id !== id || !isOpen(u)) return undefined;
     const at = new Date().toISOString();
     u.steps = withStep(u.steps, { ...step, at });
@@ -452,7 +462,7 @@ export class MemoryAppStore implements AppStore {
   }
 
   async cancelUpgrade(id: string) {
-    const u = this.upgrades.at(-1);
+    const u = this.upgradeList.at(-1);
     if (!u || u.id !== id || u.state !== 'requested') return false;
     u.state = 'cancelled';
     u.finishedAt = new Date().toISOString();
@@ -767,6 +777,12 @@ export const migrations: { id: string; sql: string }[] = [
         primary key (person_id, app_id)
       );`,
   },
+  {
+    id: '014_upgrade_names',
+    sql: `
+      -- Who asked for each upgrade, by name, for the Updates page's history.
+      alter table registry.upgrades add column requested_by_name text;`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -1036,10 +1052,15 @@ export class PgAppStore implements AppStore {
     return rows[0] && fromUpgradeRow(rows[0]);
   }
 
-  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy'>) {
+  async upgrades(limit = UPGRADES_LISTED) {
+    const { rows } = await this.pool.query<UpgradeRow>('select * from registry.upgrades order by requested_at desc limit $1', [limit]);
+    return rows.map(fromUpgradeRow);
+  }
+
+  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName'>) {
     const { rowCount } = await this.pool.query(
-      'insert into registry.upgrades (id, from_version, version, images, requested_by) values ($1, $2, $3, $4, $5) on conflict do nothing',
-      [u.id, u.from, u.version, JSON.stringify(u.images), u.requestedBy],
+      'insert into registry.upgrades (id, from_version, version, images, requested_by, requested_by_name) values ($1, $2, $3, $4, $5, $6) on conflict do nothing',
+      [u.id, u.from, u.version, JSON.stringify(u.images), u.requestedBy, u.requestedByName ?? null],
     );
     return rowCount === 1;
   }
@@ -1174,6 +1195,7 @@ type UpgradeRow = {
   version: string;
   images: Record<string, string>;
   requested_by: string;
+  requested_by_name: string | null;
   requested_at: Date;
   state: Upgrade['state'];
   steps: UpgradeStepState[];
@@ -1187,6 +1209,7 @@ const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
   version: r.version,
   images: r.images,
   requestedBy: r.requested_by,
+  ...(r.requested_by_name ? { requestedByName: r.requested_by_name } : {}),
   requestedAt: r.requested_at.toISOString(),
   state: r.state,
   steps: r.steps,

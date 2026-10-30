@@ -2,8 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
+import { releaseChanges, type Change } from './changes.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
-import type { AppRecord } from './store.ts';
+import type { AppRecord, Upgrade } from './store.ts';
 
 /**
  * Which releases a deployment follows: stable (promoted to production) only, or beta too (on preview;
@@ -27,6 +28,8 @@ export interface ReleaseManifest {
   deploy?: Record<string, string>;
   /** Where its notes are; a mirror's feed adds it (scripts/mirror-release.mjs). */
   notesUrl?: string;
+  /** Each changed part's changelog for this release; the Release workflow adds it. */
+  changelogs?: Record<string, string>;
 }
 
 /** One release in the feed. Its manifest is absent when it couldn't be read (or wasn't needed). */
@@ -306,6 +309,8 @@ export interface ReleaseSummary {
   released?: string;
   notesUrl?: string;
   breaking: string[];
+  /** What changed in it, each change once (absent for a release made before changelogs were attached). */
+  changes?: Change[];
 }
 
 /**
@@ -328,6 +333,38 @@ export interface PartChange {
   from?: string;
   to: string;
 }
+
+/** One upgrade in the Updates page's history: who asked, from and to, and how it ended. */
+export interface HistoryEntry {
+  id: string;
+  from: string;
+  version: string;
+  requestedBy: string;
+  requestedByName?: string;
+  requestedAt: string;
+  state: Upgrade['state'];
+  message?: string;
+  finishedAt?: string;
+  /** The backup the updater took first, when it says. */
+  backup?: string;
+}
+
+/** An upgrade as the history shows it: without its images and steps, with the backup it took. */
+export const historyEntry = (u: Upgrade): HistoryEntry => {
+  const backup = u.steps.find((s) => s.step === 'backup' && s.state === 'done')?.message?.match(/(platform-\S+\.sql\.gz)/)?.[1];
+  return {
+    id: u.id,
+    from: u.from,
+    version: u.version,
+    requestedBy: u.requestedBy,
+    ...(u.requestedByName ? { requestedByName: u.requestedByName } : {}),
+    requestedAt: u.requestedAt,
+    state: u.state,
+    ...(u.message ? { message: u.message } : {}),
+    ...(u.finishedAt ? { finishedAt: u.finishedAt } : {}),
+    ...(backup ? { backup } : {}),
+  };
+};
 
 /** What the Updates page shows (see contracts/registry.openapi.yaml). */
 export interface UpdatesView {
@@ -359,6 +396,7 @@ const summary = (r: FeedRelease): ReleaseSummary => ({
   ...(r.released ? { released: r.released } : {}),
   ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
   breaking: r.manifest?.breaking ?? [],
+  ...(r.manifest?.changelogs ? { changes: releaseChanges(r.manifest.changelogs) } : {}),
 });
 
 /** Whether a release's `upgradeFrom` lets the running version take it straight. */

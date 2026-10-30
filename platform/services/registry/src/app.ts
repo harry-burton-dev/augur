@@ -46,7 +46,7 @@ import {
   type AppEntry,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
-import { UpdateChecker, updatesView } from './updates.ts';
+import { historyEntry, UpdateChecker, updatesView } from './updates.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
@@ -743,9 +743,9 @@ export const buildApp = async ({
       /** The Updates page: the feed against the running release, and the upgrade asked for, while it matters. */
       const updatesPage = async () => {
         const view = updatesView({ checker: updates, apps: await store.records() });
-        const upgrade = await store.upgrade();
+        const [upgrade, history] = await Promise.all([store.upgrade(), store.upgrades()]);
         const shown = upgrade && (!upgrade.finishedAt || Date.now() - Date.parse(upgrade.finishedAt) < UPGRADE_SHOWN_MS);
-        return { ...view, ...(shown ? { upgrade } : {}), ...(updaterSeenAt ? { updaterSeenAt } : {}) };
+        return { ...view, ...(shown ? { upgrade } : {}), ...(updaterSeenAt ? { updaterSeenAt } : {}), history: history.map(historyEntry) };
       };
 
       /**
@@ -786,7 +786,7 @@ export const buildApp = async ({
           const unknown = Object.keys(settings).filter((key) => key === 'PLATFORM_VERSION' || !manifest?.settings?.all.includes(key));
           if (unknown.length) return reply.code(400).send({ error: 'bad_request', message: `AUGUR ${view.next} has no setting ${unknown.join(', ')}.` });
           const id = randomUUID();
-          if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: caller.id }))) {
+          if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: caller.id, requestedByName: caller.name }))) {
             return reply.code(409).send({ error: 'conflict', message: 'An upgrade is already waiting or under way.' });
           }
           // Kept in memory only, for the updater to write to .env: never stored, and only their names audited.

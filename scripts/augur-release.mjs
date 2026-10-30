@@ -199,7 +199,9 @@ const main = () => {
     const deploy = deployFiles(git('ls-files', DEPLOY_DIR).split('\n'));
     const dir = mkdtempSync(join(tmpdir(), 'augur-release-'));
     const asset = join(dir, 'augur-release.json');
-    writeFileSync(asset, `${JSON.stringify({ ...previous, images, deploy }, null, 2)}\n`);
+    // Each changed part's changelog for its new version, which Admin → Updates shows (registry's changes.ts).
+    const changelogs = Object.fromEntries(previous.changed.map((name) => [name, changelogFor(parts[name]?.path ?? '', previous.parts[name].version)]).filter(([, text]) => text));
+    writeFileSync(asset, `${JSON.stringify({ ...previous, images, deploy, changelogs }, null, 2)}\n`);
     const notesFile = join(dir, 'notes.md');
     writeFileSync(notesFile, notes(previous, parts));
     // Made on preview, a release is a pre-release until it is promoted to production (scripts/promote.mjs).

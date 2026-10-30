@@ -34,7 +34,7 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
   });
 
   it('keeps one upgrade open at a time, with each step it took', async () => {
-    const ask = (id: string) => store.requestUpgrade({ id, from: '0.2.0', version: '0.3.0', images: { web: 'web@sha256:aa' }, requestedBy: 'u-1' });
+    const ask = (id: string) => store.requestUpgrade({ id, from: '0.2.0', version: '0.3.0', images: { web: 'web@sha256:aa' }, requestedBy: 'u-1', requestedByName: 'Alex' });
     expect(await store.upgrade()).toBeUndefined();
     expect(await ask('up-1')).toBe(true);
     expect(await ask('up-2')).toBe(false);
@@ -49,6 +49,9 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await ask('up-3')).toBe(true);
     expect(await store.cancelUpgrade('up-3')).toBe(true);
     expect((await store.upgrade())?.state).toBe('cancelled');
+    // The history keeps every one, newest first, with who asked.
+    expect((await store.upgrades()).map((u) => `${u.id} ${u.state} ${u.requestedByName}`)).toEqual(['up-3 cancelled Alex', 'up-1 done Alex']);
+    expect((await store.upgrades(1)).map((u) => u.id)).toEqual(['up-3']);
   });
 
   it('keeps one job open per app for the app runner, oldest first', async () => {
@@ -256,7 +259,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {
