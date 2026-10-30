@@ -242,7 +242,7 @@ export const notes = (release, parts) => {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('### Running it', '', `Upgrade from Admin → Updates, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/production/docs/upgrade.md).`);
+  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/production/docs/upgrade.md).`);
   return lines.join('\n');
 };
 
@@ -298,7 +298,7 @@ const main = () => {
     const deploy = deployFiles(git('ls-files', DEPLOY_DIR).split('\n'));
     const dir = mkdtempSync(join(tmpdir(), 'augur-release-'));
     const asset = join(dir, 'augur-release.json');
-    // Each changed part's changelog for its new version, which Admin → Updates shows (registry's changes.ts).
+    // Each changed part's changelog for its new version, which Admin → Upgrade Centre shows (registry's changes.ts).
     const changelogs = previous.channel === 'dev' ? previous.changelogs ?? {} : Object.fromEntries(previous.changed.map((name) => [name, changelogFor(parts[name]?.path ?? '', previous.parts[name].version)]).filter(([, text]) => text));
     writeFileSync(asset, `${JSON.stringify({ ...previous, images, deploy, changelogs }, null, 2)}\n`);
     const notesFile = join(dir, 'notes.md');
