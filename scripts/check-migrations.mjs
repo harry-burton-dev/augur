@@ -4,7 +4,8 @@
 //
 // The rules:
 //   - a migration that shipped in an AUGUR release never changes and is never removed: servers have run it.
-//     Add a new migration instead.
+//     Add a new migration instead. On a pull request into dev, one already on dev counts as shipped too
+//     (MIGRATIONS_FROZEN_AT=origin/dev): the preview server has run it, from a dev build.
 //   - within a major version, migrations only add. A new one that drops, renames, truncates, deletes rows,
 //     changes a column's type or makes one required would break the release before it, which is what a
 //     deployment rolls back to. It needs a major bump of its service (a major changeset), so the AUGUR
@@ -86,6 +87,25 @@ const releasedLock = () => {
   }
 };
 
+/** The lock on `ref` (such as origin/dev), fetched if need be; undefined when it has none. */
+const lockAt = (ref) => {
+  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  const branch = ref.replace(/^origin\//, '');
+  try {
+    git('fetch', '--quiet', '--depth=1', 'origin', `${branch}:refs/remotes/origin/${branch}`);
+  } catch {
+    // already fetched, or not there
+  }
+  try {
+    return JSON.parse(git('show', `${ref}:${LOCK}`));
+  } catch {
+    return undefined;
+  }
+};
+
+/** Every lock entry in `a` or `b`. */
+export const mergeLocks = (a = {}, b = {}) => Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map((name) => [name, { ...(a[name] ?? {}), ...(b[name] ?? {}) }]));
+
 /** Packages that may break their tables in this change: a major changeset waiting, or already bumped past the release. */
 const allowedToBreak = () => {
   const allowed = new Set();
@@ -125,15 +145,16 @@ const main = async () => {
   const problems = [];
   if (!existsSync(join(root, LOCK)) || readFileSync(join(root, LOCK), 'utf8') !== lock) problems.push(`${LOCK} doesn't match the migrations. Run: pnpm build && node scripts/check-migrations.mjs sync`);
 
-  const released = releasedLock() ?? {};
+  const frozenAt = process.env.MIGRATIONS_FROZEN_AT;
+  const released = mergeLocks(releasedLock(), frozenAt ? lockAt(frozenAt) : undefined);
   const mayBreak = allowedToBreak();
   for (const [name, list] of Object.entries(all)) {
     const shipped = released[name] ?? {};
     const ids = list.map((m) => m.id);
     for (const [id, hash] of Object.entries(shipped)) {
       const now = list.find((m) => m.id === id);
-      if (!now) problems.push(`${name}: migration ${id} shipped in a release and is gone. Servers have run it; put it back.`);
-      else if (now.hash !== hash) problems.push(`${name}: migration ${id} changed after it shipped in a release. Servers have run the old one; put it back and add a new migration.`);
+      if (!now) problems.push(`${name}: migration ${id} shipped${frozenAt ? ` (in a release or on ${frozenAt})` : ' in a release'} and is gone. Servers have run it; put it back.`);
+      else if (now.hash !== hash) problems.push(`${name}: migration ${id} changed after it shipped${frozenAt ? ` (in a release or on ${frozenAt})` : ' in a release'}. Servers have run the old one; put it back and add a new migration.`);
     }
     const shippedIds = Object.keys(shipped);
     if (ids.slice(0, shippedIds.length).join() !== shippedIds.join()) problems.push(`${name}: new migrations must come after the released ones (${shippedIds.join(', ')}).`);

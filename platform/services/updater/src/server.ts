@@ -258,6 +258,12 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
     async verifySignedBy(ref, identity) {
       await command('cosign', verifyArgs(identity, signer.issuer, ref, await trustedRootIn(dir)), env());
     },
+    async backup() {
+      const said = await platform(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--now']);
+      const file = said.match(/backup: wrote \S*\/(platform-\S+\.sql\.gz)/)?.[1];
+      if (!file) throw new CommandFailed('The backup container didn’t say where it wrote the backup.');
+      return file;
+    },
     async provisionStorage(app) {
       await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, 'storage']);
     },

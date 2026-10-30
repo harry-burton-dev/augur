@@ -19,12 +19,18 @@ export const STEP_WORDS: Record<AppJobStepState['step'], string> = {
   remove: 'Stop and remove its containers',
 };
 
-/** Which releases an app follows: production (stable) only, or preview (beta) too, which a production server never takes. */
+/**
+ * Which releases an app follows: production (stable) only, preview (beta) too, or dev builds too, of
+ * every merge into dev. A production server takes neither of the last two, and the list says so.
+ */
 export const channelChoices = (ring: AppInstalls['ring'] = 'preview'): SelectOption[] => [
   { value: 'stable', label: 'Production releases' },
   ring === 'production'
     ? { value: 'beta', label: 'Preview releases too', detail: 'Not on a production server', disabled: true }
     : { value: 'beta', label: 'Preview releases too' },
+  ring === 'production'
+    ? { value: 'dev', label: 'Dev builds too', detail: 'Not on a production server', disabled: true }
+    : { value: 'dev', label: 'Dev builds too', detail: 'Every merge into dev, with a backup before each' },
 ];
 
 export const POLICY_CHOICES: SelectOption[] = [

@@ -90,6 +90,9 @@ jobs:
       # Every app's manifest, against the registry's own rules.
       - run: pnpm check:manifest
       - run: pnpm check:migrations
+        env:
+          # Into dev, a migration already on dev is frozen too: dev builds have run it on the preview server.
+          MIGRATIONS_FROZEN_AT: ${{ github.base_ref == 'dev' && 'origin/dev' || '' }}
       - run: pnpm typecheck --concurrency=${{ steps.fit.outputs.tasks }}
       - run: pnpm test --concurrency=${{ steps.fit.outputs.tests }}
         env:

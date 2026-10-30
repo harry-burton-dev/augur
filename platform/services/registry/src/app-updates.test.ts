@@ -16,7 +16,8 @@ const release = (version: string, more: Partial<AppRelease['manifest']> = {}, ch
   frontend: null,
   signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' },
 });
-const feedOf = (...releases: AppRelease[]): AppFeedRelease[] => releases.map((r) => ({ app: r.id, version: r.version, channel: r.channel === 'stable' ? 'stable' : 'beta', release: r }));
+const feedOf = (...releases: AppRelease[]): AppFeedRelease[] =>
+  releases.map((r) => ({ app: r.id, version: r.version, channel: r.channel === 'stable' ? 'stable' : r.channel === 'dev' ? 'dev' : 'beta', release: r }));
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('the app feed', () => {
@@ -45,6 +46,17 @@ describe('the app feed', () => {
     expect(newestOn(releases, 'notes', 'stable')?.version).toBe('1.1.0');
     expect(newestOn(releases, 'notes', 'beta')?.version).toBe('1.2.0-beta.1');
     expect(newestOn(releases, 'tasks', 'beta')).toBeUndefined();
+    const withDev = [...releases, ...feedOf(release('1.2.1-dev.40', {}, 'dev'))];
+    expect(newestOn(withDev, 'notes', 'beta')?.version).toBe('1.2.0-beta.1');
+    expect(newestOn(withDev, 'notes', 'dev')?.version).toBe('1.2.1-dev.40');
+  });
+
+  it('knows a dev build from GitHub by its version', async () => {
+    const fetchImpl = (async (url: string) =>
+      url === 'https://api/releases'
+        ? json([{ tag_name: 'app/notes@1.0.1-dev.40', prerelease: true, draft: false, assets: [{ name: 'app-release.json', url: 'https://api/assets/dev' }] }])
+        : json(release('1.0.1-dev.40', {}, 'dev'))) as typeof fetch;
+    expect((await appFeed({ url: 'https://api/releases', fetchImpl })()).map((r) => `${r.version} ${r.channel} ${r.release ? 'file' : 'no file'}`)).toEqual(['1.0.1-dev.40 dev file']);
   });
 });
 
@@ -182,6 +194,28 @@ describe('installs and updates in Admin → Apps', () => {
     await t.check(feedOf(release('1.0.0'), release('1.1.0-beta.1', {}, 'beta')));
     expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
     expect((await t.view()).installed[0]).toMatchObject({ channel: 'stable' });
+  });
+
+  it('takes dev builds only on a preview server whose admin chose them', async () => {
+    const feed = feedOf(release('1.0.0'), release('1.0.1-dev.40', {}, 'dev'));
+    const t = await setup(feed, 'preview');
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await t.runNext();
+    // Betas too isn't dev builds too.
+    await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: fresh(), payload: { channel: 'beta', policy: 'automatic' } });
+    expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
+    await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: fresh(), payload: { channel: 'dev', policy: 'automatic' } });
+    expect((await t.runNext()).release.version).toBe('1.0.1-dev.40');
+
+    const production = await setup(feed, 'production');
+    await production.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await production.runNext();
+    const follow = await production.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: fresh(), payload: { channel: 'dev', policy: 'automatic' } });
+    expect(follow.json().error).toBe('production_server');
+    const asked = await production.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.1-dev.40' } });
+    expect(asked.statusCode).toBe(400);
+    expect(asked.json().message).toMatch(/Only a preview server/);
+    expect((await production.view()).installed[0].older).toEqual([]);
   });
 
   it('on a production server, offers an app first released on beta only once it is promoted', async () => {

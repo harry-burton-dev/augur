@@ -40,6 +40,10 @@ const fakeHost = (env = ENV, network?: string) => {
       did.push(`verify ${identity}`);
       if (unsigned.has(ref)) throw new Error('no matching signatures');
     },
+    async backup() {
+      did.push('backup');
+      return 'platform-20261030-0100.sql.gz';
+    },
     async provisionStorage(app) {
       did.push(`storage ${app}`);
     },
@@ -101,6 +105,26 @@ const setup = (env = ENV, network?: string) => {
 };
 
 describe('the app runner', () => {
+  it('installs a dev build only on a preview server, from the dev workflow on dev, after a backup', async () => {
+    const dev = { signer: { repository: 'o/r', workflow: '.github/workflows/app-dev.yml' } };
+    const onProduction = setup(`${ENV}SERVER_RING=production\n`);
+    onProduction.versions.set(image('c'), '1.0.1-dev.40');
+    expect(await onProduction.run(install('1.0.1-dev.40', 'c', dev))).toBe('failed');
+    expect(onProduction.reports.at(-1)?.message).toMatch(/only a preview server/);
+    expect(onProduction.did).toEqual([]);
+
+    const t = setup(`${ENV}SERVER_RING=preview\n`);
+    t.versions.set(image('c'), '1.0.1-dev.40');
+    expect(await t.run(install('1.0.1-dev.40', 'c', dev))).toBe('done');
+    expect(t.did.slice(0, 2)).toEqual(['verify https://github.com/o/r/.github/workflows/app-dev.yml@refs/heads/dev', 'backup']);
+    expect(t.reports.find((r) => r.step === 'verify' && r.state === 'done')?.message).toMatch(/Backup platform-20261030-0100\.sql\.gz/);
+
+    // Signed by the release workflow, a dev version isn't taken as a dev build.
+    const wrong = setup(`${ENV}SERVER_RING=preview\n`);
+    expect(await wrong.run(install('1.0.1-dev.41', 'c'))).toBe('failed');
+    expect(wrong.reports.at(-1)?.message).toMatch(/isn’t trusted to publish dev builds/);
+  });
+
   it('installs an app: checks its signature, gives it storage and a sign-in, starts it, then lists it', async () => {
     const t = setup();
     expect(await t.run(install('1.0.0'))).toBe('done');

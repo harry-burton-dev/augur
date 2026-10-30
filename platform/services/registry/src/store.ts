@@ -190,7 +190,7 @@ export type AppJobOutcome = 'done' | 'failed';
 /** Which releases of an installed app a deployment takes, and whether new ones install by themselves. */
 export interface AppFollow {
   app: string;
-  channel: 'stable' | 'beta';
+  channel: 'stable' | 'beta' | 'dev';
   policy: 'automatic' | 'ask' | 'hold';
   setBy: string;
   setAt: string;
