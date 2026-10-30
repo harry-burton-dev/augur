@@ -1,6 +1,6 @@
 {
   "name": "@augur/records",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "The shapes every app's records share: levels a tree of units is built from, lifecycles, who may do what, tags, relationships, and publishing up the floors with one owner.",
