@@ -2,15 +2,16 @@ import semver from 'semver';
 import type { AppRelease } from './store.ts';
 import { FeedProblem, feedReader, type GitHubRelease, type ReadKey } from './updates.ts';
 
-/** Which of an app's releases a deployment takes: stable ones only, or betas too. */
-export type AppChannel = 'stable' | 'beta';
+/** Which of an app's releases a deployment takes: stable ones only, betas too, or dev builds too (a preview server only). */
+export type AppChannel = 'stable' | 'beta' | 'dev';
 /** What happens when a newer release is out on the app's channel. */
 export type AppPolicy = 'automatic' | 'ask' | 'hold';
 
 /**
  * One app release in the feed. Its release file is missing when it couldn't be read (or wasn't needed).
  * A pull request's build (a version such as 1.3.0-pr.12.4) is on the `preview` channel, which no
- * deployment follows: it's only ever run beside the app, for the app's developers.
+ * deployment follows: it's only ever run beside the app, for the app's developers. A dev build (a version
+ * such as 1.3.1-dev.40, from a merge into dev) is on the `dev` channel, which only a preview server follows.
  */
 export interface AppFeedRelease {
   app: string;
@@ -30,6 +31,10 @@ const FILES_READ_PER_APP = 4;
 const TAG = /^app\/([a-z][a-z0-9-]{1,39})@(.+)$/;
 /** A pull request's build: <version>-pr.<number>.<run>. */
 const PREVIEW = /-pr\.(\d+)\.\d+$/;
+/** A dev build: <next patch>-dev.<run>. */
+const DEV = /-dev\.\d+$/;
+/** Whether a version is a dev build. */
+export const isDevBuild = (version: string) => DEV.test(version);
 /** The pull request a version was built from, when it's a preview. */
 export const previewPr = (version: string) => {
   const m = PREVIEW.exec(version);
@@ -37,7 +42,7 @@ export const previewPr = (version: string) => {
 };
 const channelOf = (version: string, prerelease: boolean): Pick<AppFeedRelease, 'channel' | 'pr'> => {
   const pr = previewPr(version);
-  return pr !== undefined ? { channel: 'preview', pr } : { channel: prerelease ? 'beta' : 'stable' };
+  return pr !== undefined ? { channel: 'preview', pr } : { channel: isDevBuild(version) ? 'dev' : prerelease ? 'beta' : 'stable' };
 };
 
 const isAppRelease = (x: unknown): x is AppRelease =>
@@ -67,11 +72,11 @@ export const appFeed =
       releases.map(async ({ r, tag }): Promise<AppFeedRelease> => {
         const [, app, version] = tag;
         const base: AppFeedRelease = { app, version, ...channelOf(version, Boolean(r.prerelease)), ...(r.published_at ? { released: r.published_at } : {}), ...(r.html_url ? { notesUrl: r.html_url } : {}) };
-        // Each app's newest few releases, and each pull request's newest build.
-        const key = base.pr === undefined ? app : `${app}#${base.pr}`;
+        // Each app's newest few releases, its newest dev build, and each pull request's newest build.
+        const key = base.pr !== undefined ? `${app}#${base.pr}` : base.channel === 'dev' ? `${app}~dev` : app;
         const count = read.get(key) ?? 0;
         const asset = r.assets?.find((a) => a.name === 'app-release.json');
-        if (count >= (base.pr === undefined ? FILES_READ_PER_APP : 1) || !asset) return base;
+        if (count >= (key === app ? FILES_READ_PER_APP : 1) || !asset) return base;
         read.set(key, count + 1);
         const file = await get(asset.url, 'application/octet-stream').catch(() => undefined);
         return isAppRelease(file) && file.id === app && file.version === version ? { ...base, release: file } : base;
@@ -143,10 +148,14 @@ export class AppUpdateChecker {
   }
 }
 
+/** Whether a release on `release` is one a deployment following `follows` takes: stable within beta within dev. */
+export const onChannel = (follows: AppChannel, release: AppFeedRelease['channel']) =>
+  release !== 'preview' && (release === 'stable' || follows === 'dev' || (follows === 'beta' && release === 'beta'));
+
 /** The newest release of `app` on `channel` that the feed has a release file for. Never a preview. */
 export const newestOn = (releases: AppFeedRelease[], app: string, channel: AppChannel) =>
   releases
-    .filter((r) => r.app === app && r.release && r.channel !== 'preview' && (channel === 'beta' || r.channel === 'stable'))
+    .filter((r) => r.app === app && r.release && onChannel(channel, r.channel))
     .sort((a, b) => semver.rcompare(a.version, b.version))[0];
 
 /** Each open pull request's newest build of `app` that the feed has a release file for, newest pull request first. */

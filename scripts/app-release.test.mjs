@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { appRelease, appTag, APP_RELEASE_SCHEMA, asksOf, changedApps, channelOf, FRONTEND_MEDIA_TYPE, previewPrOf, previewVersion, readApps } from './app-release.mjs';
+import { appRelease, appTag, APP_RELEASE_SCHEMA, asksOf, changedApps, channelOf, devAppOf, devVersion, FRONTEND_MEDIA_TYPE, oldDevBuilds, previewPrOf, previewVersion, readApps } from './app-release.mjs';
 
 const digest = (c) => `sha256:${c.repeat(64)}`;
 const manifest = { id: 'notes', name: 'Notes', version: '1.2.0', sdk: '^1.3.0', route: '/notes', entry: '/apps/notes/entry.js', scopes: ['people:read'] };
@@ -13,6 +13,23 @@ test('a version with a prerelease part is beta, a pull request’s build preview
   assert.equal(channelOf('1.2.0'), 'stable');
   assert.equal(channelOf('1.2.0-beta.1'), 'beta');
   assert.equal(channelOf('1.2.0-pr.12.3'), 'preview');
+  assert.equal(channelOf('1.2.1-dev.40'), 'dev');
+});
+
+test('a dev build sorts above the release it follows and below the next', () => {
+  assert.equal(devVersion('1.2.0', 40), '1.2.1-dev.40');
+  assert.equal(devVersion('1.3.0-beta.2', '41'), '1.3.0-dev.41');
+  assert.throws(() => devVersion('1.2.0', 'x'), /number/);
+  assert.equal(devAppOf('app/notes@1.2.1-dev.40'), 'notes');
+  assert.equal(devAppOf('app/notes@1.2.1'), undefined);
+  assert.equal(devAppOf('app/notes@1.2.1-pr.3.4'), undefined);
+});
+
+test('only each app’s newest few dev builds are kept', () => {
+  const tags = ['app/notes@1.2.1-dev.9', 'app/notes@1.2.1-dev.10', 'app/notes@1.2.1-dev.8', 'app/notes@1.2.1-dev.7', 'app/notes@1.2.0', 'app/other@0.1.1-dev.1'];
+  assert.deepEqual(oldDevBuilds(tags, 'notes'), ['app/notes@1.2.1-dev.7']);
+  assert.deepEqual(oldDevBuilds(tags, 'notes', [], 1), ['app/notes@1.2.1-dev.9', 'app/notes@1.2.1-dev.8', 'app/notes@1.2.1-dev.7']);
+  assert.deepEqual(oldDevBuilds(tags, 'notes', ['app/notes@1.2.1-dev.7'], 1), ['app/notes@1.2.1-dev.9', 'app/notes@1.2.1-dev.8']);
 });
 
 test('a pull request’s build gets a version of its own, which says where it’s from', () => {

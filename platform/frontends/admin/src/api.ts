@@ -292,7 +292,8 @@ export interface AppJob {
   finishedAt?: string;
 }
 
-export type AppChannel = 'stable' | 'beta';
+/** stable is production releases, beta preview releases too, dev dev builds too (a preview server only). */
+export type AppChannel = 'stable' | 'beta' | 'dev';
 
 /** One of an app's jobs, as its history shows it. */
 export interface AppHistoryEntry {

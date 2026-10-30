@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.25.0
+  version: 1.26.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -801,7 +801,7 @@ paths:
         Its channel, and its policy: automatic (a newer release on the channel that asks for nothing
         new installs by itself), ask (each waits for an admin) or hold (nothing is offered). An app
         with no choice yet follows stable, automatically. A production server (SERVER_RING=production)
-        follows stable only, and refuses beta with 409. Audited as app.updates-set.
+        follows stable only, and refuses beta or dev with 409. dev (dev builds too) is for a preview server. Audited as app.updates-set.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -813,7 +813,7 @@ paths:
               additionalProperties: false
               required: [channel, policy]
               properties:
-                channel: { type: string, enum: [stable, beta] }
+                channel: { type: string, enum: [stable, beta, dev] }
                 policy: { type: string, enum: [automatic, ask, hold] }
       responses:
         "200":
@@ -923,7 +923,7 @@ components:
               name: { type: string }
               version: { type: string }
               installedAt: { type: string, format: date-time }
-              channel: { type: string, enum: [stable, beta] }
+              channel: { type: string, enum: [stable, beta, dev] }
               policy: { type: string, enum: [automatic, ask, hold] }
               update:
                 type: object
@@ -931,7 +931,7 @@ components:
                 description: The newest release on its channel, when newer than what runs
                 properties:
                   version: { type: string }
-                  channel: { type: string, enum: [stable, beta] }
+                  channel: { type: string, enum: [stable, beta, dev] }
                   notesUrl: { type: string }
                   needs: { type: array, items: { type: string }, description: "Why it waits for an admin; empty when it can install by itself" }
                   changes: { type: array, items: { $ref: "#/components/schemas/Change" } }
@@ -982,7 +982,7 @@ components:
         schema: { type: string, enum: [augur.app-release/v1] }
         id: { type: string }
         version: { type: string }
-        channel: { type: string, enum: [stable, beta, preview] }
+        channel: { type: string, enum: [stable, beta, dev, preview] }
         releasedAt: { type: string }
         sdk: { type: string }
         manifest: { $ref: "#/components/schemas/AppManifestEntry" }

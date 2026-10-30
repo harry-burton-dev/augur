@@ -47,7 +47,7 @@ Each server says what kind it is with `SERVER_RING` in `.env`. It is set there a
 | | `preview` (the preview server) | `production` (every other deployment, and the default) |
 | --- | --- | --- |
 | AUGUR follows | preview releases (beta) by default; `RELEASE_CHANNEL=stable` for production ones only | production releases (stable) only; `RELEASE_CHANNEL=beta` is ignored, and Updates says so |
-| An app follows | production releases, or preview releases too (Admin → Apps, **New releases**) | production releases only; **Preview releases too** stays in the list, greyed, saying why |
+| An app follows | production releases, preview releases too, or dev builds too (Admin → Apps, **New releases**) | production releases only; **Preview releases too** and **Dev builds too** stay in the list, greyed, saying why |
 | Pull requests' builds | run for an app's developers | don't run, unless `ALLOW_PR_PREVIEWS=on` |
 
 It is a required setting from the release that brings it: **Upgrade to …** asks for it, and the preflight stops a by-hand upgrade until it's set. Set `SERVER_RING=preview` on the preview server, and `production` everywhere else.
@@ -64,9 +64,17 @@ It is a required setting from the release that brings it: **Upgrade to …** ask
 
 For an app, **Admin → Apps → Go back** installs one of its three versions before (blue/green, as any install) and sets it to **Hold**, so Automatic doesn't take it straight up again.
 
+## Dev builds
+
+Every merge into `dev` that changes a runner app (Mandate today) builds it at once, with no Version packages: **App dev builds** (`.github/workflows/app-dev.yml`) makes `app/<id>@<next patch>-dev.<run>` (such as `0.1.3-dev.212` after `0.1.2`), signed by that workflow on `refs/heads/dev`, and keeps each app's three newest. A dev build sorts above the release it follows and below the next one.
+
+Only a preview server takes them. On the installed app in Admin → Apps, choose **New releases: Dev builds too**; with **Automatic**, each dev build installs at the server's next check (blue/green, as any install). Before each one, the updater takes a backup of the database, since a dev build runs on the server's real data; the install's first step names the file. On a production server the choice stays in the list, greyed, saying why; the registry refuses one, and the updater refuses to install a dev build unless `.env` says `SERVER_RING=preview`.
+
+Because a dev build has run its migrations on the preview server, a migration is frozen once it's on `dev`, not only once it's released: CI on a pull request into `dev` fails if it changes or removes one that's already there (`MIGRATIONS_FROZEN_AT=origin/dev pnpm check:migrations`). Add a new migration instead.
+
 ## What's left to build
 
-Dev builds of every merge to `dev` and signed promotion records come next; then feature previews and the live dev loop. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
+Feature previews and the live dev loop come next; then signed promotion records and clearing old dev builds' images from the registry (their releases are cleared already). Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
 
 ## Once, in GitHub (the repository's owner)
 

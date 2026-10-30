@@ -4,7 +4,7 @@ import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
 import { changesIn } from './changes.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
-import { AppUpdateChecker, newestOn, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
+import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
 import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore, type RunningPreview } from './store.ts';
 import { upstreamProblem } from './upstreams.ts';
@@ -20,7 +20,7 @@ const appReleaseSchema = {
     schema: { const: APP_RELEASE_SCHEMA },
     id: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' },
     version: { type: 'string', minLength: 1, maxLength: 40 },
-    channel: { enum: ['stable', 'beta', 'preview'] },
+    channel: { enum: ['stable', 'beta', 'dev', 'preview'] },
     releasedAt: { type: 'string', maxLength: 40 },
     sdk: { type: 'string', maxLength: 100 },
     manifest: appEntrySchema,
@@ -64,6 +64,9 @@ const OUTCOME_ACTIONS: Record<AppJob['action'], Record<AppJobOutcome, string>> =
   preview: { done: 'app.preview-started', failed: 'app.preview-failed' },
   'preview-remove': { done: 'app.preview-removed', failed: 'app.preview-remove-failed' },
 };
+
+/** Why a production server doesn't install a dev build. */
+export const DEV_BUILDS_PREVIEW_ONLY = 'That’s a dev build. Only a preview server (SERVER_RING=preview) installs dev builds.';
 
 /** How many of an app's jobs its history in Admin → Apps lists. */
 const APP_HISTORY_LISTED = 20;
@@ -120,7 +123,7 @@ export const appRunnerRoutes =
     /** When the runner last asked what to do; it lives only as long as this process. */
     let runnerSeenAt: string | undefined;
 
-    /** How an app follows releases: by default stable on Automatic. A production server never follows beta, whatever was chosen before. */
+    /** How an app follows releases: by default stable on Automatic. A production server never follows beta or dev, whatever was chosen before. */
     const followOf = (follows: AppFollow[], id: string): Pick<AppFollow, 'channel' | 'policy'> => {
       const { channel, policy } = follows.find((f) => f.app === id) ?? { channel: 'stable' as const, policy: 'automatic' as const };
       return { channel: takesPreview(ring) ? channel : 'stable', policy };
@@ -222,7 +225,7 @@ export const appRunnerRoutes =
             changes: changesIn(release.notes ?? '', id),
             // Earlier versions to go back to, newest first.
             older: releases
-              .filter((r) => r.app === id && r.release?.service && r.channel !== 'preview' && (takesPreview(ring) || r.channel === 'stable') && semver.lt(r.version, release.version))
+              .filter((r) => r.app === id && r.release?.service && onChannel(takesPreview(ring) ? 'beta' : 'stable', r.channel) && semver.lt(r.version, release.version))
               .sort((a, b) => semver.rcompare(a.version, b.version))
               .slice(0, 3)
               .map((r) => ({ version: r.version, channel: r.channel })),
@@ -354,12 +357,12 @@ export const appRunnerRoutes =
     /** How an installed app takes new releases: its channel, and Automatic, Ask first or Hold. */
     app.put<{ Params: { id: string }; Body: { channel: AppChannel; policy: AppPolicy } }>(
       '/app-runner/apps/:id/follow',
-      { schema: { body: { type: 'object', additionalProperties: false, required: ['channel', 'policy'], properties: { channel: { enum: ['stable', 'beta'] }, policy: { enum: ['automatic', 'ask', 'hold'] } } } } },
+      { schema: { body: { type: 'object', additionalProperties: false, required: ['channel', 'policy'], properties: { channel: { enum: ['stable', 'beta', 'dev'] }, policy: { enum: ['automatic', 'ask', 'hold'] } } } } },
       async (req, reply) => {
         const caller = admin(req, reply);
         if (!caller) return reply;
         if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
-        if (req.body.channel === 'beta' && !takesPreview(ring)) return reply.code(409).send({ error: 'production_server', message: PRODUCTION_ONLY });
+        if (req.body.channel !== 'stable' && !takesPreview(ring)) return reply.code(409).send({ error: 'production_server', message: PRODUCTION_ONLY });
         await store.setFollow({ app: req.params.id, ...req.body, setBy: caller.id });
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.updates-set', target: req.params.id, detail: { ...req.body } });
         await autoUpdate();
@@ -426,7 +429,12 @@ export const appRunnerRoutes =
         }
         const target = release ? release.id : (body as { app: string }).app;
         if (release) {
-          const problem = previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : releaseProblem(release, pillars);
+          const problem =
+            previewPr(release.version) !== undefined
+              ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.'
+              : isDevBuild(release.version) && !takesPreview(ring)
+                ? DEV_BUILDS_PREVIEW_ONLY
+                : releaseProblem(release, pillars);
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         } else if (pillars.includes(target)) {
           return reply.code(409).send({ error: 'conflict', message: `${target} ships with AUGUR and can’t be removed. Turn it off instead.` });

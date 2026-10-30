@@ -37,6 +37,8 @@ In the shell, **Previews** in the band lists your apps' previews. **Use it** swi
 
 Pull requests from forks get no preview.
 
+Once it's merged into `dev`, **App dev builds** builds it again as a dev build, which a preview server set to **Dev builds too** installs for everyone on it, after a backup ([release-channels.md](release-channels.md#dev-builds)).
+
 ## 3. Release it
 
 Add a changeset to the pull request (`pnpm changeset`) saying what changed in `@apps/expenses` and `@apps/expenses-frontend`, then merge it into `dev`. The next **Version packages** pull request on `dev` moves the app's version, and **Promote to preview** takes it to `preview`, which releases it as a pre-release; the Promote workflow later takes it to production ([release-channels.md](release-channels.md)). Releasing it on preview: the Release workflow builds and signs its service image and frontend, and makes the GitHub release `app/expenses@<version>` with its `app-release.json` ([versioning.md](versioning.md#app-releases)). A prerelease version, such as `1.3.0-beta.1`, goes out on the beta channel.
