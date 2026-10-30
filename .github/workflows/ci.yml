@@ -53,6 +53,7 @@ jobs:
       - run: pnpm check:reasons
       - run: pnpm check:versions
       - run: pnpm check:release
+      - run: pnpm check:catalog
       - run: pnpm test:scripts
       # Into preview and production only dev, promotions, back-merges and hotfixes go, all versioned
       # already (docs/release-channels.md).
