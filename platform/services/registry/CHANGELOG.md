@@ -1,5 +1,12 @@
 # @augur/registry
 
+## 0.12.1
+
+### Patch Changes
+
+- Updated dependencies [bb91780]
+  - @augur/mfe-sdk@1.8.0
+
 ## 0.12.0
 
 ### Minor Changes

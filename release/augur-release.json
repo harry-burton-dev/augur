@@ -1,10 +1,19 @@
 {
-  "version": "0.11.0",
+  "version": "0.12.0",
   "channel": "beta",
   "released": "2026-10-30",
   "upgradeFrom": ">=0.1.0",
   "changed": [
-    "@augur/records"
+    "@augur/mfe-sdk",
+    "@augur/ui-kit",
+    "@augur/registry",
+    "@augur/admin",
+    "@augur/home",
+    "@augur/shell",
+    "@apps/folio-frontend",
+    "@apps/folio",
+    "@apps/auspex-frontend",
+    "@apps/atlas-frontend"
   ],
   "breaking": [],
   "settings": {
@@ -100,7 +109,7 @@
   },
   "parts": {
     "@augur/mfe-sdk": {
-      "version": "1.7.0"
+      "version": "1.8.0"
     },
     "@augur/records": {
       "version": "0.1.0"
@@ -109,7 +118,7 @@
       "version": "0.9.0"
     },
     "@augur/ui-kit": {
-      "version": "1.6.0"
+      "version": "1.7.0"
     },
     "@augur/events": {
       "version": "0.5.0"
@@ -124,7 +133,7 @@
       "version": "0.3.0"
     },
     "@augur/registry": {
-      "version": "0.12.0"
+      "version": "0.12.1"
     },
     "@augur/storage": {
       "version": "0.3.0"
@@ -133,28 +142,28 @@
       "version": "0.6.0"
     },
     "@augur/admin": {
-      "version": "0.10.0"
+      "version": "0.10.1"
     },
     "@augur/home": {
-      "version": "0.2.8"
+      "version": "0.2.9"
     },
     "@augur/shell": {
-      "version": "0.10.0"
+      "version": "0.10.1"
     },
     "@apps/folio-frontend": {
-      "version": "0.3.3"
+      "version": "0.4.0"
     },
     "@apps/folio": {
-      "version": "0.2.2"
+      "version": "0.3.0"
     },
     "@apps/auspex-frontend": {
-      "version": "0.1.3"
+      "version": "0.2.0"
     },
     "@apps/auspex": {
       "version": "0.1.0"
     },
     "@apps/atlas-frontend": {
-      "version": "0.1.3"
+      "version": "0.1.4"
     },
     "@apps/atlas": {
       "version": "0.1.0"

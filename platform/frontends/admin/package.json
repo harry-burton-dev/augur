@@ -1,6 +1,6 @@
 {
   "name": "@augur/admin",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "type": "module",
   "description": "Admin: people, departments and apps. Built as one ES module the shell imports from the registry's entry URL.",
