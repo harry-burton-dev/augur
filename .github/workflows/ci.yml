@@ -98,6 +98,13 @@ jobs:
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
       - run: pnpm --filter @augur/ui-kit build-storybook
+      # The pull request's Storybook, to look through before it merges: download "storybook" from the run, unzip it and serve the folder (`npx serve`).
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: storybook
+          path: platform/packages/ui-kit/storybook-static
+          retention-days: 14
 
   # Folio's rendition worker, in Python: its tests against a real Postgres with Folio's
   # schema, PDFs included (Docling fetches its models once; they're cached), and its image

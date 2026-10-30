@@ -78,9 +78,19 @@ An app can ship a feature before it's everyone's, on any server, production incl
 
 Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feature previews**: **Off**, **For those who turn it on**, or **On for everyone**. Until an admin chooses, a preview server makes it opt-in and a production server keeps it off. People turn the opt-in ones on for themselves in the shell's **Previews** (in the band), which mounts the app again with it; while one is on, the app says **Preview on** above it, with the way back. After its `until` day a preview is off for everyone, and Admin says the app should drop it or make it everyone's. Each choice an admin makes is in Activity as `app.preview-set`.
 
+## The live dev loop
+
+Vite and Storybook already change what you see as you save. `pnpm dev:app <id>` runs the real shell and kit with your app's frontend from source (hot reload) and its service beside it. Three switches make more of it live:
+
+- `--kit` also rebuilds the UI kit, its tokens (`tokens/tokens.json`) and the shared modules the shell serves as you change them, and reloads the page, so a change to a kit part shows in your app in a few seconds.
+- `DEV_PREVIEWS=all` (or ids, comma separated) turns the app's feature previews on for the stand-in person.
+- `DEV_HOST=0.0.0.0` opens the dev server to other machines on the tailnet (any `*.ts.net` name, plus `DEV_ALLOWED_HOSTS`), such as your phone.
+
+For the kit on its own, `pnpm --filter @augur/ui-kit storybook`. Every pull request's CI run keeps its Storybook for 14 days: download **storybook** from the run's artifacts, unzip it and serve the folder (`npx serve`).
+
 ## What's left to build
 
-The live dev loop comes next; then signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
+Loading an app's frontend from a developer's machine on the preview server (a local override, which needs its own content security rules), signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
 
 ## Once, in GitHub (the repository's owner)
 
