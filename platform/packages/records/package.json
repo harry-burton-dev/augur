@@ -1,0 +1,25 @@
+{
+  "name": "@augur/records",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The shapes every app's records share: levels a tree of units is built from, lifecycles, who may do what, tags, relationships, and publishing up the floors with one owner.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}

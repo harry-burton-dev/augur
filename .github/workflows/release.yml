@@ -2,10 +2,10 @@ name: Release
 # Release channels (docs/release-channels.md): on dev it keeps the Version packages PR and, once
 # that's merged, Promote to preview; on preview it builds, signs and releases each unit as a
 # pre-release; on production it marks the promoted release as on production, building only a
-# hotfix's new version. main does what it did before the branches, until it is renamed production.
+# hotfix's new version.
 on:
   push:
-    branches: [main, dev, preview, production]
+    branches: [dev, preview, production]
 concurrency: release-${{ github.ref }}
 permissions:
   contents: write
@@ -58,9 +58,22 @@ jobs:
         run: node scripts/promote.mjs production
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      # Versions are only ever cut on dev. Changesets waiting here came in some other way (the branches
+      # were made from a commit that had some, or a hotfix that skipped `pnpm version-packages`): say so,
+      # and release nothing, rather than open a Version packages pull request into preview or production.
+      - name: Any changesets waiting?
+        id: waiting
+        if: github.ref_name != 'dev'
+        run: |
+          waiting=$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md -printf '%f ')
+          echo "names=$waiting" >> "$GITHUB_OUTPUT"
+          if [ -n "$waiting" ]; then
+            echo "::warning::${{ github.ref_name }} has changesets no Version packages run has spent ($waiting), so nothing is released. Versions are cut on dev: merge its Version packages pull request, then Promote to preview. On a hotfix branch, run pnpm version-packages and commit."
+            echo "Nothing released: ${{ github.ref_name }} has changesets that were never versioned ($waiting). See docs/release-channels.md." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: changesets/action@v1
         id: changesets
-        if: github.ref_name != 'dev'
+        if: github.ref_name != 'dev' && steps.waiting.outputs.names == ''
         with:
           title: Version packages
           commit: Version packages

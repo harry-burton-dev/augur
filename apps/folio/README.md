@@ -2,7 +2,7 @@
 
 People see Folio as **Artifacts**: that's its name in the manifest and in everything it says to them. Folio stays its id, route, schema, bucket, containers and code name.
 
-AUGUR's first pillar app: libraries of documents on every floor (your own, a team's, the org's), kept in folders, then published for people to read. It is built only on the public app contract, like any other app.
+AUGUR's first pillar app: libraries of documents on every floor (your own, a team's, the org's), given form by levels (collection › subcollection › series › subseries › file), each version moving through a lifecycle, then published for people to read. Its levels, lifecycles and access rules come from `@augur/records` ([App patterns](../../docs/app-patterns.md)). It is built only on the public app contract, like any other app.
 
 Folio keeps every file exactly as it was uploaded, as numbered versions in its own bucket, with its size and SHA-256. It takes PDF, Word (.docx), HTML, Markdown and plain text, up to 200 MB each; uploads stream straight through to the bucket.
 
@@ -107,15 +107,20 @@ All under `/api/folio/v1`, sent with the floor's `X-Workspace-Id` (`ctx.fetch` a
 
 | | |
 | --- | --- |
-| `GET /libraries` | The floor's libraries, and whether the caller can make one |
+| `GET /levels` | The levels a library is built from (collection › subcollection › series › subseries › file), called what the org calls them, what each may hold, and whether the caller may rename them |
+| `PUT /levels/:level` `{name, plural}`, `DELETE /levels/:level` | Rename a level for the whole org, or give it its own name back (the org's leads, on the org's floor) |
+| `GET /libraries?archived=` | The floor's libraries (its collections), and whether the caller can make one. With `archived=true`, a lead also gets the archived ones |
 | `POST /libraries` `{name, description?}` | A new library (the floor's leads) |
 | `GET /libraries/:id` | A library with its folders, tags (the org's and its own), authors, saved views, series, and what the caller may do there |
 | `PATCH /libraries/:id` `{name?, description?, freeTags?}` | Rename or describe it, or let anyone add tags (leads) |
 | `POST /libraries/:id/archive` | Take it off the floor's list (leads) |
-| `POST /libraries/:id/folders` `{name, parent?}` | A new folder, at the top or inside another, at most 6 deep |
-| `PATCH /libraries/:id/folders/:folder` `{name}` | Rename a folder |
+| `PUT /libraries/:id/state` `{state, note?}` | Move it through its lifecycle: open, closed (nothing new goes in) or archived (whoever manages it). An archived one can be opened again |
+| `GET /libraries/:id/moves?folder=` | Every lifecycle move of the library, or of one of its folders, newest first |
+| `POST /libraries/:id/folders` `{name, parent?, level?, description?}` | A subcollection, series or subseries: at `level`, or the next level down from `parent` (or the top). Refused where that level can't go, and inside anything closed |
+| `PATCH /libraries/:id/folders/:folder` `{name?, description?}` | Rename or describe it |
+| `PUT /libraries/:id/folders/:folder/state` `{state, note?}` | Open, close or archive it (whoever manages the library) |
 | `DELETE /libraries/:id/folders/:folder` | Remove an empty folder |
-| `GET /libraries/:id/documents?folder=&below=&tag=&type=&author=&since=&from=&to=&state=&series=&sort=&limit=&offset=` | The documents in a folder (or at the top), or with `below=true` everything inside it, filtered and sorted, with the `total`. `tag`, `type`, `author` and `state` repeat; `type` is pdf, word, html, markdown or text; `since` is week, month, quarter or year; `state` is draft, published or withdrawn; `series` is one series' issues; `sort` is title, newest, updated or period |
+| `GET /libraries/:id/documents?folder=&below=&tag=&type=&author=&since=&from=&to=&state=&series=&sort=&limit=&offset=` | The documents in a folder (or at the top), or with `below=true` everything inside it, filtered and sorted, with the `total`. `tag`, `type`, `author` and `state` repeat; `type` is pdf, word, html, markdown or text; `since` is week, month, quarter or year; `state` is draft, published or withdrawn; `series` is one series' issues; `lifecycle` (repeats) is the state of the newest version; `sort` is title, newest, updated or period |
 | `POST /libraries/:id/documents?filename=&title=&folder=&tag=&series=` | Upload a document: the body is the file, its `Content-Type` its type; `tag` repeats. With `series`, it's that series' next issue: named, numbered, tagged and published to its audience when the uploader may (otherwise a draft, with why in `draft`) |
 | `PUT /libraries/:id/documents/:doc/tags` `{tags}` | Give a document exactly these tags |
 | `GET /libraries/:id/documents/:doc` | A document with its versions, newest first, its `state` and what's `published`. To its audience alone: only the version that's out, as `only`. An issue has its `issue` (number and period) and `run`: its series, the issues either side the caller may read, and whether they follow it |
@@ -123,26 +128,42 @@ All under `/api/folio/v1`, sent with the floor's `X-Workspace-Id` (`ctx.fetch` a
 | `DELETE /libraries/:id/documents/:doc` | Take it out of the library |
 | `POST /libraries/:id/documents/:doc/versions?filename=` | Its next version, sent as above |
 | `GET /libraries/:id/documents/:doc/versions/:n/original` | Version n's file as it was uploaded |
+| `PUT /libraries/:id/documents/:doc/versions/:n/state` `{state, note?}` | Move version n through its lifecycle: in progress, in review and complete for whoever may change it, issued and retired for whoever manages it. The document's `can.moves` says where its newest version may go |
+| `GET /libraries/:id/documents/:doc/moves` | Every lifecycle move of its versions, newest first |
 | `GET /libraries/:id/documents/:doc/versions/:n/reader` | Its reader copy, as Markdown (409 `not-ready` until it's made) |
 | `GET /libraries/:id/documents/:doc/versions/:n/reader/images/:name` | A picture the reader copy shows (`images/1.png`) |
 | `GET /libraries/:id/documents/:doc/versions/:n/thumbnail`, `…/text` | Its first page as a PNG (PDFs), and its words as plain text |
 | `POST /libraries/:id/documents/:doc/versions/:n/reader/retry` | Ask again for a reader copy that failed |
-| `GET /libraries/:id/access`, `GET /libraries/:id/documents/:doc/access` | Who may see it: its floor, who has been let in (for a document, into it and into its library), and whether the caller may share it |
+| `GET /libraries/:id/access`, `GET /libraries/:id/documents/:doc/access` | Who may see it: its floor, who has been let in (for a document, into it and into its library), the floors it's published up to (`placed`: who each lets in, its filter, and the floors it came up through), and whether the caller may share it |
 | `PUT /libraries/:id/access/:principal` `{level}`, `DELETE …` | Let a person or team into the library that far (read, edit or manage), or take them out (managers). `:principal` is `person:<id>`, `team:<id>`, `tree:<id>` or `org` |
 | `PUT /libraries/:id/documents/:doc/access/:principal` `{level}`, `DELETE …` | The same for one document (whoever manages it) |
+| `GET /libraries/:id/folders/:folder/access` | Who may see a folder: its floor, who has been let into its library, and who into the folder |
+| `PUT /libraries/:id/folders/:folder/access/:principal` `{level}`, `DELETE …` | Let a person or team into a folder and everything inside it, while it stays inside (whoever manages the library). A document's access lists these under `folders` |
 | `GET /people?q=` | People and teams to share with, by name |
 | `GET /shared` | Libraries and documents shared with the caller from other floors |
-| `POST /libraries/:id/documents/:doc/publish` `{version, audience, note?}` | Put a version out to `audience` (`team:<id>`, `tree:<id>` or `org`), in place of what was out, and tell them (whoever manages it) |
+| `POST /libraries/:id/documents/:doc/publish` `{version, audience, note?}` | Put a version of a series' issue out to `audience` (`team:<id>`, `tree:<id>` or `org`), in place of what was out, and tell them (whoever manages it). Any other document answers 410 `publish-up`: it's published up the floors (`POST /placements`), and what was published this way before is moved there by itself |
 | `POST /libraries/:id/documents/:doc/withdraw` `{reason?}` | Take back what's out (whoever manages it) |
 | `GET /libraries/:id/documents/:doc/publications` | Every time it was published, newest first, with its audience named, and whether the caller may publish it, and to the org |
 | `GET /published?limit=&offset=` | What's out to the caller now, from any floor, newest first |
+| `POST /placements` `{library, record, to, filter, via?, landing?, note?}` | Publish a record (`record: {kind, id}`, a collection, folder or document) up to a floor above its own (`to`: a team's id or `org`), showing only versions in the `filter`'s lifecycle states. `via` is the step it came up through, and it can show no more than that step. The org needs the publisher role; a step further up comes from the leads of the floor that received it |
+| `GET /placements?library=&record=` | A record's steps up the floors, its owner (the highest floor it reached), and where each person sees it |
+| `PATCH /placements/:id` `{filter}` | Show more or less through a step. Narrowing it narrows every step above it, and ends any left showing nothing |
+| `PUT /placements/:id/landing` `{library, folder?}`, `DELETE …` | Where it sits on the floor that received it (that floor's leads); with none it sits under "From below" |
+| `POST /placements/:id/withdraw` `{reason?}` | Take it back off that floor, and off every floor it went to from there |
+| `GET /placements/:id/above` | The steps that came up through this one |
+| `PUT /libraries/:id/folders/:folder/tags` `{tags}` | A folder's own tags, the org's or the library's: they count for everything inside it when filtering by tag. Whoever may change the folder |
+| `GET /libraries/:id/links?record=` | A library's, folder's or document's links (`record` is its id; the library's own id for the library), the links to it from other records (`back`), the kinds of link, and whether the caller may change them. A linked record the caller can't open stays listed, with `unavailable` saying so |
+| `POST /libraries/:id/links` `{record, relation, to}` | Link a record to another (`to` is a `RecordRef`: `{app, kind, id, label?}`). `relates-to`, `supersedes` and `responds-to` link to Artifacts' own records (`{app: 'folio', kind: 'unit', id: '<library>/<record>'}`), `about` to a thing in Data Atlas, `serves` to an intent in Mandate. Whoever may change the record links it |
+| `DELETE /libraries/:id/links/:link?record=` | Unlink it |
+| `GET /received` | What's been published up to the caller's floor, with where it's landed |
+| `GET /received/:id?folder=` | The documents a received step shows, each at the newest version its filter lets through |
 | `GET /search?q=` | Find's answer: up to ten documents the caller may read or has had published to them, matching every word by title, tag or text |
 | `GET /find?q=` | The same search for the picker, as whole documents with their `libraryName` and `audienceOnly` (only the version published to them is theirs) |
 | `GET /home` | Home's card: what's been published to the caller since they last looked (`published.new`, the newest three), and for the floor's leads its `drafts` |
 | `PUT /published/looked` | The caller has looked at what's published to them: Home stops counting it as new. The app sends it when "Published to you" opens |
 | `GET /documents/:doc` | Where a document is (`{id, library, title}`), for `document.open`, which gives only its id |
 | `GET /libraries/:id/series` | The library's series, each with the issue it expects next (`next`, with `dueBy` and `overdue`), whether the caller follows it and what they may do |
-| `POST /libraries/:id/series` `{name, cadence, description?, audience?, tags?}` | A new series (whoever manages the library). `cadence` is weekly, monthly, quarterly or adhoc |
+| `POST /libraries/:id/series` `{name, cadence, description?, audience?, tags?, parent?, folder?}` | A schedule for a series (whoever manages the library): a new series in `parent` or at the top, or `folder`, a series already there. `cadence` is weekly, monthly, quarterly or adhoc. Issues go in the series |
 | `PATCH /libraries/:id/series/:series` `{name?, cadence?, description?, audience?, tags?}`, `DELETE …` | Change a series, or remove one with no issues (whoever manages the library) |
 | `GET /series/:series` | A series with its audience named, for its library's readers and its audience |
 | `GET /series/:series/issues?limit=&offset=` | The issues the caller may read, newest period first |

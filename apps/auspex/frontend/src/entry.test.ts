@@ -4,7 +4,7 @@ import { AuspexApi } from './api.js';
 import { pathFor, placeFor, type AuspexApp } from './auspex-app.js';
 import { addressFor, AUSPEX_OPEN, FLOOR_MAP, placeForIntent } from './entry.js';
 import { layoutMap } from './layout.js';
-import { ACCESS_EXPLAIN, explain, readExplain } from './access.js';
+import { ACCESS_EXPLAIN, explain, readExplain, upWords } from './access.js';
 import type { AuspexAccess } from './auspex-access.js';
 import { plantLine, roomsOf, type AuspexPlant } from './auspex-plant.js';
 import { daysOf, tally, type AuspexReplay } from './auspex-replay.js';
@@ -182,6 +182,19 @@ describe('who can open this (access.explain)', () => {
     expect(readExplain(undefined)).toBeUndefined();
     expect(ask.audience.map((a) => a.principal)).toEqual(['tree:fin', 'team:pay', 'person:lee', 'tree:leg']);
     expect(ask.change).toEqual({ where: 'Share', allowed: false });
+  });
+
+  it('says how something published up the floors reaches them: the floors it came through, and what it shows', () => {
+    const up = readExplain({
+      thing: { app: 'folio', id: 'f-1', title: 'Reports', kind: 'folder' },
+      audience: [{ principal: 'org', level: 'read', via: 'published up', chain: ['Payroll', 'Finance', 7], shows: ['Complete', 'Issued'] }, { principal: 'tree:fin', chain: 'Payroll' }],
+    })!;
+    expect(up.audience[0]).toMatchObject({ chain: ['Payroll', 'Finance'], shows: ['Complete', 'Issued'] });
+    expect(up.audience[1].chain).toBeUndefined();
+    expect(upWords(up.audience[0])).toBe('Up from Payroll through Finance, showing Complete and Issued');
+    expect(upWords({ chain: ['Payroll'], shows: ['In review', 'Complete', 'Issued'] })).toBe('Up from Payroll, showing In review, Complete and Issued');
+    expect(upWords({ shows: ['Issued'] })).toBe('Showing Issued only');
+    expect(upWords({})).toBe('');
   });
 
   it('counts only people the person may know about, and says when it is at least that', () => {

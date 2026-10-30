@@ -1,7 +1,9 @@
 import { LitElement, html, nothing } from 'lit';
 import { ago, type ListItem, type MarkedPassage, type OutlineItem, type ReaderSize, type UiReader } from '@augur/ui-kit';
 import { agoWords } from './folio-publish.js';
-import { fileTypeOf, sizeWords, type DocumentVersion, type FolioApi, type OpenDocument, type Tag } from './api.js';
+import './folio-links.js';
+import type { PickRef } from './folio-links.js';
+import { CONTENT_STATES, fileTypeOf, sizeWords, stateName, type DocumentVersion, type FolioApi, type OpenDocument, type Tag } from './api.js';
 
 /** How a person likes to read, kept in their browser for every document. */
 export interface ReadingPrefs {
@@ -62,6 +64,9 @@ const shortWords = (text: string) => (text.length > 80 ? `${text.slice(0, 79)}�
  * @fires folio-manage - open the document's details, to change it
  * @fires folio-share - see who can see it, and share it when the person manages it
  * @fires folio-publish - see how it's published, and publish or withdraw it when the person manages it
+ * @fires folio-move - detail `{ version, state }`, to move a version through its lifecycle
+ * @fires folio-publish-up - see where it's been published up the floors, and publish it further
+ * @fires folio-open-link - detail `{ link }`, from its links: open the other end
  * @fires folio-download - detail `{ version }`, the original of a version
  * @fires folio-retry - detail `{ version }`, ask again for a reader copy that failed
  * @fires folio-issue - detail `{ library, document }`, to read the issue before or after this one
@@ -81,6 +86,7 @@ export class FolioReader extends LitElement {
     current: { state: true },
     prefs: { state: true },
     propose: { attribute: false },
+    pickRef: { attribute: false },
     passage: { state: true },
     proposing: { state: true },
     proposed: { state: true },
@@ -100,6 +106,8 @@ export class FolioReader extends LitElement {
   declare prefs: ReadingPrefs;
   /** Offers marked words to Data Atlas; without it, there's no Data Atlas section. */
   declare propose: Propose | undefined;
+  /** Asks the person for a thing in Data Atlas or an intent in Mandate, to link the document to. */
+  declare pickRef: PickRef | undefined;
   /** The words marked in the reader copy now, if any. */
   declare passage: MarkedPassage | undefined;
   declare proposing: boolean;
@@ -258,9 +266,15 @@ export class FolioReader extends LitElement {
     }
   }
 
-  /** Where it is in being published, and the way to publish it for whoever manages it. */
+  /**
+   * Where it is in being published, and the way to publish it for whoever
+   * manages it: for a series' issue, which still goes out one version at a time.
+   * Anything else is published up the floors (the lifecycle section), and says
+   * so here only while something it put out the old way is still out.
+   */
   private publishing() {
     const doc = this.doc;
+    if (!doc.issue && !doc.only && doc.state !== 'published') return nothing;
     const words = doc.only
       ? `Version ${doc.only} was published to you${doc.published ? ` ${agoWords(doc.published.publishedAt)}` : ''}.`
       : doc.state === 'published' && doc.published
@@ -272,6 +286,21 @@ export class FolioReader extends LitElement {
       <p class="folio-reader-said"><ui-icon name=${doc.state === 'published' ? 'publish' : doc.state === 'withdrawn' ? 'withdraw' : 'document'} size="18"></ui-icon>${words}</p>
       ${doc.published?.note && doc.only ? html`<p class="folio-reader-note">“${doc.published.note}”</p>` : nothing}
       ${doc.can.publish ? html`<ui-button kind="secondary" size="sm" @click=${() => this.emit('folio-publish')}>${doc.state === 'published' ? 'Publishing' : 'Publish'}</ui-button>` : nothing}
+    </section>`;
+  }
+
+  /** Where the version being read is in its lifecycle; the newest can move on, for whoever may move it. */
+  private lifecycle(v: DocumentVersion) {
+    const doc = this.doc;
+    if (doc.only) return nothing;
+    const newest = v.number === doc.latest.number;
+    return html`<section class="folio-reader-lifecycle" aria-label="Lifecycle">
+      <span class="label">Version ${v.number}</span>
+      <ui-lifecycle label=${`Version ${v.number}`} .states=${CONTENT_STATES} .offLine=${['retired']} state=${v.state}
+        .moves=${newest ? (doc.can.moves ?? []) : []}
+        why=${newest ? (doc.can.change ? 'Only whoever manages it can issue or retire it.' : 'Only whoever may change it can move it on.') : 'Only the newest version moves on.'}
+        @ui-move=${(e: CustomEvent<{ state: string }>) => this.emit('folio-move', { version: v.number, state: e.detail.state })}></ui-lifecycle>
+      <ui-button kind="ghost" size="sm" @click=${() => this.emit('folio-publish-up')}>Publish up the floors</ui-button>
     </section>`;
   }
 
@@ -319,7 +348,7 @@ export class FolioReader extends LitElement {
       id: String(x.number),
       title: x.number === v.number ? `Version ${x.number}, reading` : `Version ${x.number}`,
       icon: 'document',
-      detail: [sizeWords(x.size), x.number === newest ? 'newest' : '', x.number === doc.published?.version ? 'published' : ''].filter(Boolean).join(' · '),
+      detail: [stateName(x.state), sizeWords(x.size), x.number === newest ? 'newest' : '', x.number === doc.published?.version ? 'published' : ''].filter(Boolean).join(' · '),
       meta: ago(x.createdAt),
     }));
     const size = SIZES.indexOf(this.prefs.size);
@@ -337,7 +366,12 @@ export class FolioReader extends LitElement {
         ${doc.can.change ? html`<ui-button kind="ghost" size="sm" @click=${() => this.emit('folio-manage')}>Change it</ui-button>` : nothing}
         ${doc.only ? nothing : html`<ui-button kind="ghost" size="sm" @click=${() => this.emit('folio-share')}>${doc.can.share ? 'Share' : 'Who can see it'}</ui-button>`}
       </div>
-      ${this.publishing()} ${this.series()} ${this.atlas(v)}
+      ${this.lifecycle(v)} ${this.publishing()} ${this.series()}
+      <section class="folio-reader-links" aria-label="Links">
+        <span class="label">Links</span>
+        <folio-links .api=${this.api} library=${doc.library} .record=${{ kind: 'document', id: doc.id, name: doc.title }} .pickRef=${this.pickRef}></folio-links>
+      </section>
+      ${this.atlas(v)}
       ${doc.tags.length
         ? html`<div class="folio-tags" aria-label="Tags">${doc.tags.map((t) => {
             const tag = this.tags.find((x) => x.id === t);
@@ -372,6 +406,7 @@ export class FolioReader extends LitElement {
         folio-reader .folio-reader-head h1 { margin: 0; font-size: var(--type-title-s); line-height: var(--leading-title-s); font-weight: 300; }
         folio-reader .folio-reader-head p { margin: 0; color: var(--ink-muted); font-size: var(--type-meta); line-height: var(--leading-meta); }
         folio-reader .folio-reader-old { color: var(--ink); }
+        folio-reader .folio-reader-links { display: flex; flex-direction: column; gap: var(--space-3); }
         folio-reader .folio-reader-series { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
         folio-reader .folio-reader-turns { display: flex; justify-content: space-between; gap: var(--space-3); }
         folio-reader .folio-reader-publishing { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
@@ -385,6 +420,9 @@ export class FolioReader extends LitElement {
         folio-reader .label { font-size: var(--type-label); line-height: var(--leading-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--ink-muted); }
         folio-reader .folio-link { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
         folio-reader .folio-link:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }
+        folio-reader .folio-crumb { all: unset; cursor: pointer; font-size: var(--type-small); color: var(--ink-muted); }
+        folio-reader .folio-crumb:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+        folio-reader .folio-crumb:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }
         @media (max-width: 1100px) {
           folio-reader { grid-template-columns: minmax(0, 1fr); }
           folio-reader .folio-reader-contents, folio-reader .folio-reader-side { position: static; max-height: none; }

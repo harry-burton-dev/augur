@@ -10,6 +10,8 @@ A **unit** is what moves on its own: **AUGUR** (the platform, its services and t
 | `preview` | `dev` (through Promote to preview), a back-merge from `production`, or a `hotfix/*` branch | builds, signs and releases each unit whose version has no release yet, as a GitHub **pre-release** |
 | `production` | a `promote/*` branch (from the Promote workflow) or a `hotfix/*` branch, merged by the repository's owner | marks the promoted release as on production: no image is rebuilt. Only a hotfix's new version is built here |
 
+Versions are only cut on `dev`. If `preview` or `production` ever holds changesets that were never versioned, the Release workflow there releases nothing and says why in its summary, instead of opening a Version packages pull request into that branch.
+
 CI holds these rules on every pull request (`node scripts/promote.mjs check-pr`): a pull request into `preview` or `production` from anywhere else fails, as does one that carries changesets no Version packages run has spent, or a promotion that changes another unit's files.
 
 ## Working on dev

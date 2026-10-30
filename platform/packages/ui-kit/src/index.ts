@@ -38,6 +38,7 @@ export { UiTally, type TallyCount } from './components/tally.js';
 export { UiDetails, type Detail } from './components/details.js';
 export { UiTimeline, dayWords, type TimelineItem } from './components/timeline.js';
 export { UiPath, type PathStep } from './components/path.js';
+export { UiLifecycle, type LifecycleState } from './components/lifecycle.js';
 export { UiRef, UiRefs, refIcon, refName, type RefKind, type RefShown } from './components/ref.js';
 export { UiDate, parseDay, dayName, dayDistance, isoDay, type DateQuick } from './components/date.js';
 export { UiPeoplePicker, type Principal, type PrincipalSearch } from './components/people-picker.js';

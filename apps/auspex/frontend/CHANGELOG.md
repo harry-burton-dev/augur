@@ -1,5 +1,26 @@
 # @apps/auspex-frontend
 
+## 0.2.0
+
+### Minor Changes
+
+- bb91780: Who can open something now includes the floors it's published up to. Artifacts' access answers list `placed`: the steps of the thing and of whatever it's inside, each with who that floor lets in, what it shows, and the floors it came up through. Share lists them under **Published up to**, and "Who can open this, explained" sends them to Auspex. Auspex reads an entry's optional `chain` and `shows` and says "Up from Payroll through Finance, showing Complete and Issued".
+
+### Patch Changes
+
+- Updated dependencies [bb91780]
+- Updated dependencies [bef7098]
+- Updated dependencies [e0e9c83]
+  - @augur/mfe-sdk@1.8.0
+  - @augur/ui-kit@1.7.0
+
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [5b2c80c]
+  - @augur/mfe-sdk@1.7.0
+
 ## 0.1.2
 
 ### Patch Changes

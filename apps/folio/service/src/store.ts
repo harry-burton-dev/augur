@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { CONTAINER_LIFECYCLE, CONTENT_LIFECYCLE, furthest, levelFrom, reaches, type ContainerState, type ContentState, type Level, type LevelName, type StateChange } from '@augur/records';
 import { nextIssue, type Cadence, type IssuePlace } from './cadence.ts';
+import { UNIT_LEVELS, nextLevel, type FolderLevel, type UnitLevel } from './units.ts';
+
+export { furthest, levelFrom, reaches, type Level };
 
 /** A library: a shelf of documents that belongs to one floor (someone's own, a team's, or the org's). */
 export interface Library {
@@ -16,20 +20,96 @@ export interface Library {
   description: string;
   /** Anyone who may tag a document here may also make new tags, not only pick the library's. */
   freeTags: boolean;
+  /** Open to more, closed to more, or archived (off its floor's list). */
+  state: ContainerState;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
 
-/** A folder in a library. Top-level folders have no parent. */
+/**
+ * A folder in a library: a subcollection, a series or a subseries, by `level`.
+ * Top-level folders have no parent. Which level may sit in which is UNIT_LEVELS'.
+ */
 export interface Folder {
   id: string;
   library: string;
   parent?: string;
+  level: FolderLevel;
   name: string;
+  description: string;
+  state: ContainerState;
   createdBy: string;
   createdAt: string;
+  updatedAt: string;
+  /** Its own tags, which count for everything inside it when filtering. Listed with the library's folders. */
+  tags?: string[];
 }
+
+/** A move from one lifecycle state to another, on the record: of a version, a folder or a library. */
+export interface StateMove extends StateChange<string> {
+  /** The library, folder or document it happened to. */
+  record: string;
+  /** For a document's version, its number. */
+  version?: number;
+}
+
+/** What an org calls a level instead of Folio's own name. */
+export type LevelNames = Partial<Record<UnitLevel, LevelName>>;
+
+/** What can be published up the floors: a whole collection, a folder in one, or one document. */
+export interface RecordRefIn {
+  kind: 'library' | 'folder' | 'document';
+  id: string;
+}
+
+/**
+ * One step of publishing up the floors (docs/app-patterns.md): a record put on
+ * a floor above, through a filter of lifecycle states. A live window, never a
+ * copy. `from` and `to` are floors: a team's id, someone's own floor's id, or
+ * `org`. Steps are kept for good; taking one back ends it.
+ */
+export interface Placement {
+  id: string;
+  /** The library the record is in, on its own floor. */
+  library: string;
+  /** The record's own floor. */
+  workspace: string;
+  record: RecordRefIn;
+  from: string;
+  to: string;
+  /** Who the floor it went to lets in: `tree:<team>` or `org`. */
+  toPrincipal: string;
+  filter: ContentState[];
+  /** The step it came up through, when a floor that received it published it on. */
+  via?: string;
+  /** Where it sits in the receiving floor's library; nowhere yet is "From below". */
+  landed?: { library: string; folder?: string };
+  note?: string;
+  by: string;
+  at: string;
+  ended?: { by: string; at: string; reason?: string };
+}
+
+/** What a new step is. */
+export type NewPlacement = Omit<Placement, 'id' | 'at' | 'ended' | 'workspace'>;
+
+/** The record is already on that floor. */
+export class PlacedError extends Error {}
+
+/** A typed link from a library, folder or document to another record, in Artifacts or another app. */
+export interface RecordLink {
+  id: string;
+  library: string;
+  from: string;
+  relation: string;
+  to: { app: string; kind: string; id: string; label?: string };
+  by: string;
+  at: string;
+}
+
+/** The same link is already there. */
+export class LinkedError extends Error {}
 
 /** One file as it was uploaded. A document's versions are numbered from 1 and never change. */
 export interface DocumentVersion {
@@ -45,6 +125,8 @@ export interface DocumentVersion {
   sha256: string;
   createdBy: string;
   createdAt: string;
+  /** Where it is in its life: in progress, in review, complete, issued or retired. */
+  state: ContentState;
   /** How its reader copy is coming along. */
   reader: ReaderState;
 }
@@ -154,6 +236,8 @@ export interface Series {
   audience: string[];
   /** The tags each issue starts with, by id. */
   tags: string[];
+  /** The series in the library its issues go in: a folder at the series level. */
+  folder: string;
   /** Its owner, who is reminded when an issue is late. */
   createdBy: string;
   createdAt: string;
@@ -269,6 +353,8 @@ export interface DocumentQuery {
   states?: DocumentState[];
   /** Is an issue of this series. */
   series?: string;
+  /** Its newest version is in one of these lifecycle states. */
+  lifecycle?: ContentState[];
   limit?: number;
   offset?: number;
   /** Only documents someone who stands for these principals may read. */
@@ -296,6 +382,7 @@ export interface ViewQuery {
   sort?: DocumentSort;
   states?: DocumentState[];
   series?: string;
+  lifecycle?: ContentState[];
 }
 
 /** A filter set saved in a library, for everyone there, in its side rail. */
@@ -314,10 +401,6 @@ export interface Person {
   name: string;
 }
 
-/** How far a grant lets someone in: read; edit (add and change documents); manage (also share, rename and archive). */
-export type Level = 'read' | 'edit' | 'manage';
-export const LEVELS: readonly Level[] = ['read', 'edit', 'manage'];
-
 /**
  * Who may see something: `person:<id>`, `team:<id>` (that team's members),
  * `tree:<id>` (that team and every team below it), or `org`.
@@ -329,6 +412,8 @@ export interface Grant {
   library: string;
   /** Just this document; the whole library when there's none. */
   document?: string;
+  /** This folder and everything inside it, for a grant on a folder. */
+  folder?: string;
   principal: string;
   level: Level;
   createdBy: string;
@@ -340,16 +425,6 @@ export interface Shared {
   libraries: (Library & { level: Level })[];
   documents: (FolioDocument & { level: Level })[];
 }
-
-const RANK: Record<Level, number> = { read: 1, edit: 2, manage: 3 };
-/** The furthest of these levels, or none. */
-export const furthest = (...levels: (Level | undefined)[]) =>
-  levels.reduce<Level | undefined>((best, l) => (l && (!best || RANK[l] > RANK[best]) ? l : best), undefined);
-/** How far these grants let in someone who stands for `principals`. */
-export const levelFrom = (grants: readonly Pick<Grant, 'principal' | 'level'>[], principals: readonly string[]) =>
-  furthest(...grants.filter((g) => principals.includes(g.principal)).map((g) => g.level));
-/** At least `want`. */
-export const reaches = (level: Level | undefined, want: Level) => Boolean(level && RANK[level] >= RANK[want]);
 
 /** The most documents in one page of a list. */
 export const MAX_PAGE = 200;
@@ -368,8 +443,6 @@ export interface NewVersion {
 /** Where a version's file goes in Folio's bucket: by document, so moving a document moves nothing. */
 export const objectKeyFor = (document: string, version: string) => `documents/${document}/${version}`;
 
-/** How deep folders may go, so a library stays something people can find their way round. */
-export const MAX_FOLDER_DEPTH = 6;
 
 /** Another library on the floor, or another folder beside it, already has the name. */
 export class NameTakenError extends Error {}
@@ -379,20 +452,66 @@ export class BadParentError extends Error {}
 export class NotEmptyError extends Error {}
 /** A tag that isn't the org's or this library's. */
 export class BadTagError extends Error {}
+/** Something new can't go in a closed library or folder. */
+export class ClosedError extends Error {}
 
 export interface FolioStore {
-  /** The floor's libraries, by name, leaving out archived ones. */
-  libraries(workspace: string): Promise<Library[]>;
-  /** A library, unless it is archived. */
-  library(id: string): Promise<Library | undefined>;
+  /** The floor's libraries, by name, leaving out archived ones unless asked. */
+  libraries(workspace: string, options?: { archived?: boolean }): Promise<Library[]>;
+  /** A library, unless it is archived and that wasn't asked for. */
+  library(id: string, options?: { archived?: boolean }): Promise<Library | undefined>;
   createLibrary(input: { workspace: string; floor: string; name: string; description?: string; createdBy: string }): Promise<Library>;
   updateLibrary(id: string, change: { name?: string; description?: string; freeTags?: boolean }): Promise<Library | undefined>;
   /** Takes a library off its floor's list, keeping everything in it. */
   archiveLibrary(id: string, by: string): Promise<boolean>;
+  /** Moves a library to another state of its lifecycle, on the record; archived takes it off its floor's list. */
+  setLibraryState(id: string, to: ContainerState, by: string, note?: string): Promise<Library | undefined>;
   /** A library's folders, by name. */
   folders(library: string): Promise<Folder[]>;
-  createFolder(input: { library: string; parent?: string; name: string; createdBy: string }): Promise<Folder>;
+  /**
+   * A subcollection, series or subseries: at `level`, or the next level down from
+   * its parent. Refused where that level can't go, or where its parent isn't open.
+   */
+  createFolder(input: { library: string; parent?: string; level?: FolderLevel; name: string; description?: string; createdBy: string }): Promise<Folder>;
   renameFolder(library: string, id: string, name: string): Promise<Folder | undefined>;
+  updateFolder(library: string, id: string, change: { name?: string; description?: string }): Promise<Folder | undefined>;
+  /** Moves a folder to another state of its lifecycle, on the record. */
+  setFolderState(library: string, id: string, to: ContainerState, by: string, note?: string): Promise<Folder | undefined>;
+  /** Moves one version of a document to another lifecycle state, on the record. */
+  setVersionState(document: string, number: number, to: ContentState, by: string, note?: string): Promise<DocumentVersion | undefined>;
+  /** Every lifecycle move of a library, folder or document (its versions'), newest first. */
+  stateMoves(record: string): Promise<StateMove[]>;
+  /** What the org calls each level, where it has renamed them. */
+  levelNames(): Promise<LevelNames>;
+  /** Renames a level for the whole org, or with `null` gives it back its own name. */
+  setLevelName(level: UnitLevel, name: LevelName | null, by: string): Promise<LevelNames>;
+  /** Links a record to another. LinkedError when that link is already there. */
+  link(input: Omit<RecordLink, 'id' | 'at'>): Promise<RecordLink>;
+  /**
+   * The links from a record, and those to it, oldest first. Artifacts names its
+   * own records in a link as `<library>/<record>`, which `to` is.
+   */
+  links(record: string, to: string): Promise<{ from: RecordLink[]; to: RecordLink[] }>;
+  /** Takes a link away, from the record it starts at. */
+  unlink(from: string, id: string): Promise<RecordLink | undefined>;
+  /** Publishes a record up to a floor. PlacedError when it's already there. */
+  place(input: NewPlacement): Promise<Placement>;
+  placement(id: string): Promise<Placement | undefined>;
+  /** Every step a record has been published by, taken back or not, oldest first. */
+  placementsOf(record: string): Promise<Placement[]>;
+  /** What's on a floor now, from below, oldest first. */
+  placementsOn(floor: string): Promise<Placement[]>;
+  /** The steps that show a document now: of it, of a folder it's in, or of its library. */
+  covering(document: string): Promise<Placement[]>;
+  /**
+   * Changes what a step lets through; every step above it that would show more
+   * is narrowed to match, and one left showing nothing is taken back.
+   */
+  setPlacementFilter(id: string, filter: ContentState[], by: string): Promise<Placement | undefined>;
+  /** Puts a step somewhere in the receiving floor's library, or with `null` back in "From below". */
+  landPlacement(id: string, landed: { library: string; folder?: string } | null): Promise<Placement | undefined>;
+  /** Takes these steps back. */
+  endPlacements(ids: readonly string[], by: string, reason?: string): Promise<Placement[]>;
   /** Removes an empty folder; false when there was no such folder. */
   deleteFolder(library: string, id: string): Promise<boolean>;
   /** The documents that match, by title unless asked otherwise. */
@@ -422,6 +541,8 @@ export interface FolioStore {
   markPurged(id: string): Promise<boolean>;
   /** Gives a document exactly these tags. Each must be the org's or its library's. */
   setDocumentTags(id: string, tags: string[]): Promise<FolioDocument | undefined>;
+  /** Replaces a folder's own tags; BadTagError for one that isn't the org's or its library's. Undefined when there's no such folder. */
+  setFolderTags(library: string, folder: string, tags: string[]): Promise<Folder | undefined>;
   /** The tags a library's documents can have: the org's and its own, by name. */
   tags(library: string): Promise<Tag[]>;
   /** The org's tags, by name. */
@@ -457,6 +578,12 @@ export interface FolioStore {
   grants(library: string, document?: string): Promise<Grant[]>;
   /** Lets a principal in that far, or with `level: null` takes them out. Each document's readers follow. */
   setGrant(input: { library: string; document?: string; principal: string; level: Level | null; by: string }): Promise<Grant | undefined>;
+  /** Who has been let into a folder, and so into everything inside it. */
+  folderGrants(library: string, folder: string): Promise<Grant[]>;
+  /** Lets a principal into a folder and everything inside it, or with `level: null` takes them out. Its documents' readers follow. */
+  setFolderGrant(input: { library: string; folder: string; principal: string; level: Level | null; by: string }): Promise<Grant | undefined>;
+  /** Every grant that reaches a document of its own: on it, and on each folder it's inside. Not the library's. */
+  grantsOn(document: string): Promise<Grant[]>;
   /** Everyone who may read a document: its library's floor, and whoever has been let into the library or the document. */
   readers(document: string): Promise<string[]>;
   /** What has been shared with these principals, in libraries on floors other than `except`. */
@@ -467,6 +594,8 @@ export interface FolioStore {
   withdraw(input: { document: string; by: string; reason?: string }): Promise<Publication | undefined>;
   /** A document's publications, newest first. */
   publications(document: string): Promise<Publication[]>;
+  /** Publications still out of documents that aren't a series' issue, oldest first: what's left to move onto publishing up. */
+  publicationsToMove(limit: number): Promise<Publication[]>;
   /** What is out now to anyone who stands for these principals, newest first, with each one's library's name. */
   publishedTo(principals: readonly string[], page?: { limit?: number; offset?: number; since?: string }): Promise<PublishedPage>;
   /** When someone last looked at what's published to them (ISO), if they ever have. */
@@ -480,8 +609,12 @@ export interface FolioStore {
   /** A library's series, by name. */
   seriesIn(library: string): Promise<Series[]>;
   series(id: string): Promise<Series | undefined>;
-  /** Each tag must be the org's or the library's. */
-  createSeries(input: { library: string; name: string; description?: string; cadence: Cadence; audience?: string[]; tags?: string[]; createdBy: string }): Promise<Series>;
+  /**
+   * A series with a schedule. Each tag must be the org's or the library's. With
+   * `folder` (a series in the library without one) it gives that series its
+   * schedule; otherwise it makes the series, in `parent` or at the top.
+   */
+  createSeries(input: { library: string; folder?: string; parent?: string; name: string; description?: string; cadence: Cadence; audience?: string[]; tags?: string[]; createdBy: string }): Promise<Series>;
   updateSeries(id: string, change: { name?: string; description?: string; cadence?: Cadence; audience?: string[]; tags?: string[] }): Promise<Series | undefined>;
   /** Removes a series that has no issues; false when there was no such series. */
   deleteSeries(id: string): Promise<boolean>;
@@ -535,18 +668,31 @@ export interface PublishedPage {
 const sameName = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 
-/** How deep `parent` sits, 1 for a top-level folder, or 0 when it isn't one of `folders`. */
-const depthOf = (folders: readonly Folder[], parent: string) => {
-  let depth = 0;
-  for (let at = folders.find((f) => f.id === parent); at; at = at.parent ? folders.find((f) => f.id === at!.parent) : undefined) depth++;
-  return depth;
+/**
+ * Checks a folder can go in `parent` (the top of the library when there's none)
+ * at `level`, or at the next level down when it doesn't say, and gives the level.
+ */
+export const checkPlace = (folders: readonly Pick<Folder, 'id' | 'level'>[], parent: string | undefined, level?: FolderLevel, levels = UNIT_LEVELS): FolderLevel => {
+  const above = parent ? folders.find((f) => f.id === parent) : undefined;
+  if (parent && !above) throw new BadParentError('That folder isn’t in this library.');
+  const parentLevel: UnitLevel = above?.level ?? 'collection';
+  const wanted = level ?? nextLevel(parentLevel) ?? 'subseries';
+  const refusal = levels.refusal(parentLevel, wanted);
+  if (refusal) throw new BadParentError(refusal);
+  return wanted;
 };
 
-const checkParent = (folders: readonly Folder[], parent: string | undefined) => {
-  if (!parent) return;
-  const depth = depthOf(folders, parent);
-  if (!depth) throw new BadParentError('That folder isn’t in this library.');
-  if (depth >= MAX_FOLDER_DEPTH) throw new BadParentError(`Folders go ${MAX_FOLDER_DEPTH} deep at most.`);
+/** The folders from the top of the library down to `folder`, itself included. */
+const folderPath = <F extends Pick<Folder, 'id' | 'parent'>>(folders: readonly F[], folder: string | undefined) => {
+  const path: F[] = [];
+  for (let at = folder ? folders.find((f) => f.id === folder) : undefined; at && !path.includes(at); at = at.parent ? folders.find((f) => f.id === at!.parent) : undefined) path.unshift(at);
+  return path;
+};
+
+/** Refuses something new in `folder` (or at the top of the library) when it, or anything it's in, isn't open. */
+export const checkOpen = (library: Pick<Library, 'name' | 'state'>, folders: readonly Pick<Folder, 'id' | 'parent' | 'name' | 'state'>[], folder: string | undefined) => {
+  const shut = [library, ...folderPath(folders, folder)].find((u) => u.state !== 'open');
+  if (shut) throw new ClosedError(`${shut.name} is ${CONTAINER_LIFECYCLE.get(shut.state).name.toLowerCase()}: nothing new can go in it. Whoever manages it can open it again.`);
 };
 
 const byTitle = (a: FolioDocument, b: FolioDocument) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id);
@@ -612,33 +758,39 @@ export class MemoryFolioStore implements FolioStore {
   private readonly renditions = new Map<string, Rendition>();
   private readonly tagList: Tag[] = [];
   private readonly docTags = new Map<string, Set<string>>();
+  private readonly folderTagMap = new Map<string, Set<string>>();
   private readonly viewList: SavedView[] = [];
   private readonly seen = new Map<string, string>();
   private readonly grantList: Grant[] = [];
+  private folderGrantList: Grant[] = [];
   private readonly pubs: Publication[] = [];
   private readonly seriesList: (Omit<Series, 'issues' | 'last'> & { remindedFor?: string })[] = [];
   private readonly following = new Map<string, Set<string>>();
   private readonly looked = new Map<string, string>();
+  private readonly moves: StateMove[] = [];
+  private names: LevelNames = {};
+  private readonly placementList: Placement[] = [];
+  private readonly linkList: RecordLink[] = [];
   /** What Folio would have told other apps, oldest first: there's no relay without Postgres. */
   readonly outbox: OutboxEvent[] = [];
   /** Hears of each version as its rendition is queued: a stand-in for the worker under `pnpm dev:app`. */
   onQueued?: (version: StoredVersion) => Promise<void>;
 
-  async libraries(workspace: string) {
-    return [...this.shelves.values()].filter((l) => l.workspace === workspace && !l.archivedAt).map(({ archivedAt: _, ...l }) => l).sort(byName);
+  async libraries(workspace: string, { archived = false }: { archived?: boolean } = {}) {
+    return [...this.shelves.values()].filter((l) => l.workspace === workspace && (archived || !l.archivedAt)).map(({ archivedAt: _, ...l }) => ({ ...l })).sort(byName);
   }
 
-  async library(id: string) {
+  async library(id: string, { archived = false }: { archived?: boolean } = {}) {
     const found = this.shelves.get(id);
-    if (!found || found.archivedAt) return undefined;
+    if (!found || (found.archivedAt && !archived)) return undefined;
     const { archivedAt: _, ...library } = found;
-    return library;
+    return { ...library };
   }
 
   async createLibrary({ workspace, floor, name, description = '', createdBy }: { workspace: string; floor: string; name: string; description?: string; createdBy: string }) {
     if ((await this.libraries(workspace)).some((l) => sameName(l.name, name))) throw new NameTakenError(`There’s already a library called ${name} here.`);
     const now = new Date().toISOString();
-    const library: Library = { id: randomUUID(), workspace, floor, name, description, freeTags: false, createdBy, createdAt: now, updatedAt: now };
+    const library: Library = { id: randomUUID(), workspace, floor, name, description, freeTags: false, state: 'open', createdBy, createdAt: now, updatedAt: now };
     this.shelves.set(library.id, { ...library });
     return library;
   }
@@ -654,33 +806,194 @@ export class MemoryFolioStore implements FolioStore {
     return next;
   }
 
-  async archiveLibrary(id: string) {
+  async archiveLibrary(id: string, by: string) {
+    return Boolean(await this.setLibraryState(id, 'archived', by));
+  }
+
+  async setLibraryState(id: string, to: ContainerState, by: string, note?: string) {
     const found = this.shelves.get(id);
-    if (!found || found.archivedAt) return false;
-    found.archivedAt = new Date().toISOString();
-    return true;
+    if (!found || found.state === to) return undefined;
+    const at = new Date().toISOString();
+    this.moves.push({ record: id, from: found.state, to, by, at, ...(note ? { note } : {}) });
+    found.state = to;
+    found.updatedAt = at;
+    if (to === 'archived') found.archivedAt = at;
+    else delete found.archivedAt;
+    const { archivedAt: _, ...library } = found;
+    return { ...library };
   }
 
   async folders(library: string) {
-    return this.folderList.filter((f) => f.library === library).sort(byName);
+    return this.folderList
+      .filter((f) => f.library === library)
+      .map((f) => ({ ...f, tags: [...(this.folderTagMap.get(f.id) ?? [])].sort() }))
+      .sort(byName);
   }
 
-  async createFolder({ library, parent, name, createdBy }: { library: string; parent?: string; name: string; createdBy: string }) {
+  /** The tags a document has with those of every folder it's inside. */
+  private allTagsOf(d: { tags: readonly string[]; folder?: string }) {
+    const all = new Set(d.tags);
+    for (let at = d.folder; at; at = this.folderList.find((f) => f.id === at)?.parent) for (const t of this.folderTagMap.get(at) ?? []) all.add(t);
+    return all;
+  }
+
+  async setFolderTags(library: string, folder: string, tags: string[]) {
+    const found = this.folderList.find((f) => f.id === folder && f.library === library);
+    if (!found) return undefined;
+    this.checkTags(library, tags);
+    this.folderTagMap.set(folder, new Set(tags));
+    return (await this.folders(library)).find((f) => f.id === folder);
+  }
+
+  async createFolder({ library, parent, level, name, description = '', createdBy }: { library: string; parent?: string; level?: FolderLevel; name: string; description?: string; createdBy: string }) {
+    const shelf = await this.library(library);
+    if (!shelf) throw new BadParentError('There’s no such library.');
     const folders = await this.folders(library);
-    checkParent(folders, parent);
-    if (folders.some((f) => f.parent === parent && sameName(f.name, name))) throw new NameTakenError(`There’s already a folder called ${name} there.`);
-    const folder: Folder = { id: randomUUID(), library, ...(parent ? { parent } : {}), name, createdBy, createdAt: new Date().toISOString() };
+    const placed = checkPlace(folders, parent, level);
+    checkOpen(shelf, folders, parent);
+    if (folders.some((f) => f.parent === parent && sameName(f.name, name))) throw new NameTakenError(`There’s already something called ${name} there.`);
+    const now = new Date().toISOString();
+    const folder: Folder = { id: randomUUID(), library, ...(parent ? { parent } : {}), level: placed, name, description, state: 'open', createdBy, createdAt: now, updatedAt: now };
     this.folderList.push(folder);
-    return folder;
+    return { ...folder };
   }
 
   async renameFolder(library: string, id: string, name: string) {
-    const folders = await this.folders(library);
-    const folder = folders.find((f) => f.id === id);
+    return this.updateFolder(library, id, { name });
+  }
+
+  async updateFolder(library: string, id: string, change: { name?: string; description?: string }) {
+    const folder = this.folderList.find((f) => f.library === library && f.id === id);
     if (!folder) return undefined;
-    if (folders.some((f) => f.id !== id && f.parent === folder.parent && sameName(f.name, name))) throw new NameTakenError(`There’s already a folder called ${name} there.`);
-    folder.name = name;
+    if (change.name !== undefined && this.folderList.some((f) => f.library === library && f.id !== id && f.parent === folder.parent && sameName(f.name, change.name!)))
+      throw new NameTakenError(`There’s already something called ${change.name} there.`);
+    if (change.name !== undefined) {
+      folder.name = change.name;
+      for (const run of this.seriesList) if (run.folder === id) run.name = change.name;
+    }
+    if (change.description !== undefined) folder.description = change.description;
+    folder.updatedAt = new Date().toISOString();
     return { ...folder };
+  }
+
+  async setFolderState(library: string, id: string, to: ContainerState, by: string, note?: string) {
+    const folder = this.folderList.find((f) => f.library === library && f.id === id);
+    if (!folder || folder.state === to) return undefined;
+    const at = new Date().toISOString();
+    this.moves.push({ record: id, from: folder.state, to, by, at, ...(note ? { note } : {}) });
+    folder.state = to;
+    folder.updatedAt = at;
+    return { ...folder };
+  }
+
+  async setVersionState(document: string, number: number, to: ContentState, by: string, note?: string) {
+    const doc = this.docs.get(document);
+    const version = this.versionList.find((v) => v.document === document && v.number === number);
+    if (!doc || doc.deletedAt || !version || version.state === to) return undefined;
+    const at = new Date().toISOString();
+    this.moves.push({ record: document, version: number, from: version.state, to, by, at, ...(note ? { note } : {}) });
+    version.state = to;
+    doc.updatedAt = at;
+    return publicVersion(this.withReader(version));
+  }
+
+  async stateMoves(record: string) {
+    return this.moves.filter((m) => m.record === record).reverse().map((m) => ({ ...m }));
+  }
+
+  async levelNames() {
+    return structuredClone(this.names);
+  }
+
+  async setLevelName(level: UnitLevel, name: LevelName | null) {
+    if (name) this.names[level] = { ...name };
+    else delete this.names[level];
+    return this.levelNames();
+  }
+
+  async link(input: Omit<RecordLink, 'id' | 'at'>) {
+    if (this.linkList.some((l) => l.from === input.from && l.relation === input.relation && l.to.app === input.to.app && l.to.id === input.to.id)) throw new LinkedError('They’re already linked that way.');
+    const made: RecordLink = { ...structuredClone(input), id: randomUUID(), at: new Date().toISOString() };
+    this.linkList.push(made);
+    return structuredClone(made);
+  }
+
+  async links(record: string, to: string) {
+    return {
+      from: this.linkList.filter((l) => l.from === record).map((l) => structuredClone(l)),
+      to: this.linkList.filter((l) => l.to.app === 'folio' && l.to.id === to).map((l) => structuredClone(l)),
+    };
+  }
+
+  async unlink(from: string, id: string) {
+    const at = this.linkList.findIndex((l) => l.id === id && l.from === from);
+    if (at < 0) return undefined;
+    return this.linkList.splice(at, 1)[0];
+  }
+
+  async place(input: NewPlacement) {
+    const shelf = this.shelves.get(input.library);
+    if (!shelf) throw new BadParentError('There’s no such library.');
+    if (this.placementList.some((p) => !p.ended && p.record.id === input.record.id && p.to === input.to)) throw new PlacedError('It’s already on that floor.');
+    const placed: Placement = { ...structuredClone(input), id: randomUUID(), workspace: shelf.workspace, filter: CONTENT_LIFECYCLE.tidy(input.filter), at: new Date().toISOString() };
+    this.placementList.push(placed);
+    return structuredClone(placed);
+  }
+
+  async placement(id: string) {
+    const found = this.placementList.find((p) => p.id === id);
+    return found && structuredClone(found);
+  }
+
+  async placementsOf(record: string) {
+    return structuredClone(this.placementList.filter((p) => p.record.id === record));
+  }
+
+  async placementsOn(floor: string) {
+    return structuredClone(this.placementList.filter((p) => !p.ended && p.to === floor));
+  }
+
+  async covering(document: string) {
+    const doc = this.docs.get(document);
+    if (!doc || doc.deletedAt) return [];
+    const around = new Set([document, doc.library, ...folderPath(this.folderList, doc.folder).map((f) => f.id)]);
+    return structuredClone(this.placementList.filter((p) => !p.ended && around.has(p.record.id)));
+  }
+
+  async setPlacementFilter(id: string, filter: ContentState[], by: string) {
+    const found = this.placementList.find((p) => p.id === id && !p.ended);
+    if (!found) return undefined;
+    found.filter = CONTENT_LIFECYCLE.tidy(filter);
+    // Nothing above can show more than it now does; what's left showing nothing is taken back.
+    const at = new Date().toISOString();
+    for (let grew = true, narrowed = new Set([id]); grew; ) {
+      grew = false;
+      for (const p of this.placementList)
+        if (!p.ended && p.via && narrowed.has(p.via) && !narrowed.has(p.id)) {
+          const below = this.placementList.find((b) => b.id === p.via)!;
+          const kept = p.filter.filter((s) => below.filter.includes(s));
+          if (kept.length) p.filter = kept;
+          else p.ended = { by, at, reason: 'It no longer showed anything.' };
+          narrowed.add(p.id);
+          grew = true;
+        }
+    }
+    return structuredClone(found);
+  }
+
+  async landPlacement(id: string, landed: { library: string; folder?: string } | null) {
+    const found = this.placementList.find((p) => p.id === id && !p.ended);
+    if (!found) return undefined;
+    if (landed) found.landed = { ...landed };
+    else delete found.landed;
+    return structuredClone(found);
+  }
+
+  async endPlacements(ids: readonly string[], by: string, reason?: string) {
+    const at = new Date().toISOString();
+    const ended = this.placementList.filter((p) => ids.includes(p.id) && !p.ended);
+    for (const p of ended) p.ended = { by, at, ...(reason ? { reason } : {}) };
+    return structuredClone(ended);
   }
 
   async deleteFolder(library: string, id: string) {
@@ -689,6 +1002,10 @@ export class MemoryFolioStore implements FolioStore {
     if (folders.some((f) => f.parent === id)) throw new NotEmptyError('Empty the folder first: it has folders in it.');
     if ([...this.docs.values()].some((d) => d.folder === id && !d.deletedAt)) throw new NotEmptyError('Empty the folder first: it has documents in it.');
     this.folderList.splice(this.folderList.findIndex((f) => f.id === id), 1);
+    this.folderGrantList = this.folderGrantList.filter((g) => g.folder !== id);
+    // An empty series takes its schedule with it, and what had landed in it goes back to "From below".
+    for (const run of this.seriesList.filter((r) => r.folder === id)) await this.deleteSeries(run.id);
+    for (const p of this.placementList) if (p.landed?.folder === id) delete p.landed;
     return true;
   }
 
@@ -749,12 +1066,13 @@ export class MemoryFolioStore implements FolioStore {
       .map((d) => this.withLatest(d))
       .filter(
         (d) =>
-          (!query.tags?.length || query.tags.every((t) => d.tags.includes(t))) &&
+          (!query.tags?.length || query.tags.every((t) => this.allTagsOf(d).has(t))) &&
           (!query.mediaTypes?.length || query.mediaTypes.includes(d.latest.mediaType)) &&
           (!query.authors?.length || query.authors.includes(d.createdBy)) &&
           (!query.from || d.updatedAt >= new Date(query.from).toISOString()) &&
           (!query.to || d.updatedAt < new Date(query.to).toISOString()) &&
-          (!query.states?.length || query.states.includes(d.state)),
+          (!query.states?.length || query.states.includes(d.state)) &&
+          (!query.lifecycle?.length || query.lifecycle.includes(d.latest.state)),
       )
       .sort(ORDER[query.sort ?? 'title']);
     const { limit, offset } = pageOf(query);
@@ -778,17 +1096,20 @@ export class MemoryFolioStore implements FolioStore {
     return found && this.withReader(found);
   }
 
-  async createDocument({ id, library, folder, title, createdBy, tags = [], series }: NewDocument, first: NewVersion) {
+  async createDocument({ id, library, folder: asked, title, createdBy, tags = [], series }: NewDocument, first: NewVersion) {
     const shelf = await this.library(library);
     if (!shelf) throw new BadParentError('There’s no such library.');
-    await this.checkFolder(library, folder);
-    this.checkTags(library, tags);
     const run = series ? await this.series(series) : undefined;
     if (series && run?.library !== library) throw new BadParentError('That series isn’t in this library.');
+    // An issue goes in its series, wherever it was dropped.
+    const folder = run?.folder ?? asked;
+    await this.checkFolder(library, folder);
+    checkOpen(shelf, await this.folders(library), folder);
+    this.checkTags(library, tags);
     const issue = run && { series: run.id, ...pickPlace(nextIssue(run.cadence, run.last)) };
     const now = new Date().toISOString();
     this.docs.set(id, { id, workspace: shelf.workspace, library, ...(folder ? { folder } : {}), title, createdBy, createdAt: now, updatedAt: now, ...(issue ? { issue } : {}) });
-    this.versionList.push({ ...first, document: id, number: 1, createdAt: now });
+    this.versionList.push({ ...first, document: id, number: 1, state: CONTENT_LIFECYCLE.initial, createdAt: now });
     this.queue(first.id, now);
     if (tags.length) this.docTags.set(id, new Set(tags));
     this.tell(TOPICS.versionCreated, shelf.workspace, { document: id, library, version: 1 });
@@ -799,7 +1120,7 @@ export class MemoryFolioStore implements FolioStore {
     const doc = this.docs.get(document);
     if (!doc || doc.deletedAt) return undefined;
     const number = Math.max(...this.versionList.filter((v) => v.document === document).map((v) => v.number)) + 1;
-    const stored = { ...version, document, number, createdAt: new Date().toISOString() };
+    const stored = { ...version, document, number, state: CONTENT_LIFECYCLE.initial, createdAt: new Date().toISOString() };
     this.versionList.push(stored);
     this.queue(stored.id, stored.createdAt);
     doc.updatedAt = stored.createdAt;
@@ -882,7 +1203,7 @@ export class MemoryFolioStore implements FolioStore {
     if (tag.library) return;
     const absorbed = new Set(this.tagList.filter((t) => t.library && sameName(t.name, name)).map((t) => t.id));
     if (!absorbed.size) return;
-    for (const set of this.docTags.values()) {
+    for (const set of [...this.docTags.values(), ...this.folderTagMap.values()]) {
       if (![...set].some((t) => absorbed.has(t))) continue;
       for (const t of absorbed) set.delete(t);
       set.add(tag.id);
@@ -911,7 +1232,7 @@ export class MemoryFolioStore implements FolioStore {
     const at = this.tagList.findIndex((t) => t.id === id);
     if (at < 0) return false;
     this.tagList.splice(at, 1);
-    for (const set of this.docTags.values()) set.delete(id);
+    for (const set of [...this.docTags.values(), ...this.folderTagMap.values()]) set.delete(id);
     for (const view of this.viewList) view.query = retag(view.query, new Set([id]));
     for (const run of this.seriesList) run.tags = retagged(run.tags, new Set([id])).sort();
     return true;
@@ -993,7 +1314,35 @@ export class MemoryFolioStore implements FolioStore {
   private readersOf(library: string, document: string) {
     const floor = this.shelves.get(library)?.floor;
     const granted = this.grantList.filter((g) => g.library === library && (!g.document || g.document === document)).map((g) => g.principal);
-    return [...new Set([...(floor ? [floor] : []), ...granted])].sort();
+    const inherited = this.folderGrantsAbove(document).map((g) => g.principal);
+    return [...new Set([...(floor ? [floor] : []), ...granted, ...inherited])].sort();
+  }
+
+  /** The grants on every folder a document is inside. */
+  private folderGrantsAbove(document: string) {
+    const above = new Set<string>();
+    for (let at = this.docs.get(document)?.folder; at; at = this.folderList.find((f) => f.id === at)?.parent) above.add(at);
+    return this.folderGrantList.filter((g) => above.has(g.folder!));
+  }
+
+  async folderGrants(library: string, folder: string) {
+    return this.folderGrantList.filter((g) => g.library === library && g.folder === folder).map((g) => ({ ...g })).sort((a, b) => a.principal.localeCompare(b.principal));
+  }
+
+  async setFolderGrant({ library, folder, principal, level, by }: { library: string; folder: string; principal: string; level: Level | null; by: string }) {
+    const shelf = await this.library(library);
+    if (level && (!shelf || !this.folderList.some((f) => f.id === folder && f.library === library))) throw new BadParentError('There’s no such library or folder.');
+    const at = this.folderGrantList.findIndex((g) => g.folder === folder && g.principal === principal);
+    if (at >= 0) this.folderGrantList.splice(at, 1);
+    if (shelf) this.tell(TOPICS.readersChanged, shelf.workspace, { library });
+    if (!level) return undefined;
+    const grant: Grant = { library, folder, principal, level, createdBy: by, createdAt: new Date().toISOString() };
+    this.folderGrantList.push(grant);
+    return { ...grant };
+  }
+
+  async grantsOn(document: string) {
+    return [...this.grantList.filter((g) => g.document === document), ...this.folderGrantsAbove(document)].map((g) => ({ ...g }));
   }
 
   async grants(library: string, document?: string) {
@@ -1030,7 +1379,7 @@ export class MemoryFolioStore implements FolioStore {
     const documents = [...this.docs.values()]
       .filter((d) => !d.deletedAt && d.workspace !== except && !reached.has(d.library) && !this.shelves.get(d.library)?.archivedAt)
       .flatMap((d) => {
-        const level = levelFrom(mine.filter((g) => g.document === d.id), principals);
+        const level = levelFrom([...mine.filter((g) => g.document === d.id), ...this.folderGrantsAbove(d.id)], principals);
         return level ? [{ ...this.withLatest(d), level }] : [];
       })
       .sort(byTitle);
@@ -1062,6 +1411,16 @@ export class MemoryFolioStore implements FolioStore {
 
   async publications(document: string) {
     return this.publicationsOf(document).map(copyPublication);
+  }
+
+  async publicationsToMove(limit: number) {
+    return this.pubs
+      .filter((p) => {
+        const doc = this.docs.get(p.document);
+        return !p.ended && doc && !doc.deletedAt && !doc.issue;
+      })
+      .slice(0, limit)
+      .map(copyPublication);
   }
 
   async publishedTo(principals: readonly string[], page: { limit?: number; offset?: number; since?: string } = {}): Promise<PublishedPage> {
@@ -1096,13 +1455,17 @@ export class MemoryFolioStore implements FolioStore {
     return found && this.withIssues(found);
   }
 
-  async createSeries({ library, name, description = '', cadence, audience = [], tags = [], createdBy }: { library: string; name: string; description?: string; cadence: Cadence; audience?: string[]; tags?: string[]; createdBy: string }) {
+  async createSeries({ library, folder, parent, name, description = '', cadence, audience = [], tags = [], createdBy }: { library: string; folder?: string; parent?: string; name: string; description?: string; cadence: Cadence; audience?: string[]; tags?: string[]; createdBy: string }) {
     const shelf = await this.library(library);
     if (!shelf) throw new BadParentError('There’s no such library.');
     if (this.seriesList.some((s) => s.library === library && sameName(s.name, name))) throw new NameTakenError(`There’s already a series called ${name} here.`);
     this.checkTags(library, tags);
+    const existing = folder ? this.folderList.find((f) => f.library === library && f.id === folder) : undefined;
+    if (folder && existing?.level !== 'series') throw new BadParentError('Only a series can have a schedule.');
+    if (existing && this.seriesList.some((s) => s.folder === existing.id)) throw new NameTakenError('That series already has a schedule.');
+    const home = existing ?? (await this.createFolder({ library, parent, level: 'series', name, description, createdBy }));
     const now = new Date().toISOString();
-    const run = { id: randomUUID(), workspace: shelf.workspace, library, name, description, cadence, audience: [...new Set(audience)].sort(), tags: [...new Set(tags)].sort(), createdBy, createdAt: now, updatedAt: now };
+    const run = { id: randomUUID(), workspace: shelf.workspace, library, folder: home.id, name: home.name, description, cadence, audience: [...new Set(audience)].sort(), tags: [...new Set(tags)].sort(), createdBy, createdAt: now, updatedAt: now };
     this.seriesList.push(run);
     return this.withIssues(run);
   }
@@ -1113,7 +1476,7 @@ export class MemoryFolioStore implements FolioStore {
     if (change.name !== undefined && this.seriesList.some((s) => s.id !== id && s.library === run.library && sameName(s.name, change.name!)))
       throw new NameTakenError(`There’s already a series called ${change.name} here.`);
     if (change.tags) this.checkTags(run.library, change.tags);
-    if (change.name !== undefined) run.name = change.name;
+    if (change.name !== undefined) await this.updateFolder(run.library, run.folder, { name: change.name });
     if (change.description !== undefined) run.description = change.description;
     if (change.cadence) run.cadence = change.cadence;
     if (change.audience) run.audience = [...new Set(change.audience)].sort();
@@ -1126,8 +1489,14 @@ export class MemoryFolioStore implements FolioStore {
     const at = this.seriesList.findIndex((s) => s.id === id);
     if (at < 0) return false;
     if ([...this.docs.values()].some((d) => d.issue?.series === id)) throw new NotEmptyError('A series with issues stays, so its issues keep their place.');
-    this.seriesList.splice(at, 1);
+    const [run] = this.seriesList.splice(at, 1);
     this.following.delete(id);
+    // Its series goes too, unless something else has been put in it.
+    const folder = this.folderList.findIndex((f) => f.id === run.folder);
+    if (folder >= 0 && !this.folderList.some((f) => f.parent === run.folder) && ![...this.docs.values()].some((d) => d.folder === run.folder && !d.deletedAt)) {
+      this.folderList.splice(folder, 1);
+      this.folderGrantList = this.folderGrantList.filter((g) => g.folder !== run.folder);
+    }
     return true;
   }
 
@@ -1477,10 +1846,146 @@ export const migrations: { id: string; sql: string }[] = [
       alter table folio.documents add column purged_at timestamptz;
       create index documents_purgeable on folio.documents (deleted_at) where deleted_at is not null and purged_at is null;`,
   },
+  {
+    id: '010_units',
+    sql: `
+      -- The form a library takes (src/units.ts): a library is a collection, and each folder is a
+      -- subcollection, a series or a subseries in it. Every one of them has a lifecycle state.
+      alter table folio.libraries add column state text not null default 'open' check (state in ('open', 'closed', 'archived'));
+      update folio.libraries set state = 'archived' where archived_at is not null;
+      alter table folio.folders add column level text not null default 'subcollection' check (level in ('subcollection', 'series', 'subseries')),
+        add column description text not null default '',
+        add column state text not null default 'open' check (state in ('open', 'closed', 'archived')),
+        add column updated_at timestamptz not null default now();
+      -- Folders went six deep; subcollections sit straight in a collection. A deeper folder becomes a
+      -- subcollection of its own at the top, named for where it was ("Policies › HR › Leave").
+      with recursive tree (id, path, depth) as (
+        select id, name, 1 from folio.folders where parent_id is null
+        union all select f.id, t.path || ' › ' || f.name, t.depth + 1 from folio.folders f join tree t on f.parent_id = t.id)
+      update folio.folders f set name = t.path, parent_id = null from tree t where t.id = f.id and t.depth > 1;
+      -- Each series with a schedule gets its own series in the library, and its issues go in it.
+      alter table folio.series add column folder_id text references folio.folders (id);
+      insert into folio.folders (id, workspace_id, library_id, parent_id, level, name, description, created_by, created_at)
+        select 'series-' || s.id, s.workspace_id, s.library_id, null, 'series',
+            case when exists (select 1 from folio.folders f where f.library_id = s.library_id and f.parent_id is null and lower(f.name) = lower(s.name))
+              then s.name || ' (series)' else s.name end,
+            s.description, s.created_by, s.created_at
+          from folio.series s;
+      update folio.series set folder_id = 'series-' || id;
+      update folio.series s set name = f.name from folio.folders f where f.id = s.folder_id;
+      -- folder_id stays nullable so the release before this one can still make a series (docs/versioning.md): Folio always sets it.
+      create unique index series_folder on folio.series (folder_id);
+      update folio.documents d set folder_id = s.folder_id from folio.series s where d.series_id = s.id;
+      -- A version's place in its life. One out to an audience now was put out as final.
+      alter table folio.document_versions add column state text not null default 'in-progress'
+        check (state in ('in-progress', 'in-review', 'complete', 'issued', 'retired'));
+      update folio.document_versions v set state = 'issued' from folio.publications p where p.version_id = v.id and p.ended_at is null;
+      -- Every lifecycle move, of a library, a folder or a document's version, kept for good.
+      create table folio.state_moves (
+        id bigint generated always as identity primary key,
+        workspace_id text not null,
+        record_id text not null,
+        version_number integer,
+        from_state text,
+        to_state text not null,
+        moved_by text not null,
+        moved_at timestamptz not null default now(),
+        note text
+      );
+      create index state_moves_record on folio.state_moves (record_id, id desc);
+      -- What the org calls a level instead of Folio's own name.
+      create table folio.level_names (
+        level text primary key check (level in ('collection', 'subcollection', 'series', 'subseries', 'file')),
+        name text not null,
+        plural text not null,
+        updated_by text not null,
+        updated_at timestamptz not null default now()
+      );`,
+  },
+  {
+    id: '011_placements',
+    sql: `
+      -- Publishing up the floors: each step puts a record (a library, a folder, a document) on a floor
+      -- above, through a filter of lifecycle states. A live window onto it, kept for good once taken back.
+      -- Floors are a team's id, someone's own floor's id, or 'org'.
+      create table folio.placements (
+        id text primary key,
+        seq bigint generated always as identity,
+        workspace_id text not null,
+        library_id text not null references folio.libraries (id),
+        record_kind text not null check (record_kind in ('library', 'folder', 'document')),
+        record_id text not null,
+        from_floor text not null,
+        to_floor text not null,
+        to_principal text not null,
+        filter text[] not null check (cardinality(filter) > 0),
+        via text references folio.placements (id),
+        landed_library text references folio.libraries (id),
+        landed_folder text references folio.folders (id),
+        note text,
+        placed_by text not null,
+        placed_at timestamptz not null default now(),
+        ended_by text,
+        ended_at timestamptz,
+        end_reason text
+      );
+      create unique index placements_live on folio.placements (record_id, to_floor) where ended_at is null;
+      create index placements_to on folio.placements (to_floor) where ended_at is null;
+      create index placements_principal on folio.placements (to_principal) where ended_at is null;
+      create index placements_library on folio.placements (library_id) where ended_at is null;`,
+  },
+  {
+    id: '012_links',
+    sql: `
+      -- Typed links from a library, folder or document to another record, here or in another app.
+      create table folio.links (
+        id text primary key,
+        seq bigint generated always as identity,
+        library_id text not null references folio.libraries (id),
+        from_id text not null,
+        relation text not null,
+        to_app text not null,
+        to_kind text not null,
+        to_id text not null,
+        to_label text,
+        linked_by text not null,
+        linked_at timestamptz not null default now()
+      );
+      create unique index links_one on folio.links (from_id, relation, to_app, to_id);
+      create index links_to on folio.links (to_app, to_id);`,
+  },
+  {
+    id: '013_folder_tags',
+    sql: `
+      -- A folder's own tags: they count for everything inside it when filtering.
+      create table folio.folder_tags (
+        folder_id text not null references folio.folders (id),
+        tag_id text not null references folio.tags (id),
+        workspace_id text not null,
+        primary key (folder_id, tag_id)
+      );
+      create index folder_tags_tag on folio.folder_tags (tag_id);`,
+  },
+  {
+    id: '014_folder_grants',
+    sql: `
+      -- Who has been let into a folder, and so into everything inside it.
+      create table folio.folder_grants (
+        workspace_id text not null,
+        library_id text not null references folio.libraries (id),
+        folder_id text not null references folio.folders (id),
+        principal text not null check (principal ~ '^((person|team|tree):.+|org)$'),
+        level text not null check (level in ('read', 'edit', 'manage')),
+        created_by text not null,
+        created_at timestamptz not null default now(),
+        primary key (folder_id, principal)
+      );
+      create index folder_grants_principal on folio.folder_grants (principal);`,
+  },
 ];
 
-type LibraryRow = { id: string; workspace_id: string; floor_principal: string | null; name: string; description: string; free_tags: boolean; created_by: string; created_at: Date; updated_at: Date };
-type FolderRow = { id: string; library_id: string; parent_id: string | null; name: string; created_by: string; created_at: Date };
+type LibraryRow = { id: string; workspace_id: string; floor_principal: string | null; name: string; description: string; free_tags: boolean; state: ContainerState; created_by: string; created_at: Date; updated_at: Date };
+type FolderRow = { id: string; library_id: string; parent_id: string | null; level: FolderLevel; name: string; description: string; state: ContainerState; created_by: string; created_at: Date; updated_at: Date; tags?: string[] };
 
 const fromLibraryRow = (r: LibraryRow): Library => ({
   id: r.id,
@@ -1489,6 +1994,7 @@ const fromLibraryRow = (r: LibraryRow): Library => ({
   name: r.name,
   description: r.description,
   freeTags: r.free_tags,
+  state: r.state,
   createdBy: r.created_by,
   createdAt: r.created_at.toISOString(),
   updatedAt: r.updated_at.toISOString(),
@@ -1505,6 +2011,7 @@ type VersionRow = {
   object_key: string;
   created_by: string;
   created_at: Date;
+  state: ContentState;
   reader_state: RenditionState | null;
   reader_error: string | null;
   reader_pages: number | null;
@@ -1598,6 +2105,7 @@ const fromVersionRow = (r: VersionRow): StoredVersion => ({
   objectKey: r.object_key,
   createdBy: r.created_by,
   createdAt: r.created_at.toISOString(),
+  state: r.state,
   // A version always has a rendition row; one made before 004 is backfilled as queued.
   reader: {
     state: r.reader_state ?? 'queued',
@@ -1656,7 +2164,7 @@ const DOCUMENT_SELECT = `
     select dv.*, ${READER_COLUMNS} from folio.document_versions dv left join folio.renditions r on r.version_id = dv.id
     where dv.document_id = d.id order by dv.number desc limit 1
   ) v`;
-const VERSION_COLUMNS = 'id, document_id, number, filename, media_type, size_bytes, sha256, object_key, created_by, created_at';
+const VERSION_COLUMNS = 'id, document_id, number, filename, media_type, size_bytes, sha256, object_key, created_by, created_at, state';
 /** Versions with how their reader copies are coming along. */
 const VERSION_SELECT = `select ${VERSION_COLUMNS.split(', ').map((c) => `dv.${c}`).join(', ')}, ${READER_COLUMNS}
   from folio.document_versions dv left join folio.renditions r on r.version_id = dv.id`;
@@ -1666,9 +2174,14 @@ const fromFolderRow = (r: FolderRow): Folder => ({
   id: r.id,
   library: r.library_id,
   ...(r.parent_id ? { parent: r.parent_id } : {}),
+  level: r.level,
   name: r.name,
+  description: r.description,
+  state: r.state,
   createdBy: r.created_by,
   createdAt: r.created_at.toISOString(),
+  updatedAt: r.updated_at.toISOString(),
+  ...(r.tags ? { tags: r.tags } : {}),
 });
 
 /** Postgres says a unique index refused the row. */
@@ -1681,7 +2194,7 @@ const STATE_OF_D = `coalesce((select case when p.ended_at is null then 'publishe
 const tell = (client: pg.PoolClient, topic: string, workspace: string, payload: Record<string, unknown>) =>
   client.query('insert into folio.outbox (topic, workspace_id, payload) values ($1, $2, $3)', [topic, workspace, JSON.stringify(payload)]);
 
-const LIBRARY_COLUMNS = 'id, workspace_id, floor_principal, name, description, free_tags, created_by, created_at, updated_at';
+const LIBRARY_COLUMNS = 'id, workspace_id, floor_principal, name, description, free_tags, state, created_by, created_at, updated_at';
 const DOCUMENT_ORDER: Record<DocumentSort, string> = {
   title: 'lower(d.title), d.id',
   newest: 'd.created_at desc, d.id desc',
@@ -1699,6 +2212,7 @@ type SeriesRow = {
   id: string;
   workspace_id: string;
   library_id: string;
+  folder_id: string;
   name: string;
   description: string;
   cadence: Cadence;
@@ -1711,15 +2225,16 @@ type SeriesRow = {
   last: { document: string; number: number; periodStart: string; period: string } | null;
 };
 const SERIES_SELECT = `
-  select s.id, s.workspace_id, s.library_id, s.name, s.description, s.cadence, s.audience, s.tags, s.created_by, s.created_at, s.updated_at,
+  select s.id, s.workspace_id, s.library_id, s.folder_id, f.name, s.description, s.cadence, s.audience, s.tags, s.created_by, s.created_at, s.updated_at,
     (select count(*) from folio.documents d where d.series_id = s.id and d.deleted_at is null) as issues,
     (select jsonb_build_object('document', d.id, 'number', d.issue_number, 'periodStart', to_char(d.period_start, 'YYYY-MM-DD'), 'period', d.period)
       from folio.documents d where d.series_id = s.id and d.deleted_at is null order by d.issue_number desc limit 1) as last
-  from folio.series s`;
+  from folio.series s join folio.folders f on f.id = s.folder_id`;
 const fromSeriesRow = (r: SeriesRow): Series => ({
   id: r.id,
   workspace: r.workspace_id,
   library: r.library_id,
+  folder: r.folder_id,
   name: r.name,
   description: r.description,
   cadence: r.cadence,
@@ -1731,7 +2246,67 @@ const fromSeriesRow = (r: SeriesRow): Series => ({
   issues: Number(r.issues),
   ...(r.last ? { last: r.last } : {}),
 });
-const FOLDER_COLUMNS = 'id, library_id, parent_id, name, created_by, created_at';
+const FOLDER_COLUMNS = 'id, library_id, parent_id, level, name, description, state, created_by, created_at, updated_at';
+type PlacementRow = {
+  id: string;
+  workspace_id: string;
+  library_id: string;
+  record_kind: RecordRefIn['kind'];
+  record_id: string;
+  from_floor: string;
+  to_floor: string;
+  to_principal: string;
+  filter: ContentState[];
+  via: string | null;
+  landed_library: string | null;
+  landed_folder: string | null;
+  note: string | null;
+  placed_by: string;
+  placed_at: Date;
+  ended_by: string | null;
+  ended_at: Date | null;
+  end_reason: string | null;
+};
+const PLACEMENT_COLUMNS =
+  'id, workspace_id, library_id, record_kind, record_id, from_floor, to_floor, to_principal, filter, via, landed_library, landed_folder, note, placed_by, placed_at, ended_by, ended_at, end_reason';
+const fromPlacementRow = (r: PlacementRow): Placement => ({
+  id: r.id,
+  library: r.library_id,
+  workspace: r.workspace_id,
+  record: { kind: r.record_kind, id: r.record_id },
+  from: r.from_floor,
+  to: r.to_floor,
+  toPrincipal: r.to_principal,
+  filter: r.filter,
+  ...(r.via ? { via: r.via } : {}),
+  ...(r.landed_library ? { landed: { library: r.landed_library, ...(r.landed_folder ? { folder: r.landed_folder } : {}) } } : {}),
+  ...(r.note ? { note: r.note } : {}),
+  by: r.placed_by,
+  at: r.placed_at.toISOString(),
+  ...(r.ended_at ? { ended: { by: r.ended_by ?? '', at: r.ended_at.toISOString(), ...(r.end_reason ? { reason: r.end_reason } : {}) } } : {}),
+});
+type MoveRow = { record_id: string; version_number: number | null; from_state: string | null; to_state: string; moved_by: string; moved_at: Date; note: string | null };
+const fromMoveRow = (r: MoveRow): StateMove => ({
+  record: r.record_id,
+  ...(r.version_number ? { version: r.version_number } : {}),
+  ...(r.from_state ? { from: r.from_state } : {}),
+  to: r.to_state,
+  by: r.moved_by,
+  at: r.moved_at.toISOString(),
+  ...(r.note ? { note: r.note } : {}),
+});
+
+type LinkRow = { id: string; library_id: string; from_id: string; relation: string; to_app: string; to_kind: string; to_id: string; to_label: string | null; linked_by: string; linked_at: Date };
+const LINK_COLUMNS = 'id, library_id, from_id, relation, to_app, to_kind, to_id, to_label, linked_by, linked_at';
+const fromLinkRow = (r: LinkRow): RecordLink => ({
+  id: r.id,
+  library: r.library_id,
+  from: r.from_id,
+  relation: r.relation,
+  to: { app: r.to_app, kind: r.to_kind, id: r.to_id, ...(r.to_label ? { label: r.to_label } : {}) },
+  by: r.linked_by,
+  at: isoOf(r.linked_at),
+});
 
 export class PgFolioStore implements FolioStore {
   // A plain field, not a parameter property: `pnpm dev:app` runs this file with Node's type stripping.
@@ -1777,16 +2352,16 @@ export class PgFolioStore implements FolioStore {
     await this.pool.end();
   }
 
-  async libraries(workspace: string) {
+  async libraries(workspace: string, { archived = false }: { archived?: boolean } = {}) {
     const { rows } = await this.pool.query<LibraryRow>(
-      `select ${LIBRARY_COLUMNS} from folio.libraries where workspace_id = $1 and archived_at is null order by lower(name), id`,
-      [workspace],
+      `select ${LIBRARY_COLUMNS} from folio.libraries where workspace_id = $1 and ($2 or archived_at is null) order by lower(name), id`,
+      [workspace, archived],
     );
     return rows.map(fromLibraryRow);
   }
 
-  async library(id: string) {
-    const { rows } = await this.pool.query<LibraryRow>(`select ${LIBRARY_COLUMNS} from folio.libraries where id = $1 and archived_at is null`, [id]);
+  async library(id: string, { archived = false }: { archived?: boolean } = {}) {
+    const { rows } = await this.pool.query<LibraryRow>(`select ${LIBRARY_COLUMNS} from folio.libraries where id = $1 and ($2 or archived_at is null)`, [id, archived]);
     return rows[0] && fromLibraryRow(rows[0]);
   }
 
@@ -1818,39 +2393,283 @@ export class PgFolioStore implements FolioStore {
   }
 
   async archiveLibrary(id: string, by: string) {
-    const { rowCount } = await this.pool.query('update folio.libraries set archived_by = $2, archived_at = now() where id = $1 and archived_at is null', [id, by]);
-    return rowCount === 1;
+    return Boolean(await this.setLibraryState(id, 'archived', by));
+  }
+
+  /** Keeps a lifecycle move on the record, in the transaction that makes it. */
+  private async noteMove(client: pg.PoolClient, move: { workspace: string; record: string; version?: number; from?: string; to: string; by: string; note?: string }) {
+    await client.query('insert into folio.state_moves (workspace_id, record_id, version_number, from_state, to_state, moved_by, note) values ($1, $2, $3, $4, $5, $6, $7)', [
+      move.workspace,
+      move.record,
+      move.version ?? null,
+      move.from ?? null,
+      move.to,
+      move.by,
+      move.note ?? null,
+    ]);
+  }
+
+  async setLibraryState(id: string, to: ContainerState, by: string, note?: string) {
+    return this.inTransaction(async (client) => {
+      const { rows: was } = await client.query<{ state: ContainerState; workspace_id: string }>('select state, workspace_id from folio.libraries where id = $1 for update', [id]);
+      if (!was[0] || was[0].state === to) return undefined;
+      const { rows } = await client.query<LibraryRow>(
+        `update folio.libraries set state = $2, updated_at = now(),
+            archived_at = case when $2 = 'archived' then now() end, archived_by = case when $2 = 'archived' then $3 end
+          where id = $1 returning ${LIBRARY_COLUMNS}`,
+        [id, to, by],
+      );
+      await this.noteMove(client, { workspace: was[0].workspace_id, record: id, from: was[0].state, to, by, note });
+      return fromLibraryRow(rows[0]);
+    });
   }
 
   async folders(library: string) {
-    const { rows } = await this.pool.query<FolderRow>(`select ${FOLDER_COLUMNS} from folio.folders where library_id = $1 order by lower(name), id`, [library]);
+    const { rows } = await this.pool.query<FolderRow>(
+      `select ${FOLDER_COLUMNS}, array(select ft.tag_id from folio.folder_tags ft where ft.folder_id = f.id order by ft.tag_id) as tags
+        from folio.folders f where library_id = $1 order by lower(name), id`,
+      [library],
+    );
     return rows.map(fromFolderRow);
   }
 
-  async createFolder({ library, parent, name, createdBy }: { library: string; parent?: string; name: string; createdBy: string }) {
-    checkParent(await this.folders(library), parent);
-    try {
-      const { rows } = await this.pool.query<FolderRow>(
-        `insert into folio.folders (id, workspace_id, library_id, parent_id, name, created_by)
-          select $1, workspace_id, id, $3, $4, $5 from folio.libraries where id = $2 returning ${FOLDER_COLUMNS}`,
-        [randomUUID(), library, parent ?? null, name, createdBy],
+  async setFolderTags(library: string, folder: string, tags: string[]) {
+    const wanted = [...new Set(tags)];
+    const found = await this.inTransaction(async (client) => {
+      const { rowCount } = await client.query('select 1 from folio.folders where id = $1 and library_id = $2 for update', [folder, library]);
+      if (!rowCount) return false;
+      await client.query('delete from folio.folder_tags where folder_id = $1', [folder]);
+      if (!wanted.length) return true;
+      const { rowCount: added } = await client.query(
+        `insert into folio.folder_tags (folder_id, tag_id, workspace_id)
+          select f.id, t.id, l.workspace_id from folio.folders f join folio.libraries l on l.id = f.library_id
+            join folio.tags t on t.library_id is null or t.library_id = f.library_id
+          where f.id = $1 and t.id = any($2::text[])`,
+        [folder, wanted],
       );
-      if (!rows[0]) throw new BadParentError('There’s no such library.');
+      if (added !== wanted.length) throw new BadTagError('That tag isn’t the org’s or this library’s.');
+      return true;
+    });
+    return found ? (await this.folders(library)).find((f) => f.id === folder) : undefined;
+  }
+
+  async createFolder({ library, parent, level, name, description = '', createdBy }: { library: string; parent?: string; level?: FolderLevel; name: string; description?: string; createdBy: string }) {
+    return this.inTransaction((client) => this.insertFolder(client, { library, parent, level, name, description, createdBy }));
+  }
+
+  private async insertFolder(client: pg.PoolClient, { library, parent, level, name, description = '', createdBy }: { library: string; parent?: string; level?: FolderLevel; name: string; description?: string; createdBy: string }) {
+    const shelf = await this.library(library);
+    if (!shelf) throw new BadParentError('There’s no such library.');
+    const folders = await this.folders(library);
+    const placed = checkPlace(folders, parent, level);
+    checkOpen(shelf, folders, parent);
+    try {
+      await client.query('savepoint folder');
+      const { rows } = await client.query<FolderRow>(
+        `insert into folio.folders (id, workspace_id, library_id, parent_id, level, name, description, created_by)
+          values ($1, $2, $3, $4, $5, $6, $7, $8) returning ${FOLDER_COLUMNS}`,
+        [randomUUID(), shelf.workspace, library, parent ?? null, placed, name, description, createdBy],
+      );
       return fromFolderRow(rows[0]);
     } catch (err) {
-      if (isUniqueViolation(err)) throw new NameTakenError(`There’s already a folder called ${name} there.`);
+      await client.query('rollback to savepoint folder');
+      if (isUniqueViolation(err)) throw new NameTakenError(`There’s already something called ${name} there.`);
       throw err;
     }
   }
 
   async renameFolder(library: string, id: string, name: string) {
+    return this.updateFolder(library, id, { name });
+  }
+
+  async updateFolder(library: string, id: string, change: { name?: string; description?: string }) {
     try {
-      const { rows } = await this.pool.query<FolderRow>(`update folio.folders set name = $3 where id = $2 and library_id = $1 returning ${FOLDER_COLUMNS}`, [library, id, name]);
-      return rows[0] && fromFolderRow(rows[0]);
+      return await this.inTransaction(async (client) => {
+        const { rows } = await client.query<FolderRow>(
+          `update folio.folders set name = coalesce($3, name), description = coalesce($4, description), updated_at = now()
+            where id = $2 and library_id = $1 returning ${FOLDER_COLUMNS}`,
+          [library, id, change.name ?? null, change.description ?? null],
+        );
+        // A series' schedule goes by its series' name.
+        if (rows[0] && change.name !== undefined) await client.query('update folio.series set name = $2, updated_at = now() where folder_id = $1', [id, change.name]);
+        return rows[0] && fromFolderRow(rows[0]);
+      });
     } catch (err) {
-      if (isUniqueViolation(err)) throw new NameTakenError(`There’s already a folder called ${name} there.`);
+      if (isUniqueViolation(err)) throw new NameTakenError(`There’s already something called ${change.name} there.`);
       throw err;
     }
+  }
+
+  async setFolderState(library: string, id: string, to: ContainerState, by: string, note?: string) {
+    return this.inTransaction(async (client) => {
+      const { rows: was } = await client.query<{ state: ContainerState; workspace_id: string }>('select state, workspace_id from folio.folders where id = $1 and library_id = $2 for update', [id, library]);
+      if (!was[0] || was[0].state === to) return undefined;
+      const { rows } = await client.query<FolderRow>(`update folio.folders set state = $2, updated_at = now() where id = $1 returning ${FOLDER_COLUMNS}`, [id, to]);
+      await this.noteMove(client, { workspace: was[0].workspace_id, record: id, from: was[0].state, to, by, note });
+      return fromFolderRow(rows[0]);
+    });
+  }
+
+  async setVersionState(document: string, number: number, to: ContentState, by: string, note?: string) {
+    return this.inTransaction(async (client) => {
+      const { rows: was } = await client.query<{ state: ContentState; workspace_id: string }>(
+        `select v.state, v.workspace_id from folio.document_versions v join folio.documents d on d.id = v.document_id
+          where v.document_id = $1 and v.number = $2 and d.deleted_at is null for update of v`,
+        [document, number],
+      );
+      if (!was[0] || was[0].state === to) return undefined;
+      await client.query('update folio.document_versions set state = $3 where document_id = $1 and number = $2', [document, number, to]);
+      await client.query('update folio.documents set updated_at = now() where id = $1', [document]);
+      await this.noteMove(client, { workspace: was[0].workspace_id, record: document, version: number, from: was[0].state, to, by, note });
+      const { rows } = await client.query<VersionRow>(`${VERSION_SELECT} where dv.document_id = $1 and dv.number = $2`, [document, number]);
+      return publicVersion(fromVersionRow(rows[0]));
+    });
+  }
+
+  async stateMoves(record: string) {
+    const { rows } = await this.pool.query<MoveRow>('select record_id, version_number, from_state, to_state, moved_by, moved_at, note from folio.state_moves where record_id = $1 order by id desc', [record]);
+    return rows.map(fromMoveRow);
+  }
+
+  async levelNames() {
+    const { rows } = await this.pool.query<{ level: UnitLevel; name: string; plural: string }>('select level, name, plural from folio.level_names order by level');
+    return Object.fromEntries(rows.map((r) => [r.level, { name: r.name, plural: r.plural }])) as LevelNames;
+  }
+
+  async link(input: Omit<RecordLink, 'id' | 'at'>) {
+    try {
+      const { rows } = await this.pool.query<LinkRow>(
+        `insert into folio.links (id, library_id, from_id, relation, to_app, to_kind, to_id, to_label, linked_by) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning ${LINK_COLUMNS}`,
+        [randomUUID(), input.library, input.from, input.relation, input.to.app, input.to.kind, input.to.id, input.to.label ?? null, input.by],
+      );
+      return fromLinkRow(rows[0]);
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') throw new LinkedError('They’re already linked that way.');
+      throw err;
+    }
+  }
+
+  async links(record: string, to: string) {
+    const [from, back] = await Promise.all([
+      this.pool.query<LinkRow>(`select ${LINK_COLUMNS} from folio.links where from_id = $1 order by seq`, [record]),
+      this.pool.query<LinkRow>(`select ${LINK_COLUMNS} from folio.links where to_app = 'folio' and to_id = $1 order by seq`, [to]),
+    ]);
+    return { from: from.rows.map(fromLinkRow), to: back.rows.map(fromLinkRow) };
+  }
+
+  async unlink(from: string, id: string) {
+    const { rows } = await this.pool.query<LinkRow>(`delete from folio.links where id = $1 and from_id = $2 returning ${LINK_COLUMNS}`, [id, from]);
+    return rows[0] && fromLinkRow(rows[0]);
+  }
+
+  async setLevelName(level: UnitLevel, name: LevelName | null, by: string) {
+    if (name)
+      await this.pool.query(
+        `insert into folio.level_names (level, name, plural, updated_by) values ($1, $2, $3, $4)
+          on conflict (level) do update set name = excluded.name, plural = excluded.plural, updated_by = excluded.updated_by, updated_at = now()`,
+        [level, name.name, name.plural, by],
+      );
+    else await this.pool.query('delete from folio.level_names where level = $1', [level]);
+    return this.levelNames();
+  }
+
+  async place(input: NewPlacement) {
+    try {
+      const { rows } = await this.pool.query<PlacementRow>(
+        `insert into folio.placements (id, workspace_id, library_id, record_kind, record_id, from_floor, to_floor, to_principal, filter, via, landed_library, landed_folder, note, placed_by)
+          select $1, workspace_id, id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13 from folio.libraries where id = $2
+          returning ${PLACEMENT_COLUMNS}`,
+        [
+          randomUUID(),
+          input.library,
+          input.record.kind,
+          input.record.id,
+          input.from,
+          input.to,
+          input.toPrincipal,
+          CONTENT_LIFECYCLE.tidy(input.filter),
+          input.via ?? null,
+          input.landed?.library ?? null,
+          input.landed?.folder ?? null,
+          input.note ?? null,
+          input.by,
+        ],
+      );
+      if (!rows[0]) throw new BadParentError('There’s no such library.');
+      return fromPlacementRow(rows[0]);
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new PlacedError('It’s already on that floor.');
+      throw err;
+    }
+  }
+
+  async placement(id: string) {
+    const { rows } = await this.pool.query<PlacementRow>(`select ${PLACEMENT_COLUMNS} from folio.placements where id = $1`, [id]);
+    return rows[0] && fromPlacementRow(rows[0]);
+  }
+
+  async placementsOf(record: string) {
+    const { rows } = await this.pool.query<PlacementRow>(`select ${PLACEMENT_COLUMNS} from folio.placements where record_id = $1 order by seq`, [record]);
+    return rows.map(fromPlacementRow);
+  }
+
+  async placementsOn(floor: string) {
+    const { rows } = await this.pool.query<PlacementRow>(`select ${PLACEMENT_COLUMNS} from folio.placements where to_floor = $1 and ended_at is null order by seq`, [floor]);
+    return rows.map(fromPlacementRow);
+  }
+
+  async covering(document: string) {
+    const { rows } = await this.pool.query<PlacementRow>(
+      `with recursive doc as (select id, library_id, folder_id from folio.documents where id = $1 and deleted_at is null),
+        above (id, parent_id) as (
+          select f.id, f.parent_id from folio.folders f join doc on f.id = doc.folder_id
+          union all select f.id, f.parent_id from folio.folders f join above on f.id = above.parent_id)
+      select ${PLACEMENT_COLUMNS} from folio.placements p
+        where p.ended_at is null and (p.record_id in (select id from doc) or p.record_id in (select library_id from doc) or p.record_id in (select id from above))
+        order by p.seq`,
+      [document],
+    );
+    return rows.map(fromPlacementRow);
+  }
+
+  async setPlacementFilter(id: string, filter: ContentState[], by: string) {
+    return this.inTransaction(async (client) => {
+      const { rows } = await client.query<PlacementRow>(`update folio.placements set filter = $2 where id = $1 and ended_at is null returning ${PLACEMENT_COLUMNS}`, [id, CONTENT_LIFECYCLE.tidy(filter)]);
+      if (!rows[0]) return undefined;
+      // Nothing above can show more than it now does; what's left showing nothing is taken back
+      // (keeping the filter it had, so the record says what it showed).
+      await client.query(
+        `with recursive up (id, filter) as (
+            select p.id, (select array(select s from unnest(p.filter) s where s = any(b.filter))) from folio.placements p join folio.placements b on b.id = p.via
+              where p.via = $1 and p.ended_at is null
+            union all select p.id, (select array(select s from unnest(p.filter) s where s = any(up.filter))) from folio.placements p join up on p.via = up.id
+              where p.ended_at is null)
+          update folio.placements p
+            set filter = case when cardinality(up.filter) > 0 then up.filter else p.filter end,
+                ended_at = case when cardinality(up.filter) > 0 then null else now() end,
+                ended_by = case when cardinality(up.filter) > 0 then null else $2 end,
+                end_reason = case when cardinality(up.filter) > 0 then null else 'It no longer showed anything.' end
+            from up where p.id = up.id`,
+        [id, by],
+      );
+      return fromPlacementRow(rows[0]);
+    });
+  }
+
+  async landPlacement(id: string, landed: { library: string; folder?: string } | null) {
+    const { rows } = await this.pool.query<PlacementRow>(
+      `update folio.placements set landed_library = $2, landed_folder = $3 where id = $1 and ended_at is null returning ${PLACEMENT_COLUMNS}`,
+      [id, landed?.library ?? null, landed?.folder ?? null],
+    );
+    return rows[0] && fromPlacementRow(rows[0]);
+  }
+
+  async endPlacements(ids: readonly string[], by: string, reason?: string) {
+    const { rows } = await this.pool.query<PlacementRow>(
+      `update folio.placements set ended_by = $2, ended_at = now(), end_reason = $3 where id = any($1::text[]) and ended_at is null returning ${PLACEMENT_COLUMNS}`,
+      [[...ids], by, reason ?? null],
+    );
+    return rows.map(fromPlacementRow);
   }
 
   async deleteFolder(library: string, id: string) {
@@ -1864,8 +2683,16 @@ export class PgFolioStore implements FolioStore {
     if (rows[0].children) throw new NotEmptyError('Empty the folder first: it has folders in it.');
     if (rows[0].documents) throw new NotEmptyError('Empty the folder first: it has documents in it.');
     try {
-      const { rowCount } = await this.pool.query('delete from folio.folders where id = $2 and library_id = $1', [library, id]);
-      return rowCount === 1;
+      return await this.inTransaction(async (client) => {
+        // An empty series takes its schedule with it, and what had landed in it goes back to "From below".
+        await client.query('update folio.placements set landed_library = null, landed_folder = null where landed_folder = $1', [id]);
+        await client.query('delete from folio.series_followers where series_id in (select id from folio.series where folder_id = $1)', [id]);
+        await client.query('delete from folio.series where folder_id = $1', [id]);
+        await client.query('delete from folio.folder_tags where folder_id = $1', [id]);
+        await client.query('delete from folio.folder_grants where folder_id = $1', [id]);
+        const { rowCount } = await client.query('delete from folio.folders where id = $2 and library_id = $1', [library, id]);
+        return rowCount === 1;
+      });
     } catch (err) {
       // A folder made inside it in the meantime.
       if ((err as { code?: string }).code === '23503') throw new NotEmptyError('Empty the folder first: it has folders in it.');
@@ -1885,13 +2712,23 @@ export class PgFolioStore implements FolioStore {
       where.push('d.folder_id in (select id from place)');
     }
     const tags = [...new Set(query.tags ?? [])];
-    if (tags.length) where.push(`(select count(*) from folio.document_tags dt where dt.document_id = d.id and dt.tag_id = any(${param(tags)}::text[])) = ${param(tags.length)}`);
+    // A document has its own tags and those of every folder it's inside.
+    if (tags.length)
+      where.push(`(select count(distinct x.tag_id) from (
+          select dt.tag_id from folio.document_tags dt where dt.document_id = d.id
+          union all select ft.tag_id from folio.folder_tags ft where ft.folder_id in (
+            with recursive up(id, parent_id) as (
+              select f.id, f.parent_id from folio.folders f where f.id = d.folder_id
+              union all select f.id, f.parent_id from folio.folders f join up on f.id = up.parent_id)
+            select id from up)
+        ) x where x.tag_id = any(${param(tags)}::text[])) = ${param(tags.length)}`);
     if (query.mediaTypes?.length) where.push(`v.media_type = any(${param(query.mediaTypes)}::text[])`);
     if (query.authors?.length) where.push(`d.created_by = any(${param(query.authors)}::text[])`);
     if (query.from) where.push(`d.updated_at >= ${param(query.from)}::timestamptz`);
     if (query.to) where.push(`d.updated_at < ${param(query.to)}::timestamptz`);
     if (query.states?.length) where.push(`${STATE_OF_D} = any(${param(query.states)}::text[])`);
     if (query.series) where.push(`d.series_id = ${param(query.series)}`);
+    if (query.lifecycle?.length) where.push(`v.state = any(${param(query.lifecycle)}::text[])`);
     if (query.readers) where.push(visibleSql(param(query.readers), Boolean(query.audience)));
     const { limit, offset } = pageOf(query);
     const { rows } = await this.pool.query<DocumentRow>(
@@ -1940,6 +2777,7 @@ export class PgFolioStore implements FolioStore {
             select distinct p from (
               select coalesce(l.floor_principal, 'tree:' || l.workspace_id) as p
               union all select g.principal from folio.grants g where g.library_id = d.library_id and (g.document_id is null or g.document_id = d.id)
+              union all select fg.principal from folio.folder_grants fg where fg.folder_id in (${FOLDERS_ABOVE('d.folder_id')})
             ) x order by p)
           from folio.documents d join folio.libraries l on l.id = d.library_id
           where d.library_id = $1 and ($2::text is null or d.id = $2)
@@ -1964,19 +2802,24 @@ export class PgFolioStore implements FolioStore {
     }
   }
 
-  async createDocument({ id, library, folder, title, createdBy, tags = [], series }: NewDocument, first: NewVersion) {
+  async createDocument({ id, library, folder: asked, title, createdBy, tags = [], series }: NewDocument, first: NewVersion) {
     await this.inTransaction(async (client) => {
       let issue: IssuePlace | undefined;
+      let folder = asked;
       if (series) {
         // The series' row is locked first, so two issues added at once get the next two numbers.
-        const { rows } = await client.query<{ cadence: Cadence }>('select cadence from folio.series where id = $1 and library_id = $2 for update', [series, library]);
+        const { rows } = await client.query<{ cadence: Cadence; folder_id: string }>('select cadence, folder_id from folio.series where id = $1 and library_id = $2 for update', [series, library]);
         if (!rows[0]) throw new BadParentError('That series isn’t in this library.');
+        // An issue goes in its series, wherever it was dropped.
+        folder = rows[0].folder_id;
         const { rows: last } = await client.query<{ number: number; period_start: string }>(
           "select issue_number as number, to_char(period_start, 'YYYY-MM-DD') as period_start from folio.documents where series_id = $1 and deleted_at is null order by issue_number desc limit 1",
           [series],
         );
         issue = pickPlace(nextIssue(rows[0].cadence, last[0] && { number: last[0].number, periodStart: last[0].period_start }));
       }
+      const shelf = await this.library(library);
+      if (shelf) checkOpen(shelf, await this.folders(library), folder);
       const { rowCount } = await client.query(
         `insert into folio.documents (id, workspace_id, library_id, folder_id, title, created_by, series_id, issue_number, period_start, period)
           select $1, l.workspace_id, l.id, $3, $4, $5, $6, $7, $8, $9 from folio.libraries l
@@ -2016,6 +2859,14 @@ export class PgFolioStore implements FolioStore {
     if (!rowCount) {
       if (change.folder && (await this.document(id))) throw new BadParentError('That folder isn’t in this library.');
       return undefined;
+    }
+    // Moved, it's let in by the grants on the folders it's inside now.
+    if (change.folder !== undefined) {
+      const { rows } = await this.pool.query<{ library_id: string }>('select library_id from folio.documents where id = $1', [id]);
+      await this.inTransaction(async (client) => {
+        await client.query("select pg_advisory_xact_lock(hashtext('folio.grants'), hashtext($1))", [rows[0].library_id]);
+        await this.writeReaders(client, rows[0].library_id, id);
+      });
     }
     return this.document(id);
   }
@@ -2127,6 +2978,12 @@ export class PgFolioStore implements FolioStore {
         select document_id, $1, workspace_id from folio.document_tags where tag_id = any($2::text[]) on conflict do nothing`,
       [into, absorbed],
     );
+    await client.query(
+      `insert into folio.folder_tags (folder_id, tag_id, workspace_id)
+        select folder_id, $1, workspace_id from folio.folder_tags where tag_id = any($2::text[]) on conflict do nothing`,
+      [into, absorbed],
+    );
+    await client.query('delete from folio.folder_tags where tag_id = any($1::text[])', [absorbed]);
     await this.untagViews(client, absorbed, into);
     await this.untagSeries(client, absorbed, into);
     await client.query('delete from folio.document_tags where tag_id = any($1::text[])', [absorbed]);
@@ -2185,6 +3042,7 @@ export class PgFolioStore implements FolioStore {
       await this.untagViews(client, [id]);
       await this.untagSeries(client, [id]);
       await client.query('delete from folio.document_tags where tag_id = $1', [id]);
+      await client.query('delete from folio.folder_tags where tag_id = $1', [id]);
       const { rowCount } = await client.query('delete from folio.tags where id = $1', [id]);
       return rowCount === 1;
     });
@@ -2327,6 +3185,45 @@ export class PgFolioStore implements FolioStore {
     return rows[0]?.principals ?? [];
   }
 
+  async folderGrants(library: string, folder: string) {
+    const { rows } = await this.pool.query<GrantRow>(`select ${FOLDER_GRANT_COLUMNS} from folio.folder_grants where library_id = $1 and folder_id = $2 order by principal`, [library, folder]);
+    return rows.map(fromGrantRow);
+  }
+
+  async setFolderGrant({ library, folder, principal, level, by }: { library: string; folder: string; principal: string; level: Level | null; by: string }) {
+    return this.inTransaction(async (client) => {
+      // The same lock as the library's own grants: its readers are written from the grants as they end up.
+      await client.query("select pg_advisory_xact_lock(hashtext('folio.grants'), hashtext($1))", [library]);
+      await client.query('delete from folio.folder_grants where library_id = $1 and folder_id = $2 and principal = $3', [library, folder, principal]);
+      let grant: Grant | undefined;
+      if (level) {
+        const { rows } = await client.query<GrantRow>(
+          `insert into folio.folder_grants (workspace_id, library_id, folder_id, principal, level, created_by)
+            select l.workspace_id, l.id, f.id, $3, $4, $5 from folio.libraries l join folio.folders f on f.library_id = l.id and f.id = $2
+            where l.id = $1 and l.archived_at is null
+            returning ${FOLDER_GRANT_COLUMNS}`,
+          [library, folder, principal, level, by],
+        );
+        if (!rows[0]) throw new BadParentError('There’s no such library or folder.');
+        grant = fromGrantRow(rows[0]);
+      }
+      await this.writeReaders(client, library);
+      const { rows: shelf } = await client.query<{ workspace_id: string }>('select workspace_id from folio.libraries where id = $1', [library]);
+      if (shelf[0]) await tell(client, TOPICS.readersChanged, shelf[0].workspace_id, { library });
+      return grant;
+    });
+  }
+
+  async grantsOn(document: string) {
+    const { rows } = await this.pool.query<GrantRow>(
+      `select ${GRANT_COLUMNS.split(', ').map((c) => `g.${c}`).join(', ')}, null as folder_id from folio.grants g where g.document_id = $1
+        union all select fg.library_id, null, fg.principal, fg.level, fg.created_by, fg.created_at, fg.folder_id from folio.folder_grants fg
+          where fg.folder_id in (${FOLDERS_ABOVE('(select d.folder_id from folio.documents d where d.id = $1)')})`,
+      [document],
+    );
+    return rows.map(fromGrantRow);
+  }
+
   async shared(principals: readonly string[], except: string): Promise<Shared> {
     const { rows: libraries } = await this.pool.query<LibraryRow & { level: Level }>(
       `select ${LIBRARY_COLUMNS.split(', ').map((c) => `l.${c}`).join(', ')}, g.level from folio.libraries l
@@ -2342,8 +3239,10 @@ export class PgFolioStore implements FolioStore {
       `${DOCUMENT_SELECT}
         join folio.libraries l on l.id = d.library_id and l.archived_at is null
         cross join lateral (
-          select level from folio.grants g where g.document_id = d.id and g.principal = any($1::text[])
-          order by array_position(array['read', 'edit', 'manage'], level) desc limit 1
+          select level from (
+            select g.level from folio.grants g where g.document_id = d.id and g.principal = any($1::text[])
+            union all select fg.level from folio.folder_grants fg where fg.principal = any($1::text[]) and fg.folder_id in (${FOLDERS_ABOVE('d.folder_id')})
+          ) x order by array_position(array['read', 'edit', 'manage'], level) desc limit 1
         ) g
         where d.deleted_at is null and d.workspace_id <> $2
           and not exists (select 1 from folio.grants lg where lg.library_id = d.library_id and lg.document_id is null and lg.principal = any($1::text[]))
@@ -2398,6 +3297,16 @@ export class PgFolioStore implements FolioStore {
     return rows.map(fromPublicationRow);
   }
 
+  async publicationsToMove(limit: number) {
+    const { rows } = await this.pool.query<PublicationRow>(
+      `select ${PUBLICATION_COLUMNS.split(', ').map((c) => `p.${c}`).join(', ')} from folio.publications p
+        join folio.documents d on d.id = p.document_id
+        where p.ended_at is null and d.deleted_at is null and d.series_id is null order by p.seq limit $1`,
+      [limit],
+    );
+    return rows.map(fromPublicationRow);
+  }
+
   async publishedTo(principals: readonly string[], page: { limit?: number; offset?: number; since?: string } = {}): Promise<PublishedPage> {
     const { limit, offset } = pageOf(page);
     const { rows } = await this.pool.query<DocumentRow & { library_name: string }>(
@@ -2413,7 +3322,7 @@ export class PgFolioStore implements FolioStore {
   }
 
   async seriesIn(library: string) {
-    const { rows } = await this.pool.query<SeriesRow>(`${SERIES_SELECT} where s.library_id = $1 order by lower(s.name), s.id`, [library]);
+    const { rows } = await this.pool.query<SeriesRow>(`${SERIES_SELECT} where s.library_id = $1 order by lower(f.name), s.id`, [library]);
     return rows.map(fromSeriesRow);
   }
 
@@ -2429,20 +3338,33 @@ export class PgFolioStore implements FolioStore {
     if (Number(rows[0].n) !== new Set(tags).size) throw new BadTagError('That tag isn’t the org’s or this library’s.');
   }
 
-  async createSeries({ library, name, description = '', cadence, audience = [], tags = [], createdBy }: { library: string; name: string; description?: string; cadence: Cadence; audience?: string[]; tags?: string[]; createdBy: string }) {
+  async createSeries({ library, folder, parent, name, description = '', cadence, audience = [], tags = [], createdBy }: { library: string; folder?: string; parent?: string; name: string; description?: string; cadence: Cadence; audience?: string[]; tags?: string[]; createdBy: string }) {
     await this.checkSeriesTags(library, tags);
     const id = randomUUID();
-    try {
-      const { rowCount } = await this.pool.query(
-        `insert into folio.series (id, workspace_id, library_id, name, description, cadence, audience, tags, created_by)
-          select $1, workspace_id, id, $3, $4, $5, $6, $7, $8 from folio.libraries where id = $2 and archived_at is null`,
-        [id, library, name, description, cadence, [...new Set(audience)].sort(), [...new Set(tags)].sort(), createdBy],
-      );
-      if (!rowCount) throw new BadParentError('There’s no such library.');
-    } catch (err) {
-      if (isUniqueViolation(err)) throw new NameTakenError(`There’s already a series called ${name} here.`);
-      throw err;
-    }
+    await this.inTransaction(async (client) => {
+      let home: { id: string; name: string };
+      if (folder) {
+        const { rows } = await client.query<{ level: FolderLevel; name: string; scheduled: boolean }>(
+          'select level, name, exists (select 1 from folio.series s where s.folder_id = f.id) as scheduled from folio.folders f where f.id = $1 and f.library_id = $2',
+          [folder, library],
+        );
+        if (rows[0]?.level !== 'series') throw new BadParentError('Only a series can have a schedule.');
+        if (rows[0].scheduled) throw new NameTakenError('That series already has a schedule.');
+        home = { id: folder, name: rows[0].name };
+      } else home = await this.insertFolder(client, { library, parent, level: 'series', name, description, createdBy });
+      try {
+        await client.query('savepoint series');
+        const { rowCount } = await client.query(
+          `insert into folio.series (id, workspace_id, library_id, folder_id, name, description, cadence, audience, tags, created_by)
+            select $1, workspace_id, id, $3, $4, $5, $6, $7, $8, $9 from folio.libraries where id = $2 and archived_at is null`,
+          [id, library, home.id, home.name, description, cadence, [...new Set(audience)].sort(), [...new Set(tags)].sort(), createdBy],
+        );
+        if (!rowCount) throw new BadParentError('There’s no such library.');
+      } catch (err) {
+        if (isUniqueViolation(err)) throw new NameTakenError(`There’s already a series called ${home.name} here.`);
+        throw err;
+      }
+    });
     return (await this.series(id))!;
   }
 
@@ -2451,11 +3373,12 @@ export class PgFolioStore implements FolioStore {
     if (!found) return undefined;
     if (change.tags) await this.checkSeriesTags(found.library, change.tags);
     try {
+      if (change.name !== undefined) await this.updateFolder(found.library, found.folder, { name: change.name });
       await this.pool.query(
-        `update folio.series set name = coalesce($2, name), description = coalesce($3, description), cadence = coalesce($4, cadence),
-            audience = coalesce($5, audience), tags = coalesce($6, tags), updated_at = now()
+        `update folio.series set description = coalesce($2, description), cadence = coalesce($3, cadence),
+            audience = coalesce($4, audience), tags = coalesce($5, tags), updated_at = now()
           where id = $1`,
-        [id, change.name ?? null, change.description ?? null, change.cadence ?? null, change.audience ? [...new Set(change.audience)].sort() : null, change.tags ? [...new Set(change.tags)].sort() : null],
+        [id, change.description ?? null, change.cadence ?? null, change.audience ? [...new Set(change.audience)].sort() : null, change.tags ? [...new Set(change.tags)].sort() : null],
       );
     } catch (err) {
       if (isUniqueViolation(err)) throw new NameTakenError(`There’s already a series called ${change.name} here.`);
@@ -2472,7 +3395,23 @@ export class PgFolioStore implements FolioStore {
       const { rowCount: issues } = await client.query('select 1 from folio.documents where series_id = $1 limit 1', [id]);
       if (issues) throw new NotEmptyError('A series with issues stays, so its issues keep their place.');
       await client.query('delete from folio.series_followers where series_id = $1', [id]);
-      await client.query('delete from folio.series where id = $1', [id]);
+      const { rows } = await client.query<{ folder_id: string }>('delete from folio.series where id = $1 returning folder_id', [id]);
+      // Its series goes too, unless something else has been put in it.
+      await client.query(
+        `delete from folio.folder_grants fg where fg.folder_id = $1 and not exists (select 1 from folio.folders c where c.parent_id = fg.folder_id)
+          and not exists (select 1 from folio.documents d where d.folder_id = fg.folder_id)`,
+        [rows[0].folder_id],
+      );
+      await client.query(
+        `delete from folio.folder_tags ft where ft.folder_id = $1 and not exists (select 1 from folio.folders c where c.parent_id = ft.folder_id)
+          and not exists (select 1 from folio.documents d where d.folder_id = ft.folder_id)`,
+        [rows[0].folder_id],
+      );
+      await client.query(
+        `delete from folio.folders f where f.id = $1 and not exists (select 1 from folio.folders c where c.parent_id = f.id)
+          and not exists (select 1 from folio.documents d where d.folder_id = f.id)`,
+        [rows[0].folder_id],
+      );
       return true;
     });
   }
@@ -2574,11 +3513,18 @@ export class PgFolioStore implements FolioStore {
   }
 }
 
-type GrantRow = { library_id: string; document_id: string | null; principal: string; level: Level; created_by: string; created_at: Date };
+type GrantRow = { library_id: string; document_id?: string | null; folder_id?: string | null; principal: string; level: Level; created_by: string; created_at: Date };
 const GRANT_COLUMNS = 'library_id, document_id, principal, level, created_by, created_at';
+const FOLDER_GRANT_COLUMNS = 'library_id, folder_id, principal, level, created_by, created_at';
+/** The ids of a folder and every folder it's inside, as a subquery: `folder` is a column or parameter. */
+const FOLDERS_ABOVE = (folder: string) => `with recursive up(id, parent_id) as (
+    select f.id, f.parent_id from folio.folders f where f.id = ${folder}
+    union all select f.id, f.parent_id from folio.folders f join up on f.id = up.parent_id)
+  select id from up`;
 const fromGrantRow = (r: GrantRow): Grant => ({
   library: r.library_id,
   ...(r.document_id ? { document: r.document_id } : {}),
+  ...(r.folder_id ? { folder: r.folder_id } : {}),
   principal: r.principal,
   level: r.level,
   createdBy: r.created_by,

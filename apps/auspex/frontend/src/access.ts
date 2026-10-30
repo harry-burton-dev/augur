@@ -10,7 +10,8 @@ import type { MapFloor, PersonMap } from './api.js';
  *
  * ```ts
  * { thing: { app: 'folio', appName?: 'Artifacts', id, title, kind?: 'document' },
- *   audience: [{ principal: 'tree:<team>', name?, level?: 'read', since?: '<iso>', via?: 'its floor' }],
+ *   audience: [{ principal: 'tree:<team>', name?, level?: 'read', since?: '<iso>', via?: 'its floor',
+ *                chain?: ['Payroll', 'Finance'], shows?: ['Complete', 'Issued'] }],
  *   change?: { where: 'Share', allowed: true } }
  * ```
  */
@@ -24,6 +25,10 @@ export interface AccessEntry {
   since?: string;
   /** How it reaches them, in the app's words: "its floor", "its library", "shared with them". */
   via?: string;
+  /** For something published up the floors: the floors it came up through, from where it was made to them. */
+  chain?: string[];
+  /** For something published up: the states it shows them there, e.g. Complete and Issued, and nothing else. */
+  shows?: string[];
 }
 
 export interface AccessExplain {
@@ -35,6 +40,11 @@ export interface AccessExplain {
 }
 
 const text = (v: unknown, max = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
+/** A short list of words, as sent: anything that isn't words is dropped. */
+const words = (v: unknown, most: number, max: number) => {
+  const list = Array.isArray(v) ? v.slice(0, most).flatMap((w) => text(w, max) ?? []) : [];
+  return list.length ? list : undefined;
+};
 
 /** The payload as sent, or undefined when it isn't one Auspex can explain. */
 export const readExplain = (payload: unknown): AccessExplain | undefined => {
@@ -49,7 +59,9 @@ export const readExplain = (payload: unknown): AccessExplain | undefined => {
     const principal = text(e.principal, 120);
     if (!principal || !/^(org|(person|team|tree):.+)$/.test(principal)) return [];
     const level = e.level === 'read' || e.level === 'edit' || e.level === 'manage' ? e.level : undefined;
-    return [{ principal, name: text(e.name), level, since: text(e.since, 40), via: text(e.via, 80) }];
+    const chain = words(e.chain, 8, 80);
+    const shows = words(e.shows, 6, 40);
+    return [{ principal, name: text(e.name), level, since: text(e.since, 40), via: text(e.via, 80), ...(chain ? { chain } : {}), ...(shows ? { shows } : {}) }];
   });
   const change = (p.change ?? undefined) as Record<string, unknown> | undefined;
   return {
@@ -106,4 +118,20 @@ export const explain = (ask: AccessExplain, map: PersonMap): { entries: Explaine
     return { ...e, kind, who: `${nameOf(id, e.name)} and the teams inside it`, people: floor?.people };
   });
   return { entries, people: everyone ? (org?.people ?? known.size) : known.size, atLeast: everyone ? false : atLeast, org: everyone ? undefined : org };
+};
+
+/** A list in words: "Complete", "Complete and Issued", "In review, Complete and Issued". */
+const listWords = (list: readonly string[]) => (list.length < 2 ? (list[0] ?? '') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`);
+
+/**
+ * How something published up the floors reaches them, in a line: "Up from
+ * Payroll through Finance, showing Complete and Issued". Nothing for anything
+ * else.
+ */
+export const upWords = (e: Pick<AccessEntry, 'chain' | 'shows'>) => {
+  const [from, ...through] = e.chain ?? [];
+  const up = from ? `Up from ${from}${through.length ? ` through ${listWords(through)}` : ''}` : '';
+  const shows = e.shows?.length ? `showing ${listWords(e.shows)}${up ? '' : ' only'}` : '';
+  const line = [up, shows].filter(Boolean).join(', ');
+  return line ? line[0].toUpperCase() + line.slice(1) : '';
 };

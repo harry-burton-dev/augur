@@ -235,6 +235,8 @@ try {
 
 `library.open` opens a whole library the same way: `openLibrary(ctx, { app: 'folio', id: 'l-7', name: 'Policies' })`, with a `LibraryRef` in the handling app's `ctx.intent.payload` (check it with `isLibraryRef`).
 
+`unit.open` (SDK 1.8) opens one place in a floor's library at any level of its shape: a collection, subcollection, series or subseries, or a file. Pass a `UnitRef`, `openUnit(ctx, { kind: 'unit', app: 'folio', id: 'l-7/f-reports', level: 'series', name: 'Reports' })`; the handling app checks it with `isUnitRef`. Artifacts' unit ids are `<library>/<unit>`, or the library's own id for the collection at its top. `UNIT_LEVELS` lists the levels, top down.
+
 An app that handles `document.open` finds a `DocumentRef` in `ctx.intent.payload`. One that handles `document.pick` gets a `DocumentPick` there and answers with `ctx.reply.respond(ref)`; `pickDocument` checks the answer is a `DocumentRef`.
 
 ### Entities from other apps
@@ -281,6 +283,10 @@ An app that lets people share things with each other asks identity two things, a
 - **Who an audience reaches.** `identityAudience` gives the ids of everyone who stands for at least one of some principals, so the app can tell them something was sent to them (`notify` takes at most 500 people a call). A team from the directory carries its `path`, the ids of the teams it sits in and its own, so an app can tell whether one team is inside another.
 
 The platform has a **publisher** role for people who may put things out beyond their own team, to the whole org or to any team. An app checks it in the caller's `roles`; an admin gives it in Admin, People. Identity adds the role to the sign-in service when it starts, so a server set up before it gets it too.
+
+### Records like Artifacts'
+
+If your app keeps things people organise, version and publish, keep them the way Artifacts does: levels, a lifecycle on each version, grants that reach down, tags, relationships and publishing up the floors with one owner. [App patterns](app-patterns.md) sets out each one and the tables to keep, and `@augur/records` holds the rules.
 
 ## 6. Before you open a pull request
 

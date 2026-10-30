@@ -2,7 +2,7 @@ import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
   Activity, Anchor, ArrowLeft, ArrowRight, ArrowUpDown, Ban, Bell, BellOff, Bird, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, CalendarDays, Car, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, Info, Gauge, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, List, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Network, Palette, Pause, Plane, Play, Plus, Power, Search, Server, Ship,
+  FileText, Folder, Info, Gauge, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, Link, List, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Network, Palette, Pause, Plane, Play, Plus, Power, Search, Server, Ship,
   Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, User, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
   type IconNode,
 } from 'lucide';
@@ -104,6 +104,8 @@ export const icons = {
   calendar: draw(CalendarDays),
   // App kit: a neutral notice, a line of explanation.
   info: draw(Info),
+  // A link between records (`@augur/records`' relations).
+  link: draw(Link),
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;
