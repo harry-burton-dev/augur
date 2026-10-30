@@ -72,9 +72,15 @@ Only a preview server takes them. On the installed app in Admin → Apps, choose
 
 Because a dev build has run its migrations on the preview server, a migration is frozen once it's on `dev`, not only once it's released: CI on a pull request into `dev` fails if it changes or removes one that's already there (`MIGRATIONS_FROZEN_AT=origin/dev pnpm check:migrations`). Add a new migration instead.
 
+## Feature previews
+
+An app can ship a feature before it's everyone's, on any server, production included: it lists it in its manifest's `previews` (SDK 1.7), with an `id`, a `name`, a sentence of `detail` and, if you like, its last day, `until`. The app asks `ctx.previewOn('<id>')` and works as before when the answer is no; its service can ask the registry the same for a person (`GET /v1/apps/<id>/feature-previews/people/<person>`).
+
+Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feature previews**: **Off**, **For those who turn it on**, or **On for everyone**. Until an admin chooses, a preview server makes it opt-in and a production server keeps it off. People turn the opt-in ones on for themselves in the shell's **Previews** (in the band), which mounts the app again with it; while one is on, the app says **Preview on** above it, with the way back. After its `until` day a preview is off for everyone, and Admin says the app should drop it or make it everyone's. Each choice an admin makes is in Activity as `app.preview-set`.
+
 ## What's left to build
 
-Feature previews and the live dev loop come next; then signed promotion records and clearing old dev builds' images from the registry (their releases are cleared already). Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
+The live dev loop comes next; then signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
 
 ## Once, in GitHub (the repository's owner)
 

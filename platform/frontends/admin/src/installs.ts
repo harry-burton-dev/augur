@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit';
 import type { SelectOption } from '@augur/ui-kit';
-import type { AppInstalls, AppJob, AppJobStepState, AppPolicy, AvailableApp, InstalledApp } from './api.js';
+import type { AppInstalls, AppJob, AppJobStepState, AppPolicy, AvailableApp, FeaturePreviewMode, FeaturePreviews, InstalledApp } from './api.js';
 import { line } from './parts.js';
 
 /** How often Apps asks again while the app runner has a job waiting or under way. */
@@ -32,6 +32,30 @@ export const channelChoices = (ring: AppInstalls['ring'] = 'preview'): SelectOpt
     ? { value: 'dev', label: 'Dev builds too', detail: 'Not on a production server', disabled: true }
     : { value: 'dev', label: 'Dev builds too', detail: 'Every merge into dev, with a backup before each' },
 ];
+
+const MODE_LABELS: Record<FeaturePreviewMode, string> = { off: 'Off', 'opt-in': 'For those who turn it on', everyone: 'On for everyone' };
+
+/** Who gets a feature preview: the server's default first, saying what it is, then each choice. */
+export const featureModeChoices = (preview: FeaturePreviews['previews'][number], defaultMode: FeaturePreviewMode): SelectOption[] => [
+  { value: 'default', label: `As this server does: ${MODE_LABELS[defaultMode].toLowerCase()}` },
+  ...(['off', 'opt-in', 'everyone'] as const).map((m) =>
+    preview.ended && m !== 'off' ? { value: m, label: MODE_LABELS[m], detail: 'It has ended', disabled: true } : { value: m, label: MODE_LABELS[m] },
+  ),
+];
+
+/** Where one feature preview stands, in a line: how many turned it on, and when it ends or ended. */
+export const featureHint = (preview: FeaturePreviews['previews'][number]) =>
+  [
+    preview.detail,
+    preview.ended
+      ? `It ended on ${preview.until}: it’s off for everyone, and the app should drop it or make it everyone’s.`
+      : preview.until
+        ? `Runs until ${preview.until}.`
+        : undefined,
+    preview.mode === 'opt-in' && !preview.ended ? `${preview.optedIn} ${preview.optedIn === 1 ? 'person has' : 'people have'} turned it on.` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
 export const POLICY_CHOICES: SelectOption[] = [
   { value: 'automatic', label: 'Automatic', detail: 'Installs fixes and features that ask for nothing new' },

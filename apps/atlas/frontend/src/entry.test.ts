@@ -85,6 +85,7 @@ const ctx = (fetch: MountContext['fetch'], path = '/', more: Partial<MountContex
   path,
   workspace: floor,
   getWorkspace: () => floor,
+  previewOn: () => false,
   fetch,
   ...more,
 });

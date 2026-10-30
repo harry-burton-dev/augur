@@ -19,6 +19,11 @@ import {
   HOME_CHANNEL,
   cardsFor,
   choosePreview,
+  chooseFeaturePreview,
+  choosable,
+  featureLine,
+  loadFeaturePreviews,
+  type FeaturePreviewApp,
   hrefFor,
   IntentError,
   needsFor,
@@ -58,6 +63,8 @@ export interface HostProps {
   preferencesUrl?: string;
   /** Where the registry lists the pull requests' previews a developer may try, through the gateway. */
   previewsUrl?: string;
+  /** Where the registry lists apps' feature previews and takes a person's choice of them (SDK 1.7). */
+  featurePreviewsUrl?: string;
   fetchImpl?: typeof fetch;
   importEntry?: ImportEntry;
 }
@@ -98,6 +105,7 @@ export function Host({
   eventsUrl = '/api/events/v1',
   preferencesUrl = '/api/identity/v1/me/preferences',
   previewsUrl = '/api/registry/v1/previews',
+  featurePreviewsUrl = '/api/registry/v1/feature-previews',
   fetchImpl = fetch,
   importEntry,
 }: HostProps) {
@@ -122,6 +130,8 @@ export function Host({
   const [answering, setAnswering] = useState<OpenRequest | null>(null);
   /** The previews this person may try, as a developer of their apps; none for everyone else. */
   const [previewApps, setPreviewApps] = useState<PreviewApp[]>([]);
+  /** Apps' feature previews, and whether each is on for this person (SDK 1.7). */
+  const [featureApps, setFeatureApps] = useState<FeaturePreviewApp[]>([]);
   const [previewsOpen, setPreviewsOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
   const previewsRef = useRef<UiDialog>(null);
@@ -225,12 +235,34 @@ export function Host({
     let live = true;
     void session
       .getToken()
-      .then((token) => loadPreviews(fetchImpl, previewsUrl, token))
-      .then((apps) => live && setPreviewApps(apps));
+      .then((token) => Promise.all([loadPreviews(fetchImpl, previewsUrl, token), loadFeaturePreviews(fetchImpl, featurePreviewsUrl, token)]))
+      .then(([apps, features]) => {
+        if (!live) return;
+        setPreviewApps(apps);
+        setFeatureApps(features);
+      });
     return () => {
       live = false;
     };
-  }, [session, fetchImpl, previewsUrl, attempt]);
+  }, [session, fetchImpl, previewsUrl, featurePreviewsUrl, attempt]);
+
+  /** Turns one of an app's feature previews on or off for this person, then loads the catalogue again, which mounts the app again. */
+  const switchFeature = useCallback(
+    async (app: FeaturePreviewApp, id: string, on: boolean) => {
+      setSwitching(true);
+      try {
+        await chooseFeaturePreview(fetchImpl, featurePreviewsUrl, await session.getToken(), app.app, id, on);
+        const name = app.previews.find((p) => p.id === id)?.name ?? id;
+        shellRef.current?.notify(toShellNotification('platform', { title: `${name} is ${on ? 'on' : 'off'} in ${app.name}`, body: 'Only for you. Turn it off again in Previews.' }));
+        setAttempt((n) => n + 1);
+      } catch (err) {
+        shellRef.current?.notify(toShellNotification('platform', { title: `Couldn’t change it: ${(err as Error).message}` }));
+      } finally {
+        setSwitching(false);
+      }
+    },
+    [fetchImpl, featurePreviewsUrl, session],
+  );
 
   /** Switches this person to a pull request's preview of an app, or back to the app, then loads the catalogue again. */
   const switchPreview = useCallback(
@@ -331,6 +363,7 @@ export function Host({
       path,
       intent,
       reply,
+      previewOn: (id) => app.previewsOn?.includes(id) ?? false,
     }),
     [session, bus, raise, request, floor, home, fetchImpl],
   );
@@ -633,10 +666,10 @@ export function Host({
     shell.user = { name: session.user.name, email: session.user.email };
     shell.floors = session.floors;
     shell.floor = floor?.id ?? '';
-    shell.functions = previewApps.length ? [...alphaFunctions, PREVIEWS_FUNCTION] : alphaFunctions;
+    shell.functions = previewApps.length || featureApps.some((a) => a.previews.some(choosable)) ? [...alphaFunctions, PREVIEWS_FUNCTION] : alphaFunctions;
     shell.canSwitchWorkspace = false;
     shell.version = `${__SHELL_VERSION__} · SDK ${SDK_VERSION}`;
-  }, [catalogue, session, floor, previewApps]);
+  }, [catalogue, session, floor, previewApps, featureApps]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.
   useEffect(() => {
@@ -795,6 +828,8 @@ export function Host({
   const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
   const previewOf = previewPr(openApp?.version);
   const previewing = previewOf !== undefined ? previewApps.find((a) => a.app === openApp?.id) : undefined;
+  // The open app has feature previews on for this person: say which, with the way to change them.
+  const featuresOn = openApp?.previewsOn?.length ? featureApps.find((a) => a.app === openApp.id)?.previews.filter((p) => p.on) : undefined;
 
   return (
     <ui-shell ref={shellRef} product="AUGUR">
@@ -816,6 +851,14 @@ export function Host({
               Back to {previewing.version}
             </ui-button>
           ) : null}
+        </aside>
+      ) : null}
+      {previewOf === undefined && featuresOn?.length ? (
+        <aside className="preview-badge" role="status" data-features-on>
+          <span>Preview on: {featuresOn.map((p) => p.name).join(', ')}</span>
+          <ui-button kind="tertiary" size="sm" onClick={() => setPreviewsOpen(true)}>
+            Previews
+          </ui-button>
         </aside>
       ) : null}
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
@@ -843,9 +886,31 @@ export function Host({
         ref={previewsRef}
         size="read"
         heading="Previews"
-        summary="Pull requests’ builds of the apps you’re a developer of, running beside them on this server. Switching changes the app for you alone, with data of its own."
+        summary="Features apps are trying before they’re everyone’s, and pull requests’ builds of the apps you’re a developer of. Each choice is yours alone."
         cancelLabel="Close"
       >
+        {featureApps.map((app) => (
+          <section key={`f:${app.app}`} className="previews" data-feature-previews={app.app}>
+            <ui-heading heading={app.name} summary="Features it’s trying out" size="s" />
+            <ul>
+              {app.previews.map((p) => (
+                <li key={p.id}>
+                  <span>
+                    <strong>{p.name}</strong>
+                    {p.detail ? ` · ${p.detail}` : ''}
+                    <br />
+                    <small>{featureLine(p)}</small>
+                  </span>
+                  {choosable(p) ? (
+                    <ui-button kind={p.on ? 'tertiary' : 'secondary'} size="sm" busy={switching} onClick={() => void switchFeature(app, p.id, !p.on)}>
+                      {p.on ? 'Turn off' : 'Turn on'}
+                    </ui-button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
         {previewApps.map((app) => (
           <section key={app.app} className="previews" data-previews={app.app}>
             <ui-heading heading={app.name} summary={app.chosen === undefined ? `You’re on ${app.version}, as everyone is.` : `You’re on pull request #${app.chosen}’s preview.`} size="s" />

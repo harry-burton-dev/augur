@@ -2,8 +2,8 @@ import { LitElement, html, nothing } from 'lit';
 import semver from 'semver';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
-import { ApiError, fullName, type AdminApi, type AllowedOrigin, type AppChannel, type AppInstalls, type AppPolicy, type AppSettingValue, type AppVersion, type CatalogueApp, type Department, type FloorChoice, type FloorRule, type InstalledApp, type IssuedSignIn, type Person } from './api.js';
-import { asksWords, channelChoices, JOB_REFRESH_MS, jobOpen, jobSteps, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
+import { ApiError, fullName, type AdminApi, type AllowedOrigin, type AppChannel, type AppInstalls, type AppPolicy, type AppSettingValue, type AppVersion, type CatalogueApp, type Department, type FeaturePreviewMode, type FeaturePreviews, type FloorChoice, type FloorRule, type InstalledApp, type IssuedSignIn, type Person } from './api.js';
+import { asksWords, channelChoices, featureHint, featureModeChoices, JOB_REFRESH_MS, jobOpen, jobSteps, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
 import { appHistoryList, changeList } from './changes.js';
 import { line, page, section } from './parts.js';
 
@@ -128,6 +128,8 @@ export class AdminApps extends LitElement {
     floorsError: { state: true },
     settingValues: { state: true },
     settingsError: { state: true },
+    features: { state: true },
+    featuresError: { state: true },
     installs: { state: true },
     installsError: { state: true },
     checkingInstalls: { state: true },
@@ -164,6 +166,9 @@ export class AdminApps extends LitElement {
   /** The open app's settings with their values; undefined until loaded. */
   declare settingValues: AppSettingValue[] | undefined;
   declare settingsError: string;
+  /** Who gets each of the open app's feature previews; undefined until loaded. */
+  declare features: FeaturePreviews | undefined;
+  declare featuresError: string;
   /** What the app runner installed and what the app feed offers; undefined until loaded. */
   declare installs: AppInstalls | undefined;
   declare installsError: string;
@@ -183,6 +188,7 @@ export class AdminApps extends LitElement {
     this.error = '';
     this.versionsError = '';
     this.settingsError = '';
+    this.featuresError = '';
     this.choice = NEWEST;
     this.saving = false;
     this.saveError = '';
@@ -338,6 +344,9 @@ export class AdminApps extends LitElement {
       this.settingValues = undefined;
       this.settingsError = '';
       if (app?.settings?.length) void this.loadSettings(app.id);
+      this.features = undefined;
+      this.featuresError = '';
+      if (app?.previews?.length) void this.loadFeatures(app.id);
       if (app && !this.people && this.installs?.installed.some((i) => i.app === app.id)) void this.loadPeople();
       if (app && !app.platform) {
         // An app that ships with AUGUR changes version with the release, so it has none to go back to.
@@ -393,6 +402,49 @@ export class AdminApps extends LitElement {
     } catch (err) {
       this.settingsError = (err as Error).message;
     }
+  }
+
+  async loadFeatures(id: string) {
+    try {
+      const features = await this.api.featurePreviews(id);
+      if (this.open === id) this.features = features;
+    } catch (err) {
+      if (this.open === id) this.featuresError = (err as Error).message;
+    }
+  }
+
+  async setFeature(app: CatalogueApp, preview: string, value: string) {
+    this.featuresError = '';
+    try {
+      const features = await this.api.setFeaturePreview(app.id, preview, value === 'default' ? null : (value as FeaturePreviewMode));
+      if (this.open === app.id) this.features = features;
+    } catch (err) {
+      this.featuresError = (err as Error).message;
+    }
+  }
+
+  /** The features the app is trying, each with who gets it (SDK 1.7). */
+  private featureFields(app: CatalogueApp) {
+    if (!app.previews?.length) return nothing;
+    const features = this.features;
+    return html`<section data-feature-previews style="display:flex;flex-direction:column;gap:var(--space-4)">
+      <ui-heading heading="Feature previews" summary="Features it’s trying before they’re everyone’s. People turn the opt-in ones on for themselves in the shell’s Previews." size="s"></ui-heading>
+      ${features
+        ? features.previews.map(
+            (p) => html`<ui-select
+              data-feature-preview=${p.id}
+              label=${p.name}
+              hint=${featureHint(p)}
+              .options=${featureModeChoices(p, features.defaultMode)}
+              .value=${p.chosen ? p.mode : 'default'}
+              @ui-change=${(e: CustomEvent<{ value: string }>) => this.setFeature(app, p.id, e.detail.value)}
+            ></ui-select>`,
+          )
+        : this.featuresError
+          ? nothing
+          : html`<p>Loading its previews…</p>`}
+      ${this.featuresError ? html`<p role="alert" data-feature-previews-error>${this.featuresError}</p>` : nothing}
+    </section>`;
   }
 
   /** The settings the app offers, each a number to type, saved when the field is left. */
@@ -864,6 +916,7 @@ export class AdminApps extends LitElement {
             @ui-change=${(e: CustomEvent<{ value: string }>) => this.limitUploads(app, e.detail.value)}
           ></ui-select>`}
       ${app.platform ? nothing : this.settingsFields(app)}
+      ${app.platform ? nothing : this.featureFields(app)}
       ${app.platform ? nothing : this.floors(app)}
       ${app.handles?.length ? html`<p>Answers ${app.handles.join(', ')}.</p>` : nothing}
       ${app.pillar

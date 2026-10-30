@@ -27,6 +27,7 @@ import {
 } from '@augur/service-kit';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import { appRunnerRoutes } from './app-runner.ts';
+import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import {
@@ -220,11 +221,16 @@ export const buildApp = async ({
           const rules = place ? await store.rules() : [];
           const kept = await store.frontends();
           const previews = await previewsChosenBy(caller?.id);
+          const optIns = caller ? await store.featureOptIns({ person: caller.id }) : [];
+          const at = new Date();
           const registered = (await store.records())
             .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
             // The limit the gateway holds requests to the app's service to (SDK 1.3), and the version's own copy of its code:
-            // for a developer trying one of its pull requests, that build's.
-            .map((r) => ({ ...servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept), maxUpload: uploadLimitOf(r) }));
+            // for a developer trying one of its pull requests, that build's. And the feature previews on for this person (SDK 1.7).
+            .map((r) => {
+              const on = previewsOnFor(r, optIns, updates.ring, at);
+              return { ...servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
+            });
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
         },
@@ -399,6 +405,7 @@ export const buildApp = async ({
       const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
+      await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record }));
       await app.register(appRunnerRoutes({ store, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(

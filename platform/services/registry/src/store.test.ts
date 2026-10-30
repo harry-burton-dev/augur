@@ -150,6 +150,25 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.setSetting('nothing', 'other', 5, 'u-1')).toBeUndefined();
   });
 
+  it('keeps who gets each feature preview, and who turned one on, until the app goes', async () => {
+    await store.put(library, 'library');
+    expect((await store.setFeaturePreview('library', 'board', 'everyone', 'u-1'))?.featurePreviews?.board).toMatchObject({ mode: 'everyone', setBy: 'u-1' });
+    await store.put({ ...library, version: '0.2.0' }, 'library');
+    expect((await store.records())[0].featurePreviews?.board.mode).toBe('everyone');
+    expect((await store.setFeaturePreview('library', 'board', null, 'u-1'))?.featurePreviews).toBeUndefined();
+    expect(await store.setFeaturePreview('nothing', 'board', 'off', 'u-1')).toBeUndefined();
+
+    await store.setFeatureOptIn('u-1', 'library', 'board', true);
+    await store.setFeatureOptIn('u-1', 'library', 'board', true);
+    await store.setFeatureOptIn('u-2', 'library', 'tags', true);
+    expect(await store.featureOptIns({ person: 'u-1' })).toEqual([{ person: 'u-1', app: 'library', preview: 'board' }]);
+    expect(await store.featureOptIns({ app: 'library' })).toHaveLength(2);
+    await store.setFeatureOptIn('u-1', 'library', 'board', false);
+    expect(await store.featureOptIns({ person: 'u-1' })).toEqual([]);
+    await store.remove('library');
+    expect(await store.featureOptIns()).toEqual([]);
+  });
+
   it('keeps one rule per app and floor, and forgets them with the app', async () => {
     await store.put(library, 'service');
     await store.setRule({ app: 'library', workspace: 'w-fin', state: 'on', carriesOn: false, setBy: 'u-1' });
@@ -259,7 +278,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

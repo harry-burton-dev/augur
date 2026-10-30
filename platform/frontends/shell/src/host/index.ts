@@ -9,5 +9,18 @@ export { screenFor, hasOrbit, titleMenu, titleTarget, orbitMenu, orbitIndexOf, a
 export { PreferenceSync, applyPreferences, type Preferences } from './preferences.js';
 export { floorFromPath, floorHref, floorBySlug, ownFloor, loadFloors, FloorsError, type FloorLocation } from './floors.js';
 export { HOME_CHANNEL, MAX_CARDS, needsFor, cardOf, cardsFor, SurfaceMounter, type HomeNeed, type HomeCard, type HomeState } from './home.js';
-export { loadPreviews, choosePreview, previewPr, previewLine, type Preview, type PreviewApp } from './previews.js';
+export {
+  loadPreviews,
+  choosePreview,
+  previewPr,
+  previewLine,
+  loadFeaturePreviews,
+  chooseFeaturePreview,
+  choosable,
+  featureLine,
+  type Preview,
+  type PreviewApp,
+  type FeaturePreviewApp,
+  type FeaturePreviewState,
+} from './previews.js';
 export { AppSearch, readAnswer, SEARCH_BUDGET_MS, RESULTS_PER_APP, MIN_QUERY, type FoundIn, type FindUpdate } from './find.js';

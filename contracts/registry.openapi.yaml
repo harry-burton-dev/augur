@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.26.0
+  version: 1.27.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -286,6 +286,109 @@ paths:
         "400": { description: Outside the setting's min and max }
         "403": { description: Not an admin }
         "404": { description: No such app, or it offers no such setting }
+  /feature-previews:
+    get:
+      summary: Apps' feature previews, and whether each is on for the caller (SDK 1.7)
+      description: >
+        Every app the caller can open that lists `previews` in its manifest. A preview is on for
+        everyone, for those who turned it on (opt-in), or off; one past its `until` day is ended
+        and off. On a preview server one nobody chose for is opt-in, on a production server off.
+      responses:
+        "200":
+          description: The apps with feature previews
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apps]
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      required: [app, name, previews]
+                      properties:
+                        app: { type: string }
+                        name: { type: string }
+                        previews:
+                          type: array
+                          items:
+                            allOf:
+                              - { $ref: "#/components/schemas/FeaturePreview" }
+                              - type: object
+                                required: [mode, on]
+                                properties:
+                                  mode: { $ref: "#/components/schemas/FeaturePreviewMode" }
+                                  ended: { type: boolean }
+                                  on: { type: boolean }
+        "401": { description: Not signed in }
+  /feature-previews/{app}/{preview}:
+    parameters:
+      - { name: app, in: path, required: true, schema: { type: string } }
+      - { name: preview, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Turn one of an app's opt-in feature previews on or off for the caller alone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [on], properties: { on: { type: boolean } } }
+      responses:
+        "204": { description: Chosen }
+        "404": { description: No such app or preview, or the caller can't open the app }
+        "409": { description: "It isn't opt-in (error not_opt_in), or it has ended (ended)" }
+  /apps/{id}/feature-previews:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Who gets each of an app's feature previews (admins)
+      responses:
+        "200":
+          description: Its feature previews
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeaturePreviewsAdmin" }
+        "403": { description: Not an admin }
+        "404": { description: No such app is registered }
+  /apps/{id}/feature-previews/{preview}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: preview, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Set who gets one of an app's feature previews (admins)
+      description: "`null` goes back to the server's default. Kept when the app registers new versions. Audited as app.preview-set."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mode]
+              properties:
+                mode: { oneOf: [{ $ref: "#/components/schemas/FeaturePreviewMode" }, { type: "null" }] }
+      responses:
+        "200":
+          description: Its feature previews as they now are
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeaturePreviewsAdmin" }
+        "403": { description: Not an admin }
+        "404": { description: No such app, or it offers no such preview }
+  /apps/{id}/feature-previews/people/{person}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: person, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Which of an app's feature previews are on for one person (the app's own service, or admins)
+      responses:
+        "200":
+          description: The ids on for them
+          content:
+            application/json:
+              schema: { type: object, required: [on], properties: { on: { type: array, items: { type: string } } } }
+        "403": { description: Neither the app's own service nor an admin }
+        "404": { description: No such app is registered }
   /apps/{id}/floors:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -1234,6 +1337,35 @@ components:
         origin: { type: string }
         addedBy: { type: string }
         addedAt: { type: string, format: date-time }
+    FeaturePreview:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9-]{0,39}$" }
+        name: { type: string, maxLength: 60 }
+        detail: { type: string, maxLength: 200 }
+        until: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Its last day; after it, it's off for everyone" }
+    FeaturePreviewMode: { type: string, enum: [off, opt-in, everyone] }
+    FeaturePreviewsAdmin:
+      type: object
+      required: [defaultMode, ring, previews]
+      properties:
+        defaultMode: { $ref: "#/components/schemas/FeaturePreviewMode" }
+        ring: { $ref: "#/components/schemas/ServerRing" }
+        previews:
+          type: array
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/FeaturePreview" }
+              - type: object
+                required: [mode, ended, chosen, optedIn]
+                properties:
+                  mode: { $ref: "#/components/schemas/FeaturePreviewMode" }
+                  ended: { type: boolean }
+                  chosen: { type: boolean, description: "An admin chose its mode; false means the server's default" }
+                  setBy: { type: string }
+                  setAt: { type: string, format: date-time }
+                  optedIn: { type: integer, description: How many people turned it on }
     AppManifestEntry:
       type: object
       required: [id, name, route, entry, version, sdk]
@@ -1255,6 +1387,15 @@ components:
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
         orbit: { type: boolean, description: "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus" }
         sameOnEveryFloor: { type: boolean, description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)" }
+        previews:
+          type: array
+          maxItems: 8
+          items: { $ref: "#/components/schemas/FeaturePreview" }
+          description: "Features the app is trying before they're everyone's (SDK 1.7): admins say who gets each, people turn opt-in ones on in the shell's Previews, and the app asks ctx.previewOn(id)"
+        previewsOn:
+          type: array
+          items: { type: string }
+          description: "In the catalogue the registry serves: the ids of the app's previews on for the caller (SDK 1.7)"
         search: { type: boolean, description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it" }
         storage:
           type: object
