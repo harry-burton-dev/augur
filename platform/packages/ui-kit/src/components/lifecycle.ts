@@ -91,7 +91,7 @@ export class UiLifecycle extends LitElement {
       ${this.moves.length
         ? html`<div class="moves">
             ${this.moves.map(
-              (m) => html`<ui-button kind="secondary" size="sm" ?disabled=${this.busy} @click=${() => this.move(m)}>Make it ${name(m)}</ui-button>`,
+              (m) => html`<ui-button kind="secondary" size="sm" ?disabled=${this.busy} reason="It’s moving now." @click=${() => this.move(m)}>Make it ${name(m)}</ui-button>`,
             )}
           </div>`
         : nothing}
