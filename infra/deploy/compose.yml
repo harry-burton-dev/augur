@@ -73,6 +73,8 @@ services:
       KEYCLOAK_CONSOLE: ${KEYCLOAK_CONSOLE:-closed}
       # On the workbench (dev) only, the shell may load an app from a developer's machine on the tailnet.
       SERVER_RING: ${SERVER_RING:-}
+      # Its tailnet is the only one it loads apps from then (infra/deploy/live-origins.envsh).
+      PLATFORM_URL: ${PLATFORM_URL}
     depends_on: [gateway, keycloak]
 
   # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.
@@ -234,6 +236,8 @@ services:
       PIPELINE_FEED_URL: ${PIPELINE_FEED_URL:-}
       PORTAL_URL: ${PORTAL_URL:-}
       SERVER_RING: ${SERVER_RING:-}
+      # On the workbench, Live on the workbench loads apps only from machines on this address's tailnet.
+      PLATFORM_URL: ${PLATFORM_URL}
       ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEED_URL: ${APP_FEED_URL:-}

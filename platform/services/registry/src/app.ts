@@ -103,6 +103,8 @@ export interface RegistryOptions {
   pipeline?: PipelineReader;
   /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to. AUGUR never calls it. */
   portalUrl?: string;
+  /** The workbench's own tailnet, from PLATFORM_URL: Live on the workbench loads only from machines on it. */
+  tailnet?: string;
 }
 
 /** PILLAR_APPS: the ids of the apps this deployment ships with, space or comma separated. */
@@ -179,9 +181,10 @@ export const buildApp = async ({
   allowPrPreviews = true,
   pipeline,
   portalUrl,
+  tailnet,
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
-  const live = new LiveOverrides(updates.ring);
+  const live = new LiveOverrides(updates.ring, tailnet);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
