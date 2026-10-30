@@ -37,7 +37,7 @@ Three levels: **read**, **edit** (add to it and change it), **manage** (also sha
 
 - **The floor gives its own people a level.** Leads manage what's on their floor; everyone else on it reads (`floorLevel`). Say in your app if everyone on a floor may add things; Artifacts lets them.
 - **Grants add to that**, on any record, for a person, a team, a team and the teams below it, or the whole org (identity's principals; see [Build an app, Sharing](build-an-app.md#sharing)).
-- **A grant reaches down.** A grant on a collection lets you into everything in it. Work out a caller's level with `levelDown(grantsFromTheTopDown, principals, floorLevel)`.
+- **A grant reaches down.** A grant on a collection lets you into everything in it, and one on a folder into everything inside that folder while it stays inside (Artifacts keeps folder grants in their own table, so a rollback only narrows access). Work out a caller's level with `levelDown(grantsFromTheTopDown, principals, floorLevel)`.
 - Keep, with each piece of content, the principals who may read it (a `readers text[]` column with a GIN index), so every list can filter with `&&` rather than walking the tree per row. Recompute it when a grant, a placement or the record's place changes.
 - Something someone can't see is as good as not there: answer 404, not 403.
 
