@@ -95,11 +95,15 @@ Whatever has been shared with you appears under **Shared with you** on every flo
 
 ### Publishing
 
-A document is a **draft** until it's published. Publishing puts one version out to an audience: a team, a team and the teams below it, or the whole org. Everyone in that audience can then read that version, and only that version, from their own floor, even if they can't see the library. Each of them is told about it, with a **Read** button that opens it.
+A document is published **up the floors**: press **Publish up the floors** on it, choose a floor above its own, and choose which lifecycle states it shows there (Complete and Issued at first). The floor above then sees each version as it reaches those states. A series' issues are the exception: each new issue still goes out to the series' audience, one version at a time, as below.
+
+What was published the old way before (one version out to an audience) is moved onto publishing up by itself, soon after the upgrade. A team or the org above the document's floor gets it published up, showing Issued. Its own floor and the teams below it already see it. Anyone else it went to, such as a team beside it, keeps it as a share. The old publication ends with "Moved onto publishing up the floors." on its record. Until it's moved, it reads as it did.
+
+For an issue:
 
 ![Publishing a version to everyone in the org, with a note](images/folio/publish.webp)
 
-- Press **Publishing** on the document to choose the version and the audience. You can add a note, which goes out with the notice.
+- Press **Publishing** on the issue to choose the version and the audience. You can add a note, which goes out with the notice.
 - Publishing it again replaces what was out with the new version.
 - **Withdraw** takes it back. You can give a reason.
 
