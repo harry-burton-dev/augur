@@ -235,6 +235,8 @@ try {
 
 `library.open` opens a whole library the same way: `openLibrary(ctx, { app: 'folio', id: 'l-7', name: 'Policies' })`, with a `LibraryRef` in the handling app's `ctx.intent.payload` (check it with `isLibraryRef`).
 
+`unit.open` (SDK 1.8) opens one place in a floor's library at any level of its shape: a collection, subcollection, series or subseries, or a file. Pass a `UnitRef`, `openUnit(ctx, { kind: 'unit', app: 'folio', id: 'l-7/f-reports', level: 'series', name: 'Reports' })`; the handling app checks it with `isUnitRef`. Artifacts' unit ids are `<library>/<unit>`, or the library's own id for the collection at its top. `UNIT_LEVELS` lists the levels, top down.
+
 An app that handles `document.open` finds a `DocumentRef` in `ctx.intent.payload`. One that handles `document.pick` gets a `DocumentPick` there and answers with `ctx.reply.respond(ref)`; `pickDocument` checks the answer is a `DocumentRef`.
 
 ### Entities from other apps
