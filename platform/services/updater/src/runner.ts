@@ -285,8 +285,8 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
     const publisher = `${release.signer.repository}/${release.signer.workflow}`;
     const trusted = [...publishers, ...publishersFrom(envValue(env, 'APP_PUBLISHERS'))];
     const dev = job.pr === undefined && isDevBuild(release.version);
-    // Only a preview server takes dev builds, whatever the registry asked.
-    if (dev && envValue(env, 'SERVER_RING') !== 'preview') throw new StepFailed(`${release.version} is a dev build, and only a preview server (SERVER_RING=preview in .env) installs dev builds.`);
+    // Only a dev or preview server takes dev builds, whatever the registry asked.
+    if (dev && !['dev', 'preview'].includes(envValue(env, 'SERVER_RING') ?? '')) throw new StepFailed(`${release.version} is a dev build, and only a dev or preview server (SERVER_RING=dev or preview in .env) installs dev builds.`);
     // A preview or a dev build comes from its own workflow, in a repository whose releases are trusted.
     const own = job.pr !== undefined ? PREVIEW_WORKFLOW : dev ? DEV_WORKFLOW : undefined;
     const ok = own === undefined ? trusted.includes(publisher) : release.signer.workflow === own && trusted.some((t) => t.startsWith(`${release.signer.repository}/`));

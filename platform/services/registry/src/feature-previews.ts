@@ -5,7 +5,7 @@ import type { Ring } from './ring.ts';
 import type { AppRecord, AppStore, FeatureOptIn, FeaturePreviewMode } from './store.ts';
 
 /** Who gets a feature preview nobody has chosen for: those who turn it on, on a preview server; nobody on a production one. */
-export const defaultMode = (ring: Ring): FeaturePreviewMode => (ring === 'preview' ? 'opt-in' : 'off');
+export const defaultMode = (ring: Ring): FeaturePreviewMode => (ring === 'production' ? 'off' : 'opt-in');
 
 /** Whether a preview's last day (`until`, YYYY-MM-DD) is behind `now`. */
 export const ended = (preview: Pick<FeaturePreview, 'until'>, now: Date) => Boolean(preview.until && preview.until < now.toISOString().slice(0, 10));
