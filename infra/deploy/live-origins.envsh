@@ -1,0 +1,9 @@
+#!/bin/sh
+# Live on the workbench (docs/release-channels.md): on a dev server only, the shell may load an app's
+# frontend from a developer's own machine on the tailnet, and its dev server's reload socket. nginx's
+# entrypoint sources this before it fills in default.conf.template, so ${LIVE_ORIGINS} is set here.
+if [ "${SERVER_RING:-}" = "dev" ]; then
+  export LIVE_ORIGINS="https://*.ts.net wss://*.ts.net"
+else
+  export LIVE_ORIGINS=""
+fi

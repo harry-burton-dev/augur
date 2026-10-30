@@ -10,6 +10,7 @@ test('a mirrored release file takes its channel and notes from GitHub as they ar
   assert.equal(promoted.channel, 'stable');
   assert.equal(promoted.notesUrl, 'https://github.com/o/r/releases/tag/augur@0.3.0');
   assert.equal(asMirrored(manifest('0.4.0'), { prerelease: true }).channel, 'beta');
+  assert.equal(asMirrored(manifest('0.4.1-dev.12'), { prerelease: true }).channel, 'dev');
 });
 
 test('the feed keeps one copy of each release, newest first', () => {

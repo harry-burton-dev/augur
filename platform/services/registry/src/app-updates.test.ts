@@ -214,7 +214,7 @@ describe('installs and updates in Admin → Apps', () => {
     expect(follow.json().error).toBe('production_server');
     const asked = await production.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.1-dev.40' } });
     expect(asked.statusCode).toBe(400);
-    expect(asked.json().message).toMatch(/Only a preview server/);
+    expect(asked.json().message).toMatch(/Only a dev or preview server/);
     expect((await production.view()).installed[0].older).toEqual([]);
   });
 

@@ -105,13 +105,17 @@ const setup = (env = ENV, network?: string) => {
 };
 
 describe('the app runner', () => {
-  it('installs a dev build only on a preview server, from the dev workflow on dev, after a backup', async () => {
+  it('installs a dev build only on a dev or preview server, from the dev workflow on dev, after a backup', async () => {
     const dev = { signer: { repository: 'o/r', workflow: '.github/workflows/app-dev.yml' } };
     const onProduction = setup(`${ENV}SERVER_RING=production\n`);
     onProduction.versions.set(image('c'), '1.0.1-dev.40');
     expect(await onProduction.run(install('1.0.1-dev.40', 'c', dev))).toBe('failed');
-    expect(onProduction.reports.at(-1)?.message).toMatch(/only a preview server/);
+    expect(onProduction.reports.at(-1)?.message).toMatch(/only a dev or preview server/);
     expect(onProduction.did).toEqual([]);
+
+    const workbench = setup(`${ENV}SERVER_RING=dev\n`);
+    workbench.versions.set(image('c'), '1.0.1-dev.40');
+    expect(await workbench.run(install('1.0.1-dev.40', 'c', dev))).toBe('done');
 
     const t = setup(`${ENV}SERVER_RING=preview\n`);
     t.versions.set(image('c'), '1.0.1-dev.40');

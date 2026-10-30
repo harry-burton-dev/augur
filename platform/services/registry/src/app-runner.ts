@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
 import { changesIn } from './changes.ts';
+import { LIVE_ONLY_ON_DEV, LiveOverrides, liveUrlProblem } from './live.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
@@ -66,7 +67,7 @@ const OUTCOME_ACTIONS: Record<AppJob['action'], Record<AppJobOutcome, string>> =
 };
 
 /** Why a production server doesn't install a dev build. */
-export const DEV_BUILDS_PREVIEW_ONLY = 'That’s a dev build. Only a preview server (SERVER_RING=preview) installs dev builds.';
+export const DEV_BUILDS_PREVIEW_ONLY = 'That’s a dev build. Only a dev or preview server (SERVER_RING=dev or preview) installs dev builds.';
 
 /** How many of an app's jobs its history in Admin → Apps lists. */
 const APP_HISTORY_LISTED = 20;
@@ -96,6 +97,8 @@ export const previewProblem = (preview: AppRelease, installed: AppRelease, pilla
 
 export interface AppRunnerRouteOptions {
   store: AppStore;
+  /** Who loads which app from their own machine (Live on the workbench). */
+  live?: LiveOverrides;
   pillars: string[];
   /** The app feed: releases admins can install, and newer ones for what's installed. */
   updates: AppUpdateChecker;
@@ -118,7 +121,7 @@ export interface AppRunnerRouteOptions {
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, pillars, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, now = () => new Date() }: AppRunnerRouteOptions) =>
+  ({ store, pillars, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), now = () => new Date() }: AppRunnerRouteOptions) =>
   async (app: FastifyInstance) => {
     /** When the runner last asked what to do; it lives only as long as this process. */
     let runnerSeenAt: string | undefined;
@@ -314,12 +317,16 @@ export const appRunnerRoutes =
           .map((i) => {
             const chosen = choices.find((c) => c.app === i.app)?.pr;
             const previews = running.filter((p) => p.app === i.app);
+            const from = live.of(caller.id, i.app);
             return {
               app: i.app,
               name: i.release.manifest.name,
               version: i.release.version,
               ...(chosen !== undefined && previews.some((p) => p.pr === chosen) ? { chosen } : {}),
               previews: previews.map(previewView),
+              // Live on the workbench: loading it from the developer's own machine, or why it can't here.
+              ...(from ? { live: from } : {}),
+              ...(live.allowed ? {} : { liveProblem: LIVE_ONLY_ON_DEV }),
             };
           }),
       };
@@ -338,6 +345,25 @@ export const appRunnerRoutes =
         if (pr !== null && !(await store.runningPreviews()).some((p) => p.app === id && p.pr === pr)) return reply.code(404).send({ error: 'not_found', message: `No preview of pull request ${pr} is running.` });
         await store.choosePreview(caller.id, id, pr);
         req.log.info({ by: caller.id, app: id, pr }, pr === null ? 'preview left' : 'preview chosen');
+        return reply.code(204).send();
+      },
+    );
+
+    /** Loads an app's frontend from the caller's own machine instead of the app, for them alone, on the workbench; `null` stops. */
+    app.put<{ Params: { id: string }; Body: { url: string | null } }>(
+      '/previews/:id/live',
+      { schema: { body: { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: ['string', 'null'], maxLength: 2048 } } } } },
+      async (req, reply) => {
+        const caller = callerFromHeaders(req.headers);
+        if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to load an app from your machine.' });
+        const { id } = req.params;
+        if (!live.allowed) return reply.code(409).send({ error: 'conflict', message: LIVE_ONLY_ON_DEV });
+        if (!(await store.developers(id)).some((d) => d.person === caller.id)) return reply.code(403).send({ error: 'forbidden', message: `Only ${id}’s developers can load it from their machine. An admin adds them in Admin → Apps.` });
+        const { url } = req.body;
+        const problem = url === null ? undefined : liveUrlProblem(url);
+        if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
+        live.set(caller.id, id, url);
+        req.log.info({ by: caller.id, app: id, url }, url === null ? 'live stopped' : 'live started');
         return reply.code(204).send();
       },
     );

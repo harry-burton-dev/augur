@@ -180,10 +180,13 @@ export interface Change {
   parts: string[];
 }
 
+/** stable is on production, beta on preview, dev a dev build that only the workbench takes. */
+export type ReleaseChannel = 'stable' | 'beta' | 'dev';
+
 /** An AUGUR release as Updates shows it (see contracts/registry.openapi.yaml). */
 export interface ReleaseSummary {
   version: string;
-  channel: 'stable' | 'beta';
+  channel: ReleaseChannel;
   released?: string;
   notesUrl?: string;
   breaking: string[];
@@ -193,7 +196,7 @@ export interface ReleaseSummary {
 /** An earlier release the server could go back to. */
 export interface GoBackTarget {
   version: string;
-  channel: 'stable' | 'beta';
+  channel: ReleaseChannel;
   released?: string;
   problem?: string;
   breakingAfter?: string;
@@ -247,11 +250,35 @@ export interface Upgrade {
   finishedAt?: string;
 }
 
+/** The Upgrade Centre's line (see contracts/registry.openapi.yaml, PipelineLine). */
+export interface PipelineLine {
+  feed: 'on' | 'off';
+  checkedAt?: string;
+  problem?: string;
+  generatedAt?: string;
+  repository?: string;
+  units: {
+    id: string;
+    name: string;
+    versions: Record<'dev' | 'preview' | 'production', string | null>;
+    devBuild?: { version: string; released?: string };
+    waiting: string[];
+    previews: { pr: number; version: string }[];
+    running?: string;
+  }[];
+  steps: { from: 'dev' | 'preview' | 'production'; to: 'dev' | 'preview' | 'production'; merged: number; pulls: { number: number; title: string; mergedAt?: string }[] }[];
+  pulls?: {
+    versionPackages?: { number: number; title: string; url: string };
+    promoteToPreview?: { number: number; title: string; url: string };
+    promoteToProduction: { number: number; title: string; url: string; unit: string; version: string }[];
+  };
+}
+
 export interface PlatformUpdates {
-  running: { version: string; channel: 'stable' | 'beta' };
-  channel: 'stable' | 'beta';
+  running: { version: string; channel: ReleaseChannel };
+  channel: ReleaseChannel;
   /** What kind of server this is (SERVER_RING), which bounds the channel. */
-  ring?: 'preview' | 'production';
+  ring?: 'dev' | 'preview' | 'production';
   channelNote?: string;
   /** Off when the deployment set RELEASE_FEED_URL=off. */
   feed: 'on' | 'off';
@@ -270,6 +297,10 @@ export interface PlatformUpdates {
   goBack?: GoBackTarget[];
   /** When the deployment's updater last asked for work, since the registry started. */
   updaterSeenAt?: string;
+  /** The line from dev to production, from the pipeline feed, with what this server runs of each unit. */
+  line?: PipelineLine;
+  /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to. */
+  portalUrl?: string;
 }
 
 /** One step the app runner took (see contracts/registry.openapi.yaml). */
@@ -299,13 +330,13 @@ export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone';
 
 /** An app's feature previews as Admin shows them. */
 export interface FeaturePreviews {
-  /** Who gets one nobody chose for: opt-in on a preview server, off on a production one. */
+  /** Who gets one nobody chose for: opt-in on a dev or preview server, off on a production one. */
   defaultMode: FeaturePreviewMode;
-  ring: 'preview' | 'production';
+  ring: 'dev' | 'preview' | 'production';
   previews: { id: string; name: string; detail?: string; until?: string; mode: FeaturePreviewMode; ended: boolean; chosen: boolean; setBy?: string; setAt?: string; optedIn: number }[];
 }
 
-/** stable is production releases, beta preview releases too, dev dev builds too (a preview server only). */
+/** stable is production releases, beta preview releases too, dev dev builds too (a dev or preview server only). */
 export type AppChannel = 'stable' | 'beta' | 'dev';
 
 /** One of an app's jobs, as its history shows it. */
@@ -376,7 +407,7 @@ export interface AppInstalls {
   runnerSeenAt?: string;
   sdkVersion: string;
   /** What kind of server this is (SERVER_RING): a production one follows stable releases only. */
-  ring?: 'preview' | 'production';
+  ring?: 'dev' | 'preview' | 'production';
   previewsAllowed?: boolean;
   channelNote?: string;
   installed: InstalledApp[];
