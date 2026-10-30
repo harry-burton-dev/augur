@@ -1,5 +1,16 @@
 # @augur/home
 
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [effebfe]
+- Updated dependencies [84fab17]
+- Updated dependencies [2c9caf0]
+- Updated dependencies [b716037]
+- Updated dependencies [2487ae0]
+  - @augur/ui-kit@1.6.0
+
 ## 0.2.6
 
 ### Patch Changes
