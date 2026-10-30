@@ -154,7 +154,7 @@ export const notes = (release, parts) => {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('### Running it', '', `Upgrade from Admin → Updates, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/main/docs/upgrade.md).`);
+  lines.push('### Running it', '', `Upgrade from Admin → Updates, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/production/docs/upgrade.md).`);
   return lines.join('\n');
 };
 
