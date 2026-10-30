@@ -43,3 +43,13 @@ test('each release file takes its channel from GitHub as it is now, and one that
   assert.equal(feed.releases[0].notesUrl, 'https://github.com/o/r/releases/tag/augur@0.4.0');
   assert.deepEqual(feed.apps.map((a) => `${a.id} ${a.version} ${a.channel} ${a.releasedAt}`), ['notes 1.2.0 stable 2026-10-27T00:00:00Z']);
 });
+
+test('AUGUR’s dev builds go under devBuilds, never releases, which registries from before dev builds read alone', async () => {
+  const files = {
+    'asset:augur@0.12.0': { version: '0.12.0', channel: 'beta', parts: {} },
+    'asset:augur@0.12.1-dev.1': { version: '0.12.1-dev.1', channel: 'dev', parts: {} },
+  };
+  const feed = await buildFeed([release('augur@0.12.0', { prerelease: true }), release('augur@0.12.1-dev.1', { prerelease: true })], async (url) => files[url]);
+  assert.deepEqual(feed.releases.map((m) => m.version), ['0.12.0']);
+  assert.deepEqual(feed.devBuilds.map((m) => m.version), ['0.12.1-dev.1']);
+});

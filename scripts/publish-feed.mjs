@@ -79,9 +79,13 @@ export const buildFeed = async (releases, download) => {
   };
   const augurFiles = await Promise.all(augur.map(async ({ release, version }) => ({ version, file: await fileOf(release, 'augur-release.json'), release })));
   const appFiles = await Promise.all(apps.map(async ({ release, app, version }) => ({ app, version, file: await fileOf(release, 'app-release.json'), release })));
+  const augurListed = augurFiles.filter((x) => x.file?.version === x.version).map((x) => asMirrored(x.file, x.release));
   return {
     schema: 'augur.feed/v1',
-    releases: augurFiles.filter((x) => x.file?.version === x.version).map((x) => asMirrored(x.file, x.release)),
+    // AUGUR's dev builds go under their own key: a registry from before dev builds reads only `releases`, and
+    // would take a dev build there for the newest beta, then refuse its images (signed by the dev builds workflow).
+    releases: augurListed.filter((m) => !DEV.test(m.version)),
+    devBuilds: augurListed.filter((m) => DEV.test(m.version)),
     apps: appFiles.filter((x) => x.file?.id === x.app && x.file?.version === x.version).map((x) => asListed(x.file, x.release)),
   };
 };
@@ -105,7 +109,7 @@ const main = async (args) => {
   }
   const feed = await buildFeed(releases, (url) => github(url, 'application/octet-stream'));
   writeFileSync(out, `${JSON.stringify(feed, null, 2)}\n`);
-  console.log(`${out}: ${feed.releases.length} AUGUR releases, ${feed.apps.length} app releases.`);
+  console.log(`${out}: ${feed.releases.length} AUGUR releases, ${feed.devBuilds.length} AUGUR dev builds, ${feed.apps.length} app releases.`);
   if (args.includes('--push')) {
     const ref = `ghcr.io/${REPO.toLowerCase()}/feed:latest`;
     // ORAS takes a file by its path relative to where it runs, which also names the layer.

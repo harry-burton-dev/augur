@@ -192,7 +192,9 @@ export const releaseFeed =
   async (running) => {
     const get = feedReader({ token, key, fetchImpl });
     const body = await get(url, 'application/vnd.github+json, application/json');
-    const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { releases?: unknown })?.releases) ? (body as { releases: unknown[] }).releases : [];
+    const listed = (key: 'releases' | 'devBuilds') => { const v = (body as Record<string, unknown> | undefined)?.[key]; return Array.isArray(v) ? v : []; };
+    // The feed keeps AUGUR's dev builds apart from its releases, so registries from before dev builds never see them.
+    const items: unknown[] = Array.isArray(body) ? body : [...listed('releases'), ...listed('devBuilds')];
 
     if (items.some(isManifest)) {
       // A mirror: the release files themselves.

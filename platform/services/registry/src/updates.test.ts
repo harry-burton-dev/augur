@@ -172,6 +172,15 @@ describe('the release feed', () => {
     ]);
   });
 
+  it('reads AUGUR’s dev builds from the feed’s devBuilds, beside its releases', async () => {
+    const fetchImpl = (async () => json({ releases: [manifest('0.3.0')], devBuilds: [manifest('0.3.1-dev.4', { channel: 'dev' })] })) as unknown as typeof fetch;
+    const releases = await releaseFeed({ url: 'https://mirror.example.org/augur/releases.json', fetchImpl })('0.3.0');
+    expect(releases.map((r) => [r.version, r.channel])).toEqual([
+      ['0.3.0', 'beta'],
+      ['0.3.1-dev.4', 'dev'],
+    ]);
+  });
+
   it('reads a mirror’s feed from a file on the server, with each release’s notes', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'feed-'));
     writeFileSync(join(dir, 'releases.json'), JSON.stringify({ releases: [manifest('0.3.0', { notesUrl: 'https://github.com/o/r/releases/tag/augur@0.3.0' })] }));
