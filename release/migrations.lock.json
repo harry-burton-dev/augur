@@ -52,7 +52,8 @@
     "010_units": "88f449c16c837350",
     "011_placements": "56d877e6bfbbdf78",
     "012_links": "cfe9fb4fc42f0c34",
-    "013_folder_tags": "267763cd6c2af04f"
+    "013_folder_tags": "267763cd6c2af04f",
+    "014_folder_grants": "d19d9f44ac794c69"
   },
   "@apps/mandate": {
     "001_intents": "fcb7f5a10b616475"

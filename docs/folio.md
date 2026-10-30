@@ -89,6 +89,8 @@ Anyone who manages a library, or a document, can let others in with **Share**. Y
 | Add documents, folders and versions, and change any document | | yes | yes |
 | Share it, rename or archive it | | | yes |
 
+Whoever manages a library can also share one folder with **Share** inside it. Whoever it's shared with sees everything inside that folder, the folders below it too, for as long as it stays inside: a document moved out of the folder is no longer shared with them. They find it under **Shared with you**, and the library itself stays closed to them. A document's **Share** lists anyone who reaches it through a folder it's in.
+
 ![Who can see a document, and sharing it with someone](images/folio/share.webp)
 
 Whatever has been shared with you appears under **Shared with you** on every floor of yours. Anyone who can see something can also see who else can. **Who can open this, explained** opens Auspex over Artifacts: each person and team with how many people that is, how it reaches them (its floor, its library, or shared with it alone), and everyone else at the org who can't.
