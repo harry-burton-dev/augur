@@ -346,6 +346,12 @@ importers:
       '@augur/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
+      '@fontsource/jost':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/nunito':
+        specifier: ^5.3.0
+        version: 5.3.0
       lit:
         specifier: ^3.3.0
         version: 3.3.3
@@ -445,6 +451,12 @@ importers:
         specifier: ^14.3.3
         version: 14.3.3
     devDependencies:
+      '@fontsource/jost':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/nunito':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@storybook/web-components-vite':
         specifier: 10.6.2
         version: 10.6.2(lit@3.3.3)(storybook@10.6.2(@types/react@19.3.0)(prettier@2.8.8)(react@19.3.1))(vite@7.3.7(@types/node@22.20.5)(yaml@2.9.1))
@@ -1073,6 +1085,12 @@ packages:
 
   '@fastify/reply-from@12.7.1':
     resolution: {integrity: sha512-F26CIcy6PKqyhsTwQI7p5UwH5vrv2yz7BOqAnkHTmNVSU9J+vmRh8CNfOk/ZD8AjcKbiyRkNl6Lb3AuJdxIADQ==}
+
+  '@fontsource/jost@5.3.0':
+    resolution: {integrity: sha512-lORv5y49hSoLVxjGb0qNuBzXvnaNYI3B94200uGPGJFei8fao6d6LLz2ziWbOZubGfZnibzuT6GVNX8fBw8WQQ==}
+
+  '@fontsource/nunito@5.3.0':
+    resolution: {integrity: sha512-vw9TaTQJ/zpEpKrsODuPmOvaVjXgdda6B+xXA4YqjrdeJ62MLgVoDerdRXFQHyBnSCt2yQ2nHKCHPP/Pv7Xq4Q==}
 
   '@inquirer/external-editor@1.0.3':
     resolution: {integrity: sha512-RWbSrDiYmO4LbejWY7ttpxczuwQyZLBUyygsA9Nsv95hpzUWwnNTVQmAq3xuh7vNwCp07UTmE5i11XAEExx4RA==}
@@ -3404,6 +3422,10 @@ snapshots:
       fastify-plugin: 6.0.1
       toad-cache: 3.7.4
       undici: 7.30.1
+
+  '@fontsource/jost@5.3.0': {}
+
+  '@fontsource/nunito@5.3.0': {}
 
   '@inquirer/external-editor@1.0.3(@types/node@22.20.5)':
     dependencies:

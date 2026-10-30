@@ -1,5 +1,6 @@
 import '@augur/ui-kit/tokens.css';
 import '@augur/ui-kit/base.css';
+import './fonts.ts';
 import '@augur/ui-kit';
 import './shell.css';
 import { UserManager } from 'oidc-client-ts';
