@@ -34,6 +34,7 @@ export { UiAppFrame, type FrameMeasure } from './components/app-frame.js';
 export { UiPageHead, type TrailStep, type PageAction } from './components/page-head.js';
 export { UiSection } from './components/section.js';
 export { UiCard, UiCards, floorMark } from './components/card.js';
+export { UiTile, UiTiles } from './components/tile.js';
 export { UiTally, type TallyCount } from './components/tally.js';
 export { UiDetails, type Detail } from './components/details.js';
 export { UiTimeline, dayWords, type TimelineItem } from './components/timeline.js';
