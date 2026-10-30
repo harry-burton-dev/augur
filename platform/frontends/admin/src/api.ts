@@ -251,7 +251,7 @@ export interface PlatformUpdates {
   running: { version: string; channel: 'stable' | 'beta' };
   channel: 'stable' | 'beta';
   /** What kind of server this is (SERVER_RING), which bounds the channel. */
-  ring?: 'preview' | 'production';
+  ring?: 'dev' | 'preview' | 'production';
   channelNote?: string;
   /** Off when the deployment set RELEASE_FEED_URL=off. */
   feed: 'on' | 'off';
@@ -299,13 +299,13 @@ export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone';
 
 /** An app's feature previews as Admin shows them. */
 export interface FeaturePreviews {
-  /** Who gets one nobody chose for: opt-in on a preview server, off on a production one. */
+  /** Who gets one nobody chose for: opt-in on a dev or preview server, off on a production one. */
   defaultMode: FeaturePreviewMode;
-  ring: 'preview' | 'production';
+  ring: 'dev' | 'preview' | 'production';
   previews: { id: string; name: string; detail?: string; until?: string; mode: FeaturePreviewMode; ended: boolean; chosen: boolean; setBy?: string; setAt?: string; optedIn: number }[];
 }
 
-/** stable is production releases, beta preview releases too, dev dev builds too (a preview server only). */
+/** stable is production releases, beta preview releases too, dev dev builds too (a dev or preview server only). */
 export type AppChannel = 'stable' | 'beta' | 'dev';
 
 /** One of an app's jobs, as its history shows it. */
@@ -376,7 +376,7 @@ export interface AppInstalls {
   runnerSeenAt?: string;
   sdkVersion: string;
   /** What kind of server this is (SERVER_RING): a production one follows stable releases only. */
-  ring?: 'preview' | 'production';
+  ring?: 'dev' | 'preview' | 'production';
   previewsAllowed?: boolean;
   channelNote?: string;
   installed: InstalledApp[];

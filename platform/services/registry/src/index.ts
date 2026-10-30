@@ -4,7 +4,7 @@ import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
 import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
-import { ringFrom } from './ring.ts';
+import { ringFrom, takesPreview } from './ring.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
 
 // Every setting the registry reads, checked before it starts (in production, a missing one stops it).
@@ -20,7 +20,7 @@ loadConfigOrExit('registry', [
   { name: 'GITHUB_READ_KEY', about: 'the deployment’s read key, a GitHub token with read:packages, usually in secrets/github-read-key.', secret: true },
   { name: 'RELEASE_FEED_URL', about: 'where new AUGUR releases are listed, or off.' },
   { name: 'RELEASE_CHANNEL', about: 'stable or beta (default: beta on a preview server, stable on a production one, which takes nothing else).' },
-  { name: 'SERVER_RING', about: 'preview or production (default): what kind of server this is (docs/release-channels.md).' },
+  { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
   { name: 'ALLOW_PR_PREVIEWS', about: 'on: run pull requests’ builds for apps’ developers on a production server too.' },
   { name: 'APP_FEED_URL', about: 'where new versions of apps are listed, or off.' },
   { name: 'PILLAR_APPS', about: 'the apps that ship with AUGUR, which register themselves.' },
@@ -63,7 +63,7 @@ const channel = (process.env.RELEASE_CHANNEL || undefined) as Channel | undefine
 if (channel && channel !== 'stable' && channel !== 'beta') throw new Error('RELEASE_CHANNEL is stable or beta.');
 // What kind of server this is: a production one follows stable only and runs no pull requests' builds.
 const ring = ringFrom(process.env.SERVER_RING);
-const allowPrPreviews = ring === 'preview' || process.env.ALLOW_PR_PREVIEWS === 'on';
+const allowPrPreviews = takesPreview(ring) || process.env.ALLOW_PR_PREVIEWS === 'on';
 const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: feedTokenFromEnv(), key: readKey });
 const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel, ring });
 updates.start();

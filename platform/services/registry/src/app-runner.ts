@@ -66,7 +66,7 @@ const OUTCOME_ACTIONS: Record<AppJob['action'], Record<AppJobOutcome, string>> =
 };
 
 /** Why a production server doesn't install a dev build. */
-export const DEV_BUILDS_PREVIEW_ONLY = 'That’s a dev build. Only a preview server (SERVER_RING=preview) installs dev builds.';
+export const DEV_BUILDS_PREVIEW_ONLY = 'That’s a dev build. Only a dev or preview server (SERVER_RING=dev or preview) installs dev builds.';
 
 /** How many of an app's jobs its history in Admin → Apps lists. */
 const APP_HISTORY_LISTED = 20;
