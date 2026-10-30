@@ -14,6 +14,11 @@ import './icon.js';
  * Its actions aren't on it: right-click it (or press the context-menu key)
  * and the app opens a `ui-radial-menu` around it.
  *
+ * Everything that can be right-clicked answers the pointer. `rank` says how
+ * high in the app's hierarchy it is, and the hover is as strong as that:
+ * `high` (a collection) lifts and lights, `mid` (a folder) lifts a little,
+ * `low` (a document) only firms its edge.
+ *
  * @fires ui-open - it was pressed
  */
 export class UiTile extends LitElement {
@@ -23,6 +28,7 @@ export class UiTile extends LitElement {
     picture: { type: String },
     add: { type: Boolean, reflect: true },
     selected: { type: Boolean, reflect: true },
+    rank: { type: String, reflect: true },
   };
 
   declare heading: string;
@@ -34,6 +40,8 @@ export class UiTile extends LitElement {
   declare add: boolean;
   /** Its radial menu is open on it: it shows as the one chosen. */
   declare selected: boolean;
+  /** How high it is in the hierarchy, which sets how strongly it answers hover: `high`, `mid` (default) or `low`. */
+  declare rank: 'high' | 'mid' | 'low';
 
   constructor() {
     super();
@@ -42,6 +50,7 @@ export class UiTile extends LitElement {
     this.picture = '';
     this.add = false;
     this.selected = false;
+    this.rank = 'mid';
   }
 
   static override styles = [
@@ -62,9 +71,11 @@ export class UiTile extends LitElement {
         border-radius: var(--radius-inset);
         background: var(--surface-pane);
         cursor: pointer;
-        transition: border-color var(--motion-instant) var(--ease-standard), transform var(--motion-quick) var(--ease-out);
+        transition: border-color var(--motion-quick) var(--ease-standard), background var(--motion-quick) var(--ease-standard), box-shadow var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out);
       }
-      .tile:hover { border-color: var(--hairline-strong); transform: translateY(-1px); }
+      :host([rank='high']) .tile:hover { border-color: var(--hairline-strong); background: var(--surface-raised); transform: translateY(-3px); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--slate-deep) 90%, transparent); }
+      :host([rank='mid']) .tile:hover { border-color: var(--hairline-strong); background: color-mix(in srgb, var(--surface-raised) 50%, var(--surface-pane)); transform: translateY(-1px); }
+      :host([rank='low']) .tile:hover { border-color: var(--hairline-strong); }
       .tile:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }
       :host([selected]) .tile { border-color: var(--focus); background: var(--surface-raised); }
       :host([add]) .tile { border-style: dashed; background: none; justify-content: center; align-items: center; color: var(--ink-muted); }
@@ -76,7 +87,7 @@ export class UiTile extends LitElement {
       @keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
       @media (prefers-reduced-motion: reduce) {
         :host { animation: none; }
-        .tile:hover { transform: none; }
+        .tile:hover { transform: none !important; }
       }
     `,
   ];

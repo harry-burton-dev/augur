@@ -13,7 +13,7 @@ import './icon.js';
  *
  * @slot - the filters and sort: a `ui-filter-bar`
  * @fires ui-search - detail `{ query }`, as the person types
- * @fires ui-add - the add button was pressed
+ * @fires ui-add - detail `{ button }`: the add button was pressed; when there's more than one thing to add, open a `ui-radial-menu` on `button`
  */
 export class UiToolbar extends LitElement {
   static override properties = {
@@ -71,7 +71,7 @@ export class UiToolbar extends LitElement {
       </div>
       <div class="filters"><slot></slot></div>
       ${this.add
-        ? html`<button class="add" @click=${() => this.dispatchEvent(new CustomEvent('ui-add', { bubbles: true, composed: true }))}><ui-icon name="plus" size="14" aria-hidden="true"></ui-icon>${this.add}</button>`
+        ? html`<button class="add" @click=${(e: Event) => this.dispatchEvent(new CustomEvent('ui-add', { detail: { button: e.currentTarget }, bubbles: true, composed: true }))}><ui-icon name="plus" size="14" aria-hidden="true"></ui-icon>${this.add}</button>`
         : nothing}`;
   }
 }

@@ -37,7 +37,8 @@ const remember = (key: string, closed: boolean) => {
  * person sees both change together.
  *
  * The rail and the drawer each fold away to a thin strip with a button to
- * open them again; the frame remembers that on this device. Whenever the
+ * open them again; the frame remembers that on this device. A folded rail
+ * keeps its trees as icons (`ui-tree` `compact`), so it still takes you places. Whenever the
  * drawer opens, closes or goes, the frame fires `ui-drawer` on the window with
  * the width it takes, so the shell keeps its floor gauge just left of it.
  *
@@ -85,6 +86,8 @@ export class UiAppFrame extends LitElement {
   declare turning: boolean;
 
   private turn?: ReturnType<typeof setTimeout>;
+  /** Keeps every tree in the rail compact while it's folded, including trees the app adds later. */
+  private railWatch = new MutationObserver(() => this.compactRail());
 
   constructor() {
     super();
@@ -107,7 +110,7 @@ export class UiAppFrame extends LitElement {
       :host {
         --rail: var(--measure-rail);
         --drawer: var(--measure-drawer);
-        --strip: 44px;
+        --strip: 56px;
         display: grid; grid-template-columns: minmax(0, 1fr); min-height: 100%; background: var(--slate); color: var(--ink); font-size: var(--type-body); line-height: var(--leading-body);
         transition: grid-template-columns var(--motion-slow) var(--ease-out);
       }
@@ -116,19 +119,20 @@ export class UiAppFrame extends LitElement {
       :host([has-rail]) { grid-template-columns: var(--rail) minmax(0, 1fr); }
       :host([has-drawer]) { grid-template-columns: minmax(0, 1fr) var(--drawer); }
       :host([has-rail][has-drawer]) { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }
-      nav { display: none; position: relative; flex-direction: column; gap: var(--space-5); padding: var(--space-6) var(--space-3); border-right: 1px solid var(--hairline); overflow: hidden auto; min-width: 0; }
+      nav { display: none; flex-direction: column; gap: var(--space-4); padding: var(--space-4) var(--space-3) var(--space-6); border-right: 1px solid var(--hairline); overflow: hidden auto; min-width: 0; }
       :host([has-rail]) nav { display: flex; }
       .rail-body, .drawer-body { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; transition: opacity var(--motion-base) var(--ease-out); }
-      :host([rail-closed]) .rail-body, :host([drawer-closed]) .drawer-body { opacity: 0; visibility: hidden; pointer-events: none; }
+      :host([drawer-closed]) .drawer-body { opacity: 0; visibility: hidden; pointer-events: none; }
+      .rail-head { display: flex; justify-content: flex-end; }
+      :host([rail-closed]) nav { padding-inline: 0; align-items: center; }
+      :host([rail-closed]) .rail-head { justify-content: center; width: 100%; }
+      :host([rail-closed]) .rail-body { align-items: center; width: 100%; }
       .fold {
         all: unset; box-sizing: border-box; display: grid; place-items: center; width: 28px; height: 28px; flex: none; cursor: pointer;
         border-radius: var(--radius-key); color: var(--ink-muted); transition: color var(--motion-instant) var(--ease-standard), background var(--motion-instant) var(--ease-standard);
       }
       .fold:hover { color: var(--ink); background: var(--surface-pane); }
       .fold:focus-visible { outline: 1.5px solid var(--focus); outline-offset: 2px; }
-      nav .fold { position: absolute; top: var(--space-4); right: var(--space-2); z-index: 1; }
-      :host([rail-closed]) nav { padding-inline: 0; }
-      :host([rail-closed]) nav .fold { right: 8px; }
       main { min-width: 0; padding: var(--space-6) var(--edge) var(--space-8); }
       .page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-7); align-items: start; max-width: var(--measure-wide); margin: 0 auto; transition: opacity var(--motion-slow) var(--ease-out); }
       :host([has-rail]) .page { margin: 0; }
@@ -143,9 +147,10 @@ export class UiAppFrame extends LitElement {
       aside:not(.on) { display: none; }
       .drawer { display: none; position: relative; min-width: 0; overflow: hidden; border-left: 1px solid var(--hairline); }
       :host([has-drawer]) .drawer { display: block; }
-      .drawer .fold { position: absolute; top: var(--space-4); left: 8px; z-index: 1; }
+      .drawer-head { display: flex; justify-content: flex-start; padding: var(--space-4) var(--space-3) 0; }
+      :host([drawer-closed]) .drawer-head { justify-content: center; padding-inline: 0; }
       .drawer-inner {
-        position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: calc(var(--space-6) + 28px) var(--space-5) var(--space-8);
+        position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: var(--space-4) var(--space-5) var(--space-8);
         transition: opacity var(--motion-slow) var(--ease-out), transform var(--motion-slow) var(--ease-out);
       }
       :host([turning]) .drawer-inner { opacity: 0; transform: translateX(var(--travel-near)); transition: none; }
@@ -177,6 +182,14 @@ export class UiAppFrame extends LitElement {
 
   override firstUpdated() {
     this.onSlot();
+    this.railWatch.observe(this, { childList: true, subtree: true });
+    this.compactRail();
+  }
+
+  private compactRail() {
+    for (const tree of this.querySelectorAll<HTMLElement & { compact: boolean }>('[slot="rail"] ui-tree, ui-tree[slot="rail"]')) {
+      if (tree.compact !== this.railClosed) tree.compact = this.railClosed;
+    }
   }
 
   override willUpdate(changed: Map<string, unknown>) {
@@ -190,6 +203,7 @@ export class UiAppFrame extends LitElement {
 
   override updated(changed: Map<string, unknown>) {
     if (changed.has('hasDrawer') || changed.has('drawerClosed')) this.tellDrawer();
+    if (changed.has('railClosed')) this.compactRail();
   }
 
   /** Says, on the window, how much of the right edge the drawer takes, for the shell to keep its floor gauge clear of. */
@@ -206,6 +220,7 @@ export class UiAppFrame extends LitElement {
   override disconnectedCallback() {
     super.disconnectedCallback();
     clearTimeout(this.turn);
+    this.railWatch.disconnect();
     // Gone with the app: the shell has the whole edge back.
     this.tellDrawer(0);
   }
@@ -219,9 +234,9 @@ export class UiAppFrame extends LitElement {
     const rail = this.railLabel || 'Sections';
     const drawer = this.drawerLabel || 'Details';
     return html`<nav aria-label=${rail} part="rail">
-        <button class="fold" aria-expanded=${this.railClosed ? 'false' : 'true'} aria-label=${this.railClosed ? `Show ${rail}` : `Hide ${rail}`} title=${this.railClosed ? `Show ${rail}` : `Hide ${rail}`} @click=${() => this.fold('rail')}>
+        <div class="rail-head"><button class="fold" aria-expanded=${this.railClosed ? 'false' : 'true'} aria-label=${this.railClosed ? `Show ${rail}` : `Hide ${rail}`} title=${this.railClosed ? `Show ${rail}` : `Hide ${rail}`} @click=${() => this.fold('rail')}>
           <ui-icon name=${this.railClosed ? 'rail-open' : 'rail-close'} size="16" aria-hidden="true"></ui-icon>
-        </button>
+        </button></div>
         <div class="rail-body"><slot name="rail" @slotchange=${this.onSlot}></slot></div>
       </nav>
       <main part="main" aria-busy=${this.busy ? 'true' : 'false'}>
@@ -231,9 +246,9 @@ export class UiAppFrame extends LitElement {
         </div>
       </main>
       <div class="drawer" role="complementary" aria-label=${drawer} part="drawer">
-        <button class="fold" aria-expanded=${this.drawerClosed ? 'false' : 'true'} aria-label=${this.drawerClosed ? `Show ${drawer}` : `Hide ${drawer}`} title=${this.drawerClosed ? `Show ${drawer}` : `Hide ${drawer}`} @click=${() => this.fold('drawer')}>
+        <div class="drawer-head"><button class="fold" aria-expanded=${this.drawerClosed ? 'false' : 'true'} aria-label=${this.drawerClosed ? `Show ${drawer}` : `Hide ${drawer}`} title=${this.drawerClosed ? `Show ${drawer}` : `Hide ${drawer}`} @click=${() => this.fold('drawer')}>
           <ui-icon name=${this.drawerClosed ? 'drawer-open' : 'drawer-close'} size="16" aria-hidden="true"></ui-icon>
-        </button>
+        </button></div>
         <div class="drawer-inner"><div class="drawer-body"><slot name="drawer" @slotchange=${this.onSlot}></slot></div></div>
       </div>`;
   }
