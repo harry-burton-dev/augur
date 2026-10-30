@@ -1,6 +1,6 @@
 {
   "name": "@augur/home",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": true,
   "type": "module",
   "description": "Home: the platform's landing app. Built as one ES module the shell imports from the registry's entry URL.",

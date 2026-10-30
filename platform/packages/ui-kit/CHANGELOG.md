@@ -1,5 +1,12 @@
 # @augur/ui-kit
 
+## 1.7.0
+
+### Minor Changes
+
+- bef7098: `ui-lifecycle`: where a record is in its lifecycle, every state in order with the one it's in ringed, a button for each move the person may make, and why when there are none.
+- e0e9c83: A `link` icon, for links between records.
+
 ## 1.6.0
 
 ### Minor Changes
