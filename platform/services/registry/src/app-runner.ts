@@ -220,6 +220,12 @@ export const appRunnerRoutes =
               : {}),
             ...(job ? { job } : {}),
             changes: changesIn(release.notes ?? '', id),
+            // Earlier versions to go back to, newest first.
+            older: releases
+              .filter((r) => r.app === id && r.release?.service && r.channel !== 'preview' && (takesPreview(ring) || r.channel === 'stable') && semver.lt(r.version, release.version))
+              .sort((a, b) => semver.rcompare(a.version, b.version))
+              .slice(0, 3)
+              .map((r) => ({ version: r.version, channel: r.channel })),
             history: jobs.filter((j) => j.app === id && j.pr === undefined).slice(0, APP_HISTORY_LISTED).map(historyOf),
             developers: developers.filter((d) => d.app === id).map((d) => d.person),
             previews: running.filter((p) => p.app === id).map(previewView),
@@ -427,6 +433,15 @@ export const appRunnerRoutes =
         }
         const job = { id: randomUUID(), app: target, action: body.action, ...(release ? { release } : {}), requestedBy: caller.id };
         if (!(await store.requestAppJob(job))) return reply.code(409).send({ error: 'conflict', message: `Something is already waiting or under way for ${target}.` });
+        // Going back to an older version: held there, or Automatic would take it straight up again.
+        const current = release && (await store.installedApps()).find((i) => i.app === target)?.release;
+        if (release && current && semver.lt(release.version, current.version)) {
+          const follow = followOf(await store.follows(), target);
+          if (follow.policy === 'automatic') {
+            await store.setFollow({ app: target, channel: follow.channel, policy: 'hold', setBy: caller.id });
+            await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.updates-set', target, detail: { channel: follow.channel, policy: 'hold', why: `going back to ${release.version}` } });
+          }
+        }
         req.log.info({ by: caller.id, app: target, action: body.action }, 'app job requested');
         await record(req, {
           actor: { id: caller.id, kind: 'user' },

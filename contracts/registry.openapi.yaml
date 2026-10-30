@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.24.0
+  version: 1.25.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -546,6 +546,23 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PlatformUpdates" }
         "403": { description: Not an admin }
+  /platform/go-back:
+    put:
+      summary: Go back to an earlier AUGUR release (admins who just entered their password)
+      description: >
+        The same steps as an upgrade, a backup first, to one of the releases the Updates page lists
+        under goBack with no problem: no release between is breaking, so the data stays as it is.
+        Audited as platform.go-back-requested, and platform.went-back when it's done.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [version], properties: { version: { type: string } } }
+      responses:
+        "202": { description: Asked; the Updates page as it now stands }
+        "401": { description: "Enter your password again (error sign_in_again)" }
+        "403": { description: Not an admin }
+        "409": { description: "Not a release it can go back to, with why; or an upgrade is already open" }
   /platform/upgrade:
     put:
       summary: Ask the deployment's updater to upgrade AUGUR (admins only)
@@ -920,6 +937,10 @@ components:
                   changes: { type: array, items: { $ref: "#/components/schemas/Change" } }
               job: { $ref: "#/components/schemas/AppJob" }
               changes: { type: array, items: { $ref: "#/components/schemas/Change" }, description: What changed in the version it runs }
+              older:
+                type: array
+                description: Earlier versions in the feed to go back to (install one; the app is then held there)
+                items: { type: object, required: [version, channel], properties: { version: { type: string }, channel: { type: string, enum: [stable, beta] } } }
               history:
                 type: array
                 description: Its jobs, newest first (at most 20)
@@ -1113,6 +1134,18 @@ components:
         next: { type: string, description: The release to upgrade to next; one on the way when the newest can't be reached straight }
         upgrade: { $ref: "#/components/schemas/Upgrade", description: The upgrade asked for, while it's open and for a week after }
         history: { type: array, items: { $ref: "#/components/schemas/UpgradeHistoryEntry" }, description: Every upgrade asked for, newest first (at most 50) }
+        goBack:
+          type: array
+          description: Earlier releases on the channel to go back to, newest first (at most 5)
+          items:
+            type: object
+            required: [version, channel]
+            properties:
+              version: { type: string }
+              channel: { $ref: "#/components/schemas/ReleaseChannel" }
+              released: { type: string }
+              problem: { type: string, description: "Why it can't go back straight; absent when it can" }
+              breakingAfter: { type: string, description: The breaking release between, whose backup going back by hand restores }
         updaterSeenAt: { type: string, format: date-time, description: When the updater last asked for work, since the registry started }
         needsYou:
           type: array

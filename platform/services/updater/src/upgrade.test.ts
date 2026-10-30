@@ -105,6 +105,24 @@ describe('an upgrade', () => {
     expect(fake.env()).toContain('PLATFORM_URL=https://augur.example.org');
   });
 
+  it('stops the parts a release doesn’t have, such as one added after it when going back, and starts them again if it goes back', async () => {
+    const withAtlas = (breaks = {}) => {
+      const fake = fakeServer(breaks);
+      const services = fake.server.services;
+      fake.server.services = async () => [...(await services()), 'atlas'];
+      return fake;
+    };
+    const fake = withAtlas();
+    const { outcome, reports } = await run(target(), fake.server);
+    expect(outcome).toBe('done');
+    expect(fake.did.indexOf('remove atlas')).toBeLessThan(fake.did.indexOf('env 0.3.0'));
+    expect(reports.find((r) => r.step === 'roll-forward' && r.state === 'done')?.message).toContain('stopped atlas, which 0.3.0 doesn’t have');
+
+    const failing = withAtlas({ registry: true });
+    expect((await run(target(), failing.server)).outcome).toBe('rolled-back');
+    expect(failing.did.some((d) => d.startsWith('up ') && d.includes('atlas'))).toBe(true);
+  });
+
   it('restarts the apps that ship with AUGUR too, on the version the release gives them', async () => {
     const shipped = target({
       images: { ...target().images, folio: image('folio', 'f3'), 'folio-worker': image('folio-worker', 'f3') },

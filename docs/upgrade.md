@@ -239,6 +239,8 @@ Two optional touches:
 
 ## Going back
 
+**Admin → Updates → Go back** does this for you while no release between is breaking ([release-channels.md](release-channels.md#going-back)). By hand:
+
 Code and data are separate, so going back is two steps, and the second is only needed if the new release migrated data:
 
 1. **Code**: the same steps with the version you noted: `git checkout augur@<it>`, set `PLATFORM_VERSION` back, `pc up -d --remove-orphans`. The old images are still on the server, so nothing is downloaded.

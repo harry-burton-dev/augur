@@ -129,6 +129,19 @@ describe('installs and updates in Admin → Apps', () => {
     ]);
   });
 
+  it('goes back to an older version and holds it there, so Automatic doesn’t take it straight up again', async () => {
+    const t = await setup(feedOf(release('1.0.0'), release('1.1.0')));
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.1.0' } });
+    await t.runNext();
+    expect((await t.view()).installed[0].older).toEqual([{ version: '1.0.0', channel: 'stable' }]);
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await t.runNext();
+    expect((await t.view()).installed[0]).toMatchObject({ version: '1.0.0', policy: 'hold' });
+    await t.check(feedOf(release('1.0.0'), release('1.1.0')));
+    expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
+    expect(t.entries.find((e) => e.action === 'app.updates-set')?.detail).toMatchObject({ policy: 'hold', why: 'going back to 1.0.0' });
+  });
+
   it('shows what changed in the version it runs and in the one waiting', async () => {
     const notes = (text: string) => `### Minor Changes\n\n- abcdef1: ${text}\n\n### Patch Changes\n\n- Updated dependencies [abcdef1]\n  - @augur/mfe-sdk@1.6.0`;
     const t = await setup(feedOf({ ...release('1.0.0'), notes: notes('Lists notes by date.') }));
