@@ -85,6 +85,17 @@ Only the workbench takes them. With `SERVER_RING=dev`, the registry follows the 
 
 The updater checks a dev build's images against the AUGUR dev builds workflow on `refs/heads/dev` (`AUGUR_DEV_SIGNER` in the updater overrides it), not the Release workflow, and refuses one unless `.env` says `SERVER_RING=dev`. On a preview or production server `RELEASE_CHANNEL=dev` is ignored, and Updates says so.
 
+## The pipeline feed
+
+Beside the release feed, `ghcr.io/<repo>/feed:pipeline` says where everything is between the branches, for Backstage (every unit, every deployment) and each deployment's Upgrade Centre (this server's place on the line). The **Pipeline feed** workflow (`.github/workflows/pipeline.yml`, `scripts/pipeline.mjs`) writes it again on every push to `dev`, `preview` or `production`, when a pull request into one opens or closes, and after each workflow that makes or removes releases. It's read with the deployment's read key, as the release feed is. It holds:
+
+- each unit (AUGUR, and each app the app runner installs) with its version on each branch, its newest dev build, and its pull requests' newest previews
+- the changesets waiting on `dev`, and which units each moves: what the next Version packages PR will release
+- the pull requests merged into `dev` that `preview` hasn't got, and into `preview` that `production` hasn't, newest first
+- the open Version packages, Promote to preview and Promote to production pull requests
+
+It only describes the line. Nothing reads it to decide what to install: that stays the release feed's job.
+
 ## Feature previews
 
 An app can ship a feature before it's everyone's, on any server, production included: it lists it in its manifest's `previews` (SDK 1.7), with an `id`, a `name`, a sentence of `detail` and, if you like, its last day, `until`. The app asks `ctx.previewOn('<id>')` and works as before when the answer is no; its service can ask the registry the same for a person (`GET /v1/apps/<id>/feature-previews/people/<person>`).

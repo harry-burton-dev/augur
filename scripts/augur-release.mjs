@@ -128,7 +128,10 @@ export const pendingChangesets = (dir = join(root, '.changeset')) =>
   readdirSync(dir)
     .filter((f) => f.endsWith('.md') && f !== 'README.md')
     .sort()
-    .map((f) => parseChangeset(readFileSync(join(dir, f), 'utf8')))
+    .map((f) => {
+      const changeset = parseChangeset(readFileSync(join(dir, f), 'utf8'));
+      return changeset && { id: f.slice(0, -'.md'.length), ...changeset };
+    })
     .filter(Boolean);
 
 const KIND_HEADINGS = { major: 'Major Changes', minor: 'Minor Changes', patch: 'Patch Changes' };
