@@ -47,6 +47,7 @@ import {
   type AppEntry,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
+import { lineView, type PipelineReader } from './pipeline.ts';
 import { automaticDevUpgrade, goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
@@ -97,6 +98,10 @@ export interface RegistryOptions {
   allowPrPreviews?: boolean;
   /** The app feed, for the app runner's installs and updates (Admin → Apps). Without one nothing is offered. */
   appUpdates?: AppUpdateChecker;
+  /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
+  pipeline?: PipelineReader;
+  /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to. AUGUR never calls it. */
+  portalUrl?: string;
 }
 
 /** PILLAR_APPS: the ids of the apps this deployment ships with, space or comma separated. */
@@ -171,6 +176,8 @@ export const buildApp = async ({
   frontendFiles,
   appUpdates = new AppUpdateChecker(),
   allowPrPreviews = true,
+  pipeline,
+  portalUrl,
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
@@ -752,7 +759,18 @@ export const buildApp = async ({
         const view = updatesView({ checker: updates, apps: await store.records() });
         const [upgrade, history] = await Promise.all([store.upgrade(), store.upgrades()]);
         const shown = upgrade && (!upgrade.finishedAt || Date.now() - Date.parse(upgrade.finishedAt) < UPGRADE_SHOWN_MS);
-        return { ...view, ...(shown ? { upgrade } : {}), ...(updaterSeenAt ? { updaterSeenAt } : {}), history: history.map(historyEntry) };
+        // The line: what this server runs of each unit, on the pipeline from dev to production.
+        const installed = await store.installedApps();
+        const running = { augur: view.running.version, ...Object.fromEntries(installed.map((a) => [a.app, a.release.version])) };
+        const line = lineView(await pipeline?.current(), running);
+        return {
+          ...view,
+          ...(shown ? { upgrade } : {}),
+          ...(updaterSeenAt ? { updaterSeenAt } : {}),
+          history: history.map(historyEntry),
+          line,
+          ...(portalUrl ? { portalUrl } : {}),
+        };
       };
 
       /**

@@ -200,7 +200,7 @@ describe('admin', () => {
     it('heads the screen with what’s out, or that all is current', () => {
       expect(updatesHeadline(out)).toEqual({ heading: 'AUGUR 0.4.0 is out', summary: 'You’re on 0.2.0. 1 thing needs you before upgrading.' });
       expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, newer: [], needsYou: [] }).heading).toBe('You’re up to date');
-      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, problem: 'The release feed answered 502.', newer: [], needsYou: [] }).heading).toBe('Updates can’t be checked');
+      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, problem: 'The release feed answered 502.', newer: [], needsYou: [] }).heading).toBe('New releases can’t be checked');
       expect(updatesHeadline({ running, channel: 'stable', feed: 'off', newer: [], needsYou: [] }).summary).toContain('RELEASE_FEED_URL is off');
     });
 

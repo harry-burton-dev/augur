@@ -3,6 +3,7 @@ import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
 import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
+import { PipelineReader, pipelineUrlFor } from './pipeline.ts';
 import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { ringFrom, takesPreview } from './ring.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
@@ -20,6 +21,8 @@ loadConfigOrExit('registry', [
   { name: 'GITHUB_READ_KEY', about: 'the deployment’s read key, a GitHub token with read:packages, usually in secrets/github-read-key.', secret: true },
   { name: 'RELEASE_FEED_URL', about: 'where new AUGUR releases are listed, or off.' },
   { name: 'RELEASE_CHANNEL', about: 'stable, beta or dev (default: dev on the workbench, beta on a preview server, stable on a production one, which takes nothing else; only the workbench takes dev).' },
+  { name: 'PIPELINE_FEED_URL', about: 'where the pipeline feed is (default: feed:pipeline beside the release feed on GitHub’s container registry, else off).' },
+  { name: 'PORTAL_URL', about: 'the company’s Backstage, which the Upgrade Centre links to (optional).' },
   { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
   { name: 'ALLOW_PR_PREVIEWS', about: 'on: run pull requests’ builds for apps’ developers on a production server too.' },
   { name: 'APP_FEED_URL', about: 'where new versions of apps are listed, or off.' },
@@ -66,6 +69,10 @@ const ring = ringFrom(process.env.SERVER_RING);
 const allowPrPreviews = takesPreview(ring) || process.env.ALLOW_PR_PREVIEWS === 'on';
 const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: feedTokenFromEnv(), key: readKey });
 const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel, ring });
+// The line from dev to production, for the Upgrade Centre: beside the release feed, read with the same key.
+const pipeline = new PipelineReader(process.env.PIPELINE_FEED_URL || (feedUrl === 'off' ? 'off' : pipelineUrlFor(feedUrl)), { token: feedTokenFromEnv(), key: readKey });
+const portalUrl = process.env.PORTAL_URL?.replace(/\/+$/, '') || undefined;
+if (portalUrl && !/^https?:\/\//.test(portalUrl)) throw new Error('PORTAL_URL is an http(s) address.');
 updates.start();
 
 // Apps' own releases, for the app runner (Admin → Apps): from the same feed, read with the same key or
@@ -81,5 +88,5 @@ if (!frontendFiles) console.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fr
 
 // Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
 // this deployment ships with, which register themselves like any other.
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl });
 await app.listen({ port, host: '0.0.0.0' });
