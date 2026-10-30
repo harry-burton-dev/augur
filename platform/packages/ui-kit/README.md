@@ -32,7 +32,10 @@ import '@augur/ui-kit';
 | `ui-notice` | One sentence in a page that needs attention, with one action: needs, warning, refused, info |
 | `ui-note` | A quiet line that explains, with its `why` one press away; `live` for an action's result |
 | `ui-can` | What you can do from here, and who can do the rest |
-| `ui-app-frame` | An app's page: the slate ground, a rail, the main column and an aside |
+| `ui-app-frame` | An app's page: the slate ground, a rail that folds to icons, the main column, an aside, and a drawer at the right that folds away; `screen` fades both on a change of screen |
+| `ui-tile`, `ui-tiles` | One thing in a grid you walk into, by its picture or icon and name alone; `add` is the dashed tile that makes one; `rank` (`high`, `mid`, `low`) sets how strongly it answers hover |
+| `ui-toolbar` | The row above a grid: a search, any filters slotted in, and one Add |
+| `ui-radial-menu` | A ring of an object's actions around it, opened on right-click with `show(target)`; keys move round it, Esc or a click off closes it |
 | `ui-page-head` | Trail, eyebrow, title, one line of summary, two actions and ⋯ |
 | `ui-section` | A labelled part with its count, one action and a why; folds after five |
 | `ui-card`, `ui-cards` | One thing in a grid: title, mark, floor dot and name, one line of meta, at most one line that matters; unavailable cards stay and say why |

@@ -85,11 +85,11 @@ A new required setting, `SERVER_RING`: `preview` on the server that runs what's 
 
 ### Data Atlas ships with AUGUR
 
-Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from the Updates page makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). See [atlas.md](atlas.md).
+Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from Admin → Upgrade Centre makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). See [atlas.md](atlas.md).
 
 ### Auspex ships with AUGUR
 
-Auspex, which shows people where they are on AUGUR, who's there, and why they can or can't use each app, is now part of every release: a new container, `auspex`, and its frontend inside `web`. It keeps nothing of its own (no schema, no bucket) and puts itself in Admin, Apps on its first start. It needs one new setting, `AUSPEX_CLIENT_SECRET`, its sign-in: an upgrade from the Updates page makes it up for you. Upgrading by hand, add it to `.env` first (`openssl rand -hex 32`). See [auspex.md](auspex.md).
+Auspex, which shows people where they are on AUGUR, who's there, and why they can or can't use each app, is now part of every release: a new container, `auspex`, and its frontend inside `web`. It keeps nothing of its own (no schema, no bucket) and puts itself in Admin, Apps on its first start. It needs one new setting, `AUSPEX_CLIENT_SECRET`, its sign-in: an upgrade from Admin → Upgrade Centre makes it up for you. Upgrading by hand, add it to `.env` first (`openssl rand -hex 32`). See [auspex.md](auspex.md).
 
 ### Folio is called Artifacts
 
@@ -114,7 +114,7 @@ Then upgrade as usual. The worker's image is large (about 2 GB: the models that 
 
 ### The Updates page
 
-Admin gets an **Updates** page, under AUGUR. It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. [The read key](#the-read-key) now does this, and the steps below are how servers did it before:
+Admin gets an **Updates** page, under AUGUR (since replaced by the **Upgrade Centre**, [release-channels.md](release-channels.md)). It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. [The read key](#the-read-key) now does this, and the steps below are how servers did it before:
 
 1. In GitHub, **Settings → Developer settings → Fine-grained tokens**, make a token for this repository only, with **Contents: Read-only** and nothing else. (The `read:packages` token you sign Docker in with can't read releases.)
 2. Save it where only the registry reads it, then upgrade as usual:
