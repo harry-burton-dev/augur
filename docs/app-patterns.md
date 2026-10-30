@@ -71,6 +71,14 @@ Links from one record to another, in the same app or in another, kept by the app
 
 Table shape: `links (id, from_id, relation, to_app, to_kind, to_id, to_label, by, at)`. Show the inverse name ("Superseded by") on the other end when it's yours.
 
+How Artifacts does it, to copy (`apps/folio/service/src/links.ts`, `apps/folio/frontend/src/folio-links.ts`):
+
+- Its own records are `{app: 'folio', kind: 'unit', id: '<library>/<record>'}`. Pick one id shape for your records and keep it.
+- Anyone who can see a record sees its links, both ways; whoever may change it links and unlinks. Linking to one of your own records needs the caller to be able to open it, and keeps its current name as the label.
+- A linked record the caller can't open stays in the list with an `unavailable` sentence, never dropped (explain, never hide: [shell principles](shell-principles.md)).
+- The other app's end is picked in that app through its pick intent (`entity.pick` for Data Atlas, `aim.pick` for Mandate) and opened through its open intent. A kind of link nobody can make from where the person is stays in the choice, disabled, saying why.
+- Every link and unlink is audited (`record.linked`, `record.unlinked`).
+
 ## Publishing up, and one owner
 
 Something made on a floor is **published up** to a floor above it, through a **filter** of lifecycle states. That's a **placement**: a live window, not a copy, so what's added later shows through when it passes the filter.

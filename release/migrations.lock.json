@@ -50,7 +50,8 @@
     "008_search": "47e34b347322f312",
     "009_retention": "5b257ca4f3886214",
     "010_units": "88f449c16c837350",
-    "011_placements": "56d877e6bfbbdf78"
+    "011_placements": "56d877e6bfbbdf78",
+    "012_links": "cfe9fb4fc42f0c34"
   },
   "@apps/mandate": {
     "001_intents": "fcb7f5a10b616475"
