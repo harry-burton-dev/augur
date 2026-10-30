@@ -13,6 +13,7 @@ const ctx = (bus: EventBus = createEventBus(), notify = vi.fn()): MountContext =
   notify,
   workspace: own,
   getWorkspace: () => own,
+  previewOn: () => false,
   fetch: vi.fn(),
   path: '/',
 });

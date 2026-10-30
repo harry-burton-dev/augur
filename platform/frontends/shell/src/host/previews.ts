@@ -60,3 +60,61 @@ export async function choosePreview(fetchImpl: typeof fetch, url: string, token:
 
 /** Where a preview stands, in a few words: what it is and when it goes. */
 export const previewLine = (p: Preview) => `#${p.pr}${p.title ? ` ${p.title}` : ''} · ${p.version} · until ${new Date(p.endsAt).toLocaleDateString()}`;
+
+/** One of an app's feature previews, as the person stands with it (SDK 1.7). */
+export interface FeaturePreviewState {
+  id: string;
+  name: string;
+  detail?: string;
+  until?: string;
+  /** Who gets it: nobody, those who turn it on, or everyone. An admin chooses in Admin → Apps. */
+  mode: 'off' | 'opt-in' | 'everyone';
+  ended?: boolean;
+  on: boolean;
+}
+
+/** An app with feature previews, and each of them. */
+export interface FeaturePreviewApp {
+  app: string;
+  name: string;
+  previews: FeaturePreviewState[];
+}
+
+const isFeatureApp = (a: unknown): a is FeaturePreviewApp =>
+  !!a && typeof a === 'object' && typeof (a as FeaturePreviewApp).app === 'string' && Array.isArray((a as FeaturePreviewApp).previews);
+
+/** The feature previews of the apps this person can open; nothing (rather than an error) from a registry without them. */
+export async function loadFeaturePreviews(fetchImpl: typeof fetch, url: string, token: string): Promise<FeaturePreviewApp[]> {
+  try {
+    const res = await fetchImpl(url, { headers: { authorization: `Bearer ${token}`, accept: 'application/json' } });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { apps?: unknown };
+    return Array.isArray(body?.apps) ? body.apps.filter(isFeatureApp) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Turns one of an app's opt-in feature previews on or off for this person. */
+export async function chooseFeaturePreview(fetchImpl: typeof fetch, url: string, token: string, app: string, preview: string, on: boolean): Promise<void> {
+  const res = await fetchImpl(`${url}/${encodeURIComponent(app)}/${encodeURIComponent(preview)}`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ on }),
+  });
+  if (!res.ok) {
+    const said = ((await res.json().catch(() => ({}))) as { message?: string }).message;
+    throw new Error(said ?? `The registry answered ${res.status}.`);
+  }
+}
+
+/** Whether a person has anything to choose among an app's feature previews: one they can turn on or off. */
+export const choosable = (p: FeaturePreviewState) => p.mode === 'opt-in' && !p.ended;
+
+/** Where a feature preview stands for this person, in a few words, saying why when they can't change it. */
+export const featureLine = (p: FeaturePreviewState) => {
+  if (p.ended) return `Ended${p.until ? ` on ${new Date(`${p.until}T00:00:00Z`).toLocaleDateString()}` : ''}`;
+  if (p.mode === 'everyone') return 'On for everyone: an admin chose that';
+  if (p.mode === 'off') return 'Off for now: an admin hasn’t opened it';
+  return `${p.on ? 'On for you' : 'Off'}${p.until ? ` · until ${new Date(`${p.until}T00:00:00Z`).toLocaleDateString()}` : ''}`;
+};

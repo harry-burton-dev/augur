@@ -25,11 +25,30 @@ export interface AppRecord {
   uploadLimitMb?: number;
   /** What admins set the app's own settings (its manifest's `settings`) to, by setting id. Unset ones take their default. */
   settings?: Record<string, SettingValue>;
+  /** Who admins gave each of the app's feature previews (its manifest's `previews`) to, by preview id. Unset ones take the server's default. */
+  featurePreviews?: Record<string, FeaturePreviewSetting>;
   /**
    * Where the gateway sends /api/<id>/… for this app, such as http://app-expenses:8090: set by the platform
    * service that runs it, or an admin. Unset, the app's service is wherever the gateway's APP_UPSTREAMS says.
    */
   upstream?: string;
+}
+
+/** Who gets a feature preview: nobody, those who turn it on, or everyone. */
+export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone';
+
+/** An admin's choice for one of an app's feature previews. */
+export interface FeaturePreviewSetting {
+  mode: FeaturePreviewMode;
+  setBy: string;
+  setAt: string;
+}
+
+/** One person who turned one of an app's feature previews on for themselves. */
+export interface FeatureOptIn {
+  person: string;
+  app: string;
+  preview: string;
 }
 
 /** An admin's value for one of an app's settings. */
@@ -315,6 +334,12 @@ export interface AppStore {
   previewChoices(person?: string): Promise<PreviewChoice[]>;
   /** Uses one of an app's previews instead of the app, or with `null` goes back to the app. */
   choosePreview(person: string, app: string, pr: number | null): Promise<void>;
+  /** Sets who gets one of the app's feature previews, or with `null` puts it back to the server's default. Undefined when there is no such app. */
+  setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string): Promise<AppRecord | undefined>;
+  /** Who turned which feature previews on: one person's, or of one app, or everyone's. */
+  featureOptIns(filter?: { person?: string; app?: string }): Promise<FeatureOptIn[]>;
+  /** Turns one of an app's feature previews on or off for one person. */
+  setFeatureOptIn(person: string, app: string, preview: string, on: boolean): Promise<void>;
 }
 
 /** A step's new state replaces its last one, so each step shows once. */
@@ -337,6 +362,27 @@ export class MemoryAppStore implements AppStore {
   private following = new Map<string, AppFollow>();
   private devs: AppDeveloper[] = [];
   private choices: PreviewChoice[] = [];
+  private optIns: FeatureOptIn[] = [];
+
+  async setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string) {
+    const record = this.apps.get(id);
+    if (!record) return undefined;
+    const previews = { ...record.featurePreviews };
+    if (mode === null) delete previews[preview];
+    else previews[preview] = { mode, setBy: by, setAt: new Date().toISOString() };
+    if (Object.keys(previews).length) record.featurePreviews = previews;
+    else delete record.featurePreviews;
+    return structuredClone(record);
+  }
+
+  async featureOptIns(filter: { person?: string; app?: string } = {}) {
+    return this.optIns.filter((o) => (!filter.person || o.person === filter.person) && (!filter.app || o.app === filter.app)).map((o) => ({ ...o }));
+  }
+
+  async setFeatureOptIn(person: string, app: string, preview: string, on: boolean) {
+    this.optIns = this.optIns.filter((o) => o.person !== person || o.app !== app || o.preview !== preview);
+    if (on) this.optIns.push({ person, app, preview });
+  }
 
   async runningPreviews() {
     const last = new Map<string, AppJob>();
@@ -507,6 +553,7 @@ export class MemoryAppStore implements AppStore {
       grantedScopes: before?.grantedScopes ?? [...(entry.scopes ?? [])],
       ...(before?.uploadLimitMb !== undefined ? { uploadLimitMb: before.uploadLimitMb } : {}),
       ...(before?.settings ? { settings: before.settings } : {}),
+      ...(before?.featurePreviews ? { featurePreviews: before.featurePreviews } : {}),
       ...(before?.upstream ? { upstream: before.upstream } : {}),
     });
     return !before;
@@ -537,6 +584,7 @@ export class MemoryAppStore implements AppStore {
 
   async remove(id: string) {
     this.history.delete(id);
+    this.optIns = this.optIns.filter((o) => o.app !== id);
     this.kept = this.kept.filter((f) => f.app !== id);
     this.floorRules = this.floorRules.filter((r) => r.app !== id);
     return this.apps.delete(id);
@@ -783,6 +831,20 @@ export const migrations: { id: string; sql: string }[] = [
       -- Who asked for each upgrade, by name, for the Updates page's history.
       alter table registry.upgrades add column requested_by_name text;`,
   },
+  {
+    id: '015_feature_previews',
+    sql: `
+      -- Who admins gave each of an app's feature previews to: { "<preview>": { "mode", "setBy", "setAt" } }. Unset ones take the server's default.
+      alter table registry.apps add column feature_previews jsonb not null default '{}'::jsonb;
+      -- Who turned which feature previews on for themselves.
+      create table registry.feature_opt_ins (
+        person_id text not null,
+        app_id text not null,
+        preview_id text not null,
+        opted_at timestamptz not null default now(),
+        primary key (person_id, app_id, preview_id)
+      );`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -807,6 +869,7 @@ type AppRow = {
   granted_scopes: Scope[];
   upload_limit_mb: number | null;
   settings: Record<string, SettingValue> | null;
+  feature_previews: Record<string, FeaturePreviewSetting> | null;
   upstream: string | null;
 };
 
@@ -820,6 +883,7 @@ const fromAppRow = (r: AppRow): AppRecord => ({
   grantedScopes: r.granted_scopes,
   ...(r.upload_limit_mb !== null ? { uploadLimitMb: r.upload_limit_mb } : {}),
   ...(r.settings && Object.keys(r.settings).length ? { settings: r.settings } : {}),
+  ...(r.feature_previews && Object.keys(r.feature_previews).length ? { featurePreviews: r.feature_previews } : {}),
   ...(r.upstream ? { upstream: r.upstream } : {}),
 });
 
@@ -968,6 +1032,7 @@ export class PgAppStore implements AppStore {
   async remove(id: string) {
     const { rowCount } = await this.pool.query('delete from registry.apps where id = $1', [id]);
     await this.pool.query('delete from registry.app_frontends where app_id = $1', [id]);
+    await this.pool.query('delete from registry.feature_opt_ins where app_id = $1', [id]);
     return rowCount === 1;
   }
 
@@ -1163,6 +1228,29 @@ export class PgAppStore implements AppStore {
       [person ?? null],
     );
     return rows.map((r) => ({ person: r.person_id, app: r.app_id, pr: r.pr }));
+  }
+
+  async setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string) {
+    const { rows } = await this.pool.query<AppRow>(
+      mode === null
+        ? 'update registry.apps set feature_previews = feature_previews - $2 where id = $1 returning *'
+        : `update registry.apps set feature_previews = feature_previews || jsonb_build_object($2::text, jsonb_build_object('mode', $3::text, 'setBy', $4::text, 'setAt', $5::text)) where id = $1 returning *`,
+      mode === null ? [id, preview] : [id, preview, mode, by, new Date().toISOString()],
+    );
+    return rows[0] && fromAppRow(rows[0]);
+  }
+
+  async featureOptIns(filter: { person?: string; app?: string } = {}) {
+    const { rows } = await this.pool.query<{ person_id: string; app_id: string; preview_id: string }>(
+      'select person_id, app_id, preview_id from registry.feature_opt_ins where ($1::text is null or person_id = $1) and ($2::text is null or app_id = $2) order by person_id, app_id, preview_id',
+      [filter.person ?? null, filter.app ?? null],
+    );
+    return rows.map((r) => ({ person: r.person_id, app: r.app_id, preview: r.preview_id }));
+  }
+
+  async setFeatureOptIn(person: string, app: string, preview: string, on: boolean) {
+    if (on) await this.pool.query('insert into registry.feature_opt_ins (person_id, app_id, preview_id) values ($1, $2, $3) on conflict do nothing', [person, app, preview]);
+    else await this.pool.query('delete from registry.feature_opt_ins where person_id = $1 and app_id = $2 and preview_id = $3', [person, app, preview]);
   }
 
   async choosePreview(person: string, app: string, pr: number | null) {

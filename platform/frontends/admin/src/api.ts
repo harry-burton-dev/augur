@@ -53,6 +53,8 @@ export interface CatalogueApp extends AppManifestEntry {
   uploadLimitLowered?: boolean;
   /** Settings the app offers admins, from its manifest. */
   settings?: AppSetting[];
+  /** Features it's trying before they're everyone's (SDK 1.7). */
+  previews?: { id: string; name: string; detail?: string; until?: string }[];
 }
 
 /** One setting an app offers admins: a whole number between min and max. */
@@ -292,6 +294,17 @@ export interface AppJob {
   finishedAt?: string;
 }
 
+/** Who gets a feature preview: nobody, those who turn it on, or everyone. */
+export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone';
+
+/** An app's feature previews as Admin shows them. */
+export interface FeaturePreviews {
+  /** Who gets one nobody chose for: opt-in on a preview server, off on a production one. */
+  defaultMode: FeaturePreviewMode;
+  ring: 'preview' | 'production';
+  previews: { id: string; name: string; detail?: string; until?: string; mode: FeaturePreviewMode; ended: boolean; chosen: boolean; setBy?: string; setAt?: string; optedIn: number }[];
+}
+
 /** stable is production releases, beta preview releases too, dev dev builds too (a preview server only). */
 export type AppChannel = 'stable' | 'beta' | 'dev';
 
@@ -449,6 +462,11 @@ export class AdminApi {
   /** Sets one of an app's settings; `null` puts it back to its default. */
   setAppSetting = async (id: string, setting: string, value: number | null) =>
     (await this.call<{ settings: AppSettingValue[] }>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/settings/${encodeURIComponent(setting)}`, { value })).settings;
+  /** Who gets each of an app's feature previews, and how many turned each on. */
+  featurePreviews = (id: string) => this.call<FeaturePreviews>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews`);
+  /** Sets who gets one of an app's feature previews; `null` goes back to the server's default. */
+  setFeaturePreview = (id: string, preview: string, mode: FeaturePreviewMode | null) =>
+    this.call<FeaturePreviews>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews/${encodeURIComponent(preview)}`, { mode });
   grantScopes = (id: string, scopes: string[]) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/scopes`, { scopes });
   /** The org's own floor, which every app rule starts from. */
   org = async () => {
