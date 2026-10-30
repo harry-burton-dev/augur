@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
-import MarkdownIt from 'markdown-it';
+import type MarkdownIt from 'markdown-it';
 import { base, reducedMotion } from '../shared.js';
 
 /** A heading in what the reader shows, for a contents list. */
@@ -32,7 +32,7 @@ const BLOCK_OPEN = new Set(['paragraph_open', 'heading_open', 'bullet_list_open'
  * else by its place (`b12`). The same Markdown always gets the same anchors, so a
  * link, a search hit or a saved place can point at one paragraph.
  */
-const markdown = () => {
+const markdown = (MarkdownIt: typeof import('markdown-it').default) => {
   const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
   md.core.ruler.push('ui_anchors', (state) => {
     const taken = new Set<string>();
@@ -76,6 +76,13 @@ const markdown = () => {
 };
 
 let shared: MarkdownIt | undefined;
+let loading: Promise<MarkdownIt> | undefined;
+
+/**
+ * Markdown-it, loaded the first time a reader shows something: a third of the kit's weight, which
+ * every page would otherwise download before the shell starts, though only a few screens read.
+ */
+const loadMarkdown = () => (loading ??= import('markdown-it').then(({ default: MarkdownIt }) => (shared = markdown(MarkdownIt))));
 
 /** Words selected in a reader: what they say, the block they start in, and that block's words. */
 export interface MarkedPassage {
@@ -119,6 +126,10 @@ export class UiReader extends LitElement {
 
   private rendered = '';
   private html = '';
+  /** Waiting for markdown-it before the document can be shown. */
+  private waiting = false;
+  /** The document was just rendered, so its outline is new. */
+  private fresh = false;
   private atTop = '';
   private frame = 0;
 
@@ -208,14 +219,34 @@ export class UiReader extends LitElement {
   }
 
   override willUpdate(changed: Map<string, unknown>) {
-    if (changed.has('markdown') && this.markdown !== this.rendered) {
+    if ((changed.has('markdown') || this.waiting) && this.markdown !== this.rendered) {
+      if (!shared) {
+        // Shown once markdown-it is here, a moment later the first time.
+        this.waiting = true;
+        void loadMarkdown().then(() => this.requestUpdate());
+        return;
+      }
+      this.waiting = false;
+      this.fresh = true;
       this.rendered = this.markdown;
-      this.html = (shared ??= markdown()).render(this.markdown ?? '');
+      this.html = shared.render(this.markdown ?? '');
     }
   }
 
+  /** Also waits for markdown-it the first time, so `await reader.updateComplete` finds the document shown. */
+  protected override async getUpdateComplete() {
+    let done = await super.getUpdateComplete();
+    while (this.waiting) {
+      await loadMarkdown();
+      done = await super.getUpdateComplete();
+    }
+    return done;
+  }
+
   override updated(changed: Map<string, unknown>) {
-    if (changed.has('markdown') || changed.has('heading')) {
+    if (this.waiting) return;
+    if (changed.has('markdown') || this.fresh || changed.has('heading')) {
+      this.fresh = false;
       const first = this.renderRoot.querySelector<HTMLElement>('article > :first-child');
       const repeats = first?.tagName === 'H1' && first.textContent?.trim().toLocaleLowerCase() === this.heading.trim().toLocaleLowerCase();
       for (const h of this.renderRoot.querySelectorAll('h1[hidden]')) h.removeAttribute('hidden');
