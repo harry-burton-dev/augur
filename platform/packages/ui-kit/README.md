@@ -40,6 +40,7 @@ import '@augur/ui-kit';
 | `ui-details` | Label and value pairs; unknown values say so; folds after eight |
 | `ui-timeline` | What happened, grouped by day in words, newest first; five then "Earlier" |
 | `ui-path` | Where something sits on the floors above it, one disc per floor, you are here ringed |
+| `ui-lifecycle` | Where a record is in its lifecycle: every state in order, the one it's in ringed, a button for each move the caller may make |
 | `ui-ref`, `ui-refs` | A thing from any app as a chip that opens where you are; what you can't open is counted, never dropped |
 | `ui-date` | A day said and typed in words ("Fri 13 Nov · in 15 days", "friday", "+2w"), with quick choices and a calendar one press away |
 | `ui-people-picker` | Find people and teams by name; ones you can't add stay, dimmed, with why |
