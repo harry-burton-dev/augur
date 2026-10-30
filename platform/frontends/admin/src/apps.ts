@@ -683,6 +683,20 @@ export class AdminApps extends LitElement {
       ${installed.update?.changes?.length ? section(`What’s new in ${installed.update.version}`, changeList(installed.update.changes, () => installed.name)) : nothing}
       ${installed.job ? html`<p style="margin:0" data-job>${jobWords(installed.job)}</p>${jobOpen(installed.job) || installed.job.state === 'failed' ? jobSteps(installed.job) : nothing}` : nothing}
       ${installed.history?.length ? section('History', appHistoryList(installed.history)) : nothing}
+      ${installed.older?.length
+        ? section(
+            'Go back',
+            html`<div data-app-go-back>
+              ${installed.older.map((o) =>
+                line(
+                  `${installed.name} ${o.version}`,
+                  html`<ui-button kind="tertiary" size="sm" ?disabled=${jobOpen(installed.job)} reason="Wait for the server to finish its current job with this app." @click=${() => this.askInstall(installed.app, o.version)}>Go back</ui-button>`,
+                ),
+              )}
+              <p style="margin:0;color:var(--ink-muted);font-size:var(--type-small)">Going back holds the app on that version, so it isn’t updated again by itself. Its data stays as it is.</p>
+            </div>`,
+          )
+        : nothing}
       <ui-tag-picker
         data-developers
         label="Developers"

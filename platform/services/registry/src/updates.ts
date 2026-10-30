@@ -194,8 +194,11 @@ export const releaseFeed =
       .filter((r) => typeof r?.tag_name === 'string' && r.tag_name.startsWith('augur@') && !r.draft && semver.valid(r.tag_name.slice('augur@'.length)))
       .map((r) => ({ release: r, version: r.tag_name.slice('augur@'.length) }))
       .sort((a, b) => semver.rcompare(a.version, b.version));
-    // Only the running release and the newer ones matter, and only so many of those.
-    const wanted = new Set(releases.filter((r) => semver.gte(r.version, running)).slice(0, MANIFESTS_READ + 1).map((r) => r.version));
+    // The running release, so many newer ones, and the few older ones it could go back to.
+    const wanted = new Set([
+      ...releases.filter((r) => semver.gte(r.version, running)).slice(0, MANIFESTS_READ + 1),
+      ...releases.filter((r) => semver.lt(r.version, running)).slice(0, GO_BACK_LISTED),
+    ].map((r) => r.version));
     return Promise.all(
       releases.map(async ({ release, version }): Promise<FeedRelease> => {
         const base: FeedRelease = { version, channel: release.prerelease ? 'beta' : 'stable', released: release.published_at, notesUrl: release.html_url };
@@ -366,6 +369,45 @@ export const historyEntry = (u: Upgrade): HistoryEntry => {
   };
 };
 
+/** An earlier release this server could go back to, and why not when it can't. */
+export interface GoBackTarget {
+  version: string;
+  channel: Channel;
+  released?: string;
+  /** Absent when it can go back straight: the code goes back, and the data stays as it is. */
+  problem?: string;
+  /** Going back across a breaking release: only by hand, restoring the backup taken before it. */
+  breakingAfter?: string;
+}
+
+/** How many earlier releases the Updates page offers to go back to. */
+const GO_BACK_LISTED = 5;
+
+/**
+ * The releases older than the running one that the server could go back to (docs/release-channels.md,
+ * Going back). Straight back is only safe while no release between is breaking: within that, migrations
+ * only add, so an older release still works on the tables a newer one left.
+ */
+export const goBackTargets = (checker: UpdateChecker): GoBackTarget[] => {
+  const { running, channel } = checker;
+  const releases = checker.result.releases;
+  const onChannel = (r: FeedRelease) => channel === 'beta' || r.channel === 'stable';
+  const older = releases.filter((r) => onChannel(r) && semver.lt(r.version, running.version)).sort((a, b) => semver.rcompare(a.version, b.version)).slice(0, GO_BACK_LISTED);
+  return older.map((r) => {
+    const base = { version: r.version, channel: r.channel, ...(r.released ? { released: r.released } : {}) };
+    // Every release after it, up to and including the running one: what going back undoes.
+    const between = releases.filter((b) => semver.gt(b.version, r.version) && semver.lte(b.version, running.version));
+    const breaking = between.filter((b) => b.manifest?.breaking.length).sort((a, b) => semver.compare(a.version, b.version))[0];
+    if (breaking) {
+      return { ...base, breakingAfter: breaking.version, problem: `AUGUR ${breaking.version} is breaking (${breaking.manifest!.breaking[0]}), so ${r.version} may not work on the tables it left. Go back by hand and restore the backup taken before upgrading to ${breaking.version} (docs/upgrade.md, Going back).` };
+    }
+    const unknown = between.find((b) => !b.manifest);
+    if (unknown) return { ...base, problem: `AUGUR ${unknown.version}’s release file couldn’t be read, so whether going back past it is safe isn’t known.` };
+    if (!r.manifest?.images || !Object.keys(r.manifest.images).length) return { ...base, problem: `AUGUR ${r.version}’s release file couldn’t be read or names no images, so the updater can’t run it.` };
+    return base;
+  });
+};
+
 /** What the Updates page shows (see contracts/registry.openapi.yaml). */
 export interface UpdatesView {
   running: { version: string; channel: Channel };
@@ -388,6 +430,8 @@ export interface UpdatesView {
    */
   next?: string;
   needsYou: NeedsYou[];
+  /** Earlier releases to go back to, newest first, each with why not when it can't. */
+  goBack: GoBackTarget[];
 }
 
 const summary = (r: FeedRelease): ReleaseSummary => ({
@@ -409,7 +453,7 @@ const reachable = (r: FeedRelease, running: string) => r.manifest !== undefined 
 export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: AppRecord[] }): UpdatesView => {
   const { running, channel } = checker;
   const { checkedAt, problem, releases } = checker.result;
-  const base = { running, channel, ring: checker.ring, ...(checker.channelNote ? { channelNote: checker.channelNote } : {}), feed: checker.on ? ('on' as const) : ('off' as const), ...(checkedAt ? { checkedAt } : {}), ...(problem ? { problem } : {}) };
+  const base = { running, channel, goBack: goBackTargets(checker), ring: checker.ring, ...(checker.channelNote ? { channelNote: checker.channelNote } : {}), feed: checker.on ? ('on' as const) : ('off' as const), ...(checkedAt ? { checkedAt } : {}), ...(problem ? { problem } : {}) };
   const onChannel = (r: FeedRelease) => channel === 'beta' || r.channel === 'stable';
   const newer = releases.filter((r) => onChannel(r) && semver.gt(r.version, running.version)).sort((a, b) => semver.rcompare(a.version, b.version));
   const newestBeta = releases.filter((r) => r.channel === 'beta' && semver.gt(r.version, newer[0]?.version ?? running.version)).sort((a, b) => semver.rcompare(a.version, b.version))[0];

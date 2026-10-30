@@ -74,6 +74,7 @@ export class AdminUpdates extends LitElement {
     checking: { state: true },
     error: { state: true },
     confirming: { state: true },
+    goingBack: { state: true },
     entered: { state: true },
   };
 
@@ -84,6 +85,8 @@ export class AdminUpdates extends LitElement {
   declare error: string;
   /** Asking "Upgrade to …?" */
   declare confirming: boolean;
+  /** Asking "Go back to …?": the version. */
+  declare goingBack: string | undefined;
   /** New settings typed into "Upgrade to …?", for the updater to write to .env. */
   declare entered: Record<string, string>;
   private timer?: ReturnType<typeof setInterval>;
@@ -94,6 +97,7 @@ export class AdminUpdates extends LitElement {
     this.checking = false;
     this.error = '';
     this.confirming = false;
+    this.goingBack = undefined;
     this.entered = {};
   }
 
@@ -124,11 +128,14 @@ export class AdminUpdates extends LitElement {
   private resume() {
     const params = new URLSearchParams(window.location.search);
     const wanted = params.get('upgrade');
-    if (!wanted) return;
+    const back = params.get('go-back');
+    if (!wanted && !back) return;
     params.delete('upgrade');
+    params.delete('go-back');
     const rest = params.toString();
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
-    if (wanted === this.updates?.next && !isOpen(this.updates.upgrade)) {
+    if (back && this.updates?.goBack?.some((t) => t.version === back && !t.problem) && !isOpen(this.updates.upgrade)) this.goingBack = back;
+    if (wanted && wanted === this.updates?.next && !isOpen(this.updates.upgrade)) {
       this.entered = takeEntered();
       this.confirming = true;
     }
@@ -151,6 +158,60 @@ export class AdminUpdates extends LitElement {
       throw err;
     }
   };
+
+  /** Asks to go back; when the password is needed again, goes to enter it and comes back here. */
+  private goBack = async () => {
+    const version = this.goingBack!;
+    try {
+      this.updates = await this.api.goBack(version);
+      this.goingBack = undefined;
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') {
+        const back = `${window.location.pathname}?go-back=${encodeURIComponent(version)}`;
+        window.location.assign(`/auth/again?return=${encodeURIComponent(back)}`);
+        return false;
+      }
+      throw err;
+    }
+  };
+
+  /** "Go back to …?": what it undoes, and what stays. */
+  private goBackDialog(u: PlatformUpdates) {
+    if (!this.goingBack) return nothing;
+    return html`<ui-dialog
+      open
+      eyebrow="Updates"
+      heading=${`Go back to AUGUR ${this.goingBack}?`}
+      summary="Everyone is cut off for a minute or two while the parts restart. It backs up first, as an upgrade does."
+      action-label="Go back"
+      busy-label="Asking…"
+      cancel-label="Not now"
+      .submit=${this.goBack}
+      @ui-close=${() => (this.goingBack = undefined)}
+    >
+      <p>The code goes back to ${this.goingBack}. The data stays as ${u.running.version} left it: no release between is breaking, so ${this.goingBack} works on it.</p>
+      <p>You may be asked for your password again.</p>
+    </ui-dialog>`;
+  }
+
+  /** Earlier releases, each with Go back, or why it can't straight. */
+  private goBackSection(u: PlatformUpdates) {
+    if (!u.goBack?.length) return nothing;
+    return section(
+      'Go back',
+      html`<div data-go-back>
+        ${u.goBack.map((t) =>
+          line(
+            html`<span style="display:flex;flex-direction:column;padding:var(--space-2) 0">
+              <span>AUGUR ${t.version}</span>
+              ${t.problem ? html`<span style="color:var(--ink-muted);font-size:var(--type-small)">${t.problem}</span>` : nothing}
+            </span>`,
+            html`<ui-button kind="tertiary" size="sm" ?disabled=${Boolean(t.problem) || isOpen(u.upgrade)} reason=${t.problem ?? 'Wait for the upgrade under way to finish.'} @click=${() => (this.goingBack = t.version)}>Go back</ui-button>`,
+          ),
+        )}
+      </div>`,
+    );
+  }
 
   private async cancel() {
     try {
@@ -321,6 +382,7 @@ export class AdminUpdates extends LitElement {
           )
         : nothing}
       ${u.history ? section('History', historyList(u.history)) : nothing}
+      ${this.goBackSection(u)}
       ${u.channelNote ? html`<p data-channel-note style="margin:0;color:var(--ink-muted)">${u.channelNote}</p>` : nothing}
       ${u.beta ? html`<p style="margin:0;color:var(--ink-muted)">AUGUR ${u.beta.version} is out on preview. To follow preview releases, set <code>RELEASE_CHANNEL=beta</code> in <code>.env</code>.</p>` : nothing}
     `;
@@ -334,7 +396,7 @@ export class AdminUpdates extends LitElement {
       : this.error && !u
         ? html`<ui-state kind="error" heading="Updates can’t be shown" body=${this.error} action="Try again" @ui-action=${() => this.load()}></ui-state>`
         : u
-          ? html`${this.facts(u)} ${this.details(u)} ${this.confirmDialog(u)}
+          ? html`${this.facts(u)} ${this.details(u)} ${this.confirmDialog(u)} ${this.goBackDialog(u)}
               ${this.error ? html`<p style="margin:0;color:var(--danger)">${this.error}</p>` : nothing}
               ${u.feed === 'on'
                 ? html`<div><ui-button data-check kind="secondary" size="sm" ?busy=${this.checking} @click=${() => this.checkNow()}>Check now</ui-button></div>`

@@ -188,6 +188,15 @@ export interface ReleaseSummary {
   changes?: Change[];
 }
 
+/** An earlier release the server could go back to. */
+export interface GoBackTarget {
+  version: string;
+  channel: 'stable' | 'beta';
+  released?: string;
+  problem?: string;
+  breakingAfter?: string;
+}
+
 /** One upgrade in the Updates page's history. */
 export interface UpdateHistoryEntry {
   id: string;
@@ -255,6 +264,8 @@ export interface PlatformUpdates {
   upgrade?: Upgrade;
   /** Every upgrade asked for, newest first. */
   history?: UpdateHistoryEntry[];
+  /** Earlier releases to go back to, newest first, each with why not when it can't. */
+  goBack?: GoBackTarget[];
   /** When the deployment's updater last asked for work, since the registry started. */
   updaterSeenAt?: string;
 }
@@ -311,6 +322,8 @@ export interface InstalledApp {
   changes?: Change[];
   /** Its jobs, newest first: installs, updates, going back and removals. */
   history?: AppHistoryEntry[];
+  /** Earlier versions in the feed to go back to, newest first. */
+  older?: { version: string; channel: AppChannel }[];
   /** Who may try its pull requests' previews, by person id. */
   developers?: string[];
   previews?: AppPreview[];
@@ -471,6 +484,8 @@ export class AdminApi {
    */
   upgrade = (version: string, settings: Record<string, string> = {}) =>
     this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/upgrade', Object.keys(settings).length ? { version, settings } : { version });
+  /** Asks the updater to go back to an earlier release Updates offers. Turned down with `sign_in_again` too. */
+  goBack = (version: string) => this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/go-back', { version });
   installs = () => this.call<AppInstalls>('GET', '/api/registry/v1/app-runner/apps');
   /** Reads the app feed now, starting any automatic updates it finds. */
   checkInstalls = () => this.call<AppInstalls>('POST', '/api/registry/v1/app-runner/check');

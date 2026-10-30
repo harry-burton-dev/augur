@@ -46,7 +46,7 @@ import {
   type AppEntry,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
-import { historyEntry, UpdateChecker, updatesView } from './updates.ts';
+import { goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
@@ -803,6 +803,35 @@ export const buildApp = async ({
         },
       );
 
+      /**
+       * Asks the updater to go back to an earlier release: the same steps as an upgrade, a backup first,
+       * to a release Updates offers (no breaking release between, so the data stays as it is). Needs an
+       * admin who entered their password in the last few minutes.
+       */
+      app.put<{ Body: { version: string } }>(
+        '/platform/go-back',
+        { schema: { body: { type: 'object', additionalProperties: false, required: ['version'], properties: { version: { type: 'string', minLength: 1, maxLength: 64 } } } } },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can take AUGUR back to an earlier release.' });
+          if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
+            return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to go back. It’s asked for anything this drastic.' });
+          }
+          const target = goBackTargets(updates).find((t) => t.version === req.body.version);
+          if (!target) return reply.code(409).send({ error: 'conflict', message: `AUGUR ${req.body.version} isn’t one of the releases this server can go back to.` });
+          if (target.problem) return reply.code(409).send({ error: 'conflict', message: target.problem });
+          const images = updates.result.releases.find((r) => r.version === target.version)?.manifest?.images ?? {};
+          const id = randomUUID();
+          if (!(await store.requestUpgrade({ id, from: updates.running.version, version: target.version, images, requestedBy: caller.id, requestedByName: caller.name }))) {
+            return reply.code(409).send({ error: 'conflict', message: 'An upgrade is already waiting or under way.' });
+          }
+          upgradeSettings = undefined;
+          req.log.info({ by: caller.id, from: updates.running.version, to: target.version }, 'going back requested');
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.go-back-requested', target: target.version, detail: { from: updates.running.version } });
+          return reply.code(202).send(await updatesPage());
+        },
+      );
+
       /** Takes back an upgrade the updater hasn't started. One under way can't be stopped halfway. */
       app.delete('/platform/upgrade', async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
@@ -883,7 +912,8 @@ export const buildApp = async ({
             await record(req, {
               actor: { id: UPDATER, kind: 'service' },
               app: 'registry',
-              action: OUTCOME_ACTIONS[outcome],
+              // Ending on an older release than it started from was going back on purpose.
+              action: outcome === 'done' && semver.valid(upgrade.version) && semver.valid(upgrade.from) && semver.lt(upgrade.version, upgrade.from) ? 'platform.went-back' : OUTCOME_ACTIONS[outcome],
               target: upgrade.version,
               detail: { from: upgrade.from, requestedBy: upgrade.requestedBy, ...(message ? { message } : {}) },
             });

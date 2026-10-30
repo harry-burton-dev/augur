@@ -275,9 +275,14 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
   // Parts this release adds, and the rest of what the deployment runs (the database, sign-in, storage).
   let fresh: string[] = [];
   let others: string[] = [];
+  let left: string[] = [];
   try {
     await run('roll-forward', async () => {
       const paths = Object.keys(changedFiles);
+      // Parts the release doesn't have, such as one added after it when going back: stopped while the
+      // compose.yml that names them is still in place.
+      left = (await server.services()).filter((service) => (ROLL_ORDER as readonly string[]).includes(service) && !target.images[service]);
+      if (left.length) await server.remove(left);
       if (paths.length) await server.writeDeployFiles(changedFiles);
       await server.writeEnv(withEnvValue(settings, 'PLATFORM_VERSION', target.version));
       const now = await server.services();
@@ -297,7 +302,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
         await ready(server, [service], versionOf);
       }
       if (added.length) await server.up(added);
-      const notes = [paths.length ? `wrote ${paths.join(', ')}` : '', enteredKeys.length ? `set ${enteredKeys.join(', ')} as entered` : '', madeKeys.length ? `made up ${madeKeys.join(', ')} in .env` : '', added.length ? `started ${added.join(', ')}` : ''].filter(Boolean);
+      const notes = [left.length ? `stopped ${left.join(', ')}, which ${target.version} doesn’t have` : '', paths.length ? `wrote ${paths.join(', ')}` : '', enteredKeys.length ? `set ${enteredKeys.join(', ')} as entered` : '', madeKeys.length ? `made up ${madeKeys.join(', ')} in .env` : '', added.length ? `started ${added.join(', ')}` : ''].filter(Boolean);
       return notes.length ? `${notes.join('; ')}.` : undefined;
     });
     // Every part again, now that all of them are on it: one that came up early may have fallen over since.
@@ -310,7 +315,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     if (err instanceof Withdrawn) throw err;
     const why = reason(err);
     await report({ step, state: 'failed', message: why }).catch(() => undefined);
-    return rollBack(target, server, report, before, services, why, backup, { oldFiles, fresh, others });
+    return rollBack(target, server, report, before, services, why, backup, { oldFiles, fresh, others, left });
   }
 };
 
@@ -336,7 +341,7 @@ const rollBack = async (
   services: readonly string[],
   why: string,
   backup?: string,
-  { oldFiles = {}, fresh = [], others = [] }: { oldFiles?: Record<string, Buffer | undefined>; fresh?: string[]; others?: string[] } = {},
+  { oldFiles = {}, fresh = [], others = [], left = [] }: { oldFiles?: Record<string, Buffer | undefined>; fresh?: string[]; others?: string[]; left?: string[] } = {},
 ): Promise<Outcome> => {
   const kept = backup ? ` If ${target.from} has trouble with data ${target.version} changed, restore ${backup} (docs/upgrade.md, Going back).` : '';
   try {
@@ -351,7 +356,7 @@ const rollBack = async (
       const remount = (await server.mounting(paths)).filter((service) => others.includes(service));
       if (remount.length) await server.recreate(remount);
     }
-    const back = services.filter((service) => !fresh.includes(service));
+    const back = [...services.filter((service) => !fresh.includes(service)), ...left];
     await server.up(back);
     await ready(server, back, () => undefined);
   } catch (err) {

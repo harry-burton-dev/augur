@@ -253,6 +253,29 @@ describe('admin', () => {
       vi.unstubAllGlobals();
     });
 
+    it('offers to go back to an earlier release, and says why not when it can’t', async () => {
+      const withGoBack: PlatformUpdates = { ...out, goBack: [{ version: '0.1.1', channel: 'beta' }, { version: '0.1.0', channel: 'beta', breakingAfter: '0.1.1', problem: 'AUGUR 0.1.1 is breaking.' }], history: [] };
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify(withGoBack), { status: 200 }));
+      const el = document.createElement('admin-updates') as AdminUpdates;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.updates).toBeDefined());
+      await el.updateComplete;
+      const section = el.querySelector('[data-go-back]')!;
+      expect(section.textContent).toContain('AUGUR 0.1.0');
+      expect(section.textContent).toContain('AUGUR 0.1.1 is breaking.');
+      const buttons = [...section.querySelectorAll('ui-button')] as HTMLElement[];
+      expect(buttons.map((b) => b.hasAttribute('disabled'))).toEqual([false, true]);
+      buttons[0]!.click();
+      await el.updateComplete;
+      const dialog = el.querySelector('ui-dialog') as UiDialog;
+      expect(dialog.getAttribute('heading')).toBe('Go back to AUGUR 0.1.1?');
+      await dialog.confirm();
+      expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/platform/go-back', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ version: '0.1.1' }) }));
+      expect(el.querySelector('[data-history]')).toBeNull();
+      el.remove();
+    });
+
     it('follows an upgrade step by step, and says how it ended', async () => {
       const steps = [
         { step: 'preflight', state: 'done', at: '2026-10-30T09:00:00Z' },
