@@ -11,11 +11,14 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const id = process.argv[2];
 const kit = process.argv.includes('--kit');
 const live = process.argv.includes('--live');
+// pnpm is a .cmd shim on Windows, which only runs through a shell.
+const windows = process.platform === 'win32';
 const dir = id && join(root, 'apps', id);
 if (!dir || !existsSync(join(dir, 'manifest.json')) || !existsSync(join(dir, 'frontend/src/entry.ts'))) {
   console.error(`✗ Usage: pnpm dev:app <id>, where apps/<id> has a manifest.json and frontend/src/entry.ts.`);
@@ -23,12 +26,12 @@ if (!dir || !existsSync(join(dir, 'manifest.json')) || !existsSync(join(dir, 'fr
 }
 
 // What the shell is built from (the SDK, the kit), so the stand-in uses the real thing, and Home, where the app's glance card goes.
-execFileSync('pnpm', ['turbo', 'run', 'build', '--filter=@augur/shell^...', '--filter=@augur/home', '--output-logs=errors-only'], { cwd: root, stdio: 'inherit' });
+execFileSync('pnpm', ['turbo', 'run', 'build', '--filter=@augur/shell^...', '--filter=@augur/home', '--output-logs=errors-only'], { cwd: root, stdio: 'inherit', shell: windows });
 
 const port = process.env.APP_SERVICE_PORT ?? '8090';
 const children = [];
 const run = (args, env) => {
-  const child = spawn('pnpm', args, { cwd: root, stdio: 'inherit', env: { ...process.env, ...env } });
+  const child = spawn('pnpm', args, { cwd: root, stdio: 'inherit', shell: windows, env: { ...process.env, ...env } });
   children.push(child);
   child.on('exit', (code) => {
     children.forEach((c) => c !== child && c.kill());

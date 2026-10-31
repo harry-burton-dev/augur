@@ -33,6 +33,9 @@ export const treePath = (items: readonly TreeItem[], id: string): string[] => {
  * under its parent, with a chevron to open or close what's inside. One row is
  * the selected one; the rows above it open by themselves so it can be seen.
  *
+ * `compact` shows only the top-level rows, as icons with their names on
+ * hover, for a rail folded to a strip.
+ *
  * Follows the ARIA tree pattern. Keys: ↑ ↓ move, → opens or goes in, ← closes
  * or goes up, Home / End, Enter or Space selects. Only one row takes Tab.
  *
@@ -46,6 +49,7 @@ export class UiTree extends LitElement {
     items: { attribute: false },
     selected: { type: String },
     open: { attribute: false },
+    compact: { type: Boolean, reflect: true },
     focused: { state: true },
   };
 
@@ -57,6 +61,8 @@ export class UiTree extends LitElement {
   declare selected: string;
   /** Ids of the rows that show what's inside them. The selected row's parents are always open. */
   declare open: Set<string>;
+  /** Icons only, one per top-level row, its name on hover: how a folded `ui-app-frame` rail shows it. */
+  declare compact: boolean;
   declare focused: string;
 
   constructor() {
@@ -66,6 +72,7 @@ export class UiTree extends LitElement {
     this.items = [];
     this.selected = '';
     this.open = new Set();
+    this.compact = false;
     this.focused = '';
   }
 
@@ -86,7 +93,7 @@ export class UiTree extends LitElement {
     const walk = (items: readonly TreeItem[], level: number, parent?: TreeItem) => {
       for (const item of items) {
         out.push({ item, level, parent });
-        if (item.children?.length && this.open.has(item.id)) walk(item.children, level + 1, item);
+        if (item.children?.length && this.open.has(item.id) && !this.compact) walk(item.children, level + 1, item);
       }
     };
     walk(this.items, 1);
@@ -192,6 +199,16 @@ export class UiTree extends LitElement {
       ui-icon.mark { flex: none; color: var(--ink-muted); }
       .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .meta { flex: none; font-size: var(--type-small); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+      ul[role='group'] > li { animation: unfold var(--motion-base) var(--ease-out) both; }
+      @keyframes unfold { from { opacity: 0; transform: translateY(-4px); } }
+      :host([compact]) .heading { padding: 0; height: 1px; margin: var(--space-2) var(--space-2); background: var(--hairline); font-size: 0; }
+      :host([compact]) .row { justify-content: center; width: 36px; min-height: 36px; padding: 0; margin: 0 auto; }
+      :host([compact]) .chev, :host([compact]) .spacer, :host([compact]) .meta { display: none; }
+      :host([compact]) .name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      :host([compact]) ui-icon.mark { color: var(--ink); }
+      @media (prefers-reduced-motion: reduce) {
+        ul[role='group'] > li { animation: none; }
+      }
     `,
   ];
 
@@ -206,6 +223,7 @@ export class UiTree extends LitElement {
           role="treeitem"
           data-id=${item.id}
           style=${`--level:${level}`}
+          title=${this.compact ? item.label : nothing}
           aria-level=${level}
           aria-selected=${item.id === this.selected ? 'true' : 'false'}
           aria-expanded=${hasKids ? String(isOpen) : nothing}
@@ -221,7 +239,7 @@ export class UiTree extends LitElement {
           <span class="name">${item.label}</span>
           ${item.meta ? html`<span class="meta">${item.meta}</span>` : nothing}
         </div>
-        ${isOpen ? html`<ul role="group">${this.renderItems(item.children!, level + 1, item, stop)}</ul>` : nothing}
+        ${isOpen && !this.compact ? html`<ul role="group">${this.renderItems(item.children!, level + 1, item, stop)}</ul>` : nothing}
       </li>`;
     });
   }

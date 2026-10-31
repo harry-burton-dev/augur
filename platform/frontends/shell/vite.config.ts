@@ -3,7 +3,7 @@ import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isSharedModule } from '@augur/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
-import { defineConfig, type Plugin, type ProxyOptions } from 'vite';
+import { defineConfig, normalizePath, type Plugin, type ProxyOptions } from 'vite';
 
 /**
  * Local stand-in for where apps are hosted: /apps/<id>/* is served from that
@@ -116,7 +116,7 @@ const devApp = (dir: string | undefined) => {
   const previews = ((manifest.previews ?? []) as { id: string }[]).map((p) => p.id);
   const asked = (process.env.DEV_PREVIEWS ?? '').split(',').map((p) => p.trim()).filter(Boolean);
   const previewsOn = asked.includes('all') ? previews : previews.filter((p) => asked.includes(p));
-  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs${resolve(dir, 'frontend/src/entry.ts')}`, ...(previewsOn.length ? { previewsOn } : {}) };
+  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs/${normalizePath(resolve(dir, 'frontend/src/entry.ts')).replace(/^\//, '')}`, ...(previewsOn.length ? { previewsOn } : {}) };
   const caller = {
     'x-user-id': 'dev-person',
     'x-user-name': encodeURIComponent('Dev Person'),

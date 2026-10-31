@@ -16,7 +16,7 @@ Spec: [Data Atlas](https://claude.ai/artifact/G9XhuREFpYFjLWFqKK8sEF). The app's
 
 - A container, `atlas`, on port 8086, reached through the gateway at `/api/atlas`, and its frontend inside `web`.
 - Its graph lives in Postgres, in its own `atlas` schema, under its own login (`app_atlas`). The storage container makes the login, the schema and the `pg_trgm` and `pgvector` extensions it uses for matching by spelling and by meaning. It makes a bucket too, as it does for every app, though Data Atlas keeps nothing there.
-- Settings in `.env`: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from the Updates page makes them up; by hand, `openssl rand -hex 32` makes each.
+- Settings in `.env`: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from Admin → Upgrade Centre makes them up; by hand, `openssl rand -hex 32` makes each.
 - It puts itself in Admin, Apps on its first start. Admins turn it off org-wide or floor by floor; it can't be removed.
 - Matching by meaning in Triage uses the model gateway when it's on. Without it, Triage matches by keys, names and spelling, and says so.
 - It follows Mandate's bindings and Artifacts' withdrawals through events, from where it left off. Mandate is optional: without it, "Used by" lists only documents.
