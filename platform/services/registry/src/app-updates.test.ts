@@ -3,6 +3,7 @@ import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { appFeed, AppUpdateChecker, newestOn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
 import type { AppRelease } from './store.ts';
+import { UpdateChecker } from './updates.ts';
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const release = (version: string, more: Partial<AppRelease['manifest']> = {}, channel = 'stable'): AppRelease => ({
@@ -15,7 +16,8 @@ const release = (version: string, more: Partial<AppRelease['manifest']> = {}, ch
   frontend: null,
   signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' },
 });
-const feedOf = (...releases: AppRelease[]): AppFeedRelease[] => releases.map((r) => ({ app: r.id, version: r.version, channel: r.channel === 'stable' ? 'stable' : 'beta', release: r }));
+const feedOf = (...releases: AppRelease[]): AppFeedRelease[] =>
+  releases.map((r) => ({ app: r.id, version: r.version, channel: r.channel === 'stable' ? 'stable' : r.channel === 'dev' ? 'dev' : 'beta', release: r }));
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('the app feed', () => {
@@ -44,6 +46,17 @@ describe('the app feed', () => {
     expect(newestOn(releases, 'notes', 'stable')?.version).toBe('1.1.0');
     expect(newestOn(releases, 'notes', 'beta')?.version).toBe('1.2.0-beta.1');
     expect(newestOn(releases, 'tasks', 'beta')).toBeUndefined();
+    const withDev = [...releases, ...feedOf(release('1.2.1-dev.40', {}, 'dev'))];
+    expect(newestOn(withDev, 'notes', 'beta')?.version).toBe('1.2.0-beta.1');
+    expect(newestOn(withDev, 'notes', 'dev')?.version).toBe('1.2.1-dev.40');
+  });
+
+  it('knows a dev build from GitHub by its version', async () => {
+    const fetchImpl = (async (url: string) =>
+      url === 'https://api/releases'
+        ? json([{ tag_name: 'app/notes@1.0.1-dev.40', prerelease: true, draft: false, assets: [{ name: 'app-release.json', url: 'https://api/assets/dev' }] }])
+        : json(release('1.0.1-dev.40', {}, 'dev'))) as typeof fetch;
+    expect((await appFeed({ url: 'https://api/releases', fetchImpl })()).map((r) => `${r.version} ${r.channel} ${r.release ? 'file' : 'no file'}`)).toEqual(['1.0.1-dev.40 dev file']);
   });
 });
 
@@ -71,13 +84,14 @@ describe('installs and updates in Admin → Apps', () => {
     headers.authorization === 'Bearer platform-updater' ? { kind: 'platform' as const, name: 'updater' } : undefined;
   const runner = { authorization: 'Bearer platform-updater' };
 
-  const setup = async (releases: AppFeedRelease[]) => {
+  const setup = async (releases: AppFeedRelease[], ring?: 'preview' | 'production') => {
     let feed = releases;
     // Each check a minute after the last, so none is answered from the one before.
     let minutes = 0;
     const checker = new AppUpdateChecker(async () => feed, () => new Date(Date.UTC(2026, 9, 27, 12, minutes++)));
     const entries: { action: string; detail?: Record<string, unknown> }[] = [];
-    const server = await buildApp({ verifyService, appUpdates: checker, audit: async (e) => void entries.push(e) });
+    const updates = new UpdateChecker({ running: { version: '0.9.0', channel: 'beta' }, ring });
+    const server = await buildApp({ verifyService, appUpdates: checker, updates, allowPrPreviews: ring !== 'production', audit: async (e) => void entries.push(e) });
     await checker.check();
     /** Plays the runner: takes the next job and says it went as `outcome`. */
     const runNext = async (outcome: 'done' | 'failed' = 'done') => {
@@ -119,7 +133,36 @@ describe('installs and updates in Admin → Apps', () => {
     // It failed, so it isn't tried again by itself.
     await t.check(feedOf(release('1.0.0'), release('1.1.0')));
     expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
-    expect((await t.view()).installed[0].update).toEqual({ version: '1.1.0', channel: 'stable', needs: [] });
+    expect((await t.view()).installed[0].update).toEqual({ version: '1.1.0', channel: 'stable', needs: [], changes: [] });
+    // Its history: the install, then the update that failed, newest first.
+    expect((await t.view()).installed[0].history.map((h: { version: string; state: string; requestedBy: string }) => [h.version, h.state, h.requestedBy])).toEqual([
+      ['1.1.0', 'failed', 'automatic'],
+      ['1.0.0', 'done', 'u-1'],
+    ]);
+  });
+
+  it('goes back to an older version and holds it there, so Automatic doesn’t take it straight up again', async () => {
+    const t = await setup(feedOf(release('1.0.0'), release('1.1.0')));
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.1.0' } });
+    await t.runNext();
+    expect((await t.view()).installed[0].older).toEqual([{ version: '1.0.0', channel: 'stable' }]);
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await t.runNext();
+    expect((await t.view()).installed[0]).toMatchObject({ version: '1.0.0', policy: 'hold' });
+    await t.check(feedOf(release('1.0.0'), release('1.1.0')));
+    expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
+    expect(t.entries.find((e) => e.action === 'app.updates-set')?.detail).toMatchObject({ policy: 'hold', why: 'going back to 1.0.0' });
+  });
+
+  it('shows what changed in the version it runs and in the one waiting', async () => {
+    const notes = (text: string) => `### Minor Changes\n\n- abcdef1: ${text}\n\n### Patch Changes\n\n- Updated dependencies [abcdef1]\n  - @augur/mfe-sdk@1.6.0`;
+    const t = await setup(feedOf({ ...release('1.0.0'), notes: notes('Lists notes by date.') }));
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await t.runNext();
+    await t.check(feedOf({ ...release('1.0.0'), notes: notes('Lists notes by date.') }, { ...release('2.0.0'), notes: notes('Tags notes.') }));
+    const installed = (await t.view()).installed[0];
+    expect(installed.changes).toEqual([{ id: 'abcdef1', kind: 'minor', text: 'Lists notes by date.', parts: ['notes'] }]);
+    expect(installed.update.changes).toEqual([{ id: 'abcdef1', kind: 'minor', text: 'Tags notes.', parts: ['notes'] }]);
   });
 
   it('waits for an admin when a version asks for more, or the app is on Ask first or Hold', async () => {
@@ -138,5 +181,47 @@ describe('installs and updates in Admin → Apps', () => {
     await follow({ channel: 'beta', policy: 'automatic' });
     expect((await t.runNext()).release.version).toBe('1.0.1-beta.1');
     expect((await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/tasks/follow', headers: fresh(), payload: { channel: 'stable', policy: 'ask' } })).statusCode).toBe(404);
+  });
+
+  it('on a production server, follows stable releases only and offers no beta', async () => {
+    const t = await setup(feedOf(release('1.0.0'), release('1.1.0-beta.1', {}, 'beta')), 'production');
+    expect(await t.view()).toMatchObject({ ring: 'production', previewsAllowed: false, channelNote: expect.stringContaining('SERVER_RING=production') });
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await t.runNext();
+    const follow = await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: fresh(), payload: { channel: 'beta', policy: 'automatic' } });
+    expect(follow.statusCode).toBe(409);
+    expect(follow.json().error).toBe('production_server');
+    await t.check(feedOf(release('1.0.0'), release('1.1.0-beta.1', {}, 'beta')));
+    expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
+    expect((await t.view()).installed[0]).toMatchObject({ channel: 'stable' });
+  });
+
+  it('takes dev builds only on a preview server whose admin chose them', async () => {
+    const feed = feedOf(release('1.0.0'), release('1.0.1-dev.40', {}, 'dev'));
+    const t = await setup(feed, 'preview');
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await t.runNext();
+    // Betas too isn't dev builds too.
+    await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: fresh(), payload: { channel: 'beta', policy: 'automatic' } });
+    expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
+    await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: fresh(), payload: { channel: 'dev', policy: 'automatic' } });
+    expect((await t.runNext()).release.version).toBe('1.0.1-dev.40');
+
+    const production = await setup(feed, 'production');
+    await production.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await production.runNext();
+    const follow = await production.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: fresh(), payload: { channel: 'dev', policy: 'automatic' } });
+    expect(follow.json().error).toBe('production_server');
+    const asked = await production.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.1-dev.40' } });
+    expect(asked.statusCode).toBe(400);
+    expect(asked.json().message).toMatch(/Only a dev or preview server/);
+    expect((await production.view()).installed[0].older).toEqual([]);
+  });
+
+  it('on a production server, offers an app first released on beta only once it is promoted', async () => {
+    const t = await setup(feedOf(release('1.0.0-beta.1', {}, 'beta')), 'production');
+    expect((await t.view()).available).toEqual([]);
+    const preview = await setup(feedOf(release('1.0.0-beta.1', {}, 'beta')), 'preview');
+    expect((await preview.view()).available).toEqual([expect.objectContaining({ app: 'notes', version: '1.0.0-beta.1' })]);
   });
 });

@@ -1,5 +1,40 @@
 # @augur/shell
 
+## 0.10.1
+
+### Patch Changes
+
+- Updated dependencies [bb91780]
+- Updated dependencies [bef7098]
+- Updated dependencies [e0e9c83]
+  - @augur/mfe-sdk@1.8.0
+  - @augur/ui-kit@1.7.0
+
+## 0.10.0
+
+### Minor Changes
+
+- 5b2c80c: Feature previews (SDK 1.7): an app lists features it's trying in its manifest's `previews` and asks `ctx.previewOn(id)`. Admins choose who gets each in Admin → Apps (off, for those who turn it on, or everyone; opt-in by default on a preview server, off on a production one), people turn opt-in ones on in the shell's Previews, and the shell marks an app with one on. A preview past its `until` day is off for everyone. Registry contract 1.27.0 (docs/release-channels.md, "Feature previews").
+
+### Patch Changes
+
+- 5119d47: The live dev loop: `pnpm dev:app <id> --kit` rebuilds the UI kit, its tokens and the shared modules as you change them and reloads the page; `DEV_PREVIEWS` turns an app's feature previews on in the stand-in; `DEV_HOST` opens the dev server to the tailnet. Each pull request's CI keeps its Storybook as an artifact (docs/release-channels.md, "The live dev loop").
+- Updated dependencies [5b2c80c]
+  - @augur/mfe-sdk@1.7.0
+
+## 0.9.1
+
+### Patch Changes
+
+- 2c9caf0: App kit, part 1: nothing is obtuse. `ui-button` and `ui-icon-button` take a `reason`: disabled with one, they stay focusable and say why on hover and focus, and it's read aloud. List rows, list actions and menu entries take a `reason` too. The kit warns on localhost about a disabled control without one, and `pnpm check:reasons` fails a platform screen that has one. New parts: `ui-notice` (one sentence that needs attention, with one action), `ui-note` (a quiet line with its `why` one press away) and `ui-can` (what you can do here, and who can do the rest). Every disabled control in Admin, the shell, Artifacts, Mandate and Data Atlas now says why, and ones that were only waiting for a request show as busy instead.
+- 858b234: An app answering a request (a picker, or any app opened over another) is mounted once per request. Before, the catalogue loading again while its dialog was open mounted it a second time, so whatever the person had started in it was lost.
+- Updated dependencies [effebfe]
+- Updated dependencies [84fab17]
+- Updated dependencies [2c9caf0]
+- Updated dependencies [b716037]
+- Updated dependencies [2487ae0]
+  - @augur/ui-kit@1.6.0
+
 ## 0.9.0
 
 ### Minor Changes

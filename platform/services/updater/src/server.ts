@@ -62,10 +62,14 @@ export class CommandFailed extends Error {}
  */
 export const TRUSTED_ROOT = 'releases/trusted_root.json';
 
-/** cosign's arguments to check `ref` was signed by `identity`, offline when there's a trust root to check against. */
+/**
+ * cosign's arguments to check `ref` was signed by `identity`, offline when there's a trust root to check against.
+ * An identity that starts with `^` is a pattern (cosign's --certificate-identity-regexp), such as a workflow
+ * on any of the branches releases are made from (releaseIdentity).
+ */
 export const verifyArgs = (identity: string, issuer: string, ref: string, trustedRoot?: string) => [
   'verify',
-  '--certificate-identity',
+  identity.startsWith('^') ? '--certificate-identity-regexp' : '--certificate-identity',
   identity,
   '--certificate-oidc-issuer',
   issuer,
@@ -156,8 +160,8 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
     async recreate(services) {
       await compose(['up', '-d', '--no-deps', '--force-recreate', ...services]);
     },
-    async verifySignature(ref) {
-      await command('cosign', verifyArgs(signer.identity, signer.issuer, ref, await trustedRootIn(dir)), env());
+    async verifySignature(ref, identity = signer.identity) {
+      await command('cosign', verifyArgs(identity, signer.issuer, ref, await trustedRootIn(dir)), env());
     },
     async backup() {
       const said = await compose(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--now']);
@@ -253,6 +257,12 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
     },
     async verifySignedBy(ref, identity) {
       await command('cosign', verifyArgs(identity, signer.issuer, ref, await trustedRootIn(dir)), env());
+    },
+    async backup() {
+      const said = await platform(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--now']);
+      const file = said.match(/backup: wrote \S*\/(platform-\S+\.sql\.gz)/)?.[1];
+      if (!file) throw new CommandFailed('The backup container didn’t say where it wrote the backup.');
+      return file;
     },
     async provisionStorage(app) {
       await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, 'storage']);

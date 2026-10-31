@@ -56,6 +56,7 @@ const ctx = (over: Partial<MountContext> = {}): MountContext => ({
   path: '/',
   workspace: floor,
   getWorkspace: () => floor,
+  previewOn: () => false,
   fetch: service as unknown as MountContext['fetch'],
   ...over,
 });
@@ -81,8 +82,9 @@ describe('mandate', () => {
     await app.mount(el, ctx());
     const view = el.querySelector('mandate-app')!;
     await settle(view);
-    expect(view.textContent).toContain('Keep the fleet at sea');
-    expect(view.textContent).toContain('1 at risk');
+    expect(view.querySelector('ui-card')!.heading).toBe('Keep the fleet at sea');
+    const tally = view.querySelector('ui-tally')!;
+    expect(tally.counts.find((c) => c.word === 'at risk')!.n).toBe(1);
     await app.unmount!(el);
     expect(el.querySelector('mandate-app')).toBeNull();
   });
@@ -93,8 +95,12 @@ describe('mandate', () => {
     await app.mount(el, ctx({ path: '/intents/a1', raise }));
     const view = el.querySelector('mandate-app')!;
     await settle(view);
-    for (const words of ['So the coast is watched', 'No overtime', 'Refit Hull 4', 'Two hulls in dock', 'HMS Example']) expect(view.textContent).toContain(words);
-    [...view.querySelectorAll('button')].find((b) => b.textContent?.includes('HMS Example'))!.click();
+    const statement = [...view.querySelectorAll('ui-prose')].map((p) => p.value);
+    for (const words of ['So the coast is watched', 'No overtime', '- Refit Hull 4']) expect(statement).toContain(words);
+    for (const words of ['Refit Hull 4', 'Two hulls in dock']) expect(view.textContent).toContain(words);
+    expect(view.querySelector('ui-refs')!.refs[0]!.label).toBe('HMS Example');
+    const chip = view.querySelector('ui-refs')!.shadowRoot!.querySelector('ui-ref')!;
+    (chip.shadowRoot!.querySelector('button.open') as HTMLButtonElement).click();
     expect(raise).toHaveBeenCalledWith({ type: 'entity.open', payload: { kind: 'entity', id: 'ent_01J0000000000000000000SHIP', type: 'ship', label: 'HMS Example' } });
   });
 
@@ -112,7 +118,7 @@ describe('mandate', () => {
     await settle(view);
     expect(request).toHaveBeenCalledWith({ type: 'entity.pick', payload: { purpose: 'Bind to this intent' } });
     expect(bind.disabled).toBe(true);
-    expect(view.textContent).toContain('Linking to entities arrives with Data Atlas.');
+    expect(bind.getAttribute('reason')).toContain('Linking to entities arrives with Data Atlas.');
   });
 
   it('answers aim.pick with the intent chosen', async () => {

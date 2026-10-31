@@ -1,5 +1,38 @@
 # @apps/auspex-frontend
 
+## 0.2.0
+
+### Minor Changes
+
+- bb91780: Who can open something now includes the floors it's published up to. Artifacts' access answers list `placed`: the steps of the thing and of whatever it's inside, each with who that floor lets in, what it shows, and the floors it came up through. Share lists them under **Published up to**, and "Who can open this, explained" sends them to Auspex. Auspex reads an entry's optional `chain` and `shows` and says "Up from Payroll through Finance, showing Complete and Issued".
+
+### Patch Changes
+
+- Updated dependencies [bb91780]
+- Updated dependencies [bef7098]
+- Updated dependencies [e0e9c83]
+  - @augur/mfe-sdk@1.8.0
+  - @augur/ui-kit@1.7.0
+
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [5b2c80c]
+  - @augur/mfe-sdk@1.7.0
+
+## 0.1.2
+
+### Patch Changes
+
+- effebfe: App kit, part 2: the frame. New `ui-app-frame` (the slate ground, a rail, the main column and an aside), `ui-page-head` (the trail of what a page is inside, its title, one line of summary, and two actions with the rest in ⋯) and `ui-section` (a labelled part with its count, one action and a why, folding after five). New token `measure-rail` (240px). Type tokens are now emitted in rem, so a person's browser text size scales them. Artifacts, Mandate, Data Atlas and Auspex use the frame and page head instead of their own grids, heads and trails.
+- Updated dependencies [effebfe]
+- Updated dependencies [84fab17]
+- Updated dependencies [2c9caf0]
+- Updated dependencies [b716037]
+- Updated dependencies [2487ae0]
+  - @augur/ui-kit@1.6.0
+
 ## 0.1.1
 
 ### Patch Changes

@@ -15,11 +15,16 @@
 //                                                 (its manifest and packages) and prints it
 //   node scripts/app-release.mjs previews-clean <pr> [<tag>...]
 //                                                 deletes the pull request's preview releases and tags, but those named
+// For dev builds, of every merge to dev (.github/workflows/app-dev.yml):
+//   node scripts/app-release.mjs dev <id> <run>   gives the app the dev version <next patch>-dev.<run> in this checkout and prints it
+//   node scripts/app-release.mjs devs-clean <id> [<tag>...]
+//                                                 deletes the app's older dev builds, keeping the newest DEV_BUILDS_KEPT and those named
 //
 // An app's version is its manifest's (its frontend package's, or its service's when it has none). A version
 // with a prerelease part (1.2.0-beta.1) is on the beta channel, any other on stable. A pull request's
 // build is on the preview channel, with a version of its own that no deployment installs as the app:
-// the app runner runs it beside the app, for the app's developers.
+// the app runner runs it beside the app, for the app's developers. A dev build is on the dev channel,
+// which only a preview server's admin can choose for an app (docs/release-channels.md, "Dev builds").
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -39,8 +44,35 @@ export const appTag = (id, version) => `app/${id}@${version}`;
 
 /** A pull request's build: <x.y.z>-pr.<number>.<run>, as the registry recognises it. */
 const PREVIEW = /-pr\.(\d+)\.\d+$/;
-/** stable, beta for a version with a prerelease part, or preview for a pull request's build. */
-export const channelOf = (version) => (PREVIEW.test(version) ? 'preview' : semver.prerelease(version) ? 'beta' : 'stable');
+/** A dev build: <x.y.z>-dev.<run>, as the registry recognises it. */
+const DEV = /-dev\.\d+$/;
+/** How many of each app's dev builds are kept as releases. */
+export const DEV_BUILDS_KEPT = 3;
+/** stable, beta for a version with a prerelease part, preview for a pull request's build, or dev for a dev build. */
+export const channelOf = (version) => (PREVIEW.test(version) ? 'preview' : DEV.test(version) ? 'dev' : semver.prerelease(version) ? 'beta' : 'stable');
+/**
+ * The version a dev build is given: the next patch after the app's own (so it sorts above the release
+ * it follows and below the next), then the run. An app already on a prerelease keeps its x.y.z.
+ */
+export const devVersion = (version, run) => {
+  const base = semver.parse(version);
+  if (!base) throw new Error(`"${version}" is not a version.`);
+  if (!/^\d+$/.test(String(run))) throw new Error('The run is a number.');
+  const next = base.prerelease.length ? `${base.major}.${base.minor}.${base.patch}` : semver.inc(version, 'patch');
+  return `${next}-dev.${run}`;
+};
+/** The app a dev build's tag is of, or undefined for any other tag. */
+export const devAppOf = (tag) => {
+  const m = /^app\/([a-z][a-z0-9-]{1,39})@(.+)$/.exec(tag);
+  return m && DEV.test(m[2]) && semver.valid(m[2]) ? m[1] : undefined;
+};
+/** Which of an app's dev build tags to delete: all but the newest `kept` and those in `keep`. */
+export const oldDevBuilds = (tags, app, keep = [], kept = DEV_BUILDS_KEPT) =>
+  tags
+    .filter((t) => devAppOf(t) === app)
+    .sort((a, b) => semver.rcompare(a.split('@')[1], b.split('@')[1]))
+    .slice(kept)
+    .filter((t) => !keep.includes(t));
 /** The version a pull request's build is given: the app's own, without any prerelease part, then the pull request and run. */
 export const previewVersion = (version, pr, run) => {
   const base = semver.parse(version);
@@ -127,7 +159,7 @@ const main = async () => {
   const [mode, id, file] = process.argv.slice(2);
   const apps = readApps();
   const app = id && apps.find((a) => a.id === id);
-  if (id && !app && !['pending', 'changed', 'previews-clean'].includes(mode)) throw new Error(`No app "${id}" is released on its own (pillar apps go out with AUGUR).`);
+  if (id && !app && !['pending', 'changed', 'previews-clean', 'devs-clean'].includes(mode)) throw new Error(`No app "${id}" is released on its own (pillar apps go out with AUGUR).`);
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 
   if (mode === 'pending') {
@@ -143,9 +175,9 @@ const main = async () => {
   } else if (mode === 'changed') {
     const paths = git('diff', '--name-only', `${id}...HEAD`).split('\n').filter(Boolean);
     console.log(JSON.stringify(changedApps(apps, paths).map((a) => ({ id: a.id, version: a.manifest.version }))));
-  } else if (mode === 'preview') {
+  } else if (mode === 'preview' || mode === 'dev') {
     const [, , pr, run] = process.argv.slice(2);
-    const version = previewVersion(app.manifest.version, pr, run);
+    const version = mode === 'dev' ? devVersion(app.manifest.version, pr) : previewVersion(app.manifest.version, pr, run);
     // In this checkout only: the build, the image's /healthz and the release all say the preview's version.
     const setVersion = (path) => {
       const json = readJson(path);
@@ -160,6 +192,12 @@ const main = async () => {
     const pr = Number(id);
     const tags = JSON.parse(execFileSync('gh', ['release', 'list', '--limit', '500', '--json', 'tagName'], { cwd: root, encoding: 'utf8' })).map((r) => r.tagName);
     for (const tag of tags.filter((t) => previewPrOf(t) === pr && !keep.has(t))) {
+      execFileSync('gh', ['release', 'delete', tag, '--yes', '--cleanup-tag'], { cwd: root, stdio: 'inherit' });
+      console.log(`Deleted ${tag}.`);
+    }
+  } else if (mode === 'devs-clean') {
+    const tags = JSON.parse(execFileSync('gh', ['release', 'list', '--limit', '500', '--json', 'tagName'], { cwd: root, encoding: 'utf8' })).map((r) => r.tagName);
+    for (const tag of oldDevBuilds(tags, id, process.argv.slice(4))) {
       execFileSync('gh', ['release', 'delete', tag, '--yes', '--cleanup-tag'], { cwd: root, stdio: 'inherit' });
       console.log(`Deleted ${tag}.`);
     }
@@ -178,7 +216,8 @@ const main = async () => {
       : { service: app.service ? `ghcr.io/<repo>/apps/${id}${zero}` : null, frontend: app.frontend ? { artifact: `ghcr.io/<repo>/apps/${id}-frontend${zero}`, digest: zero.slice(1) } : null };
     const preview = bundle.channel === 'preview' ? previewFromEnv() : undefined;
     if (bundle.channel === 'preview' && !preview) throw new Error('A preview is released from a pull request: PR_NUMBER is not set.');
-    const release = appRelease({ app, bundle, signer: signerFromEnv(), notes: preview ? '' : notesFor(app), preview });
+    const dev = bundle.channel === 'dev';
+    const release = appRelease({ app, bundle, signer: signerFromEnv(), notes: preview || dev ? '' : notesFor(app), preview });
     if (mode === 'describe') return console.log(JSON.stringify(release, null, 2));
     const tag = appTag(release.id, release.version);
     if (git('ls-remote', '--tags', 'origin', `refs/tags/${tag}`)) return console.log(`${tag} is already released.`);
@@ -190,15 +229,18 @@ const main = async () => {
       notesFile,
       preview
         ? `A preview of ${release.manifest.name} from pull request #${preview.pr}${preview.title ? `, ${preview.title}` : ''}. It runs beside the app for its developers, and goes when the pull request closes.\n`
-        : `${release.manifest.name} ${release.version} (${release.channel}).\n\n${release.notes || '_No changelog entry._'}\n`,
+        : dev
+          ? `A dev build of ${release.manifest.name}, from ${process.env.RELEASE_TARGET || 'dev'} on dev. Only a preview server set to take dev builds of it installs it.\n`
+          : `${release.manifest.name} ${release.version}.\n\n${release.notes || '_No changelog entry._'}\n`,
     );
-    const beta = release.channel !== 'stable';
+    // Made on preview, a release is a pre-release until it is promoted to production (scripts/promote.mjs).
+    const beta = release.channel !== 'stable' || process.env.RELEASE_BRANCH === 'preview';
     // A pull request's merge commit isn't on a branch, so its preview is tagged on the pull request's head.
     const target = process.env.RELEASE_TARGET || git('rev-parse', 'HEAD');
     execFileSync('gh', ['release', 'create', tag, '--target', target, '--title', `${release.manifest.name} ${release.version}`, '--notes-file', notesFile, ...(beta ? ['--prerelease'] : ['--latest=false']), asset], { cwd: root, stdio: 'inherit' });
     console.log(`Released ${tag}.`);
   } else {
-    console.error('Usage: node scripts/app-release.mjs pending | pack <id> <file> | describe <id> [bundle.json] | publish <id> <bundle.json> | changed <base> | preview <id> <pr> <run> | previews-clean <pr> [<tag>...]');
+    console.error('Usage: node scripts/app-release.mjs pending | pack <id> <file> | describe <id> [bundle.json] | publish <id> <bundle.json> | changed <base> | preview <id> <pr> <run> | previews-clean <pr> [<tag>...] | dev <id> <run> | devs-clean <id> [<tag>...]');
     process.exit(2);
   }
 };

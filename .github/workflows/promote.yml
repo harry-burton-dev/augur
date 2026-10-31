@@ -1,0 +1,41 @@
+name: Promote
+# Opens "Promote <unit> <version> to production": a branch from production with only that unit's
+# files from preview, so production takes the release preview ran (docs/release-channels.md). The
+# unit is augur or an app's id; the version, by default, is the one preview has.
+on:
+  workflow_dispatch:
+    inputs:
+      unit:
+        description: 'What to promote: augur, or an app id (such as mandate)'
+        required: true
+      version:
+        description: 'The version (by default, the one on preview)'
+        required: false
+concurrency: promote-${{ inputs.unit }}
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  promote:
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: production
+          fetch-depth: 0
+          # The promotion's pull request must start CI, which the built-in token's pushes don't.
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+      - run: pnpm install --frozen-lockfile
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - run: node scripts/promote.mjs promote "$UNIT" "$VERSION"
+        env:
+          UNIT: ${{ inputs.unit }}
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}

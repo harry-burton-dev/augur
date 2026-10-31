@@ -1,5 +1,6 @@
-import { LitElement, css, html } from 'lit';
+import { LitElement, css, html, nothing } from 'lit';
 import { base } from '../shared.js';
+import { warnNoReason } from '../reason.js';
 import './icon.js';
 
 /**
@@ -19,6 +20,7 @@ export class UiIconButton extends LitElement {
     size: { type: String, reflect: true },
     ai: { type: Boolean, reflect: true },
     disabled: { type: Boolean, reflect: true },
+    reason: { type: String, reflect: true },
     nameless: { type: Boolean, reflect: true },
   };
 
@@ -27,6 +29,8 @@ export class UiIconButton extends LitElement {
   declare size: 'md' | 'sm';
   declare ai: boolean;
   declare disabled: boolean;
+  /** Why it's disabled, in one sentence, shown under its name on hover and focus. */
+  declare reason: string;
   /** Hide the name below (it stays the accessible name), for rows where it would sit on the next cell. */
   declare nameless: boolean;
 
@@ -37,6 +41,7 @@ export class UiIconButton extends LitElement {
     this.size = 'md';
     this.ai = false;
     this.disabled = false;
+    this.reason = '';
     this.nameless = false;
     this.addEventListener('click', (e) => {
       if (this.disabled) {
@@ -44,6 +49,10 @@ export class UiIconButton extends LitElement {
         e.preventDefault();
       }
     }, { capture: true });
+  }
+
+  override updated() {
+    warnNoReason(this, this.disabled, this.reason, this.label);
   }
 
   override focus(options?: FocusOptions) {
@@ -101,7 +110,11 @@ export class UiIconButton extends LitElement {
       }
       button:hover .name, button:focus-visible .name { opacity: 1; }
       :host([nameless]) .name { display: none; }
-      :host([disabled]) button { opacity: 0.4; cursor: default; pointer-events: none; }
+      :host([nameless][disabled][reason]:not([reason=''])) .name { display: block; }
+      :host([disabled]) button { cursor: default; }
+      :host([disabled]) button > :not(.name) { opacity: 0.4; }
+      :host([disabled]:not([reason])) button, :host([disabled][reason='']) button { pointer-events: none; }
+      .name .why { display: block; max-width: 30ch; white-space: normal; color: var(--ink-muted); text-align: center; }
 
       /* Bubble marks AI: a small glass sphere, a green light from below, an iridescent rim. */
       :host([ai]) button {
@@ -136,10 +149,13 @@ export class UiIconButton extends LitElement {
   ];
 
   override render() {
-    return html`<button part="button" type="button" aria-label=${this.label} ?disabled=${this.disabled}>
+    const reasoned = this.disabled && Boolean(this.reason);
+    return html`<button part="button" type="button" aria-label=${this.label} ?disabled=${this.disabled && !reasoned}
+      aria-disabled=${reasoned ? 'true' : nothing} aria-describedby=${reasoned ? 'reason' : nothing}>
       <span class="rim"></span>
       <ui-icon name=${this.icon} size=${this.size === 'sm' ? 20 : 24}></ui-icon>
-      <span class="name" aria-hidden="true">${this.label}</span>
+      <span class="name" aria-hidden="true">${this.label}${reasoned ? html`<span class="why">${this.reason}</span>` : nothing}</span>
+      ${reasoned ? html`<span id="reason" hidden>${this.reason}</span>` : nothing}
     </button>`;
   }
 }

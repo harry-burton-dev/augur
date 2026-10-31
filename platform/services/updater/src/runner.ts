@@ -16,6 +16,7 @@
  */
 import { appSecretFor } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
+import { isDevBuild, releaseIdentity } from './signers.ts';
 
 /** What an app's release file says (scripts/app-release.mjs); only what the runner reads. */
 export interface AppRelease {
@@ -85,6 +86,8 @@ export interface AppHost {
   writeProject(state: RunnerState, project: object, envFiles: Record<string, string>): Promise<void>;
   /** Throws unless `ref` (an image by digest) was signed by `identity` (a workflow's certificate identity). */
   verifySignedBy(ref: string, identity: string): Promise<void>;
+  /** Takes a fresh backup of the platform's database (apps' tables with it) and returns its file name. */
+  backup(): Promise<string>;
   /** Runs the storage container for this app (or preview id) alone: its database login and schema, its bucket and key. */
   provisionStorage(app: string): Promise<void>;
   /** Runs the storage container to take a preview's scratch storage away, data and all. */
@@ -137,13 +140,19 @@ const previewUpstream = (id: string) => `http://${previewService(id)}:${APP_PORT
 /** The prefix of an app's own settings in .env, as the storage container reads them: "team-notes" → TEAM_NOTES. */
 const envPrefix = (app: string) => app.toUpperCase().replace(/-/g, '_');
 /**
- * A workflow's certificate identity, as cosign checks it: the workflow file on the main branch, or
- * for a pull request's build, on that pull request's merge ref, so a build is only ever taken as the
- * pull request it says it is.
+ * A workflow's certificate identity, as cosign checks it: the workflow file on a branch releases are
+ * made from (main, preview or production), or for a pull request's build, on that pull request's merge
+ * ref, so a build is only ever taken as the pull request it says it is.
  */
-export const signerIdentity = (publisher: string, pr?: number) => `https://github.com/${publisher}@${pr === undefined ? 'refs/heads/main' : `refs/pull/${pr}/merge`}`;
+export const signerIdentity = (publisher: string, pr?: number) => (pr === undefined ? releaseIdentity(publisher) : `https://github.com/${publisher}@refs/pull/${pr}/merge`);
 /** The workflow that builds pull requests' previews, in a repository trusted to publish apps. */
 export const PREVIEW_WORKFLOW = '.github/workflows/app-preview.yml';
+/** The workflow that builds every merge into dev, in a repository trusted to publish apps. */
+export const DEV_WORKFLOW = '.github/workflows/app-dev.yml';
+/** A dev build's version: <next patch>-dev.<run>. */
+export { isDevBuild };
+/** A dev build's certificate identity: the dev workflow, on dev. */
+export const devIdentity = (repository: string) => `https://github.com/${repository}/${DEV_WORKFLOW}@refs/heads/dev`;
 
 /** APP_PUBLISHERS in .env: `owner/repo` (its release.yml) or `owner/repo/.github/workflows/<file>`, space or comma separated. */
 export const publishersFrom = (setting = '') =>
@@ -275,15 +284,26 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
     await report({ step: 'verify', state: 'running' });
     const publisher = `${release.signer.repository}/${release.signer.workflow}`;
     const trusted = [...publishers, ...publishersFrom(envValue(env, 'APP_PUBLISHERS'))];
-    // A preview comes from the preview workflow of a repository whose releases are trusted.
-    const ok = job.pr === undefined ? trusted.includes(publisher) : release.signer.workflow === PREVIEW_WORKFLOW && trusted.some((t) => t.startsWith(`${release.signer.repository}/`));
-    if (!ok) throw new StepFailed(`${publisher} isn’t trusted to publish ${job.pr === undefined ? 'apps' : 'previews'} on this server. Add ${job.pr === undefined ? 'it' : 'its repository'} to APP_PUBLISHERS in .env to trust it.`);
+    const dev = job.pr === undefined && isDevBuild(release.version);
+    // Only a dev or preview server takes dev builds, whatever the registry asked.
+    if (dev && !['dev', 'preview'].includes(envValue(env, 'SERVER_RING') ?? '')) throw new StepFailed(`${release.version} is a dev build, and only a dev or preview server (SERVER_RING=dev or preview in .env) installs dev builds.`);
+    // A preview or a dev build comes from its own workflow, in a repository whose releases are trusted.
+    const own = job.pr !== undefined ? PREVIEW_WORKFLOW : dev ? DEV_WORKFLOW : undefined;
+    const ok = own === undefined ? trusted.includes(publisher) : release.signer.workflow === own && trusted.some((t) => t.startsWith(`${release.signer.repository}/`));
+    const what = job.pr !== undefined ? 'previews' : dev ? 'dev builds' : 'apps';
+    if (!ok) throw new StepFailed(`${publisher} isn’t trusted to publish ${what} on this server. Add ${own === undefined ? 'it' : 'its repository'} to APP_PUBLISHERS in .env to trust it.`);
     try {
-      await host.verifySignedBy(release.service.image, signerIdentity(publisher, job.pr));
+      await host.verifySignedBy(release.service.image, dev ? devIdentity(release.signer.repository) : signerIdentity(publisher, job.pr));
     } catch (err) {
-      throw new StepFailed(`The service image isn’t signed by ${publisher}: ${reason(err)}`);
+      throw new StepFailed(`The service image isn’t signed by ${publisher}${dev ? ' on dev' : ''}: ${reason(err)}`);
     }
-    await report({ step: 'verify', state: 'done' });
+    // A dev build runs on the server's real data: a backup first, to go back to.
+    if (dev) {
+      const file = await host.backup().catch((err) => {
+        throw new StepFailed(`The backup a dev build needs first couldn’t be taken: ${reason(err)}`);
+      });
+      await report({ step: 'verify', state: 'done', message: `Signed on dev. Backup ${file} taken first.` });
+    } else await report({ step: 'verify', state: 'done' });
     return { release: release as AppRelease & { service: { image: string } }, env };
   };
 

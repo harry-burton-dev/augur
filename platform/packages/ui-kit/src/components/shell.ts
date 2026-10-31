@@ -612,8 +612,15 @@ export class UiShell extends LitElement {
     }
   };
 
+  /** An app's drawer took (or gave back) the right edge: the floor gauge moves to stay just left of it. */
+  private onDrawer = (e: Event) => {
+    const inset = (e as CustomEvent<{ inset?: number }>).detail?.inset ?? 0;
+    this.style.setProperty('--app-drawer-inset', `${Math.max(0, inset)}px`);
+  };
+
   override connectedCallback() {
     super.connectedCallback();
+    window.addEventListener('ui-drawer', this.onDrawer);
     window.addEventListener('keydown', this.onWindowKey);
     for (const type of ['keydown', 'pointerdown', 'wheel'] as const) window.addEventListener(type, this.endCard, { capture: true, passive: true });
     this.clock = setInterval(() => (this.now = Date.now()), 30_000);
@@ -621,6 +628,7 @@ export class UiShell extends LitElement {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener('ui-drawer', this.onDrawer);
     window.removeEventListener('keydown', this.onWindowKey);
     for (const type of ['keydown', 'pointerdown', 'wheel'] as const) window.removeEventListener(type, this.endCard, { capture: true });
     clearInterval(this.clock);
@@ -955,7 +963,7 @@ export class UiShell extends LitElement {
       :host([floor-kind='team']) { --floor-mark: var(--floor-team-high); }
       :host([floor-tone='department']) { --floor-mark: var(--floor-department-high); }
       :host([floor-kind='org']) { --floor-mark: var(--floor-org-high); }
-      .gauge { position: absolute; z-index: 3; right: var(--space-2); top: 50%; transform: translateY(-50%); padding: var(--space-2); border-radius: var(--radius-inset); border: 1px solid transparent; transition: opacity var(--motion-slow) var(--ease-standard), background var(--motion-base) var(--ease-standard), border-color var(--motion-base) var(--ease-standard); }
+      .gauge { position: absolute; z-index: 3; right: calc(var(--space-2) + var(--app-drawer-inset, 0px)); top: 50%; transform: translateY(-50%); padding: var(--space-2); border-radius: var(--radius-inset); border: 1px solid transparent; transition: right var(--motion-slow) var(--ease-out), opacity var(--motion-slow) var(--ease-standard), background var(--motion-base) var(--ease-standard), border-color var(--motion-base) var(--ease-standard); }
       .gauge ol { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
       .gauge ol::before { content: ''; position: absolute; top: var(--space-4); bottom: var(--space-4); right: 13.5px; width: 1px; background: var(--hairline); }
       :host([open]) .gauge { opacity: 0; pointer-events: none; }

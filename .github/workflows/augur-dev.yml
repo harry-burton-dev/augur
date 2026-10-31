@@ -1,0 +1,67 @@
+name: AUGUR dev builds
+# Every merge into dev that changes AUGUR (the platform, the apps that ship with it, or how it is
+# deployed) gets a dev build: every image, built, pushed and signed as the Release workflow does,
+# with the version <next patch>-dev.<run>, released as the pre-release augur@<that version>. What it
+# changes and its notes come from the changesets waiting. Only the workbench (SERVER_RING=dev) takes
+# it, by itself and after a backup, as it would a release. AUGUR keeps its newest few dev builds.
+# See docs/release-channels.md, "AUGUR dev builds".
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'platform/**'
+      - 'apps/folio/**'
+      - 'apps/auspex/**'
+      - 'apps/atlas/**'
+      - 'infra/**'
+      - 'release/**'
+  workflow_dispatch:
+concurrency:
+  group: augur-dev
+  cancel-in-progress: false
+permissions:
+  contents: write
+  packages: write
+  # Signed keyless, as refs/heads/dev: the updater takes a dev build only from this workflow on dev.
+  id-token: write
+jobs:
+  dev:
+    if: github.ref_name == 'dev'
+    # Builds and pushes images, so only on an x86-64 runner (docs/ci-runner.md, "An Arm runner").
+    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          # Our own runner keeps the pnpm store between jobs (docs/ci-runner.md).
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+      - run: pnpm install --frozen-lockfile
+      # In this checkout only: the release file and the registry's own idea of its release say the dev build.
+      - name: Which dev build is it?
+        id: build
+        run: echo "version=$(node scripts/augur-release.mjs dev "$GITHUB_RUN_NUMBER")" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@v3
+      - name: Build, push and sign the images
+        run: infra/release-images.sh "${{ steps.build.outputs.version }}" dev > "$RUNNER_TEMP/images.json"
+      - name: Release the dev build
+        run: |
+          node scripts/augur-release.mjs publish "$RUNNER_TEMP/images.json"
+          node scripts/augur-release.mjs devs-clean "augur@${{ steps.build.outputs.version }}"
+          echo "## AUGUR ${{ steps.build.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "The workbench (SERVER_RING=dev) upgrades to it by itself at its updater's next check, after a backup." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: dev
+          RELEASE_TARGET: ${{ github.sha }}
+  # The workbench learns of the dev build from the feed beside the images.
+  feed:
+    needs: dev
+    uses: ./.github/workflows/feed.yml

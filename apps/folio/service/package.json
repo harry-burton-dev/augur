@@ -1,6 +1,6 @@
 {
   "name": "@apps/folio",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Folio's service: its API behind the gateway at /api/folio.",
@@ -13,6 +13,7 @@
     "migrate": "node --experimental-strip-types src/migrate.ts"
   },
   "dependencies": {
+    "@augur/records": "workspace:*",
     "@augur/service-kit": "workspace:*",
     "@aws-sdk/client-s3": "^3.1156.0",
     "@aws-sdk/lib-storage": "^3.1156.0",

@@ -1,5 +1,32 @@
 # @augur/registry
 
+## 0.12.1
+
+### Patch Changes
+
+- Updated dependencies [bb91780]
+  - @augur/mfe-sdk@1.8.0
+
+## 0.12.0
+
+### Minor Changes
+
+- d709061: Dev builds: every merge into `dev` that changes a runner app builds it as `<next patch>-dev.<run>`, signed on `dev`. A preview server's admin can set an app to **Dev builds too** in Admin → Apps, and the updater takes a backup before each one; production servers refuse them. A migration is frozen once it's on `dev`. Registry contract 1.26.0 (docs/release-channels.md, "Dev builds").
+- 5b2c80c: Feature previews (SDK 1.7): an app lists features it's trying in its manifest's `previews` and asks `ctx.previewOn(id)`. Admins choose who gets each in Admin → Apps (off, for those who turn it on, or everyone; opt-in by default on a preview server, off on a production one), people turn opt-in ones on in the shell's Previews, and the shell marks an app with one on. A preview past its `until` day is off for everyone. Registry contract 1.27.0 (docs/release-channels.md, "Feature previews").
+
+### Patch Changes
+
+- Updated dependencies [5b2c80c]
+  - @augur/mfe-sdk@1.7.0
+
+## 0.11.0
+
+### Minor Changes
+
+- 65f4ede: Go back: Admin → Updates lists the releases before yours and goes back to one with the updater's usual steps (a backup first), while no release between is breaking; across a breaking one it says which and why, and going back is by hand. The updater stops parts the older release doesn't have, and starts them again if it has to roll back. Admin → Apps goes back to one of an app's three earlier versions and holds it there. Registry contract 1.25.0 (`PUT /v1/platform/go-back`, `goBack`, `older`).
+- 91f62f3: Admin → Updates shows the history of every upgrade (who asked, from and to, how it ended, how long it took and the backup it took) and **What's new since** your version: every change between it and the newest release, once each, breaking ones first. Admin → Apps shows the same for each installed app: what's new in the waiting version and its history of installs. Releases carry each changed part's changelog (`changelogs` in the AUGUR release file) for this. Registry contract 1.24.0.
+- ab76a1a: Server rings: `SERVER_RING=preview|production` in `.env` (required). A production server follows stable (production) releases only, for AUGUR and for every app, and runs pull requests' builds only with `ALLOW_PR_PREVIEWS=on`. Updates and Apps show the ring, and Admin calls the channels Production and Preview (docs/release-channels.md).
+
 ## 0.10.0
 
 ### Minor Changes

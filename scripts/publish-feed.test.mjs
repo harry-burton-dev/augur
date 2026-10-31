@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { APP_RELEASES_KEPT, buildFeed, chooseReleases } from './publish-feed.mjs';
+import { APP_RELEASES_KEPT, asListed, AUGUR_RELEASES_KEPT, buildFeed, chooseReleases, DEV_BUILDS_KEPT } from './publish-feed.mjs';
 
 const release = (tag, more = {}) => ({ tag_name: tag, draft: false, prerelease: false, html_url: `https://github.com/o/r/releases/tag/${tag}`, assets: [{ name: tag.startsWith('augur@') ? 'augur-release.json' : 'app-release.json', url: `asset:${tag}` }], ...more });
 
@@ -12,6 +12,24 @@ test('the feed holds each app’s newest few releases and each pull request’s 
   assert.deepEqual(augur.map((a) => a.version), ['0.4.0']);
   assert.deepEqual(apps.filter((a) => !a.pr).map((a) => a.version), ['1.5.0', '1.4.0', '1.3.0', '1.2.0']);
   assert.deepEqual(apps.filter((a) => a.pr).map((a) => a.version), ['1.9.0-pr.13.1', '1.9.0-pr.12.2']);
+});
+
+test('dev builds are kept apart, so they never push an app’s releases out', () => {
+  const notes = Array.from({ length: APP_RELEASES_KEPT }, (_, i) => release(`app/notes@1.${i}.0`));
+  const devs = [release('app/notes@1.3.1-dev.7'), release('app/notes@1.3.1-dev.8'), release('app/notes@1.3.1-dev.9')];
+  const { apps } = chooseReleases([...notes, ...devs]);
+  assert.deepEqual(apps.filter((a) => a.dev).map((a) => a.version), ['1.3.1-dev.9', '1.3.1-dev.8'].slice(0, DEV_BUILDS_KEPT));
+  assert.equal(apps.filter((a) => !a.dev && !a.pr).length, APP_RELEASES_KEPT);
+  assert.equal(asListed({ version: '1.3.1-dev.9' }, { prerelease: true }).channel, 'dev');
+});
+
+test('AUGUR’s dev builds are kept apart too, so they never push its releases out', () => {
+  const releases = Array.from({ length: AUGUR_RELEASES_KEPT }, (_, i) => release(`augur@0.${i}.0`, { prerelease: true }));
+  const devs = [release('augur@0.19.1-dev.40', { prerelease: true }), release('augur@0.19.1-dev.41', { prerelease: true }), release('augur@0.19.1-dev.42', { prerelease: true })];
+  const { augur } = chooseReleases([...releases, ...devs]);
+  assert.deepEqual(augur.filter((a) => /-dev\./.test(a.version)).map((a) => a.version), ['0.19.1-dev.42', '0.19.1-dev.41'].slice(0, DEV_BUILDS_KEPT));
+  assert.equal(augur.filter((a) => !/-dev\./.test(a.version)).length, AUGUR_RELEASES_KEPT);
+  assert.equal(augur[0].version, '0.19.1-dev.42');
 });
 
 test('each release file takes its channel from GitHub as it is now, and one that doesn’t match its tag is left out', async () => {

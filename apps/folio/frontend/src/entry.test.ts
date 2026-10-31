@@ -1,16 +1,17 @@
 import { createEventBus, type MountContext, type Workspace } from '@augur/mfe-sdk';
-import type { UiContents, UiDialog, UiFilterBar, UiList, UiReader, UiTagPicker, UiTextField, UiTree } from '@augur/ui-kit';
+import type { UiContents, UiDialog, UiFilterBar, UiList, UiPageHead, UiRadialMenu, UiReader, UiTagPicker, UiTile, UiTree } from '@augur/ui-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pathFor, placeFor, type ReaderState } from './api.js';
 import app, { addressFor, placeForIntent, proposeFrom } from './entry.js';
-import { folderTrail, folderTree, type FolioApp } from './folio-app.js';
+import { DEFAULT_LEVELS, folderTrail, folderTree, type FolioApp } from './folio-app.js';
+import { explainPayload } from './folio-share.js';
 
 const floor: Workspace = { id: 'w-fin', kind: 'team', name: 'Finance', slug: 'finance', path: [], role: 'lead' };
 const policies = { id: 'l-1', workspace: 'w-fin', name: 'Policies', description: 'How we work', freeTags: false, createdBy: 'u1', createdAt: '', updatedAt: '' };
 const reports = { ...policies, id: 'l-2', name: 'Reports', description: '' };
-const hr = { id: 'f-hr', library: 'l-1', name: 'HR', createdBy: 'u1', createdAt: '' };
-const leave = { id: 'f-leave', library: 'l-1', parent: 'f-hr', name: 'Leave', createdBy: 'u2', createdAt: '' };
-const it_ = { id: 'f-it', library: 'l-1', name: 'IT', createdBy: 'u2', createdAt: '' };
+const hr = { id: 'f-hr', library: 'l-1', level: 'subcollection' as const, name: 'HR', description: '', state: 'open' as const, createdBy: 'u1', createdAt: '', updatedAt: '' };
+const leave = { id: 'f-leave', library: 'l-1', parent: 'f-hr', level: 'series' as const, name: 'Leave', description: '', state: 'open' as const, createdBy: 'u2', createdAt: '', updatedAt: '' };
+const it_ = { id: 'f-it', library: 'l-1', level: 'subcollection' as const, name: 'IT', description: '', state: 'open' as const, createdBy: 'u2', createdAt: '', updatedAt: '' };
 const TRAVEL_MD = '# Travel policy\n\nBook through the travel desk.\n\n## Claims\n\nClaim within 30 days.\n\n![A map](images/1.png)\n\n![](https://tracker.example/x.gif)\n';
 const READY = { state: 'ready', pages: 3, thumbnail: true } as ReaderState;
 const DAMAGED = { state: 'failed', error: 'The file is damaged.', thumbnail: false } as ReaderState;
@@ -38,10 +39,21 @@ const service = ({
   views = [recent] as (typeof recent)[],
   shared = NO_SHARED,
   series = [] as unknown[],
+  /** Travel policy as a series' issue: only issues still go out one version at a time. */
+  anIssue = false,
+  /** Whether the caller may rename the levels: the org's leads, on the org's floor. */
+  renameLevels = false,
 } = {}) => {
   const calls: [string, string, unknown?][] = [];
   let grants: (typeof KIM)[] = [KIM];
+  let folderGrants: (typeof KIM)[] = [];
+  let levels = DEFAULT_LEVELS.map((l) => ({ ...l }));
   let retried = false;
+  /** Travel policy's newest version's lifecycle state, and its steps up the floors. */
+  let state = 'in-progress';
+  let placed: Record<string, unknown>[] = [];
+  /** Travel policy's links, and what links to it. */
+  let linked: Record<string, unknown>[] = [];
   /** What's out of Travel policy, if anything. */
   let out: { id: string; version: number; audience: string[]; publishedAt: string; ended?: { as: string; at: string; by: string } } | undefined;
   const named = (p: NonNullable<typeof out>) => ({ ...p, document: 'd-1', library: 'l-1', publishedBy: 'u1', audience: p.audience.map((a) => (a === 'tree:w-fin' ? FINANCE : { principal: a, kind: 'org' })) });
@@ -58,6 +70,13 @@ const service = ({
       const tags = params.getAll('tag');
       const found = documents.filter((d) => !deleted.has(d.id) && (params.get('below') ? true : d.folder === (params.get('folder') ?? undefined)) && tags.every((t) => d.tags.includes(t)));
       return Response.json({ documents: found, total: found.length });
+    }
+    if (method === 'GET' && where === '/levels') return Response.json({ levels, top: ['collection'], can: { rename: renameLevels } });
+    const naming = where.match(/^\/levels\/([a-z]+)$/);
+    if (naming) {
+      const own = DEFAULT_LEVELS.find((l) => l.id === naming[1])!;
+      levels = levels.map((l) => (l.id === own.id ? { ...l, ...(method === 'PUT' ? body : { name: own.name, plural: own.plural }) } : l));
+      return Response.json({ levels });
     }
     if (method === 'GET' && where === '/series/s-1')
       return Response.json({ ...CASH, audience: [FINANCE], libraryName: 'Policies', following: false, next: { number: 3, periodStart: '2026-10-26', period: 'Week 44, 2026', dueBy: '2026-11-02', overdue: false }, can: { manage: lead, addIssue: true, publish: lead } });
@@ -85,10 +104,68 @@ const service = ({
     if (method === 'GET' && where === '/libraries/l-1/documents/d-1')
       return Response.json({
         ...travel,
+        ...(anIssue ? { issue: { series: 's-1', number: 1, periodStart: '', period: 'Week 43, 2026' } } : {}),
         state: out ? (out.ended ? 'withdrawn' : 'published') : 'draft',
         ...(out && !out.ended ? { published: out } : {}),
-        can: { ...travel.can, publish: lead },
-        versions: [v(2), v(1, 'travel-old.pdf', 900, retried ? { state: 'queued', thumbnail: false } : DAMAGED)],
+        latest: { ...v(2), state },
+        can: { ...travel.can, publish: lead, moves: state === 'in-progress' ? ['in-review', 'complete'] : lead ? ['in-progress', 'in-review', 'issued'] : ['in-progress', 'in-review'] },
+        versions: [{ ...v(2), state }, { ...v(1, 'travel-old.pdf', 900, retried ? { state: 'queued', thumbnail: false } : DAMAGED), state: 'complete' }],
+      });
+    if (method === 'PUT' && where === '/libraries/l-1/documents/d-1/versions/2/state') {
+      state = body.state;
+      return Response.json({ ...v(2), state });
+    }
+    if (method === 'PUT' && /^\/libraries\/l-1(\/folders\/[^/]+)?\/state$/.test(where)) return Response.json({ ...hr, state: body.state });
+    if (method === 'PUT' && where === '/libraries/l-1/folders/f-hr/tags') return Response.json({ ...hr, tags: body.tags });
+    if (method === 'GET' && where === '/libraries/l-1/moves') return Response.json({ moves: [{ id: 'm-1', record: 'f-hr', from: 'open', to: 'closed', by: 'u1', note: 'Year end', at: new Date().toISOString() }] });
+    if (method === 'GET' && where === '/libraries/l-1/links') {
+      const KINDS = [
+        { id: 'relates-to', name: 'Relates to', inverse: 'Relates to' },
+        { id: 'supersedes', name: 'Supersedes', inverse: 'Superseded by' },
+        { id: 'about', name: 'About', inverse: 'Written about in' },
+        { id: 'serves', name: 'Serves', inverse: 'Served by' },
+      ];
+      const back = params.get('record') === 'd-1' ? [{ id: 'k-9', relation: 'responds-to', words: 'Answered by', from: { unavailable: 'Something you can’t open links here.' }, by: 'u5', at: new Date().toISOString() }] : [];
+      return Response.json({ kinds: KINDS, links: params.get('record') === 'd-1' ? linked : [], back, can: { change: true } });
+    }
+    if (method === 'POST' && where === '/libraries/l-1/links') {
+      const to = body.to.app === 'folio' ? { ...body.to, label: 'Annual leave', library: 'l-1', record: 'd-2', unitKind: 'document' } : body.to;
+      const made = { id: `k-${linked.length + 1}`, relation: body.relation, words: body.relation === 'about' ? 'About' : 'Supersedes', to, by: 'u1', at: new Date().toISOString() };
+      linked = [...linked, made];
+      return Response.json(made, { status: 201 });
+    }
+    if (method === 'DELETE' && /^\/libraries\/l-1\/links\/[^/]+$/.test(where)) {
+      linked = linked.filter((l) => !where.endsWith(`/${l.id as string}`));
+      return new Response(null, { status: 204 });
+    }
+    if (method === 'GET' && where === '/placements') {
+      const OPS = { id: 'w-ops', kind: 'team', name: 'Operations', rank: 1, path: ['w-ops'] };
+      return Response.json({
+        placements: placed,
+        owner: placed.length ? OPS : { ...floor, rank: 2 },
+        targets: [
+          { from: { ...floor, rank: 2 }, to: OPS, ...(placed.length ? { why: 'It’s already there.' } : {}) },
+          { from: { ...floor, rank: 2 }, to: { id: 'org', kind: 'org', name: 'The org', rank: 0, path: [] }, why: 'Publishing to the org needs the publisher role, which an admin can give you.' },
+        ],
+      });
+    }
+    if (method === 'POST' && where === '/placements') {
+      const step = { id: 'pl-1', library: 'l-1', record: { ...body.record, name: 'Travel policy' }, from: 'w-fin', to: body.to, filter: body.filter, by: 'u1', at: new Date().toISOString(), chain: [], toFloor: { id: 'w-ops', kind: 'team', name: 'Operations', rank: 1, path: [] }, can: { change: true, land: false } };
+      placed = [step];
+      return Response.json(step, { status: 201 });
+    }
+    if (method === 'GET' && where === '/received')
+      return Response.json({
+        here: [{ id: 'pl-9', library: 'l-7', record: { kind: 'folder', id: 'f-q', name: 'Quarterly returns', level: 'series' }, from: 'w-pay', to: 'w-fin', filter: ['complete', 'issued'], by: 'u5', at: '', chain: [], fromFloor: { id: 'w-pay', kind: 'team', name: 'Payroll', rank: 2, path: [] } }],
+        signposts: [],
+      });
+    if (method === 'GET' && where === '/received/pl-9')
+      return Response.json({
+        placement: { id: 'pl-9', library: 'l-7', record: { kind: 'folder', id: 'f-q', name: 'Quarterly returns', level: 'series' }, from: 'w-pay', to: 'w-fin', filter: ['complete', 'issued'], by: 'u5', at: '', chain: [], fromFloor: { id: 'w-pay', kind: 'team', name: 'Payroll', rank: 2, path: [] } },
+        folders: [],
+        folder: null,
+        documents: [{ ...travel, id: 'd-q3', library: 'l-7', title: 'Q3 return', latest: { ...v(1), state: 'issued' } }, { ...travel, id: 'd-q4', library: 'l-7', title: 'Q4 return', latest: { ...v(3), state: 'complete' }, onlyVia: { id: 'w-fin', kind: 'team', name: 'Finance', rank: 1, path: [] } }],
+        states: {},
       });
     if (method === 'GET' && where === '/libraries/l-1/documents/d-1/publications') return Response.json({ publications: out ? [named(out)] : [], can: { publish: lead, publishToOrg: false } });
     if (method === 'GET' && where === '/libraries/l-1/documents/d-1/access') return Response.json({ floor: FINANCE, grants: [], library: grants, can: { share: lead } });
@@ -133,6 +210,21 @@ const service = ({
     if (method === 'GET' && route === '/shared') return Response.json(shared);
     if (method === 'GET' && where === '/people') return Response.json({ people: [{ id: 'u4', name: 'Ola Bello', email: 'ola@example.org' }], teams: [{ id: 'w-legal', name: 'Legal', within: [] }] });
     if (where === '/libraries/l-1/access') return Response.json({ floor: FINANCE, grants, can: { share: lead } });
+    if (where === '/libraries/l-1/folders/f-hr/access')
+      return Response.json({
+        floor: FINANCE,
+        grants: folderGrants,
+        library: grants,
+        placed: [{ principal: 'org', kind: 'org', filter: ['complete', 'issued'], at: '2026-10-30T09:00:00Z', record: { kind: 'folder', id: 'f-hr' }, chain: ['Payroll', 'Finance'] }],
+        can: { share: lead },
+      });
+    const folderSharing = where.match(/^\/libraries\/l-1\/folders\/f-hr\/access\/(.+)$/);
+    if (folderSharing) {
+      const principal = decodeURIComponent(folderSharing[1]);
+      folderGrants = folderGrants.filter((g) => g.principal !== principal);
+      if (method === 'PUT') folderGrants = [...folderGrants, { ...KIM, principal, kind: 'tree', name: 'Legal', level: body.level }];
+      return Response.json({ floor: FINANCE, grants: folderGrants, library: grants, can: { share: true } });
+    }
     const sharing = where.match(/^\/libraries\/l-1\/access\/(.+)$/);
     if (sharing) {
       const principal = decodeURIComponent(sharing[1]);
@@ -163,14 +255,14 @@ const service = ({
       if (body.name === 'Taken') return Response.json({ error: 'name-taken', message: 'There’s already a library called Taken here.' }, { status: 409 });
       return Response.json({ ...policies, id: 'l-new', name: body.name, description: body.description ?? '' }, { status: 201 });
     }
-    if (method === 'POST' && route === '/libraries/l-1/folders') return Response.json({ id: 'f-new', library: 'l-1', name: body.name, ...(body.parent ? { parent: body.parent } : {}), createdBy: 'u1', createdAt: '' }, { status: 201 });
+    if (method === 'POST' && route === '/libraries/l-1/folders') return Response.json({ id: 'f-new', library: 'l-1', name: body.name, level: body.level ?? 'subcollection', description: body.description ?? '', state: 'open', ...(body.parent ? { parent: body.parent } : {}), createdBy: 'u1', createdAt: '', updatedAt: '' }, { status: 201 });
     if (method === 'POST' && route.endsWith('/archive')) return new Response(null, { status: 204 });
     return Response.json({ message: 'Artifacts isn’t answering.' }, { status: 502 });
   });
   return { fetch, calls };
 };
 
-const ctx = (fetch: MountContext['fetch'], path = '/libraries'): MountContext => ({
+const ctx = (fetch: MountContext['fetch'], path = '/libraries/l-1'): MountContext => ({
   user: { id: 'u1', name: 'Sam Okafor', departments: ['Finance'], roles: [] },
   getToken: async () => 't',
   bus: createEventBus(),
@@ -180,13 +272,13 @@ const ctx = (fetch: MountContext['fetch'], path = '/libraries'): MountContext =>
   path,
   workspace: floor,
   getWorkspace: () => floor,
+  previewOn: () => false,
   fetch,
 });
 
 /** Opens Travel policy on its page, then its details, to change it. */
 const details = async (el: HTMLElement) => {
-  list(el).dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id: 'doc:d-1' } } }));
-  await settle(el);
+  await press(el, 'Travel policy');
   button(el, 'Change it')!.click();
   await settle(el);
 };
@@ -196,17 +288,56 @@ const settle = async (el: HTMLElement) => {
     await (el.querySelector('folio-app') as FolioApp | null)?.updateComplete;
   }
 };
-const mounted = async (fetch: MountContext['fetch'], path?: string) => {
+/** Mounts Artifacts at a path: by default inside Policies, the floor's first collection. */
+const mounted = async (fetch: MountContext['fetch'], path = '/libraries/l-1') => {
   const el = document.createElement('div');
   document.body.append(el);
   await app.mount(el, ctx(fetch, path));
   await settle(el);
   return el;
 };
-/** The rail's trees of libraries, folders and views; "For you" is always there, so it's left out. */
-const trees = (el: HTMLElement) => [...el.querySelectorAll<UiTree>('ui-tree')].filter((t) => t.label !== 'For you');
 const list = (el: HTMLElement) => el.querySelector<UiList>('ui-list')!;
-const button = (el: HTMLElement, text: string) => [...el.querySelectorAll<HTMLElement>('ui-button')].find((b) => b.textContent?.trim() === text);
+/** The tiles on screen, leaving out the dashed one that makes another; by rank, `mid` for folders and `low` for documents. */
+const tiles = (el: HTMLElement, rank?: UiTile['rank']) => [...el.querySelectorAll<UiTile>('ui-tile')].filter((t) => !t.add && (!rank || t.rank === rank));
+const headings = (el: HTMLElement, rank?: UiTile['rank']) => tiles(el, rank).map((t) => t.heading);
+const tile = (el: HTMLElement, heading: string) => tiles(el).find((t) => t.heading === heading)!;
+/** Presses a tile, as a click on it does. */
+const press = async (el: HTMLElement, heading: string) => {
+  tile(el, heading).dispatchEvent(new CustomEvent('ui-open', { bubbles: true }));
+  await settle(el);
+};
+/** The empty space of the grid on screen, whose right-click is about the place itself. */
+const grid = (el: HTMLElement) => el.querySelector<HTMLElement>('.folio-grid')!;
+/** What the ring offers when something is right-clicked, by label. */
+const ring = async (el: HTMLElement, target: Element) => {
+  target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  await settle(el);
+  return el.querySelector<UiRadialMenu>('ui-radial-menu')!.actions.map((a) => a.label);
+};
+/** Right-clicks something and picks one of its ring's actions. */
+const act = async (el: HTMLElement, target: Element, label: string) => {
+  target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  await settle(el);
+  const menu = el.querySelector<UiRadialMenu>('ui-radial-menu')!;
+  const action = menu.actions.find((a) => a.label === label);
+  if (!action) throw new Error(`No “${label}” in ${JSON.stringify(menu.actions.map((a) => a.label))}`);
+  menu.dispatchEvent(new CustomEvent('ui-select', { detail: { action } }));
+  await settle(el);
+};
+/** The title of the screen, and the Back above it. */
+const title = (el: HTMLElement) => el.querySelector('.folio-title')?.textContent;
+const back = (el: HTMLElement) => el.querySelector('.folio-back')?.textContent?.trim();
+/** One of the rail's trees, by its heading ("Open collection", "Series", "Views"), or by its label for the app's own screens. */
+const rail = (el: HTMLElement, name: string) => [...el.querySelectorAll<UiTree>('.folio-rail ui-tree')].find((t) => t.heading === name || t.label === name)!;
+/** What the drawer says about what's on screen, as its facts. */
+const facts = (el: HTMLElement) => Object.fromEntries([...el.querySelectorAll('.folio-facts dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
+/** A button by its words: a kit button, or one of a page head's actions (two show, the rest are in its ⋯ menu). */
+const button = (el: HTMLElement, text: string): HTMLElement | undefined =>
+  [...el.querySelectorAll<HTMLElement>('ui-button')].find((b) => b.textContent?.trim() === text) ??
+  [...el.querySelectorAll<UiPageHead>('ui-page-head')].flatMap((head) => {
+    const action = head.actions.find((a) => a.label === text);
+    return action ? [Object.assign(document.createElement('span'), { click: () => head.dispatchEvent(new CustomEvent('ui-action', { detail: { action } })) })] : [];
+  })[0];
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -216,7 +347,12 @@ afterEach(() => {
 
 describe('folio paths', () => {
   it('reads and writes where Folio is', () => {
-    expect(placeFor('/libraries')).toEqual({ adding: false });
+    expect(placeFor('/')).toEqual({ home: true, adding: false });
+    expect(placeFor('/libraries')).toEqual({ collections: true, adding: false });
+    expect(placeFor('/shared')).toEqual({ shared: true, adding: false });
+    expect(pathFor({ home: true })).toBe('/');
+    expect(pathFor({ shared: true })).toBe('/shared');
+    expect(pathFor({})).toBe('/libraries');
     expect(placeFor('/libraries/new')).toEqual({ adding: true });
     expect(placeFor('/libraries/l-1/f%20x')).toEqual({ library: 'l-1', folder: 'f x', adding: false });
     expect(placeFor('/libraries/l-1/views/vw-1')).toEqual({ library: 'l-1', view: 'vw-1', adding: false });
@@ -234,6 +370,11 @@ describe('folio paths', () => {
   it('starts at a document another app asked to open', () => {
     expect(placeForIntent({ type: 'document.open', payload: { app: 'folio', id: 'd-9', version: '2', title: 'Shared plan' } })).toEqual({ document: 'd-9', version: 2, adding: false });
     expect(placeForIntent({ type: 'document.open', payload: { app: 'other', id: 'd-9', title: 'Theirs' } })).toBeUndefined();
+    const unit = (id: string, level: string) => placeForIntent({ type: 'unit.open', payload: { kind: 'unit', app: 'folio', id, level, name: 'It' } });
+    expect(unit('l-1', 'collection')).toEqual({ library: 'l-1', adding: false });
+    expect(unit('l-1/f-hr', 'series')).toEqual({ library: 'l-1', folder: 'f-hr', adding: false });
+    expect(unit('l-1/d-1', 'file')).toEqual({ library: 'l-1', document: 'd-1', adding: false });
+    expect(unit('l-1/f-hr', 'folder')).toBeUndefined();
     expect(placeForIntent({ type: 'document.open', payload: { id: 'd-9' } })).toBeUndefined();
     expect(placeForIntent(undefined)).toBeUndefined();
     expect(placeForIntent({ type: 'folio.open', payload: { path: '/published' } })).toEqual({ published: true, adding: false });
@@ -253,37 +394,30 @@ describe('folio paths', () => {
 });
 
 describe('folio', () => {
-  it('lists a place’s documents under its folders, and uploads what is dropped there', async () => {
+  it('lists a place’s folders and documents as tiles, and uploads what is added', async () => {
     const { fetch, calls } = service({ documents: [travel] });
     const el = await mounted(fetch);
-    expect(list(el).items.map((i) => [i.group, i.title, i.detail])).toEqual([
-      ['Folders', 'HR', undefined],
-      ['Folders', 'IT', undefined],
-      ['Documents', 'Travel policy', 'Version 2 · PDF · 1.2 MB'],
-    ]);
-    const zone = el.querySelector('ui-drop-zone')!;
-    expect(zone.getAttribute('heading')).toBe('Drop files to add them to Policies');
-    // Tags chosen for what's added go with the next file.
-    const picker = el.querySelector<UiTagPicker>('.folio-add ui-tag-picker')!;
-    expect(picker.options.map((o) => [o.label, o.detail])).toEqual([['Policy', 'Org'], ['Travel', undefined]]);
-    picker.dispatchEvent(new CustomEvent('ui-change', { detail: { values: ['t-trv'] } }));
-    zone.dispatchEvent(new CustomEvent('ui-files', { detail: { files: [new File(['%PDF'], 'Leave.pdf')] } }));
+    expect(headings(el, 'mid')).toEqual(['HR', 'IT']);
+    expect(headings(el, 'low')).toEqual(['Travel policy']);
+    expect(facts(el)).toMatchObject({ 'What it is': 'Collection', Inside: '2 folders, 1 document' });
+    // Add offers what may go in here; Add files picks files from the computer.
+    el.querySelector('ui-toolbar')!.dispatchEvent(new CustomEvent('ui-add', { detail: { button: el.querySelector('ui-toolbar') } }));
     await settle(el);
-    picker.dispatchEvent(new CustomEvent('ui-change', { detail: { values: [] } }));
-    await settle(el);
+    expect(el.querySelector<UiRadialMenu>('ui-radial-menu')!.actions.map((a) => a.label)).toEqual(['Add files', 'New subcollection', 'New series']);
+    const input = el.querySelector<HTMLInputElement>('.folio-file')!;
     const pdf = new File(['%PDF'], 'Leave.pdf', { type: 'application/pdf' });
     const md = new File(['# Notes'], 'notes.md');
-    zone.dispatchEvent(new CustomEvent('ui-files', { detail: { files: [pdf, md, new File(['x'], 'big.pdf')] } }));
+    Object.defineProperty(input, 'files', { value: [pdf, md, new File(['x'], 'big.pdf')], configurable: true });
+    input.dispatchEvent(new Event('change'));
     await settle(el);
     const sent = calls.filter(([m, p]) => m === 'POST' && p.startsWith('/api/folio/v1/libraries/l-1/documents?'));
     expect(sent.map(([, p]) => p)).toEqual([
-      '/api/folio/v1/libraries/l-1/documents?filename=Leave.pdf&tag=t-trv',
       '/api/folio/v1/libraries/l-1/documents?filename=Leave.pdf',
       '/api/folio/v1/libraries/l-1/documents?filename=notes.md',
       '/api/folio/v1/libraries/l-1/documents?filename=big.pdf',
     ]);
     expect(fetch.mock.calls.find(([p]) => p.includes('filename=notes.md'))![1]!.headers).toEqual({ 'content-type': 'text/markdown' });
-    expect(el.querySelector('.folio-note')!.textContent).toBe('Added 2 documents. Couldn’t add big.pdf: A file can be 200 MB at most.');
+    expect(el.querySelector('ui-note')!.textContent).toBe('Added 2 documents. Couldn’t add big.pdf: A file can be 200 MB at most.');
   });
 
   it('renames or moves a document, and deletes one', async () => {
@@ -307,14 +441,16 @@ describe('folio', () => {
     expect(calls).toContainEqual(['DELETE', '/api/folio/v1/libraries/l-1/documents/d-1']);
     // Back in the library, without it.
     expect(el.querySelector('folio-reader')).toBeNull();
-    expect(list(el).items.map((i) => i.title)).toEqual(['HR', 'IT']);
+    expect(headings(el, 'mid')).toEqual(['HR', 'IT']);
+    expect(headings(el, 'low')).toEqual([]);
   });
 
   it('says which files it turned away', async () => {
-    const el = await mounted(service().fetch);
-    el.querySelector('ui-drop-zone')!.dispatchEvent(new CustomEvent('ui-reject', { detail: { files: [new File(['x'], 'deck.pptx')] } }));
+    const el = await mounted(service({ documents: [travel] }).fetch);
+    await details(el);
+    el.querySelector('ui-dialog ui-drop-zone')!.dispatchEvent(new CustomEvent('ui-reject', { detail: { files: [new File(['x'], 'deck.pptx')] } }));
     await settle(el);
-    expect(el.querySelector('.folio-note')!.textContent).toMatch(/^Artifacts can’t take deck\.pptx/);
+    expect(el.querySelector('ui-note')!.textContent).toMatch(/^Artifacts can’t take deck\.pptx/);
   });
 
   it('opens a document with its versions, downloads one, and takes the next', async () => {
@@ -346,13 +482,12 @@ describe('folio', () => {
   });
 
   it('opens a document on its own page to read, with its contents, versions and the original', async () => {
-    window.history.replaceState(null, '', '/@finance/folio/libraries');
+    window.history.replaceState(null, '', '/@finance/folio/libraries/l-1');
     URL.createObjectURL = vi.fn(() => 'blob:map');
     URL.revokeObjectURL = vi.fn();
     const { fetch, calls } = service({ documents: [travel] });
     const el = await mounted(fetch);
-    list(el).dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id: 'doc:d-1' } } }));
-    await settle(el);
+    await press(el, 'Travel policy');
     expect(window.location.pathname).toBe('/@finance/folio/libraries/l-1/documents/d-1');
     const page = el.querySelector('folio-reader')!;
     expect(page.querySelector('h1')!.textContent).toBe('Travel policy');
@@ -365,8 +500,9 @@ describe('folio', () => {
     expect(calls).toContainEqual(['GET', '/api/folio/v1/libraries/l-1/documents/d-1/versions/2/reader/images/1.png']);
     expect(calls.some(([, p]) => p.includes('tracker'))).toBe(false);
     expect(reader.shadowRoot!.querySelector('img')!.getAttribute('src')).toBe('blob:map');
-    expect(page.querySelector<UiList>('ui-list')!.items.map((i) => i.title)).toEqual(['Version 2, reading', 'Version 1']);
-    page.querySelector<HTMLButtonElement>('.folio-crumb')!.click();
+    // Its facts and versions are in the drawer, as on every screen.
+    expect(el.querySelector<UiList>('.folio-reader-drawer ui-list[label="Versions"]')!.items.map((i) => i.title)).toEqual(['Version 2, reading', 'Version 1']);
+    page.querySelector<HTMLButtonElement>('.folio-back')!.click();
     await settle(el);
     expect(el.querySelector('folio-reader')).toBeNull();
     expect(window.location.pathname).toBe('/@finance/folio/libraries/l-1');
@@ -382,7 +518,7 @@ describe('folio', () => {
     await settle(el);
     const page = el.querySelector('folio-reader')!;
     await page.updateComplete;
-    const section = page.querySelector('.folio-reader-atlas')!;
+    const section = el.querySelector('.folio-reader-drawer .folio-reader-atlas')!;
     const add = section.querySelector('ui-button') as HTMLElement & { disabled: boolean };
     expect(add.disabled).toBe(true);
     expect(section.textContent).toContain('Select the words that name a ship');
@@ -465,108 +601,293 @@ describe('folio', () => {
   });
 
 
-  it('opens the floor’s first library, with its libraries and folders in the side rail', async () => {
+  it('opens on its front page: what needs the person, what’s new, and their collections', async () => {
     const { fetch, calls } = service();
-    const el = await mounted(fetch);
-    expect(calls.map(([m, p]) => `${m} ${p}`)).toEqual(['GET /api/folio/v1/libraries', 'GET /api/folio/v1/shared', 'GET /api/folio/v1/libraries/l-1', 'GET /api/folio/v1/libraries/l-1/documents?limit=100']);
-    const [libs, folders, views] = trees(el);
-    expect(views.items.map((i) => i.label)).toEqual(['Recent policy']);
-    expect(libs.heading).toBe('Libraries on Finance');
-    expect(libs.items.map((i) => i.label)).toEqual(['Policies', 'Reports']);
-    expect(libs.selected).toBe('l-1');
-    expect(folders.items.map((i) => i.label)).toEqual(['HR', 'IT']);
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Policies');
-    expect(el.querySelector('ui-heading')!.getAttribute('eyebrow')).toBe('Libraries on Finance');
-    expect(el.querySelector('.folio-trail')).toBeNull();
-    expect(list(el).items.map((i) => i.title)).toEqual(['HR', 'IT']);
+    const el = await mounted(fetch, '/');
+    expect(calls.map(([m, p]) => `${m} ${p}`)).toEqual([
+      'GET /api/folio/v1/libraries',
+      'GET /api/folio/v1/shared',
+      'GET /api/folio/v1/levels',
+      'GET /api/folio/v1/received',
+      'GET /api/folio/v1/home',
+    ]);
+    expect(title(el)).toBe('Artifacts');
+    expect(el.querySelector('.folio-back')).toBeNull();
+    expect(el.querySelector('.folio-app-title')!.getAttribute('aria-current')).toBe('page');
+    expect(el.querySelector<UiList>('ui-list[label="Drafts waiting on a lead"]')!.items.map((i) => i.title)).toEqual(['Travel policy']);
+    expect(el.querySelector<UiList>('ui-list[label="Published to you"]')!.items.map((i) => [i.title, i.detail])).toEqual([['Shared plan', 'Ops runbooks']]);
+    expect(headings(el, 'high')).toEqual(['Policies', 'Reports']);
+    expect(el.querySelector<UiTile>('ui-tile[add]')!.heading).toBe('New collection');
+    expect(facts(el)).toMatchObject({ Floor: 'Finance', Collections: '2', 'New to you': '1', 'Drafts waiting': '4' });
+    expect(rail(el, 'Artifacts').items.map((i) => i.label)).toEqual(['Your collections', 'Shared libraries', 'From below']);
     await app.unmount!(el);
     expect(el.querySelector('folio-app')).toBeNull();
   });
 
-  it('goes into a folder, says where it is, and puts it in the address bar', async () => {
+  it('lists the floor’s collections as tiles, and opens one with its folders in the rail', async () => {
     window.history.replaceState(null, '', '/@finance/folio/libraries');
+    const { fetch, calls } = service();
+    const el = await mounted(fetch, '/libraries');
+    expect(title(el)).toBe('Collections on Finance');
+    expect(back(el)).toBe('Artifacts');
+    expect(rail(el, 'Artifacts').selected).toBe('collections');
+    expect(headings(el, 'high')).toEqual(['Policies', 'Reports']);
+    // The search above the grid narrows it by name.
+    el.querySelector('ui-toolbar')!.dispatchEvent(new CustomEvent('ui-search', { detail: { query: 'rep' } }));
+    await settle(el);
+    expect(headings(el, 'high')).toEqual(['Reports']);
+    el.querySelector('ui-toolbar')!.dispatchEvent(new CustomEvent('ui-search', { detail: { query: '' } }));
+    await settle(el);
+    await press(el, 'Policies');
+    expect(calls.slice(-2).map(([m, p]) => `${m} ${p}`)).toEqual(['GET /api/folio/v1/libraries/l-1', 'GET /api/folio/v1/libraries/l-1/documents?limit=100']);
+    expect(window.location.pathname).toBe('/@finance/folio/libraries/l-1');
+    expect(title(el)).toBe('Policies');
+    expect(back(el)).toBe('Your collections');
+    const scope = rail(el, 'Open collection');
+    expect(scope.items.map((i) => [i.label, i.children?.map((c) => c.label)])).toEqual([['Policies', ['HR', 'IT']]]);
+    expect(scope.selected).toBe('@library');
+    expect(rail(el, 'Views').items.map((i) => i.label)).toEqual(['Recent policy']);
+    expect(headings(el, 'mid')).toEqual(['HR', 'IT']);
+    // Back goes up to the collections.
+    el.querySelector<HTMLButtonElement>('.folio-back')!.click();
+    await settle(el);
+    expect(title(el)).toBe('Collections on Finance');
+    expect(window.location.pathname).toBe('/@finance/folio/libraries');
+  });
+
+  it('goes into a folder, says where it is, and puts it in the address bar', async () => {
+    window.history.replaceState(null, '', '/@finance/folio/libraries/l-1');
     const { fetch } = service();
     const el = await mounted(fetch);
-    list(el).dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id: 'f-hr' } } }));
-    await settle(el);
+    await press(el, 'HR');
     expect(window.location.pathname).toBe('/@finance/folio/libraries/l-1/f-hr');
-    expect([...el.querySelectorAll('.folio-crumb')].map((c) => c.textContent)).toEqual(['Policies', 'HR']);
-    expect(el.querySelector('ui-heading')!.getAttribute('eyebrow')).toBe('Policies');
-    expect(list(el).items.map((i) => i.title)).toEqual(['Leave']);
-    expect(trees(el)[1].selected).toBe('f-hr');
+    expect(title(el)).toBe('HR');
+    expect(back(el)).toBe('Policies');
+    expect(facts(el)).toMatchObject({ 'What it is': 'Subcollection', In: 'Policies' });
+    expect(headings(el, 'mid')).toEqual(['Leave']);
+    expect(rail(el, 'Open collection').selected).toBe('f-hr');
   });
 
   it('opens straight at a folder from its path', async () => {
     const { fetch } = service();
     const el = await mounted(fetch, '/libraries/l-1/f-leave');
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Leave');
-    expect(el.querySelector('ui-heading')!.getAttribute('eyebrow')).toBe('HR');
-    expect(trees(el)[1].selected).toBe('f-leave');
+    expect(title(el)).toBe('Leave');
+    expect(back(el)).toBe('HR');
+    expect(facts(el)).toMatchObject({ 'What it is': 'Series', In: 'HR' });
+    expect(rail(el, 'Open collection').selected).toBe('f-leave');
   });
 
-  it('calls them your libraries on your own floor', async () => {
+  it('calls them your collections on your own floor', async () => {
     const el = document.createElement('div');
     document.body.append(el);
     const own: Workspace = { ...floor, id: 'w-me', kind: 'personal', name: 'You', role: 'lead' };
-    await app.mount(el, { ...ctx(service().fetch), workspace: own, getWorkspace: () => own });
+    await app.mount(el, { ...ctx(service().fetch, '/libraries'), workspace: own, getWorkspace: () => own });
     await settle(el);
-    expect(trees(el)[0].heading).toBe('Your libraries');
+    expect(title(el)).toBe('Your collections');
+    expect(facts(el)).toMatchObject({ Collections: '2' });
   });
 
   it('offers Rename and Remove only on folders the person may change', async () => {
     const { fetch } = service({ lead: false });
-    const el = await mounted(fetch);
-    expect(list(el).items.map((i) => [i.title, (i.actions ?? []).map((a) => a.label)])).toEqual([
-      ['HR', ['Rename', 'Remove']],
-      ['IT', []],
-    ]);
-    expect(button(el, 'Rename')).toBeUndefined();
-    expect(button(el, 'New library')).toBeUndefined();
-    expect(button(el, 'New folder')).toBeDefined();
+    let el = await mounted(fetch);
+    const top = await ring(el, grid(el));
+    expect(top).toContain('New subcollection');
+    expect(top).not.toContain('Rename');
+    expect(top).not.toContain('Archive');
+    expect(await ring(el, tile(el, 'HR'))).toEqual(['Open', 'Who can see it', 'Rename', 'Remove']);
+    expect(await ring(el, tile(el, 'IT'))).toEqual(['Open', 'Who can see it']);
+    document.body.innerHTML = '';
+    el = await mounted(fetch, '/libraries');
+    expect(el.querySelector('ui-tile[add]')).toBeNull();
+    document.body.innerHTML = '';
+    el = await mounted(fetch, '/libraries/l-1/f-hr');
+    expect(await ring(el, grid(el))).toEqual(expect.arrayContaining(['Rename', 'Remove']));
+    document.body.innerHTML = '';
+    el = await mounted(fetch, '/libraries/l-1/f-it');
+    expect(await ring(el, grid(el))).not.toContain('Rename');
   });
 
-  it('makes a library, and keeps the dialog open with the service’s words when it refuses', async () => {
+  it('makes a collection, and keeps the dialog open with the service’s words when it refuses', async () => {
     const { fetch, calls } = service();
     const el = await mounted(fetch, '/libraries/new');
     const dialog = el.querySelector<UiDialog>('ui-dialog')!;
-    expect(dialog.heading).toBe('New library');
+    expect(dialog.heading).toBe('New collection');
     await expect(dialog.submit!({ name: 'Taken' }, dialog)).rejects.toThrow('There’s already a library called Taken here.');
     await dialog.submit!({ name: ' Board papers ', description: '' }, dialog);
     await settle(el);
     expect(calls).toContainEqual(['POST', '/api/folio/v1/libraries', { name: 'Board papers' }]);
-    expect(trees(el)[0].items.map((i) => i.label)).toEqual(['Board papers', 'Policies', 'Reports']);
+    expect(rail(el, 'Artifacts').items[0].meta).toBe('3');
   });
 
   it('makes a folder inside the one that is open', async () => {
     const { fetch, calls } = service();
     const el = await mounted(fetch, '/libraries/l-1/f-hr');
-    button(el, 'New folder')!.click();
+    el.querySelector('ui-toolbar')!.dispatchEvent(new CustomEvent('ui-add', { detail: { button: el.querySelector('ui-toolbar') } }));
+    await settle(el);
+    const menu = el.querySelector<UiRadialMenu>('ui-radial-menu')!;
+    expect(menu.actions.map((a) => a.label)).toEqual(['Add files', 'New series']);
+    menu.dispatchEvent(new CustomEvent('ui-select', { detail: { action: menu.actions[1] } }));
     await settle(el);
     const dialog = el.querySelector<UiDialog>('ui-dialog')!;
-    await dialog.submit!({ name: 'Sickness' }, dialog);
+    expect(dialog.heading).toBe('New series');
+    await dialog.submit!({ name: 'Sickness', level: 'series', description: ' Each absence ' }, dialog);
     await settle(el);
-    expect(calls).toContainEqual(['POST', '/api/folio/v1/libraries/l-1/folders', { name: 'Sickness', parent: 'f-hr' }]);
-    expect(list(el).items.map((i) => i.title)).toEqual(['Leave', 'Sickness']);
+    expect(calls).toContainEqual(['POST', '/api/folio/v1/libraries/l-1/folders', { name: 'Sickness', parent: 'f-hr', level: 'series', description: 'Each absence' }]);
+    expect(headings(el, 'mid')).toEqual(['Leave', 'Sickness']);
   });
 
-  it('archives a library and moves on to the next', async () => {
+  it('archives a collection and moves on to the next', async () => {
     const { fetch, calls } = service();
     const el = await mounted(fetch);
-    button(el, 'Archive')!.click();
-    await settle(el);
+    await act(el, grid(el), 'Archive');
     const dialog = el.querySelector<UiDialog>('ui-dialog')!;
     await dialog.submit!({}, dialog);
     await settle(el);
     expect(calls).toContainEqual(['POST', '/api/folio/v1/libraries/l-1/archive']);
-    expect(trees(el)[0].items.map((i) => i.label)).toEqual(['Reports']);
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Reports');
+    expect(title(el)).toBe('Reports');
+    expect(rail(el, 'Artifacts').items[0].meta).toBe('1');
   });
 
-  it('says when a floor has no libraries, and who can start one', async () => {
-    const lead = await mounted(service({ libraries: [] }).fetch);
-    expect(lead.querySelector('ui-state')!.getAttribute('action')).toBe('New library');
-    const member = await mounted(service({ lead: false, libraries: [] }).fetch);
-    expect(member.querySelector('ui-state')!.getAttribute('body')).toMatch(/A lead on this floor/);
+  it('moves the newest version on through its lifecycle, from the reader', async () => {
+    const { fetch, calls } = service({ documents: [travel] });
+    const el = await mounted(fetch);
+    await press(el, 'Travel policy');
+    let track = el.querySelector('.folio-reader-drawer ui-lifecycle') as HTMLElement & { state: string; moves: string[] };
+    expect([track.state, track.moves]).toEqual(['in-progress', ['in-review', 'complete']]);
+    track.dispatchEvent(new CustomEvent('ui-move', { detail: { state: 'complete' } }));
+    await settle(el);
+    expect(calls).toContainEqual(['PUT', '/api/folio/v1/libraries/l-1/documents/d-1/versions/2/state', { state: 'complete' }]);
+    track = el.querySelector('.folio-reader-drawer ui-lifecycle') as typeof track;
+    expect([track.state, track.moves]).toEqual(['complete', ['in-progress', 'in-review', 'issued']]);
+    // The versions list says where each is.
+    expect(el.querySelector<UiList>('.folio-reader-drawer ui-list[label="Versions"]')!.items.map((i) => i.detail?.split(' · ')[0])).toEqual(['Complete', 'Complete']);
+  });
+
+  it('publishes a document up the floors through a filter, with the floors it can’t go to saying why', async () => {
+    const { fetch, calls } = service({ documents: [travel] });
+    const el = await mounted(fetch);
+    await press(el, 'Travel policy');
+    button(el, 'Publish up the floors')!.click();
+    await settle(el);
+    const up = el.querySelector('folio-publish-up')!;
+    const where = up.querySelector('ui-select') as HTMLElement & { options: { label: string; disabled?: boolean; detail?: string }[]; value: string };
+    expect(where.options.map((o) => [o.label, Boolean(o.disabled), o.detail ?? ''])).toEqual([
+      ['Operations', false, ''],
+      ['The org', true, 'Publishing to the org needs the publisher role, which an admin can give you.'],
+    ]);
+    expect((up.querySelector('ui-checkbox-group') as HTMLElement & { values: string[] }).values).toEqual(['complete', 'issued']);
+    button(up as HTMLElement, 'Publish to Operations')!.click();
+    await settle(el);
+    expect(calls).toContainEqual(['POST', '/api/folio/v1/placements', { library: 'l-1', record: { kind: 'document', id: 'd-1' }, to: 'w-ops', filter: ['complete', 'issued'] }]);
+    expect(up.querySelector('.folio-note')!.textContent).toBe('Travel policy is on Operations now, showing complete and issued. Its leads were told.');
+    expect(up.querySelector<UiList>('ui-list')!.items.map((i) => [i.title, i.detail])).toEqual([['On Operations', 'Shows complete and issued']]);
+  });
+
+  it('links a document to another and to a thing in Data Atlas, opens the other end, and unlinks it', async () => {
+    const { fetch, calls } = service({ documents: [travel, leaveDoc] });
+    const el = document.createElement('div');
+    document.body.append(el);
+    const c = ctx(fetch);
+    (c.request as ReturnType<typeof vi.fn>).mockResolvedValue({ kind: 'entity', id: 'ent_01JB0000000000000000000000', type: 'vessel', label: 'HMS Example' });
+    await app.mount(el, c);
+    await settle(el);
+    await press(el, 'Travel policy');
+    const links = el.querySelector('.folio-reader-drawer folio-links')!;
+    const lists = () => [...links.querySelectorAll<UiList>('ui-list')].map((l) => [l.label, l.items.map((i) => i.title)]);
+    expect(lists()).toEqual([['What links to it', ['Answered by: Something you can’t open links here.']]]);
+
+    const [kind, to] = [...links.querySelectorAll('ui-select')] as (HTMLElement & { options: { value: string; label: string; disabled?: boolean }[]; value: string })[];
+    expect(kind.options.map((o) => o.label)).toEqual(['Relates to', 'Supersedes', 'About', 'Serves']);
+    kind.dispatchEvent(new CustomEvent('ui-change', { detail: { value: 'supersedes' } }));
+    expect(to.options.map((o) => o.label)).toEqual(['Policies', 'HR', 'Leave', 'IT', 'Annual leave']);
+    to.dispatchEvent(new CustomEvent('ui-change', { detail: { value: 'd-2' } }));
+    await settle(el);
+    button(links as HTMLElement, 'Link')!.click();
+    await settle(el);
+    expect(calls).toContainEqual(['POST', '/api/folio/v1/libraries/l-1/links', { record: 'd-1', relation: 'supersedes', to: { app: 'folio', kind: 'unit', id: 'l-1/d-2' } }]);
+
+    (links.querySelector('ui-select') as HTMLElement).dispatchEvent(new CustomEvent('ui-change', { detail: { value: 'about' } }));
+    await settle(el);
+    button(links as HTMLElement, 'Choose in Data Atlas')!.click();
+    await settle(el);
+    expect(c.request).toHaveBeenCalledWith({ type: 'entity.pick', payload: { purpose: 'Say what it’s about' } });
+    expect(calls).toContainEqual(['POST', '/api/folio/v1/libraries/l-1/links', { record: 'd-1', relation: 'about', to: { app: 'atlas', kind: 'entity', id: 'ent_01JB0000000000000000000000', label: 'HMS Example' } }]);
+    expect(lists()[0]).toEqual(['What it links to', ['Supersedes Annual leave', 'About HMS Example']]);
+
+    const mine = links.querySelector<UiList>('ui-list')!;
+    mine.dispatchEvent(new CustomEvent('ui-open', { detail: { item: mine.items[1] } }));
+    await settle(el);
+    expect(c.raise).toHaveBeenCalledWith({ type: 'entity.open', payload: { kind: 'entity', id: 'ent_01JB0000000000000000000000', type: 'entity', label: 'HMS Example' } });
+    mine.dispatchEvent(new CustomEvent('ui-action', { detail: { item: mine.items[1], action: { id: 'unlink' } } }));
+    await settle(el);
+    expect(calls).toContainEqual(['DELETE', '/api/folio/v1/libraries/l-1/links/k-2?record=d-1']);
+    expect(lists()[0]).toEqual(['What it links to', ['Supersedes Annual leave']]);
+
+    // The other end, in Artifacts, opens to read.
+    links.querySelector<UiList>('ui-list')!.dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id: 'k-1' } } }));
+    await settle(el);
+    expect(calls).toContainEqual(['GET', '/api/folio/v1/libraries/l-1/documents/d-2']);
+  });
+
+  it('shows what was published up to the floor, each at the version it lets through', async () => {
+    window.history.replaceState(null, '', '/@finance/folio/libraries/l-1');
+    const { fetch } = service();
+    const el = await mounted(fetch);
+    const screens = rail(el, 'Artifacts');
+    expect(screens.items.find((i) => i.id === 'below')!.meta).toBe('1');
+    screens.dispatchEvent(new CustomEvent('ui-select', { detail: { item: { id: 'below' } } }));
+    await settle(el);
+    expect(window.location.pathname).toBe('/@finance/folio/received');
+    expect(title(el)).toBe('From below');
+    const waiting = el.querySelector<UiList>('ui-list[label="Published up to this floor"]')!;
+    expect(waiting.items.map((i) => [i.title, i.detail])).toEqual([['Quarterly returns', 'From Payroll · Waiting for a place']]);
+    waiting.dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id: 'pl-9' } } }));
+    await settle(el);
+    expect(window.location.pathname).toBe('/@finance/folio/received/pl-9');
+    expect([title(el), back(el), el.querySelector('.folio-by')!.textContent]).toEqual(['Quarterly returns', 'From below', 'From Payroll']);
+    expect(el.querySelector('.folio-main-inner > .folio-quiet')!.textContent).toContain('Showing complete and issued.');
+    expect(facts(el)).toMatchObject({ From: 'Payroll', Showing: 'Complete and Issued' });
+    expect(list(el).items.map((i) => [i.title, i.detail])).toEqual([
+      ['Q3 return', 'Version 1 · Issued'],
+      ['Q4 return', 'Version 3 · Complete · Shown here only: Finance doesn’t show it'],
+    ]);
+  });
+
+  it('shows a folder’s details and closes it, on the record', async () => {
+    const { fetch, calls } = service();
+    const el = await mounted(fetch, '/libraries/l-1/f-hr');
+    await act(el, grid(el), 'Details');
+    const dialog = el.querySelector<UiDialog>('ui-dialog')!;
+    expect(dialog.heading).toBe('HR');
+    expect((dialog.querySelector('ui-details') as HTMLElement & { items: { label: string; value?: unknown }[] }).items.slice(0, 3).map((d) => [d.label, d.value])).toEqual([
+      ['What it is', 'Subcollection'],
+      ['What it’s for', undefined],
+      ['State', 'Open: Taking new things.'],
+    ]);
+    expect(dialog.querySelector<UiList>('ui-list')!.items.map((i) => [i.title, i.detail])).toEqual([['Open to Closed', 'Year end']]);
+    const track = dialog.querySelector('ui-lifecycle') as HTMLElement & { moves: string[] };
+    expect(track.moves).toEqual(['closed', 'archived']);
+    track.dispatchEvent(new CustomEvent('ui-move', { detail: { state: 'closed' } }));
+    await settle(el);
+    expect(calls).toContainEqual(['PUT', '/api/folio/v1/libraries/l-1/folders/f-hr/state', { state: 'closed' }]);
+
+    // Its tags count for everything inside it.
+    const tags = el.querySelector('ui-dialog ui-tag-picker') as HTMLElement & { hint: string; values: string[] };
+    expect(tags.hint).toBe('They count for everything inside it when you filter.');
+    tags.dispatchEvent(new CustomEvent('ui-change', { detail: { values: ['t-pol'] } }));
+    await settle(el);
+    expect(calls).toContainEqual(['PUT', '/api/folio/v1/libraries/l-1/folders/f-hr/tags', { tags: ['t-pol'] }]);
+    expect((el.querySelector('ui-dialog ui-tag-picker') as typeof tags).values).toEqual(['t-pol']);
+  });
+
+  it('says when a floor has no collections, and who can start one', async () => {
+    const lead = await mounted(service({ libraries: [] }).fetch, '/libraries');
+    expect(lead.querySelector<UiTile>('ui-tile[add]')!.heading).toBe('New collection');
+    expect(await ring(lead, grid(lead))).toEqual(['New collection', 'Level names']);
+    document.body.innerHTML = '';
+    const member = await mounted(service({ lead: false, libraries: [] }).fetch, '/libraries');
+    expect(member.querySelector('ui-tile[add]')).toBeNull();
+    expect(member.querySelector('.folio-grid .folio-quiet')!.textContent).toMatch(/A lead on this floor/);
   });
 
   it('says so when the service isn’t answering', async () => {
@@ -588,12 +909,14 @@ describe('folio', () => {
     bar.dispatchEvent(new CustomEvent('ui-change', { detail: { value: { tag: ['t-pol'], type: ['pdf'] }, sort: 'newest' } }));
     await settle(el);
     expect(calls.at(-1)).toEqual(['GET', '/api/folio/v1/libraries/l-1/documents?below=true&tag=t-pol&type=pdf&sort=newest&limit=100']);
-    expect(list(el).items.map((i) => [i.title, i.detail])).toEqual([['Annual leave', 'HR / Leave · Version 2 · PDF · 1.2 MB · Policy']]);
+    // Folders leave the grid while it filters: only what matches shows.
+    expect(headings(el, 'mid')).toEqual([]);
+    expect(headings(el, 'low')).toEqual(['Annual leave']);
     expect(button(el, 'Save view')).toBeDefined();
   });
 
   it('saves the filters as a view in the side rail, and opens a view from its path', async () => {
-    window.history.replaceState(null, '', '/@finance/folio/libraries');
+    window.history.replaceState(null, '', '/@finance/folio/libraries/l-1');
     const { fetch, calls } = service({ documents: [travel, leaveDoc] });
     const el = await mounted(fetch);
     el.querySelector<UiFilterBar>('ui-filter-bar')!.dispatchEvent(new CustomEvent('ui-change', { detail: { value: { since: ['month'] }, sort: 'title' } }));
@@ -608,11 +931,12 @@ describe('folio', () => {
     expect(window.location.pathname).toBe('/@finance/folio/libraries/l-1/views/vw-new');
 
     const opened = await mounted(service({ documents: [travel, leaveDoc] }).fetch, '/libraries/l-1/views/vw-1');
-    expect(opened.querySelector('ui-heading')!.getAttribute('heading')).toBe('Recent policy');
+    expect(title(opened)).toBe('Recent policy');
+    expect(back(opened)).toBe('Policies');
     const bar = opened.querySelector<UiFilterBar>('ui-filter-bar')!;
     expect([bar.value, bar.sort]).toEqual([{ tag: ['t-pol'] }, 'updated']);
-    expect(trees(opened)[2].selected).toBe('vw-1');
-    expect(button(opened, 'Delete view')).toBeDefined();
+    expect(rail(opened, 'Views').selected).toBe('vw-1');
+    expect(await ring(opened, grid(opened))).toEqual(['Rename view', 'Delete view']);
   });
 
   it('tags a document from its dialog, and adds a new tag when the library allows', async () => {
@@ -633,8 +957,7 @@ describe('folio', () => {
   it('keeps a library’s tags in one dialog, with free tags a lead’s switch', async () => {
     const { fetch, calls } = service();
     const el = await mounted(fetch);
-    button(el, 'Tags')!.click();
-    await settle(el);
+    await act(el, grid(el), 'Tags');
     const dialog = el.querySelector<UiDialog>('ui-dialog')!;
     const [own, org] = [...dialog.querySelectorAll<UiList>('ui-list')];
     expect(own.items.map((i) => [i.title, (i.actions ?? []).map((a) => a.label)])).toEqual([['Travel', ['Rename', 'Remove']]]);
@@ -649,21 +972,56 @@ describe('folio', () => {
     expect(calls).toContainEqual(['POST', '/api/folio/v1/libraries/l-1/tags', { name: 'Expenses' }]);
   });
 
+  it('lets the org’s leads rename the levels, and shows everyone else what they’re called', async () => {
+    const { fetch, calls } = service({ renameLevels: true });
+    const el = await mounted(fetch, '/libraries');
+    await act(el, grid(el), 'Level names');
+    const levels = el.querySelector('folio-levels')!;
+    const list = () => levels.querySelector<UiList>('ui-list')!;
+    expect(list().items.map((i) => i.title)).toEqual(['Collection', 'Subcollection', 'Series', 'Subseries', 'File']);
+    expect(list().items[0].detail).toBe('More than one: Collections · Holds subcollections and series and files');
+    list().dispatchEvent(new CustomEvent('ui-action', { detail: { item: list().items[0], action: { id: 'rename' } } }));
+    await settle(el);
+    levels.querySelector('ui-text-field[name="level-name"]')!.dispatchEvent(new CustomEvent('ui-input', { detail: { value: 'Programme' } }));
+    levels.querySelector('ui-text-field[name="level-plural"]')!.dispatchEvent(new CustomEvent('ui-input', { detail: { value: 'Programmes' } }));
+    await settle(el);
+    button(levels, 'Save')!.click();
+    await settle(el);
+    expect(calls).toContainEqual(['PUT', '/api/folio/v1/levels/collection', { name: 'Programme', plural: 'Programmes' }]);
+    expect(list().items[0]).toMatchObject({ title: 'Programme', detail: expect.stringContaining('Its own name is Collection') });
+    expect(levels.querySelector('[role=status]')!.textContent).toBe('The whole org calls it Programme now.');
+    // The rest of Artifacts calls it that straight away.
+    expect(el.querySelector<FolioApp>('folio-app')!.levels[0].name).toBe('Programme');
+
+    list().dispatchEvent(new CustomEvent('ui-action', { detail: { item: list().items[0], action: { id: 'reset' } } }));
+    await settle(el);
+    expect(calls).toContainEqual(['DELETE', '/api/folio/v1/levels/collection']);
+    expect(list().items[0].title).toBe('Collection');
+  });
+
+  it('shows the level names, unchangeable, to anyone who isn’t one of the org’s leads', async () => {
+    const { fetch } = service();
+    const el = await mounted(fetch, '/libraries');
+    await act(el, grid(el), 'Level names');
+    const levels = el.querySelector('folio-levels')!;
+    expect(levels.querySelector<UiList>('ui-list')!.items.every((i) => !i.actions)).toBe(true);
+    expect(levels.textContent).toContain('The org’s leads choose what they’re called, from the org’s floor.');
+  });
+
   it('shows who can see a library, and shares it with someone found by name', async () => {
     const { fetch, calls } = service();
     const el = await mounted(fetch);
-    button(el, 'Share')!.click();
-    await settle(el);
+    await act(el, grid(el), 'Share');
     const share = el.querySelector('folio-share')!;
     expect(el.querySelector('ui-dialog')!.getAttribute('heading')).toBe('Who can see Policies');
     expect(share.querySelector('.folio-share-floor')!.textContent).toContain('Everyone on Finance, and the teams below it, can read it');
     const shared = () => [...share.querySelectorAll<UiList>('ui-list')].at(-1)!.items;
     expect(shared().map((i) => [i.title, i.meta])).toEqual([['Kim Lee', 'Can read']]);
 
-    share.querySelector<UiTextField>('ui-text-field')!.dispatchEvent(new CustomEvent('ui-input', { detail: { value: 'ol' } }));
-    await new Promise((r) => setTimeout(r, 250));
+    const picker = share.querySelector('ui-people-picker')!;
+    await picker.find('ol');
     await settle(el);
-    const found = share.querySelector<UiList>('ui-list')!;
+    const found = picker.shadowRoot!.querySelector<UiList>('ui-list')!;
     expect(found.items.map((i) => i.title)).toEqual(['Ola Bello', 'Legal']);
     found.dispatchEvent(new CustomEvent('ui-open', { detail: { item: found.items[0] } }));
     await settle(el);
@@ -676,10 +1034,10 @@ describe('folio', () => {
     expect(share.querySelector('[role=status]')!.textContent).toBe('Ola Bello: can edit.');
 
     // A team goes with the teams below it, unless that's switched off.
-    share.querySelector<UiTextField>('ui-text-field')!.dispatchEvent(new CustomEvent('ui-input', { detail: { value: 'leg' } }));
-    await new Promise((r) => setTimeout(r, 250));
+    const again = share.querySelector('ui-people-picker')!;
+    await again.find('leg');
     await settle(el);
-    const teams = share.querySelector<UiList>('ui-list')!;
+    const teams = again.shadowRoot!.querySelector<UiList>('ui-list')!;
     teams.dispatchEvent(new CustomEvent('ui-open', { detail: { item: teams.items[1] } }));
     await settle(el);
     share.querySelector('ui-toggle')!.dispatchEvent(new CustomEvent('ui-change', { detail: { checked: false } }));
@@ -695,6 +1053,54 @@ describe('folio', () => {
     expect(shared().map((i) => i.title)).toEqual(['Ola Bello', 'Legal (just that team)']);
   });
 
+  it('shares a folder, and so everything inside it, from inside the folder', async () => {
+    const { fetch, calls } = service();
+    const el = await mounted(fetch, '/libraries/l-1/f-hr');
+    await act(el, grid(el), 'Share');
+    const dialog = el.querySelector<UiDialog>('ui-dialog')!;
+    expect([dialog.getAttribute('eyebrow'), dialog.heading]).toEqual(['Subcollection', 'Who can see HR']);
+    const share = el.querySelector('folio-share')!;
+    expect(share.querySelector('.folio-share-floor')!.textContent).toContain('sees everything inside it, while it’s inside');
+    const lists = () => [...share.querySelectorAll<UiList>('ui-list')].map((l) => [l.label, l.items.map((i) => i.title)]);
+    expect(lists()).toEqual([
+      ['Shared with, for this folder', []],
+      ['Published up to', ['Everyone in the org']],
+      ['Shared with, through its collection', ['Kim Lee']],
+    ]);
+    expect([...share.querySelectorAll<UiList>('ui-list')][1].items[0].detail).toBe('Up from Payroll through Finance · Shows Complete and Issued');
+
+    const picker = share.querySelector('ui-people-picker')!;
+    await picker.find('leg');
+    await settle(el);
+    const found = picker.shadowRoot!.querySelector<UiList>('ui-list')!;
+    found.dispatchEvent(new CustomEvent('ui-open', { detail: { item: found.items[1] } }));
+    await settle(el);
+    button(share, 'Share')!.click();
+    await settle(el);
+    expect(calls).toContainEqual(['PUT', '/api/folio/v1/libraries/l-1/folders/f-hr/access/tree%3Aw-legal', { level: 'read' }]);
+    expect(lists()[0]).toEqual(['Shared with, for this folder', ['Legal and the teams below it']]);
+  });
+
+  it('explains who reaches it by its being published up, with the floors it came through and what it shows', () => {
+    const asked = explainPayload(
+      {
+        floor: { ...FINANCE, kind: 'tree' as const },
+        grants: [],
+        placed: [
+          { principal: 'org', kind: 'org', filter: ['issued'], at: '2026-10-30T09:00:00Z', record: { kind: 'folder', id: 'f-hr' }, chain: ['Payroll', 'Finance'] },
+          { principal: 'tree:w-dept', kind: 'tree', name: 'Dept', filter: ['complete', 'issued'], at: '2026-10-29T09:00:00Z', record: { kind: 'library', id: 'l-1' }, chain: ['Finance'] },
+        ],
+        can: { share: false },
+      },
+      { id: 'f-hr', title: 'HR', kind: 'folder' },
+    );
+    expect(asked.thing.kind).toBe('folder');
+    expect(asked.audience.slice(1)).toEqual([
+      { principal: 'org', level: 'read', since: '2026-10-30T09:00:00Z', via: 'published up to them', chain: ['Payroll', 'Finance'], shows: ['Issued'] },
+      { principal: 'tree:w-dept', name: 'Dept', level: 'read', since: '2026-10-29T09:00:00Z', via: 'published up inside something', chain: ['Finance'], shows: ['Complete', 'Issued'] },
+    ]);
+  });
+
   it('asks for who can open it, explained, and says so when nothing can explain it', async () => {
     const { fetch } = service({ lead: false });
     const context = ctx(fetch);
@@ -702,8 +1108,7 @@ describe('folio', () => {
     document.body.append(el);
     await app.mount(el, context);
     await settle(el);
-    button(el, 'Who can see it')!.click();
-    await settle(el);
+    await act(el, grid(el), 'Who can see it');
     const share = el.querySelector('folio-share')!;
     button(share, 'Who can open this, explained')!.click();
     await settle(el);
@@ -733,34 +1138,43 @@ describe('folio', () => {
   it('lets someone who only reads see who can, without changing it', async () => {
     const { fetch } = service({ lead: false });
     const el = await mounted(fetch);
-    expect(button(el, 'Share')).toBeUndefined();
-    button(el, 'Who can see it')!.click();
-    await settle(el);
+    expect(await ring(el, grid(el))).not.toContain('Share');
+    await act(el, grid(el), 'Who can see it');
     const share = el.querySelector('folio-share')!;
-    expect(share.querySelector('ui-text-field')).toBeNull();
+    expect(share.querySelector('ui-people-picker')).toBeNull();
     expect(share.querySelector<UiList>('ui-list')!.items[0].actions).toBeUndefined();
   });
 
-  it('lists what was shared from other floors, and reads a document shared alone', async () => {
+  it('lists what was shared from other floors, a library per floor, and reads a document shared alone', async () => {
     const shared = {
-      libraries: [{ ...reports, id: 'l-8', name: 'Board papers', level: 'read' }],
+      libraries: [{ ...reports, id: 'l-8', workspace: 'w-ops', floor: 'tree:w-ops', name: 'Board papers', level: 'read' }],
       documents: [{ ...travel, id: 'd-9', library: 'l-9', title: 'Shared plan', libraryName: 'Ops runbooks', level: 'read' }],
     };
-    window.history.replaceState(null, '', '/@finance/folio/libraries');
+    window.history.replaceState(null, '', '/@finance/folio/libraries/l-1');
     const { fetch } = service({ shared });
     const el = await mounted(fetch);
-    const rail = trees(el).find((t) => t.heading === 'Shared with you')!;
-    expect(rail.items.map((i) => i.label)).toEqual(['Board papers', 'Shared plan']);
-    rail.dispatchEvent(new CustomEvent('ui-select', { detail: { item: rail.items[1] } }));
+    rail(el, 'Artifacts').dispatchEvent(new CustomEvent('ui-select', { detail: { item: { id: 'shared' } } }));
     await settle(el);
+    expect(window.location.pathname).toBe('/@finance/folio/shared');
+    expect(title(el)).toBe('Shared libraries');
+    expect(headings(el, 'high')).toEqual(['A team’s library']);
+    expect(headings(el, 'low')).toEqual(['Shared plan']);
+    expect(facts(el)).toMatchObject({ Libraries: '1', 'Documents on their own': '1' });
+    // A library opens on what it shares.
+    await press(el, 'A team’s library');
+    expect([title(el), back(el)]).toEqual(['A team’s library', 'Shared libraries']);
+    expect(headings(el, 'high')).toEqual(['Board papers']);
+    el.querySelector<HTMLButtonElement>('.folio-back')!.click();
+    await settle(el);
+    await press(el, 'Shared plan');
     expect(window.location.pathname).toBe('/@finance/folio/libraries/l-9/documents/d-9');
     const reader = el.querySelector('folio-reader')!;
-    expect(reader.querySelector('.folio-crumb')!.textContent).toContain('Ops runbooks');
-    expect(button(reader, 'Who can see it')).toBeDefined();
-    // Back has no library to go to: the floor's own first one.
-    reader.querySelector<HTMLButtonElement>('.folio-crumb')!.click();
+    expect(reader.querySelector('.folio-back')!.textContent).toContain('Ops runbooks');
+    expect(button(el.querySelector<HTMLElement>('.folio-reader-drawer')!, 'Who can see it')).toBeDefined();
+    // Back has no collection to go to: where the person came from.
+    reader.querySelector<HTMLButtonElement>('.folio-back')!.click();
     await settle(el);
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Policies');
+    expect(title(el)).toBe('Shared libraries');
   });
 
   it('opens a document shared alone straight from its path', async () => {
@@ -770,12 +1184,23 @@ describe('folio', () => {
     expect(el.querySelector('folio-reader h1')!.textContent).toBe('Shared plan');
   });
 
-  it('publishes a version to the floor’s team and those below it, and withdraws it', async () => {
-    const { fetch, calls } = service({ documents: [travel] });
+  it('leaves the old Publish off a document that isn’t an issue: it’s published up the floors', async () => {
+    const { fetch } = service({ documents: [travel] });
     const el = await mounted(fetch);
-    list(el).dispatchEvent(new CustomEvent('ui-open', { detail: { item: { id: 'doc:d-1' } } }));
-    await settle(el);
-    const reader = el.querySelector('folio-reader')!;
+    await press(el, 'Travel policy');
+    // What the reader says about it, and does with it, is in the drawer.
+    const reader = el.querySelector<HTMLElement>('.folio-reader-drawer')!;
+    expect(reader.querySelector('.folio-reader-publishing')).toBeNull();
+    expect(button(reader, 'Publish')).toBeUndefined();
+    expect(button(reader, 'Publish up the floors')).toBeDefined();
+  });
+
+  it('publishes an issue to the floor’s team and those below it, and withdraws it', async () => {
+    const { fetch, calls } = service({ documents: [travel], anIssue: true });
+    const el = await mounted(fetch);
+    await press(el, 'Travel policy');
+    // What the reader says about it, and does with it, is in the drawer.
+    const reader = el.querySelector<HTMLElement>('.folio-reader-drawer')!;
     expect(reader.querySelector('.folio-reader-said')!.textContent).toContain('A draft');
     button(reader, 'Publish')!.click();
     await settle(el);
@@ -799,7 +1224,7 @@ describe('folio', () => {
   it('lists what’s been published to the person, and opens one at the version that’s out', async () => {
     const { fetch, calls } = service();
     const el = await mounted(fetch, '/published');
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Published to you');
+    expect([title(el), back(el)]).toEqual(['Published to you', 'Shared libraries']);
     expect(calls).toContainEqual(['PUT', '/api/folio/v1/published/looked']);
     const rows = list(el);
     expect(rows.items.map((i) => [i.title, i.detail])).toEqual([['Shared plan', 'In Ops runbooks · Version 2 · For Monday']]);
@@ -824,9 +1249,9 @@ describe('folio series', () => {
   it('lists a library’s series in the rail and opens one on its own page', async () => {
     const { fetch } = service({ series: [CASH] });
     const el = await mounted(fetch);
-    const rail = trees(el).find((t) => t.heading === 'Series')!;
-    expect(rail.items.map((i) => [i.label, i.icon])).toEqual([['Cash report', 'series']]);
-    rail.dispatchEvent(new CustomEvent('ui-select', { detail: { item: rail.items[0] } }));
+    const series = rail(el, 'Series');
+    expect(series.items.map((i) => [i.label, i.icon])).toEqual([['Cash report', 'series']]);
+    series.dispatchEvent(new CustomEvent('ui-select', { detail: { item: series.items[0] } }));
     await settle(el);
     const page = el.querySelector('folio-series')!;
     expect(page.series).toBe('s-1');
@@ -858,8 +1283,7 @@ describe('folio series', () => {
   it('makes a series with a cadence, tags and audience', async () => {
     const { fetch, calls } = service({ series: [CASH] });
     const el = await mounted(fetch);
-    button(el, 'New series')!.click();
-    await settle(el);
+    await act(el, grid(el), 'New series');
     const dialog = el.querySelector<UiDialog>('ui-dialog')!;
     expect(dialog.heading).toBe('New series');
     await dialog.submit!({ name: ' Board pack ', description: '', cadence: 'monthly', tags: 't-pol', audience: 'tree:w-fin' }, dialog);
@@ -871,10 +1295,13 @@ describe('folio series', () => {
   it('reads an issue with the ones either side, and goes to its series', async () => {
     const { fetch, calls } = service({ series: [CASH] });
     const el = await mounted(fetch, '/libraries/l-1/documents/d-5');
-    const reader = el.querySelector('folio-reader')!;
+    // What the reader says about it, and does with it, is in the drawer.
+    const reader = el.querySelector<HTMLElement>('.folio-reader-drawer')!;
     expect(reader.querySelector('.folio-reader-series')!.textContent!.replace(/\s+/g, ' ')).toContain('Issue 1, Week 42, 2026, in Cash report');
-    expect(button(reader, 'Previous: Week 41, 2026')).toBeUndefined();
-    button(reader, 'Next: Week 43, 2026')!.click();
+    // The issues either side are under the title.
+    const page = el.querySelector<HTMLElement>('folio-reader')!;
+    expect(button(page, 'Previous: Week 41, 2026')).toBeUndefined();
+    button(page, 'Next: Week 43, 2026')!.click();
     await settle(el);
     expect(calls.some(([, p]) => p === '/api/folio/v1/libraries/l-1/documents/d-6')).toBe(true);
   });

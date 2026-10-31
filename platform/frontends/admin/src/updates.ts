@@ -1,9 +1,12 @@
 import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import type { Fact } from '@augur/ui-kit';
 import { ApiError, type AdminApi, type PlatformUpdates, type Upgrade, type UpgradeStepState } from './api.js';
+import { changeList, gatherChanges, historyList } from './changes.js';
+import { lineSection } from './line.js';
 import { line, page, section } from './parts.js';
 
-const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Stable' : 'Beta');
+/** Stable releases are on production, beta ones on preview (docs/release-channels.md). */
+const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Production' : c === 'dev' ? 'Dev build' : 'Preview');
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 /** How often the page asks again while an upgrade is waiting or under way. */
@@ -41,7 +44,7 @@ const stepWords: Record<UpgradeStepState['step'], string> = {
 
 /** The heading: an upgrade under way or just ended, something's out, all's current, or the feed can't be read. */
 export const headline = (u?: PlatformUpdates, error?: string): { heading: string; summary: string } => {
-  if (error || !u) return { heading: 'Updates', summary: 'Whether a newer AUGUR release is out, and what it needs first.' };
+  if (error || !u) return { heading: 'Upgrade Centre', summary: 'Where AUGUR is between dev and production, what this server runs, and what upgrading needs first.' };
   const up = u.upgrade;
   if (up?.state === 'requested') {
     return { heading: `Upgrading to ${up.version}`, summary: u.updaterSeenAt ? 'Waiting for the updater to start.' : 'Waiting for an updater. None has asked for work since the registry started.' };
@@ -49,13 +52,13 @@ export const headline = (u?: PlatformUpdates, error?: string): { heading: string
   if (up?.state === 'running') return { heading: `Upgrading to ${up.version}`, summary: 'There’s a short gap while each part restarts. This page follows along.' };
   if (up?.state === 'rolled-back' && up.from === u.running.version) return { heading: `Back on ${up.from}`, summary: up.message ?? `The upgrade to ${up.version} didn’t finish, so it went back by itself.` };
   if (up?.state === 'failed' && up.from === u.running.version) return { heading: `The upgrade to ${up.version} needs you`, summary: up.message ?? 'It stopped partway. See “Going back” in docs/upgrade.md.' };
-  if (u.feed === 'off') return { heading: 'Updates', summary: 'This deployment doesn’t check for new releases: RELEASE_FEED_URL is off.' };
+  if (u.feed === 'off') return { heading: 'Upgrade Centre', summary: 'This deployment doesn’t check for new releases: RELEASE_FEED_URL is off.' };
   if (u.available) {
     // A secret the updater makes up needs nothing from anyone.
     const n = u.needsYou.filter((x) => !x.madeUp).length;
     return { heading: `AUGUR ${u.available.version} is out`, summary: `You’re on ${u.running.version}. ${n ? `${n === 1 ? '1 thing needs' : `${n} things need`} you before upgrading.` : 'Nothing needs you before upgrading.'}` };
   }
-  if (u.problem) return { heading: 'Updates can’t be checked', summary: u.problem };
+  if (u.problem) return { heading: 'New releases can’t be checked', summary: u.problem };
   return { heading: 'You’re up to date', summary: `AUGUR ${u.running.version} is the newest ${u.channel} release.` };
 };
 
@@ -72,6 +75,7 @@ export class AdminUpdates extends LitElement {
     checking: { state: true },
     error: { state: true },
     confirming: { state: true },
+    goingBack: { state: true },
     entered: { state: true },
   };
 
@@ -82,6 +86,8 @@ export class AdminUpdates extends LitElement {
   declare error: string;
   /** Asking "Upgrade to …?" */
   declare confirming: boolean;
+  /** Asking "Go back to …?": the version. */
+  declare goingBack: string | undefined;
   /** New settings typed into "Upgrade to …?", for the updater to write to .env. */
   declare entered: Record<string, string>;
   private timer?: ReturnType<typeof setInterval>;
@@ -92,6 +98,7 @@ export class AdminUpdates extends LitElement {
     this.checking = false;
     this.error = '';
     this.confirming = false;
+    this.goingBack = undefined;
     this.entered = {};
   }
 
@@ -122,11 +129,14 @@ export class AdminUpdates extends LitElement {
   private resume() {
     const params = new URLSearchParams(window.location.search);
     const wanted = params.get('upgrade');
-    if (!wanted) return;
+    const back = params.get('go-back');
+    if (!wanted && !back) return;
     params.delete('upgrade');
+    params.delete('go-back');
     const rest = params.toString();
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
-    if (wanted === this.updates?.next && !isOpen(this.updates.upgrade)) {
+    if (back && this.updates?.goBack?.some((t) => t.version === back && !t.problem) && !isOpen(this.updates.upgrade)) this.goingBack = back;
+    if (wanted && wanted === this.updates?.next && !isOpen(this.updates.upgrade)) {
       this.entered = takeEntered();
       this.confirming = true;
     }
@@ -149,6 +159,60 @@ export class AdminUpdates extends LitElement {
       throw err;
     }
   };
+
+  /** Asks to go back; when the password is needed again, goes to enter it and comes back here. */
+  private goBack = async () => {
+    const version = this.goingBack!;
+    try {
+      this.updates = await this.api.goBack(version);
+      this.goingBack = undefined;
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') {
+        const back = `${window.location.pathname}?go-back=${encodeURIComponent(version)}`;
+        window.location.assign(`/auth/again?return=${encodeURIComponent(back)}`);
+        return false;
+      }
+      throw err;
+    }
+  };
+
+  /** "Go back to …?": what it undoes, and what stays. */
+  private goBackDialog(u: PlatformUpdates) {
+    if (!this.goingBack) return nothing;
+    return html`<ui-dialog
+      open
+      eyebrow="Upgrade Centre"
+      heading=${`Go back to AUGUR ${this.goingBack}?`}
+      summary="Everyone is cut off for a minute or two while the parts restart. It backs up first, as an upgrade does."
+      action-label="Go back"
+      busy-label="Asking…"
+      cancel-label="Not now"
+      .submit=${this.goBack}
+      @ui-close=${() => (this.goingBack = undefined)}
+    >
+      <p>The code goes back to ${this.goingBack}. The data stays as ${u.running.version} left it: no release between is breaking, so ${this.goingBack} works on it.</p>
+      <p>You may be asked for your password again.</p>
+    </ui-dialog>`;
+  }
+
+  /** Earlier releases, each with Go back, or why it can't straight. */
+  private goBackSection(u: PlatformUpdates) {
+    if (!u.goBack?.length) return nothing;
+    return section(
+      'Go back',
+      html`<div data-go-back>
+        ${u.goBack.map((t) =>
+          line(
+            html`<span style="display:flex;flex-direction:column;padding:var(--space-2) 0">
+              <span>AUGUR ${t.version}</span>
+              ${t.problem ? html`<span style="color:var(--ink-muted);font-size:var(--type-small)">${t.problem}</span>` : nothing}
+            </span>`,
+            html`<ui-button kind="tertiary" size="sm" ?disabled=${Boolean(t.problem) || isOpen(u.upgrade)} reason=${t.problem ?? 'Wait for the upgrade under way to finish.'} @click=${() => (this.goingBack = t.version)}>Go back</ui-button>`,
+          ),
+        )}
+      </div>`,
+    );
+  }
 
   private async cancel() {
     try {
@@ -195,7 +259,8 @@ export class AdminUpdates extends LitElement {
   private facts(u: PlatformUpdates) {
     const facts: Fact[] = [
       { label: 'Running', value: `AUGUR ${u.running.version}` },
-      { label: 'Following', value: `${channelWord(u.channel)} releases` },
+      ...(u.ring ? [{ label: 'Server', value: u.ring === 'production' ? 'Production' : u.ring === 'dev' ? 'Workbench' : 'Preview' }] : []),
+      { label: 'Following', value: u.channel === 'dev' ? 'Dev builds, taken by itself, and releases' : `${channelWord(u.channel)} releases` },
       ...(u.available ? [{ label: 'Newest', value: `AUGUR ${u.available.version}${u.available.released ? `, ${day(u.available.released)}` : ''}` }] : []),
       ...(u.feed === 'on' ? [{ label: 'Last checked', value: u.checkedAt ? new Date(u.checkedAt).toLocaleString() : 'Not yet' }] : []),
     ];
@@ -257,7 +322,7 @@ export class AdminUpdates extends LitElement {
     if (!this.confirming || !u.next) return nothing;
     return html`<ui-dialog
       open
-      eyebrow="Updates"
+      eyebrow="Upgrade Centre"
       heading=${`Upgrade to AUGUR ${u.next}?`}
       summary="Everyone is cut off for a minute or two while the parts restart. It backs up first and goes back by itself if anything fails."
       action-label="Upgrade"
@@ -288,6 +353,7 @@ export class AdminUpdates extends LitElement {
             html`<div data-needs>${u.needsYou.map((n) => line(html`<ui-status status=${n.kind === 'setting' && (!n.required || n.madeUp) ? 'queued' : 'needs'} mark-only></ui-status> ${n.message}`))}</div>`,
           )
         : nothing}
+      ${a ? section(`What’s new since ${u.running.version}`, changeList(gatherChanges(u.newer.map((r) => r.changes)))) : nothing}
       ${a?.parts.length ? section(`What changes in ${a.version}`, html`<div data-parts>${a.parts.map((p) => line(p.name, p.from ? `${p.from} → ${p.to}` : p.to))}</div>`) : nothing}
       ${u.newer.length > 1
         ? section(
@@ -296,7 +362,7 @@ export class AdminUpdates extends LitElement {
               ${u.newer.map((r) =>
                 line(
                   r.notesUrl ? html`<a href=${r.notesUrl} target="_blank" rel="noopener" style="color:var(--ink)">AUGUR ${r.version}</a>` : `AUGUR ${r.version}`,
-                  [r.channel === 'beta' ? 'Beta' : 'Stable', day(r.released), r.breaking.length ? 'Breaking' : ''].filter(Boolean).join(' · '),
+                  [channelWord(r.channel), day(r.released), r.breaking.length ? 'Breaking' : ''].filter(Boolean).join(' · '),
                 ),
               )}
             </div>`,
@@ -316,7 +382,10 @@ export class AdminUpdates extends LitElement {
               </p>`,
           )
         : nothing}
-      ${u.beta ? html`<p style="margin:0;color:var(--ink-muted)">AUGUR ${u.beta.version} is out on beta. To follow beta, set <code>RELEASE_CHANNEL=beta</code> in <code>.env</code>.</p>` : nothing}
+      ${u.history ? section('History', historyList(u.history)) : nothing}
+      ${this.goBackSection(u)}
+      ${u.channelNote ? html`<p data-channel-note style="margin:0;color:var(--ink-muted)">${u.channelNote}</p>` : nothing}
+      ${u.beta ? html`<p style="margin:0;color:var(--ink-muted)">AUGUR ${u.beta.version} is out on preview. To follow preview releases, set <code>RELEASE_CHANNEL=beta</code> in <code>.env</code>.</p>` : nothing}
     `;
   }
 
@@ -326,9 +395,9 @@ export class AdminUpdates extends LitElement {
     const body = this.loading
       ? html`<ui-rows loading count="3"></ui-rows>`
       : this.error && !u
-        ? html`<ui-state kind="error" heading="Updates can’t be shown" body=${this.error} action="Try again" @ui-action=${() => this.load()}></ui-state>`
+        ? html`<ui-state kind="error" heading="The Upgrade Centre can’t be shown" body=${this.error} action="Try again" @ui-action=${() => this.load()}></ui-state>`
         : u
-          ? html`${this.facts(u)} ${this.details(u)} ${this.confirmDialog(u)}
+          ? html`${section('This server', this.facts(u))} ${lineSection(u.line, u.portalUrl)} ${this.details(u)} ${this.confirmDialog(u)} ${this.goBackDialog(u)}
               ${this.error ? html`<p style="margin:0;color:var(--danger)">${this.error}</p>` : nothing}
               ${u.feed === 'on'
                 ? html`<div><ui-button data-check kind="secondary" size="sm" ?busy=${this.checking} @click=${() => this.checkNow()}>Check now</ui-button></div>`

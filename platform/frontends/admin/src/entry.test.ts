@@ -65,7 +65,7 @@ describe('admin', () => {
     const el = document.createElement('div');
     document.body.append(el);
     const own = { id: 'w-me', kind: 'personal' as const, name: 'You', slug: 'me', path: [], role: 'lead' as const };
-    const ctx: MountContext = { user: { id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] }, getToken, bus: createEventBus(), raise: vi.fn(), request: vi.fn(), notify: vi.fn(), workspace: own, getWorkspace: () => own, fetch: vi.fn(), path: '/apps' };
+    const ctx: MountContext = { user: { id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] }, getToken, bus: createEventBus(), raise: vi.fn(), request: vi.fn(), notify: vi.fn(), workspace: own, getWorkspace: () => own, fetch: vi.fn(), path: '/apps', previewOn: () => false };
     await admin.mount(el, ctx);
     await settle(el);
     expect(el.querySelector('admin-apps')).not.toBeNull();
@@ -228,7 +228,7 @@ describe('admin', () => {
     it('heads the screen with what’s out, or that all is current', () => {
       expect(updatesHeadline(out)).toEqual({ heading: 'AUGUR 0.4.0 is out', summary: 'You’re on 0.2.0. 1 thing needs you before upgrading.' });
       expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, newer: [], needsYou: [] }).heading).toBe('You’re up to date');
-      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, problem: 'The release feed answered 502.', newer: [], needsYou: [] }).heading).toBe('Updates can’t be checked');
+      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, problem: 'The release feed answered 502.', newer: [], needsYou: [] }).heading).toBe('New releases can’t be checked');
       expect(updatesHeadline({ running, channel: 'stable', feed: 'off', newer: [], needsYou: [] }).summary).toContain('RELEASE_FEED_URL is off');
     });
 
@@ -279,6 +279,29 @@ describe('admin', () => {
       sessionStorage.clear();
       el.remove();
       vi.unstubAllGlobals();
+    });
+
+    it('offers to go back to an earlier release, and says why not when it can’t', async () => {
+      const withGoBack: PlatformUpdates = { ...out, goBack: [{ version: '0.1.1', channel: 'beta' }, { version: '0.1.0', channel: 'beta', breakingAfter: '0.1.1', problem: 'AUGUR 0.1.1 is breaking.' }], history: [] };
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify(withGoBack), { status: 200 }));
+      const el = document.createElement('admin-updates') as AdminUpdates;
+      document.body.append(el);
+      el.api = new AdminApi(async () => 't', fetchImpl as unknown as typeof fetch);
+      await vi.waitFor(() => expect(el.updates).toBeDefined());
+      await el.updateComplete;
+      const section = el.querySelector('[data-go-back]')!;
+      expect(section.textContent).toContain('AUGUR 0.1.0');
+      expect(section.textContent).toContain('AUGUR 0.1.1 is breaking.');
+      const buttons = [...section.querySelectorAll('ui-button')] as HTMLElement[];
+      expect(buttons.map((b) => b.hasAttribute('disabled'))).toEqual([false, true]);
+      buttons[0]!.click();
+      await el.updateComplete;
+      const dialog = el.querySelector('ui-dialog') as UiDialog;
+      expect(dialog.getAttribute('heading')).toBe('Go back to AUGUR 0.1.1?');
+      await dialog.confirm();
+      expect(fetchImpl).toHaveBeenCalledWith('/api/registry/v1/platform/go-back', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ version: '0.1.1' }) }));
+      expect(el.querySelector('[data-history]')).toBeNull();
+      el.remove();
     });
 
     it('follows an upgrade step by step, and says how it ended', async () => {

@@ -26,6 +26,27 @@ export { UiFilterBar, filterValue, type FilterDef, type FilterValue } from './co
 export { UiReader, slugFor, type MarkedPassage, type OutlineItem, type ReaderSize, type ReaderWidth } from './components/reader.js';
 export { UiContents } from './components/contents.js';
 export { UiState, type StateKind } from './components/state.js';
+export { kitDev, warnNoReason } from './reason.js';
+export { UiNotice, type NoticeTone } from './components/notice.js';
+export { UiNote } from './components/note.js';
+export { UiCan, type CanAction, type CanBlocked } from './components/can.js';
+export { UiAppFrame, type FrameMeasure } from './components/app-frame.js';
+export { UiPageHead, type TrailStep, type PageAction } from './components/page-head.js';
+export { UiSection } from './components/section.js';
+export { UiCard, UiCards, floorMark } from './components/card.js';
+export { UiTile, UiTiles } from './components/tile.js';
+export { UiRadialMenu, type RadialAction } from './components/radial-menu.js';
+export { UiToolbar } from './components/toolbar.js';
+export { UiTally, type TallyCount } from './components/tally.js';
+export { UiDetails, type Detail } from './components/details.js';
+export { UiTimeline, dayWords, type TimelineItem } from './components/timeline.js';
+export { UiPath, type PathStep } from './components/path.js';
+export { UiLifecycle, type LifecycleState } from './components/lifecycle.js';
+export { UiRef, UiRefs, refIcon, refName, type RefKind, type RefShown } from './components/ref.js';
+export { UiDate, parseDay, dayName, dayDistance, isoDay, type DateQuick } from './components/date.js';
+export { UiPeoplePicker, type Principal, type PrincipalSearch } from './components/people-picker.js';
+export { UiEditor, readMentions, writeMentions, type MentionResult, type MentionSource } from './components/editor.js';
+export { UiProse, plainText } from './components/prose.js';
 export { UiGlance, type GlanceData, type GlanceAction, type GlanceVariant, type GlanceSkin } from './components/glance.js';
 export {
   UiShell,

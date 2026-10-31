@@ -191,7 +191,7 @@ export class AtlasPicker extends LitElement {
       <div class="atlas-picker-actions">
         <ui-button kind="ghost" size="sm" @click=${() => this.emit('atlas-cancel')}>Cancel</ui-button>
         ${this.multiple
-          ? html`<ui-button kind="primary" size="sm" ?disabled=${!this.picked.length} @click=${() => this.emit('atlas-picked', { entities: this.picked.map(refOf) })}
+          ? html`<ui-button kind="primary" size="sm" ?disabled=${!this.picked.length} reason="Pick at least one first." @click=${() => this.emit('atlas-picked', { entities: this.picked.map(refOf) })}
               >${this.picked.length > 1 ? `Pick these ${this.picked.length}` : 'Pick it'}</ui-button>`
           : nothing}
       </div>

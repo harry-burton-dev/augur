@@ -31,6 +31,7 @@ Open http://localhost:5173/expenses. This is the real shell and the real UI kit,
 Nothing else of the platform runs, so the shell stands in for it:
 
 - You are signed in as **Dev Person**, in the Development department, with the role your manifest's `requiredRole` asks for. `DEV_ROLES=admin pnpm dev:app expenses` adds roles.
+- `pnpm dev:app expenses --kit` also rebuilds the UI kit and its tokens as you change them and reloads the page; `DEV_PREVIEWS=all` turns your feature previews on; `DEV_HOST=0.0.0.0` opens it to your other machines on the tailnet ([release-channels.md](release-channels.md#the-live-dev-loop)).
 - You're on your own floor (`/@me/expenses`); `/@org/expenses` puts your app on the org's.
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
 - The catalogue is Home and your app. Home (`/@me/home`) shows what your app's `ctx.notify({ needsYou: true })` sends, and your glance card if you have one. `ctx.raise` and `ctx.request` reach your app when it `handles` the intent, and otherwise fail the way they do when no app handles one.
@@ -64,7 +65,7 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.user` | Who is signed in: `id`, `name`, `email`, `departments`, `roles` |
 | `ctx.path` | Where in your app they are, below its route: `/reports/q3` for `/expenses/reports/q3` |
 | `ctx.getToken()` | A current token to send as `Authorization: Bearer …` to `/api/<id>/…` |
-| `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. A team also has its `level`, what its level is called ("Department" right below the org, "Team" below that, unless an admin renamed them, SDK 1.6): say it where you'd say "team". The `kind` stays `team` at every level. SDK 1.1 |
+| `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. A team also has its `level`, what its level is called ("Department" right below the org, "Team" below that, unless an admin renamed them, SDK 1.9): say it where you'd say "team". The `kind` stays `team` at every level. SDK 1.1 |
 | `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on, and a call to your app on a floor where it's off for them (a call naming no floor is checked on the organisation's). SDK 1.1 |
 | `ctx.notify({ title, body?, needsYou?, actions? })` | A notification on the shell's stream. `actions` (SDK 1.2) is up to two `{ label, intent }` buttons on it; pressing one raises the intent through the shell, as `ctx.raise` does |
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
@@ -73,6 +74,39 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.bus` | Events within the page |
 
 Build screens from the kit's components (run `pnpm --filter @augur/ui-kit storybook` to see them) and its tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of the kit or Lit: the shell serves one copy to every app, and `vite.config.ts` keeps `lit`, `lit/*` and `@augur/ui-kit` out of your bundle. Anything else you import, you bundle.
+
+### The app kit
+
+Apps show more than the shell does, but each thing in them still says little: **show the shape, say one line, open the rest.** The kit's App group in Storybook holds the parts for it, and they keep these rules for you:
+
+- **One line per thing.** A title and one line of meta; a second line only when it changes what you'd do.
+- **Marks before words, words before sentences.** A colour never stands alone.
+- **Counts until asked.** Show five, then "8 more".
+- **Things open; text doesn't link.** A row has at most two actions, as words.
+- **Explain on demand.** The reason sits behind the line (`ui-note why="…"`), not in a paragraph above the form.
+- **Nothing is obtuse.** A control you can't use now stays, dimmed, and says why: give every `ui-button` and `ui-icon-button` that can be disabled a `reason` ("Only its leads can pass it down."), and list rows, list actions and menu entries a `reason` too. It stays focusable and shows on hover and focus. If it's only waiting for a request, use `busy` instead. `pnpm check:reasons` fails a platform screen that disables a control without one, and the kit warns on localhost.
+- **One heading, one primary.**
+
+| Part | For |
+| --- | --- |
+| `ui-notice` | One sentence in a page that needs attention, with one action: `tone` needs, warning, refused or info |
+| `ui-note` | A quiet line that explains; `why` keeps the longer reason one press away; `live` for an action's result ("Saved.") |
+| `ui-can` | What you can do from here (up to two actions), and who can do the rest |
+| `ui-app-frame` | The page: the slate ground, an optional `rail` slot (folds to icons), the main column, an optional `aside` slot and an optional `drawer` slot at the right edge (folds away; says more about what's on screen). `measure` is `wide`, `read` or `full`; set `screen` to the screen's id and the main column and drawer change together |
+| `ui-tile` in `ui-tiles` | One thing you walk into, by its icon or picture and name alone. Its actions open in a `ui-radial-menu` on right-click, never on the tile. `add` makes the dashed tile that makes another; `rank` (`high`, `mid`, `low`) says how high it is, which sets its hover |
+| `ui-toolbar` | Above a grid: a search (`ui-search`), filters in its slot, and one `add` (`ui-add`) |
+| `ui-radial-menu` | An object's actions in a ring around it: `show(target)`, then `ui-select` with the action or `ui-close` |
+| `ui-page-head` | The trail of what it's inside, eyebrow, title, one line of summary, and its `.actions`: two show (one primary at most), the rest go in ⋯ |
+| `ui-section` | A labelled part with its count, one quiet `action` and a `why`; shows five children and folds the rest behind "3 more" |
+| `ui-card` in `ui-cards` | One thing in a grid. Its floor is a dot in the floor's colour with the floor's name (never a coloured edge), `.meta` takes up to three facts, `note` is the one line that changes what you'd do. A `ui-tally` goes in its `tally` slot. `unavailable` with a `reason` keeps it in the grid, locked, saying why |
+| `ui-tally` | Counts drawn as segments, one per thing. Mark the counts that need attention `loud`; only those, and the total, are said in words |
+| `ui-details` | The properties of the thing that's open. Empty values say "Not known"; `explained` marks the one someone asked about |
+| `ui-timeline` | History as `{ at, who, what }`, grouped Today, Yesterday, Tue 27 Oct |
+| `ui-path` | Line of sight: steps from the top floor down to `here`, each opening on `ui-open` |
+| `ui-ref`, `ui-refs` | Things from other apps (an `EntityRef`, `DocumentRef`, intent, person or team) as chips: the kind's icon, the name, a floor dot when it's kept elsewhere. On `ui-open`, raise the matching intent (`openEntity`, `openDocument`); `removable` fires `ui-remove`. Give `closed-count` and `closed-reason` for the ones the person can't open |
+| `ui-date` | A day, value YYYY-MM-DD. It shows "Fri 13 Nov · in 15 days", reads "13 nov", "friday", "end of month" or "+2w", and `empty` says what no day means ("Today", "Still holds"). `.quick` takes up to four choices. Works in `ui-dialog` like a text field |
+| `ui-people-picker` | Give it `.search` (people and teams by name, through the SDK) and, if some can't be chosen, `.check` returning why. Fires `ui-pick`; with `multiple`, chosen ones gather as chips in `.value` |
+| `ui-editor` | For writing more than a line. Its value is Markdown with mentions as `[@Name](person:id)` links, and `.refs` lists them. Give `.mentionSource` to turn on `@` and `#`. `guide="2 sentences"` counts and never blocks. Show what it writes with `ui-prose` |
 
 ## 4. The service
 
@@ -126,6 +160,7 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 - `sdk` is the range of SDK releases the app works with. The shell refuses an app outside it.
 - `icon` and menu `icon`s are the kit's icon names (see Storybook's Icons).
 - `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit, and `areas` (SDK 1.5) names the broad parts of the app Title lists under it, each menu group naming its `area`; an app that draws its own menu inside it sets `"orbit": false` (SDK 1.4) to open straight away; an app that shows the same on every floor, as Admin does, sets `"sameOnEveryFloor": true` (SDK 1.6), and the shell's floor gauge rests while it's open, saying why; see [platform/frontends](../platform/frontends/README.md#title-and-orbit). How the shell draws menus follows the [shell principles](shell-principles.md).
+- `previews` (SDK 1.7) lists features the app is trying before they're everyone's: `[{ "id": "board-view", "name": "Board view", "detail": "Tasks as columns.", "until": "2027-01-31" }]`. Ask `ctx.previewOn('board-view')` and keep working when it's false; admins decide who gets each, and people turn opt-in ones on in the shell's Previews ([release-channels.md](release-channels.md#feature-previews)).
 - `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`), `models:use` to ask an AI model through the model gateway (`askModel`, see [Agents and models](agents.md)), `events:publish` and `events:subscribe` to tell other services what happened and hear what they did (see [Domain events](domain-events.md)), `people:read` to ask who someone stands for and find people and teams to share with (see [Sharing](#sharing)). An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope. A new version that asks for more scopes is still served, but gets the new ones only once an admin allows them in Admin, Apps.
 - `floors` is the kinds of floor the app works on: `personal` (someone's own), `team` (any team, at any depth) and `org`. Leave it out for all three. The shell never offers the app on another kind.
 - `surfaces` says what the app shows on each kind of floor, for the shell to place: a `page`, a `card` on the floor's page, a `panel`, the floor's `settings` or `admin`, each from a `module` the entry exposes. `role` limits one to members or leads there; `rollup` means it shows the floor and the teams below it that the person is on (identity's `GET /v1/me/workspaces/{id}/rollup`). Each surface's floor must be in `floors`. When several match, the most specific floor wins, then a role condition, then manifest order. The shell places `card`s on Home (SDK 1.2); the other slots are checked and kept, and placed later.
@@ -203,6 +238,8 @@ try {
 
 `library.open` opens a whole library the same way: `openLibrary(ctx, { app: 'folio', id: 'l-7', name: 'Policies' })`, with a `LibraryRef` in the handling app's `ctx.intent.payload` (check it with `isLibraryRef`).
 
+`unit.open` (SDK 1.8) opens one place in a floor's library at any level of its shape: a collection, subcollection, series or subseries, or a file. Pass a `UnitRef`, `openUnit(ctx, { kind: 'unit', app: 'folio', id: 'l-7/f-reports', level: 'series', name: 'Reports' })`; the handling app checks it with `isUnitRef`. Artifacts' unit ids are `<library>/<unit>`, or the library's own id for the collection at its top. `UNIT_LEVELS` lists the levels, top down.
+
 An app that handles `document.open` finds a `DocumentRef` in `ctx.intent.payload`. One that handles `document.pick` gets a `DocumentPick` there and answers with `ctx.reply.respond(ref)`; `pickDocument` checks the answer is a `DocumentRef`.
 
 ### Entities from other apps
@@ -250,6 +287,10 @@ An app that lets people share things with each other asks identity two things, a
 
 The platform has a **publisher** role for people who may put things out beyond their own team, to the whole org or to any team. An app checks it in the caller's `roles`; an admin gives it in Admin, People. Identity adds the role to the sign-in service when it starts, so a server set up before it gets it too.
 
+### Records like Artifacts'
+
+If your app keeps things people organise, version and publish, keep them the way Artifacts does: levels, a lifecycle on each version, grants that reach down, tags, relationships and publishing up the floors with one owner. [App patterns](app-patterns.md) sets out each one and the tables to keep, and `@augur/records` holds the rules.
+
 ## 6. Before you open a pull request
 
 ```sh
@@ -257,6 +298,7 @@ pnpm build
 pnpm --filter "@apps/expenses*" test
 pnpm check:manifest
 pnpm check:boundaries
+pnpm check:reasons
 pnpm check:versions
 pnpm changeset        # say what changed in @apps/expenses and @apps/expenses-frontend
 ```

@@ -1,0 +1,28 @@
+# Written by `pnpm catalog` from the repository (docs/catalog.md). Don't edit it by hand.
+site_name: AUGUR
+docs_dir: docs
+repo_url: https://github.com/harry-burton-dev/im-platform
+edit_uri: edit/dev/docs/
+plugins:
+  - techdocs-core
+nav:
+  - Agents and models: agents.md
+  - App patterns: app-patterns.md
+  - Previews of pull requests: app-previews.md
+  - App storage: app-storage.md
+  - Data Atlas: atlas.md
+  - Auspex: auspex.md
+  - Build an app: build-an-app.md
+  - The catalog: catalog.md
+  - Running CI on our own server: ci-runner.md
+  - Running AUGUR on your own server: deploy.md
+  - Domain events: domain-events.md
+  - "Artifacts: a guide for people and admins": folio.md
+  - "Mandate: intent": mandate.md
+  - Mirroring AUGUR releases: mirror.md
+  - "Release channels: dev, preview, production": release-channels.md
+  - Shell principles: shell-principles.md
+  - Ship an app: ship-an-app.md
+  - Signed caller: signed-caller.md
+  - Upgrading AUGUR: upgrade.md
+  - Versioning: versioning.md

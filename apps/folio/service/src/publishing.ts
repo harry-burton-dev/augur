@@ -98,6 +98,8 @@ export const publisherFor = ({ store, audit, directory, audience, notify, log }:
   const publish = async (caller: OnFloor, doc: HeldDocument, { version, audience: wanted, note }: { version: number; audience: string[]; note?: string }) => {
     const publication = await store.publish({ document: doc.id, version, audience: wanted, note, by: caller.id });
     if (!publication) return undefined;
+    // What's out to an audience is put out as final.
+    await store.setVersionState(doc.id, publication.version, 'issued', caller.id);
     await recorded({
       actor: caller.id,
       action: 'document.published',
@@ -113,9 +115,11 @@ export const publisherFor = ({ store, audit, directory, audience, notify, log }:
 };
 
 /**
- * Publishing: putting one version of a document out to an audience (teams, a
- * team and the teams below it, or the whole org), who may then read that
+ * Publishing: putting one version of a series' issue out to an audience (teams,
+ * a team and the teams below it, or the whole org), who may then read that
  * version from wherever they are and are told it's there, and taking it back.
+ * Any other document is published up the floors instead (placements.ts); what
+ * was published this way before is moved onto that (moving.ts).
  */
 export const publishingRoutes = async (app: FastifyInstance, deps: PublishingDeps & { publisher: Publisher }) => {
   const { store, onFloor, reach, principalsOf, directory, publisher } = deps;
@@ -147,6 +151,9 @@ export const publishingRoutes = async (app: FastifyInstance, deps: PublishingDep
       const doc = await documentFor(caller, req.params, reply);
       if (!doc) return reply;
       if (!reaches(doc.level, 'manage')) return managers(reply, 'publish');
+      // A document on its own is published up the floors now (placements.ts); a series still sends each issue out.
+      if (!doc.issue)
+        return reply.code(410).send({ error: 'publish-up', message: 'A document is published up the floors now: choose Publish up the floors, and which states it shows.' });
       const wanted = [...new Set(req.body.audience)];
       const refusal = await audienceRefusal(caller, doc.shelf, wanted);
       if (refusal) return reply.code(refusal.code).send({ error: refusal.error, message: refusal.message });

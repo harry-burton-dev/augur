@@ -1,0 +1,13 @@
+# Written by `pnpm catalog` from the repository (docs/catalog.md). Don't edit it by hand.
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: augur
+  description: "Everything in im-platform: register this one file in Backstage"
+spec:
+  targets:
+    - ./augur.yaml
+    - ./apps/atlas.yaml
+    - ./apps/auspex.yaml
+    - ./apps/folio.yaml
+    - ./apps/mandate.yaml

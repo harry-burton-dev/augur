@@ -69,6 +69,27 @@ export interface AppManifestEntry {
    * registry always fills it in; an app checks a file against it before sending.
    */
   maxUpload?: number;
+  /**
+   * Features the app is trying before they're everyone's (SDK 1.7). Admins say
+   * who gets each (off, those who turn it on, or everyone) in Admin → Apps,
+   * people turn the opt-in ones on in the shell's Previews, and the app asks
+   * `ctx.previewOn(id)`. An app keeps working with every preview off.
+   */
+  previews?: FeaturePreview[];
+  /** The ids of the app's previews that are on for the person: the registry fills it in (SDK 1.7). */
+  previewsOn?: string[];
+}
+
+/** A feature an app is trying out (SDK 1.7). */
+export interface FeaturePreview {
+  /** How the app names it in `ctx.previewOn`: "board-view". */
+  id: string;
+  /** What people see in Previews: "Board view". */
+  name: string;
+  /** A sentence on what it changes. */
+  detail?: string;
+  /** Its last day, YYYY-MM-DD. After it, it's off for everyone, and Admin says to drop it or ship it. */
+  until?: string;
 }
 
 /**
@@ -166,7 +187,7 @@ export interface WorkspaceRef {
   slug: string;
   /**
    * Teams only: what the team's level is called, "Department" right below the
-   * org and "Team" below that unless an admin renamed them (SDK 1.6). Say it
+   * org and "Team" below that unless an admin renamed them (SDK 1.9). Say it
    * where you'd say "team"; `kind` stays `team` at every level.
    */
   level?: string;
@@ -254,6 +275,12 @@ export interface MountContext {
   intent?: Intent;
   /** Present when the app was opened to answer a request: give the answer, or cancel. */
   reply?: IntentReply;
+  /**
+   * Whether one of the app's feature previews (its manifest's `previews`) is
+   * on for this person (SDK 1.7). False for an id the manifest doesn't list.
+   * Turning one on or off mounts the app again, so the answer holds while it's mounted.
+   */
+  previewOn(id: string): boolean;
 }
 
 export interface IntentReply {

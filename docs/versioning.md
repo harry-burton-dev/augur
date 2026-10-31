@@ -33,6 +33,8 @@ Commit the file it writes under `.changeset/` with the change.
 
 ### Cutting a release
 
+Releases now go through three branches, `dev`, `preview` and `production`: see [release-channels.md](release-channels.md). In short, versions are cut on `dev`, releases are built on `preview`, and `production` takes the same releases. What follows says `main`, which did all three before.
+
 You don't run anything locally. When changesets reach `main`, the Release workflow opens (and keeps up to date) a pull request called **Version packages**. It bumps every affected package, writes each one's `CHANGELOG.md`, and syncs the manifests and `SDK_VERSION`.
 
 Merging that pull request is the release. The workflow then tags each released package as `<name>@<version>`, for example `@augur/registry@0.2.0`, and makes a GitHub release for each tag. It also makes the AUGUR release (below).
@@ -55,7 +57,7 @@ How the AUGUR version moves: a breaking change in any part bumps the major (the 
 
 When the Version packages PR merges, the workflow makes the GitHub release `augur@<version>`, marked as a pre-release while in beta. Its notes gather each changed part's changelog, the breaking changes and the new settings, and `augur-release.json` is attached for anything that checks for updates. This is what a deployment upgrades to ([upgrade.md](upgrade.md)).
 
-Admin → Updates reads these releases. The registry knows which release it ships in from `platform/services/registry/src/augur-version.ts`, which the same script writes beside the release file. A pre-release is on the **beta** channel; to promote a release to **stable**, edit it on GitHub and untick **Set as a pre-release**. Deployments following stable see it at their next check.
+Admin → Upgrade Centre reads these releases. The registry knows which release it ships in from `platform/services/registry/src/augur-version.ts`, which the same script writes beside the release file. A pre-release is on the **beta** channel; a release is promoted to **stable** by the Promote workflow ([release-channels.md](release-channels.md#promote-to-production)), which takes off its pre-release mark. Deployments following stable see it at their next check.
 
 Two GitHub settings the workflow needs: Settings → Actions → General → Workflow permissions must allow **Read and write**, and **Allow GitHub Actions to create and approve pull requests** must be on. GitHub doesn't start other workflows from anything done with the workflow's built-in token, so the Release workflow uses a `RELEASE_TOKEN` secret instead; with it, CI runs on the Version packages PR by itself. To set it up, create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) for this repository only, with **Contents: Read and write** and **Pull requests: Read and write**, and save it under Settings → Secrets and variables → Actions as `RELEASE_TOKEN`. Renew it before it expires. Without the secret the workflow falls back to the built-in token, and CI on the Version packages PR only starts once you push a commit to its branch.
 

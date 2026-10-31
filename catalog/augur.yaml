@@ -1,0 +1,510 @@
+# Written by `pnpm catalog` from the repository (docs/catalog.md). Don't edit it by hand.
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: augur
+  title: AUGUR
+  description: "The AUGUR product: the platform and the apps that run on it"
+spec:
+  owner: group:default/augur-core
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: augur-core
+  title: AUGUR core
+  description: Builds and runs the AUGUR platform and its pillar apps
+spec:
+  type: team
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: augur-platform
+  title: AUGUR platform
+  description: The shell, SDK, UI kit, gateway, identity, registry, events, models, storage and updater
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/techdocs-ref: dir:..
+    augur.dev/release-unit: augur
+    augur.dev/version: 0.12.0
+spec:
+  owner: group:default/augur-core
+  domain: augur
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-admin
+  title: "@augur/admin"
+  description: "Admin: people, departments and apps. Built as one ES module the shell imports from the registry's entry URL."
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/admin/
+    augur.dev/package: "@augur/admin"
+    augur.dev/version: 0.10.1
+    augur.dev/release-unit: augur
+spec:
+  type: website
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-home
+  title: "@augur/home"
+  description: "Home: the platform's landing app. Built as one ES module the shell imports from the registry's entry URL."
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/home/
+    augur.dev/package: "@augur/home"
+    augur.dev/version: 0.2.9
+    augur.dev/release-unit: augur
+spec:
+  type: website
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-shell
+  title: "@augur/shell"
+  description: "The shell host: wraps ui-shell, loads apps from the registry manifest, mounts the current app and routes intents."
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/shell/
+    augur.dev/package: "@augur/shell"
+    augur.dev/version: 0.10.1
+    augur.dev/release-unit: augur
+spec:
+  type: website
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-mfe-sdk
+  title: "@augur/mfe-sdk"
+  description: "The contract between the shell and micro frontends: registration, mount context, event bus and intents."
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/mfe-sdk/
+    augur.dev/package: "@augur/mfe-sdk"
+    augur.dev/version: 1.8.0
+    augur.dev/release-unit: augur
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-records
+  title: "@augur/records"
+  description: "The shapes every app's records share: levels a tree of units is built from, lifecycles, who may do what, tags, relationships, and publishing up the floors with one owner."
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/records/
+    augur.dev/package: "@augur/records"
+    augur.dev/version: 0.1.0
+    augur.dev/release-unit: augur
+spec:
+  type: library
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-service-kit
+  title: "@augur/service-kit"
+  description: "What a backend service needs to know who is calling: the caller the gateway verified, carried in request headers."
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/service-kit/
+    augur.dev/package: "@augur/service-kit"
+    augur.dev/version: 0.9.0
+    augur.dev/release-unit: augur
+spec:
+  type: library
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-ui-kit
+  title: "@augur/ui-kit"
+  description: Design tokens, base CSS and web components rebuilt from the Claude Design system (working name Wave).
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/ui-kit/
+    augur.dev/package: "@augur/ui-kit"
+    augur.dev/version: 1.7.0
+    augur.dev/release-unit: augur
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-events
+  title: "@augur/events"
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/events/
+    augur.dev/package: "@augur/events"
+    augur.dev/version: 0.5.0
+    augur.dev/release-unit: augur
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+  providesApis:
+    - api:default/events-api
+  consumesApis:
+    - api:default/gateway-api
+    - api:default/identity-api
+    - api:default/models-api
+    - api:default/registry-api
+  dependsOn:
+    - resource:default/postgres
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-gateway
+  title: "@augur/gateway"
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/gateway/
+    augur.dev/package: "@augur/gateway"
+    augur.dev/version: 0.7.0
+    augur.dev/release-unit: augur
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+  providesApis:
+    - api:default/gateway-api
+  consumesApis:
+    - api:default/events-api
+    - api:default/identity-api
+    - api:default/models-api
+    - api:default/registry-api
+  dependsOn: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-identity
+  title: "@augur/identity"
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/identity/
+    augur.dev/package: "@augur/identity"
+    augur.dev/version: 0.8.0
+    augur.dev/release-unit: augur
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+  providesApis:
+    - api:default/identity-api
+  consumesApis:
+    - api:default/events-api
+    - api:default/gateway-api
+    - api:default/models-api
+    - api:default/registry-api
+  dependsOn:
+    - resource:default/postgres
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-models
+  title: "@augur/models"
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/models/
+    augur.dev/package: "@augur/models"
+    augur.dev/version: 0.3.0
+    augur.dev/release-unit: augur
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+  providesApis:
+    - api:default/models-api
+  consumesApis:
+    - api:default/events-api
+    - api:default/gateway-api
+    - api:default/identity-api
+    - api:default/registry-api
+  dependsOn:
+    - resource:default/postgres
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-registry
+  title: "@augur/registry"
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/registry/
+    augur.dev/package: "@augur/registry"
+    augur.dev/version: 0.12.1
+    augur.dev/release-unit: augur
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+  providesApis:
+    - api:default/registry-api
+  consumesApis:
+    - api:default/events-api
+    - api:default/gateway-api
+    - api:default/identity-api
+    - api:default/models-api
+  dependsOn:
+    - resource:default/postgres
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-storage
+  title: "@augur/storage"
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/storage/
+    augur.dev/package: "@augur/storage"
+    augur.dev/version: 0.3.0
+    augur.dev/release-unit: augur
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+  consumesApis: []
+  dependsOn:
+    - resource:default/garage
+    - resource:default/postgres
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-updater
+  title: "@augur/updater"
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/updater/
+    augur.dev/package: "@augur/updater"
+    augur.dev/version: 0.6.0
+    augur.dev/release-unit: augur
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+  consumesApis:
+    - api:default/registry-api
+  dependsOn:
+    - resource:default/docker-proxy
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: augur-contract-tests
+  title: "@augur/contract-tests"
+  description: "The shell's promise to apps, tested: a reference app, and frozen builds of it from each SDK release, mounted by the real shell in a browser."
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/contract/
+    augur.dev/package: "@augur/contract-tests"
+    augur.dev/version: 0.1.9
+    augur.dev/release-unit: augur
+spec:
+  type: tool
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: events-api
+  title: Events API
+  description: "Notifications for the Shell's stream, and the platform's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    augur.dev/contract-version: 1.6.0
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/augur-core
+  system: augur-platform
+  definition:
+    $text: ../contracts/events.openapi.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: gateway-api
+  title: Gateway API
+  description: The gateway's own API, beside the services it forwards to. Reached at /api/gateway/v1 by a signed-in caller. Everything else under /api/<service> is forwarded to that service with the caller in x-user-* headers and in x-augur-caller, a token the gateway signs (EdDSA, one minute) for that service alone (its `aud` is the service's name), and without the caller's Authorization header. Services that check callers believe only the signed one. Every path but /healthz and /caller-keys needs a signed-in caller, however it is spelt. x-user-signed-in-at (and the token's `signedInAt`) carries when the caller last entered their password (the token's auth_time, ISO 8601), for a service that wants a fresh sign-in for something drastic; the shell's /auth/again?return=<path> asks for the password and comes back.
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    augur.dev/contract-version: 1.4.0
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/augur-core
+  system: augur-platform
+  definition:
+    $text: ../contracts/gateway.openapi.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: identity-api
+  title: Identity API
+  description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers.
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    augur.dev/contract-version: 1.12.0
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/augur-core
+  system: augur-platform
+  definition:
+    $text: ../contracts/identity.openapi.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: models-api
+  title: Models API
+  description: |-
+    The model gateway: the only place AUGUR keeps a model provider's key. It speaks the OpenAI-style chat completions API to whichever provider the server is set up with (MODEL_API_URL: OpenRouter, a LiteLLM proxy, any compatible API, or the built-in stand-in model), so nothing else holds an AI key or knows the provider.
+    Two kinds of caller. An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services) and needs models:use granted by the registry on the floor named by x-workspace-id. A person reaches it through the gateway (caller in x-user-* headers) from the shell's Agents, naming the agent they are talking to: "assistant", the shell's own, or an AI app granted models:use on their floor.
+    Apps' services may also turn text into vectors (/embeddings, 1.1), to match by meaning, when an embedding model is set up (MODEL_EMBEDDING_NAME; the stand-in always has one). Each request counts as one call and is recorded as model.embedded, with how many texts and never what they say.
+    Every call is written to the audit log (model.called, with the model, how many messages and which tools, never what was said) before it is made; a call that can't be recorded isn't made (503). Each app (the shell's assistant counts as one) gets a number of calls a day, UTC (429 after). Models are off until an admin turns them on (403 while off).
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    augur.dev/contract-version: 1.1.0
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/augur-core
+  system: augur-platform
+  definition:
+    $text: ../contracts/models.openapi.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: registry-api
+  title: Registry API
+  description: Catalogue of apps and micro frontends; serves the shell manifest.
+  annotations:
+    github.com/project-slug: harry-burton-dev/im-platform
+    augur.dev/contract-version: 1.31.0
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/augur-core
+  system: augur-platform
+  definition:
+    $text: ../contracts/registry.openapi.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: postgres
+  description: "Postgres with pgvector: the platform schema, each app's schema and Keycloak's"
+  annotations:
+    augur.dev/image: pgvector/pgvector:0.8.0-pg16
+spec:
+  type: database
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: garage
+  description: "Garage, S3-compatible object storage: app buckets, versioned frontends, uploads"
+  annotations:
+    augur.dev/image: dxflrs/garage:v2.4.1
+spec:
+  type: s3-storage
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: keycloak
+  description: 'Keycloak: sign-in for people and services (realm "platform")'
+  annotations:
+    augur.dev/image: quay.io/keycloak/keycloak:26.0.8
+spec:
+  type: identity-provider
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: tailscale
+  description: "Tailscale sidecar: the way in, on the tailnet, with Funnel for public access"
+  annotations:
+    augur.dev/image: tailscale/tailscale:v1.76.6
+spec:
+  type: network
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: backup
+  description: Postgres backups the updater takes before every upgrade
+  annotations:
+    augur.dev/image: postgres:16-alpine
+spec:
+  type: job
+  owner: group:default/augur-core
+  system: augur-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: docker-proxy
+  description: A narrow Docker socket for the updater and the app runner
+  annotations:
+    augur.dev/image: tecnativa/docker-socket-proxy:v0.5.0
+spec:
+  type: docker-socket
+  owner: group:default/augur-core
+  system: augur-platform

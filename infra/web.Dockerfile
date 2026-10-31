@@ -23,10 +23,13 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine AS web
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 # Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
 ENV APP_ORIGINS=""
+# Set from SERVER_RING and PLATFORM_URL when the container starts (infra/deploy/live-origins.envsh): the workbench's own tailnet, on the workbench only.
+ENV LIVE_ORIGINS="" SERVER_RING=""
+COPY --chmod=755 infra/deploy/live-origins.envsh /docker-entrypoint.d/15-live-origins.envsh
 # What the front door holds callers to (infra/deploy/nginx.conf). Requests a second from one address,
 # and the burst let through at once, for the API and for sign-in; the largest upload in MB; and
 # whether Keycloak's own admin console is served (open) or not (anything else).
 ENV API_RATE_PER_SECOND=30 API_RATE_BURST=200 SSO_RATE_PER_SECOND=10 SSO_RATE_BURST=50 MAX_UPLOAD_MB=2048 KEYCLOAK_CONSOLE=closed
-# nginx fills in ${APP_ORIGINS} from the environment when the container starts.
+# nginx fills in ${APP_ORIGINS} and ${LIVE_ORIGINS} from the environment when the container starts.
 COPY --from=build /default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /site /usr/share/nginx/html

@@ -23,34 +23,39 @@ export const AUGUR_RELEASES_KEPT = 20;
 export const APP_RELEASES_KEPT = 4;
 /** How many pull requests' previews it holds, each pull request's newest build only. */
 export const PREVIEWS_KEPT = 20;
+/** How many of AUGUR's, and each app's, newest dev builds it holds, apart from their releases. */
+export const DEV_BUILDS_KEPT = 2;
 
 const AUGUR_TAG = /^augur@(.+)$/;
 const APP_TAG = /^app\/([a-z][a-z0-9-]{1,39})@(.+)$/;
 const PREVIEW = /-pr\.(\d+)\.\d+$/;
+const DEV = /-dev\.\d+$/;
 
 /**
- * Which releases go in the feed, newest first: AUGUR's newest few, each app's newest few, and each pull
- * request's newest preview build (the app runner runs those for the app's developers).
+ * Which releases go in the feed, newest first: AUGUR's newest few and its newest dev builds, each app's newest few, and each pull
+ * request's newest preview build (the app runner runs those for the app's developers), and each app's
+ * newest dev builds, which don't push its releases out.
  */
 export const chooseReleases = (releases) => {
   const listed = releases.filter((r) => !r.draft && typeof r.tag_name === 'string');
-  const augur = listed
+  const augurAll = listed
     .map((r) => ({ release: r, version: AUGUR_TAG.exec(r.tag_name)?.[1] }))
     .filter((x) => x.version && semver.valid(x.version))
-    .sort((a, b) => semver.rcompare(a.version, b.version))
-    .slice(0, AUGUR_RELEASES_KEPT);
+    .sort((a, b) => semver.rcompare(a.version, b.version));
+  // AUGUR's dev builds, for the workbench, don't push its releases out either.
+  const augur = [...augurAll.filter((x) => !DEV.test(x.version)).slice(0, AUGUR_RELEASES_KEPT), ...augurAll.filter((x) => DEV.test(x.version)).slice(0, DEV_BUILDS_KEPT)].sort((a, b) => semver.rcompare(a.version, b.version));
   const apps = listed
     .map((r) => ({ release: r, m: APP_TAG.exec(r.tag_name) }))
     .filter((x) => x.m && semver.valid(x.m[2]))
-    .map(({ release, m }) => ({ release, app: m[1], version: m[2], pr: PREVIEW.exec(m[2])?.[1] }))
+    .map(({ release, m }) => ({ release, app: m[1], version: m[2], pr: PREVIEW.exec(m[2])?.[1], dev: DEV.test(m[2]) }))
     .sort((a, b) => semver.rcompare(a.version, b.version));
   const kept = new Map();
   const appsChosen = [];
   let previews = 0;
   for (const a of apps) {
-    const key = a.pr ? `${a.app}#${a.pr}` : a.app;
+    const key = a.pr ? `${a.app}#${a.pr}` : a.dev ? `${a.app}~dev` : a.app;
     const count = kept.get(key) ?? 0;
-    if (count >= (a.pr ? 1 : APP_RELEASES_KEPT) || (a.pr && previews >= PREVIEWS_KEPT)) continue;
+    if (count >= (a.pr ? 1 : a.dev ? DEV_BUILDS_KEPT : APP_RELEASES_KEPT) || (a.pr && previews >= PREVIEWS_KEPT)) continue;
     kept.set(key, count + 1);
     if (a.pr) previews++;
     appsChosen.push(a);
@@ -58,10 +63,10 @@ export const chooseReleases = (releases) => {
   return { augur, apps: appsChosen };
 };
 
-/** An app's release file as the feed holds it: its channel as GitHub has it now (previews stay previews by version). */
+/** An app's release file as the feed holds it: its channel as GitHub has it now (previews stay previews by version, dev builds dev). */
 export const asListed = (file, release) => ({
   ...file,
-  channel: release.prerelease ? 'beta' : 'stable',
+  channel: DEV.test(file.version) ? 'dev' : release.prerelease ? 'beta' : 'stable',
   ...(file.releasedAt || !release.published_at ? {} : { releasedAt: release.published_at }),
 });
 

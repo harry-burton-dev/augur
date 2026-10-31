@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appSecretFor } from '@augur/service-kit';
 import { appRunner, appsProject, containerEnv, publishersFrom, READY_MS, RETIRE_MS, type AppHost, type AppJob, type JobReport, type PlatformCalls, type RunnerState } from './runner.ts';
+import { releaseIdentity } from './signers.ts';
 
 const KEY = 'k'.repeat(64);
 const ENV = `PLATFORM_URL=https://augur.example\nAPP_SECRETS_KEY=${KEY}\n`;
@@ -38,6 +39,10 @@ const fakeHost = (env = ENV, network?: string) => {
     async verifySignedBy(ref, identity) {
       did.push(`verify ${identity}`);
       if (unsigned.has(ref)) throw new Error('no matching signatures');
+    },
+    async backup() {
+      did.push('backup');
+      return 'platform-20261030-0100.sql.gz';
     },
     async provisionStorage(app) {
       did.push(`storage ${app}`);
@@ -100,10 +105,34 @@ const setup = (env = ENV, network?: string) => {
 };
 
 describe('the app runner', () => {
+  it('installs a dev build only on a dev or preview server, from the dev workflow on dev, after a backup', async () => {
+    const dev = { signer: { repository: 'o/r', workflow: '.github/workflows/app-dev.yml' } };
+    const onProduction = setup(`${ENV}SERVER_RING=production\n`);
+    onProduction.versions.set(image('c'), '1.0.1-dev.40');
+    expect(await onProduction.run(install('1.0.1-dev.40', 'c', dev))).toBe('failed');
+    expect(onProduction.reports.at(-1)?.message).toMatch(/only a dev or preview server/);
+    expect(onProduction.did).toEqual([]);
+
+    const workbench = setup(`${ENV}SERVER_RING=dev\n`);
+    workbench.versions.set(image('c'), '1.0.1-dev.40');
+    expect(await workbench.run(install('1.0.1-dev.40', 'c', dev))).toBe('done');
+
+    const t = setup(`${ENV}SERVER_RING=preview\n`);
+    t.versions.set(image('c'), '1.0.1-dev.40');
+    expect(await t.run(install('1.0.1-dev.40', 'c', dev))).toBe('done');
+    expect(t.did.slice(0, 2)).toEqual(['verify https://github.com/o/r/.github/workflows/app-dev.yml@refs/heads/dev', 'backup']);
+    expect(t.reports.find((r) => r.step === 'verify' && r.state === 'done')?.message).toMatch(/Backup platform-20261030-0100\.sql\.gz/);
+
+    // Signed by the release workflow, a dev version isn't taken as a dev build.
+    const wrong = setup(`${ENV}SERVER_RING=preview\n`);
+    expect(await wrong.run(install('1.0.1-dev.41', 'c'))).toBe('failed');
+    expect(wrong.reports.at(-1)?.message).toMatch(/isn’t trusted to publish dev builds/);
+  });
+
   it('installs an app: checks its signature, gives it storage and a sign-in, starts it, then lists it', async () => {
     const t = setup();
     expect(await t.run(install('1.0.0'))).toBe('done');
-    expect(t.did).toEqual(['verify https://github.com/o/r/.github/workflows/release.yml@refs/heads/main', 'storage notes', 'start app-notes-blue']);
+    expect(t.did).toEqual([`verify ${releaseIdentity('o/r/.github/workflows/release.yml')}`, 'storage notes', 'start app-notes-blue']);
     expect(t.calls.did).toEqual([`credential notes ${appSecretFor(KEY, 'notes', 'sign-in').slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
     expect(t.state().apps.notes).toEqual({ active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: true, bucket: false } } });
     expect(t.reports.at(-1)).toMatchObject({ step: 'retire', outcome: 'done', message: 'Notes 1.0.0 is installed.' });

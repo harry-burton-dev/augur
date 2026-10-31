@@ -53,6 +53,8 @@ export interface CatalogueApp extends AppManifestEntry {
   uploadLimitLowered?: boolean;
   /** Settings the app offers admins, from its manifest. */
   settings?: AppSetting[];
+  /** Features it's trying before they're everyone's (SDK 1.7). */
+  previews?: { id: string; name: string; detail?: string; until?: string }[];
 }
 
 /** One setting an app offers admins: a whole number between min and max. */
@@ -170,13 +172,48 @@ export interface PlatformStatus {
   publicAccess?: PublicAccess;
 }
 
+/** One change in a changelog, and the parts it moved (registry's changes.ts). */
+export interface Change {
+  id?: string;
+  kind: 'major' | 'minor' | 'patch';
+  text: string;
+  parts: string[];
+}
+
+/** stable is on production, beta on preview, dev a dev build that only the workbench takes. */
+export type ReleaseChannel = 'stable' | 'beta' | 'dev';
+
 /** An AUGUR release as Updates shows it (see contracts/registry.openapi.yaml). */
 export interface ReleaseSummary {
   version: string;
-  channel: 'stable' | 'beta';
+  channel: ReleaseChannel;
   released?: string;
   notesUrl?: string;
   breaking: string[];
+  changes?: Change[];
+}
+
+/** An earlier release the server could go back to. */
+export interface GoBackTarget {
+  version: string;
+  channel: ReleaseChannel;
+  released?: string;
+  problem?: string;
+  breakingAfter?: string;
+}
+
+/** One upgrade in the Updates page's history. */
+export interface UpdateHistoryEntry {
+  id: string;
+  from: string;
+  version: string;
+  requestedBy: string;
+  requestedByName?: string;
+  requestedAt: string;
+  state: 'requested' | 'running' | 'done' | 'rolled-back' | 'failed' | 'cancelled';
+  message?: string;
+  finishedAt?: string;
+  backup?: string;
 }
 
 /** Something to do or know before upgrading. */
@@ -213,9 +250,36 @@ export interface Upgrade {
   finishedAt?: string;
 }
 
+/** The Upgrade Centre's line (see contracts/registry.openapi.yaml, PipelineLine). */
+export interface PipelineLine {
+  feed: 'on' | 'off';
+  checkedAt?: string;
+  problem?: string;
+  generatedAt?: string;
+  repository?: string;
+  units: {
+    id: string;
+    name: string;
+    versions: Record<'dev' | 'preview' | 'production', string | null>;
+    devBuild?: { version: string; released?: string };
+    waiting: string[];
+    previews: { pr: number; version: string }[];
+    running?: string;
+  }[];
+  steps: { from: 'dev' | 'preview' | 'production'; to: 'dev' | 'preview' | 'production'; merged: number; pulls: { number: number; title: string; mergedAt?: string }[] }[];
+  pulls?: {
+    versionPackages?: { number: number; title: string; url: string };
+    promoteToPreview?: { number: number; title: string; url: string };
+    promoteToProduction: { number: number; title: string; url: string; unit: string; version: string }[];
+  };
+}
+
 export interface PlatformUpdates {
-  running: { version: string; channel: 'stable' | 'beta' };
-  channel: 'stable' | 'beta';
+  running: { version: string; channel: ReleaseChannel };
+  channel: ReleaseChannel;
+  /** What kind of server this is (SERVER_RING), which bounds the channel. */
+  ring?: 'dev' | 'preview' | 'production';
+  channelNote?: string;
   /** Off when the deployment set RELEASE_FEED_URL=off. */
   feed: 'on' | 'off';
   checkedAt?: string;
@@ -227,8 +291,16 @@ export interface PlatformUpdates {
   needsYou: NeedsYou[];
   /** The upgrade asked for, while it's waiting or under way, and for a week after. */
   upgrade?: Upgrade;
+  /** Every upgrade asked for, newest first. */
+  history?: UpdateHistoryEntry[];
+  /** Earlier releases to go back to, newest first, each with why not when it can't. */
+  goBack?: GoBackTarget[];
   /** When the deployment's updater last asked for work, since the registry started. */
   updaterSeenAt?: string;
+  /** The line from dev to production, from the pipeline feed, with what this server runs of each unit. */
+  line?: PipelineLine;
+  /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to. */
+  portalUrl?: string;
 }
 
 /** One step the app runner took (see contracts/registry.openapi.yaml). */
@@ -253,7 +325,31 @@ export interface AppJob {
   finishedAt?: string;
 }
 
-export type AppChannel = 'stable' | 'beta';
+/** Who gets a feature preview: nobody, those who turn it on, or everyone. */
+export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone';
+
+/** An app's feature previews as Admin shows them. */
+export interface FeaturePreviews {
+  /** Who gets one nobody chose for: opt-in on a dev or preview server, off on a production one. */
+  defaultMode: FeaturePreviewMode;
+  ring: 'dev' | 'preview' | 'production';
+  previews: { id: string; name: string; detail?: string; until?: string; mode: FeaturePreviewMode; ended: boolean; chosen: boolean; setBy?: string; setAt?: string; optedIn: number }[];
+}
+
+/** stable is production releases, beta preview releases too, dev dev builds too (a dev or preview server only). */
+export type AppChannel = 'stable' | 'beta' | 'dev';
+
+/** One of an app's jobs, as its history shows it. */
+export interface AppHistoryEntry {
+  id: string;
+  action: 'install' | 'remove' | 'preview' | 'preview-remove';
+  version?: string;
+  requestedBy: string;
+  requestedAt: string;
+  state: 'requested' | 'running' | 'done' | 'failed' | 'cancelled';
+  message?: string;
+  finishedAt?: string;
+}
 export type AppPolicy = 'automatic' | 'ask' | 'hold';
 
 /** An app the app runner installed, and how it takes new releases. */
@@ -265,8 +361,14 @@ export interface InstalledApp {
   channel: AppChannel;
   policy: AppPolicy;
   /** The newest release on its channel, when newer; `needs` says why it waits for an admin. */
-  update?: { version: string; channel: AppChannel; notesUrl?: string; needs: string[] };
+  update?: { version: string; channel: AppChannel; notesUrl?: string; needs: string[]; changes?: Change[] };
   job?: AppJob;
+  /** What changed in the version it runs. */
+  changes?: Change[];
+  /** Its jobs, newest first: installs, updates, going back and removals. */
+  history?: AppHistoryEntry[];
+  /** Earlier versions in the feed to go back to, newest first. */
+  older?: { version: string; channel: AppChannel }[];
   /** Who may try its pull requests' previews, by person id. */
   developers?: string[];
   previews?: AppPreview[];
@@ -304,6 +406,10 @@ export interface AppInstalls {
   problem?: string;
   runnerSeenAt?: string;
   sdkVersion: string;
+  /** What kind of server this is (SERVER_RING): a production one follows stable releases only. */
+  ring?: 'dev' | 'preview' | 'production';
+  previewsAllowed?: boolean;
+  channelNote?: string;
   installed: InstalledApp[];
   available: AvailableApp[];
 }
@@ -390,6 +496,11 @@ export class AdminApi {
   /** Sets one of an app's settings; `null` puts it back to its default. */
   setAppSetting = async (id: string, setting: string, value: number | null) =>
     (await this.call<{ settings: AppSettingValue[] }>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/settings/${encodeURIComponent(setting)}`, { value })).settings;
+  /** Who gets each of an app's feature previews, and how many turned each on. */
+  featurePreviews = (id: string) => this.call<FeaturePreviews>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews`);
+  /** Sets who gets one of an app's feature previews; `null` goes back to the server's default. */
+  setFeaturePreview = (id: string, preview: string, mode: FeaturePreviewMode | null) =>
+    this.call<FeaturePreviews>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews/${encodeURIComponent(preview)}`, { mode });
   grantScopes = (id: string, scopes: string[]) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/scopes`, { scopes });
   /** The org's own floor, which every app rule starts from. */
   org = async () => {
@@ -426,6 +537,8 @@ export class AdminApi {
    */
   upgrade = (version: string, settings: Record<string, string> = {}) =>
     this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/upgrade', Object.keys(settings).length ? { version, settings } : { version });
+  /** Asks the updater to go back to an earlier release Updates offers. Turned down with `sign_in_again` too. */
+  goBack = (version: string) => this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/go-back', { version });
   installs = () => this.call<AppInstalls>('GET', '/api/registry/v1/app-runner/apps');
   /** Reads the app feed now, starting any automatic updates it finds. */
   checkInstalls = () => this.call<AppInstalls>('POST', '/api/registry/v1/app-runner/check');

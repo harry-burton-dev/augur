@@ -17,7 +17,7 @@ import '@augur/ui-kit';
 
 | Element | What it is |
 | --- | --- |
-| `ui-button` | Primary, secondary, tertiary, ghost, danger (asks twice); `ai`, `size="sm"`, `busy` |
+| `ui-button` | Primary, secondary, tertiary, ghost, danger (asks twice); `ai`, `size="sm"`, `busy`; `disabled` with a `reason` says why |
 | `ui-surface` | Pane, raised, inset, overlay, bar, veil |
 | `ui-heading` | Eyebrow, title, summary |
 | `ui-status` | Needs you, running, queued, paused, done, failed, check |
@@ -29,6 +29,26 @@ import '@augur/ui-kit';
 | `ui-keycap`, `ui-back` | A key as an outlined cap; the Esc Back control |
 | `ui-facts` | Up to three values worth a glance; loading |
 | `ui-rows` | Up to five label and value lines; loading, empty, error |
+| `ui-notice` | One sentence in a page that needs attention, with one action: needs, warning, refused, info |
+| `ui-note` | A quiet line that explains, with its `why` one press away; `live` for an action's result |
+| `ui-can` | What you can do from here, and who can do the rest |
+| `ui-app-frame` | An app's page: the slate ground, a rail that folds to icons, the main column, an aside, and a drawer at the right that folds away; `screen` fades both on a change of screen |
+| `ui-tile`, `ui-tiles` | One thing in a grid you walk into, by its picture or icon and name alone; `add` is the dashed tile that makes one; `rank` (`high`, `mid`, `low`) sets how strongly it answers hover |
+| `ui-toolbar` | The row above a grid: a search, any filters slotted in, and one Add |
+| `ui-radial-menu` | A ring of an object's actions around it, opened on right-click with `show(target)`; keys move round it, Esc or a click off closes it |
+| `ui-page-head` | Trail, eyebrow, title, one line of summary, two actions and ⋯ |
+| `ui-section` | A labelled part with its count, one action and a why; folds after five |
+| `ui-card`, `ui-cards` | One thing in a grid: title, mark, floor dot and name, one line of meta, at most one line that matters; unavailable cards stay and say why |
+| `ui-tally` | Counts as a short bar of segments; words only for the total and what needs attention |
+| `ui-details` | Label and value pairs; unknown values say so; folds after eight |
+| `ui-timeline` | What happened, grouped by day in words, newest first; five then "Earlier" |
+| `ui-path` | Where something sits on the floors above it, one disc per floor, you are here ringed |
+| `ui-lifecycle` | Where a record is in its lifecycle: every state in order, the one it's in ringed, a button for each move the caller may make |
+| `ui-ref`, `ui-refs` | A thing from any app as a chip that opens where you are; what you can't open is counted, never dropped |
+| `ui-date` | A day said and typed in words ("Fri 13 Nov · in 15 days", "friday", "+2w"), with quick choices and a calendar one press away |
+| `ui-people-picker` | Find people and teams by name; ones you can't add stay, dimmed, with why |
+| `ui-editor` | Writing more than a line: Markdown, no toolbar at rest, a bar on a selection, `@` and `#` mentions saved as refs, a soft length guide |
+| `ui-prose` | Shows what `ui-editor` writes, mentions as chips; none of it read as HTML |
 | `ui-glance` | A quick look before you go in: veil, sheet, card, split, title; hairline or bubble; loading, error, empty |
 | `ui-shell` | The frame apps run in: the band, the water, the stage, and the sky (stream, Apps, Find, Agents, Account, Settings), summoned with ` or Ctrl/⌘ K |
 | `ui-wave-background` | The water: navy and green bands over slate. Calm Tide by default; Deep Ocean, Aurora, Sonar Line, Minimal and Split Field as variants. `pulse()` swells it |

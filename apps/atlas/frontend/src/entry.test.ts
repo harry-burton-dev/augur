@@ -85,6 +85,7 @@ const ctx = (fetch: MountContext['fetch'], path = '/', more: Partial<MountContex
   path,
   workspace: floor,
   getWorkspace: () => floor,
+  previewOn: () => false,
   fetch,
   ...more,
 });
@@ -200,7 +201,7 @@ describe('atlas', () => {
     const el = document.body.appendChild(document.createElement('div'));
     await app.mount(el, ctx(fetch));
     await settle(el);
-    expect(el.querySelector('ui-heading')!.getAttribute('summary')).toMatch(/floors above it shows: Org, Maritime desk/);
+    expect(el.querySelector('ui-page-head')!.getAttribute('summary')).toMatch(/floors above it shows: Org, Maritime desk/);
     const list = el.querySelector('ui-list') as HTMLElement & { items: { title: string; detail: string }[] };
     expect(list.items).toEqual([expect.objectContaining({ title: 'Northern Tern', detail: 'Vessel · IMO number 9400117 · Kept on Maritime desk' })]);
     await app.unmount!(el);
@@ -216,10 +217,10 @@ describe('atlas', () => {
     const el = document.body.appendChild(document.createElement('div'));
     await app.mount(el, ctx(fetch, '/entities/ent_01'));
     await settle(el);
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Northern Tern');
-    const edit = [...el.querySelectorAll('ui-button')].find((b) => b.textContent === 'Edit') as HTMLElement & { disabled: boolean };
+    expect(el.querySelector('ui-page-head')!.getAttribute('heading')).toBe('Northern Tern');
+    const edit = (el.querySelector('ui-page-head') as HTMLElement & { actions: { label: string; disabled?: boolean; reason?: string }[] }).actions.find((a) => a.label === 'Edit')!;
     expect(edit.disabled).toBe(true);
-    expect(el.textContent).toMatch(/kept on the org floor: go there/);
+    expect(edit.reason).toMatch(/kept on the org floor: go there/);
     await settle(el);
     const [facts, links, observations] = [...el.querySelectorAll('atlas-knowledge ui-list')] as (HTMLElement & { items: { title: string; detail: string }[] })[];
     expect(facts.items).toEqual([expect.objectContaining({ title: 'Flag state: Liberia', detail: 'Since 1 Sep 2026 · Kept on Operations · Disputed' })]);
@@ -246,7 +247,7 @@ describe('atlas', () => {
     expect(dialog.textContent).toMatch(/Disputed from Maritime desk/);
     const end = [...dialog.querySelectorAll('ui-button')].find((b) => b.textContent === 'It has ended') as HTMLElement & { disabled: boolean };
     expect(end.disabled).toBe(true);
-    expect(dialog.textContent).toMatch(/kept on Operations: its leads end or withdraw it there/);
+    expect(end.getAttribute('reason')).toMatch(/kept on Operations: its leads end or withdraw it there/);
   });
 
   it('says why an entity can’t be seen from here', async () => {
@@ -333,7 +334,7 @@ describe('explorer', () => {
     await explorer.updateComplete;
     expect(bodies[0]).toEqual({ seeds: [{ id: 'ent_01' }], depth: 1, limitPerNode: 12 });
     expect(el.textContent).toMatch(/can’t draw the graph \(it needs WebGL\), so it shows as a list/);
-    expect(el.querySelector('ui-heading')!.getAttribute('heading')).toBe('Around Northern Tern');
+    expect(el.querySelector('ui-page-head')!.getAttribute('heading')).toBe('Around Northern Tern');
     expect([...el.querySelectorAll('.atlas-ring')].map((h) => h.textContent)).toEqual(['Centre', 'Ring 1']);
     const fold = [...el.querySelectorAll('.atlas-fold')].find((b) => b.textContent === '+3 operates') as HTMLButtonElement;
     fold.click();
@@ -410,11 +411,11 @@ describe('triage', () => {
     const button = (text: string) => [...el.querySelectorAll('ui-button')].find((b) => b.textContent?.trim() === text) as HTMLElement & { disabled: boolean };
     // Finish waits until everything is decided, and the page says so.
     expect(button('Finish').disabled).toBe(true);
-    expect(el.textContent).toContain('Decide every mention and observation');
+    expect(button('Finish').getAttribute('reason')).toContain('Decide every mention and observation');
     button('It’s Northern Tern').click();
     await settle(el);
     expect(decided).toEqual({ as: 'link', entity: 'ent_01' });
-    expect(el.querySelector('.atlas-outcome')!.textContent).toContain('Northern Tern');
+    expect(el.querySelector<HTMLElementTagNameMap['ui-ref']>('.atlas-outcome ui-ref')!.ref.label).toBe('Northern Tern');
     expect(button('Finish').disabled).toBe(false);
     button('Open the source').click();
     expect(raise).toHaveBeenCalledWith({ type: 'document.open', payload: { app: 'folio', id: 'd-1', version: '2', title: 'Port report' } });
@@ -512,7 +513,7 @@ describe('ontology', () => {
     expect(el.textContent).toContain('IMO number (says which one), Flag state (through facts)');
     const add = [...el.querySelectorAll<HTMLElement & { disabled: boolean }>('atlas-ontology ui-button')].find((b) => b.textContent === 'Add a kind')!;
     expect(add.disabled).toBe(true);
-    expect(add.title).toContain('Only admins');
+    expect(add.getAttribute('reason')).toContain('Only admins');
     tab(el, 'Asked for').click();
     await settle(el);
     expect(el.textContent).toContain('2 words that sources asked for wait for an admin');

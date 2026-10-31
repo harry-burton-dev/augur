@@ -8,7 +8,7 @@ describe('tokens', () => {
   });
 
   it('includes type roles and spacing', () => {
-    expect(tokens['type-body']).toBe('16px');
+    expect(tokens['type-body']).toBe('1rem');
     expect(tokens['space-5']).toBe('28px');
   });
 

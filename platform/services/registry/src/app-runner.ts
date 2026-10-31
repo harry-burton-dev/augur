@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
-import { AppUpdateChecker, newestOn, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
+import { changesIn } from './changes.ts';
+import { LiveOverrides } from './live.ts';
+import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
+import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
 import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore, type RunningPreview } from './store.ts';
 import { upstreamProblem } from './upstreams.ts';
@@ -18,7 +21,7 @@ const appReleaseSchema = {
     schema: { const: APP_RELEASE_SCHEMA },
     id: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' },
     version: { type: 'string', minLength: 1, maxLength: 40 },
-    channel: { enum: ['stable', 'beta', 'preview'] },
+    channel: { enum: ['stable', 'beta', 'dev', 'preview'] },
     releasedAt: { type: 'string', maxLength: 40 },
     sdk: { type: 'string', maxLength: 100 },
     manifest: appEntrySchema,
@@ -63,6 +66,11 @@ const OUTCOME_ACTIONS: Record<AppJob['action'], Record<AppJobOutcome, string>> =
   'preview-remove': { done: 'app.preview-removed', failed: 'app.preview-remove-failed' },
 };
 
+/** Why a production server doesn't install a dev build. */
+export const DEV_BUILDS_PREVIEW_ONLY = 'That’s a dev build. Only a dev or preview server (SERVER_RING=dev or preview) installs dev builds.';
+
+/** How many of an app's jobs its history in Admin → Apps lists. */
+const APP_HISTORY_LISTED = 20;
 /** How many pull requests' previews one app runs at once. */
 export const MAX_PREVIEWS = 3;
 /** How long a preview runs after its pull request's last build. */
@@ -89,9 +97,15 @@ export const previewProblem = (preview: AppRelease, installed: AppRelease, pilla
 
 export interface AppRunnerRouteOptions {
   store: AppStore;
+  /** Who loads which app from their own machine (Live on the workbench). */
+  live?: LiveOverrides;
   pillars: string[];
   /** The app feed: releases admins can install, and newer ones for what's installed. */
   updates: AppUpdateChecker;
+  /** What kind of server this is: a production one follows stable releases only. */
+  ring?: Ring;
+  /** Whether pull requests' builds run beside apps for their developers. */
+  allowPrPreviews?: boolean;
   /** The SDK this AUGUR's shell speaks, which a release's `sdk` range must cover to install by itself. */
   sdkVersion: string;
   /** Records what happens without a request, such as an update starting by itself. */
@@ -107,12 +121,16 @@ export interface AppRunnerRouteOptions {
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, pillars, updates, sdkVersion, audit, serviceOf, record, now = () => new Date() }: AppRunnerRouteOptions) =>
+  ({ store, pillars, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), now = () => new Date() }: AppRunnerRouteOptions) =>
   async (app: FastifyInstance) => {
     /** When the runner last asked what to do; it lives only as long as this process. */
     let runnerSeenAt: string | undefined;
 
-    const followOf = (follows: AppFollow[], id: string): Pick<AppFollow, 'channel' | 'policy'> => follows.find((f) => f.app === id) ?? { channel: 'stable', policy: 'automatic' };
+    /** How an app follows releases: by default stable on Automatic. A production server never follows beta or dev, whatever was chosen before. */
+    const followOf = (follows: AppFollow[], id: string): Pick<AppFollow, 'channel' | 'policy'> => {
+      const { channel, policy } = follows.find((f) => f.app === id) ?? { channel: 'stable' as const, policy: 'automatic' as const };
+      return { channel: takesPreview(ring) ? channel : 'stable', policy };
+    };
 
     /**
      * After each check of the feed: every installed app on Automatic whose channel has a newer release
@@ -156,7 +174,7 @@ export const appRunnerRoutes =
         else if (Date.parse(p.startedAt) + PREVIEW_MS <= at) await remove(p, 'Its last build is a week old.');
       }
       for (const { app: id, release: current } of installed) {
-        if (!developers.some((d) => d.app === id)) continue;
+        if (!allowPrPreviews || !developers.some((d) => d.app === id)) continue;
         const jobs = await store.appJobs(id);
         const busy = (pr: number) => jobs.some((j) => j.pr === pr && (j.state === 'requested' || j.state === 'running'));
         const starting = jobs.filter((j) => j.action === 'preview' && (j.state === 'requested' || j.state === 'running'));
@@ -190,6 +208,9 @@ export const appRunnerRoutes =
         ...(problem ? { problem } : {}),
         ...(runnerSeenAt ? { runnerSeenAt } : {}),
         sdkVersion,
+        ring,
+        previewsAllowed: allowPrPreviews,
+        ...(takesPreview(ring) ? {} : { channelNote: PRODUCTION_ONLY }),
         installed: installed.map(({ app: id, release, installedAt }) => {
           const follow = followOf(follows, id);
           const newest = newestOn(releases, id, follow.channel);
@@ -201,16 +222,24 @@ export const appRunnerRoutes =
             installedAt,
             ...follow,
             ...(newest?.release && semver.gt(newest.version, release.version)
-              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release, sdkVersion) } }
+              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release, sdkVersion), changes: changesIn(newest.release.notes ?? '', id) } }
               : {}),
             ...(job ? { job } : {}),
+            changes: changesIn(release.notes ?? '', id),
+            // Earlier versions to go back to, newest first.
+            older: releases
+              .filter((r) => r.app === id && r.release?.service && onChannel(takesPreview(ring) ? 'beta' : 'stable', r.channel) && semver.lt(r.version, release.version))
+              .sort((a, b) => semver.rcompare(a.version, b.version))
+              .slice(0, 3)
+              .map((r) => ({ version: r.version, channel: r.channel })),
+            history: jobs.filter((j) => j.app === id && j.pr === undefined).slice(0, APP_HISTORY_LISTED).map(historyOf),
             developers: developers.filter((d) => d.app === id).map((d) => d.person),
             previews: running.filter((p) => p.app === id).map(previewView),
           };
         }),
         available: [...new Set(releases.map((r) => r.app))]
           .filter((id) => !installedIds.has(id) && !pillars.includes(id))
-          .map((id) => newestOn(releases, id, 'stable') ?? newestOn(releases, id, 'beta'))
+          .map((id) => newestOn(releases, id, 'stable') ?? (takesPreview(ring) ? newestOn(releases, id, 'beta') : undefined))
           .filter((r): r is NonNullable<typeof r> => Boolean(r?.release?.service))
           .map((r) => ({
             app: r.app,
@@ -226,6 +255,18 @@ export const appRunnerRoutes =
           })),
       };
     };
+
+    /** A job as an app's history shows it: what was asked, from and to, by whom, and how it ended. */
+    const historyOf = (j: AppJob) => ({
+      id: j.id,
+      action: j.action,
+      ...(j.release ? { version: j.release.version } : {}),
+      requestedBy: j.requestedBy,
+      requestedAt: j.requestedAt,
+      state: j.state,
+      ...(j.message ? { message: j.message } : {}),
+      ...(j.finishedAt ? { finishedAt: j.finishedAt } : {}),
+    });
 
     /** A running preview as people are shown it. */
     const previewView = (p: RunningPreview) => ({
@@ -276,12 +317,16 @@ export const appRunnerRoutes =
           .map((i) => {
             const chosen = choices.find((c) => c.app === i.app)?.pr;
             const previews = running.filter((p) => p.app === i.app);
+            const from = live.of(caller.id, i.app);
             return {
               app: i.app,
               name: i.release.manifest.name,
               version: i.release.version,
               ...(chosen !== undefined && previews.some((p) => p.pr === chosen) ? { chosen } : {}),
               previews: previews.map(previewView),
+              // Live on the workbench: loading it from the developer's own machine, or why it can't here.
+              ...(from ? { live: from } : {}),
+              ...(live.problem ? { liveProblem: live.problem } : {}),
             };
           }),
       };
@@ -304,6 +349,25 @@ export const appRunnerRoutes =
       },
     );
 
+    /** Loads an app's frontend from the caller's own machine instead of the app, for them alone, on the workbench; `null` stops. */
+    app.put<{ Params: { id: string }; Body: { url: string | null } }>(
+      '/previews/:id/live',
+      { schema: { body: { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: ['string', 'null'], maxLength: 2048 } } } } },
+      async (req, reply) => {
+        const caller = callerFromHeaders(req.headers);
+        if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to load an app from your machine.' });
+        const { id } = req.params;
+        if (live.problem) return reply.code(409).send({ error: 'conflict', message: live.problem });
+        if (!(await store.developers(id)).some((d) => d.person === caller.id)) return reply.code(403).send({ error: 'forbidden', message: `Only ${id}’s developers can load it from their machine. An admin adds them in Admin → Apps.` });
+        const { url } = req.body;
+        const problem = url === null ? undefined : live.urlProblem(url);
+        if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
+        live.set(caller.id, id, url);
+        req.log.info({ by: caller.id, app: id, url }, url === null ? 'live stopped' : 'live started');
+        return reply.code(204).send();
+      },
+    );
+
     app.get('/app-runner/apps', async (req, reply) => {
       if (!admin(req, reply)) return reply;
       return appsView();
@@ -319,11 +383,12 @@ export const appRunnerRoutes =
     /** How an installed app takes new releases: its channel, and Automatic, Ask first or Hold. */
     app.put<{ Params: { id: string }; Body: { channel: AppChannel; policy: AppPolicy } }>(
       '/app-runner/apps/:id/follow',
-      { schema: { body: { type: 'object', additionalProperties: false, required: ['channel', 'policy'], properties: { channel: { enum: ['stable', 'beta'] }, policy: { enum: ['automatic', 'ask', 'hold'] } } } } },
+      { schema: { body: { type: 'object', additionalProperties: false, required: ['channel', 'policy'], properties: { channel: { enum: ['stable', 'beta', 'dev'] }, policy: { enum: ['automatic', 'ask', 'hold'] } } } } },
       async (req, reply) => {
         const caller = admin(req, reply);
         if (!caller) return reply;
         if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
+        if (req.body.channel !== 'stable' && !takesPreview(ring)) return reply.code(409).send({ error: 'production_server', message: PRODUCTION_ONLY });
         await store.setFollow({ app: req.params.id, ...req.body, setBy: caller.id });
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.updates-set', target: req.params.id, detail: { ...req.body } });
         await autoUpdate();
@@ -390,13 +455,27 @@ export const appRunnerRoutes =
         }
         const target = release ? release.id : (body as { app: string }).app;
         if (release) {
-          const problem = previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : releaseProblem(release, pillars);
+          const problem =
+            previewPr(release.version) !== undefined
+              ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.'
+              : isDevBuild(release.version) && !takesPreview(ring)
+                ? DEV_BUILDS_PREVIEW_ONLY
+                : releaseProblem(release, pillars);
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         } else if (pillars.includes(target)) {
           return reply.code(409).send({ error: 'conflict', message: `${target} ships with AUGUR and can’t be removed. Turn it off instead.` });
         }
         const job = { id: randomUUID(), app: target, action: body.action, ...(release ? { release } : {}), requestedBy: caller.id };
         if (!(await store.requestAppJob(job))) return reply.code(409).send({ error: 'conflict', message: `Something is already waiting or under way for ${target}.` });
+        // Going back to an older version: held there, or Automatic would take it straight up again.
+        const current = release && (await store.installedApps()).find((i) => i.app === target)?.release;
+        if (release && current && semver.lt(release.version, current.version)) {
+          const follow = followOf(await store.follows(), target);
+          if (follow.policy === 'automatic') {
+            await store.setFollow({ app: target, channel: follow.channel, policy: 'hold', setBy: caller.id });
+            await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.updates-set', target, detail: { channel: follow.channel, policy: 'hold', why: `going back to ${release.version}` } });
+          }
+        }
         req.log.info({ by: caller.id, app: target, action: body.action }, 'app job requested');
         await record(req, {
           actor: { id: caller.id, kind: 'user' },

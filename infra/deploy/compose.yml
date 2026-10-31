@@ -71,6 +71,10 @@ services:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
       # Keycloak's own admin console, at PLATFORM_URL/sso/admin: open serves it; it's closed otherwise.
       KEYCLOAK_CONSOLE: ${KEYCLOAK_CONSOLE:-closed}
+      # On the workbench (dev) only, the shell may load an app from a developer's machine on the tailnet.
+      SERVER_RING: ${SERVER_RING:-}
+      # Its tailnet is the only one it loads apps from then (infra/deploy/live-origins.envsh).
+      PLATFORM_URL: ${PLATFORM_URL}
     depends_on: [gateway, keycloak]
 
   # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.
@@ -229,6 +233,12 @@ services:
       # Admin's Updates page: where new AUGUR releases are listed, and which ones to follow.
       RELEASE_FEED_URL: ${RELEASE_FEED_URL:-}
       RELEASE_CHANNEL: ${RELEASE_CHANNEL:-}
+      PIPELINE_FEED_URL: ${PIPELINE_FEED_URL:-}
+      PORTAL_URL: ${PORTAL_URL:-}
+      SERVER_RING: ${SERVER_RING:-}
+      # On the workbench, Live on the workbench loads apps only from machines on this address's tailnet.
+      PLATFORM_URL: ${PLATFORM_URL}
+      ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEED_URL: ${APP_FEED_URL:-}
       # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.
@@ -318,7 +328,7 @@ services:
       <<: *folio-storage
     depends_on: [folio]
 
-  # Applies the upgrades an admin asks for on Admin → Updates: backup, pull, restart each part, and back
+  # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
   # by itself if one doesn't come up (docs/upgrade.md, The updater). Optional: only with
   # COMPOSE_PROFILES=updater in .env. It drives Docker, which can start anything, so it has the run of
   # the server: only it can reach docker-proxy, on a network of their own.

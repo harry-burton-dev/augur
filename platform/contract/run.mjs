@@ -3,7 +3,7 @@
 //   pnpm --filter @augur/contract-tests test:contract
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { totalmem } from 'node:os';
+import { availableParallelism, totalmem } from 'node:os';
 import { join } from 'node:path';
 
 const here = new URL('.', import.meta.url).pathname;
@@ -26,10 +26,15 @@ const label = (target) => `${target.name}, Folio ${target.folio ? 'on' : 'off'}`
 // Each run (a shell, Folio's service, two browsers) takes up to about 2.5 GB, so a
 // machine or container with less memory runs fewer at once rather than having the
 // kernel kill one part way through (as on an 8 GB self-hosted runner, docs/ci-runner.md).
+// Each also keeps about two cores busy, and the tests give the shell a few seconds to
+// answer a key or a floor change: on a 2-core hosted runner, three at once starved them
+// and different tests timed out on each run. CONTRACT_AT_ONCE sets it outright.
 const constrained = process.constrainedMemory?.();
 const memory = constrained && constrained < totalmem() ? constrained : totalmem();
-const atOnce = Math.max(1, Math.min(targets.length, Math.floor(memory / 2.5e9)));
-console.log(`${targets.length} runs of the reference app, ${atOnce} at a time (${(memory / 1e9).toFixed(1)} GB).`);
+const cores = availableParallelism();
+const fits = Math.min(Math.floor(memory / 2.5e9), Math.floor(cores / 2));
+const atOnce = Math.max(1, Math.min(targets.length, Number(process.env.CONTRACT_AT_ONCE) || fits));
+console.log(`${targets.length} runs of the reference app, ${atOnce} at a time (${(memory / 1e9).toFixed(1)} GB, ${cores} cores).`);
 const run = (target, i) =>
   new Promise((resolve) => {
     const child = spawn('pnpm', ['exec', 'playwright', 'test'], {

@@ -9,6 +9,7 @@
  * or not anything was restarted) and `failed` (it couldn't go back either: someone has to look).
  */
 import { createHash, randomBytes } from 'node:crypto';
+import { isDevBuild } from './signers.ts';
 import { envQuoted, envValue, withEnvValue } from './env-file.ts';
 
 /** What the registry hands the updater for the open upgrade (GET /v1/platform/upgrade/target). */
@@ -70,8 +71,8 @@ export interface Server {
   remove(services: string[]): Promise<void>;
   /** Makes these services' containers again, changed or not, so they read files written since they started. */
   recreate(services: string[]): Promise<void>;
-  /** Throws unless `ref` (an image by digest) was signed by AUGUR's Release workflow. */
-  verifySignature(ref: string): Promise<void>;
+  /** Throws unless `ref` (an image by digest) was signed by AUGUR's Release workflow, or by `identity` when given. */
+  verifySignature(ref: string, identity?: string): Promise<void>;
   /** Takes a fresh backup and returns its file name. */
   backup(): Promise<string>;
   /** Throws unless the newest backup restores. */
@@ -166,7 +167,11 @@ const running = async (server: Server, service: string) => {
 /** What went wrong, for the page: a message we wrote, or the first line of anything else. */
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 500);
 
-export const runUpgrade = async (target: Target, server: Server, report: Reporter): Promise<Outcome> => {
+/**
+ * `devIdentity`: who signs AUGUR's dev builds (signers.ts). Only a dev server (SERVER_RING=dev, the
+ * workbench) runs one, and only with images signed by that workflow on dev.
+ */
+export const runUpgrade = async (target: Target, server: Server, report: Reporter, { devIdentity }: { devIdentity?: string } = {}): Promise<Outcome> => {
   const services = ROLL_ORDER.filter((s) => target.images[s]);
   // A platform service's part is @augur/<service>; an app that ships with AUGUR is @apps/<its id>.
   const versionOf = (service: string) => (service === 'web' ? undefined : (target.parts?.[`@augur/${service}`] ?? target.parts?.[`@apps/${service}`]));
@@ -194,6 +199,11 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       if (envValue(before, 'PLATFORM_VERSION') !== target.from) {
         throw new StepFailed(`The server’s settings say it runs ${envValue(before, 'PLATFORM_VERSION') ?? 'no version'}, not ${target.from}. Set PLATFORM_VERSION in .env to what it runs.`);
       }
+      const dev = isDevBuild(target.version);
+      if (dev && envValue(before, 'SERVER_RING') !== 'dev') {
+        throw new StepFailed(`${target.version} is a dev build of AUGUR, and only the workbench (SERVER_RING=dev in .env) runs those.`);
+      }
+      if (dev && !devIdentity) throw new StepFailed(`${target.version} is a dev build of AUGUR, and this updater doesn’t know who signs those.`);
       if (!target.deploy || !target.parts) throw new StepFailed(`AUGUR ${target.version}’s release file couldn’t be read, or names no deploy files, so whether it fits this server isn’t known. Upgrade by hand (docs/upgrade.md).`);
       // The release's deploy files that differ from the server's are written by the updater, as long as
       // the server's are still as the running release left them: one changed by hand is never overwritten.
@@ -231,8 +241,8 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       }
       for (const [service, ref] of Object.entries(target.images)) {
         const local = `${imageRepo(before, ref)}/${service}@${digestOf(ref)}`;
-        await server.verifySignature(local).catch((err) => {
-          throw new StepFailed(`The ${service} image isn’t signed by AUGUR’s Release workflow, so nothing was run: ${reason(err)}`);
+        await server.verifySignature(local, dev ? devIdentity : undefined).catch((err) => {
+          throw new StepFailed(`The ${service} image isn’t signed by AUGUR’s ${dev ? 'dev builds workflow on dev' : 'Release workflow'}, so nothing was run: ${reason(err)}`);
         });
       }
     });
@@ -275,9 +285,14 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
   // Parts this release adds, and the rest of what the deployment runs (the database, sign-in, storage).
   let fresh: string[] = [];
   let others: string[] = [];
+  let left: string[] = [];
   try {
     await run('roll-forward', async () => {
       const paths = Object.keys(changedFiles);
+      // Parts the release doesn't have, such as one added after it when going back: stopped while the
+      // compose.yml that names them is still in place.
+      left = (await server.services()).filter((service) => (ROLL_ORDER as readonly string[]).includes(service) && !target.images[service]);
+      if (left.length) await server.remove(left);
       if (paths.length) await server.writeDeployFiles(changedFiles);
       await server.writeEnv(withEnvValue(settings, 'PLATFORM_VERSION', target.version));
       const now = await server.services();
@@ -297,7 +312,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
         await ready(server, [service], versionOf);
       }
       if (added.length) await server.up(added);
-      const notes = [paths.length ? `wrote ${paths.join(', ')}` : '', enteredKeys.length ? `set ${enteredKeys.join(', ')} as entered` : '', madeKeys.length ? `made up ${madeKeys.join(', ')} in .env` : '', added.length ? `started ${added.join(', ')}` : ''].filter(Boolean);
+      const notes = [left.length ? `stopped ${left.join(', ')}, which ${target.version} doesn’t have` : '', paths.length ? `wrote ${paths.join(', ')}` : '', enteredKeys.length ? `set ${enteredKeys.join(', ')} as entered` : '', madeKeys.length ? `made up ${madeKeys.join(', ')} in .env` : '', added.length ? `started ${added.join(', ')}` : ''].filter(Boolean);
       return notes.length ? `${notes.join('; ')}.` : undefined;
     });
     // Every part again, now that all of them are on it: one that came up early may have fallen over since.
@@ -310,7 +325,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     if (err instanceof Withdrawn) throw err;
     const why = reason(err);
     await report({ step, state: 'failed', message: why }).catch(() => undefined);
-    return rollBack(target, server, report, before, services, why, backup, { oldFiles, fresh, others });
+    return rollBack(target, server, report, before, services, why, backup, { oldFiles, fresh, others, left });
   }
 };
 
@@ -336,7 +351,7 @@ const rollBack = async (
   services: readonly string[],
   why: string,
   backup?: string,
-  { oldFiles = {}, fresh = [], others = [] }: { oldFiles?: Record<string, Buffer | undefined>; fresh?: string[]; others?: string[] } = {},
+  { oldFiles = {}, fresh = [], others = [], left = [] }: { oldFiles?: Record<string, Buffer | undefined>; fresh?: string[]; others?: string[]; left?: string[] } = {},
 ): Promise<Outcome> => {
   const kept = backup ? ` If ${target.from} has trouble with data ${target.version} changed, restore ${backup} (docs/upgrade.md, Going back).` : '';
   try {
@@ -351,7 +366,7 @@ const rollBack = async (
       const remount = (await server.mounting(paths)).filter((service) => others.includes(service));
       if (remount.length) await server.recreate(remount);
     }
-    const back = services.filter((service) => !fresh.includes(service));
+    const back = [...services.filter((service) => !fresh.includes(service)), ...left];
     await server.up(back);
     await ready(server, back, () => undefined);
   } catch (err) {

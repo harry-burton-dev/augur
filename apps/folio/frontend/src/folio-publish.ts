@@ -34,6 +34,7 @@ export class FolioPublish extends LitElement {
     library: { type: String },
     document: { type: String },
     versions: { attribute: false },
+    issue: { type: Boolean },
     history: { state: true },
     floor: { state: true },
     failure: { state: true },
@@ -49,6 +50,8 @@ export class FolioPublish extends LitElement {
   declare document: string;
   /** The document's version numbers, newest first. */
   declare versions: number[];
+  /** True for a series' issue: only issues are still put out one version at a time. Anything else is published up the floors. */
+  declare issue: boolean;
   declare history: Publications | undefined;
   /** Who the library's floor lets in. */
   declare floor: Principal | undefined;
@@ -66,6 +69,7 @@ export class FolioPublish extends LitElement {
     this.library = '';
     this.document = '';
     this.versions = [];
+    this.issue = false;
     this.failure = '';
     this.version = 0;
     this.chosen = [];
@@ -86,7 +90,7 @@ export class FolioPublish extends LitElement {
   private async load() {
     this.failure = '';
     try {
-      const [history, access] = await Promise.all([this.api.publications(this.library, this.document), this.api.access(this.library, this.document)]);
+      const [history, access] = await Promise.all([this.api.publications(this.library, this.document), this.api.access(this.library, { document: this.document })]);
       this.history = history;
       this.floor = access.floor;
       this.chosen = this.startWith(history, access.floor);
@@ -137,7 +141,7 @@ export class FolioPublish extends LitElement {
 
   private out() {
     const out = this.history?.publications.find((p) => !p.ended);
-    if (!out) return html`<p class="folio-publish-lead">It hasn’t been published: only those who can see the library, or it’s been shared with, can read it.</p>`;
+    if (!out) return html`<p class="folio-publish-lead">It hasn’t been published: only those who can see the collection, or it’s been shared with, can read it.</p>`;
     return html`<div class="folio-publish-out">
       <p class="folio-publish-lead"><ui-icon name="publish" size="20"></ui-icon> Version ${out.version} went out to ${audienceWords(out.audience)} ${agoWords(out.publishedAt)}.</p>
       ${out.note ? html`<p class="folio-publish-said">“${out.note}”</p>` : nothing}
@@ -156,6 +160,8 @@ export class FolioPublish extends LitElement {
   private form() {
     const history = this.history!;
     if (!history.can.publish) return nothing;
+    if (!this.issue)
+      return html`<p class="folio-publish-hint">A document is published up the floors now: close this and choose Publish up the floors, and which states it shows. What went out before keeps reading as it did until Artifacts moves it there.</p>`;
     const out = history.publications.find((p) => !p.ended);
     const versionOptions: SelectOption[] = this.versions.map((n, i) => ({ value: String(n), label: `Version ${n}${i === 0 ? ', the newest' : ''}`, ...(out?.version === n ? { detail: 'Out now' } : {}) }));
     const own = this.floor?.kind === 'person';
@@ -166,7 +172,8 @@ export class FolioPublish extends LitElement {
         @folio-change=${(e: CustomEvent<{ chosen: Chosen[] }>) => (this.chosen = e.detail.chosen)}></folio-audience>
       <ui-text-field name="publish-note" label="A word about it" optional multiline maxlength="500" hint="It goes with the notification, and stays with the version."></ui-text-field>
       <div class="folio-actions">
-        <ui-button kind="primary" size="sm" ?disabled=${!this.chosen.length || !this.version} ?busy=${this.busy} busy-label="Publishing…" @click=${() => void this.publish()}>
+        <ui-button kind="primary" size="sm" ?disabled=${!this.chosen.length || !this.version}
+          reason=${!this.version ? 'There’s no version to publish yet.' : 'Choose who to publish it to first.'} ?busy=${this.busy} busy-label="Publishing…" @click=${() => void this.publish()}>
           ${!out ? `Publish version ${this.version}` : out.version === this.version ? 'Publish it again' : `Publish version ${this.version} instead`}
         </ui-button>
       </div>

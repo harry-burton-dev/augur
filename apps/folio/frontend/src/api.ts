@@ -9,6 +9,8 @@ export interface Library {
   description: string;
   /** Anyone who may tag a document here may make new tags too. */
   freeTags: boolean;
+  /** Open, closed (nothing new goes in) or archived. */
+  state: ContainerState;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -83,13 +85,178 @@ export interface ListQuery extends ViewQuery {
   offset?: number;
 }
 
+/** Where a version is in its lifecycle (`@augur/records`' content lifecycle). */
+export type ContentState = 'in-progress' | 'in-review' | 'complete' | 'issued' | 'retired';
+/** Where a collection or folder is in its lifecycle. */
+export type ContainerState = 'open' | 'closed' | 'archived';
+
+/** The states in order, as people read them. */
+export const CONTENT_STATES: { id: ContentState; name: string }[] = [
+  { id: 'in-progress', name: 'In progress' },
+  { id: 'in-review', name: 'In review' },
+  { id: 'complete', name: 'Complete' },
+  { id: 'issued', name: 'Issued' },
+  { id: 'retired', name: 'Retired' },
+];
+export const CONTAINER_STATES: { id: ContainerState; name: string }[] = [
+  { id: 'open', name: 'Open' },
+  { id: 'closed', name: 'Closed' },
+  { id: 'archived', name: 'Archived' },
+];
+export const stateName = (id: string) => [...CONTENT_STATES, ...CONTAINER_STATES].find((s) => s.id === id)?.name ?? id;
+
+/** collection › subcollection › series › subseries › file. */
+export type UnitLevel = 'collection' | 'subcollection' | 'series' | 'subseries' | 'file';
+export type FolderLevel = 'subcollection' | 'series' | 'subseries';
+
+/** A level, called what the org calls it, and what it may hold. */
+export interface LevelInfo {
+  id: UnitLevel;
+  name: string;
+  plural: string;
+  holds: UnitLevel[];
+}
+
 export interface Folder {
   id: string;
   library: string;
   parent?: string;
+  /** Which level of the library it is. */
+  level: FolderLevel;
   name: string;
+  description: string;
+  state: ContainerState;
   createdBy: string;
   createdAt: string;
+  updatedAt: string;
+  /** Its own tags: they count for everything inside it when filtering. */
+  tags?: string[];
+}
+
+/** One move through a lifecycle, on the record. */
+export interface StateMove {
+  id: string;
+  record: string;
+  version?: number;
+  from: string;
+  to: string;
+  by: string;
+  note?: string;
+  at: string;
+}
+
+/** A floor as publishing up names it: how high it sits, from the org (0) down. */
+export interface FloorView {
+  id: string;
+  kind: 'personal' | 'team' | 'org';
+  name: string;
+  rank: number;
+  path: string[];
+}
+
+/** A collection, folder or document, as a step up the floors shows it. */
+export interface RecordView {
+  kind: 'library' | 'folder' | 'document';
+  id: string;
+  level?: UnitLevel;
+  name?: string;
+  library?: string;
+  libraryName?: string;
+}
+
+/** One step a record took up the floors: what it shows (the filter), from where, and where it landed. */
+export interface Placement {
+  id: string;
+  library: string;
+  record: RecordView;
+  from: string;
+  to: string;
+  filter: ContentState[];
+  via?: string;
+  landed?: { library: string; folder?: string };
+  note?: string;
+  by: string;
+  at: string;
+  ended?: { as: string; by: string; at: string; reason?: string };
+  fromFloor?: FloorView;
+  toFloor?: FloorView;
+  /** The highest floor it has reached: that floor decides about it now. */
+  owner?: FloorView;
+  /** From its own floor up to this step. */
+  chain: { id: string; from?: FloorView; to?: FloorView; filter: ContentState[]; by: string; at: string }[];
+  can?: { change: boolean; land: boolean };
+  /** Received here: which floor shows each state to the caller (a lower one shows it only there). */
+  states?: Record<string, FloorView | undefined>;
+}
+
+/** Where the caller could publish a record next; `why` says why not, when they can't. */
+export interface PlacementTarget {
+  from?: FloorView;
+  to?: FloorView;
+  via?: string;
+  /** The most it can show: what reached the floor it goes on from. */
+  most?: ContentState[];
+  why?: string;
+}
+
+export interface Placements {
+  placements: Placement[];
+  owner?: FloorView;
+  targets: PlacementTarget[];
+}
+
+/** A kind of link between records (`@augur/records`' relations), as the service lists them. */
+export interface RelationKind {
+  id: 'relates-to' | 'supersedes' | 'responds-to' | 'about' | 'serves';
+  name: string;
+  inverse: string;
+}
+
+/** The far end of a link from a record: in Artifacts (named for whoever asks), or in another app. */
+export interface LinkEnd {
+  app: string;
+  kind: string;
+  id: string;
+  label?: string;
+  library?: string;
+  record?: string;
+  unitKind?: RecordView['kind'];
+  /** Why it can't be opened, when the caller can't. */
+  unavailable?: string;
+}
+
+export interface RecordLink {
+  id: string;
+  relation: RelationKind['id'];
+  /** The link in words, from the end being looked at: "Responds to", or "Answered by". */
+  words: string;
+  to?: LinkEnd;
+  from?: { library: string; record: string; kind: RecordView['kind']; name: string } | { unavailable: string };
+  by: string;
+  at: string;
+}
+
+export interface RecordLinks {
+  kinds: RelationKind[];
+  links: RecordLink[];
+  /** Links to this record from others. */
+  back: RecordLink[];
+  can: { change: boolean };
+}
+
+/** What's been published up to the caller's floor: here, and elsewhere (a higher floor shows it to them). */
+export interface Received {
+  here: Placement[];
+  signposts: { placement: string; record: RecordView; to?: FloorView; reached: string }[];
+}
+
+/** Inside something received: its folders, and the documents where you are, each at the version the caller sees. */
+export interface ReceivedPage {
+  placement: Placement;
+  folders: Folder[];
+  folder: string | null;
+  documents: (FolioDocument & { onlyVia?: FloorView })[];
+  states: Record<string, FloorView | undefined>;
 }
 
 export interface LibraryRights {
@@ -100,6 +267,8 @@ export interface LibraryRights {
   addTags: boolean;
   /** Let people and teams in, or take them out. */
   share: boolean;
+  /** Where the library's own lifecycle may go, for whoever manages it. */
+  moves?: ContainerState[];
 }
 
 /** How far someone is let in: read; edit (add and change documents); manage (also share). */
@@ -129,10 +298,17 @@ export interface Access {
   floor: Principal;
   /** Who has been let into this library, or into this document. */
   grants: Grant[];
-  /** For a document: who has been let into its whole library. */
+  /** For a document or a folder: who has been let into its whole library. */
   library?: Grant[];
+  /** For a document: who has been let into a folder it's inside, and so into it. */
+  folders?: (Grant & { folder: string })[];
+  /** Published up the floors (it, or what it's inside): who that floor lets in, what it shows there, and the floors it came up through. */
+  placed?: (Principal & { filter: ContentState[]; at: string; record: { kind: RecordView['kind']; id: string }; chain: string[] })[];
   can: { share: boolean };
 }
+
+/** Something in a library to share on its own: one document, or a folder and everything inside it. */
+export type AccessTarget = { document: string; folder?: undefined } | { folder: string; document?: undefined };
 
 /** People and teams found to share with. */
 export interface Found {
@@ -198,6 +374,7 @@ export interface DocumentVersion {
   createdBy: string;
   createdAt: string;
   reader: ReaderState;
+  state: ContentState;
 }
 
 /** How often a series comes out. An ad hoc one has issues but no periods. */
@@ -266,7 +443,7 @@ export interface FolioDocument {
   /** Why a new issue wasn't published as it was added. */
   draft?: string;
   /** Whether the caller may add versions, retag, retitle, move or delete it, share it, and publish it. */
-  can: { change: boolean; share: boolean; publish?: boolean };
+  can: { change: boolean; share: boolean; publish?: boolean; moves?: ContentState[] };
 }
 
 export interface OpenDocument extends FolioDocument {
@@ -403,8 +580,89 @@ export class FolioApi {
     return this.call<void>('POST', `/libraries/${encodeURIComponent(id)}/archive`);
   }
 
-  createFolder(library: string, name: string, parent?: string) {
-    return this.call<Folder>('POST', `/libraries/${encodeURIComponent(library)}/folders`, { name, ...(parent ? { parent } : {}) });
+  createFolder(library: string, name: string, parent?: string, level?: FolderLevel, description?: string) {
+    return this.call<Folder>('POST', `/libraries/${encodeURIComponent(library)}/folders`, { name, ...(parent ? { parent } : {}), ...(level ? { level } : {}), ...(description ? { description } : {}) });
+  }
+
+  /** Changes a folder's name or what it's for. */
+  updateFolder(library: string, id: string, change: { name?: string; description?: string }) {
+    return this.call<Folder>('PATCH', `/libraries/${encodeURIComponent(library)}/folders/${encodeURIComponent(id)}`, change);
+  }
+
+  /** The levels a library is built from, in the org's words, and whether the caller may rename them. */
+  levels() {
+    return this.call<{ levels: LevelInfo[]; top: UnitLevel[]; can: { rename: boolean } }>('GET', '/levels');
+  }
+
+  /** Renames a level for the whole org, or with `null` gives it its own name back. */
+  nameLevel(level: UnitLevel, name: { name: string; plural: string } | null) {
+    return name ? this.call<{ levels: LevelInfo[] }>('PUT', `/levels/${level}`, name) : this.call<{ levels: LevelInfo[] }>('DELETE', `/levels/${level}`);
+  }
+
+  /** Opens, closes or archives a library, or with `folder` one of its folders. */
+  setState(library: string, state: ContainerState, folder?: string, note?: string) {
+    const at = `/libraries/${encodeURIComponent(library)}${folder ? `/folders/${encodeURIComponent(folder)}` : ''}/state`;
+    return this.call<Library | Folder>('PUT', at, { state, ...(note ? { note } : {}) });
+  }
+
+  /** Moves a version through its lifecycle. */
+  setVersionState(library: string, document: string, version: number, state: ContentState, note?: string) {
+    return this.call<DocumentVersion>('PUT', `/libraries/${encodeURIComponent(library)}/documents/${encodeURIComponent(document)}/versions/${version}/state`, { state, ...(note ? { note } : {}) });
+  }
+
+  /** Every lifecycle move of a document's versions, or of a library or one of its folders, newest first. */
+  moves(library: string, target: { document?: string; folder?: string } = {}) {
+    const at = `/libraries/${encodeURIComponent(library)}`;
+    return this.call<{ moves: StateMove[] }>('GET', target.document ? `${at}/documents/${encodeURIComponent(target.document)}/moves` : `${at}/moves${target.folder ? `?folder=${encodeURIComponent(target.folder)}` : ''}`);
+  }
+
+  /** A record's steps up the floors, who owns it, and where the caller could publish it next. */
+  placements(library: string, record: string) {
+    return this.call<Placements>('GET', `/placements?library=${encodeURIComponent(library)}&record=${encodeURIComponent(record)}`);
+  }
+
+  /** Publishes a record up to a floor above, showing the versions in `filter`'s states. */
+  publishUp(step: { library: string; record: { kind: RecordView['kind']; id: string }; to: string; filter: ContentState[]; via?: string; landing?: { library: string; folder?: string }; note?: string }) {
+    return this.call<Placement>('POST', '/placements', step);
+  }
+
+  /** Shows more or less through a step. */
+  changePlacement(id: string, filter: ContentState[]) {
+    return this.call<Placement>('PATCH', `/placements/${encodeURIComponent(id)}`, { filter });
+  }
+
+  /** Puts what was received in a place on this floor, or with `null` back under "From below". */
+  land(id: string, landing: { library: string; folder?: string } | null) {
+    const at = `/placements/${encodeURIComponent(id)}/landing`;
+    return landing ? this.call<Placement>('PUT', at, landing) : this.call<Placement>('DELETE', at);
+  }
+
+  /** Takes a step back, and every step that went on up from it. */
+  withdrawPlacement(id: string, reason?: string) {
+    return this.call<Placement>('POST', `/placements/${encodeURIComponent(id)}/withdraw`, reason ? { reason } : {});
+  }
+
+  /** What's been published up to the caller's floor. */
+  /** A record's links both ways: `record` is a folder's or document's id, or the library's own. */
+  links(library: string, record: string) {
+    return this.call<RecordLinks>('GET', `/libraries/${encodeURIComponent(library)}/links?record=${encodeURIComponent(record)}`);
+  }
+
+  link(library: string, record: string, relation: RelationKind['id'], to: { app: string; kind: string; id: string; label?: string }) {
+    return this.call<RecordLink>('POST', `/libraries/${encodeURIComponent(library)}/links`, { record, relation, to });
+  }
+
+  unlink(library: string, record: string, link: string) {
+    return this.call<void>('DELETE', `/libraries/${encodeURIComponent(library)}/links/${encodeURIComponent(link)}?record=${encodeURIComponent(record)}`);
+  }
+
+  received() {
+    return this.call<Received>('GET', '/received');
+  }
+
+  /** Inside something received, at one of its folders or its top. */
+  receivedPage(id: string, folder?: string) {
+    return this.call<ReceivedPage>('GET', `/received/${encodeURIComponent(id)}${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`);
   }
 
   renameFolder(library: string, id: string, name: string) {
@@ -460,6 +718,10 @@ export class FolioApi {
     return this.call<{ following: boolean }>('PUT', `/series/${encodeURIComponent(series)}/follow`, { following });
   }
 
+  setFolderTags(library: string, folder: string, tags: string[]) {
+    return this.call<Folder>('PUT', `/libraries/${encodeURIComponent(library)}/folders/${encodeURIComponent(folder)}/tags`, { tags });
+  }
+
   setTags(library: string, document: string, tags: string[]) {
     return this.call<FolioDocument>('PUT', `/libraries/${encodeURIComponent(library)}/documents/${encodeURIComponent(document)}/tags`, { tags });
   }
@@ -506,19 +768,20 @@ export class FolioApi {
     return this.call<void>('DELETE', `/libraries/${encodeURIComponent(library)}/documents/${encodeURIComponent(id)}`);
   }
 
-  /** Who may see a library, or with `document` one of its documents. */
-  access(library: string, document?: string) {
-    return this.call<Access>('GET', `${this.accessPath(library, document)}`);
+  /** Who may see a library, or one of its documents or folders. */
+  access(library: string, on?: AccessTarget) {
+    return this.call<Access>('GET', this.accessPath(library, on));
   }
 
   /** Lets someone in that far, or with `null` takes them out; answers who may see it now. */
-  share(library: string, document: string | undefined, principal: string, level: Level | null) {
-    const path = `${this.accessPath(library, document)}/${encodeURIComponent(principal)}`;
+  share(library: string, on: AccessTarget | undefined, principal: string, level: Level | null) {
+    const path = `${this.accessPath(library, on)}/${encodeURIComponent(principal)}`;
     return level ? this.call<Access>('PUT', path, { level }) : this.call<Access>('DELETE', path);
   }
 
-  private accessPath(library: string, document?: string) {
-    return `/libraries/${encodeURIComponent(library)}${document ? `/documents/${encodeURIComponent(document)}` : ''}/access`;
+  private accessPath(library: string, on?: AccessTarget) {
+    const within = on?.document ? `/documents/${encodeURIComponent(on.document)}` : on?.folder ? `/folders/${encodeURIComponent(on.folder)}` : '';
+    return `/libraries/${encodeURIComponent(library)}${within}/access`;
   }
 
   /** People and teams whose names have `q` in them, to share with. */
@@ -619,11 +882,23 @@ export interface Place {
   adding: boolean;
   /** What's been published to the person (`/published`). */
   published?: boolean;
+  /** Something published up to this floor (`/received/<placement>`), or with `true` the list of them (`/received`). */
+  received?: string | true;
+  /** What other floors have shared with the person (`/shared`). */
+  shared?: boolean;
+  /** The app's front page (`/`). */
+  home?: boolean;
+  /** The person's collections (`/libraries`). */
+  collections?: boolean;
 }
 
 export const placeFor = (path: string): Place => {
   const [first, second, third, fourth, fifth, sixth] = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (first === 'published') return { published: true, adding: false };
+  if (first === 'shared') return { shared: true, adding: false };
+  if (first === 'received') return { received: second || true, adding: false };
+  if (!first) return { home: true, adding: false };
+  if (first === 'libraries' && !second) return { collections: true, adding: false };
   if (first !== 'libraries' || !second) return { adding: false };
   if (second === 'new') return { adding: true };
   if (third === 'documents' && fourth) {
@@ -635,8 +910,11 @@ export const placeFor = (path: string): Place => {
   return { library: second, ...(third ? { folder: third } : {}), adding: false };
 };
 
-export const pathFor = ({ library, folder, view, series, document, version, published }: Omit<Place, 'adding'>) => {
+export const pathFor = ({ library, folder, view, series, document, version, published, received, shared, home }: Omit<Place, 'adding'>) => {
+  if (home && !document) return '/';
   if (published && !document) return '/published';
+  if (shared && !document) return '/shared';
+  if (received && !document) return received === true ? '/received' : `/received/${encodeURIComponent(received)}`;
   if (!library) return '/libraries';
   const at = `/libraries/${encodeURIComponent(library)}`;
   if (document) return `${at}/documents/${encodeURIComponent(document)}${version ? `/versions/${version}` : ''}`;

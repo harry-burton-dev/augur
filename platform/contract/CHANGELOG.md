@@ -1,5 +1,34 @@
 # @augur/contract-tests
 
+## 0.1.9
+
+### Patch Changes
+
+- Updated dependencies [bb91780]
+- Updated dependencies [bef7098]
+- Updated dependencies [e0e9c83]
+  - @augur/mfe-sdk@1.8.0
+  - @augur/ui-kit@1.7.0
+
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [5b2c80c]
+  - @augur/mfe-sdk@1.7.0
+
+## 0.1.7
+
+### Patch Changes
+
+- 1f4a10f: The contract tests run as many builds of the reference app at once as the machine's cores allow as well as its memory (two cores each), so a small CI runner no longer starves them into timeouts. `CONTRACT_AT_ONCE` sets the number outright.
+- Updated dependencies [effebfe]
+- Updated dependencies [84fab17]
+- Updated dependencies [2c9caf0]
+- Updated dependencies [b716037]
+- Updated dependencies [2487ae0]
+  - @augur/ui-kit@1.6.0
+
 ## 0.1.6
 
 ### Patch Changes

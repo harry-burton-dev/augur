@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.22.0
+  version: 1.31.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -286,6 +286,109 @@ paths:
         "400": { description: Outside the setting's min and max }
         "403": { description: Not an admin }
         "404": { description: No such app, or it offers no such setting }
+  /feature-previews:
+    get:
+      summary: Apps' feature previews, and whether each is on for the caller (SDK 1.7)
+      description: >
+        Every app the caller can open that lists `previews` in its manifest. A preview is on for
+        everyone, for those who turned it on (opt-in), or off; one past its `until` day is ended
+        and off. On a preview server one nobody chose for is opt-in, on a production server off.
+      responses:
+        "200":
+          description: The apps with feature previews
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apps]
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      required: [app, name, previews]
+                      properties:
+                        app: { type: string }
+                        name: { type: string }
+                        previews:
+                          type: array
+                          items:
+                            allOf:
+                              - { $ref: "#/components/schemas/FeaturePreview" }
+                              - type: object
+                                required: [mode, on]
+                                properties:
+                                  mode: { $ref: "#/components/schemas/FeaturePreviewMode" }
+                                  ended: { type: boolean }
+                                  on: { type: boolean }
+        "401": { description: Not signed in }
+  /feature-previews/{app}/{preview}:
+    parameters:
+      - { name: app, in: path, required: true, schema: { type: string } }
+      - { name: preview, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Turn one of an app's opt-in feature previews on or off for the caller alone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [on], properties: { on: { type: boolean } } }
+      responses:
+        "204": { description: Chosen }
+        "404": { description: No such app or preview, or the caller can't open the app }
+        "409": { description: "It isn't opt-in (error not_opt_in), or it has ended (ended)" }
+  /apps/{id}/feature-previews:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Who gets each of an app's feature previews (admins)
+      responses:
+        "200":
+          description: Its feature previews
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeaturePreviewsAdmin" }
+        "403": { description: Not an admin }
+        "404": { description: No such app is registered }
+  /apps/{id}/feature-previews/{preview}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: preview, in: path, required: true, schema: { type: string } }
+    put:
+      summary: Set who gets one of an app's feature previews (admins)
+      description: "`null` goes back to the server's default. Kept when the app registers new versions. Audited as app.preview-set."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mode]
+              properties:
+                mode: { oneOf: [{ $ref: "#/components/schemas/FeaturePreviewMode" }, { type: "null" }] }
+      responses:
+        "200":
+          description: Its feature previews as they now are
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeaturePreviewsAdmin" }
+        "403": { description: Not an admin }
+        "404": { description: No such app, or it offers no such preview }
+  /apps/{id}/feature-previews/people/{person}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: person, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Which of an app's feature previews are on for one person (the app's own service, or admins)
+      responses:
+        "200":
+          description: The ids on for them
+          content:
+            application/json:
+              schema: { type: object, required: [on], properties: { on: { type: array, items: { type: string } } } }
+        "403": { description: Neither the app's own service nor an admin }
+        "404": { description: No such app is registered }
   /apps/{id}/floors:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -546,6 +649,23 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PlatformUpdates" }
         "403": { description: Not an admin }
+  /platform/go-back:
+    put:
+      summary: Go back to an earlier AUGUR release (admins who just entered their password)
+      description: >
+        The same steps as an upgrade, a backup first, to one of the releases the Updates page lists
+        under goBack with no problem: no release between is breaking, so the data stays as it is.
+        Audited as platform.go-back-requested, and platform.went-back when it's done.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [version], properties: { version: { type: string } } }
+      responses:
+        "202": { description: Asked; the Updates page as it now stands }
+        "401": { description: "Enter your password again (error sign_in_again)" }
+        "403": { description: Not an admin }
+        "409": { description: "Not a release it can go back to, with why; or an upgrade is already open" }
   /platform/upgrade:
     put:
       summary: Ask the deployment's updater to upgrade AUGUR (admins only)
@@ -783,7 +903,8 @@ paths:
       description: >
         Its channel, and its policy: automatic (a newer release on the channel that asks for nothing
         new installs by itself), ask (each waits for an admin) or hold (nothing is offered). An app
-        with no choice yet follows stable, automatically. Audited as app.updates-set.
+        with no choice yet follows stable, automatically. A production server (SERVER_RING=production)
+        follows stable only, and refuses beta or dev with 409. dev (dev builds too) is for a preview server. Audited as app.updates-set.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -795,7 +916,7 @@ paths:
               additionalProperties: false
               required: [channel, policy]
               properties:
-                channel: { type: string, enum: [stable, beta] }
+                channel: { type: string, enum: [stable, beta, dev] }
                 policy: { type: string, enum: [automatic, ask, hold] }
       responses:
         "200":
@@ -805,6 +926,7 @@ paths:
               schema: { $ref: "#/components/schemas/AppInstalls" }
         "403": { description: Not an admin }
         "404": { description: The app runner hasn't installed that app }
+        "409": { description: "This is a production server: it follows stable releases only (error production_server)" }
   /app-runner/apps/{id}/developers:
     put:
       summary: Set who may try an installed app's pull requests' previews (admins only)
@@ -857,6 +979,8 @@ paths:
                         version: { type: string, description: The installed version }
                         chosen: { type: integer }
                         previews: { type: array, items: { $ref: "#/components/schemas/Preview" } }
+                        live: { type: string, description: "Live on the workbench: the entry on the caller's own machine the shell loads instead of the app" }
+                        liveProblem: { type: string, description: "Why the app can't be loaded from the caller's machine here (only the workbench, SERVER_RING=dev, does)" }
         "401": { description: Not signed in }
   /previews/{id}:
     put:
@@ -880,6 +1004,30 @@ paths:
         "401": { description: Not signed in }
         "403": { description: Not one of the app's developers }
         "404": { description: No preview of that pull request is running }
+  /previews/{id}/live:
+    put:
+      summary: Load an app's frontend from the caller's own machine, for them alone (Live on the workbench)
+      description: >
+        Only on the workbench (SERVER_RING=dev), whose front door lets the shell load scripts from *.ts.net.
+        The shell is given `url` as the app's entry for the caller until they send `null` or the registry
+        restarts. The app's service stays the installed one.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties: { url: { type: [string, "null"], maxLength: 2048, description: "https://<machine>.ts.net/…/entry.ts, as pnpm dev:app <id> --live prints it" } }
+      responses:
+        "204": { description: Loading it from there, or stopped }
+        "400": { description: Not an app entry on a machine on the tailnet }
+        "401": { description: Not signed in }
+        "403": { description: Not one of the app's developers }
+        "409": { description: This server isn't the workbench }
 components:
   schemas:
     AppInstalls:
@@ -891,6 +1039,9 @@ components:
         problem: { type: string, description: Why the app feed couldn't be read last time }
         runnerSeenAt: { type: string, format: date-time, description: "When the app runner last asked for work; missing when it hasn't since the registry started" }
         sdkVersion: { type: string }
+        ring: { $ref: "#/components/schemas/ServerRing" }
+        previewsAllowed: { type: boolean, description: "Whether pull requests' builds run beside apps for their developers: always on a preview server, with ALLOW_PR_PREVIEWS=on on a production one" }
+        channelNote: { type: string, description: Why apps here follow stable only, on a production server }
         installed:
           type: array
           items:
@@ -901,7 +1052,7 @@ components:
               name: { type: string }
               version: { type: string }
               installedAt: { type: string, format: date-time }
-              channel: { type: string, enum: [stable, beta] }
+              channel: { type: string, enum: [stable, beta, dev] }
               policy: { type: string, enum: [automatic, ask, hold] }
               update:
                 type: object
@@ -909,10 +1060,31 @@ components:
                 description: The newest release on its channel, when newer than what runs
                 properties:
                   version: { type: string }
-                  channel: { type: string, enum: [stable, beta] }
+                  channel: { type: string, enum: [stable, beta, dev] }
                   notesUrl: { type: string }
                   needs: { type: array, items: { type: string }, description: "Why it waits for an admin; empty when it can install by itself" }
+                  changes: { type: array, items: { $ref: "#/components/schemas/Change" } }
               job: { $ref: "#/components/schemas/AppJob" }
+              changes: { type: array, items: { $ref: "#/components/schemas/Change" }, description: What changed in the version it runs }
+              older:
+                type: array
+                description: Earlier versions in the feed to go back to (install one; the app is then held there)
+                items: { type: object, required: [version, channel], properties: { version: { type: string }, channel: { type: string, enum: [stable, beta] } } }
+              history:
+                type: array
+                description: Its jobs, newest first (at most 20)
+                items:
+                  type: object
+                  required: [id, action, requestedBy, requestedAt, state]
+                  properties:
+                    id: { type: string }
+                    action: { type: string, enum: [install, remove, preview, preview-remove] }
+                    version: { type: string }
+                    requestedBy: { type: string, description: "A person's id, or automatic" }
+                    requestedAt: { type: string, format: date-time }
+                    state: { type: string, enum: [requested, running, done, failed, cancelled] }
+                    message: { type: string }
+                    finishedAt: { type: string, format: date-time }
               developers: { type: array, items: { type: string }, description: "Who may try its previews, by person id" }
               previews: { type: array, items: { $ref: "#/components/schemas/Preview" } }
         available:
@@ -939,7 +1111,7 @@ components:
         schema: { type: string, enum: [augur.app-release/v1] }
         id: { type: string }
         version: { type: string }
-        channel: { type: string, enum: [stable, beta, preview] }
+        channel: { type: string, enum: [stable, beta, dev, preview] }
         releasedAt: { type: string }
         sdk: { type: string }
         manifest: { $ref: "#/components/schemas/AppManifestEntry" }
@@ -1065,12 +1237,67 @@ components:
         message: { type: string }
         finishedAt: { type: string, format: date-time }
     UpgradeStep: { type: string, enum: [preflight, backup, pull, roll-forward, verify, roll-back] }
+    PipelineBranch: { type: string, enum: [dev, preview, production] }
+    PipelinePull:
+      type: object
+      required: [number, title, url]
+      properties: { number: { type: integer }, title: { type: string }, url: { type: string } }
+    PipelineLine:
+      type: object
+      description: "The Upgrade Centre's line: each unit between dev, preview and production, from the pipeline feed (docs/release-channels.md, The pipeline feed), with what this server runs of it"
+      required: [feed, units, steps]
+      properties:
+        feed: { type: string, enum: ["on", "off"], description: Off when there's no pipeline feed (a mirror, or PIPELINE_FEED_URL=off) }
+        checkedAt: { type: string, format: date-time }
+        problem: { type: string, description: Why the last read failed; what it read before still shows }
+        generatedAt: { type: string, format: date-time }
+        repository: { type: string }
+        units:
+          type: array
+          items:
+            type: object
+            required: [id, name, versions, waiting, previews]
+            properties:
+              id: { type: string, description: "augur, or an app's id" }
+              name: { type: string }
+              versions:
+                type: object
+                properties: { dev: { type: [string, "null"] }, preview: { type: [string, "null"] }, production: { type: [string, "null"] } }
+              devBuild: { type: object, required: [version], properties: { version: { type: string }, released: { type: string } } }
+              waiting: { type: array, items: { type: string }, description: The changesets on dev that move it }
+              previews: { type: array, items: { type: object, required: [pr, version], properties: { pr: { type: integer }, version: { type: string } } } }
+              running: { type: string, description: The version this server runs, when it runs it }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [from, to, merged, pulls]
+            properties:
+              from: { $ref: "#/components/schemas/PipelineBranch" }
+              to: { $ref: "#/components/schemas/PipelineBranch" }
+              merged: { type: integer, description: How many pull requests are on from that aren't on to yet }
+              pulls: { type: array, items: { type: object, required: [number, title], properties: { number: { type: integer }, title: { type: string }, mergedAt: { type: string } } } }
+        pulls:
+          type: object
+          properties:
+            versionPackages: { $ref: "#/components/schemas/PipelinePull" }
+            promoteToPreview: { $ref: "#/components/schemas/PipelinePull" }
+            promoteToProduction:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/PipelinePull"
+                  - type: object
+                    required: [unit, version]
+                    properties: { unit: { type: string }, version: { type: string } }
     PlatformUpdates:
       type: object
       required: [running, channel, feed, newer, needsYou]
       properties:
         running: { type: object, required: [version, channel], properties: { version: { type: string }, channel: { $ref: "#/components/schemas/ReleaseChannel" } } }
         channel: { $ref: "#/components/schemas/ReleaseChannel" }
+        ring: { $ref: "#/components/schemas/ServerRing" }
+        channelNote: { type: string, description: Why the channel isn't the one RELEASE_CHANNEL asks for (a production server follows stable only) }
         feed: { type: string, enum: ["on", "off"], description: Off when the deployment set RELEASE_FEED_URL=off }
         checkedAt: { type: string, format: date-time }
         problem: { type: string, description: Why the last check failed; what it found before still shows }
@@ -1088,7 +1315,22 @@ components:
         beta: { $ref: "#/components/schemas/ReleaseSummary", description: "On stable: a beta newer than anything stable" }
         next: { type: string, description: The release to upgrade to next; one on the way when the newest can't be reached straight }
         upgrade: { $ref: "#/components/schemas/Upgrade", description: The upgrade asked for, while it's open and for a week after }
+        history: { type: array, items: { $ref: "#/components/schemas/UpgradeHistoryEntry" }, description: Every upgrade asked for, newest first (at most 50) }
+        goBack:
+          type: array
+          description: Earlier releases on the channel to go back to, newest first (at most 5)
+          items:
+            type: object
+            required: [version, channel]
+            properties:
+              version: { type: string }
+              channel: { $ref: "#/components/schemas/ReleaseChannel" }
+              released: { type: string }
+              problem: { type: string, description: "Why it can't go back straight; absent when it can" }
+              breakingAfter: { type: string, description: The breaking release between, whose backup going back by hand restores }
         updaterSeenAt: { type: string, format: date-time, description: When the updater last asked for work, since the registry started }
+        portalUrl: { type: string, description: "The company's Backstage (PORTAL_URL), which the Upgrade Centre links to" }
+        line: { $ref: "#/components/schemas/PipelineLine" }
         needsYou:
           type: array
           items:
@@ -1102,7 +1344,8 @@ components:
               required: { type: boolean }
               madeUp: { type: boolean, description: "For kind setting: a secret the updater makes up itself" }
               app: { type: string, description: The app that won't run on the new SDK, for kind app }
-    ReleaseChannel: { type: string, enum: [stable, beta] }
+    ReleaseChannel: { type: string, enum: [stable, beta, dev], description: "stable is on production, beta on preview, dev a dev build of the dev branch that only the workbench takes (docs/release-channels.md)" }
+    ServerRing: { type: string, enum: [dev, preview, production], description: "What kind of server this is (SERVER_RING in .env): dev is the workbench, which also runs AUGUR's dev builds; a production one takes only releases promoted to production" }
     ReleaseSummary:
       type: object
       required: [version, channel, breaking]
@@ -1112,6 +1355,29 @@ components:
         released: { type: string }
         notesUrl: { type: string, format: uri }
         breaking: { type: array, items: { type: string } }
+        changes: { type: array, items: { $ref: "#/components/schemas/Change" }, description: "What changed in it, each change once; absent for a release made before changelogs were attached" }
+    Change:
+      type: object
+      required: [kind, text, parts]
+      properties:
+        id: { type: string, description: "Changesets' commit hash: the same change in two parts has the same id" }
+        kind: { type: string, enum: [major, minor, patch] }
+        text: { type: string, description: The changeset's words, as Markdown }
+        parts: { type: array, items: { type: string } }
+    UpgradeHistoryEntry:
+      type: object
+      required: [id, from, version, requestedBy, requestedAt, state]
+      properties:
+        id: { type: string }
+        from: { type: string }
+        version: { type: string }
+        requestedBy: { type: string }
+        requestedByName: { type: string }
+        requestedAt: { type: string, format: date-time }
+        state: { type: string, enum: [requested, running, done, rolled-back, failed, cancelled] }
+        message: { type: string }
+        finishedAt: { type: string, format: date-time }
+        backup: { type: string, description: The backup the updater took first }
     CatalogueEntry:
       allOf:
         - $ref: "#/components/schemas/AppManifestEntry"
@@ -1152,6 +1418,35 @@ components:
         origin: { type: string }
         addedBy: { type: string }
         addedAt: { type: string, format: date-time }
+    FeaturePreview:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9-]{0,39}$" }
+        name: { type: string, maxLength: 60 }
+        detail: { type: string, maxLength: 200 }
+        until: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Its last day; after it, it's off for everyone" }
+    FeaturePreviewMode: { type: string, enum: [off, opt-in, everyone] }
+    FeaturePreviewsAdmin:
+      type: object
+      required: [defaultMode, ring, previews]
+      properties:
+        defaultMode: { $ref: "#/components/schemas/FeaturePreviewMode" }
+        ring: { $ref: "#/components/schemas/ServerRing" }
+        previews:
+          type: array
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/FeaturePreview" }
+              - type: object
+                required: [mode, ended, chosen, optedIn]
+                properties:
+                  mode: { $ref: "#/components/schemas/FeaturePreviewMode" }
+                  ended: { type: boolean }
+                  chosen: { type: boolean, description: "An admin chose its mode; false means the server's default" }
+                  setBy: { type: string }
+                  setAt: { type: string, format: date-time }
+                  optedIn: { type: integer, description: How many people turned it on }
     AppManifestEntry:
       type: object
       required: [id, name, route, entry, version, sdk]
@@ -1173,6 +1468,15 @@ components:
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
         orbit: { type: boolean, description: "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus" }
         sameOnEveryFloor: { type: boolean, description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)" }
+        previews:
+          type: array
+          maxItems: 8
+          items: { $ref: "#/components/schemas/FeaturePreview" }
+          description: "Features the app is trying before they're everyone's (SDK 1.7): admins say who gets each, people turn opt-in ones on in the shell's Previews, and the app asks ctx.previewOn(id)"
+        previewsOn:
+          type: array
+          items: { type: string }
+          description: "In the catalogue the registry serves: the ids of the app's previews on for the caller (SDK 1.7)"
         search: { type: boolean, description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it" }
         storage:
           type: object

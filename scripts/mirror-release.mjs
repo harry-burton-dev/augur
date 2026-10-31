@@ -21,11 +21,16 @@ import semver from 'semver';
 
 const REPO = process.env.AUGUR_REPO ?? 'harry-burton-dev/im-platform';
 /** Who signs AUGUR's images: this repository's Release workflow (infra/release-images.sh). */
-export const SIGNER = `https://github.com/${REPO}/.github/workflows/release.yml@refs/heads/main`;
+/** The branches releases are made from (docs/release-channels.md): main until it became production. */
+export const RELEASE_BRANCHES = ['main', 'preview', 'production'];
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** A workflow's certificate identity on any branch releases are made from, as a pattern for --certificate-identity-regexp. */
+export const releaseIdentity = (workflow) => `^${escape(`https://github.com/${workflow}`)}@refs/heads/(${RELEASE_BRANCHES.join('|')})$`;
+export const SIGNER = releaseIdentity(`${REPO}/.github/workflows/release.yml`);
 const ISSUER = 'https://token.actions.githubusercontent.com';
 
-/** A release file as the mirror's feed holds it: its channel and notes as GitHub has them now. */
-export const asMirrored = (manifest, release) => ({ ...manifest, channel: release.prerelease ? 'beta' : 'stable', notesUrl: release.html_url });
+/** A release file as the mirror's feed holds it: its channel and notes as GitHub has them now (a dev build stays one, by version). */
+export const asMirrored = (manifest, release) => ({ ...manifest, channel: /-dev\.\d+$/.test(manifest.version) ? 'dev' : release.prerelease ? 'beta' : 'stable', notesUrl: release.html_url });
 
 /** The feed with `manifest` in it, newest first, replacing an earlier copy of the same release. */
 export const withRelease = (feed, manifest) => ({
@@ -68,8 +73,8 @@ export const withAppReleases = (feed, files) => {
   return { apps: [...(feed?.apps ?? []).filter((f) => !added.has(key(f))), ...files].sort((a, b) => a.id.localeCompare(b.id) || semver.rcompare(a.version, b.version)) };
 };
 
-/** The certificate identity a part must be signed with: its release workflow on the main branch. */
-const signerOf = (file) => `https://github.com/${file.signer.repository}/${file.signer.workflow}@refs/heads/main`;
+/** The certificate identity a part must be signed with: its release workflow on a branch releases are made from. */
+const signerOf = (file) => releaseIdentity(`${file.signer.repository}/${file.signer.workflow}`);
 
 /** Finds the trust root `cosign initialize` keeps under ~/.sigstore, newest first. */
 const findTrustedRoot = (dir = join(homedir(), '.sigstore')) => {
@@ -126,7 +131,7 @@ const mirrorApps = async ({ to, feedDir, only, cosign }) => {
       const tagged = `${ref.slice(0, ref.lastIndexOf('@'))}:${version}`;
       console.log(`${app} ${version}: ${from} → ${tagged}`);
       cosign('copy', '--force', from, tagged);
-      cosign('verify', '--certificate-identity', signerOf(file), '--certificate-oidc-issuer', ISSUER, '--output', 'text', ref);
+      cosign('verify', '--certificate-identity-regexp', signerOf(file), '--certificate-oidc-issuer', ISSUER, '--output', 'text', ref);
     }
     files.push({ ...mirrored, channel: release.prerelease ? 'beta' : 'stable', notesUrl: release.html_url });
   }
@@ -167,7 +172,7 @@ const main = async () => {
     console.log(`${image.part}: ${image.from} → ${image.to}`);
     cosign('copy', '--force', image.from, image.to);
     // The copy, by digest, must still be the image the release workflow signed.
-    cosign('verify', '--certificate-identity', SIGNER, '--certificate-oidc-issuer', ISSUER, '--output', 'text', `${to.replace(/\/$/, '')}/${image.part}@${image.digest}`);
+    cosign('verify', '--certificate-identity-regexp', SIGNER, '--certificate-oidc-issuer', ISSUER, '--output', 'text', `${to.replace(/\/$/, '')}/${image.part}@${image.digest}`);
   }
 
   mkdirSync(feedDir, { recursive: true });

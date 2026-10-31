@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import type { AuspexApi, PersonMap } from './api.js';
-import { explain, type AccessExplain, type Explained } from './access.js';
+import { explain, upWords, type AccessExplain, type Explained } from './access.js';
 import { styles } from './styles.js';
 
 const LEVEL_WORDS = { read: 'Can read', edit: 'Can edit', manage: 'Can manage' } as const;
@@ -78,7 +78,7 @@ export class AuspexAccess extends LitElement {
     const line = [count, e.via, e.since ? `since ${dateOf(e.since)}` : ''].filter(Boolean).join(' · ');
     return html`<li class="ax-who">
       <span class="ax-orb ${orb} sm" aria-hidden="true"><ui-icon name=${icon} size="18"></ui-icon></span>
-      <span class="txt"><span class="t1">${e.who}</span><span class="t2">${line}</span></span>
+      <span class="txt"><span class="t1">${e.who}</span><span class="t2">${line}</span>${upWords(e) ? html`<span class="t2">${upWords(e)}</span>` : nothing}</span>
       ${e.level ? html`<span class="lvl">${LEVEL_WORDS[e.level]}</span>` : nothing}
     </li>`;
   }

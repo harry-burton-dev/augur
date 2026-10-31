@@ -39,6 +39,10 @@ html[data-density='compact'] {
 }
 .preview-badge a, .previews a { color: inherit; }
 .previews ul { list-style: none; margin: var(--space-3) 0 var(--space-5); padding: 0; }
+.previews .live { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin: 0 0 var(--space-5); }
+.previews .live label { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
+.previews .live input { font: inherit; padding: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--radius-inset); background: transparent; color: var(--ink); }
+.previews .live small { color: var(--ink-muted); word-break: break-all; }
 .previews li {
   display: flex;
   align-items: center;

@@ -38,6 +38,22 @@ export interface AppEntry {
   maxUpload?: number;
   /** The app's own settings, which admins set in Admin, Apps and its service reads from the registry. */
   settings?: AppSetting[];
+  /** Features the app has ready to try before they're everyone's (SDK 1.7): admins say who gets each, people opt in. */
+  previews?: FeaturePreview[];
+}
+
+/**
+ * A feature an app is trying out (SDK 1.7). Off for everyone until an admin says otherwise, or opt-in
+ * by default on a preview server; the app asks `ctx.previewOn(id)` and keeps working without it.
+ */
+export interface FeaturePreview {
+  /** How the app names it: "board-view". */
+  id: string;
+  name: string;
+  /** A sentence on what it changes, for the person choosing it. */
+  detail?: string;
+  /** The last day it runs, YYYY-MM-DD: after it, it's off for everyone and Admin says the app should drop it or ship it. */
+  until?: string;
 }
 
 /**
@@ -60,6 +76,8 @@ export interface AppSetting {
 
 /** How many settings one app may offer. */
 export const MAX_SETTINGS = 10;
+/** How many feature previews one app may offer at once. */
+export const MAX_FEATURE_PREVIEWS = 8;
 
 /** What an app may be sent in one request when its manifest doesn't say: enough for any form, not for files. */
 export const DEFAULT_UPLOAD_MB = 10;
@@ -208,7 +226,7 @@ export const platformApps: AppEntry[] = [
         area: 'system',
         items: [
           { label: 'Status', icon: 'gauge', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },
-          { label: 'Updates', icon: 'download', path: '/updates', detail: 'New AUGUR releases', keywords: 'upgrade release version new' },
+          { label: 'Upgrade Centre', icon: 'download', path: '/updates', detail: 'From dev to production, and upgrading', keywords: 'updates upgrade release version new dev preview production pipeline' },
           { label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' },
         ],
       },
@@ -242,6 +260,21 @@ export const appEntrySchema = {
     search: { type: 'boolean' },
     storage: { type: 'object', additionalProperties: false, properties: { database: { type: 'boolean' }, bucket: { type: 'boolean' } } },
     maxUpload: { type: 'integer', minimum: 1, maximum: MAX_UPLOAD_MB },
+    previews: {
+      type: 'array',
+      maxItems: MAX_FEATURE_PREVIEWS,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'name'],
+        properties: {
+          id: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,39}$' },
+          name: { type: 'string', minLength: 1, maxLength: 60 },
+          detail: { type: 'string', maxLength: 200 },
+          until: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+        },
+      },
+    },
     settings: {
       type: 'array',
       maxItems: MAX_SETTINGS,
@@ -348,8 +381,14 @@ export const surfaceProblem = (entry: AppEntry): string | undefined => {
   return stray ? `${entry.name} has a ${stray.slot} for the ${stray.floor} floor, but its floors don't include ${stray.floor}.` : undefined;
 };
 
-/** What's wrong with the settings an app offers, or undefined when nothing is. */
+/** What's wrong with the settings and feature previews an app offers, or undefined when nothing is. */
 export const settingsProblem = (entry: AppEntry): string | undefined => {
+  const previews = new Set<string>();
+  for (const preview of entry.previews ?? []) {
+    if (previews.has(preview.id)) return `${entry.name} offers the preview "${preview.id}" twice.`;
+    previews.add(preview.id);
+    if (preview.until && Number.isNaN(Date.parse(`${preview.until}T00:00:00Z`))) return `${entry.name}'s preview "${preview.id}" runs until "${preview.until}", which isn't a day.`;
+  }
   const seen = new Set<string>();
   for (const setting of entry.settings ?? []) {
     if (seen.has(setting.id)) return `${entry.name} offers the setting "${setting.id}" twice.`;

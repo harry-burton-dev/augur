@@ -1,5 +1,18 @@
 # @augur/updater
 
+## 0.6.0
+
+### Minor Changes
+
+- d709061: Dev builds: every merge into `dev` that changes a runner app builds it as `<next patch>-dev.<run>`, signed on `dev`. A preview server's admin can set an app to **Dev builds too** in Admin → Apps, and the updater takes a backup before each one; production servers refuse them. A migration is frozen once it's on `dev`. Registry contract 1.26.0 (docs/release-channels.md, "Dev builds").
+
+## 0.5.0
+
+### Minor Changes
+
+- 65f4ede: Go back: Admin → Updates lists the releases before yours and goes back to one with the updater's usual steps (a backup first), while no release between is breaking; across a breaking one it says which and why, and going back is by hand. The updater stops parts the older release doesn't have, and starts them again if it has to roll back. Admin → Apps goes back to one of an app's three earlier versions and holds it there. Registry contract 1.25.0 (`PUT /v1/platform/go-back`, `goBack`, `older`).
+- 0f21cbd: Takes releases signed by the Release workflow on `preview` or `production` as well as `main`, ready for release channels (docs/release-channels.md). An app's release is checked the same way. Upgrade to this release before the first release made on `preview`, or the updater refuses it.
+
 ## 0.4.2
 
 ### Patch Changes

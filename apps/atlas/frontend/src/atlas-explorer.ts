@@ -3,7 +3,7 @@ import type { SelectOption } from '@augur/ui-kit';
 import { MultiDirectedGraph } from 'graphology';
 import type Sigma from 'sigma';
 import type FA2Layout from 'graphology-layout-forceatlas2/worker';
-import { floorWords, type AtlasApi, type Fold, type GraphNode, type Ontology, type Subgraph } from './api.js';
+import { PAST_DAYS, floorWords, type AtlasApi, type Fold, type GraphNode, type Ontology, type Subgraph } from './api.js';
 import { FOLD, HIDDEN, foldsOf, hiddenNear, hoverDrawer, linksOf, rings, syncGraph, widen, type Explored, type Look } from './graph.js';
 
 /** Links drawn from each entity before the rest fold into a count. */
@@ -277,7 +277,7 @@ export class AtlasExplorer extends LitElement {
   }
 
   private foldButton(fold: Fold) {
-    return html`<ui-button kind="secondary" size="sm" ?disabled=${this.busy} @click=${() => void this.openFold(fold)}
+    return html`<ui-button kind="secondary" size="sm" ?busy=${this.busy} @click=${() => void this.openFold(fold)}
       >Open ${fold.count} more ${this.foldWord(fold)}</ui-button>`;
   }
 
@@ -308,7 +308,7 @@ export class AtlasExplorer extends LitElement {
             ${links.map(
               (l) => html`<li>
                 <span class="atlas-relation">${l.label}</span>
-                <button class="atlas-link" @click=${() => (this.selected = l.other.ref.id)}>${l.other.ref.label}</button>
+                <ui-ref .ref=${l.other.ref} @ui-open=${() => (this.selected = l.other.ref.id)}></ui-ref>
                 ${l.edge.disputed ? html`<span class="atlas-disputed">disputed</span>` : nothing}
               </li>`,
             )}
@@ -317,7 +317,7 @@ export class AtlasExplorer extends LitElement {
       ${hidden.length ? html`<p class="atlas-note">${hidden.length} more linked ${hidden.length === 1 ? 'one doesn’t' : 'ones don’t'} show from here. <button class="atlas-link" @click=${() => (this.selected = `${HIDDEN}${n.ref.id}`)}>Why</button></p>` : nothing}
       <div class="atlas-panel-actions">
         ${folds.map((f) => this.foldButton(f))}
-        <ui-button kind="secondary" size="sm" ?disabled=${centre} @click=${() => this.emit('atlas-explore', n.ref.id)}>Make it the centre</ui-button>
+        <ui-button kind="secondary" size="sm" ?disabled=${centre} reason="It’s already the centre." @click=${() => this.emit('atlas-explore', n.ref.id)}>Make it the centre</ui-button>
         <ui-button kind="ghost" size="sm" @click=${() => this.emit('atlas-open-entity', n.ref.id)}>Open its page</ui-button>
       </div>
       ${centre ? html`<p class="atlas-note">It’s the centre already.</p>` : nothing}
@@ -374,12 +374,12 @@ export class AtlasExplorer extends LitElement {
         }}></ui-checkbox-group>
       <ui-toggle label="Hide disputed" .checked=${this.hideDisputed} hint="Disputed links, and what only they reach"
         @ui-change=${(e: CustomEvent<{ checked: boolean }>) => (this.hideDisputed = e.detail.checked)}></ui-toggle>
-      <ui-text-field type="date" label="True on" optional .value=${this.at} hint="The day in the world; empty is today"
+      <ui-date label="True on" optional empty="Today" .quick=${PAST_DAYS} .value=${this.at} hint="The day in the world"
         @ui-change=${(e: CustomEvent<{ value: string }>) => {
           if (e.detail.value === this.at) return;
           this.at = e.detail.value;
           void this.load();
-        }}></ui-text-field>
+        }}></ui-date>
     </aside>`;
   }
 
@@ -451,8 +451,8 @@ export class AtlasExplorer extends LitElement {
         atlas-explorer .atlas-panel-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
         @media (max-width: 1100px) { atlas-explorer .atlas-explore { grid-template-columns: minmax(0, 1fr); } }
       </style>
-      <ui-heading eyebrow=${this.floorName ? `${this.floorName} · Explore` : 'Explore'} heading=${label ? `Around ${label}` : 'Explore'}
-        summary="What it’s linked to, as seen from this floor, a ring at a time. Each ring shows the strongest links; the rest fold into counts you can open."></ui-heading>
+      <ui-page-head eyebrow=${this.floorName ? `${this.floorName} · Explore` : 'Explore'} heading=${label ? `Around ${label}` : 'Explore'}
+        summary="What it’s linked to, as seen from this floor, a ring at a time."></ui-page-head>
       ${this.body()}`;
   }
 }

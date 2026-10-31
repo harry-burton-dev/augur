@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev, preview, production]
 # Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
 # others, such as ["self-hosted","augur-ci"] for our own (docs/ci-runner.md). The same goes for
 # the Release, App previews and Release feed workflows.
@@ -12,7 +12,7 @@ on:
 # on hosted runners: from our server they downloaded ~1 GB a run at about 7 MB/s.
 
 # A new push to a pull request stops its last run, so the one runner isn't kept busy with it.
-# Pushes to main each run in full.
+# Pushes to dev, preview and production each run in full.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Changesets compares the branch with main to find what it changes.
+          # Changesets compares the branch with its base to find what it changes.
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -50,11 +50,21 @@ jobs:
           cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:boundaries
+      - run: pnpm check:reasons
       - run: pnpm check:versions
       - run: pnpm check:release
+      - run: pnpm check:catalog
       - run: pnpm test:scripts
+      # Into preview and production only dev, promotions, back-merges and hotfixes go, all versioned
+      # already (docs/release-channels.md).
+      - name: May it go into its branch?
+        if: github.event_name == 'pull_request'
+        run: node scripts/promote.mjs check-pr
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
       - name: Every change says how it is released
-        if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/') && github.base_ref != 'preview' && github.base_ref != 'production'
         run: pnpm changeset status --since=origin/${{ github.base_ref }}
       # Turbo's default of ten tasks at once is too many for our 8 GB runner on a shared server:
       # builds were killed for memory, and tests timed out and deadlocked in Postgres. About 2 GB a
@@ -81,11 +91,21 @@ jobs:
       # Every app's manifest, against the registry's own rules.
       - run: pnpm check:manifest
       - run: pnpm check:migrations
+        env:
+          # Into dev, a migration already on dev is frozen too: dev builds have run it on the preview server.
+          MIGRATIONS_FROZEN_AT: ${{ github.base_ref == 'dev' && 'origin/dev' || '' }}
       - run: pnpm typecheck --concurrency=${{ steps.fit.outputs.tasks }}
       - run: pnpm test --concurrency=${{ steps.fit.outputs.tests }}
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
       - run: pnpm --filter @augur/ui-kit build-storybook
+      # The pull request's Storybook, to look through before it merges: download "storybook" from the run, unzip it and serve the folder (`npx serve`).
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: storybook
+          path: platform/packages/ui-kit/storybook-static
+          retention-days: 14
 
   # Folio's rendition worker, in Python: its tests against a real Postgres with Folio's
   # schema, PDFs included (Docling fetches its models once; they're cached), and its image
@@ -112,7 +132,7 @@ jobs:
         with:
           fetch-depth: 0
       # Only when Folio (its worker, or the service whose tables it works on) or this workflow
-      # changed; main runs it always. The job still reports, so it can stay a required check.
+      # changed; pushes run it always. The job still reports, so it can stay a required check.
       - name: Does this change Folio?
         id: folio
         run: |
@@ -146,7 +166,9 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: docling-models-${{ hashFiles('apps/folio/worker/pyproject.toml') }}
-      # The worker works on the tables Folio's service makes.
+      # The worker works on the tables Folio's service makes, which needs the packages Folio's store is built on.
+      - if: steps.folio.outputs.run == 'true'
+        run: pnpm turbo run build --filter="@apps/folio^..."
       - if: steps.folio.outputs.run == 'true'
         run: pnpm --filter @apps/folio migrate
       - if: steps.folio.outputs.run == 'true'
@@ -264,12 +286,27 @@ jobs:
             -e APP_ORIGINS=https://apps.example.org -p 8088:8080 platform-web
           for i in $(seq 1 20); do curl -fsI http://localhost:8088/admin > /tmp/headers && break; sleep 1; done
           cat /tmp/headers
-          grep -iE "^content-security-policy: default-src 'self'; script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https://apps.example.org;" /tmp/headers
+          grep -iE "^content-security-policy: default-src 'self'; script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https://apps.example.org ?;" /tmp/headers
+          # Anywhere but the workbench, nothing on the tailnet may run in the shell.
+          ! grep -i "ts.net" /tmp/headers
           # Folio ships with AUGUR, so the front door serves its frontend too.
           curl -fsI http://localhost:8088/apps/folio/entry.js
           curl -fsI http://localhost:8088/apps/auspex/entry.js
           curl -fsI http://localhost:8088/apps/atlas/entry.js
           docker rm -f web
+      - name: On the workbench, the shell may load an app from a machine on its own tailnet
+        run: |
+          docker run -d --name web-dev --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -e SERVER_RING=dev -e PLATFORM_URL=https://augur.tail1234.ts.net -p 8089:8080 platform-web
+          for i in $(seq 1 20); do curl -fsI http://localhost:8089/admin > /tmp/headers-dev && break; sleep 1; done
+          grep -iE "^content-security-policy: .*script-src 'self' 'sha256-[A-Za-z0-9+/=]+'  https://\*\.tail1234\.ts\.net wss://\*\.tail1234\.ts\.net;" /tmp/headers-dev
+          # Never every Tailscale user's machines.
+          ! grep -iE "[ /]\*\.ts\.net" /tmp/headers-dev
+          docker rm -f web-dev
+          # A workbench that isn't at a Tailscale address loads from no machine.
+          docker run -d --name web-dev2 --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -e SERVER_RING=dev -e PLATFORM_URL=https://augur.example.org -p 8090:8080 platform-web
+          for i in $(seq 1 20); do curl -fsI http://localhost:8090/admin > /tmp/headers-dev2 && break; sleep 1; done
+          ! grep -i "ts.net" /tmp/headers-dev2
+          docker rm -f web-dev2
       - name: The nightly backup writes a restorable dump
         run: |
           docker run -d --name pg -e POSTGRES_PASSWORD=ci postgres:16-alpine

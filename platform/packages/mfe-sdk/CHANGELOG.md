@@ -1,5 +1,17 @@
 # @augur/mfe-sdk
 
+## 1.8.0
+
+### Minor Changes
+
+- bb91780: The standard unit intent (SDK 1.8): `UnitRef` and `isUnitRef`, `UNIT_OPEN` and `openUnit`, and `UNIT_LEVELS`. A unit is one place in a floor's library at any level (collection, subcollection, series, subseries or file). Artifacts handles `unit.open`, opening the library, the folder or the file.
+
+## 1.7.0
+
+### Minor Changes
+
+- 5b2c80c: Feature previews (SDK 1.7): an app lists features it's trying in its manifest's `previews` and asks `ctx.previewOn(id)`. Admins choose who gets each in Admin → Apps (off, for those who turn it on, or everyone; opt-in by default on a preview server, off on a production one), people turn opt-in ones on in the shell's Previews, and the shell marks an app with one on. A preview past its `until` day is off for everyone. Registry contract 1.27.0 (docs/release-channels.md, "Feature previews").
+
 ## 1.6.0
 
 ### Minor Changes

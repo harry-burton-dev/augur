@@ -14,6 +14,7 @@ const ctx = (notify = vi.fn()): MountContext => ({
   path: '/',
   workspace: floor,
   getWorkspace: () => floor,
+  previewOn: () => false,
   fetch: vi.fn(),
 });
 

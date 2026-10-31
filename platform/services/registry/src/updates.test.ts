@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import type { AppRecord } from './store.ts';
-import { FeedProblem, releaseFeed, UpdateChecker, updatesView, type FeedRelease, type ReleaseManifest } from './updates.ts';
+import { automaticDevUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRelease, type ReleaseManifest } from './updates.ts';
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
@@ -22,7 +22,7 @@ const manifest = (version: string, more: Partial<ReleaseManifest> = {}): Release
   parts: { '@augur/registry': { version }, '@augur/mfe-sdk': { version: '1.1.0' } },
   ...more,
 });
-const release = (version: string, channel: 'beta' | 'stable' = 'beta', more: Partial<ReleaseManifest> = {}): FeedRelease => ({
+const release = (version: string, channel: 'beta' | 'stable' | 'dev' = 'beta', more: Partial<ReleaseManifest> = {}): FeedRelease => ({
   version,
   channel,
   notesUrl: `https://github.com/o/r/releases/tag/augur@${version}`,
@@ -42,10 +42,98 @@ const app = (id: string, sdk: string, enabled = true): AppRecord => ({
   grantedScopes: [],
 });
 
+describe('going back', () => {
+  it('offers earlier releases on the channel, straight back only while nothing between is breaking', async () => {
+    const images = { registry: 'ghcr.io/o/r/registry@sha256:aa' };
+    const checker = await checked(
+      [release('0.5.0', 'beta', { images }), release('0.4.0', 'beta', { images }), release('0.3.0', 'beta', { images, breaking: ['@augur/identity 0.3.0 → 1.0.0'] }), release('0.2.0', 'beta', { images }), release('0.4.5', 'beta', { images: {} })],
+      'beta',
+      '0.5.0',
+    );
+    expect(goBackTargets(checker).map((t) => [t.version, t.problem === undefined, t.breakingAfter])).toEqual([
+      ['0.4.5', false, undefined],
+      ['0.4.0', true, undefined],
+      ['0.3.0', true, undefined],
+      ['0.2.0', false, '0.3.0'],
+    ]);
+    expect(goBackTargets(checker).find((t) => t.version === '0.2.0')?.problem).toContain('restore the backup taken before upgrading to 0.3.0');
+    expect(updatesView({ checker, apps: [] }).goBack).toHaveLength(4);
+  });
+});
+
+describe('the history of upgrades', () => {
+  it('names the backup each one took', () => {
+    const at = '2026-10-29T00:00:00Z';
+    expect(historyEntry({ id: 'u', from: '0.8.0', version: '0.9.0', images: {}, requestedBy: 'u-1', requestedAt: at, state: 'done', steps: [{ step: 'backup', state: 'done', message: 'platform-2026-10-29T0000.sql.gz, restored and checked', at }] })).toEqual({
+      id: 'u', from: '0.8.0', version: '0.9.0', requestedBy: 'u-1', requestedAt: at, state: 'done', backup: 'platform-2026-10-29T0000.sql.gz',
+    });
+  });
+
+  it('gives each newer release its changes, from the changelogs its release file carries', async () => {
+    const view = updatesView({ checker: await checked([release('0.3.0', 'beta', { changelogs: { '@augur/registry': '### Minor Changes\n\n- abcdef1: Shows history.' } })]), apps: [] });
+    expect(view.available?.changes).toEqual([{ id: 'abcdef1', kind: 'minor', text: 'Shows history.', parts: ['@augur/registry'] }]);
+  });
+});
+
+describe('the server’s ring', () => {
+  it('a preview server follows beta by itself, a production server only ever stable', async () => {
+    const releases = [release('0.3.0', 'stable'), release('0.4.0')];
+    const preview = new UpdateChecker({ feed: async () => releases, running: { version: '0.2.0', channel: 'beta' }, ring: 'preview' });
+    await preview.check();
+    expect(updatesView({ checker: preview, apps: [] })).toMatchObject({ ring: 'preview', channel: 'beta', available: { version: '0.4.0' } });
+
+    const production = new UpdateChecker({ feed: async () => releases, running: { version: '0.2.0', channel: 'beta' }, ring: 'production', channel: 'beta' });
+    await production.check();
+    const view = updatesView({ checker: production, apps: [] });
+    expect(view).toMatchObject({ ring: 'production', channel: 'stable', available: { version: '0.3.0' }, channelNote: expect.stringContaining('RELEASE_CHANNEL=beta is ignored') });
+    // A production server can't follow beta, so it isn't told of one.
+    expect(view.beta).toBeUndefined();
+  });
+
+  it('the workbench follows AUGUR’s dev builds by itself; no other server takes them', async () => {
+    const releases = [release('0.3.0', 'stable'), release('0.4.0'), release('0.4.1-dev.48', 'dev')];
+    const make = (ring: 'dev' | 'preview' | 'production', channel?: 'dev') => new UpdateChecker({ feed: async () => releases, running: { version: '0.2.0', channel: 'beta' }, ring, channel });
+    const workbench = make('dev');
+    await workbench.check();
+    expect(updatesView({ checker: workbench, apps: [] })).toMatchObject({ ring: 'dev', channel: 'dev', available: { version: '0.4.1-dev.48' }, newer: [{ version: '0.4.1-dev.48' }, { version: '0.4.0' }, { version: '0.3.0' }] });
+
+    const preview = make('preview', 'dev');
+    await preview.check();
+    expect(updatesView({ checker: preview, apps: [] })).toMatchObject({ channel: 'beta', available: { version: '0.4.0' }, channelNote: expect.stringContaining('Only the workbench') });
+    const production = make('production', 'dev');
+    await production.check();
+    expect(updatesView({ checker: production, apps: [] })).toMatchObject({ channel: 'stable', available: { version: '0.3.0' }, channelNote: expect.stringContaining('RELEASE_CHANNEL=dev is ignored') });
+  });
+
+  it('dev takes every release, beta all but dev builds, stable only stable', () => {
+    expect([follows('dev', 'dev'), follows('dev', 'beta'), follows('dev', 'stable')]).toEqual([true, true, true]);
+    expect([follows('beta', 'dev'), follows('beta', 'beta'), follows('beta', 'stable')]).toEqual([false, true, true]);
+    expect([follows('stable', 'dev'), follows('stable', 'beta'), follows('stable', 'stable')]).toEqual([false, false, true]);
+  });
+
+  it('the workbench upgrades to a dev build by itself only when nothing needs a person, and only once', async () => {
+    const workbench = async (releases: FeedRelease[], ring: 'dev' | 'preview' = 'dev') => {
+      const checker = new UpdateChecker({ feed: async () => releases, running: { version: '0.4.0', channel: 'beta' }, ring, ...(ring === 'preview' ? { channel: 'beta' as const } : {}) });
+      await checker.check();
+      return updatesView({ checker, apps: [] });
+    };
+    const dev = release('0.4.1-dev.48', 'dev');
+    expect(automaticDevUpgrade(await workbench([dev]), [])).toBe('0.4.1-dev.48');
+    expect(automaticDevUpgrade(await workbench([dev]), [{ version: '0.4.1-dev.48', state: 'rolled-back' }])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([dev], 'preview'), [])).toBeUndefined();
+    // A release, rather than a dev build, waits for an admin even on the workbench.
+    expect(automaticDevUpgrade(await workbench([release('0.5.0')]), [])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.49', 'dev', { breaking: ['@augur/mfe-sdk: SDK 2.'] })]), [])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.50', 'dev', { settings: settings(['MODELS_URL'], ['MODELS_URL']) })]), [])).toBeUndefined();
+    // One the updater makes up itself doesn't need a person.
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.51', 'dev', { settings: settings(['MODELS_CLIENT_SECRET'], ['MODELS_CLIENT_SECRET']) })]), [])).toBe('0.4.1-dev.51');
+  });
+});
+
 describe('the release feed', () => {
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-  it('reads AUGUR releases from GitHub, with the release files of the running and newer ones', async () => {
+  it('reads AUGUR releases from GitHub, with the release files of the running, newer and a few older ones', async () => {
     const asked: { url: string; auth?: string }[] = [];
     const fetchImpl = (async (url: string, init: RequestInit) => {
       asked.push({ url, auth: (init.headers as Record<string, string>).authorization });
@@ -67,10 +155,11 @@ describe('the release feed', () => {
     expect(releases.map((r) => [r.version, r.channel, Boolean(r.manifest)])).toEqual([
       ['0.3.0', 'beta', true],
       ['0.2.1', 'stable', true],
-      ['0.1.0', 'stable', false],
+      ['0.1.0', 'stable', true],
     ]);
-    // Not the draft, not a package's own release, and not the old release's file.
-    expect(asked.map((a) => a.url)).not.toContain('https://api.github.com/assets/augur@0.1.0');
+    // Not the draft and not a package's own release; an older release's file, to go back to.
+    expect(asked.map((a) => a.url)).not.toContain('https://api.github.com/assets/augur@0.4.0');
+    expect(asked.map((a) => a.url)).toContain('https://api.github.com/assets/augur@0.1.0');
     expect(asked.every((a) => a.auth === 'Bearer t0ken')).toBe(true);
   });
 
@@ -189,6 +278,26 @@ describe('upgrading', () => {
     return { server, entries };
   };
 
+  it('goes back to an earlier release the same way, for an admin who has just entered their password', async () => {
+    const entries: { action: string; target?: string; actor: { id: string } }[] = [];
+    const server = await buildApp({
+      verifyService,
+      updates: await checked([release('0.4.0', 'beta', { images }), release('0.3.0', 'beta', { images }), release('0.2.0', 'beta', { images, breaking: ['x'] }), release('0.1.0', 'beta', { images })], 'beta', '0.4.0'),
+      audit: async (e) => void entries.push(e),
+    });
+    const ask = (headers: Record<string, string>, version: string) => server.inject({ method: 'PUT', url: '/v1/platform/go-back', headers, payload: { version } });
+    const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
+    expect(page.goBack.map((t: { version: string; problem?: string }) => [t.version, !t.problem])).toEqual([['0.3.0', true], ['0.2.0', true], ['0.1.0', false]]);
+    expect((await ask(admin, '0.3.0')).json()).toMatchObject({ error: 'sign_in_again' });
+    expect((await ask(fresh(), '0.1.0')).json().message).toContain('restore the backup taken before upgrading to 0.2.0');
+    expect((await ask(fresh(), '0.9.0')).statusCode).toBe(409);
+    expect((await ask(fresh(), '0.3.0')).statusCode).toBe(202);
+    const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
+    expect(target).toMatchObject({ from: '0.4.0', version: '0.3.0', images });
+    await server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, step: 'verify', state: 'done', outcome: 'done' } });
+    expect(entries.map((e) => `${e.action} ${e.target}`)).toEqual(['platform.go-back-requested 0.3.0', 'platform.went-back 0.3.0']);
+  });
+
   it('needs an admin who has just entered their password, and only the next release', async () => {
     const { server } = await setup();
     const ask = (headers: Record<string, string>, version = '0.3.0') => server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers, payload: { version } });
@@ -224,6 +333,9 @@ describe('upgrading', () => {
     const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
     expect(page.upgrade.state).toBe('rolled-back');
     expect(page.updaterSeenAt).toBeDefined();
+    // The history keeps it, with who asked by name, without the images.
+    expect(page.history).toEqual([expect.objectContaining({ from: '0.2.0', version: '0.3.0', requestedBy: 'u-1', requestedByName: 'Alex', state: 'rolled-back' })]);
+    expect(page.history[0].images).toBeUndefined();
     expect(entries.map((e) => `${e.action} ${e.target} by ${e.actor.id}`)).toEqual(['platform.upgrade-requested 0.3.0 by u-1', 'platform.upgrade-rolled-back 0.3.0 by updater']);
   });
 
@@ -242,6 +354,21 @@ describe('upgrading', () => {
     await server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, step: 'preflight', state: 'failed', outcome: 'rolled-back' } });
     await ask({});
     expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json().settings).toBeUndefined();
+  });
+
+  it('on the workbench, asks the updater for a new dev build by itself, and audits it', async () => {
+    const entries: { action: string; target?: string; actor: { id: string } }[] = [];
+    const updates = new UpdateChecker({ feed: async () => [release('0.2.1-dev.48', 'dev', { images }), release('0.2.0')], running: { version: '0.2.0', channel: 'beta' }, ring: 'dev' });
+    await updates.check();
+    const server = await buildApp({ verifyService, updates, audit: async (e) => void entries.push(e) });
+    const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
+    expect(target).toMatchObject({ version: '0.2.1-dev.48', from: '0.2.0', images, state: 'requested' });
+    expect(entries.map((e) => `${e.action} ${e.target} by ${e.actor.id}`)).toEqual(['platform.upgrade-requested 0.2.1-dev.48 by registry']);
+    const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
+    expect(page.history[0]).toMatchObject({ requestedBy: 'automatic', version: '0.2.1-dev.48' });
+    // Taken back by an admin, it isn't asked for again.
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).statusCode).toBe(200);
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
   });
 
   it('lets an admin take back an upgrade nothing has started', async () => {
