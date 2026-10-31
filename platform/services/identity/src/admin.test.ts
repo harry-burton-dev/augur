@@ -145,6 +145,20 @@ describe('admin: departments', () => {
   });
 });
 
+describe('admin: levels', () => {
+  it('names each level of department, audited, for admins only', async () => {
+    const { call, audit } = await setup();
+    expect((await call('GET', '/levels')).json()).toEqual({ levels: ['Department', 'Team'], max: 5 });
+    expect((await call('GET', '/levels', undefined, editor)).statusCode).toBe(403);
+    expect((await call('PUT', '/levels', { levels: ['Division', 'Crew'] })).json()).toEqual({ levels: ['Division', 'Crew'], max: 5 });
+    expect((await call('GET', '/levels')).json().levels).toEqual(['Division', 'Crew']);
+    expect(audit.mock.calls.map(([e]) => e)).toContainEqual(expect.objectContaining({ action: 'levels.renamed', detail: { from: ['Department', 'Team'], to: ['Division', 'Crew'] } }));
+    expect((await call('PUT', '/levels', { levels: [] })).statusCode).toBe(400);
+    expect((await call('PUT', '/levels', { levels: ['A', 'B', 'C', 'D', 'E', 'F'] })).statusCode).toBe(400);
+    expect((await call('PUT', '/levels', { levels: ['Crew', 'crew'] })).json().message).toMatch(/both be called/);
+  });
+});
+
 describe('helpers', () => {
   it('makes a username from an email', () => {
     expect(usernameFrom('Jo.Smith+news@example.org')).toBe('jo.smith');

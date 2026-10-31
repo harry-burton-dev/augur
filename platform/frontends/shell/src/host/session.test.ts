@@ -37,6 +37,13 @@ describe('startSession', () => {
     expect(elsewhere.signinRedirect).toHaveBeenCalledWith(expect.objectContaining({ state: '/' }));
   });
 
+  it('keeps each team’s level name for the shell and apps, and nothing else the platform adds', async () => {
+    const ops = { id: 'w-ops', kind: 'team', name: 'Ops', slug: 'ops', level: 'Department', path: [org.path[0], { id: 'w-ops', kind: 'team', name: 'Ops', slug: 'ops', level: 'Department' }], role: 'member' };
+    const fetchImpl = vi.fn(async (url: string) => Response.json(url.endsWith('/me/workspaces') ? { workspaces: [own, org, { ...ops, direct: false }] } : me)) as unknown as typeof fetch;
+    const session = await startSession(fakeAuth({ access_token: 't' }), { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl });
+    expect(session !== 'redirecting' && session.floors[2]).toEqual(ops);
+  });
+
   it('finishes signing in on the callback and returns to where they were', async () => {
     const auth = fakeAuth(null);
     const history = { replaceState: vi.fn() };

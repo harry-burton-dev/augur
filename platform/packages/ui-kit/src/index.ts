@@ -66,7 +66,7 @@ export {
   type ShellViewRenderer,
   type AreaCard,
 } from './components/shell.js';
-export { floorStack, floorBeside, floorDirection, floorIcon, floorKindName, floorLevel, floorMeaning, type ShellFloor, type ShellFloorRef, type FloorKind, type FloorDirection } from './components/floors.js';
+export { floorStack, floorBeside, floorDirection, floorIcon, floorIconOf, floorKindName, floorKindOf, floorLevel, floorMeaning, floorTone, teamDepth, type ShellFloor, type ShellFloorRef, type FloorKind, type FloorDirection, type FloorTone } from './components/floors.js';
 export {
   UiWaveBackground,
   wavePresets,

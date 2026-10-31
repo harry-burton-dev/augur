@@ -7,7 +7,8 @@
   },
   "@augur/identity": {
     "001_preferences": "148165f8cbddebab",
-    "002_workspaces": "54f71c8c9cc46c8c"
+    "002_workspaces": "54f71c8c9cc46c8c",
+    "003_team_levels": "4f354b7fa3c5c9d8"
   },
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"

@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson, type PersonChanges } from './directory.ts';
+import { DEFAULT_LEVELS, MAX_LEVEL_NAME, MAX_TEAM_DEPTH, type WorkspaceStore } from './workspaces.ts';
 
 /** Easy to read out or type: no 0/O, 1/l/I. */
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -42,6 +43,13 @@ const departmentSchema = {
   properties: { name: { type: 'string', minLength: 1, maxLength: 60, pattern: '^[^/]*[^/\\s][^/]*$' } },
 } as const;
 
+const levelsSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['levels'],
+  properties: { levels: { type: 'array', minItems: 1, maxItems: MAX_TEAM_DEPTH, items: { type: 'string', minLength: 1, maxLength: MAX_LEVEL_NAME } } },
+} as const;
+
 const newDepartmentSchema = {
   ...departmentSchema,
   properties: { ...departmentSchema.properties, parentId: { type: 'string', minLength: 1, maxLength: 100 } },
@@ -59,6 +67,8 @@ export const usernameFrom = (address: string) =>
 
 interface AdminOptions {
   directory?: Directory;
+  /** Where the names of the levels of team are kept. */
+  workspaces?: WorkspaceStore;
   audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
 }
 
@@ -69,7 +79,7 @@ interface AdminOptions {
  * can give or take away that role, or change a deployment admin's sign-in.
  */
 export const adminRoutes =
-  ({ directory, audit }: AdminOptions) =>
+  ({ directory, workspaces, audit }: AdminOptions) =>
   async (app: FastifyInstance) => {
     app.addHook('onRequest', async (req, reply) => {
       if (!callerFromHeaders(req.headers)?.roles.includes('admin')) {
@@ -170,6 +180,17 @@ export const adminRoutes =
     });
 
     app.get('/departments', async () => dir().departments());
+
+    // What each level of department is called: Department right below the org, then Team, unless renamed here.
+    app.get('/levels', async () => ({ levels: (await workspaces?.levels()) ?? DEFAULT_LEVELS, max: MAX_TEAM_DEPTH }));
+
+    app.put<{ Body: { levels: string[] } }>('/levels', { schema: { body: levelsSchema } }, async (req) => {
+      if (!workspaces) throw new DirectoryError('Level names can’t be changed here yet.', 503);
+      const before = await workspaces.levels();
+      const levels = await workspaces.setLevels(req.body.levels);
+      if (levels.join('\n') !== before.join('\n')) await record(req, 'levels.renamed', 'team-levels', { from: before, to: levels });
+      return { levels, max: MAX_TEAM_DEPTH };
+    });
 
     app.post<{ Body: { name: string; parentId?: string } }>('/departments', { schema: { body: newDepartmentSchema } }, async (req, reply) => {
       const created = await dir().createDepartment(req.body.name.trim(), req.body.parentId);

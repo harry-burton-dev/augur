@@ -344,7 +344,8 @@ describe('floors', () => {
     await el.updateComplete;
     const where = root().querySelector('.where')!;
     expect(where.textContent!.trim()).toBe('Finance');
-    expect(where.querySelector('ui-icon')!.getAttribute('name')).toBe('people');
+    expect(where.querySelector('ui-icon')!.getAttribute('name')).toBe('department');
+    expect(where.getAttribute('aria-label')).toBe('You’re on Finance, a department');
     expect(where.querySelectorAll('li, button')).toHaveLength(0);
     expect(root().querySelector('.mark')).toBeNull();
     expect(root().querySelector('.place')).toBeNull();
@@ -422,7 +423,7 @@ describe('floors', () => {
     const labels = [...root().querySelectorAll('.gauge .label')].map((l) => l.textContent!.replace(/\s+/g, ' ').trim());
     expect(labels).toEqual([
       'Acme Everyone in Acme sees what’s here.',
-      'Finance You’re here Finance and the teams under it see what’s here. Home is showing this floor',
+      'Finance You’re here Department. Finance and the teams under it see what’s here. Home is showing this floor',
       'Your own floor Just you. No one else sees what’s here unless you share it.',
     ]);
     expect(root().querySelectorAll('.gauge .pinned')).toHaveLength(1);
@@ -430,6 +431,23 @@ describe('floors', () => {
     await el.updateComplete;
     expect(root().querySelector('.gauge .bound')).toBeNull();
     expect(root().querySelector('.gauge .pinned')).toBeNull();
+  });
+
+  it('tells the levels of team apart: each its own name, icon and colours, whatever they’re called', async () => {
+    const payroll = { id: 'pay', kind: 'team' as const, name: 'Payroll', level: 'Squadron', path: [org.path[0], { ...finance.path[1], level: 'Division' }, { id: 'pay', kind: 'team' as const, name: 'Payroll', level: 'Squadron' }] };
+    el.floors = [me, org, { ...finance, level: 'Division' }, payroll];
+    await el.updateComplete;
+    expect(el.getAttribute('floor-tone')).toBe('department');
+    el.floor = 'pay';
+    await el.updateComplete;
+    expect(el.getAttribute('floor-kind')).toBe('team');
+    expect(el.getAttribute('floor-tone')).toBe('team');
+    expect([...card()!.children].map((c) => c.textContent)[0]).toBe('Squadron');
+    expect(root().querySelector('.where ui-icon')!.getAttribute('name')).toBe('people');
+    const notches = [...root().querySelectorAll('.gauge .notch ui-icon')].map((i) => i.getAttribute('name'));
+    expect(notches).toEqual(['org', 'department', 'people', 'account']);
+    const labels = [...root().querySelectorAll('.gauge .label > span > span')].map((l) => l.textContent);
+    expect(labels.slice(1, 3).map((l) => l!.split('.')[0])).toEqual(['Division', 'Squadron']);
   });
 
   it('goes up or down a floor with Page Up and Page Down', () => {

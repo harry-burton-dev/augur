@@ -390,7 +390,7 @@ metadata:
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers.
   annotations:
     github.com/project-slug: harry-burton-dev/im-platform
-    augur.dev/contract-version: 1.11.0
+    augur.dev/contract-version: 1.12.0
 spec:
   type: openapi
   lifecycle: production

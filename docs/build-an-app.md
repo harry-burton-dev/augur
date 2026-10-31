@@ -65,7 +65,7 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.user` | Who is signed in: `id`, `name`, `email`, `departments`, `roles` |
 | `ctx.path` | Where in your app they are, below its route: `/reports/q3` for `/expenses/reports/q3` |
 | `ctx.getToken()` | A current token to send as `Authorization: Bearer …` to `/api/<id>/…` |
-| `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. SDK 1.1 |
+| `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. A team also has its `level`, what its level is called ("Department" right below the org, "Team" below that, unless an admin renamed them, SDK 1.9): say it where you'd say "team". The `kind` stays `team` at every level. SDK 1.1 |
 | `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on, and a call to your app on a floor where it's off for them (a call naming no floor is checked on the organisation's). SDK 1.1 |
 | `ctx.notify({ title, body?, needsYou?, actions? })` | A notification on the shell's stream. `actions` (SDK 1.2) is up to two `{ label, intent }` buttons on it; pressing one raises the intent through the shell, as `ctx.raise` does |
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
