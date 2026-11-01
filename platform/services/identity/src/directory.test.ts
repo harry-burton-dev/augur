@@ -44,6 +44,20 @@ describe('identity’s sign-in to Keycloak', () => {
     expect(REALM_ADMIN_ROLES).not.toContain('realm-admin');
   });
 
+  it('reads from its own token whether it already holds every realm-management role it needs', async () => {
+    const tokenWith = (roles: string[]) => `h.${Buffer.from(JSON.stringify({ resource_access: { 'realm-management': { roles } } })).toString('base64url')}.s`;
+    const signIn = { client: { id: 'platform-identity', secret: 's' } };
+    const answering = (res: () => Response) => (async () => res()) as typeof fetch;
+    const full = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: answering(() => Response.json({ access_token: tokenWith([...REALM_ADMIN_ROLES]), expires_in: 300 })) });
+    expect(await full.hasRealmAdmin()).toBe(true);
+    const partial = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: answering(() => Response.json({ access_token: tokenWith(['view-users']), expires_in: 300 })) });
+    expect(await partial.hasRealmAdmin()).toBe(false);
+    const refused = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: answering(() => new Response('{"error":"unauthorized_client"}', { status: 401 })) });
+    expect(await refused.hasRealmAdmin()).toBe(false);
+    const down = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: (async () => { throw new TypeError('fetch failed'); }) as typeof fetch });
+    await expect(down.hasRealmAdmin()).rejects.toThrow('can’t be reached');
+  });
+
   it('turns on the brute-force policy once, and leaves a realm that has it alone', async () => {
     let protectedNow = false;
     const { calls, fetchImpl } = keycloak((method, path) => (method === 'GET' && path === '' ? { realm: 'platform', bruteForceProtected: protectedNow } : undefined));
