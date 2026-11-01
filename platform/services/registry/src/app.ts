@@ -69,6 +69,7 @@ import {
   type UpgradeOutcome,
   type UpgradeStepState,
 } from './store.ts';
+import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 
 /** How identity names the organisation's floor, for a call that names none. */
 const ORG_FLOOR = 'org';
@@ -163,18 +164,6 @@ const catalogueEntry = (r: AppRecord, allowed: string[], pillar: boolean) => {
 /** How recently an admin must have entered their password to start an upgrade. */
 export const UPGRADE_SIGN_IN_MS = 10 * 60 * 1000;
 
-/**
- * The realm role that runs the deployment (ADR 0022): only its holders upgrade AUGUR, go back to an
- * earlier release or take back a waiting upgrade. `admin` alone runs the organisation, not the server.
- */
-export const DEPLOYMENT_ADMIN = 'deployment-admin';
-
-/** The 403 for someone without it: names the role, so the Upgrade Centre can say who to ask. */
-export const needsDeploymentAdmin = (doing: string) => ({
-  error: 'forbidden',
-  requiredRole: DEPLOYMENT_ADMIN,
-  message: `Only a deployment admin can ${doing}. Ask someone who holds the deployment-admin role (Admin, People).`,
-});
 /** A finished upgrade stays on the Updates page this long. */
 const UPGRADE_SHOWN_MS = 7 * 24 * 60 * 60 * 1000;
 /** The platform service that applies upgrades on a Compose deployment (its Keycloak client is platform-updater). */

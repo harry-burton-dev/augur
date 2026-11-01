@@ -6,6 +6,7 @@ import { UpdateChecker, type FeedRelease, type ReleaseManifest } from './updates
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
+const deployer = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'] });
 const updater = { authorization: 'Bearer platform-updater' };
 const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
   const m = /^Bearer platform-(\S+)$/.exec(String(headers.authorization ?? ''));
@@ -67,14 +68,16 @@ describe('the Upgrade Centre overview (ADR 0020)', () => {
     expect(view.units[0].automatic).toEqual({ waits: '0.14.0 is a minor release, and Automatic takes patch releases only.' });
   });
 
-  it('lets an admin change AUGUR’s record, refuses a bad one, keeps the history and audits it', async () => {
+  it('lets a deployment admin change AUGUR’s record, refuses a bad one, keeps the history and audits it', async () => {
     const { app, entries } = await server([release('0.14.0'), release('0.13.0')], SUNDAY_2AM);
-    const set = (payload: Record<string, unknown>, headers = admin) => app.inject({ method: 'PUT', url: '/v1/platform/units/augur/desired-state', headers, payload });
+    const set = (payload: Record<string, unknown>, headers = deployer) => app.inject({ method: 'PUT', url: '/v1/platform/units/augur/desired-state', headers, payload });
     const record = { channel: 'stable', policy: 'automatic', automaticUpTo: 'minor', windows: [{ day: 0, start: '02:00', hours: 3 }], pin: '0.x' };
     expect((await set(record, editor)).statusCode).toBe(403);
+    // An organisation admin alone doesn't decide what the server runs (ADR 0022).
+    expect((await set(record, admin)).json()).toMatchObject({ error: 'forbidden', requiredRole: 'deployment-admin' });
     expect((await set({ ...record, channel: 'beta' })).json().message).toBe('AUGUR follows stable releases, set by RELEASE_CHANNEL in .env (docs/upgrade.md). Change it there.');
     expect((await set({ ...record, pin: 'latest' })).json().message).toBe('“latest” isn’t a version range. Use one such as 0.13.x or ^1.2.0.');
-    expect((await app.inject({ method: 'PUT', url: '/v1/platform/units/nothing/desired-state', headers: admin, payload: record })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'PUT', url: '/v1/platform/units/nothing/desired-state', headers: deployer, payload: record })).statusCode).toBe(404);
 
     const view = (await set(record)).json();
     expect(view.units[0]).toMatchObject({ desired: { automaticUpTo: 'minor', pin: '0.x', setBy: 'u-1', isDefault: false }, automatic: { takes: '0.14.0' } });
