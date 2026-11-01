@@ -20,7 +20,7 @@ nav:
   - "Artifacts: a guide for people and admins": folio.md
   - "Mandate: intent": mandate.md
   - Mirroring AUGUR releases: mirror.md
-  - "Release channels: dev, preview, production": release-channels.md
+  - "Release channels: one branch, three rings": release-channels.md
   - Shell principles: shell-principles.md
   - Ship an app: ship-an-app.md
   - Signed caller: signed-caller.md
