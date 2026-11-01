@@ -137,7 +137,11 @@ kept() {
 
 up() { pc up -d --no-build --remove-orphans $(services) >&2; }
 
-if [ "${BUILD:-}" = 1 ]; then pc build $(services | grep -vx -e postgres -e backup -e garage -e keycloak -e docker-proxy) >&2; fi
+if [ "${BUILD:-}" = 1 ]; then
+  pc build $(services | grep -vx -e postgres -e backup -e garage -e keycloak -e docker-proxy) >&2
+  # The build cache isn't needed again, and on a CI runner its space is.
+  docker builder prune -af >/dev/null
+fi
 
 case "$mode" in
   fresh)
