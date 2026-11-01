@@ -30,7 +30,7 @@ For a fix that can't wait for what's on `main`: cut `release/<unit>-<major>.<min
 
 ## Signatures
 
-Releases are signed by the Release workflow on the branch it ran on. The updater and the mirror take a signature from `release.yml` on `main` or a `release/<unit>-<major>.<minor>` branch (`releaseIdentity` in `platform/services/updater/src/signers.ts`), and still refuse any other branch or workflow. `preview` and `production` stay on the list for the releases made on them before 0.14, which a deployment may roll back to.
+Releases are signed by the Release workflow on the branch it ran on. The updater and the mirror take a signature from `release.yml` on `main` or a `release/<unit>-<major>.<minor>` branch (`releaseIdentity` in `platform/services/updater/src/signers.ts`), and still refuse any other branch or workflow. `preview` and `production` stay on the list for the releases made on them up to 0.13.0, which a deployment may roll back to.
 
 Dev builds are signed by `augur-dev.yml` (AUGUR) or `app-dev.yml` (apps) on `main`, which the updater takes only for a dev build, and only on the workbench ([AUGUR dev builds](#augur-dev-builds)). `dev` stays on that list until `main` replaces it.
 
@@ -121,4 +121,4 @@ Signed promotion records, clearing old dev builds' images from the registry, and
 ## Once, in GitHub (the repository's owner)
 
 1. Rulesets, if your plan enforces them on a private repository: `main` and `release/*` need a pull request and passing checks, and no force-pushes. On GitHub Free they aren't enforced, and the checks above still hold.
-2. The workbench takes dev builds from `main` from 0.14 on, the first release made there. Until it runs 0.14, it refuses them at their signature check; upgrade it and they install by themselves again.
+2. The workbench takes dev builds from `main` from 0.13.1 on, the first release made there. Until it runs 0.13.1, it refuses them at their signature check; upgrade it and they install by themselves again.

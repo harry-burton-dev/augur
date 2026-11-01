@@ -2,7 +2,7 @@
 
 /**
  * The branches releases are made from (docs/release-channels.md): `main`, and a hotfix's
- * `release/<unit>-<major>.<minor>`. `preview` and `production` made the releases before 0.14, which a
+ * `release/<unit>-<major>.<minor>`. `preview` and `production` made the releases up to 0.13.0, which a
  * deployment may still roll back to.
  */
 export const RELEASE_BRANCHES = ['main', 'preview', 'production'] as const;
