@@ -27,7 +27,7 @@ Load a kit's theme, not these files: `@augur/app-kit/theme.css` in an app, `@aug
 
 ## Controls
 
-The shared controls are React components on React Aria Components, with icons from Lucide. They are `Button`, `IconButton`, `Icon`, `TextField`, `Select`, `Toggle`, `Checkbox`, `CheckboxGroup`, `Heading`, `Dialog`, `Menu` and `Tabs` so far. Load `@augur/kit-common/kit.css` once, after `tokens.css`, for their styles. It holds only the classes the controls use.
+The shared controls are React components on React Aria Components, with icons from Lucide. They are `Button`, `IconButton`, `Icon`, `TextField`, `Select`, `Toggle`, `Checkbox`, `CheckboxGroup`, `Heading`, `Dialog`, `Menu`, `Tabs`, `Choice` and `Segmented` so far. Load `@augur/kit-common/kit.css` once, after `tokens.css`, for their styles. It holds only the classes the controls use.
 
 - A disabled control can carry a `reason`. It then stays focusable and shows the reason on hover and focus, so that nothing unavailable is left unexplained (docs/shell-principles.md). In development, a disabled control with no reason logs a warning.
 - `Button` kinds are `primary`, `secondary`, `quiet` and `danger`. A `danger` button arms on the first press and acts on the second, and Esc or moving away disarms it. `busy` shows progress with a `busyLabel`, and `once` stops a second press.

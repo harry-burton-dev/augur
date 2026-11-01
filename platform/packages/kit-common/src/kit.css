@@ -366,6 +366,36 @@
   .augur-tab-panel { outline: none; }
   .augur-tab-panel[data-focus-visible] { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
   .augur-tab-why { margin: 0; max-width: var(--measure-prose); color: var(--ink-muted); }
+
+  /* Choice: two to four options, each with a line. The chosen one fills with green. */
+  .augur-choices { display: grid; gap: var(--space-2); }
+  .augur-choice {
+    display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3); padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--hairline); border-radius: var(--radius-inset); cursor: pointer;
+    transition: border-color var(--motion-base) var(--ease-standard), background var(--motion-base) var(--ease-standard);
+  }
+  .augur-choice[data-hovered] { border-color: var(--hairline-strong); }
+  .augur-choice[data-selected] { border-color: color-mix(in srgb, var(--green) 55%, transparent); background: color-mix(in srgb, var(--green) 6%, transparent); }
+  .augur-choice[data-focus-visible] { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+  .augur-choice[data-disabled] { cursor: default; }
+  .augur-choice[data-disabled] .augur-choice-dot, .augur-choice[data-disabled] .augur-choice-label { opacity: 0.4; }
+  .augur-choice[data-readonly] { cursor: default; }
+  .augur-choice-dot { grid-row: span 2; width: 16px; height: 16px; margin-top: 4px; border-radius: 50%; border: var(--focus-ring) solid var(--ink-muted); }
+  .augur-choice[data-selected] .augur-choice-dot { border-color: var(--green); background: var(--green); box-shadow: inset 0 0 0 3px var(--slate-deep); }
+  .augur-choice-label { font-size: var(--type-body); line-height: var(--leading-body); color: var(--ink); }
+  .augur-choice-detail { font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
+
+  /* Segmented: ways of seeing the same thing. */
+  .augur-segmented { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--radius-pill); background: var(--surface-inset); border: 1px solid var(--hairline); }
+  .augur-segment {
+    display: inline-flex; align-items: center; gap: var(--space-2); min-height: 28px; padding: var(--space-1) var(--space-3);
+    border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--ink-muted);
+    font: inherit; font-size: var(--type-meta); line-height: var(--leading-meta); cursor: pointer; outline: none;
+    transition: background var(--motion-base) var(--ease-standard), color var(--motion-base) var(--ease-standard);
+  }
+  .augur-segment[data-hovered] { color: var(--ink); }
+  .augur-segment[data-selected] { background: var(--surface-raised); color: var(--light); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+  .augur-segment[data-focus-visible] { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
 }
 
 @keyframes augur-spin { to { transform: rotate(1turn); } }
