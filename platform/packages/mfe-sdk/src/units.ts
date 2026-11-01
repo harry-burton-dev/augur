@@ -1,4 +1,5 @@
 import type { Intent, MountContext } from './contract.js';
+import { isMarkingOrNone, type Marking } from './refs.js';
 
 /**
  * The standard unit intent (SDK 1.8). A unit is one place in a floor's library,
@@ -23,6 +24,8 @@ export interface UnitRef {
   level: UnitLevel;
   /** What it was called when the reference was made, so the asking app can show it before opening it. */
   name: string;
+  /** Reserved (SDK 1.10, ADR 0029): a protective marking, kept as found and never enforced yet. */
+  marking?: Marking;
 }
 
 const text = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 && v.length <= max;
@@ -31,7 +34,7 @@ const text = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 
 export const isUnitRef = (v: unknown): v is UnitRef => {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
-  return r.kind === 'unit' && text(r.app, 40) && text(r.id, 200) && (UNIT_LEVELS as readonly unknown[]).includes(r.level) && text(r.name, 300);
+  return r.kind === 'unit' && text(r.app, 40) && text(r.id, 200) && (UNIT_LEVELS as readonly unknown[]).includes(r.level) && text(r.name, 300) && isMarkingOrNone(r.marking);
 };
 
 /** Opens a unit in whichever app handles `unit.open`: the place, or the file, as the person may see it. */
