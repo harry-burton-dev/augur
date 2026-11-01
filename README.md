@@ -25,7 +25,10 @@ platform/                 everything the platform owns; never imports from apps/
     home/                 Home, the landing app
     admin/                Admin screens
   packages/
-    ui-kit/               design tokens + Lit web components (and Storybook)
+    kit-common/           Common: the design tokens, the Tailwind theme, parts both kits share
+    app-kit/              Quill: the React kit apps build with
+    shell-kit/            Aerie: the shell's own React kit
+    ui-kit/               the Lit web components, frozen until SDK 2 (and Storybook)
     mfe-sdk/              the contract between shell and apps
     service-kit/          helpers every backend service uses
     records/              the rules every app's records share (levels, lifecycle, access, tags, links, publishing up)
@@ -66,7 +69,9 @@ Home and Admin are built like any app: one ES module the shell imports.
 
 | Package | Purpose |
 | --- | --- |
-| `@augur/ui-kit` | Every visual. Tokens come from `tokens/*.tokens.json` (common, shell and app; the only files to edit; `pnpm --filter @augur/ui-kit tokens` regenerates the rest). Storybook: `pnpm --filter @augur/ui-kit storybook`. |
+| `@augur/kit-common` | Common (ADR 0015). Tokens come from `tokens/*.tokens.json` (common, shell and app; the only files to edit; `pnpm --filter @augur/kit-common tokens` regenerates the rest, the Tailwind theme included). |
+| `@augur/app-kit`, `@augur/shell-kit` | Quill, the React kit apps build with, and Aerie, the shell's own. Only the shell may import Aerie. |
+| `@augur/ui-kit` | The Lit components every screen uses today, frozen until SDK 2. Storybook: `pnpm --filter @augur/ui-kit storybook`, and hosted on Chromatic from `main` (ADR 0016). |
 | `@augur/mfe-sdk` | What an app gets from the shell: `defineMicroFrontend`, the mount context (`ctx.person`, `ctx.workspace`, `ctx.fetch`, `notify`, `raise`/`request` intents, event bus), and the manifest types. Breaking it breaks apps, so it is versioned carefully. |
 | `@augur/service-kit` | For backend services: read the caller the gateway verified, sign in as the service itself, register an app, send notifications and audit entries, check floors and grants, logging. |
 | `@augur/records` | The rules every app's records share, for services and frontends alike: levels a tree is built from, lifecycles, read/edit/manage down a tree, tags, relationships, and publishing up the floors with one owner. See [App patterns](docs/app-patterns.md). |
