@@ -43,6 +43,8 @@ The pull fetches that release's images before anything stops. Each service migra
 
 ## Check
 
+Every release has been through the [deploy test](deploy-test.md) in CI: the release before it is upgraded to it with data, and gone back to. Your server can still differ, so check it yourself too.
+
 - `pc ps` shows each of AUGUR's services as `healthy` about a minute after it starts: Compose asks each one's `/healthz` every 30 seconds. One that stays `unhealthy` or `starting` is the one to look at in `pc logs`.
 - Open **Admin → Status**. Give it a minute: every part should be Running, with the new versions in the Version column.
 - Sign in as yourself and as someone without the admin role, and open an app or two.

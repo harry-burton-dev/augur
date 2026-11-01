@@ -1,0 +1,69 @@
+name: Deploy test
+# Does a new AUGUR release install, upgrade and go back? Once per release, with the images the
+# Release workflow just pushed, so nothing is built twice: a fresh server on the new release, then
+# the release before it upgraded to the new one with its data, then back (docs/deploy-test.md).
+# It boots the stack three times in about five minutes; it never runs on pull requests, to keep CI
+# minutes down. Run it by hand from Actions to try any two releases.
+on:
+  workflow_call:
+    inputs:
+      to:
+        description: The AUGUR release to test
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      to:
+        description: The AUGUR release to test, such as 0.14.0 (default the newest)
+        required: false
+      from:
+        description: The release to upgrade from (default the one before it, dev builds aside)
+        required: false
+concurrency: deploy-test-${{ inputs.to || github.sha }}
+permissions:
+  contents: read
+  packages: read
+jobs:
+  deploy-test:
+    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Which releases
+        id: releases
+        run: |
+          # Newest first, dev builds aside.
+          list=$(gh release list --limit 100 --json tagName --jq '[.[].tagName | select(startswith("augur@") and (contains("-dev.") | not)) | ltrimstr("augur@")]')
+          to=${TO:-$(jq -r '.[0]' <<<"$list")}
+          from=${FROM:-$(jq -r --arg to "$to" 'index($to) as $i | if $i == null then empty else .[$i + 1] // empty end' <<<"$list")}
+          echo "to=$to" >> "$GITHUB_OUTPUT"
+          echo "from=$from" >> "$GITHUB_OUTPUT"
+          echo "Deploy test of augur@$to, upgrading from ${from:+augur@}${from:-nothing}" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          TO: ${{ inputs.to }}
+          FROM: ${{ inputs.from }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The release's own deploy files, as a server that checked out its tag has them.
+      - name: Check out the release
+        run: |
+          git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
+          git checkout -q "augur@$TO"
+          # The test script is this workflow's, so an older release is tested the same way.
+          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh
+        env:
+          TO: ${{ steps.releases.outputs.to }}
+      - name: A fresh server
+        run: infra/deploy-test.sh fresh
+        env:
+          LOCAL_TAG: ${{ steps.releases.outputs.to }}
+      - name: Upgrade from the release before, then back
+        if: steps.releases.outputs.from != ''
+        run: infra/deploy-test.sh upgrade "$FROM"
+        env:
+          FROM: ${{ steps.releases.outputs.from }}
+          LOCAL_TAG: ${{ steps.releases.outputs.to }}
