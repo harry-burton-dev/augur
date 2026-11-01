@@ -11,7 +11,7 @@ nav:
   - Previews of pull requests: app-previews.md
   - App storage: app-storage.md
   - Data Atlas: atlas.md
-  - Auspex: auspex.md
+  - Explorer: auspex.md
   - Build an app: build-an-app.md
   - The catalog: catalog.md
   - Running AUGUR on your own server: deploy.md
@@ -57,3 +57,4 @@ nav:
       - 0028. Discussion starts inside Intent behind a ref-keyed API: decisions/0028-discussion-starts-in-intent.md
       - 0029. The SDK reserves a working context and a protective marking now: decisions/0029-reserve-focus-and-marking.md
       - 0030. The Upgrade Centre is its own platform frontend, released with AUGUR: decisions/0030-upgrade-centre-platform-frontend.md
+      - 0032. Apps that ship with AUGUR are platform apps or pillar apps: decisions/0032-platform-apps-and-pillar-apps.md
