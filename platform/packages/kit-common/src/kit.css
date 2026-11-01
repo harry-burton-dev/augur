@@ -11,6 +11,8 @@
 
 @layer components {
   /* Buttons: one shape, five kinds. */
+  /* No browser button look: each kind draws its own. */
+  .augur-button, .augur-icon-button { margin: 0; padding: 0; border: 0; background: transparent; }
   .augur-button {
     min-height: var(--target-md);
     color: var(--ink);
