@@ -20,5 +20,7 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0012](0012-apps-in-own-repositories.md) | Every app lives in its own repository, and pillar apps are default-installed apps | Accepted | 2026-11-01 |
 | [0013](0013-versions-and-releases.md) | One AUGUR version for deployments, and GitHub releases only for AUGUR and apps | Accepted | 2026-11-01 |
 | [0014](0014-agent-runtime.md) | Agents are apps, run by a durable runs service on DBOS | Proposed | 2026-10-24 |
+| [0015](0015-react-kits-tailwind.md) | Frontends are React, with a shell kit and an app kit on one common base, styled with Tailwind | Proposed | 2026-11-01 |
+| [0016](0016-storybook-on-chromatic.md) | The kits' Storybook is hosted on Chromatic | Proposed | 2026-11-01 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.
