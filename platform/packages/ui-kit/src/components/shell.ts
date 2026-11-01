@@ -508,14 +508,23 @@ export class UiShell extends LitElement {
    */
   private afterCard(box: HTMLElement, comeIn: () => Promise<void>): Promise<void> {
     if (!this.card) {
-      box.style.removeProperty('opacity');
+      this.behindCard(box, false);
       return comeIn();
     }
-    box.style.opacity = '0';
+    this.behindCard(box, true);
     return this.cardGone().then(() => {
-      box.style.removeProperty('opacity');
+      this.behindCard(box, false);
       return comeIn();
     });
+  }
+
+  /** Whether the stage waits unseen behind a title card. Nothing unseen can be pressed, so it is inert until it comes in. */
+  private hiddenByCard = false;
+  private behindCard(box: HTMLElement, hidden: boolean) {
+    this.hiddenByCard = hidden;
+    if (hidden) box.style.opacity = '0';
+    else box.style.removeProperty('opacity');
+    box.inert = this.isOpen || hidden;
   }
 
   /** Resolves once no card is showing: a card that replaces another waits for that one too. */
@@ -657,7 +666,7 @@ export class UiShell extends LitElement {
   override async updated(changed: Map<string, unknown>) {
     if (changed.has('notifications') || changed.has('muted')) this.emit('ui-notifications', { notifications: this.notifications, muted: this.muted });
     const stage = this.renderRoot.querySelector<HTMLElement>('.stage');
-    if (stage) stage.inert = this.isOpen;
+    if (stage) stage.inert = this.isOpen || this.hiddenByCard;
     if (changed.has('isOpen') && this.isOpen && !this.view) {
       await this.updateComplete;
       this.focusDome(this.focusIndex);

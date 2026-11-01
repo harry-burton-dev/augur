@@ -1,6 +1,6 @@
 # 0004. The UI kit is Lit web components, with one tokens file and Lucide icons
 
-- **Status:** Accepted
+- **Status:** Superseded by [0015](0015-react-kits-tailwind.md)
 - **Date:** 2026-10-17
 - **Decided by:** Harry
 

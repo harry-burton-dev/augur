@@ -1,0 +1,15 @@
+{
+  "$description": "Quill, the app kit: the rail and drawer every app frame is built from. Edit tokens here only; scripts/build-tokens.mjs generates everything else.",
+  "structure": {
+    "measure-rail": {
+      "$value": "240px",
+      "$type": "dimension",
+      "$description": "An app's side rail (ui-app-frame): its sections and one action. Between the widths Artifacts and Mandate had chosen by hand."
+    },
+    "measure-drawer": {
+      "$value": "320px",
+      "$type": "dimension",
+      "$description": "An app's right drawer (ui-app-frame): what can be done with what's on screen, its filters and its settings."
+    }
+  }
+}

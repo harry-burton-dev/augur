@@ -1,5 +1,12 @@
 /* Foundation classes. Load tokens.css first. */
-@import url('https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500&family=Nunito:wght@400;600&display=swap');
+/* The kit's typefaces are served by AUGUR itself (Fontsource), so a deployment with no internet still shows them. */
+@import '@fontsource/jost/200.css';
+@import '@fontsource/jost/300.css';
+@import '@fontsource/jost/400.css';
+@import '@fontsource/jost/500.css';
+@import '@fontsource/jost/600.css';
+@import '@fontsource/nunito/400.css';
+@import '@fontsource/nunito/600.css';
 
 .w-ground {
   min-height: 100vh;

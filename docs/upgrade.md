@@ -92,6 +92,10 @@ To take a deployment's access away, delete its token in the account's **Settings
 
 A deployment that pulls from a mirror ([mirror.md](mirror.md)) has no use for a read key: its feed and images are in your own registry.
 
+### Auspex is called Explorer
+
+Auspex now shows as **Explorer**, a platform app. Its container, `.env` name (`AUSPEX_CLIENT_SECRET`), sign-in and address (`/auspex`) haven't changed, so there's nothing to do.
+
 ### Server rings
 
 A new required setting, `SERVER_RING`: `preview` on the server that runs what's on its way to production, `production` on every other (docs/release-channels.md). **Upgrade to …** has a field for it. A production server follows stable releases only, and runs no pull requests' builds unless `ALLOW_PR_PREVIEWS=on`.
