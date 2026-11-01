@@ -344,10 +344,28 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
           BEFORE: ${{ github.event.before }}
-      - name: No dependencies with known vulnerabilities (OSV-Scanner)
+      # Every vulnerability found is listed in the run's summary. Only ones this change brings in fail
+      # it: the ones already on the base branch are Renovate's to fix (its weekly PRs), not this PR's.
+      - name: No new dependencies with known vulnerabilities (OSV-Scanner)
         run: |
-          docker run --rm -v "$PWD:/src" -w /src ghcr.io/google/osv-scanner:v2.0.2 \
-            scan source --config=osv-scanner.toml -L pnpm-lock.yaml
+          ids() { jq -r '[.results[]?.packages[]? | .package as $p | .vulnerabilities[]? | "\($p.name)@\($p.version) \(.id)"] | unique | .[]'; }
+          mkdir -p "$RUNNER_TEMP/base"
+          base=${BASE_REF:+origin/$BASE_REF}
+          git show "${base:-HEAD~1}:pnpm-lock.yaml" > "$RUNNER_TEMP/base/pnpm-lock.yaml"
+          cp osv-scanner.toml "$RUNNER_TEMP/osv-scanner.toml"
+          osv() { docker run --rm -v "$1:/src:ro" -v "$RUNNER_TEMP/osv-scanner.toml:/cfg/osv-scanner.toml:ro" -w /src ghcr.io/google/osv-scanner:v2.0.2 scan source --config=/cfg/osv-scanner.toml -L pnpm-lock.yaml --format json 2>/dev/null || true; }
+          osv "$PWD" > "$RUNNER_TEMP/now.json"
+          osv "$RUNNER_TEMP/base" > "$RUNNER_TEMP/before.json"
+          # A scan that didn't run is a failure, not a clean result.
+          jq -e '.results' "$RUNNER_TEMP/now.json" "$RUNNER_TEMP/before.json" > /dev/null
+          ids < "$RUNNER_TEMP/now.json" > "$RUNNER_TEMP/now.txt"
+          ids < "$RUNNER_TEMP/before.json" > "$RUNNER_TEMP/before.txt"
+          { echo "### Known vulnerabilities in dependencies: $(wc -l < "$RUNNER_TEMP/now.txt")"; sed 's/^/- /' "$RUNNER_TEMP/now.txt"; } >> "$GITHUB_STEP_SUMMARY"
+          new=$(comm -23 <(sort "$RUNNER_TEMP/now.txt") <(sort "$RUNNER_TEMP/before.txt"))
+          if [ -n "$new" ]; then echo "This change brings in:"; echo "$new"; exit 1; fi
+          echo "Nothing new: $(wc -l < "$RUNNER_TEMP/now.txt") known, all already on the base branch."
+        env:
+          BASE_REF: ${{ github.base_ref }}
   deploy-images:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
