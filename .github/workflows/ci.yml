@@ -104,8 +104,8 @@ jobs:
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
 
-  # The kits' Storybook, published to Chromatic (ADR 0016): from every push to main, and from pull
-  # requests that touch a kit. Chromatic hosts each build, links it from the pull request, and shows
+  # The kits' Storybook, published to Chromatic (ADR 0016), only when a kit's code, tokens or stories
+  # change: on a pull request, or on the push to main that brings the change in. Chromatic hosts each build, links it from the pull request, and shows
   # what looks different there to accept or deny. TurboSnap (--only-changed) snapshots only the
   # stories whose code changed, to stay inside the free tier. The job still reports when it has
   # nothing to do, so it can be a required check.
@@ -118,17 +118,21 @@ jobs:
       - name: Should the Storybook be published?
         id: kits
         run: |
+          # A pull request against where it left main; a push to main against the push before it.
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then range="origin/$BASE...HEAD"; else range="$BEFORE..HEAD"; fi
           if [ -z "$CHROMATIC_PROJECT_TOKEN" ]; then
             echo "::notice title=Storybook not published::The CHROMATIC_PROJECT_TOKEN repository secret isn't set, so nothing goes to Chromatic. A repository admin adds it in Settings, Secrets and variables, Actions (ADR 0016)."
-          elif [ "$GITHUB_EVENT_NAME" != pull_request ] || ! git diff --quiet "origin/$BASE..." -- \
-              platform/packages/ui-kit platform/packages/kit-common platform/packages/app-kit platform/packages/shell-kit \
-              pnpm-lock.yaml .github/workflows/ci.yml; then
+          elif ! git rev-parse -q --verify "${range%%..*}^{commit}" >/dev/null || ! git diff --quiet "$range" -- \
+              platform/packages/ui-kit/src platform/packages/ui-kit/.storybook \
+              platform/packages/kit-common/src platform/packages/kit-common/tokens \
+              platform/packages/app-kit/src platform/packages/shell-kit/src; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            echo "No kit changed: Chromatic keeps main's Storybook."
+            echo "No kit or story changed: Chromatic keeps the Storybook it has."
           fi
         env:
           BASE: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
       - if: steps.kits.outputs.run == 'true'
         uses: pnpm/action-setup@v4
