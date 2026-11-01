@@ -18,7 +18,7 @@
     "sync:migrations": "node scripts/check-migrations.mjs sync",
     "test:scripts": "node --test scripts/*.test.mjs",
     "changeset": "changeset",
-    "version-packages": "changeset version && node scripts/versions.mjs sync && node scripts/augur-release.mjs version",
+    "version-packages": "changeset version && node scripts/versions.mjs sync && node scripts/augur-release.mjs version && node scripts/catalog.mjs",
     "release": "changeset tag",
     "check:manifest": "node scripts/check-manifests.mjs",
     "create-app": "node scripts/create-app.mjs",
