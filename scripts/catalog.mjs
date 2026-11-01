@@ -241,6 +241,13 @@ files['catalog/all.yaml'] = doc([
 // TechDocs: every guide in docs/, in one site on the platform system.
 const guides = readdirSync(join(root, 'docs')).filter((f) => f.endsWith('.md')).sort();
 const titleOf = (f) => (read(`docs/${f}`).match(/^#\s+(.+)$/m)?.[1] ?? f.replace('.md', '')).trim();
+// Decision records (docs/decisions/, ADR 0001): the index first, then each record in number order.
+const decisions = existsSync(join(root, 'docs/decisions'))
+  ? readdirSync(join(root, 'docs/decisions')).filter((f) => /^\d{4}-.+\.md$/.test(f)).sort()
+  : [];
+const decisionsNav = decisions.length
+  ? [{ Decisions: [{ Index: 'decisions/README.md' }, ...decisions.map((f) => ({ [titleOf(`decisions/${f}`)]: `decisions/${f}` }))] }]
+  : [];
 files['mkdocs.yml'] =
   HEADER +
   stringify(
@@ -250,7 +257,7 @@ files['mkdocs.yml'] =
       repo_url: `https://github.com/${REPO}`,
       edit_uri: 'edit/dev/docs/',
       plugins: ['techdocs-core'],
-      nav: guides.map((f) => ({ [titleOf(f)]: f })),
+      nav: [...guides.map((f) => ({ [titleOf(f)]: f })), ...decisionsNav],
     },
     { lineWidth: 0 },
   );
