@@ -274,7 +274,10 @@ describe('the Updates page', () => {
 
 describe('upgrading', () => {
   const images = { registry: 'ghcr.io/o/r/registry@sha256:aa', web: 'ghcr.io/o/r/web@sha256:bb' };
-  const fresh = (at = new Date()) => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'], signedInAt: at.toISOString() });
+  const fresh = (at = new Date()) => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: at.toISOString() });
+  // An admin who runs the organisation but not the server (ADR 0022).
+  const orgAdmin = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['admin'], signedInAt: new Date().toISOString() });
+  const deployer = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'] });
   const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
     const m = /^Bearer platform-(\S+)$/.exec(String(headers.authorization ?? ''));
     return m ? { kind: 'platform' as const, name: m[1] } : undefined;
@@ -296,9 +299,10 @@ describe('upgrading', () => {
     const ask = (headers: Record<string, string>, version: string) => server.inject({ method: 'PUT', url: '/v1/platform/go-back', headers, payload: { version } });
     const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
     expect(page.goBack.map((t: { version: string; problem?: string }) => [t.version, !t.problem])).toEqual([['0.3.0', true], ['0.2.0', true], ['0.1.0', false]]);
-    expect((await ask(admin, '0.3.0')).json()).toMatchObject({ error: 'sign_in_again' });
+    expect((await ask(deployer, '0.3.0')).json()).toMatchObject({ error: 'sign_in_again' });
     expect((await ask(fresh(), '0.1.0')).json().message).toContain('restore the backup taken before upgrading to 0.2.0');
     expect((await ask(fresh(), '0.9.0')).statusCode).toBe(409);
+    expect((await ask(orgAdmin, '0.3.0')).statusCode).toBe(403);
     expect((await ask(fresh(), '0.3.0')).statusCode).toBe(202);
     const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
     expect(target).toMatchObject({ from: '0.4.0', version: '0.3.0', images });
@@ -310,7 +314,8 @@ describe('upgrading', () => {
     const { server } = await setup();
     const ask = (headers: Record<string, string>, version = '0.3.0') => server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers, payload: { version } });
     expect((await ask(editor)).statusCode).toBe(403);
-    expect((await ask(admin)).json()).toMatchObject({ error: 'sign_in_again' });
+    expect((await ask(orgAdmin)).json()).toMatchObject({ error: 'forbidden', requiredRole: 'deployment-admin' });
+    expect((await ask(deployer)).json()).toMatchObject({ error: 'sign_in_again' });
     expect((await ask(fresh(new Date(Date.now() - 11 * 60_000)))).statusCode).toBe(401);
     expect((await ask(fresh(), '0.9.0')).json().message).toBe('Upgrade to 0.3.0 next, not 0.9.0.');
     const asked = await ask(fresh());
@@ -331,7 +336,7 @@ describe('upgrading', () => {
 
     const report = (payload: Record<string, unknown>) => server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, ...payload } });
     expect((await report({ step: 'preflight', state: 'done' })).json()).toMatchObject({ state: 'running' });
-    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).statusCode).toBe(409);
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: deployer })).statusCode).toBe(409);
     await report({ step: 'roll-forward', state: 'failed', message: 'identity didn’t get ready in 120 s' });
     const ended = (await report({ step: 'roll-back', state: 'done', outcome: 'rolled-back', message: 'Back on 0.2.0: identity didn’t get ready in 120 s' })).json();
     expect(ended).toMatchObject({ state: 'rolled-back', message: 'Back on 0.2.0: identity didn’t get ready in 120 s' });
@@ -375,15 +380,15 @@ describe('upgrading', () => {
     const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
     expect(page.history[0]).toMatchObject({ requestedBy: 'automatic', version: '0.2.1-dev.48' });
     // Taken back by an admin, it isn't asked for again.
-    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).statusCode).toBe(200);
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: deployer })).statusCode).toBe(200);
     expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
   });
 
   it('lets an admin take back an upgrade nothing has started', async () => {
     const { server, entries } = await setup();
-    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).statusCode).toBe(404);
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: deployer })).statusCode).toBe(404);
     await server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0' } });
-    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: admin })).json().upgrade.state).toBe('cancelled');
+    expect((await server.inject({ method: 'DELETE', url: '/v1/platform/upgrade', headers: deployer })).json().upgrade.state).toBe('cancelled');
     expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
     expect(entries.map((e) => e.action)).toEqual(['platform.upgrade-requested', 'platform.upgrade-cancelled']);
   });
