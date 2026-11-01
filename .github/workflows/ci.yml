@@ -18,7 +18,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   # Turbo's cache outside the checkout, which checkout cleans, so a task whose inputs haven't
-  # changed since an earlier run on the runner replays instead of running. Main runs every task.
+  # changed since an earlier run replays instead of running: kept on our own runner's volume, or in
+  # GitHub's cache on hosted runners (build-test and contract). Pushes run every task.
   TURBO_CACHE_DIR: /home/runner/.cache/turbo
   TURBO_FORCE: ${{ github.event_name == 'push' }}
 jobs:
@@ -49,6 +50,17 @@ jobs:
           node-version-file: .nvmrc
           cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
+      # On GitHub's runners the turbo cache starts empty, so every task ran every time. Keep it in
+      # GitHub's cache instead: restored from this branch's (or its base's) last run, entries older
+      # than a week dropped, saved again under this commit.
+      - if: runner.environment == 'github-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TURBO_CACHE_DIR }}
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
+      - if: runner.environment == 'github-hosted'
+        run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
       - run: pnpm check:boundaries
       - run: pnpm check:reasons
       - run: pnpm check:versions
@@ -215,26 +227,63 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }} # Playwright 1.56 has no browsers for ubuntu-latest (26.04) yet
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+        with:
+          fetch-depth: 0
+      # The longest job (about 5 minutes), and only the shell, Home, the shared packages, Folio
+      # (which it mounts) or the tests themselves can break the promise it checks. On a pull request
+      # that changes none of them (nor the root package, the lockfile or this workflow) it stops
+      # here; pushes run it always.
+      # The job still reports, so it can stay a required check.
+      - name: Could this change break apps in the shell?
+        id: shell
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] || ! git diff --quiet "origin/$BASE..." -- \
+              platform/frontends platform/packages platform/contract \
+              apps/folio package.json pnpm-lock.yaml .github/workflows/ci.yml; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing the contract tests cover changed: nothing to test here."
+          fi
+        env:
+          BASE: ${{ github.base_ref }}
+      - if: steps.shell.outputs.run == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.shell.outputs.run == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
+      - if: steps.shell.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+      # On GitHub's runners the turbo cache starts empty, so every task ran every time. Keep it in
+      # GitHub's cache instead: restored from this branch's (or its base's) last run, entries older
+      # than a week dropped, saved again under this commit.
+      - if: steps.shell.outputs.run == 'true' && runner.environment == 'github-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TURBO_CACHE_DIR }}
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
+      - if: steps.shell.outputs.run == 'true' && runner.environment == 'github-hosted'
+        run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
+      - if: steps.shell.outputs.run == 'true'
+        run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
       # The browser is cached by Playwright version. No --with-deps: the runner image
       # already has Chrome's system libraries, and apt-get was the slow, uneven part
       # (half a minute on a good day, twelve on a bad one).
       - name: Playwright version
+        if: steps.shell.outputs.run == 'true'
         id: playwright
         run: echo "version=$(pnpm --filter @augur/contract-tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - if: runner.environment == 'github-hosted'
+      - if: steps.shell.outputs.run == 'true' && runner.environment == 'github-hosted'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
-      - run: pnpm --filter @augur/contract-tests exec playwright install --only-shell chromium
-      - run: pnpm --filter @augur/contract-tests test:contract
+      - if: steps.shell.outputs.run == 'true'
+        run: pnpm --filter @augur/contract-tests exec playwright install --only-shell chromium
+      - if: steps.shell.outputs.run == 'true'
+        run: pnpm --filter @augur/contract-tests test:contract
 
   # The server setup in infra/deploy: the compose file is valid and the images build.
   deploy-images:
