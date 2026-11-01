@@ -3,11 +3,11 @@
 - **Status:** Proposed
 - **Date:** 2026-11-01
 - **Decided by:** Harry
-- **Replaces:** none (amends the pillar list in [0012](0012-apps-in-own-repositories.md))
+- **Replaces:** none (amends the pillar list in [0012](0012-apps-in-own-repositories.md), and narrows "platform apps" in the handbook's PDR-008)
 
 ## Context
 
-Every app that ships with AUGUR is called a pillar app today, whatever it is for: Artifacts, Mandate and Data Atlas, which hold the organisation's work, and Auspex, which shows people where they are on AUGUR and why they can or can't use things. Home, Admin and the Upgrade Centre ([0030](0030-upgrade-centre-platform-frontend.md)) are platform frontends with no category at all. Harry asked for Auspex to be renamed Explorer and called a platform app: pillar apps are the foundation of what AUGUR produces, platform apps are for using and managing AUGUR itself.
+Every app that ships with AUGUR is called a pillar app today, whatever it is for: Artifacts, Mandate and Data Atlas, which hold the organisation's work, and Auspex, which shows people where they are on AUGUR and why they can or can't use things. Home, Admin and the Upgrade Centre ([0030](0030-upgrade-centre-platform-frontend.md)) are platform frontends with no category at all. The handbook's PDR-008 used "platform apps" loosely, for every supporting app that produces no business output, Data Atlas included. Harry asked for Auspex to be renamed Explorer and called a platform app: pillar apps are the foundation of what AUGUR produces, platform apps are for using and managing AUGUR itself.
 
 ## Options
 
@@ -30,6 +30,7 @@ Auspex is shown to people as **Explorer**. Like Folio shown as Artifacts, its co
 
 - People read the name from the manifest (`"name": "Explorer"`); Explorer's screens take it from there, so a later rename is one line.
 - The category becomes data in a follow-up: an optional manifest field `category` (`platform` or `pillar`, SDK minor), the registry's own platform apps counted as `platform`, and Admin, Apps showing it. Until then it lives in the docs.
+- PDR-008's "platform apps" now means this narrower set; Data Atlas is a pillar app.
 - A new shipped app has to say which kind it is, in its ADR or plan.
 - Renaming the persisted `auspex` ids, or `PILLAR_APPS`, would need an alias and an upgrade note in docs/upgrade.md; this record chooses not to.
 
