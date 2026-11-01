@@ -52,7 +52,9 @@ if (!PLATFORM_DIR) throw new Error('PLATFORM_DIR is not set: the updater needs t
 /** Who signs AUGUR's dev builds, which only a dev server runs: the dev builds workflow on dev, in the same repository. */
 const AUGUR_DEV_SIGNER = setting('AUGUR_DEV_SIGNER', augurDevIdentity('harry-burton-dev/im-platform'));
 const signer = { identity: IMAGE_SIGNER, issuer: setting('IMAGE_SIGNER_ISSUER', GITHUB_ISSUER) };
-const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer });
+// The watch after an upgrade checks the sign-in realm answers, as the updater reaches it inside Docker.
+const signInUrl = setting('OIDC_INTERNAL_URL') || setting('OIDC_ISSUER') || undefined;
+const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl });
 
 if (process.argv[2] === 'replace') {
   // Lets the updater that started this finish saying how the upgrade went first.

@@ -53,7 +53,7 @@ export interface GoBackTarget {
 export type JobState = 'requested' | 'running' | 'done' | 'rolled-back' | 'failed' | 'cancelled';
 
 export interface UpgradeStep {
-  step: 'preflight' | 'backup' | 'pull' | 'roll-forward' | 'verify' | 'roll-back';
+  step: 'preflight' | 'backup' | 'pull' | 'roll-forward' | 'verify' | 'watch' | 'roll-back';
   state: 'running' | 'done' | 'failed';
   at: string;
   message?: string;
