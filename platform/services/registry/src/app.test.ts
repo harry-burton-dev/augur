@@ -41,7 +41,7 @@ describe('registry', () => {
     const app = await buildApp({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, requiredRole: 'admin' } });
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).toEqual(['home']);
-    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'admin', 'library']);
+    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'admin', 'upgrades', 'library']);
   });
 
   it('offers Admin, with its menu, to admins only', async () => {

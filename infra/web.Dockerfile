@@ -8,11 +8,12 @@ COPY . .
 # A path: the shell signs in against Keycloak on whatever address it is served from.
 ENV VITE_OIDC_AUTHORITY=/sso/realms/platform
 RUN pnpm install --frozen-lockfile \
- && pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/admin..." --filter "@apps/folio-frontend..." --filter "@apps/auspex-frontend..." --filter "@apps/atlas-frontend..." build \
+ && pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/admin..." --filter "@augur/upgrades..." --filter "@apps/folio-frontend..." --filter "@apps/auspex-frontend..." --filter "@apps/atlas-frontend..." build \
  && mkdir -p /site/apps \
  && cp -r platform/frontends/shell/dist/. /site/ \
  && cp -r platform/frontends/home/dist /site/apps/home \
  && cp -r platform/frontends/admin/dist /site/apps/admin \
+ && cp -r platform/frontends/upgrades/dist /site/apps/upgrades \
  && cp -r apps/folio/frontend/dist /site/apps/folio \
  && cp -r apps/auspex/frontend/dist /site/apps/auspex \
  && cp -r apps/atlas/frontend/dist /site/apps/atlas \
