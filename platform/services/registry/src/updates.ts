@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
 import { releaseChanges, type Change } from './changes.ts';
+import { checkPublisherFeed, FeedTrustProblem, type FeedSignatureCheck, type FeedTrust } from './feed-trust.ts';
 import { PRODUCTION_ONLY, takesAugurDevBuilds, takesPreview, type Ring } from './ring.ts';
 import type { AppRecord, Upgrade } from './store.ts';
 
@@ -43,6 +44,12 @@ export interface ReleaseManifest {
   changelogs?: Record<string, string>;
 }
 
+/** Why a release was halted (the Halt rollout workflow, ADR 0018): no deployment is offered it. */
+export interface Halt {
+  reason: string;
+  at?: string;
+}
+
 /** One release in the feed. Its manifest is absent when it couldn't be read (or wasn't needed). */
 export interface FeedRelease {
   version: string;
@@ -50,10 +57,27 @@ export interface FeedRelease {
   released?: string;
   notesUrl?: string;
   manifest?: ReleaseManifest;
+  /** Halted by the publisher: never offered, and a deployment running it is told to move. */
+  halted?: Halt;
+}
+
+/** What a read of the feed found: its releases, and whether the feed itself can be trusted. */
+export interface FeedRead {
+  releases: FeedRelease[];
+  trust?: FeedTrust;
 }
 
 /** Where releases are listed. */
-export type ReleaseFeed = (running: string) => Promise<FeedRelease[]>;
+export type ReleaseFeed = (running: string) => Promise<FeedRelease[] | FeedRead>;
+
+/** Ends a reason someone typed with a full stop, so a sentence can follow it. */
+const sentence = (text: string) => (/[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`);
+
+/** A feed entry's `halted`, when it says why. */
+export const haltOf = (x: unknown): Halt | undefined => {
+  const h = (x as { halted?: { reason?: unknown; at?: unknown } } | undefined)?.halted;
+  return h && typeof h.reason === 'string' && h.reason.trim() ? { reason: h.reason, ...(typeof h.at === 'string' ? { at: h.at } : {}) } : undefined;
+};
 
 /** This repo's GitHub releases: the feed every deployment reads unless RELEASE_FEED_URL points at a mirror. */
 export const DEFAULT_FEED_URL = 'https://api.github.com/repos/harry-burton-dev/im-platform/releases?per_page=100';
@@ -97,7 +121,7 @@ export interface GitHubRelease {
 export const feedReader =
   ({ token, key, fetchImpl = (...args) => fetch(...args) }: { token?: string; key?: ReadKey; fetchImpl?: typeof fetch }) =>
   async (target: string, accept: string): Promise<unknown> => {
-    if (target.startsWith('oci:')) return ociFile(target, key, fetchImpl);
+    if (target.startsWith('oci:')) return parseJson((await ociFiles(target, key, fetchImpl)).text);
     if (target.startsWith('file:')) {
       const text = await readFile(fileURLToPath(target), 'utf8').catch(() => {
         throw new FeedProblem(`The release feed file ${fileURLToPath(target)} can’t be read. Check RELEASE_FEED_URL and that it’s mounted (docs/mirror.md).`);
@@ -133,6 +157,38 @@ export const feedReader =
     }) as Promise<unknown>;
   };
 
+/** How the feed itself is checked: the publisher's signature and expiry (ADR 0017). */
+export interface FeedChecking {
+  check?: FeedSignatureCheck;
+  signer?: string;
+  now?: () => Date;
+}
+
+/**
+ * Reads the feed itself, at `target`, and says whether it can be trusted: the publisher's feed on a
+ * container registry must be signed and in date (feed-trust.ts); a mirror's feed is the mirror's own;
+ * GitHub's releases, read directly, aren't signed. A refused feed is a FeedProblem that says why.
+ */
+export const feedSource =
+  ({ token, key, fetchImpl = (...args) => fetch(...args), check, signer, now = () => new Date() }: { token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking) =>
+  async (target: string, accept: string): Promise<{ body: unknown; trust: FeedTrust }> => {
+    if (target.startsWith('oci:')) {
+      const { text, bundle } = await ociFiles(target, key, fetchImpl);
+      try {
+        const trust = await checkPublisherFeed({ text, bundle, check, signer, now: now() });
+        return { body: parseJson(text), trust };
+      } catch (err) {
+        if (err instanceof FeedTrustProblem) throw new FeedProblem(err.message);
+        throw err;
+      }
+    }
+    const body = await feedReader({ token, key, fetchImpl })(target, accept);
+    if (!target.startsWith('file:') && new URL(target).host === 'api.github.com') {
+      return { body, trust: { state: 'unchecked', note: 'This server reads GitHub’s releases directly, which aren’t signed. Give it a read key to read the signed feed instead (docs/upgrade.md, The read key).' } };
+    }
+    return { body, trust: { state: 'mirror', note: 'A mirror’s own feed: the organisation that runs the mirror vouches for the list, and the updater still checks every image’s signature.' } };
+  };
+
 const parseJson = (text: string) => {
   try {
     return JSON.parse(text) as unknown;
@@ -141,12 +197,15 @@ const parseJson = (text: string) => {
   }
 };
 
+/** The feed's signature, as scripts/publish-feed.mjs pushes it beside the feed. */
+const BUNDLE_MEDIA_TYPE = 'application/vnd.dev.sigstore.bundle.v0.3+json';
+
 /**
- * Reads the one file of an OCI artifact, `oci://<registry>/<repository>:<tag>`, as Docker would pull
- * it: a pull token for the repository (with the read key, when there is one), then the tag's manifest,
- * then its first layer.
+ * Reads the feed of an OCI artifact, `oci://<registry>/<repository>:<tag>`, as Docker would pull it: a
+ * pull token for the repository (with the read key, when there is one), then the tag's manifest, then
+ * the feed's layer and, when there is one, its signature's.
  */
-const ociFile = async (target: string, key: ReadKey | undefined, fetchImpl: typeof fetch): Promise<unknown> => {
+const ociFiles = async (target: string, key: ReadKey | undefined, fetchImpl: typeof fetch): Promise<{ text: string; bundle?: string }> => {
   const m = /^oci:\/\/([^/]+)\/(.+):([^:/]+)$/.exec(target);
   if (!m) throw new FeedProblem('The release feed’s address isn’t oci://<registry>/<repository>:<tag>. Check RELEASE_FEED_URL.');
   const [, host, repository, tag] = m;
@@ -174,13 +233,18 @@ const ociFile = async (target: string, key: ReadKey | undefined, fetchImpl: type
   const manifestRes = await call(`https://${host}/v2/${repository}/manifests/${tag}`, { ...auth, accept: 'application/vnd.oci.image.manifest.v1+json' });
   if (manifestRes.status === 401 || manifestRes.status === 403 || manifestRes.status === 404) throw refused(manifestRes.status);
   if (!manifestRes.ok) throw new FeedProblem(`The release feed answered ${manifestRes.status}. Try again later.`);
-  const manifest = (await manifestRes.json().catch(() => ({}))) as { layers?: { digest?: string }[] };
-  const digest = manifest.layers?.[0]?.digest;
+  const manifest = (await manifestRes.json().catch(() => ({}))) as { layers?: { digest?: string; mediaType?: string }[] };
+  const layers = manifest.layers ?? [];
+  const signature = layers.find((l) => l.mediaType === BUNDLE_MEDIA_TYPE);
+  const digest = layers.find((l) => l !== signature)?.digest;
   if (!digest) throw new FeedProblem('The release feed has no file in it. Check RELEASE_FEED_URL.');
-  // The blob is a redirect to storage elsewhere; fetch drops the token on the way.
-  const blobRes = await call(`https://${host}/v2/${repository}/blobs/${digest}`, auth);
-  if (!blobRes.ok) throw new FeedProblem(`The release feed answered ${blobRes.status}. Try again later.`);
-  return parseJson(await blobRes.text());
+  // A blob is a redirect to storage elsewhere; fetch drops the token on the way.
+  const blob = async (d: string) => {
+    const res = await call(`https://${host}/v2/${repository}/blobs/${d}`, auth);
+    if (!res.ok) throw new FeedProblem(`The release feed answered ${res.status}. Try again later.`);
+    return res.text();
+  };
+  return { text: await blob(digest), ...(signature?.digest ? { bundle: await blob(signature.digest) } : {}) };
 };
 
 /**
@@ -190,15 +254,19 @@ const ociFile = async (target: string, key: ReadKey | undefined, fetchImpl: type
  * On GitHub a release marked pre-release is beta; promoting it to stable is unticking that.
  */
 export const releaseFeed =
-  ({ url, token, key, fetchImpl }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch }): ReleaseFeed =>
+  ({ url, token, key, fetchImpl, ...checking }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking): ReleaseFeed =>
   async (running) => {
     const get = feedReader({ token, key, fetchImpl });
-    const body = await get(url, 'application/vnd.github+json, application/json');
+    const { body, trust } = await feedSource({ token, key, fetchImpl, ...checking })(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { releases?: unknown })?.releases) ? (body as { releases: unknown[] }).releases : [];
 
     if (items.some(isManifest)) {
-      // A mirror: the release files themselves.
-      return items.filter(isManifest).map((m) => ({ version: m.version, channel: feedChannel(m.version, m.channel !== 'stable'), released: m.released, ...(m.notesUrl ? { notesUrl: m.notesUrl } : {}), manifest: m }));
+      // The feed, or a mirror's: the release files themselves.
+      const releases = items.filter(isManifest).map((m) => {
+        const halted = haltOf(m);
+        return { version: m.version, channel: feedChannel(m.version, m.channel !== 'stable'), released: m.released, ...(m.notesUrl ? { notesUrl: m.notesUrl } : {}), manifest: m, ...(halted ? { halted } : {}) };
+      });
+      return { releases, trust };
     }
 
     const releases = (items as GitHubRelease[])
@@ -210,16 +278,20 @@ export const releaseFeed =
       ...releases.filter((r) => semver.gte(r.version, running)).slice(0, MANIFESTS_READ + 1),
       ...releases.filter((r) => semver.lt(r.version, running)).slice(0, GO_BACK_LISTED),
     ].map((r) => r.version));
-    return Promise.all(
+    const read = await Promise.all(
       releases.map(async ({ release, version }): Promise<FeedRelease> => {
         const base: FeedRelease = { version, channel: feedChannel(version, release.prerelease), released: release.published_at, notesUrl: release.html_url };
+        // A release the Halt rollout workflow halted carries halted.json.
+        const halted = release.assets?.some((a) => a.name === 'halted.json') ? haltOf({ halted: await get(release.assets.find((a) => a.name === 'halted.json')!.url, 'application/octet-stream').catch(() => ({ reason: 'Halted by the publisher.' })) }) : undefined;
+        const withHalt = halted ? { ...base, halted } : base;
         const asset = release.assets?.find((a) => a.name === 'augur-release.json');
-        if (!wanted.has(version) || !asset) return base;
+        if (!wanted.has(version) || !asset) return withHalt;
         // Asked for as bytes, GitHub redirects to the file; fetch drops the token on the way.
         const manifest = await get(asset.url, 'application/octet-stream').catch(() => undefined);
-        return isManifest(manifest) ? { ...base, manifest } : base;
+        return isManifest(manifest) ? { ...withHalt, manifest } : withHalt;
       }),
     );
+    return { releases: read, trust };
   };
 
 /**
@@ -249,6 +321,8 @@ export interface CheckResult {
   checkedAt?: string;
   problem?: string;
   releases: FeedRelease[];
+  /** Whether the feed the releases came from can be trusted (ADR 0017). */
+  trust?: FeedTrust;
 }
 
 /** Checks the feed once a day and when an admin asks, and keeps what it found. Never restarts anything. */
@@ -295,7 +369,8 @@ export class UpdateChecker {
     const feed = this.feed;
     this.inFlight = (async () => {
       try {
-        this.last = { checkedAt: this.now().toISOString(), releases: await feed(this.running.version) };
+        const read = await feed(this.running.version);
+        this.last = Array.isArray(read) ? { checkedAt: this.now().toISOString(), releases: read } : { checkedAt: this.now().toISOString(), releases: read.releases, ...(read.trust ? { trust: read.trust } : {}) };
       } catch (err) {
         const problem = err instanceof FeedProblem ? err.message : 'The release feed couldn’t be read. Try again later.';
         this.last = { ...this.last, checkedAt: this.now().toISOString(), problem };
@@ -328,6 +403,8 @@ export interface ReleaseSummary {
   breaking: string[];
   /** What changed in it, each change once (absent for a release made before changelogs were attached). */
   changes?: Change[];
+  /** Halted by the publisher: listed, never offered. */
+  halted?: Halt;
 }
 
 /**
@@ -342,7 +419,8 @@ export type NeedsYou =
   | { kind: 'setting'; key: string; required: boolean; madeUp?: boolean; message: string }
   | { kind: 'breaking'; version: string; message: string }
   | { kind: 'app'; app: string; message: string }
-  | { kind: 'unknown'; version: string; message: string };
+  | { kind: 'unknown'; version: string; message: string }
+  | { kind: 'halted'; version: string; message: string };
 
 /** One part that changes in the upgrade. */
 export interface PartChange {
@@ -392,6 +470,7 @@ export interface GoBackTarget {
   problem?: string;
   /** Going back across a breaking release: only by hand, restoring the backup taken before it. */
   breakingAfter?: string;
+  halted?: Halt;
 }
 
 /** How many earlier releases the Updates page offers to go back to. */
@@ -408,7 +487,8 @@ export const goBackTargets = (checker: UpdateChecker): GoBackTarget[] => {
   const onChannel = (r: FeedRelease) => follows(channel, r.channel);
   const older = releases.filter((r) => onChannel(r) && semver.lt(r.version, running.version)).sort((a, b) => semver.rcompare(a.version, b.version)).slice(0, GO_BACK_LISTED);
   return older.map((r) => {
-    const base = { version: r.version, channel: r.channel, ...(r.released ? { released: r.released } : {}) };
+    const base = { version: r.version, channel: r.channel, ...(r.released ? { released: r.released } : {}), ...(r.halted ? { halted: r.halted } : {}) };
+    if (r.halted) return { ...base, problem: `AUGUR ${r.version} was halted by its publisher: ${r.halted.reason}` };
     // Every release after it, up to and including the running one: what going back undoes.
     const between = releases.filter((b) => semver.gt(b.version, r.version) && semver.lte(b.version, running.version));
     const breaking = between.filter((b) => b.manifest?.breaking.length).sort((a, b) => semver.compare(a.version, b.version))[0];
@@ -430,6 +510,8 @@ export interface UpdatesView {
   ring: Ring;
   channelNote?: string;
   feed: 'on' | 'off';
+  /** Whether the feed itself can be trusted: signed and in date, a mirror's, or not checked (ADR 0017). */
+  feedTrust?: FeedTrust;
   checkedAt?: string;
   problem?: string;
   /** The newest release on the channel, when it is newer than the running one. */
@@ -455,6 +537,7 @@ const summary = (r: FeedRelease): ReleaseSummary => ({
   ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
   breaking: r.manifest?.breaking ?? [],
   ...(r.manifest?.changelogs ? { changes: releaseChanges(r.manifest.changelogs) } : {}),
+  ...(r.halted ? { halted: r.halted } : {}),
 });
 
 /** Whether a release's `upgradeFrom` lets the running version take it straight. */
@@ -466,17 +549,27 @@ const reachable = (r: FeedRelease, running: string) => r.manifest !== undefined 
  */
 export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: AppRecord[] }): UpdatesView => {
   const { running, channel } = checker;
-  const { checkedAt, problem, releases } = checker.result;
-  const base = { running, channel, goBack: goBackTargets(checker), ring: checker.ring, ...(checker.channelNote ? { channelNote: checker.channelNote } : {}), feed: checker.on ? ('on' as const) : ('off' as const), ...(checkedAt ? { checkedAt } : {}), ...(problem ? { problem } : {}) };
+  const { checkedAt, problem, releases, trust } = checker.result;
+  const base = { running, channel, goBack: goBackTargets(checker), ring: checker.ring, ...(checker.channelNote ? { channelNote: checker.channelNote } : {}), feed: checker.on ? ('on' as const) : ('off' as const), ...(trust ? { feedTrust: trust } : {}), ...(checkedAt ? { checkedAt } : {}), ...(problem ? { problem } : {}) };
   const onChannel = (r: FeedRelease) => follows(channel, r.channel);
-  const newer = releases.filter((r) => onChannel(r) && semver.gt(r.version, running.version)).sort((a, b) => semver.rcompare(a.version, b.version));
-  const newestBeta = releases.filter((r) => r.channel === 'beta' && semver.gt(r.version, newer[0]?.version ?? running.version)).sort((a, b) => semver.rcompare(a.version, b.version))[0];
+  // Halted releases stay listed, saying so, but are never offered (ADR 0018).
+  const listed = releases.filter((r) => onChannel(r) && semver.gt(r.version, running.version)).sort((a, b) => semver.rcompare(a.version, b.version));
+  const newer = listed.filter((r) => !r.halted);
+  const newestBeta = releases.filter((r) => r.channel === 'beta' && !r.halted && semver.gt(r.version, newer[0]?.version ?? running.version)).sort((a, b) => semver.rcompare(a.version, b.version))[0];
   // Only a preview server can switch to it, so only one is told of it.
   const beta = channel === 'stable' && takesPreview(checker.ring) && newestBeta ? summary(newestBeta) : undefined;
-  if (!newer.length) return { ...base, newer: [], ...(beta ? { beta } : {}), needsYou: [] };
+  // Running a release its publisher halted: say so first, and where to go.
+  const runningHalt = releases.find((r) => r.version === running.version)?.halted;
+  const haltNeed = (to?: string): NeedsYou[] => {
+    if (!runningHalt) return [];
+    const back = goBackTargets(checker).find((t) => !t.problem)?.version;
+    const where = to ? `Upgrade to ${to}.` : back ? `Go back to ${back}, or wait for a fixed release.` : 'Wait for a fixed release, or go back by hand (docs/upgrade.md, Going back).';
+    return [{ kind: 'halted', version: running.version, message: `AUGUR ${running.version}, which this server runs, was halted by its publisher: ${sentence(runningHalt.reason)} ${where}` }];
+  };
+  if (!newer.length) return { ...base, newer: listed.map(summary), ...(beta ? { beta } : {}), needsYou: haltNeed() };
 
   const available = newer[0];
-  const needsYou: NeedsYou[] = [];
+  const needsYou: NeedsYou[] = haltNeed(available.version);
   // Straight there when it allows it; otherwise the newest release on the way that does.
   let next = available;
   if (!available.manifest) {
@@ -526,7 +619,7 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
   return {
     ...base,
     available: { ...summary(available), parts },
-    newer: newer.map(summary),
+    newer: listed.map(summary),
     ...(beta ? { beta } : {}),
     ...(next.manifest && reachable(next, running.version) ? { next: next.version } : {}),
     needsYou,

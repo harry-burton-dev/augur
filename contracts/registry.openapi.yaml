@@ -1299,6 +1299,7 @@ components:
         ring: { $ref: "#/components/schemas/ServerRing" }
         channelNote: { type: string, description: Why the channel isn't the one RELEASE_CHANNEL asks for (a production server follows stable only) }
         feed: { type: string, enum: ["on", "off"], description: Off when the deployment set RELEASE_FEED_URL=off }
+        feedTrust: { $ref: "#/components/schemas/FeedTrust" }
         checkedAt: { type: string, format: date-time }
         problem: { type: string, description: Why the last check failed; what it found before still shows }
         available:
@@ -1327,6 +1328,7 @@ components:
               channel: { $ref: "#/components/schemas/ReleaseChannel" }
               released: { type: string }
               problem: { type: string, description: "Why it can't go back straight; absent when it can" }
+              halted: { $ref: "#/components/schemas/Halt" }
               breakingAfter: { type: string, description: The breaking release between, whose backup going back by hand restores }
         updaterSeenAt: { type: string, format: date-time, description: When the updater last asked for work, since the registry started }
         portalUrl: { type: string, description: "The company's Backstage (PORTAL_URL), which the Upgrade Centre links to" }
@@ -1337,7 +1339,7 @@ components:
             type: object
             required: [kind, message]
             properties:
-              kind: { type: string, enum: [path, setting, breaking, app, unknown] }
+              kind: { type: string, enum: [halted, path, setting, breaking, app, unknown], description: "halted: the running release was halted by its publisher, and is the only need shown" }
               message: { type: string }
               version: { type: string }
               key: { type: string, description: The setting, for kind setting }
@@ -1356,6 +1358,24 @@ components:
         notesUrl: { type: string, format: uri }
         breaking: { type: array, items: { type: string } }
         changes: { type: array, items: { $ref: "#/components/schemas/Change" }, description: "What changed in it, each change once; absent for a release made before changelogs were attached" }
+        halted: { $ref: "#/components/schemas/Halt" }
+    Halt:
+      type: object
+      description: "The publisher halted this release (ADR 0018): it is listed but never offered, installed or chosen as next"
+      required: [reason, at]
+      properties:
+        reason: { type: string }
+        at: { type: string, format: date-time }
+        by: { type: string, description: Who halted it }
+    FeedTrust:
+      type: object
+      description: "How far the release feed this server read can be trusted (ADR 0017)"
+      required: [state]
+      properties:
+        state: { type: string, enum: [verified, mirror, unchecked], description: "verified: signed by the publisher and in date; mirror: the organisation's own mirror feed; unchecked: GitHub's releases read directly" }
+        expires: { type: string, format: date-time, description: When a verified feed stops being good unless it is issued again }
+        signer: { type: string, description: The workflow that signed it, as cosign checked it }
+        note: { type: string, description: What to know when it isn't verified }
     Change:
       type: object
       required: [kind, text, parts]

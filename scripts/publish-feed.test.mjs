@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { APP_RELEASES_KEPT, asListed, AUGUR_RELEASES_KEPT, buildFeed, chooseReleases, DEV_BUILDS_KEPT } from './publish-feed.mjs';
+import { APP_RELEASES_KEPT, asListed, AUGUR_RELEASES_KEPT, buildFeed, chooseReleases, DEV_BUILDS_KEPT, FEED_VALID_DAYS, haltedOf } from './publish-feed.mjs';
 
 const release = (tag, more = {}) => ({ tag_name: tag, draft: false, prerelease: false, html_url: `https://github.com/o/r/releases/tag/${tag}`, assets: [{ name: tag.startsWith('augur@') ? 'augur-release.json' : 'app-release.json', url: `asset:${tag}` }], ...more });
 
@@ -42,4 +42,21 @@ test('each release file takes its channel from GitHub as it is now, and one that
   assert.deepEqual(feed.releases.map((m) => `${m.version} ${m.channel}`), ['0.4.0 stable']);
   assert.equal(feed.releases[0].notesUrl, 'https://github.com/o/r/releases/tag/augur@0.4.0');
   assert.deepEqual(feed.apps.map((a) => `${a.id} ${a.version} ${a.channel} ${a.releasedAt}`), ['notes 1.2.0 stable 2026-10-27T00:00:00Z']);
+});
+
+test('the feed says when it expires, and lists a halted release with why', async () => {
+  const files = {
+    'asset:augur@0.4.0': { version: '0.4.0', channel: 'beta', parts: {} },
+    'halt:augur@0.4.0': { reason: 'Sign-in fails after the upgrade', at: '2026-11-01T20:00:00Z', by: 'harry' },
+    'asset:app/notes@1.2.0': { schema: 'augur.app-release/v1', id: 'notes', version: '1.2.0', channel: 'stable' },
+  };
+  const halted = release('augur@0.4.0');
+  halted.assets.push({ name: 'halted.json', url: 'halt:augur@0.4.0' });
+  const now = new Date('2026-11-01T00:00:00Z');
+  const feed = await buildFeed([halted, release('app/notes@1.2.0')], async (url) => files[url], now);
+  assert.equal(feed.issued, now.toISOString());
+  assert.equal(Date.parse(feed.expires) - now.getTime(), FEED_VALID_DAYS * 86_400_000);
+  assert.deepEqual(feed.releases[0].halted, { reason: 'Sign-in fails after the upgrade', at: '2026-11-01T20:00:00Z', by: 'harry' });
+  assert.equal(feed.apps[0].halted, undefined);
+  assert.equal(haltedOf({ reason: '  ' }), undefined);
 });

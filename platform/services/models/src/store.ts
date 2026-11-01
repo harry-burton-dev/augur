@@ -117,7 +117,9 @@ export class PgModelStore implements ModelStore {
     try {
       await client.query('begin');
       await client.query("select pg_advisory_xact_lock(hashtext('models.migrate'))");
-      await client.query('create schema if not exists models');
+      // On a server the storage job makes the schema for models's own login, which may not create schemas.
+      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'models'");
+      if (!hasSchema) await client.query('create schema models');
       await client.query('create table if not exists models.migrations (id text primary key, applied_at timestamptz not null default now())');
       const { rows } = await client.query<{ id: string }>('select id from models.migrations');
       const applied = new Set(rows.map((r) => r.id));

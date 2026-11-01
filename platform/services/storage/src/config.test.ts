@@ -24,6 +24,7 @@ describe('configFromEnv', () => {
         { app: 'folio', databasePassword: 'p'.repeat(32), bucketSecret: secret },
         { app: 'team-notes', databasePassword: 'q'.repeat(32), bucketSecret: secret },
       ],
+      services: [],
     });
   });
 
@@ -76,5 +77,23 @@ describe('configFromEnv', () => {
     expect(appSecretFor(key, 'notes', 'bucket')).not.toBe(appSecretFor(key, 'other', 'bucket'));
     const short = configFromEnv({ DATABASE_URL: 'postgres://a:b@db/platform', APP_SECRETS_KEY: 'short' });
     expect('problems' in short && short.problems).toEqual([expect.stringContaining('APP_SECRETS_KEY must be')]);
+  });
+
+  it('reads each platform service’s login and Keycloak’s', () => {
+    const base = { DATABASE_URL: 'postgres://platform:pw@postgres:5432/platform', PLATFORM_DATABASE_LOGINS: 'identity events' };
+    const config = configFromEnv({ ...base, IDENTITY_DATABASE_PASSWORD: 'i'.repeat(32), EVENTS_DATABASE_PASSWORD: 'e'.repeat(32), KEYCLOAK_DATABASE_PASSWORD: 'k'.repeat(32) });
+    expect(config).toMatchObject({
+      services: [
+        { service: 'identity', databasePassword: 'i'.repeat(32) },
+        { service: 'events', databasePassword: 'e'.repeat(32) },
+      ],
+      keycloak: { database: 'keycloak', role: 'keycloak', password: 'k'.repeat(32) },
+    });
+    expect(configFromEnv({ ...base, IDENTITY_DATABASE_PASSWORD: 'short' })).toEqual({
+      problems: [
+        'IDENTITY_DATABASE_PASSWORD must be at least 16 characters; `openssl rand -hex 32` makes one.',
+        'EVENTS_DATABASE_PASSWORD must be at least 16 characters; `openssl rand -hex 32` makes one.',
+      ],
+    });
   });
 });

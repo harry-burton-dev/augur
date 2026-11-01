@@ -5,6 +5,7 @@ import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
 import { tailnetOf } from './live.ts';
 import { PipelineReader, pipelineUrlFor } from './pipeline.ts';
+import { cosignFeedCheck, feedSigner, repoOfFeed, TRUSTED_ROOT_IN_REGISTRY } from './feed-trust.ts';
 import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { ringFrom, takesPreview } from './ring.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
@@ -28,6 +29,7 @@ loadConfigOrExit('registry', [
   { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
   { name: 'ALLOW_PR_PREVIEWS', about: 'on: run pull requests’ builds for apps’ developers on a production server too.' },
   { name: 'APP_FEED_URL', about: 'where new versions of apps are listed, or off.' },
+  { name: 'FEED_SIGNER', about: 'who must sign the release feed, for a fork (default: this repository’s Release feed workflow).' },
   { name: 'PILLAR_APPS', about: 'the apps that ship with AUGUR, which register themselves.' },
   { name: 'FRONTENDS_BUCKET_SECRET', about: 'the registry’s key to the bucket apps’ frontends are kept in by version.', secret: true },
   { name: 'FRONTENDS_S3_URL', about: 'where that bucket is.' },
@@ -69,7 +71,11 @@ if (channel && !['stable', 'beta', 'dev'].includes(channel)) throw new Error('RE
 // What kind of server this is: a production one follows stable only and runs no pull requests' builds.
 const ring = ringFrom(process.env.SERVER_RING);
 const allowPrPreviews = takesPreview(ring) || process.env.ALLOW_PR_PREVIEWS === 'on';
-const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: feedTokenFromEnv(), key: readKey });
+// The publisher's feed is signed by its Release feed workflow (ADR 0017); FEED_SIGNER names another
+// signer, for a fork. Checked offline when the deployment has Sigstore's trust root (docs/mirror.md).
+const signer = process.env.FEED_SIGNER || feedSigner(repoOfFeed(feedUrl) ?? repoOfFeed(DEFAULT_OCI_FEED_URL)!);
+const checking = { check: cosignFeedCheck({ identity: signer, trustedRoot: TRUSTED_ROOT_IN_REGISTRY }), signer };
+const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: feedTokenFromEnv(), key: readKey, ...checking });
 const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel, ring });
 // The line from dev to production, for the Upgrade Centre: beside the release feed, read with the same key.
 const pipeline = new PipelineReader(process.env.PIPELINE_FEED_URL || (feedUrl === 'off' ? 'off' : pipelineUrlFor(feedUrl)), { token: feedTokenFromEnv(), key: readKey });
@@ -84,7 +90,7 @@ const tailnet = tailnetOf(process.env.PLATFORM_URL);
 // token, unless APP_FEED_URL says otherwise. Off when the AUGUR feed is a mirror or off and APP_FEED_URL
 // isn't set, or with APP_FEED_URL=off.
 const appFeedUrl = process.env.APP_FEED_URL || (process.env.RELEASE_FEED_URL ? 'off' : githubFeed);
-const appUpdates = new AppUpdateChecker(appFeedUrl === 'off' ? undefined : appFeed({ url: appFeedUrl, token: feedTokenFromEnv(), key: readKey }));
+const appUpdates = new AppUpdateChecker(appFeedUrl === 'off' ? undefined : appFeed({ url: appFeedUrl, token: feedTokenFromEnv(), key: readKey, ...checking }));
 appUpdates.start();
 
 // Apps' frontends, kept by version in the frontends bucket (FRONTENDS_BUCKET_SECRET, made by the storage service).

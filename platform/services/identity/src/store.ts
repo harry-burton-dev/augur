@@ -67,7 +67,9 @@ export class PgPreferenceStore implements PreferenceStore {
     try {
       await client.query('begin');
       await client.query("select pg_advisory_xact_lock(hashtext('identity.migrate'))");
-      await client.query('create schema if not exists identity');
+      // On a server the storage job makes the schema for identity's own login, which may not create schemas.
+      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'identity'");
+      if (!hasSchema) await client.query('create schema identity');
       await client.query('create table if not exists identity.migrations (id text primary key, applied_at timestamptz not null default now())');
       const { rows } = await client.query<{ id: string }>('select id from identity.migrations');
       const applied = new Set(rows.map((r) => r.id));

@@ -1,6 +1,6 @@
 import semver from 'semver';
 import type { AppRelease } from './store.ts';
-import { FeedProblem, feedReader, type GitHubRelease, type ReadKey } from './updates.ts';
+import { FeedProblem, feedReader, feedSource, haltOf, type FeedChecking, type GitHubRelease, type Halt, type ReadKey } from './updates.ts';
 
 /** Which of an app's releases a deployment takes: stable ones only, betas too, or dev builds too (a preview server only). */
 export type AppChannel = 'stable' | 'beta' | 'dev';
@@ -22,6 +22,8 @@ export interface AppFeedRelease {
   released?: string;
   notesUrl?: string;
   release?: AppRelease;
+  /** Halted by its publisher (ADR 0018): listed, never installed or offered. */
+  halted?: Halt;
 }
 
 export type AppFeed = () => Promise<AppFeedRelease[]>;
@@ -54,13 +56,17 @@ const isAppRelease = (x: unknown): x is AppRelease =>
  * On GitHub a release marked pre-release is beta.
  */
 export const appFeed =
-  ({ url, token, key, fetchImpl }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch }): AppFeed =>
+  ({ url, token, key, fetchImpl, ...checking }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking): AppFeed =>
   async () => {
     const get = feedReader({ token, key, fetchImpl });
-    const body = await get(url, 'application/vnd.github+json, application/json');
+    // The same feed as AUGUR's, so it's checked the same way: signed and in date (ADR 0017).
+    const { body } = await feedSource({ token, key, fetchImpl, ...checking })(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { apps?: unknown })?.apps) ? (body as { apps: unknown[] }).apps : [];
     if (items.some(isAppRelease)) {
-      return items.filter(isAppRelease).map((r) => ({ app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...(r.releasedAt ? { released: r.releasedAt } : {}), release: r }));
+      return items.filter(isAppRelease).map((r) => {
+        const halted = haltOf(r);
+        return { app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...(r.releasedAt ? { released: r.releasedAt } : {}), release: r, ...(halted ? { halted } : {}) };
+      });
     }
     const releases = (items as GitHubRelease[])
       .filter((r) => typeof r?.tag_name === 'string' && !r.draft)
@@ -71,7 +77,9 @@ export const appFeed =
     return Promise.all(
       releases.map(async ({ r, tag }): Promise<AppFeedRelease> => {
         const [, app, version] = tag;
-        const base: AppFeedRelease = { app, version, ...channelOf(version, Boolean(r.prerelease)), ...(r.published_at ? { released: r.published_at } : {}), ...(r.html_url ? { notesUrl: r.html_url } : {}) };
+        const haltAsset = r.assets?.find((a) => a.name === 'halted.json');
+        const halted = haltAsset ? haltOf({ halted: await get(haltAsset.url, 'application/octet-stream').catch(() => ({ reason: 'Halted by the publisher.' })) }) : undefined;
+        const base: AppFeedRelease = { app, version, ...channelOf(version, Boolean(r.prerelease)), ...(r.published_at ? { released: r.published_at } : {}), ...(r.html_url ? { notesUrl: r.html_url } : {}), ...(halted ? { halted } : {}) };
         // Each app's newest few releases, its newest dev build, and each pull request's newest build.
         const key = base.pr !== undefined ? `${app}#${base.pr}` : base.channel === 'dev' ? `${app}~dev` : app;
         const count = read.get(key) ?? 0;
@@ -152,10 +160,10 @@ export class AppUpdateChecker {
 export const onChannel = (follows: AppChannel, release: AppFeedRelease['channel']) =>
   release !== 'preview' && (release === 'stable' || follows === 'dev' || (follows === 'beta' && release === 'beta'));
 
-/** The newest release of `app` on `channel` that the feed has a release file for. Never a preview. */
+/** The newest release of `app` on `channel` that the feed has a release file for. Never a preview, and never one its publisher halted. */
 export const newestOn = (releases: AppFeedRelease[], app: string, channel: AppChannel) =>
   releases
-    .filter((r) => r.app === app && r.release && onChannel(channel, r.channel))
+    .filter((r) => r.app === app && r.release && !r.halted && onChannel(channel, r.channel))
     .sort((a, b) => semver.rcompare(a.version, b.version))[0];
 
 /** Each open pull request's newest build of `app` that the feed has a release file for, newest pull request first. */

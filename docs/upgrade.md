@@ -52,6 +52,10 @@ The pull fetches that release's images before anything stops. Each service migra
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Each platform service gets its own database login
+
+Identity, the registry, events, models and Keycloak stop connecting as Postgres's admin login (`platform`). Each gets a login that owns only its own schema, or for Keycloak its own database. The release adds five required settings: `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD` and `KEYCLOAK_DATABASE_PASSWORD`. The Upgrade Centre makes them up for you. If you upgrade by hand, add each to `.env` first (`openssl rand -hex 32`). On the first `up`, the storage job makes the logins and hands each one the tables its service made while it ran as `platform`. The upgrade's backup comes first, as always. Going back to the earlier release still works, because that release connects as `platform` again.
+
 ### A call that names no floor is checked on the organisation's
 
 An app's service calls (notifications, audit, models, people lookups) that name no floor used to get the app's scopes wherever it was on at all. Now they're checked on the organisation's floor, as the gateway already checked people's calls. Nothing changes for an app that is on for the whole organisation, which is every app AUGUR ships with unless you turned one off. If you turned an app off for the organisation and on for some teams, its service must now name the team's floor to send there. A refused call shows in that app's service log (`pc logs <app>`) as a 403 saying it isn't granted the scope.
@@ -59,6 +63,16 @@ An app's service calls (notifications, audit, models, people lookups) that name 
 ### Keycloak's admin leaves identity
 
 Identity no longer gets `KEYCLOAK_ADMIN_PASSWORD`. Its own sign-in already holds its rights on every server that has started identity before, so there's nothing to do. Keep the password in `.env`: Keycloak reads it on a new server, and it's the way back in if every deployment admin loses their one-time code. If identity's log ever says its sign-in can't manage the realm, see **Keycloak's admin** in deploy.md.
+
+### The signed feed
+
+From this release the registry checks the release feed before it believes it ([ADR 0017](decisions/0017-signed-release-feed.md)). The Feed workflow signs it with cosign, keyless, as the Release workflow signs images, and gives it an expiry two weeks out; it runs again every Monday, so a feed that stops being renewed runs out. The registry turns down a feed that isn't signed by `feed.yml` on `main` or a release branch, whose signature doesn't verify, or that has expired. It keeps running what it runs, and the Upgrade Centre says why. Nothing to set for the publisher's feed: the registry's image now carries cosign, and checks offline when `infra/deploy/releases/trusted_root.json` is there.
+
+- **A mirror** ([mirror.md](mirror.md)) is shown as your organisation's own feed, not as signed by the publisher, and doesn't expire. Each image is still checked as before.
+- **The old token path** (`release-feed-token`, reading GitHub's releases straight) is shown as not signed. Swap it for [the read key](#the-read-key).
+- `FEED_SIGNER` in `.env` overrides which workflow may sign the feed, as a regular expression. Leave it unset unless you publish AUGUR from a fork.
+
+A release its publisher **halted** (the Halt rollout workflow, [release-channels.md](release-channels.md#halting-a-release)) is still listed in the Upgrade Centre, marked halted with the reason, but is never offered, chosen as the next upgrade or installed. A server running one is told so first, and where to go: a newer release that isn't halted, or back to the one before.
 
 ### The read key
 

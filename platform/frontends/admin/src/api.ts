@@ -191,6 +191,23 @@ export interface ReleaseSummary {
   notesUrl?: string;
   breaking: string[];
   changes?: Change[];
+  /** Its publisher halted it (ADR 0018): listed, never offered. */
+  halted?: Halt;
+}
+
+/** Why a release's publisher halted it. */
+export interface Halt {
+  reason: string;
+  at: string;
+  by?: string;
+}
+
+/** How far the release feed this server read can be trusted (ADR 0017). */
+export interface FeedTrust {
+  state: 'verified' | 'mirror' | 'unchecked';
+  expires?: string;
+  signer?: string;
+  note?: string;
 }
 
 /** An earlier release the server could go back to. */
@@ -200,6 +217,7 @@ export interface GoBackTarget {
   released?: string;
   problem?: string;
   breakingAfter?: string;
+  halted?: Halt;
 }
 
 /** One upgrade in the Updates page's history. */
@@ -218,7 +236,7 @@ export interface UpdateHistoryEntry {
 
 /** Something to do or know before upgrading. */
 export interface NeedsYou {
-  kind: 'path' | 'setting' | 'breaking' | 'app' | 'unknown';
+  kind: 'halted' | 'path' | 'setting' | 'breaking' | 'app' | 'unknown';
   message: string;
   version?: string;
   key?: string;
@@ -282,6 +300,8 @@ export interface PlatformUpdates {
   channelNote?: string;
   /** Off when the deployment set RELEASE_FEED_URL=off. */
   feed: 'on' | 'off';
+  /** How far the feed it read can be trusted. */
+  feedTrust?: FeedTrust;
   checkedAt?: string;
   problem?: string;
   available?: ReleaseSummary & { parts: { name: string; from?: string; to: string }[] };
