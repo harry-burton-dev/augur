@@ -1,5 +1,11 @@
 # @augur/service-kit
 
+## 0.10.0
+
+### Minor Changes
+
+- ea41136: Services stay up through a Postgres restart: a dropped idle connection is logged (`steadyPool` in the service kit) rather than ending the process, and the events service listens again on a new connection, so open notification streams don't go quiet for good.
+
 ## 0.9.0
 
 ### Minor Changes

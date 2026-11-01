@@ -9,7 +9,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/apps/folio/
     augur.dev/release-unit: augur
-    augur.dev/version: 0.4.0
+    augur.dev/version: 0.5.0
     augur.dev/app-id: folio
     augur.dev/route: /folio
     augur.dev/sdk-range: ^1.1.1
@@ -32,7 +32,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/apps/folio/frontend/
     augur.dev/package: "@apps/folio-frontend"
-    augur.dev/version: 0.4.0
+    augur.dev/version: 0.5.0
     augur.dev/release-unit: augur
     augur.dev/app-id: folio
 spec:
@@ -53,7 +53,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/apps/folio/service/
     augur.dev/package: "@apps/folio"
-    augur.dev/version: 0.3.0
+    augur.dev/version: 0.3.1
     augur.dev/release-unit: augur
     augur.dev/app-id: folio
 spec:

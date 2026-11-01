@@ -1,19 +1,28 @@
 {
-  "version": "0.12.0",
+  "version": "0.13.0",
   "channel": "beta",
-  "released": "2026-10-30",
+  "released": "2026-11-01",
   "upgradeFrom": ">=0.1.0",
   "changed": [
     "@augur/mfe-sdk",
+    "@augur/service-kit",
     "@augur/ui-kit",
+    "@augur/events",
+    "@augur/gateway",
+    "@augur/identity",
+    "@augur/models",
     "@augur/registry",
+    "@augur/storage",
+    "@augur/updater",
     "@augur/admin",
     "@augur/home",
     "@augur/shell",
     "@apps/folio-frontend",
     "@apps/folio",
     "@apps/auspex-frontend",
-    "@apps/atlas-frontend"
+    "@apps/auspex",
+    "@apps/atlas-frontend",
+    "@apps/atlas"
   ],
   "breaking": [],
   "settings": {
@@ -47,6 +56,7 @@
       "PLATFORM_ADMIN_FIRST_NAME",
       "PLATFORM_ADMIN_LAST_NAME",
       "PLATFORM_ADMIN_DEPARTMENT",
+      "KEYCLOAK_ADMIN_USER",
       "ORG_NAME",
       "BACKUP_HOUR_UTC",
       "BACKUP_KEEP_DAYS",
@@ -67,8 +77,11 @@
       "APP_ORIGINS",
       "GITHUB_READ_USER",
       "RELEASE_FEED_URL",
+      "APP_FEED_URL",
       "SERVER_RING",
       "RELEASE_CHANNEL",
+      "PIPELINE_FEED_URL",
+      "PORTAL_URL",
       "ALLOW_PR_PREVIEWS",
       "COMPOSE_PROFILES",
       "PLATFORM_DIR",
@@ -104,69 +117,74 @@
       "PLATFORM_ADMIN_DEPARTMENT",
       "SERVER_RING"
     ],
-    "added": [],
+    "added": [
+      "KEYCLOAK_ADMIN_USER",
+      "APP_FEED_URL",
+      "PIPELINE_FEED_URL",
+      "PORTAL_URL"
+    ],
     "removed": []
   },
   "parts": {
     "@augur/mfe-sdk": {
-      "version": "1.8.0"
+      "version": "1.9.0"
     },
     "@augur/records": {
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.9.0"
+      "version": "0.10.0"
     },
     "@augur/ui-kit": {
-      "version": "1.7.0"
+      "version": "1.8.0"
     },
     "@augur/events": {
-      "version": "0.5.0"
+      "version": "0.5.1"
     },
     "@augur/gateway": {
-      "version": "0.7.0"
+      "version": "0.7.1"
     },
     "@augur/identity": {
-      "version": "0.8.0"
+      "version": "0.9.0"
     },
     "@augur/models": {
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     "@augur/registry": {
-      "version": "0.12.1"
+      "version": "0.13.0"
     },
     "@augur/storage": {
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     "@augur/updater": {
-      "version": "0.6.0"
+      "version": "0.7.0"
     },
     "@augur/admin": {
-      "version": "0.10.1"
+      "version": "0.11.0"
     },
     "@augur/home": {
-      "version": "0.2.9"
+      "version": "0.2.10"
     },
     "@augur/shell": {
-      "version": "0.10.1"
+      "version": "0.11.0"
     },
     "@apps/folio-frontend": {
-      "version": "0.4.0"
+      "version": "0.5.0"
     },
     "@apps/folio": {
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     "@apps/auspex-frontend": {
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     "@apps/auspex": {
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     "@apps/atlas-frontend": {
-      "version": "0.1.4"
+      "version": "0.1.5"
     },
     "@apps/atlas": {
-      "version": "0.1.0"
+      "version": "0.1.1"
     }
   }
 }
