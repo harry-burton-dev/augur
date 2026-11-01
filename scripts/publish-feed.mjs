@@ -2,9 +2,14 @@
 // pushed to GitHub's container registry beside the images, as ghcr.io/<repo>/feed:latest. A deployment
 // can then check for releases with the same read:packages token it pulls images with (docs/upgrade.md,
 // "The read key"), where reading GitHub's releases themselves would need a second token.
-//   node scripts/publish-feed.mjs [--out <file>] [--push]
+//   node scripts/publish-feed.mjs [--out <file>] [--sign] [--push]
 //     --out   where to write the feed (default: feed.json)
-//     --push  push it with ORAS (signed in to ghcr.io) as ghcr.io/<repo>/feed:latest
+//     --sign  sign it with cosign keyless, writing <file>.sigstore.json beside it (ADR 0017)
+//     --push  push it with ORAS (signed in to ghcr.io) as ghcr.io/<repo>/feed:latest, with its signature
+// The feed says when it was issued and when it expires: a deployment refuses one that has expired, so a
+// feed someone keeps from it can't hide a newer release for long. The Release feed workflow runs weekly
+// as well, to issue it again. A release with a halted.json asset (the Halt rollout workflow) is listed
+// with `halted`, and no deployment is offered it.
 // The Release workflow runs it after every release, and again whenever a release is edited, so a
 // release promoted to stable on GitHub (pre-release unticked) is stable in the feed too.
 // Needs GITHUB_TOKEN (or GH_TOKEN) that can read the repository's releases.
@@ -25,6 +30,14 @@ export const APP_RELEASES_KEPT = 4;
 export const PREVIEWS_KEPT = 20;
 /** How many of AUGUR's, and each app's, newest dev builds it holds, apart from their releases. */
 export const DEV_BUILDS_KEPT = 2;
+
+/** How long a feed is good for. The Release feed workflow issues it again weekly, so there's a week to spare. */
+export const FEED_VALID_DAYS = 14;
+/** The asset the Halt rollout workflow puts on a release it halts. */
+export const HALTED_ASSET = 'halted.json';
+/** The cosign bundle written beside the feed, and pushed with it. */
+export const BUNDLE_SUFFIX = '.sigstore.json';
+export const BUNDLE_MEDIA_TYPE = 'application/vnd.dev.sigstore.bundle.v0.3+json';
 
 const AUGUR_TAG = /^augur@(.+)$/;
 const APP_TAG = /^app\/([a-z][a-z0-9-]{1,39})@(.+)$/;
@@ -70,19 +83,29 @@ export const asListed = (file, release) => ({
   ...(file.releasedAt || !release.published_at ? {} : { releasedAt: release.published_at }),
 });
 
+/** A release's halted.json as the feed carries it: why and when, or undefined when it isn't halted. */
+export const haltedOf = (record) =>
+  record && typeof record.reason === 'string' && record.reason.trim() ? { reason: record.reason.trim(), at: typeof record.at === 'string' ? record.at : undefined, ...(record.by ? { by: record.by } : {}) } : undefined;
+
 /** Builds the feed from the repository's releases, reading each chosen release's file with `download`. */
-export const buildFeed = async (releases, download) => {
+export const buildFeed = async (releases, download, now = new Date()) => {
   const { augur, apps } = chooseReleases(releases);
   const fileOf = async (release, name) => {
     const asset = release.assets?.find((a) => a.name === name);
     return asset ? download(asset.url).catch(() => undefined) : undefined;
   };
+  const withHalt = async (entry, release) => {
+    const halted = haltedOf(await fileOf(release, HALTED_ASSET));
+    return halted ? { ...entry, halted } : entry;
+  };
   const augurFiles = await Promise.all(augur.map(async ({ release, version }) => ({ version, file: await fileOf(release, 'augur-release.json'), release })));
   const appFiles = await Promise.all(apps.map(async ({ release, app, version }) => ({ app, version, file: await fileOf(release, 'app-release.json'), release })));
   return {
     schema: 'augur.feed/v1',
-    releases: augurFiles.filter((x) => x.file?.version === x.version).map((x) => asMirrored(x.file, x.release)),
-    apps: appFiles.filter((x) => x.file?.id === x.app && x.file?.version === x.version).map((x) => asListed(x.file, x.release)),
+    issued: now.toISOString(),
+    expires: new Date(now.getTime() + FEED_VALID_DAYS * 86_400_000).toISOString(),
+    releases: await Promise.all(augurFiles.filter((x) => x.file?.version === x.version).map((x) => withHalt(asMirrored(x.file, x.release), x.release))),
+    apps: await Promise.all(appFiles.filter((x) => x.file?.id === x.app && x.file?.version === x.version).map((x) => withHalt(asListed(x.file, x.release), x.release))),
   };
 };
 
@@ -105,13 +128,20 @@ const main = async (args) => {
   }
   const feed = await buildFeed(releases, (url) => github(url, 'application/octet-stream'));
   writeFileSync(out, `${JSON.stringify(feed, null, 2)}\n`);
-  console.log(`${out}: ${feed.releases.length} AUGUR releases, ${feed.apps.length} app releases.`);
+  const halted = [...feed.releases, ...feed.apps].filter((r) => r.halted).length;
+  console.log(`${out}: ${feed.releases.length} AUGUR releases, ${feed.apps.length} app releases${halted ? `, ${halted} halted` : ''}; expires ${feed.expires}.`);
+  const bundle = `${out}${BUNDLE_SUFFIX}`;
+  if (args.includes('--sign')) {
+    // Keyless, as this workflow: deployments check the feed came from the Release feed workflow (ADR 0017).
+    execFileSync('cosign', ['sign-blob', '--yes', '--bundle', bundle, out], { stdio: 'inherit' });
+  }
   if (args.includes('--push')) {
     const ref = `ghcr.io/${REPO.toLowerCase()}/feed:latest`;
+    const files = [`${basename(out)}:${FEED_MEDIA_TYPE}`, ...(args.includes('--sign') ? [`${basename(bundle)}:${BUNDLE_MEDIA_TYPE}`] : [])];
     // ORAS takes a file by its path relative to where it runs, which also names the layer.
     execFileSync(
       'oras',
-      ['push', ref, '--artifact-type', FEED_MEDIA_TYPE, '--annotation', `org.opencontainers.image.source=https://github.com/${REPO}`, `${basename(out)}:${FEED_MEDIA_TYPE}`],
+      ['push', ref, '--artifact-type', FEED_MEDIA_TYPE, '--annotation', `org.opencontainers.image.source=https://github.com/${REPO}`, ...files],
       { stdio: 'inherit', cwd: dirname(resolve(out)) },
     );
     console.log(`Pushed ${ref}.`);

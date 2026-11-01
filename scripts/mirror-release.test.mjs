@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { appReleasesToMirror, asMirrored, destinations, mirroredAppRelease, withAppReleases, withRelease } from './mirror-release.mjs';
+import { appReleasesToMirror, asMirrored, destinations, mirroredAppRelease, withAppReleases, withHalt, withRelease } from './mirror-release.mjs';
 
 const manifest = (version, more = {}) => ({ version, channel: 'beta', parts: {}, ...more });
 
@@ -52,4 +52,11 @@ test('a mirrored app release names its parts in the mirror, by the same digest',
   assert.equal(mirroredAppRelease({ ...file, service: null }, 'r').service, null);
   const feed = withAppReleases({ apps: [{ id: 'notes', version: '1.0.0', old: true }, { id: 'notes', version: '0.9.0' }] }, [{ id: 'notes', version: '1.0.0' }, { id: 'auth', version: '1.0.0' }]);
   assert.deepEqual(feed.apps.map((f) => `${f.id} ${f.version}${f.old ? ' old' : ''}`), ['auth 1.0.0', 'notes 1.0.0', 'notes 0.9.0']);
+});
+
+test('a mirrored release keeps its publisher’s halt mark, and mirroring it again after a resume drops it', () => {
+  const halted = { reason: 'Breaks sign-in.', at: '2026-11-01T20:00:00Z' };
+  const feed = withRelease(undefined, withHalt(manifest('0.3.0'), halted));
+  assert.deepEqual(feed.releases[0].halted, halted);
+  assert.equal(withRelease(feed, withHalt(manifest('0.3.0'), undefined)).releases[0].halted, undefined);
 });

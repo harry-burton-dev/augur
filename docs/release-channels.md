@@ -24,6 +24,12 @@ In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`a
 
 Units move independently: Mandate can become stable while AUGUR stays where it is, and the other way round.
 
+## Halting a release
+
+When a release turns out to be bad after it's out, stop it reaching more servers: in GitHub, **Actions → Halt rollout → Run workflow**, with `halt`, the unit (`augur` or an app's id), the version and a reason people will read. It attaches `halted.json` (the reason, when, who) to the release and publishes the feed again at once ([ADR 0018](decisions/0018-rollout-gates.md)). Every server sees the mark at its next check: the release stays listed, marked halted with the reason, and is never offered, chosen as the next upgrade or installed. A server running it is told to move on, or to go back. Only the repository's owner may run it.
+
+Run it again with `resume` to take the mark off once the release turns out fine. A fix is normally a new patch release instead, which servers move to as usual. Mirrors pass a halt on when the release is mirrored again ([mirror.md](mirror.md#halted-releases)).
+
 ## Hotfixes
 
 For a fix that can't wait for what's on `main`: cut `release/<unit>-<major>.<minor>` from the release's tag (such as `git switch -c release/augur-0.14 augur@0.14.0`), branch `hotfix/<what>` from it, make the fix with a changeset and open a pull request into the release branch. Merging it opens a Version packages pull request on that branch; merging that releases the patch as a beta, and **Promote to stable** makes it stable. Then make the same fix on `main` (cherry-pick it, with its own changeset), so the next release has it too. Keep the release branch while that line is supported; delete it after.
