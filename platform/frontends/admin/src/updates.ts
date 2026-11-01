@@ -1,6 +1,6 @@
 import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import type { Fact } from '@augur/ui-kit';
-import { ApiError, type AdminApi, type PlatformUpdates, type Upgrade, type UpgradeStepState } from './api.js';
+import { ApiError, type AdminApi, type FeedTrust, type PlatformUpdates, type Upgrade, type UpgradeStepState } from './api.js';
 import { changeList, gatherChanges, historyList } from './changes.js';
 import { lineSection } from './line.js';
 import { line, page, section } from './parts.js';
@@ -52,6 +52,8 @@ export const headline = (u?: PlatformUpdates, error?: string): { heading: string
   if (up?.state === 'running') return { heading: `Upgrading to ${up.version}`, summary: 'There’s a short gap while each part restarts. This page follows along.' };
   if (up?.state === 'rolled-back' && up.from === u.running.version) return { heading: `Back on ${up.from}`, summary: up.message ?? `The upgrade to ${up.version} didn’t finish, so it went back by itself.` };
   if (up?.state === 'failed' && up.from === u.running.version) return { heading: `The upgrade to ${up.version} needs you`, summary: up.message ?? 'It stopped partway. See “Going back” in docs/upgrade.md.' };
+  const halt = u.needsYou.find((n) => n.kind === 'halted');
+  if (halt) return { heading: `AUGUR ${u.running.version} was halted`, summary: halt.message };
   if (u.feed === 'off') return { heading: 'Upgrade Centre', summary: 'This deployment doesn’t check for new releases: RELEASE_FEED_URL is off.' };
   if (u.available) {
     // A secret the updater makes up needs nothing from anyone.
@@ -61,6 +63,14 @@ export const headline = (u?: PlatformUpdates, error?: string): { heading: string
   if (u.problem) return { heading: 'New releases can’t be checked', summary: u.problem };
   return { heading: 'You’re up to date', summary: `AUGUR ${u.running.version} is the newest ${u.channel} release.` };
 };
+
+/** The feed's trust, in words: signed and in date, the organisation's mirror, or read straight from GitHub. */
+export const trustWords = (t: FeedTrust): string =>
+  t.state === 'verified'
+    ? `Signed by the publisher${t.expires ? `, good until ${new Date(t.expires).toLocaleDateString()}` : ''}`
+    : t.state === 'mirror'
+      ? `Your organisation’s mirror${t.note ? `. ${t.note}` : ''}`
+      : `Not signed${t.note ? `. ${t.note}` : ''}`;
 
 /**
  * Whether a newer AUGUR release is out, what changes, and what has to be done before upgrading,
@@ -262,6 +272,7 @@ export class AdminUpdates extends LitElement {
       ...(u.ring ? [{ label: 'Server', value: u.ring === 'production' ? 'Production' : u.ring === 'dev' ? 'Workbench' : 'Preview' }] : []),
       { label: 'Following', value: u.channel === 'dev' ? 'Dev builds, taken by itself, and releases' : `${channelWord(u.channel)} releases` },
       ...(u.available ? [{ label: 'Newest', value: `AUGUR ${u.available.version}${u.available.released ? `, ${day(u.available.released)}` : ''}` }] : []),
+      ...(u.feedTrust ? [{ label: 'Release feed', value: trustWords(u.feedTrust) }] : []),
       ...(u.feed === 'on' ? [{ label: 'Last checked', value: u.checkedAt ? new Date(u.checkedAt).toLocaleString() : 'Not yet' }] : []),
     ];
     return html`<ui-facts .items=${facts}></ui-facts>`;
@@ -347,7 +358,7 @@ export class AdminUpdates extends LitElement {
     return html`
       ${this.progress(u)}
       ${u.problem && a ? html`<ui-status status="warning" label=${`The last check failed, so this is from before. ${u.problem}`}></ui-status>` : nothing}
-      ${a && u.needsYou.length
+      ${(a || u.needsYou.some((n) => n.kind === 'halted')) && u.needsYou.length
         ? section(
             'Needs you first',
             html`<div data-needs>${u.needsYou.map((n) => line(html`<ui-status status=${n.kind === 'setting' && (!n.required || n.madeUp) ? 'queued' : 'needs'} mark-only></ui-status> ${n.message}`))}</div>`,
@@ -362,7 +373,7 @@ export class AdminUpdates extends LitElement {
               ${u.newer.map((r) =>
                 line(
                   r.notesUrl ? html`<a href=${r.notesUrl} target="_blank" rel="noopener" style="color:var(--ink)">AUGUR ${r.version}</a>` : `AUGUR ${r.version}`,
-                  [channelWord(r.channel), day(r.released), r.breaking.length ? 'Breaking' : ''].filter(Boolean).join(' · '),
+                  [channelWord(r.channel), day(r.released), r.breaking.length ? 'Breaking' : '', r.halted ? `Halted: ${r.halted.reason}` : ''].filter(Boolean).join(' · '),
                 ),
               )}
             </div>`,

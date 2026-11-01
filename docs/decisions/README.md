@@ -36,6 +36,7 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0028](0028-discussion-starts-in-intent.md) | Discussion starts inside Intent behind a ref-keyed API | Accepted | 2026-11-01 |
 | [0029](0029-reserve-focus-and-marking.md) | The SDK reserves a working context and a protective marking now | Accepted | 2026-11-01 |
 | [0030](0030-upgrade-centre-platform-frontend.md) | The Upgrade Centre is its own platform frontend, released with AUGUR | Accepted | 2026-11-01 |
+| [0031](0031-mirror-feeds-are-the-organisations-own.md) | A mirror's feed is the organisation's own, and carries the publisher's halt marks | Accepted | 2026-11-01 |
 | [0032](0032-platform-apps-and-pillar-apps.md) | Apps that ship with AUGUR are platform apps or pillar apps | Proposed | 2026-11-01 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

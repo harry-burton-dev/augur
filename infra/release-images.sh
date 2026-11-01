@@ -24,9 +24,10 @@ build() {
 }
 
 build web -f infra/web.Dockerfile --target web
-for service in gateway identity registry events models storage; do
+for service in gateway identity events models storage; do
   build "$service" -f infra/service.Dockerfile --build-arg "PACKAGE=@augur/$service" --target service
 done
+build registry -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry --target registry
 build updater -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater
 # The apps that ship with AUGUR: Folio's service and its rendition worker, Auspex and Data Atlas.
 build folio -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend --target service

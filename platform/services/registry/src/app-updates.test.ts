@@ -41,6 +41,13 @@ describe('the app feed', () => {
     expect((await appFeed({ url: 'https://mirror/apps.json', fetchImpl })()).map((r) => r.version)).toEqual(['1.0.0']);
   });
 
+  it('lists a halted release as halted, and never takes it', async () => {
+    const fetchImpl = (async () => json({ apps: [release('1.0.0'), { ...release('1.1.0'), halted: { reason: 'Loses notes on save' } }] })) as unknown as typeof fetch;
+    const releases = await appFeed({ url: 'https://mirror/apps.json', fetchImpl })();
+    expect(releases.find((r) => r.version === '1.1.0')?.halted).toEqual({ reason: 'Loses notes on save' });
+    expect(newestOn(releases, 'notes', 'stable')?.version).toBe('1.0.0');
+  });
+
   it('finds the newest release on a channel', () => {
     const releases = feedOf(release('1.0.0'), release('1.2.0-beta.1', {}, 'beta'), release('1.1.0'));
     expect(newestOn(releases, 'notes', 'stable')?.version).toBe('1.1.0');

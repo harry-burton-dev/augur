@@ -17,6 +17,8 @@ concurrency: promote-${{ inputs.unit }}
 permissions:
   contents: write
   packages: write
+  # For the Release feed workflow, which signs the feed.
+  id-token: write
 jobs:
   promote:
     runs-on: ubuntu-latest
