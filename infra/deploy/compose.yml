@@ -7,7 +7,16 @@
 # Keeps the old codename: Docker names the data volumes after the project, so renaming it would start empty.
 name: platform
 
+# What every container AUGUR builds runs with: they run as an unprivileged user already, so they need
+# no Linux capabilities and may never gain privileges. init passes Docker's stop signal on, so a stop
+# takes a moment instead of the 10 seconds before Docker kills the process.
+x-hardened: &hardened
+  init: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+
 x-service: &service
+  <<: *hardened
   restart: unless-stopped
   environment: &env
     NODE_ENV: production
@@ -59,6 +68,13 @@ services:
 
   web:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/web:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     environment:
       # Other sites apps may load from, space separated (also allow each in Admin, Apps).
@@ -132,6 +148,7 @@ services:
   # from the secrets in .env, then stops. Runs on every `up`; see docs/app-storage.md.
   storage:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
     restart: on-failure
     # Each app's secrets are named after it (FOLIO_DATABASE_PASSWORD, ...), so it reads them all from .env.
     env_file: [{ path: .env, required: false }]
@@ -180,6 +197,13 @@ services:
 
   gateway:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/gateway:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -205,6 +229,12 @@ services:
   identity:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/identity:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       <<: *env
       PORT: 8081
@@ -224,6 +254,12 @@ services:
   registry:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/registry:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8082/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       <<: *env
       PORT: 8082
@@ -256,6 +292,12 @@ services:
   events:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/events:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8084/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment: { <<: *env, PORT: 8084, SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}" }
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
@@ -263,6 +305,12 @@ services:
   models:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/models:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8085/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       <<: *env
       PORT: 8085
@@ -278,6 +326,12 @@ services:
   folio:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8083/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       # Its own login comes first: it replaces the platform's DATABASE_URL.
       <<: [*folio-storage, *env]
@@ -292,6 +346,13 @@ services:
   # identity, the registry and the last 30 days of events, and remembers them in memory.
   auspex:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -311,6 +372,12 @@ services:
   atlas:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8086/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       # Its own login comes first: it replaces the platform's DATABASE_URL.
       <<: [*atlas-storage, *env]
@@ -324,6 +391,7 @@ services:
   # It works on the tables Folio's service makes, so it waits for the service to start.
   folio-worker:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
     restart: unless-stopped
     environment:
       <<: *folio-storage
@@ -335,6 +403,7 @@ services:
   # the server: only it can reach docker-proxy, on a network of their own.
   updater:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/updater:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
     profiles: [updater]
     restart: unless-stopped
     environment:
