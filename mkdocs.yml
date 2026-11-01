@@ -56,4 +56,5 @@ nav:
       - 0027. The runs service also runs ordinary background jobs: decisions/0027-runs-is-the-jobs-engine.md
       - 0028. Discussion starts inside Intent behind a ref-keyed API: decisions/0028-discussion-starts-in-intent.md
       - 0029. The SDK reserves a working context and a protective marking now: decisions/0029-reserve-focus-and-marking.md
+      - 0030. The Upgrade Centre is its own platform frontend, released with AUGUR: decisions/0030-upgrade-centre-platform-frontend.md
       - 0032. Apps that ship with AUGUR are platform apps or pillar apps: decisions/0032-platform-apps-and-pillar-apps.md
