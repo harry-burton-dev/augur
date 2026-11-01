@@ -4,7 +4,6 @@ name: Release
 # once, as a pre-release: the beta channel. The Promote workflow makes a release stable, with no rebuild.
 on:
   push:
-    # Not dev: a release signed there is one no updater takes. Rename dev to main first.
     branches: [main, 'release/**']
 concurrency: release-${{ github.ref }}
 permissions:

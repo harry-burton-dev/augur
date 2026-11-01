@@ -6,8 +6,7 @@ name: App dev builds
 # would a release. Each app keeps its newest few dev builds. See docs/release-channels.md, "Dev builds".
 on:
   push:
-    # dev until it is renamed main (docs/release-channels.md).
-    branches: [main, dev]
+    branches: [main]
     paths: ['apps/**']
 concurrency:
   group: app-dev

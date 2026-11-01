@@ -77,12 +77,12 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   see docs/versioning.md.
 
 ## Pull requests and releases
-- Open pull requests against `main` (`dev` until Harry renames it), the only
+- Open pull requests against `main`, the only
   long-lived branch (ADR 0011, docs/release-channels.md). A hotfix goes into
   its `release/<unit>-<major>.<minor>` branch, and then onto `main` too.
 - Only Harry makes a release stable (Actions → Promote to stable).
 - Harry's standing rule: merge your own PR once CI is green, after merging
-  fresh `origin/main` (or `origin/dev`) into it and re-running the checks. Don't ask for review;
+  fresh `origin/main` into it and re-running the checks. Don't ask for review;
   post one summary per phase, ending with anything Harry must do on his
   server as a short numbered list.
 - Nothing in the repository names the tool that wrote it: no

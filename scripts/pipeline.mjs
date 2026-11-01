@@ -137,8 +137,7 @@ const main = (args) => {
       return false;
     }
   };
-  // The trunk: main, or dev until it is renamed main.
-  const trunk = process.env.TRUNK || (has('origin/main') ? 'main' : 'dev');
+  const trunk = process.env.TRUNK || 'main';
   const apps = readApps();
   const appIds = apps.map((a) => a.id);
   const read = (ref) => (path) => {

@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, dev, 'release/**']
+    branches: [main, 'release/**']
 # Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
 # others (as JSON, such as a runner provider's label). The same goes for every other workflow;
 # RELEASE_RUNNER, if set, names the x86-64 runner the image-building jobs use.
@@ -98,7 +98,7 @@ jobs:
       - run: pnpm check:migrations
         env:
           # Into main, a migration already on main is frozen too: dev builds have run it on the workbench.
-          MIGRATIONS_FROZEN_AT: ${{ (github.base_ref == 'main' || github.base_ref == 'dev') && format('origin/{0}', github.base_ref) || '' }}
+          MIGRATIONS_FROZEN_AT: ${{ github.base_ref == 'main' && 'origin/main' || '' }}
       - run: pnpm typecheck --concurrency=${{ steps.fit.outputs.tasks }}
       - run: pnpm test --concurrency=${{ steps.fit.outputs.tests }}
         env:

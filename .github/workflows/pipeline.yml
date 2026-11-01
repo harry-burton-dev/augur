@@ -6,10 +6,10 @@ name: Pipeline feed
 # docs/release-channels.md, "The pipeline feed".
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
     types: [opened, reopened, closed]
-    branches: [main, dev]
+    branches: [main]
   # After a workflow that makes or removes releases (dev builds, previews, releases) finishes.
   workflow_run:
     workflows: [Release, Promote to stable, AUGUR dev builds, App dev builds, App previews]

@@ -120,7 +120,5 @@ Signed promotion records, clearing old dev builds' images from the registry, and
 
 ## Once, in GitHub (the repository's owner)
 
-1. Rename `dev` to `main` (Settings → Branches), which keeps it the default branch. Open pull requests and links follow it. Do it before the next Version packages merge: the Release workflow only runs on `main`, since a release signed on `dev` is one no updater takes. Close the old `changeset-release/dev` pull request; the next run opens one from `changeset-release/main`.
-2. Delete the `preview` and `production` branches. Their releases and tags stay.
-3. Until the workbench runs the first release made on `main` (0.14), its updater still takes dev builds only as signed on `dev`, so it refuses dev builds from `main` at their signature check. Upgrade it to that release and they install by themselves again.
-4. Rulesets, if your plan enforces them on a private repository: `main` and `release/*` need a pull request and passing checks, and no force-pushes. On GitHub Free they aren't enforced, and the checks above still hold.
+1. Rulesets, if your plan enforces them on a private repository: `main` and `release/*` need a pull request and passing checks, and no force-pushes. On GitHub Free they aren't enforced, and the checks above still hold.
+2. The workbench takes dev builds from `main` from 0.14 on, the first release made there. Until it runs 0.14, it refuses them at their signature check; upgrade it and they install by themselves again.
