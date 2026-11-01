@@ -1,5 +1,5 @@
 import type { Preview } from '@storybook/web-components-vite';
-import '../dist/tokens.css';
+import '@augur/kit-common/tokens.css';
 import '../src/base.css';
 
 const preview: Preview = {
