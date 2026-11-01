@@ -37,7 +37,9 @@ cleanup() {
   pc down -v --remove-orphans >/dev/null 2>&1 || true
   rm -f "$deploy/.env"
   if [ -e "$work/env.saved" ]; then mv "$work/env.saved" "$deploy/.env"; fi
-  rm -rf "$work"
+  # The backup container writes its files as its own user, so a container removes them.
+  rm -rf "$work" 2>/dev/null || docker run --rm -v "$work:/w" --entrypoint rm postgres:16-alpine -rf /w/from >/dev/null 2>&1 || true
+  rm -rf "$work" 2>/dev/null || true
   exit "$status"
 }
 trap cleanup EXIT
