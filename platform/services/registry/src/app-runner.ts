@@ -452,6 +452,9 @@ export const appRunnerRoutes =
         if (body.action === 'install') {
           release = 'release' in body ? body.release : updates.result.releases.find((r) => r.app === body.app && r.version === body.version)?.release;
           if (!release) return reply.code(404).send({ error: 'not_found', message: `The app feed has no release file for ${'app' in body ? `${body.app} ${body.version}` : 'it'}. Check for updates, then try again.` });
+          // A release its publisher halted is never installed (ADR 0018), whichever way it's asked for.
+          const halted = updates.result.releases.find((r) => r.app === release!.id && r.version === release!.version)?.halted;
+          if (halted) return reply.code(409).send({ error: 'conflict', message: `${release.id} ${release.version} was halted by its publisher: ${halted.reason}` });
         }
         const target = release ? release.id : (body as { app: string }).app;
         if (release) {

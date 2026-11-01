@@ -136,9 +136,18 @@ Apps don't bundle the UI kit or Lit: the shell serves one copy of each through a
 - Moving the shared Lit to a new major is a kit major too.
 - The contract tests in `platform/contract` hold the shell to this: they mount a reference app built against each earlier SDK minor, and fail CI when the shell breaks one.
 
+### The React kits (ADR 0015)
+
+Every frontend is moving to React. Since SDK 1.10 the shell also serves React 19 (`react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`), Common (`@augur/kit-common`) and Quill, the app kit (`@augur/app-kit`), through the same import map, so a React app's bundle carries none of them. They keep the same promise:
+
+- Within SDK 1.x the shell serves React 19.x, and Common and Quill on their same major. Moving React to a new major is an SDK major.
+- Aerie, the shell kit (`@augur/shell-kit`), is the shell's own: it is never in the import map, never published and not part of the promise, so it changes with the shell. `pnpm check:boundaries` fails if anything but the shell imports it.
+- Until SDK 2 the Lit kit (`@augur/ui-kit`) and Lit stay served, frozen: fixes only, no new parts. New parts go into Common or Quill. SDK 2 drops Lit and `@augur/ui-kit`, once every frontend has moved.
+- The tokens live in `platform/packages/kit-common/tokens/`, and Common's build writes the Tailwind v4 theme from them. An app styles its own layout with `@import 'tailwindcss/utilities' layer(utilities); @import '@augur/app-kit/theme.css';`, and only AUGUR's tokens exist as classes. It leaves out Tailwind's preflight: the shell already sets the page's base.
+
 ## Building an app in its own repository
 
-Apps are moving to their own repositories (ADR 0012), so the libraries in `platform/packages` (the SDK, the UI kit, service-kit, records and any added there later) are published to GitHub Packages. The Release workflow does it once the Version packages PR has merged, with `scripts/publish-packages.mjs`: each package whose version isn't there yet is published, and nothing else. Nobody publishes by hand.
+Apps are moving to their own repositories (ADR 0012), so the libraries in `platform/packages` (the SDK, the kits, service-kit, records and any added there later, except Aerie, which only the shell uses) are published to GitHub Packages. The Release workflow does it once the Version packages PR has merged, with `scripts/publish-packages.mjs`: each package whose version isn't there yet is published, and nothing else. Nobody publishes by hand.
 
 GitHub's npm registry only takes packages scoped to the repository's owner, so `@augur/<name>` is published as `@<owner>/augur-<name>` (the owner comes from the repository, or `PACKAGE_SCOPE`). An app repository aliases each one back, so its imports stay `@augur/...`:
 
@@ -161,6 +170,14 @@ and reads them with a `.npmrc` beside its package.json:
 In the app repository's workflows `NODE_AUTH_TOKEN` is its own `GITHUB_TOKEN`, once the package's settings give that repository read access (Package settings → Manage Actions access). On a laptop it's a personal access token with `read:packages`.
 
 The UI kit is still served by the shell at runtime (see [The shared kit](#the-shared-kit)); an app installs it only to build and type-check against, and keeps it out of its bundle. A hotfix published from a `release/<unit>-<major>.<minor>` branch gets the dist-tag `release-<unit>-<major>.<minor>`, so `latest` stays the newest version from `main`.
+
+## Dependency updates
+
+Renovate proposes dependency updates (ADR 0033, `renovate.json`). It runs once a week, early on Monday, and opens one PR for npm minor and patch updates, one for container images and one for GitHub Actions. Security fixes come at any time. A major update stays on the **Dependency Dashboard** issue until someone ticks it there. Renovate never merges anything itself. To merge one of its PRs:
+
+1. Merge fresh `main` into it and let CI run.
+2. Add a changeset (`pnpm changeset`): a patch for each unit whose dependencies moved, or `--empty` when only dev tooling changed.
+3. If it's labelled `needs-upgrade-note` (a major update to Postgres, pgvector, Keycloak or Garage), write the note in docs/upgrade.md first, including how to go back.
 
 ## Going back to an earlier app version
 

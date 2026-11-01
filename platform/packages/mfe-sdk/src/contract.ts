@@ -1,3 +1,5 @@
+import type { Focus } from './refs.js';
+
 /** One entry in the registry manifest the shell loads at startup. */
 export interface AppManifestEntry {
   id: string;
@@ -78,6 +80,12 @@ export interface AppManifestEntry {
   previews?: FeaturePreview[];
   /** The ids of the app's previews that are on for the person: the registry fills it in (SDK 1.7). */
   previewsOn?: string[];
+  /**
+   * `true`: the app can narrow what it shows to a working context inside the
+   * floor, read from `ctx.focus` (SDK 1.10). Reserved (ADR 0029): the shell
+   * doesn't offer a working context yet, so this changes nothing today.
+   */
+  focus?: boolean;
 }
 
 /** A feature an app is trying out (SDK 1.7). */
@@ -281,6 +289,12 @@ export interface MountContext {
    * Turning one on or off mounts the app again, so the answer holds while it's mounted.
    */
   previewOn(id: string): boolean;
+  /**
+   * The working context the person chose inside the floor, such as an
+   * operation and its phase (SDK 1.10). Reserved (ADR 0029): always undefined
+   * until the shell offers working contexts. Undefined means the whole floor.
+   */
+  focus?: Focus;
 }
 
 export interface IntentReply {

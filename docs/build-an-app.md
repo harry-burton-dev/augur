@@ -279,6 +279,27 @@ if (passage) {
 }
 ```
 
+### Binding your things to entities
+
+An app that lets people say "this is about HMS X" keeps those links itself, in its own schema, and tells the rest of AUGUR through its outbox (ADR 0025, docs/domain-events.md). Publish `<app>.bound` when someone links one of your things to an entity and `<app>.unbound` when they take the link away. The payload is an `EntityBinding` (SDK 1.10): your thing as a `Ref`, plus the `EntityRef`.
+
+```ts
+import type { EntityBinding, Ref } from '@augur/mfe-sdk';
+
+const task: Ref = { kind: 'ref', app: 'intent', type: 'task', id: 't-41', label: 'Brief the desk' };
+const binding: EntityBinding = { subject: task, entity: ship };
+// in the same transaction as the link: outbox.add('intent.bound', binding)
+```
+
+A `Ref` stands for anything an app keeps when no more specific reference fits (`DocumentRef`, `UnitRef`, `EntityRef`). Check one you're given with `isRef`. Data Atlas follows the events to answer "what points at this entity", so binding still works while Atlas is off.
+
+### Reserved: markings and working context
+
+Two parts of the SDK are reserved now so that adding them later won't break apps (ADR 0029). Both are empty today.
+
+- **`marking`** is optional on `Ref`, `DocumentRef`, `UnitRef` and `EntityRef`. It's a `{ scheme, label }` protective marking. Whether a deployment marks its information is still open (PER-149), so nothing sets markings or enforces them. If a ref you're handed has a marking, keep it as you found it when you store or pass that ref on.
+- **`ctx.focus`** is the working context someone chose inside a floor, such as "Operation Alpha · Phase 2": a `Ref` to the thing plus a label. The shell doesn't offer working contexts yet, so it's always undefined, and undefined means the whole floor. An app that will narrow what it shows to a working context can say so with `focus: true` in its manifest. Today that changes nothing.
+
 ### Sharing
 
 An app that lets people share things with each other asks identity two things, as itself, with the `people:read` scope.

@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import type { AppRecord } from './store.ts';
-import { automaticDevUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRelease, type ReleaseManifest } from './updates.ts';
+import { feedSigner, repoOfFeed } from './feed-trust.ts';
+import { automaticDevUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRead, type FeedRelease, type ReleaseManifest } from './updates.ts';
+
+const listOf = (read: FeedRelease[] | FeedRead) => (Array.isArray(read) ? read : read.releases);
+const trustOf = (read: FeedRelease[] | FeedRead) => (Array.isArray(read) ? undefined : read.trust);
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
@@ -151,7 +155,9 @@ describe('the release feed', () => {
       const version = url.split('augur@')[1];
       return json(manifest(version));
     }) as typeof fetch;
-    const releases = await releaseFeed({ url: 'https://api.github.com/repos/o/r/releases?per_page=100', token: 't0ken', fetchImpl })('0.2.1');
+    const read = await releaseFeed({ url: 'https://api.github.com/repos/o/r/releases?per_page=100', token: 't0ken', fetchImpl })('0.2.1');
+    const releases = listOf(read);
+    expect(trustOf(read)?.state).toBe('unchecked');
     expect(releases.map((r) => [r.version, r.channel, Boolean(r.manifest)])).toEqual([
       ['0.3.0', 'beta', true],
       ['0.2.1', 'stable', true],
@@ -165,7 +171,9 @@ describe('the release feed', () => {
 
   it('reads a mirror’s list of release files', async () => {
     const fetchImpl = (async () => json({ releases: [manifest('0.3.0', { channel: 'stable' }), manifest('0.2.0')] })) as unknown as typeof fetch;
-    const releases = await releaseFeed({ url: 'https://mirror.example.org/augur/releases.json', fetchImpl })('0.2.0');
+    const read = await releaseFeed({ url: 'https://mirror.example.org/augur/releases.json', fetchImpl })('0.2.0');
+    const releases = listOf(read);
+    expect(trustOf(read)?.state).toBe('mirror');
     expect(releases.map((r) => [r.version, r.channel])).toEqual([
       ['0.3.0', 'stable'],
       ['0.2.0', 'beta'],
@@ -175,7 +183,7 @@ describe('the release feed', () => {
   it('reads a mirror’s feed from a file on the server, with each release’s notes', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'feed-'));
     writeFileSync(join(dir, 'releases.json'), JSON.stringify({ releases: [manifest('0.3.0', { notesUrl: 'https://github.com/o/r/releases/tag/augur@0.3.0' })] }));
-    const releases = await releaseFeed({ url: pathToFileURL(join(dir, 'releases.json')).href })('0.2.0');
+    const releases = listOf(await releaseFeed({ url: pathToFileURL(join(dir, 'releases.json')).href })('0.2.0'));
     expect(releases).toMatchObject([{ version: '0.3.0', notesUrl: 'https://github.com/o/r/releases/tag/augur@0.3.0' }]);
     await expect(releaseFeed({ url: pathToFileURL(join(dir, 'missing.json')).href })('0.2.0')).rejects.toThrow(/can’t be read/);
   });
@@ -384,5 +392,73 @@ describe('upgrading', () => {
     const server = await buildApp({ updates: await checked([release('0.3.0'), release('0.2.0')]) });
     const res = await server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0' } });
     expect(res.json().message).toBe('AUGUR 0.3.0’s release file names no images, so it can’t be applied.');
+  });
+});
+
+describe('the signed feed (ADR 0017)', () => {
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const NOW = new Date('2026-11-01T12:00:00Z');
+  const BUNDLE = 'application/vnd.dev.sigstore.bundle.v0.3+json';
+  const feedText = (expires = '2026-11-15T00:00:00Z', more: Record<string, unknown> = {}) =>
+    JSON.stringify({ schema: 'augur.feed/v1', issued: '2026-11-01T00:00:00Z', expires, releases: [manifest('0.3.0'), { ...manifest('0.2.5'), halted: { reason: 'Sign-in fails after it', at: '2026-11-01T10:00:00Z' } }], apps: [], ...more });
+  // A container registry holding the feed and, when signed, its bundle.
+  const registry = (text: string, bundle?: string) =>
+    (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/token?')) return json({ token: 'pull' });
+      if (url.includes('/manifests/')) return json({ layers: [{ digest: 'sha256:feed', mediaType: 'application/vnd.augur.feed.v1+json' }, ...(bundle ? [{ digest: 'sha256:sig', mediaType: BUNDLE }] : [])] });
+      if (url.endsWith('/blobs/sha256:feed')) return new Response(text);
+      if (url.endsWith('/blobs/sha256:sig')) return new Response(bundle);
+      return json({}, 404);
+    }) as typeof fetch;
+  const url = 'oci://ghcr.io/o/r/feed:latest';
+  const signedBy = (ok: boolean) => async (feed: string, bundle: string) => {
+    expect(bundle).toBe('the-bundle');
+    expect(JSON.parse(feed).schema).toBe('augur.feed/v1');
+    if (!ok) throw new Error('none of the expected identities matched what was in the certificate.');
+  };
+
+  it('takes a signed feed in date, and lists a halted release as halted', async () => {
+    const read = await releaseFeed({ url, fetchImpl: registry(feedText(), 'the-bundle'), check: signedBy(true), signer: 'feed.yml', now: () => NOW })('0.2.0');
+    expect(trustOf(read)).toEqual({ state: 'verified', expires: '2026-11-15T00:00:00Z', signer: 'feed.yml' });
+    expect(listOf(read).find((r) => r.version === '0.2.5')?.halted).toEqual({ reason: 'Sign-in fails after it', at: '2026-11-01T10:00:00Z' });
+  });
+
+  it('refuses a feed that isn’t signed, is signed by someone else, or has expired', async () => {
+    const read = (text: string, bundle: string | undefined, ok = true) => releaseFeed({ url, fetchImpl: registry(text, bundle), check: signedBy(ok), now: () => NOW })('0.2.0');
+    await expect(read(feedText(), undefined)).rejects.toThrow(/isn’t signed/);
+    await expect(read(feedText(), 'the-bundle', false)).rejects.toThrow(/signature didn’t check out, so nothing new is offered: none of the expected identities/);
+    await expect(read(feedText('2026-10-31T00:00:00Z'), 'the-bundle')).rejects.toThrow(/expired on 2026-10-31/);
+    await expect(read(feedText('soon'), 'the-bundle')).rejects.toThrow(/doesn’t say when it expires/);
+  });
+
+  it('expects the Release feed workflow of the feed’s own repository', () => {
+    expect(repoOfFeed('oci://ghcr.io/harry-burton-dev/im-platform/feed:latest')).toBe('harry-burton-dev/im-platform');
+    const signer = new RegExp(feedSigner('o/r'));
+    expect(signer.test('https://github.com/o/r/.github/workflows/feed.yml@refs/heads/main')).toBe(true);
+    expect(signer.test('https://github.com/o/r/.github/workflows/feed.yml@refs/heads/release/augur-0.14')).toBe(true);
+    expect(signer.test('https://github.com/o/r/.github/workflows/feed.yml@refs/pull/12/merge')).toBe(false);
+    expect(signer.test('https://github.com/o/r/.github/workflows/release.yml@refs/heads/main')).toBe(false);
+  });
+
+  it('never offers a halted release, and tells a server running one where to go', async () => {
+    const halted = { ...release('0.4.0'), halted: { reason: 'Data loss on upgrade' } };
+    const offered = updatesView({ checker: await checked([release('0.2.0'), release('0.3.0'), halted]), apps: [] });
+    expect(offered.available?.version).toBe('0.3.0');
+    expect(offered.newer.map((r) => [r.version, r.halted?.reason])).toEqual([
+      ['0.4.0', 'Data loss on upgrade'],
+      ['0.3.0', undefined],
+    ]);
+
+    const running = { ...release('0.3.0'), halted: { reason: 'Sign-in fails' } };
+    const stuck = updatesView({ checker: await checked([release('0.2.0', 'beta', { images: { registry: 'ghcr.io/o/r/registry@sha256:1' } }), running], 'beta', '0.3.0'), apps: [] });
+    expect(stuck.needsYou).toEqual([{ kind: 'halted', version: '0.3.0', message: 'AUGUR 0.3.0, which this server runs, was halted by its publisher: Sign-in fails. Go back to 0.2.0, or wait for a fixed release.' }]);
+    const moving = updatesView({ checker: await checked([running, release('0.3.1')], 'beta', '0.3.0'), apps: [] });
+    expect(moving.needsYou[0]).toMatchObject({ kind: 'halted', message: expect.stringMatching(/Upgrade to 0\.3\.1\.$/) });
+  });
+
+  it('never goes back to a halted release', async () => {
+    const targets = goBackTargets(await checked([{ ...release('0.1.0'), halted: { reason: 'Broken' } }, release('0.2.0')]));
+    expect(targets[0]).toMatchObject({ version: '0.1.0', problem: 'AUGUR 0.1.0 was halted by its publisher: Broken' });
   });
 });

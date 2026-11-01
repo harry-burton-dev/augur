@@ -11,7 +11,7 @@ services:
   identity:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/identity" } }
   registry:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/registry" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, target: registry, args: { PACKAGE: "@augur/registry" } }
   events:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
   models:

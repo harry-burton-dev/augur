@@ -1,0 +1,55 @@
+name: Halt rollout
+# Stops a release reaching any more deployments, or lets it go on again (ADR 0018,
+# docs/release-channels.md "Halting a release"). Halting puts halted.json on the release; the feed then
+# lists it as halted, so no deployment is offered it or takes it by itself, and a deployment already
+# running it is told what to move to. Nothing is deleted. Only the repository's owner may run it.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'halt or resume'
+        required: true
+        default: halt
+        type: choice
+        options: [halt, resume]
+      unit:
+        description: 'augur, or an app id (such as mandate)'
+        required: true
+        default: augur
+      version:
+        description: 'The version'
+        required: true
+      reason:
+        description: 'Why (shown to every deployment admin); needed to halt'
+        required: false
+concurrency: halt-${{ inputs.unit }}
+permissions:
+  contents: write
+  packages: write
+  # For the Release feed workflow, which signs the feed.
+  id-token: write
+jobs:
+  halt:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.halt.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: halt
+        run: node scripts/halt.mjs "$ACTION" "$UNIT" "$VERSION" "$REASON"
+        env:
+          ACTION: ${{ inputs.action }}
+          UNIT: ${{ inputs.unit }}
+          VERSION: ${{ inputs.version }}
+          REASON: ${{ inputs.reason }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  feed:
+    needs: halt
+    if: needs.halt.outputs.changed != ''
+    uses: ./.github/workflows/feed.yml

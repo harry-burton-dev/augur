@@ -18,6 +18,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import semver from 'semver';
+import { HALTED_ASSET, haltedOf } from './publish-feed.mjs';
 
 const REPO = process.env.AUGUR_REPO ?? 'harry-burton-dev/im-platform';
 /** Who signs AUGUR's images: this repository's Release workflow (infra/release-images.sh). */
@@ -31,6 +32,15 @@ const ISSUER = 'https://token.actions.githubusercontent.com';
 
 /** A release file as the mirror's feed holds it: its channel and notes as GitHub has them now (a dev build stays one, by version). */
 export const asMirrored = (manifest, release) => ({ ...manifest, channel: /-dev\.\d+$/.test(manifest.version) ? 'dev' : release.prerelease ? 'beta' : 'stable', notesUrl: release.html_url });
+
+/** The publisher's halt mark on a release (ADR 0018), read from its halted.json, or undefined. */
+const haltOfRelease = async (release) => {
+  const asset = release.assets?.find((a) => a.name === HALTED_ASSET);
+  return asset ? haltedOf(await github(asset.url, 'application/octet-stream').catch(() => ({ reason: 'Halted by the publisher.' }))) : undefined;
+};
+
+/** A feed entry with its halt mark, if it has one; mirroring a release again picks up a halt or a resume. */
+export const withHalt = (entry, halted) => (halted ? { ...entry, halted } : entry);
 
 /** The feed with `manifest` in it, newest first, replacing an earlier copy of the same release. */
 export const withRelease = (feed, manifest) => ({
@@ -133,7 +143,7 @@ const mirrorApps = async ({ to, feedDir, only, cosign }) => {
       cosign('copy', '--force', from, tagged);
       cosign('verify', '--certificate-identity-regexp', signerOf(file), '--certificate-oidc-issuer', ISSUER, '--output', 'text', ref);
     }
-    files.push({ ...mirrored, channel: release.prerelease ? 'beta' : 'stable', notesUrl: release.html_url });
+    files.push(withHalt({ ...mirrored, channel: release.prerelease ? 'beta' : 'stable', notesUrl: release.html_url }, await haltOfRelease(release)));
   }
   mkdirSync(feedDir, { recursive: true });
   const feedFile = join(feedDir, 'apps.json');
@@ -165,7 +175,9 @@ const main = async () => {
   const release = await github(`/releases/tags/augur@${version}`);
   const asset = release.assets?.find((a) => a.name === 'augur-release.json');
   if (!asset) throw new Error(`augur@${version} has no augur-release.json: it was released before images were, so it can't be mirrored.`);
-  const manifest = asMirrored(await github(asset.url, 'application/octet-stream'), release);
+  const halted = await haltOfRelease(release);
+  if (halted) console.warn(`augur@${version} was halted by its publisher: ${halted.reason} Servers are told, and aren't offered it.`);
+  const manifest = withHalt(asMirrored(await github(asset.url, 'application/octet-stream'), release), halted);
   if (!manifest.images || !Object.keys(manifest.images).length) throw new Error(`augur@${version}'s release file names no images.`);
 
   for (const image of destinations(manifest.images, to, version)) {

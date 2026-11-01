@@ -1,4 +1,4 @@
-import '@augur/ui-kit/tokens.css';
+import '@augur/kit-common/tokens.css';
 import '@augur/ui-kit/base.css';
 import '@augur/ui-kit';
 import './shell.css';

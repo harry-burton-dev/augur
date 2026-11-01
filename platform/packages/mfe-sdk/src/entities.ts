@@ -1,6 +1,7 @@
 import type { Intent, MountContext } from './contract.js';
 import { isDocumentRef, type DocumentRef } from './documents.js';
 import { IntentError } from './intents.js';
+import { isMarkingOrNone, type Marking } from './refs.js';
 
 /**
  * The standard entity intents (SDK 1.5). Data Atlas handles them out of the box;
@@ -25,6 +26,8 @@ export interface EntityRef {
   label?: string;
   /** When it was meant, for a reference about a moment (an ISO date or time). Without it, now. */
   at?: string;
+  /** Reserved (SDK 1.10, ADR 0029): a protective marking, kept as found and never enforced yet. */
+  marking?: Marking;
 }
 
 /** What `pickEntities` asks for. */
@@ -49,7 +52,8 @@ export const isEntityRef = (v: unknown): v is EntityRef => {
     /^ent_[0-9A-HJKMNP-TV-Z]{26}$/.test(r.id) &&
     text(r.type, 80) &&
     (r.label === undefined || text(r.label, 300)) &&
-    (r.at === undefined || text(r.at, 40))
+    (r.at === undefined || text(r.at, 40)) &&
+    isMarkingOrNone(r.marking)
   );
 };
 

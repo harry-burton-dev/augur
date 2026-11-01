@@ -76,6 +76,7 @@ export default defineMicroFrontend({
             <dt>Fetched</dt><dd data-check="fetched">${state.fetched}</dd>
             <dt>Opened</dt><dd data-check="opened">${state.opened}</dd>
             <dt>Picked</dt><dd data-check="picked">${state.picked}</dd>
+            <dt>Focus</dt><dd data-check="focus">${ctx.focus ? ctx.focus.label : 'none'}</dd>
           </dl>
           ${ctx.reply
             ? html`<ui-button data-action="respond" @click=${() => ctx.reply!.respond({ answer: 42 })}>Answer 42</ui-button>
