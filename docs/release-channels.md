@@ -98,7 +98,7 @@ Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feat
 
 Vite and Storybook already change what you see as you save. `pnpm dev:app <id>` runs the real shell and kit with your app's frontend from source (hot reload) and its service beside it. Three switches make more of it live:
 
-- `--kit` also rebuilds the UI kit, its tokens (`tokens/tokens.json`) and the shared modules the shell serves as you change them, and reloads the page, so a change to a kit part shows in your app in a few seconds.
+- `--kit` also rebuilds the UI kit, its tokens (`tokens/*.tokens.json`) and the shared modules the shell serves as you change them, and reloads the page, so a change to a kit part shows in your app in a few seconds.
 - `DEV_PREVIEWS=all` (or ids, comma separated) turns the app's feature previews on for the stand-in person.
 - `DEV_HOST=0.0.0.0` opens the dev server to other machines on the tailnet (any `*.ts.net` name, plus `DEV_ALLOWED_HOSTS`), such as your phone.
 

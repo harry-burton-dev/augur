@@ -62,11 +62,12 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   (including `src/components/icon.ts`), `platform/services/gateway`. Keep
   changes there in their own small PR and merge it first.
 
-## Design rules (ADR 0004)
+## Design rules (ADR 0015)
 - Shell behaviour is a rule driven by manifests and floors, never a special
   case for one app or screen.
 - Colours, durations and distances come only from
-  `platform/packages/ui-kit/tokens/tokens.json`. New `floor-*` tokens must
+  the token files in `platform/packages/ui-kit/tokens/` (`common`, `shell`,
+  `app`; ADR 0015). New `floor-*` tokens must
   also be copied into the design tool Wave is made in (tell Harry).
 - Icons come from Lucide through `icon.ts`. Never hand-write SVG.
 - App layout and interaction rules agreed with Harry live in

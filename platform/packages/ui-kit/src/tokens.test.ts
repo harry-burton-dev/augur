@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { token, tokens } from './generated/tokens.js';
 
 describe('tokens', () => {
-  it('carries the fixed accents from tokens.json', () => {
+  it('carries the fixed accents from the token files', () => {
     expect(tokens.green).toBe('#34D399');
     expect(tokens.navy).toBe('#1E40AF');
   });
