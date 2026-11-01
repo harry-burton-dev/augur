@@ -27,10 +27,12 @@ Load a kit's theme, not these files: `@augur/app-kit/theme.css` in an app, `@aug
 
 ## Controls
 
-The shared controls are React components on React Aria Components, with icons from Lucide. They are `Button`, `IconButton` and `Icon` so far. Load `@augur/kit-common/kit.css` once, after `tokens.css`, for their styles. It holds only the classes the controls use.
+The shared controls are React components on React Aria Components, with icons from Lucide. They are `Button`, `IconButton`, `Icon`, `TextField`, `Select`, `Toggle`, `Checkbox` and `CheckboxGroup` so far. Load `@augur/kit-common/kit.css` once, after `tokens.css`, for their styles. It holds only the classes the controls use.
 
 - A disabled control can carry a `reason`. It then stays focusable and shows the reason on hover and focus, so that nothing unavailable is left unexplained (docs/shell-principles.md). In development, a disabled control with no reason logs a warning.
 - `Button` kinds are `primary`, `secondary`, `quiet` and `danger`. A `danger` button arms on the first press and acts on the second, and Esc or moving away disarms it. `busy` shows progress with a `busyLabel`, and `once` stops a second press.
+- Fields share one shape: a label row (Required or Optional), a hint, a hairline that turns the focus blue, and a line under it for the field's state. A required field left empty asks in green (`attention`); only wrong content is `error`. Pass `state` and `message` to set it from outside, or `validate` to check on leaving the field.
+- A `Toggle` acts at once. Give `onChange` a Promise and it shows saving, and turns back and says why if it fails. A choice that waits for a form's primary is a `Checkbox`.
 - `iconNames` matches the Lit kit's icon list. A test in ui-kit fails if the two lists drift apart.
 - `src/tokens-only.test.ts` fails on any raw colour or duration in kit source.
 
