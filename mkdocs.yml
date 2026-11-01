@@ -41,3 +41,5 @@ nav:
       - 0012. Every app lives in its own repository, and pillar apps are default-installed apps: decisions/0012-apps-in-own-repositories.md
       - 0013. One AUGUR version for deployments, and GitHub releases only for AUGUR and apps: decisions/0013-versions-and-releases.md
       - 0014. Agents are apps, run by a durable runs service on DBOS: decisions/0014-agent-runtime.md
+      - 0015. Frontends are React, with a shell kit and an app kit on one common base, styled with Tailwind: decisions/0015-react-kits-tailwind.md
+      - 0016. The kits' Storybook is hosted on Chromatic: decisions/0016-storybook-on-chromatic.md
