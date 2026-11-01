@@ -3,13 +3,11 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactN
 import { upgradesApi } from './api.js';
 import { useUpgrades, type UpgradesData } from './data.js';
 import { Facts, Muted, Section, StateMark, Version, When } from './look.js';
-import { loadSeen, markSeen, needsYou } from './model/needs-you.js';
+import { needsYou } from './model/needs-you.js';
 import { canChange } from './model/roles.js';
-import { policySentence } from './model/sentence.js';
-import { nextWindows } from './model/time.js';
-import type { GoBackTarget, UnitRecord } from './model/types.js';
+import type { GoBackTarget, Overview as OverviewData } from './model/types.js';
 import { CHANNEL_WORDS, POLICY_WORDS, RING_WORDS } from './model/words.js';
-import { AUGUR, appRows, augurRow, levelWord, type UnitRow } from './units.js';
+import { AUGUR, levelWord, rowOf, type UnitRow } from './units.js';
 
 /** Where Admin's own Upgrade Centre page is, which still makes the changes until this app's flow ships. */
 const ADMIN_UPGRADES = '/admin/updates';
@@ -18,14 +16,14 @@ export type Route = { page: 'overview' } | { page: 'unit'; unit: string } | { pa
 
 /** Which page a path inside the Upgrade Centre opens. Anything unknown opens the overview. */
 export const routeFor = (path: string): Route => {
-  const [first, second] = path.split('/').filter(Boolean);
+  const [first, second] = path.split('#')[0]!.split('/').filter(Boolean);
   if (first === AUGUR) return { page: 'unit', unit: AUGUR };
   if (first === 'apps' && second) return { page: 'unit', unit: second };
   if (first === 'history') return { page: 'history' };
   return { page: 'overview' };
 };
 
-const deploymentZone = (records: UpgradesData['records']) => records[AUGUR]?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+const deploymentZone = (overview?: OverviewData) => overview?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** A link inside the app: it moves the address and the page without reloading the shell. */
 const useNavigation = (ctx: Pick<MountContext, 'path'>) => {
@@ -68,13 +66,14 @@ const useNavigation = (ctx: Pick<MountContext, 'path'>) => {
 
 export const App = ({ ctx }: { ctx: Pick<MountContext, 'fetch' | 'path' | 'user'> }) => {
   const api = useMemo(() => upgradesApi(ctx), [ctx]);
-  const { data, checkNow } = useUpgrades(api);
+  const { data, checkNow, took } = useUpgrades(api);
   const { path, Link } = useNavigation(ctx);
   const route = routeFor(path);
   const now = data.readAt ?? new Date();
-  const zone = deploymentZone(data.records);
+  const zone = deploymentZone(data.overview);
   const gate = canChange(ctx.user.roles);
-  const rows = data.updates ? [augurRow(data.updates, data.records[AUGUR], now), ...(data.installs ? appRows(data.installs, data.records, now) : [])] : [];
+  const watchingUntil = data.updates?.upgrade?.state === 'done' ? data.updates.upgrade.watch?.until : undefined;
+  const rows = data.overview?.units.map((u) => rowOf(u, now, u.unit === AUGUR ? watchingUntil : undefined)) ?? [];
 
   return (
     <div className="flex flex-wrap gap-7 p-edge text-body text-ink min-h-full" data-upgrades>
@@ -97,12 +96,12 @@ export const App = ({ ctx }: { ctx: Pick<MountContext, 'fetch' | 'path' | 'user'
             {data.error} What you see below was read <When at={data.readAt} zone={zone} now={new Date()} />.
           </p>
         )}
-        {data.loading && !data.updates ? (
+        {data.loading && !data.overview ? (
           <Muted>Reading what this deployment runs…</Muted>
-        ) : !data.updates ? (
+        ) : !data.overview || !data.updates ? (
           <Muted>The registry isn't answering, so nothing can be shown or changed here. Check it with `pc logs registry`.</Muted>
         ) : route.page === 'overview' ? (
-          <Overview data={data} rows={rows} now={now} zone={zone} gate={gate} checkNow={checkNow} Link={Link} />
+          <Overview data={data} rows={rows} now={now} zone={zone} gate={gate} checkNow={checkNow} took={took} api={api} Link={Link} />
         ) : route.page === 'history' ? (
           <History data={data} now={now} zone={zone} />
         ) : (
@@ -116,15 +115,25 @@ export const App = ({ ctx }: { ctx: Pick<MountContext, 'fetch' | 'path' | 'user'
 type LinkC = ReturnType<typeof useNavigation>['Link'];
 type Gate = ReturnType<typeof canChange>;
 
-const Overview = (p: { data: UpgradesData; rows: UnitRow[]; now: Date; zone: string; gate: Gate; checkNow: () => Promise<void>; Link: LinkC }) => {
+const Overview = (p: {
+  data: UpgradesData;
+  rows: UnitRow[];
+  now: Date;
+  zone: string;
+  gate: Gate;
+  checkNow: () => Promise<void>;
+  took: (o: OverviewData) => void;
+  api: ReturnType<typeof upgradesApi>;
+  Link: LinkC;
+}) => {
   const u = p.data.updates!;
-  const [seen, setSeen] = useState(loadSeen);
+  const o = p.data.overview!;
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string>();
-  const items = needsYou(u, p.data.installs?.installed ?? [], seen);
-  const record = p.data.records[AUGUR];
-  const next = record ? nextWindows(record.windows, record.timeZone, p.now, 1)[0] : undefined;
-  const trust = u.feedTrust;
+  const [seenError, setSeenError] = useState<string>();
+  const items = needsYou(o, p.data.installs?.installed ?? []);
+  const augur = o.units.find((x) => x.unit === AUGUR);
+  const trust = o.feedTrust;
 
   return (
     <>
@@ -137,31 +146,41 @@ const Overview = (p: { data: UpgradesData; rows: UnitRow[]; now: Date; zone: str
               <li key={i.key} className="flex flex-col gap-1 rounded-card bg-surface-raised p-4" data-need={i.kind}>
                 <strong>{i.title}</strong>
                 <span className="text-ink-muted">{i.why}</span>
-                <span>
+                <span className="flex gap-4 items-baseline">
                   <p.Link to={i.action.to}>{i.action.verb}</p.Link>
-                  {(i.kind === 'failed' || i.kind === 'went-back') && (
-                    <button
-                      type="button"
-                      className="ml-4 text-ink-muted underline-offset-4 hover:underline bg-transparent border-0 cursor-pointer"
-                      onClick={() => {
-                        markSeen(i.key.replace(/^result-/, ''));
-                        setSeen(loadSeen());
+                  {i.result && (
+                    <ui-button
+                      kind="quiet"
+                      size="small"
+                      disabled={!p.gate.allowed || undefined}
+                      reason={p.gate.allowed ? undefined : p.gate.reason}
+                      onClick={async () => {
+                        setSeenError(undefined);
+                        await p.api
+                          .markSeen(i.result!.kind, i.result!.id)
+                          .then(p.took)
+                          .catch((e: unknown) => setSeenError(e instanceof Error ? e.message : String(e)));
                       }}
                     >
                       I've looked at this
-                    </button>
+                    </ui-button>
                   )}
                 </span>
               </li>
             ))}
           </ul>
         )}
+        {seenError && (
+          <p role="alert" className="m-0 text-danger">
+            {seenError}
+          </p>
+        )}
       </Section>
 
       <Section title="This deployment" id="deployment">
         <Facts
           rows={[
-            ['Server', u.ring ? RING_WORDS[u.ring] : 'Not set (SERVER_RING in .env)'],
+            ['Server', RING_WORDS[o.ring]],
             ['AUGUR', <Version key="v" v={u.running.version} />],
             ['Following', `${CHANNEL_WORDS[u.channel]} releases`],
             ['Updater', u.updaterSeenAt ? <span key="s">Last asked for work <When at={u.updaterSeenAt} zone={p.zone} now={p.now} /></span> : 'Not set up yet, so upgrades from here wait. See docs/upgrade.md.'],
@@ -191,7 +210,7 @@ const Overview = (p: { data: UpgradesData; rows: UnitRow[]; now: Date; zone: str
                   {r.pin && <span className="text-ink-muted"> · pinned to {r.pin}</span>}
                   {r.held && <span className="text-ink-muted"> · held</span>}
                 </td>
-                <td className="py-3">{r.policy ? POLICY_WORDS[r.policy] : <span className="text-ink-muted">An admin starts each upgrade</span>}</td>
+                <td className="py-3">{POLICY_WORDS[r.policy]}</td>
                 <td className="py-3">
                   <StateMark state={r.state} />
                   {r.offered && r.state !== 'up-to-date' && (
@@ -208,21 +227,24 @@ const Overview = (p: { data: UpgradesData; rows: UnitRow[]; now: Date; zone: str
       </Section>
 
       <Section title="Next" id="next">
-        {next ? (
+        {augur?.window.open && augur.automatic?.takes ? (
+          <Muted>A window is open now: {augur.automatic.takes}</Muted>
+        ) : augur?.window.nextAt ? (
           <Muted>
-            Next maintenance window <When at={next.start} zone={p.zone} now={p.now} />.
+            Next maintenance window <When at={augur.window.nextAt} zone={p.zone} now={p.now} />.{' '}
+            {augur.automatic?.takes ? augur.automatic.takes : 'Nothing will run in it by itself.'}
           </Muted>
-        ) : record?.windows === 'any' ? (
-          <Muted>Automatic upgrades may run at any time on this server.</Muted>
+        ) : augur && augur.desired.windows.length === 0 && augur.desired.policy === 'automatic' ? (
+          <Muted>Automatic upgrades may start at any time on this server.</Muted>
         ) : (
-          <Muted>Nothing scheduled. AUGUR upgrades start when an admin asks.</Muted>
+          <Muted>Nothing scheduled.</Muted>
         )}
       </Section>
 
       <Section title="Last checked" id="checked">
         <Facts
           rows={[
-            ['Release feed', u.feed === 'off' ? 'Off on this deployment (RELEASE_FEED_URL=off)' : <When key="c" at={u.checkedAt} zone={p.zone} now={p.now} />],
+            ['Release feed', o.feed === 'off' ? 'Off on this deployment (RELEASE_FEED_URL=off)' : <When key="c" at={o.checkedAt ?? u.checkedAt} zone={p.zone} now={p.now} />],
             ...(trust
               ? ([
                   [
@@ -230,8 +252,8 @@ const Overview = (p: { data: UpgradesData; rows: UnitRow[]; now: Date; zone: str
                     trust.state === 'verified'
                       ? `Checked${trust.signer ? `, signed by ${trust.signer}` : ''}`
                       : trust.state === 'mirror'
-                        ? `Read from a mirror${trust.note ? `: ${trust.note}` : ''}`
-                        : trust.note ?? 'Not checked',
+                        ? `Read from your organisation's mirror${trust.note ? `: ${trust.note}` : ''}`
+                        : trust.note ?? 'Not checked: read from GitHub directly',
                   ],
                   ...(trust.expires ? ([['Expires', <When key="e" at={trust.expires} zone={p.zone} now={p.now} />]] as [string, ReactNode][]) : []),
                 ] as [string, ReactNode][])
@@ -243,8 +265,8 @@ const Overview = (p: { data: UpgradesData; rows: UnitRow[]; now: Date; zone: str
           <ui-button
             kind="secondary"
             busy={checking || undefined}
-            disabled={u.feed === 'off' || undefined}
-            reason={u.feed === 'off' ? 'The release feed is off on this deployment (RELEASE_FEED_URL=off).' : undefined}
+            disabled={o.feed === 'off' || undefined}
+            reason={o.feed === 'off' ? 'The release feed is off on this deployment (RELEASE_FEED_URL=off).' : undefined}
             onClick={async () => {
               setChecking(true);
               setCheckError(undefined);
@@ -269,7 +291,7 @@ const flowNotHere = 'Upgrading from this page arrives in the next release of the
 
 const Unit = (p: { data: UpgradesData; row?: UnitRow; unit: string; now: Date; zone: string; gate: Gate }) => {
   if (!p.row) return <Muted>Nothing called “{p.unit}” is installed on this deployment.</Muted>;
-  const record: UnitRecord | undefined = p.data.records[p.unit];
+  const unit = p.data.overview!.units.find((x) => x.unit === p.unit)!;
   const isAugur = p.unit === AUGUR;
   const u = p.data.updates!;
   const app = p.data.installs?.installed.find((a) => a.app === p.unit);
@@ -287,25 +309,18 @@ const Unit = (p: { data: UpgradesData; row?: UnitRow; unit: string; now: Date; z
       </header>
 
       <Section title="How it moves" id="policy">
-        {record ? (
-          <p className="m-0">
-            {policySentence({ name: p.row.name, channel: record.channel, policy: record.policy, windows: record.windows, pin: record.pin })}
-          </p>
-        ) : isAugur ? (
-          <Muted>
-            AUGUR follows {CHANNEL_WORDS[u.channel]} releases, and an admin starts each upgrade. Policies, pins and maintenance windows arrive with the next updater release.
-          </Muted>
-        ) : (
-          <Muted>
-            {p.row.name} follows {CHANNEL_WORDS[app!.channel]} releases. Policy: {POLICY_WORDS[app!.policy]}.
-          </Muted>
-        )}
-        {record?.hold && (
-          <Muted>
-            Held by {record.hold.byName ?? record.hold.by} <When at={record.hold.at} zone={p.zone} now={p.now} />
-            {record.hold.note ? `: ${record.hold.note}` : '.'}
-          </Muted>
-        )}
+        <p className="m-0">{unit.policy}</p>
+        {unit.automatic?.takes && <Muted>{unit.automatic.takes}</Muted>}
+        {unit.automatic?.waits && <Muted>{unit.automatic.waits}</Muted>}
+        <Muted>
+          {unit.desired.isDefault ? (
+            'These are the defaults: nobody has changed them on this server.'
+          ) : (
+            <>
+              Set by {unit.desired.setBy} <When at={unit.desired.setAt} zone={p.zone} now={p.now} />.
+            </>
+          )}
+        </Muted>
       </Section>
 
       <Section title="On offer" id="offer">
@@ -397,7 +412,7 @@ const History = (p: { data: UpgradesData; now: Date; zone: string }) => {
       ) : (
         <ul className="m-0 p-0 list-none flex flex-col gap-3">
           {entries.map((h) => (
-            <li key={h.id} className="flex flex-col gap-1 border-t border-hairline pt-3" data-history={h.id}>
+            <li key={h.id} id={h.id} className="flex flex-col gap-1 border-t border-hairline pt-3" data-history={h.id}>
               <span>
                 AUGUR <Version v={h.from} /> to <Version v={h.version} />: {OUTCOME[h.state] ?? h.state}
               </span>

@@ -2,8 +2,9 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, routeFor } from './app.js';
-import type { AppInstalls, PlatformUpdates } from './model/types.js';
-import { appRows, augurRow } from './units.js';
+import { needsYou } from './model/needs-you.js';
+import type { AppInstalls, Overview, OverviewUnit, PlatformUpdates } from './model/types.js';
+import { stateOf } from './units.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -34,23 +35,66 @@ describe('routes', () => {
     expect(routeFor('/augur')).toEqual({ page: 'unit', unit: 'augur' });
     expect(routeFor('/apps/folio')).toEqual({ page: 'unit', unit: 'folio' });
     expect(routeFor('/history')).toEqual({ page: 'history' });
+    expect(routeFor('/history#u1')).toEqual({ page: 'history' });
     expect(routeFor('/nonsense')).toEqual({ page: 'overview' });
   });
 });
 
-describe('unit rows', () => {
+const unit = (over: Partial<OverviewUnit> = {}): OverviewUnit => ({
+  unit: 'augur',
+  name: 'AUGUR',
+  running: '0.13.1',
+  available: '0.13.2',
+  desired: { unit: 'augur', channel: 'stable', policy: 'ask', automaticUpTo: 'patch', windows: [{ day: 0, start: '02:00', hours: 2 }], timeZone: 'Europe/London', setBy: 'default', setAt: '2026-11-01T00:00:00Z', isDefault: true },
+  policy: 'AUGUR waits for you before taking any release from Production.',
+  window: { open: false, nextAt: '2026-11-08T02:00:00Z' },
+  ...over,
+});
+
+const overview = (over: Partial<Overview> = {}): Overview => ({
+  ring: 'production',
+  timeZone: 'Europe/London',
+  feed: 'on',
+  feedTrust: { state: 'verified', signer: 'release.yml' },
+  checkedAt: '2026-11-01T20:00:00Z',
+  units: [unit(), unit({ unit: 'folio', name: 'Artifacts', running: '1.0.0', available: '1.1.0', policy: 'Artifacts takes patch and minor releases by itself.', desired: { ...unit().desired, unit: 'folio', policy: 'automatic', automaticUpTo: 'minor', windows: [] }, window: { open: true }, automatic: { takes: 'It takes 1.1.0 by itself now.' } })],
+  needsYou: [],
+  ...over,
+});
+
+describe('unit state', () => {
   const now = new Date('2026-11-04T12:00:00Z');
-  it('shows AUGUR’s offer as available until it has a policy, and as running during a job', () => {
-    expect(augurRow(updates(), undefined, now)).toMatchObject({ id: 'augur', running: '0.13.1', offered: '0.13.2', state: 'update-available' });
-    const job = updates({ upgrade: { id: 'u', from: '0.13.1', version: '0.13.2', requestedBy: 'p', requestedAt: '', state: 'running', steps: [] } });
-    expect(augurRow(job, undefined, now).state).toBe('running');
-    expect(augurRow(updates({ needsYou: [{ kind: 'halted', message: 'Stopped' }] }), undefined, now).state).toBe('halted');
+  it('follows the registry: running, halted, held, then the offer', () => {
+    expect(stateOf(unit({ open: { id: 'u', state: 'running' } }), now)).toBe('running');
+    expect(stateOf(unit({ halted: { reason: 'Sign-in loops', at: '' } }), now)).toBe('halted');
+    expect(stateOf(unit({ desired: { ...unit().desired, policy: 'hold' } }), now)).toBe('held');
+    expect(stateOf(unit({ available: undefined }), now)).toBe('up-to-date');
+    expect(stateOf(unit(), now)).toBe('waiting-you');
   });
 
-  it('lets an Automatic app take a minor by itself, and waits for a person when it asks for more', () => {
-    expect(appRows(installs, {}, now)[0]).toMatchObject({ id: 'folio', name: 'Artifacts', state: 'update-available', policy: 'automatic' });
-    const asks = { ...installs, installed: [{ ...installs.installed[0]!, update: { version: '1.1.0', channel: 'stable' as const, needs: ['It asks to send notifications.'] } }] };
-    expect(appRows(asks, {}, now)[0]!.state).toBe('waiting-you');
+  it('waits for the window when Automatic takes it, and for a person when it says why not', () => {
+    const auto = { ...unit().desired, policy: 'automatic' as const };
+    expect(stateOf(unit({ desired: auto, automatic: { takes: 'Takes 0.13.2 on Sunday.' } }), now)).toBe('waiting-window');
+    expect(stateOf(unit({ desired: auto, automatic: { takes: 'Takes it now.' }, window: { open: true } }), now)).toBe('update-available');
+    expect(stateOf(unit({ desired: auto, automatic: { waits: 'It needs a setting only a person can give.' } }), now)).toBe('waiting-you');
+    expect(stateOf(unit(), now, '2026-11-04T12:05:00Z')).toBe('watching');
+  });
+});
+
+describe('needs you', () => {
+  it('lists what the registry lists, worst first, then app releases that ask for more', () => {
+    const items = needsYou(
+      overview({
+        needsYou: [
+          { kind: 'went-back', unit: 'augur', message: 'Verify failed on registry.', result: { kind: 'upgrade', id: 'u1' } },
+          { kind: 'halted', unit: 'folio', message: 'Uploads fail on 1.0.0.' },
+        ],
+      }),
+      [{ ...installs.installed[0]!, update: { version: '1.1.0', channel: 'stable', needs: ['It asks to send notifications.'] } }],
+    );
+    expect(items.map((i) => i.kind)).toEqual(['halted', 'went-back', 'approval']);
+    expect(items[0]!.title).toBe('Artifacts runs a halted release');
+    expect(items[1]!.result).toEqual({ kind: 'upgrade', id: 'u1' });
   });
 });
 
@@ -79,7 +123,13 @@ describe('Upgrade Centre', () => {
   };
 
   const registry = (path: string): [number, unknown] =>
-    path.endsWith('/platform/updates') ? [200, updates()] : path.endsWith('/app-runner/apps') ? [200, installs] : [404, { error: 'not_found', message: 'No such record' }];
+    path.endsWith('/platform/overview')
+      ? [200, overview()]
+      : path.endsWith('/platform/updates')
+        ? [200, updates()]
+        : path.endsWith('/app-runner/apps')
+          ? [200, installs]
+          : [404, { error: 'not_found', message: 'Nothing there' }];
 
   it('answers the three overview questions, and says when nothing needs you', async () => {
     const { el } = await mount(['admin'], registry);
@@ -87,7 +137,8 @@ describe('Upgrade Centre', () => {
     expect(el.textContent).toContain('Production');
     expect(el.querySelector('[data-unit="augur"]')?.textContent).toContain('0.13.1');
     expect(el.querySelector('[data-unit="folio"]')?.textContent).toContain('Artifacts');
-    expect(el.textContent).toContain('Nothing scheduled.');
+    expect(el.textContent).toContain('Next maintenance window Sun 8 Nov, 02:00 GMT');
+    expect(el.querySelector('[data-unit="folio"]')?.textContent).toContain('Automatic');
   });
 
   it('opens a unit inside the app, keeping its upgrade visible but explained', async () => {
@@ -100,6 +151,8 @@ describe('Upgrade Centre', () => {
     expect(button?.textContent).toBe('Upgrade AUGUR to 0.13.2');
     expect(button?.getAttribute('reason')).toContain('deployment-admin');
     expect(el.querySelector('[data-go-back="0.13.0"]')?.textContent).toContain('Can go back straight away');
+    expect(el.textContent).toContain('AUGUR waits for you before taking any release from Production.');
+    expect(el.textContent).toContain('These are the defaults');
   });
 
   it('keeps what it last read when the registry stops answering, and says so', async () => {
@@ -110,5 +163,31 @@ describe('Upgrade Centre', () => {
     await act(async () => check.click());
     expect(el.querySelector('[role="alert"]')?.textContent).toContain('The registry isn’t answering.');
     expect(el.querySelector('[data-unit="augur"]')).not.toBeNull();
+  });
+});
+
+describe('marking a result looked at', () => {
+  it('sends it to the registry for every admin and shows the overview it answers with', async () => {
+    window.history.replaceState(null, '', '/@me/upgrades');
+    const el = document.createElement('div');
+    document.body.append(el);
+    let current = overview({ needsYou: [{ kind: 'failed', unit: 'augur', message: 'Pull failed.', result: { kind: 'upgrade', id: 'u9' } }] });
+    const fetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path.endsWith('/results/upgrade/u9/seen') && init?.method === 'POST') current = overview();
+      const body = path.includes('/platform/overview') || path.includes('/seen') ? current : path.endsWith('/platform/updates') ? updates() : installs;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    await act(async () => {
+      createRoot(el).render(<App ctx={{ fetch, path: '', user: { id: 'p1', name: 'Alex', departments: [], roles: ['deployment-admin'] } }} />);
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(el.querySelector('[data-need="failed"]')).not.toBeNull();
+    const looked = el.querySelector('[data-need="failed"] ui-button') as HTMLElement;
+    await act(async () => looked.click());
+    expect(fetch).toHaveBeenCalledWith('/api/registry/v1/platform/results/upgrade/u9/seen', expect.objectContaining({ method: 'POST' }));
+    expect(el.querySelector('[data-need="failed"]')).toBeNull();
+    expect(el.textContent).toContain('Nothing needs you.');
   });
 });
