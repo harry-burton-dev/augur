@@ -20,6 +20,7 @@ nav:
   - "Artifacts: a guide for people and admins": folio.md
   - "Mandate: intent": mandate.md
   - Mirroring AUGUR releases: mirror.md
+  - Observability: observability.md
   - "Release channels: one branch, three rings": release-channels.md
   - Shell principles: shell-principles.md
   - Ship an app: ship-an-app.md
@@ -61,6 +62,7 @@ nav:
       - 0031. A mirror's feed is the organisation's own, and carries the publisher's halt marks: decisions/0031-mirror-feeds-are-the-organisations-own.md
       - 0032. Apps that ship with AUGUR are platform apps or pillar apps: decisions/0032-platform-apps-and-pillar-apps.md
       - 0033. Renovate proposes dependency updates, weekly and grouped, and never merges them: decisions/0033-renovate-for-dependency-updates.md
+      - 0034. Services send OpenTelemetry through the service kit, off until a collector is named: decisions/0034-opentelemetry-in-the-service-kit.md
       - 0035. AUGUR sends email through the organisation's own SMTP relay: decisions/0035-email-through-the-organisations-relay.md
       - 0036. People manage their own account in the shell, through identity, with credentials on Keycloak's screens: decisions/0036-account-area-in-the-shell.md
       - 0037. Keycloak moves to the current 26.x and stays current: decisions/0037-keycloak-stays-current.md
