@@ -249,7 +249,7 @@ export interface NeedsYou {
 /** What the registry last found in the release feed, against the running release. */
 /** One step the updater took (see contracts/registry.openapi.yaml). */
 export interface UpgradeStepState {
-  step: 'preflight' | 'backup' | 'pull' | 'roll-forward' | 'verify' | 'roll-back';
+  step: 'preflight' | 'backup' | 'pull' | 'roll-forward' | 'verify' | 'watch' | 'roll-back';
   state: 'running' | 'done' | 'failed';
   at: string;
   message?: string;

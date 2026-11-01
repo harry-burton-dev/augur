@@ -5,6 +5,10 @@
  * to the release it was on. Each step is reported to the registry, which shows it on Admin's
  * Updates page.
  *
+ * When the registry asks for it (`watch`), the upgrade isn't done until the new release has run for
+ * WATCH_MS with sign-in working and few calls failing at the gateway (ADR 0020); if it falls over in
+ * that time, the server goes back by itself, unless a breaking release lies between.
+ *
  * Outcomes: `done` (on the new release), `rolled-back` (on the release it started from, whether
  * or not anything was restarted) and `failed` (it couldn't go back either: someone has to look).
  */
@@ -28,9 +32,14 @@ export interface Target {
   deploy?: Record<string, string>;
   /** Settings the admin entered on the Updates page when they asked, for .env. */
   settings?: Record<string, string>;
+  /**
+   * Watch the new release before calling it done (ADR 0020). `breakingSince`: a breaking release
+   * between, which makes going back by itself unsafe, so a problem is reported for a person instead.
+   */
+  watch?: { breakingSince?: string };
 }
 
-export type Step = 'preflight' | 'backup' | 'pull' | 'roll-forward' | 'verify' | 'roll-back';
+export type Step = 'preflight' | 'backup' | 'pull' | 'roll-forward' | 'verify' | 'watch' | 'roll-back';
 export type Outcome = 'done' | 'rolled-back' | 'failed';
 
 export interface Report {
@@ -85,6 +94,10 @@ export interface Server {
   up(services: string[]): Promise<void>;
   /** What a service's /healthz says, or undefined while it doesn't answer. */
   health(service: string): Promise<{ version?: string } | undefined>;
+  /** How calls through the gateway answered in the last `minutes`; undefined when it can't be asked. */
+  traffic(minutes: number): Promise<{ requests: number; serverErrors: number } | undefined>;
+  /** Why signing in wouldn't work now (the sign-in service doesn't answer for the realm), or nothing. */
+  signInProblem(): Promise<string | undefined>;
   /** How a one-off job's container ended: its exit code, or undefined while it runs. */
   exitCode(service: string): Promise<number | undefined>;
   wait(ms: number): Promise<void>;
@@ -114,6 +127,16 @@ const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex
 /** How long a part has to come back on its new version. */
 export const READY_MS = 120_000;
 const POLL_MS = 2_000;
+
+/** How long a new release is watched before the upgrade is done, and how often it's looked at (ADR 0020). */
+export const WATCH_MS = 10 * 60_000;
+export const WATCH_EVERY_MS = 30_000;
+/** More than this share of the gateway's calls failing (5xx) means the release isn't working... */
+export const ERROR_RATE = 0.05;
+/** ...once there have been enough calls to tell. */
+export const MIN_CALLS = 20;
+/** Sign-in failing this many looks in a row means it's down, not a blip. */
+export const SIGN_IN_LOOKS = 2;
 
 const digestOf = (ref: string) => ref.slice(ref.lastIndexOf('@') + 1);
 
@@ -162,6 +185,28 @@ const running = async (server: Server, service: string) => {
   await server.wait(POLL_MS);
   const code = await server.exitCode(service).catch(() => undefined);
   if (code !== undefined) throw new StepFailed(`${service} stopped (exit code ${code}); its logs say why.`);
+};
+
+/**
+ * Watches the new release for WATCH_MS: sign-in must keep answering and the gateway's calls mostly
+ * succeed. Throws StepFailed with what it saw when either stops being so. Every part must still be
+ * on its new version at the end.
+ */
+const watch = async (server: Server, services: readonly string[], versionOf: (service: string) => string | undefined) => {
+  let signInMisses = 0;
+  for (let watched = WATCH_EVERY_MS; watched <= WATCH_MS; watched += WATCH_EVERY_MS) {
+    await server.wait(WATCH_EVERY_MS);
+    const problem = await server.signInProblem().catch((err) => reason(err));
+    signInMisses = problem ? signInMisses + 1 : 0;
+    if (signInMisses >= SIGN_IN_LOOKS) throw new StepFailed(`Signing in stopped working after the upgrade: ${problem}`);
+    // The gateway restarted in the upgrade, so everything it counted is since then.
+    const minutes = Math.min(10, Math.ceil(watched / 60_000));
+    const calls = await server.traffic(minutes).catch(() => undefined);
+    if (calls && calls.requests >= MIN_CALLS && calls.serverErrors / calls.requests > ERROR_RATE) {
+      throw new StepFailed(`${calls.serverErrors} of the ${calls.requests} calls through the gateway in the last ${minutes} minute${minutes === 1 ? '' : 's'} failed, more than ${ERROR_RATE * 100}%.`);
+    }
+  }
+  await ready(server, services, versionOf);
 };
 
 /** What went wrong, for the page: a message we wrote, or the first line of anything else. */
@@ -319,11 +364,29 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     step = 'verify';
     await report({ step, state: 'running' });
     await ready(server, services, versionOf);
-    await report({ step, state: 'done', message: `Running AUGUR ${target.version}.`, outcome: 'done' });
+    if (!target.watch) {
+      await report({ step, state: 'done', message: `Running AUGUR ${target.version}.`, outcome: 'done' });
+      return 'done';
+    }
+    await report({ step, state: 'done', message: `Running AUGUR ${target.version}.` });
+    step = 'watch';
+    await report({ step, state: 'running', message: `Watching sign-in and the gateway’s calls for ${WATCH_MS / 60_000} minutes.` });
+    await watch(server, services, versionOf);
+    await report({ step, state: 'done', message: `AUGUR ${target.version} ran for ${WATCH_MS / 60_000} minutes with sign-in working and calls answering.`, outcome: 'done' });
     return 'done';
   } catch (err) {
     if (err instanceof Withdrawn) throw err;
     const why = reason(err);
+    // A breaking release between: going back by itself could leave data the old release can't read.
+    if (step === 'watch' && target.watch?.breakingSince) {
+      await report({
+        step,
+        state: 'failed',
+        message: `${why} AUGUR ${target.version} is still running: it didn’t go back by itself, because ${target.watch.breakingSince} between is breaking. See docs/upgrade.md, Going back.`,
+        outcome: 'failed',
+      }).catch(() => undefined);
+      return 'failed';
+    }
     await report({ step, state: 'failed', message: why }).catch(() => undefined);
     return rollBack(target, server, report, before, services, why, backup, { oldFiles, fresh, others, left });
   }

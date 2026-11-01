@@ -113,7 +113,7 @@ export interface AllowedOrigin {
 }
 
 /** The steps an updater takes, in order; `roll-back` only when one fails. */
-export const UPGRADE_STEPS = ['preflight', 'backup', 'pull', 'roll-forward', 'verify', 'roll-back'] as const;
+export const UPGRADE_STEPS = ['preflight', 'backup', 'pull', 'roll-forward', 'verify', 'watch', 'roll-back'] as const;
 export type UpgradeStep = (typeof UPGRADE_STEPS)[number];
 
 /** Where one step of an upgrade stands. */
