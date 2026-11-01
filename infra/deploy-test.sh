@@ -5,9 +5,8 @@
 #   infra/deploy-test.sh fresh                    # a new server on the images built from this checkout
 #   infra/deploy-test.sh upgrade <from-version>   # that release first, with data, then this checkout, then back
 #
-# The images built from this checkout are tagged PLATFORM_VERSION=$LOCAL_TAG (default "ci"): build them
-# first, with `docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml build`,
-# or let this script do it with BUILD=1. Tailscale isn't started: the front door is published on
+# The release under test is PLATFORM_VERSION=$LOCAL_TAG: a published release's version, whose images
+# are pulled, or (default "ci") images built from this checkout first, which BUILD=1 does. Tailscale isn't started: the front door is published on
 # localhost:$WEB_PORT instead. Everything runs in its own compose project, which is removed at the end.
 set -euo pipefail
 export LC_ALL=C
@@ -88,6 +87,8 @@ pc() {
 use() {
   if [ "$1" = "$local_tag" ]; then dir=$deploy; else dir=$old_deploy; cp "$deploy/.env" "$dir/.env"; fi
   sed -i "s/^PLATFORM_VERSION=.*/PLATFORM_VERSION=$1/" "$dir/.env"
+  # A release's images come from the registry; images built here with BUILD=1 are already local.
+  if [ "${BUILD:-}" != 1 ] || [ "$1" != "$local_tag" ]; then pc pull --quiet $(services) >&2; fi
 }
 services() { pc config --services | grep -vx tailscale; }
 
@@ -177,7 +178,6 @@ case "$mode" in
   upgrade)
     [ -n "$from" ] || { echo "upgrade needs the release to start from, such as 0.13.1" >&2; exit 2; }
     use "$from"
-    pc pull --quiet $(services) >&2
     up
     old=$(wait_ready "augur@$from")
     no_restarts

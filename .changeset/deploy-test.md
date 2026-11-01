@@ -1,4 +1,4 @@
 ---
 ---
 
-A deploy test in CI installs AUGUR fresh, upgrades the newest release to the new images with data, and goes back.
+Each AUGUR release gets a deploy test: installed fresh, upgraded to from the release before with data, and gone back from.
