@@ -5,7 +5,7 @@ import admin, { screenFor } from './entry.js';
 import { AdminApi, departmentPath, type AppInstalls, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person, type PlatformUpdates } from './api.js';
 import { appStatus, floorStatus, floorTree, rollbackNote, scopeWords, uploadChoices, type AdminApps } from './apps.js';
 import { headline, stateOf, type AdminStatus } from './status.js';
-import { headline as updatesHeadline, type AdminUpdates } from './updates.js';
+import { headline as updatesHeadline, trustWords, type AdminUpdates } from './updates.js';
 import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
 import type { AdminDepartments } from './departments.js';
@@ -230,6 +230,14 @@ describe('admin', () => {
       expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, newer: [], needsYou: [] }).heading).toBe('You’re up to date');
       expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, problem: 'The release feed answered 502.', newer: [], needsYou: [] }).heading).toBe('New releases can’t be checked');
       expect(updatesHeadline({ running, channel: 'stable', feed: 'off', newer: [], needsYou: [] }).summary).toContain('RELEASE_FEED_URL is off');
+    });
+
+    it('says first when the release it runs was halted, and how far the feed is trusted', () => {
+      const message = 'AUGUR 0.2.0, which this server runs, was halted by its publisher: Breaks sign-in. Wait for a fixed release.';
+      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', newer: [], needsYou: [{ kind: 'halted', version: '0.2.0', message }] })).toEqual({ heading: 'AUGUR 0.2.0 was halted', summary: message });
+      expect(trustWords({ state: 'verified', expires: '2026-11-15T00:00:00Z' })).toMatch(/^Signed by the publisher, good until /);
+      expect(trustWords({ state: 'mirror' })).toBe('Your organisation’s mirror');
+      expect(trustWords({ state: 'unchecked', note: 'Read from GitHub directly.' })).toBe('Not signed. Read from GitHub directly.');
     });
 
     it('shows what needs doing first, what changes, and checks again when asked', async () => {

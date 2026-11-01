@@ -29,6 +29,17 @@ ENV NODE_ENV=production
 USER node
 CMD ["node", "dist/index.js"]
 
+# The registry also checks the release feed's signature with cosign (ADR 0017):
+#   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry --target registry .
+FROM node:22-alpine AS registry
+RUN apk add --no-cache cosign
+LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+WORKDIR /app
+COPY --from=build /out .
+ENV NODE_ENV=production
+USER node
+CMD ["node", "dist/index.js"]
+
 FROM node:22-alpine AS service
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 WORKDIR /app
