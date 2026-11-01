@@ -72,6 +72,7 @@ describe('identity', () => {
       expect((await look(payroll.id, 'Bearer registry')).json()).toEqual({ id: payroll.id, kind: 'team', path: [org.id, finance.id, payroll.id], org: org.id });
       expect((await look(own.id, 'Bearer registry')).json()).toEqual({ id: own.id, kind: 'personal', path: [own.id], org: org.id });
       expect((await look('nope', 'Bearer registry')).statusCode).toBe(404);
+      expect((await look('org', 'Bearer registry')).json()).toEqual({ id: org.id, kind: 'org', path: [org.id], org: org.id });
       expect((await look(payroll.id, 'Bearer app')).statusCode).toBe(403);
       expect((await look(payroll.id)).statusCode).toBe(403);
     });
