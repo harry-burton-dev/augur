@@ -92,7 +92,7 @@ kind: Component
 metadata:
   name: augur-upgrades
   title: "@augur/upgrades"
-  description: "Upgrade Centre: what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Its state model comes first; the screens follow on the app kit."
+  description: "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL."
   annotations:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/upgrades/
