@@ -27,7 +27,7 @@ Load a kit's theme, not these files: `@augur/app-kit/theme.css` in an app, `@aug
 
 ## Controls
 
-The shared controls are React components on React Aria Components, with icons from Lucide. They are `Button`, `IconButton`, `Icon`, `TextField`, `Select`, `Toggle`, `Checkbox`, `CheckboxGroup`, `Heading`, `Dialog`, `Menu`, `Tabs`, `Choice` and `Segmented` so far. Load `@augur/kit-common/kit.css` once, after `tokens.css`, for their styles. It holds only the classes the controls use.
+The shared controls are React components on React Aria Components, with icons from Lucide. They are `Button`, `IconButton`, `Icon`, `TextField`, `Select`, `Toggle`, `Checkbox`, `CheckboxGroup`, `Heading`, `Dialog`, `Menu`, `Tabs`, `Choice`, `Segmented`, `Person`, `People`, `Tip`, `Progress` and `Steps`. Quill and Aerie add their own parts on top. Load `@augur/kit-common/kit.css` once, after `tokens.css`, for their styles. It holds only the classes the controls use.
 
 - A disabled control can carry a `reason`. It then stays focusable and shows the reason on hover and focus, so that nothing unavailable is left unexplained (docs/shell-principles.md). In development, a disabled control with no reason logs a warning.
 - `Button` kinds are `primary`, `secondary`, `quiet` and `danger`. A `danger` button arms on the first press and acts on the second, and Esc or moving away disarms it. `busy` shows progress with a `busyLabel`, and `once` stops a second press.
@@ -35,6 +35,7 @@ The shared controls are React components on React Aria Components, with icons fr
 - A `Toggle` acts at once. Give `onChange` a Promise and it shows saving, and turns back and says why if it fails. A choice that waits for a form's primary is a `Checkbox`.
 - A `Dialog` holds one decision or one small task. Put its fields in `fields`: the primary checks each one (through `useFieldCheck`) and goes to the first gap before `onSubmit` runs, and `onClose` gets the named values. Throw from `onSubmit` to keep it open with a message.
 - A `Menu` wraps the button that opens it. Give an unavailable item `disabled` and a `reason`, and don't leave it out. `Tabs` take `unavailable`, a map from tab id to why; that tab's panel then shows the reason instead of its content.
+- A `Tip` wraps one focusable DOM element. Never put the only way to do something in a tip, and a disabled control explains itself with its own `reason`, not a Tip.
 - `iconNames` matches the Lit kit's icon list. A test in ui-kit fails if the two lists drift apart.
 - `src/tokens-only.test.ts` fails on any raw colour or duration in kit source.
 
