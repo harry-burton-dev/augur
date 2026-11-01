@@ -5,6 +5,7 @@
 | `shell/` | The host (`@augur/shell`, React + Vite). Wraps the UI kit's `ui-shell`, loads the role-filtered manifest from the registry through the gateway, mounts the app the URL points at into the Shell's stage, routes intents to the app that handles them, and turns `ctx.notify()` into notifications on the Shell's stream. |
 | `home/` | Home (`@augur/home`, at `/home`): what needs you, and apps' glance cards. Built as one ES module at `dist/entry.js`. |
 | `admin/` | Admin (`@augur/admin`, at `/admin`, admins only): people, departments and apps. Its screens call identity's `/v1/admin/*` and the registry's `/v1/apps` and `/v1/origins` through the gateway, never Keycloak. |
+| `upgrades/` | Upgrade Centre (`@augur/upgrades`, coming at `/upgrades`): its API client and state model so far; screens follow on the app kit. See its [README](upgrades/README.md). |
 
 Product apps keep their own frontends under `apps/<app>/frontend`.
 

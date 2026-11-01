@@ -35,5 +35,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0027](0027-runs-is-the-jobs-engine.md) | The runs service also runs ordinary background jobs | Accepted | 2026-11-01 |
 | [0028](0028-discussion-starts-in-intent.md) | Discussion starts inside Intent behind a ref-keyed API | Accepted | 2026-11-01 |
 | [0029](0029-reserve-focus-and-marking.md) | The SDK reserves a working context and a protective marking now | Accepted | 2026-11-01 |
+| [0030](0030-upgrade-centre-platform-frontend.md) | The Upgrade Centre is its own platform frontend, released with AUGUR | Accepted | 2026-11-01 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.
