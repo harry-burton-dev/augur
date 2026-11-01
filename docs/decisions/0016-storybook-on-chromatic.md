@@ -1,6 +1,6 @@
 # 0016. The kits' Storybook is hosted on Chromatic
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 - **Decided by:** Harry
 

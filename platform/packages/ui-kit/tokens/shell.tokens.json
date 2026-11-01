@@ -1,0 +1,121 @@
+{
+  "$description": "Aerie, the shell kit: the water, the band, the focal point and the layers the shell alone draws. Edit tokens here only; scripts/build-tokens.mjs generates everything else.",
+  "color": {
+    "floor-you-low": {
+      "$value": "#1E40AF",
+      "$type": "color",
+      "$description": "Floors: the lower, larger glow bands of the water on your own floor. The same as navy, so your own floor looks as the shell always has. Light, never ink."
+    },
+    "floor-department-low": {
+      "$value": "#6B3FA0",
+      "$type": "color",
+      "$description": "Floors: the lower glow bands on the floors of the first level of team below the org (called Department unless an admin renames it): a deep violet, so a department never looks like a team below it. Light, never ink."
+    },
+    "floor-team-low": {
+      "$value": "#C2553F",
+      "$type": "color",
+      "$description": "Floors: the lower glow bands on every team's floor: a warm coral, one colour for every team below the first level (departments have their own) so it always means \"shared with my team\". Light, never ink; teams are told apart by name and breadcrumb."
+    },
+    "floor-org-low": {
+      "$value": "#172F7A",
+      "$type": "color",
+      "$description": "Floors: the lower glow bands on the org's floor, a deep navy that reads as the deepest, quietest water. Light, never ink."
+    }
+  },
+  "effect": {
+    "glow-blur": {
+      "$value": "18px",
+      "$type": "dimension",
+      "$description": "Blur on the band canvas. Higher is softer (Minimal uses 40px); lower draws lines (Sonar Line uses 6px)."
+    },
+    "glow-saturate": {
+      "$value": "1.15",
+      "$type": "number",
+      "$description": "Saturation boost on the band canvas."
+    },
+    "grain-opacity": {
+      "$value": "0.06",
+      "$type": "number",
+      "$description": "Opacity of the fractal-noise grain laid over everything."
+    },
+    "breathe": {
+      "$value": "0.2",
+      "$type": "number",
+      "$description": "How far each band's intensity swells and fades (0 = steady)."
+    }
+  },
+  "structure": {
+    "measure-card": {
+      "$value": "384px",
+      "$type": "dimension",
+      "$description": "One raised card (Glance Card)."
+    },
+    "band-top": {
+      "$value": "64px",
+      "$type": "dimension",
+      "$description": "Height of the top band. Holds chrome (name left, status right) and nothing else; view headings start at its foot."
+    },
+    "band-bottom": {
+      "$value": "96px",
+      "$type": "dimension",
+      "$description": "Height of the bottom band. Holds the ask line and the Esc key; content stops above it."
+    },
+    "anchor-ask": {
+      "$value": "48px",
+      "$type": "dimension",
+      "$description": "Distance of the ask line from the bottom edge."
+    },
+    "anchor-back": {
+      "$value": "16px",
+      "$type": "dimension",
+      "$description": "Distance of the Esc key and key hints from the bottom edge."
+    },
+    "focal": {
+      "$value": "50%",
+      "$description": "The focal point: the menu's focused item and any centred glance sit on it. Centred blocks sit 4% high of it (optical centre)."
+    },
+    "letterbox": {
+      "$value": "12%",
+      "$description": "Height of each letterbox bar in the Title layouts."
+    },
+    "layer-ground": {
+      "$value": "0",
+      "$type": "number",
+      "$description": "WaveBackground."
+    },
+    "layer-menu": {
+      "$value": "10",
+      "$type": "number",
+      "$description": "CentreMenu."
+    },
+    "layer-glance": {
+      "$value": "20",
+      "$type": "number",
+      "$description": "A Glance, with its veil, over the menu."
+    },
+    "layer-intro": {
+      "$value": "60",
+      "$type": "number",
+      "$description": "The opening wordmark."
+    }
+  },
+  "tracking": {
+    "tracking-mark": {
+      "$value": "0.42em",
+      "$type": "dimension",
+      "$description": "The wordmark only."
+    }
+  },
+  "motion": {
+    "travel-floor": {
+      "$value": "96px",
+      "$type": "dimension",
+      "$description": "How far the screen travels between floors: away the way you're going, in from the other side. Under reduced motion nothing travels; it crossfades."
+    },
+    "motion-title": {
+      "$value": "2400ms",
+      "$type": "duration",
+      "$description": "How long an area title card stays: arriving on a floor or opening an app. Any key, press or scroll ends it sooner."
+    }
+  }
+}
