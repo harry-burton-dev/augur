@@ -24,3 +24,14 @@ The three files in `tokens/`, in the W3C design tokens format, are the only plac
 - `@augur/kit-common/tokens`: the typed map (`tokens`, `token('ink')`).
 
 Load a kit's theme, not these files: `@augur/app-kit/theme.css` in an app, `@augur/shell-kit/theme.css` in the shell. New `floor-*` tokens also have to be copied into the design tool by hand.
+
+## Controls
+
+The shared controls are React components on React Aria Components, with icons from Lucide. They are `Button`, `IconButton` and `Icon` so far. Load `@augur/kit-common/kit.css` once, after `tokens.css`, for their styles. It holds only the classes the controls use.
+
+- A disabled control can carry a `reason`. It then stays focusable and shows the reason on hover and focus, so that nothing unavailable is left unexplained (docs/shell-principles.md). In development, a disabled control with no reason logs a warning.
+- `Button` kinds are `primary`, `secondary`, `quiet` and `danger`. A `danger` button arms on the first press and acts on the second, and Esc or moving away disarms it. `busy` shows progress with a `busyLabel`, and `once` stops a second press.
+- `iconNames` matches the Lit kit's icon list. A test in ui-kit fails if the two lists drift apart.
+- `src/tokens-only.test.ts` fails on any raw colour or duration in kit source.
+
+The stories live next to each control, and the shared Storybook in `platform/storybook` shows them. It is published to Chromatic from CI (docs/release-channels.md).
