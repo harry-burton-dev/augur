@@ -73,6 +73,8 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.intent`, `ctx.reply` | Present when your app was opened to handle an intent, or to answer a request (`reply.respond(result)`) |
 | `ctx.bus` | Events within the page |
 
+**What your app can reach.** Your app runs in the shell's own window with the signed-in person's session, so it can call anything that person can, admin routes included. That's why only apps the deployment's own team wrote or reviewed are installed this way ([ADR 0024](decisions/0024-apps-are-trusted-code.md)). Apps from anyone else will run sandboxed, with a token limited to their own upstreams. Your service still only gets the scopes the registry granted it, and the gateway still applies floor rules on every call.
+
 Build screens from the kit's components (run `pnpm --filter @augur/ui-kit storybook` to see them) and its tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of the kit or Lit: the shell serves one copy to every app, and `vite.config.ts` keeps `lit`, `lit/*` and `@augur/ui-kit` out of your bundle. Anything else you import, you bundle.
 
 ### The app kit
@@ -124,7 +126,7 @@ app.get('/claims', async (req, reply) => {
 });
 ```
 
-From the service kit, `notify` puts a notification on someone's stream and `recordAudit` writes to the platform's audit log; see [apps/README](../apps/README.md). A breaking API change goes under `/v2` beside `/v1`, as in [Versioning](versioning.md#http-apis).
+From the service kit, `notify` puts a notification on someone's stream and `recordAudit` writes to the platform's audit log (each entry also keeps which service wrote it, from its signed token, so an entry that names someone as the actor still shows it came from your app); see [apps/README](../apps/README.md). A breaking API change goes under `/v2` beside `/v1`, as in [Versioning](versioning.md#http-apis).
 
 A frontend-only app can delete `service/`; it is then registered with `pnpm register-app` (step 7).
 

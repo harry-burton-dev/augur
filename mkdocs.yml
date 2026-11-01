@@ -43,3 +43,16 @@ nav:
       - 0014. Agents are apps, run by a durable runs service on DBOS: decisions/0014-agent-runtime.md
       - 0015. Frontends are React, with a shell kit and an app kit on one common base, styled with Tailwind: decisions/0015-react-kits-tailwind.md
       - 0016. The kits' Storybook is hosted on Chromatic: decisions/0016-storybook-on-chromatic.md
+      - 0017. The release feed is signed, expires, and can mark a release halted: decisions/0017-signed-release-feed.md
+      - 0018. Releases reach production through rings, a bake time and a halt switch: decisions/0018-rollout-gates.md
+      - 0019. Deployments report what they run, as a signed heartbeat or an exported file: decisions/0019-deployment-reporting.md
+      - 0020. AUGUR upgrades follow a policy, a maintenance window, a semver pin and a post-upgrade watch: decisions/0020-upgrade-policy-windows-watch.md
+      - 0021. Feature flags use OpenFeature with flagd: decisions/0021-feature-flags-openfeature-flagd.md
+      - 0022. Upgrades need a deployment or app admin role and a step-up sign-in: decisions/0022-upgrade-roles-step-up.md
+      - 0023. The air-gap bundle is a standard OCI image layout: decisions/0023-air-gap-bundle-oci-layout.md
+      - 0024. Apps in the shell are trusted code until outside apps run sandboxed: decisions/0024-apps-are-trusted-code.md
+      - 0025. Apps keep their own links to entities and publish them as events: decisions/0025-apps-own-entity-bindings.md
+      - 0026. The Inbox holds work that waits on someone, apart from notifications: decisions/0026-inbox-separate-from-notifications.md
+      - 0027. The runs service also runs ordinary background jobs: decisions/0027-runs-is-the-jobs-engine.md
+      - 0028. Discussion starts inside Intent behind a ref-keyed API: decisions/0028-discussion-starts-in-intent.md
+      - 0029. The SDK reserves a working context and a protective marking now: decisions/0029-reserve-focus-and-marking.md

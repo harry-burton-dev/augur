@@ -147,6 +147,15 @@ describe('events', () => {
       expect([elsewhere.statusCode, elsewhere.json().message]).toEqual([403, 'library isn’t granted audit:write on that floor.']);
     });
 
+    it('records which service wrote an entry, whoever it names as the actor', async () => {
+      const app = await buildApp({ verifyService, grants, floors });
+      const entry = { actor: { id: 'admin-1', kind: 'user' }, app: 'library', action: 'document.deleted', target: 'doc-7' };
+      const written = await app.inject({ method: 'POST', url: '/v1/audit', headers: as('library', 'w-finance'), payload: entry });
+      expect(written.json()).toMatchObject({ actor: { id: 'admin-1' }, recordedBy: 'library' });
+      const byPlatform = await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: { ...entry, app: 'identity' } });
+      expect(byPlatform.json().recordedBy).toBe('identity');
+    });
+
     it('refuses for now when what an app may do can’t be checked', async () => {
       const app = await buildApp({ verifyService, grants: async () => Promise.reject(new GrantsUnavailable('down')) });
       expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: as('library'), payload: review })).statusCode).toBe(503);

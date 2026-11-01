@@ -22,5 +22,18 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0014](0014-agent-runtime.md) | Agents are apps, run by a durable runs service on DBOS | Proposed | 2026-10-24 |
 | [0015](0015-react-kits-tailwind.md) | Frontends are React, with a shell kit and an app kit on one common base, styled with Tailwind | Accepted | 2026-11-01 |
 | [0016](0016-storybook-on-chromatic.md) | The kits' Storybook is hosted on Chromatic | Accepted | 2026-11-01 |
+| [0017](0017-signed-release-feed.md) | The release feed is signed, expires, and can mark a release halted | Accepted | 2026-11-01 |
+| [0018](0018-rollout-gates.md) | Releases reach production through rings, a bake time and a halt switch | Accepted | 2026-11-01 |
+| [0019](0019-deployment-reporting.md) | Deployments report what they run, as a signed heartbeat or an exported file | Accepted | 2026-11-01 |
+| [0020](0020-upgrade-policy-windows-watch.md) | AUGUR upgrades follow a policy, a maintenance window, a semver pin and a post-upgrade watch | Accepted | 2026-11-01 |
+| [0021](0021-feature-flags-openfeature-flagd.md) | Feature flags use OpenFeature with flagd | Accepted | 2026-11-01 |
+| [0022](0022-upgrade-roles-step-up.md) | Upgrades need a deployment or app admin role and a step-up sign-in | Accepted | 2026-11-01 |
+| [0023](0023-air-gap-bundle-oci-layout.md) | The air-gap bundle is a standard OCI image layout | Accepted | 2026-11-01 |
+| [0024](0024-apps-are-trusted-code.md) | Apps in the shell are trusted code until outside apps run sandboxed | Proposed | 2026-11-01 |
+| [0025](0025-apps-own-entity-bindings.md) | Apps keep their own links to entities and publish them as events | Proposed | 2026-11-01 |
+| [0026](0026-inbox-separate-from-notifications.md) | The Inbox holds work that waits on someone, apart from notifications | Proposed | 2026-11-01 |
+| [0027](0027-runs-is-the-jobs-engine.md) | The runs service also runs ordinary background jobs | Proposed | 2026-11-01 |
+| [0028](0028-discussion-starts-in-intent.md) | Discussion starts inside Intent behind a ref-keyed API | Proposed | 2026-11-01 |
+| [0029](0029-reserve-focus-and-marking.md) | The SDK reserves a working context and a protective marking now | Proposed | 2026-11-01 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.
