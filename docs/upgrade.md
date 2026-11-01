@@ -43,6 +43,8 @@ The pull fetches that release's images before anything stops. Each service migra
 
 ## Check
 
+Every release has already been through this in CI: the [deploy test](deploy-test.md) upgrades the previous release to it with data, and goes back again. Your server can still differ, so check it yourself too.
+
 - Open **Admin → Status**. Give it a minute: every part should be Running, with the new versions in the Version column.
 - Sign in as yourself and as someone without the admin role, and open an app or two.
 - `pc logs --since 10m gateway identity registry events` shouldn't show errors. Every log line carries a `requestId`; the same id is in the `x-request-id` header of the response, so a problem someone reports can be found across every service's logs.

@@ -1,0 +1,59 @@
+name: Deploy test
+# Does AUGUR still install, upgrade and go back? Runs the real compose file with the images built
+# from this commit: a fresh server, then the newest AUGUR release upgraded to this commit with its
+# data, then back to that release (docs/deploy-test.md). On main, and on PRs that touch what a
+# server runs: the compose file, the images, or a service's migrations.
+on:
+  push:
+    branches: [main, 'release/**']
+    paths-ignore: ['docs/**', '**/*.md', '.changeset/**', 'catalog/**']
+  pull_request:
+    paths:
+      - infra/**
+      - '**/src/store.ts'
+      - release/migrations.lock.json
+      - .github/workflows/deploy-test.yml
+  workflow_dispatch:
+    inputs:
+      from:
+        description: The AUGUR release to upgrade from, such as 0.13.1 (default the newest)
+        required: false
+concurrency:
+  group: deploy-test-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  packages: read
+jobs:
+  deploy-test:
+    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Builds every image from this commit first, tagged ci, and the upgrade below reuses them.
+      - name: A fresh server
+        run: infra/deploy-test.sh fresh
+        env:
+          BUILD: '1'
+      - name: Which release to upgrade from
+        id: from
+        run: |
+          from="$FROM"
+          if [ -z "$from" ]; then
+            from=$(gh release list --limit 100 --json tagName --jq '[.[].tagName | select(startswith("augur@"))][0] | ltrimstr("augur@")')
+          fi
+          echo "version=$from" >> "$GITHUB_OUTPUT"
+          echo "Upgrading from augur@$from" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          FROM: ${{ inputs.from }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upgrade from that release, then back
+        if: steps.from.outputs.version != ''
+        run: infra/deploy-test.sh upgrade "$FROM"
+        env:
+          FROM: ${{ steps.from.outputs.version }}
