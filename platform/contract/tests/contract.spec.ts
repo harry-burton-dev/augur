@@ -23,6 +23,12 @@ test('mounts with the signed-in person, the path below its route and a token', a
   await expect(check(page, 'intent')).toHaveText('none');
 });
 
+test('mounts with no working context, which SDK 1.10 reserves (ADR 0029)', async ({ page }) => {
+  since('1.10');
+  await page.goto('/reference/claims/42');
+  await expect(check(page, 'focus')).toHaveText('none');
+});
+
 test('notify puts a notification on the shell’s stream', async ({ page }) => {
   await page.goto('/reference');
   await press(page, 'notify');

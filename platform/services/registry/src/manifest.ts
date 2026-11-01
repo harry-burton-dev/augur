@@ -24,6 +24,8 @@ export interface AppEntry {
   orbit?: boolean;
   /** true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why. */
   sameOnEveryFloor?: boolean;
+  /** true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029). */
+  focus?: boolean;
   /** What the app's service asks to do on the platform, such as "notifications:send". */
   scopes?: Scope[];
   /** The kinds of floor the app works on. Without it, every kind. */
@@ -314,6 +316,7 @@ export const appEntrySchema = {
     },
     orbit: { type: 'boolean' },
     sameOnEveryFloor: { type: 'boolean' },
+    focus: { type: 'boolean' },
     areas: {
       type: 'array',
       maxItems: 6,
