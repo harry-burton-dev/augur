@@ -25,4 +25,4 @@ AUGUR's backend is a set of small services behind one gateway: identity, registr
 ## Links
 
 - docs/domain-events.md
-- Architecture review: https://claude.ai/artifact/DLG3HiFxi5oN87sRYrAntC
+- Architecture review (a private design note)

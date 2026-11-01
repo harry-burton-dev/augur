@@ -21,4 +21,4 @@ Every deployment runs from the same signed release images with Docker Compose (`
 ## Links
 
 - docs/deploy.md
-- Delivery design: https://claude.ai/artifact/5CRmFQHPyR9Fmu7213DRgn
+- Delivery design (a private design note)

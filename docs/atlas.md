@@ -2,7 +2,7 @@
 
 Data Atlas holds the things the organisation keeps track of (ships, ports, organisations, people, places, events), what is known about each, and how they connect. Artifacts holds what was published, Mandate holds what people mean to do, and Data Atlas holds what those are about. It ships with AUGUR, like Artifacts and Auspex (a pillar app), at `/atlas`.
 
-Spec: [Data Atlas](https://claude.ai/artifact/G9XhuREFpYFjLWFqKK8sEF). The app's own guide, with its API, is [apps/atlas/README.md](../apps/atlas/README.md).
+The app's own guide, with its API, is [apps/atlas/README.md](../apps/atlas/README.md).
 
 ## What people see
 

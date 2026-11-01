@@ -4,7 +4,6 @@ name: Release
 # once, as a pre-release: the beta channel. The Promote workflow makes a release stable, with no rebuild.
 on:
   push:
-    # Not dev: a release signed there is one no updater takes. Rename dev to main first.
     branches: [main, 'release/**']
 concurrency: release-${{ github.ref }}
 permissions:
@@ -15,7 +14,7 @@ permissions:
   id-token: write
 jobs:
   release:
-    # Builds and pushes images, so only on an x86-64 runner (docs/ci-runner.md, "An Arm runner").
+    # Builds and pushes images, so only on an x86-64 runner: RELEASE_RUNNER, if CI_RUNNER names an Arm one.
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
     outputs:
       released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') }}
@@ -30,8 +29,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          # Our own runner keeps the pnpm store between jobs (docs/ci-runner.md).
-          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
       # While changesets are waiting, keeps one "Version packages" PR open that bumps versions and
       # writes changelogs. No publish step: packages aren't tagged or released one by one. The only

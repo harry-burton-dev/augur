@@ -1,5 +1,5 @@
 // Generates CSS custom properties and a typed token map from tokens/tokens.json,
-// the token file exported from the Claude Design system. tokens.json stays the
+// the token file exported from the Wave design system. tokens.json stays the
 // source of truth: edit it (or re-export it), never the generated files.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

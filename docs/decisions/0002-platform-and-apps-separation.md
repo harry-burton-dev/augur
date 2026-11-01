@@ -23,4 +23,4 @@ The repository is a pnpm workspace built with Turborepo.
 ## Links
 
 - docs/shell-principles.md
-- Codebase structure review: https://claude.ai/artifact/HA6bWxhxe2ahvSaupediom
+- Codebase structure review (a private design note)

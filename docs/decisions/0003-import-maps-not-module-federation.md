@@ -26,5 +26,5 @@ Apps are ES modules loaded with `import()`. Shared runtime modules (Lit, `@augur
 
 ## Links
 
-- Codebase structure review: https://claude.ai/artifact/HA6bWxhxe2ahvSaupediom
+- Codebase structure review (a private design note)
 - platform/frontends/shell/vite.shared.config.ts

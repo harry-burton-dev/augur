@@ -146,7 +146,7 @@ kind: Component
 metadata:
   name: augur-ui-kit
   title: "@augur/ui-kit"
-  description: Design tokens, base CSS and web components rebuilt from the Claude Design system (working name Wave).
+  description: Design tokens, base CSS and web components rebuilt from the Wave design system.
   annotations:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/ui-kit/

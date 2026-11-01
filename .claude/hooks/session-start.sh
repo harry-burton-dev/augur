@@ -1,5 +1,5 @@
 #!/bin/bash
-# Gets a Claude Code cloud session ready to work on AUGUR (ADR 0001, CLAUDE.md):
+# Gets a cloud coding session ready to work on AUGUR (ADR 0001, AGENTS.md):
 # installs dependencies when they changed, then points the session at the decisions.
 set -euo pipefail
 

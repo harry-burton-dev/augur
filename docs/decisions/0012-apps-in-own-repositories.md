@@ -19,4 +19,4 @@ The `augur` repository holds the platform: shell, SDK, UI kit, service kit, reco
 
 ## Links
 
-- Delivery design: https://claude.ai/artifact/5CRmFQHPyR9Fmu7213DRgn
+- Delivery design (a private design note)

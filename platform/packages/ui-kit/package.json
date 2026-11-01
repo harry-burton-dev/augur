@@ -3,7 +3,7 @@
   "version": "1.8.0",
   "private": true,
   "type": "module",
-  "description": "Design tokens, base CSS and web components rebuilt from the Claude Design system (working name Wave).",
+  "description": "Design tokens, base CSS and web components rebuilt from the Wave design system.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

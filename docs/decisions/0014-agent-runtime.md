@@ -24,4 +24,4 @@ Option 2, with DBOS Transact on the existing Postgres behind AUGUR's own run API
 
 ## Links
 
-- Agent runtime design: https://claude.ai/artifact/KweKf7bcfTDRgwfCv7D62r
+- Agent runtime design (a private design note)

@@ -14,7 +14,6 @@ nav:
   - Auspex: auspex.md
   - Build an app: build-an-app.md
   - The catalog: catalog.md
-  - Running CI on our own server: ci-runner.md
   - Running AUGUR on your own server: deploy.md
   - Domain events: domain-events.md
   - "Artifacts: a guide for people and admins": folio.md

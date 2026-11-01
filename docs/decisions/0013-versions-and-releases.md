@@ -23,4 +23,4 @@ Every package was released on its own, which made 344 tags in a week. Harry and 
 ## Links
 
 - docs/versioning.md
-- Delivery design: https://claude.ai/artifact/5CRmFQHPyR9Fmu7213DRgn
+- Delivery design (a private design note)

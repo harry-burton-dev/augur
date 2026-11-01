@@ -129,6 +129,5 @@ pnpm check:boundaries
 | [Mirror](docs/mirror.md) | Releases and apps for servers that can't reach GitHub |
 | [Agents and models](docs/agents.md) | Setting up the model behind Agents, and an app's service asking it |
 | [Versioning](docs/versioning.md) | Changesets, releases, API and SDK versions |
-| [CI on our own server](docs/ci-runner.md) | A self-hosted runner, so CI uses no GitHub-hosted minutes |
 | [apps/](apps/README.md) | How apps register and ask each other for things |
 | [platform/contract](platform/contract/README.md) | The shell's promise to apps and the frozen SDK builds |

@@ -1,6 +1,6 @@
 # @augur/ui-kit
 
-The platform's UI kit: design tokens generated from the Claude Design system (working name Wave) and Lit web components rebuilt from its specs. Works in any framework.
+The platform's UI kit: design tokens generated from the Wave design system and Lit web components rebuilt from its specs. Works in any framework.
 
 ```sh
 pnpm --filter @augur/ui-kit storybook        # catalogue at http://localhost:6006

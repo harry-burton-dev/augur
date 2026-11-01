@@ -23,4 +23,4 @@ People in an organisation work alone, in teams inside teams, and across the whol
 
 ## Links
 
-- Nested workspaces plan: https://claude.ai/artifact/9sTJ9XjyHX3EwCDfJiBfvp
+- Nested workspaces plan (a private design note)
