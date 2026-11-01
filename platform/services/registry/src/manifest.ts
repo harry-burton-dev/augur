@@ -234,6 +234,21 @@ export const platformApps: AppEntry[] = [
       },
     ],
   },
+  {
+    id: 'upgrades',
+    name: 'Upgrade Centre',
+    route: '/upgrades',
+    entry: '/apps/upgrades/entry.js',
+    version: PLATFORM_APP_VERSIONS.upgrades,
+    sdk: '^1.10.0',
+    icon: 'download',
+    description: 'What this deployment runs, and upgrading it',
+    requiredRole: 'admin',
+    // what a deployment runs is the deployment's, whichever floor you stand on
+    sameOnEveryFloor: true,
+    // its sections are in its own rail (ADR 0030)
+    orbit: false,
+  },
 ];
 
 /**

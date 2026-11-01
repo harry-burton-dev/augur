@@ -19,7 +19,7 @@ const fail = (message) => {
 if (!id) fail('Usage: pnpm create-app <id> [--name "Display name"]');
 // The registry's own rule for app ids, and the platform's apps keep theirs.
 if (!/^[a-z][a-z0-9-]{1,39}$/.test(id)) fail(`"${id}" can't be an app id: use 2 to 40 lowercase letters, digits and dashes, starting with a letter.`);
-if (['home', 'admin'].includes(id)) fail(`"${id}" is one of the platform's own apps.`);
+if (['home', 'admin', 'upgrades'].includes(id)) fail(`"${id}" is one of the platform's own apps.`);
 const dir = join(root, 'apps', id);
 if (existsSync(dir)) fail(`apps/${id} already exists.`);
 const name = nameAt >= 0 ? args[nameAt + 1] : titleCase(id);
