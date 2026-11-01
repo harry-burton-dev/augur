@@ -1,6 +1,6 @@
 # Upgrade Centre
 
-`@augur/upgrades` will be the Upgrade Centre: a platform frontend at `/upgrades`, for everyone with an Upgrade Centre role ([ADR 0030](../../../docs/decisions/0030-upgrade-centre-platform-frontend.md), proposed). It shows what this deployment runs, what's on offer and what would happen, and lets deployment admins upgrade, pin, hold or go back, for AUGUR and each app.
+`@augur/upgrades` will be the Upgrade Centre: a platform frontend at `/upgrades`, for everyone with an Upgrade Centre role ([ADR 0030](../../../docs/decisions/0030-upgrade-centre-platform-frontend.md)). It shows what this deployment runs, what's on offer and what would happen, and lets deployment admins upgrade, pin, hold or go back, for AUGUR and each app.
 
 So far it holds the parts that don't depend on the app kit:
 

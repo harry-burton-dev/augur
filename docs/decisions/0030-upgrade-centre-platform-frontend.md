@@ -1,6 +1,6 @@
 # 0030. The Upgrade Centre is its own platform frontend, released with AUGUR
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 - **Decided by:** Harry
 - **Replaces:** none (clarifies [0012](0012-apps-in-own-repositories.md))
