@@ -37,7 +37,7 @@ Releases now go through three branches, `dev`, `preview` and `production`: see [
 
 You don't run anything locally. When changesets reach `main`, the Release workflow opens (and keeps up to date) a pull request called **Version packages**. It bumps every affected package, writes each one's `CHANGELOG.md`, and syncs the manifests and `SDK_VERSION`.
 
-Merging that pull request is the release. The workflow then tags each released package as `<name>@<version>`, for example `@augur/registry@0.2.0`, and makes a GitHub release for each tag. It also makes the AUGUR release (below).
+Merging that pull request is the release. Packages get no tag or GitHub release of their own: their version and `CHANGELOG.md` are the record, and the AUGUR release gathers the changelogs of the parts it moves. The only GitHub releases are the units a deployment installs: the AUGUR release (below) and each app's release ([App releases](#app-releases)).
 
 ### The AUGUR release
 
@@ -63,7 +63,7 @@ Two GitHub settings the workflow needs: Settings → Actions → General → Wor
 
 When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @augur/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)).
 
-To do the same by hand: `pnpm version-packages`, review, commit, merge, then `pnpm release && git push --follow-tags`.
+To do the same by hand: `pnpm version-packages`, review, commit, merge, then let the Release workflow make the AUGUR and app releases.
 
 ### App releases
 

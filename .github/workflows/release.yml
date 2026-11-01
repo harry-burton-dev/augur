@@ -34,8 +34,7 @@ jobs:
           cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
       # While changesets are waiting, keeps one "Version packages" PR open that bumps
-      # versions and writes changelogs. Merging that PR tags each released package
-      # (e.g. @augur/registry@0.2.0) and makes a GitHub release for it.
+      # versions and writes changelogs. Packages get no tag or GitHub release of their own.
       # On dev, versions are cut but nothing is released: the Version packages PR only.
       - uses: changesets/action@v1
         id: dev-changesets
@@ -78,8 +77,8 @@ jobs:
           title: Version packages
           commit: Version packages
           version: pnpm version-packages
-          publish: pnpm release
-          createGithubReleases: true
+          # No publish step: packages aren't tagged or released one by one. The only GitHub releases
+          # are the units a deployment installs, augur@<version> and app/<id>@<version>, made below.
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       # Once nothing is waiting (the Version packages PR just merged), releases the AUGUR version
