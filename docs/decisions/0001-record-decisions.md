@@ -32,5 +32,5 @@ Records guide rather than bind, but changing course is never silent. Work that g
 
 ## Links
 
-- Proposal: https://claude.ai/artifact/MyFY8DhKZENj9cRpUgf64r
+- Proposal (a private design note)
 - Handbook: Google Drive folder "Augur"

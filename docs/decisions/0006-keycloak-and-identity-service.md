@@ -25,5 +25,5 @@ Keycloak runs in the stack and only signs people in (OIDC). It brokers the organ
 
 ## Links
 
-- Nested workspaces plan: https://claude.ai/artifact/9sTJ9XjyHX3EwCDfJiBfvp
-- SaaS demo plan: https://claude.ai/artifact/WbJTkkLoZL5sirZiuWKUFp
+- Nested workspaces plan (a private design note)
+- SaaS demo plan (a private design note)

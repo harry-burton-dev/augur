@@ -2,7 +2,7 @@
 
 AUGUR describes itself in [Backstage](https://backstage.io)'s catalog format, so a developer portal can show every part, who owns it, what it calls and what it stands on. Nobody writes it: `pnpm catalog` makes it from what the repository already says, and CI fails when it's out of date (`pnpm check:catalog`). After a change to a `package.json`, a manifest, a contract, `infra/deploy/compose.yml` or a guide in `docs/`, run `pnpm catalog` and commit what it writes.
 
-The portal is one for the whole company, above every AUGUR deployment, and lives in its own repository. AUGUR never depends on it. The plan: [Backstage for AUGUR](https://claude.ai/artifact/KmiJ5zLexGxG9B4ctBKSzj).
+The portal is one for the whole company, above every AUGUR deployment, and lives in its own repository. AUGUR never depends on it.
 
 ## What it writes
 

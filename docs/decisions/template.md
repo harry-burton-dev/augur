@@ -24,4 +24,4 @@ What gets easier, what gets harder, and what we now have to do or watch. Name th
 
 ## Links
 
-Specs, threads, pull requests and Drive documents behind it.
+Pull requests, Linear issues and Drive documents behind it. No links to private chats or artifacts: name a private note instead.

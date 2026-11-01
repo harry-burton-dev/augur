@@ -2,7 +2,7 @@
 
 Auspex shows people where they are on AUGUR: the floors they can go to and why, who's on each, which apps they can use there, and why an app is off. It ships with AUGUR, like Folio (a pillar app), at `/auspex`. It changes nothing: every screen says who can make a change instead.
 
-Specs: [design 1, the full explorer](https://claude.ai/artifact/YTnmWdHJXbajzrMLCD6NEf) and [design 2, for everyone](https://claude.ai/artifact/QJvHTzoiJZ7cgWaECP2HEH). This first version builds design 2, drawn rather than tabled.
+There were two designs: a full explorer, and a quieter one for everyone. This first version builds the second, drawn rather than tabled.
 
 ## Screens
 

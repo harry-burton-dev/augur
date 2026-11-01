@@ -4,22 +4,18 @@ on:
   push:
     branches: [main, dev, 'release/**']
 # Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
-# others, such as ["self-hosted","augur-ci"] for our own (docs/ci-runner.md). The same goes for
-# the Release, App previews and Release feed workflows.
-#
-# On our own runner, caches live on its volumes between jobs (the pnpm store, pip's and
-# Playwright's and Docling's caches, turbo's), so the steps that fetch GitHub's cache run only
-# on hosted runners: from our server they downloaded ~1 GB a run at about 7 MB/s.
+# others (as JSON, such as a runner provider's label). The same goes for every other workflow;
+# RELEASE_RUNNER, if set, names the x86-64 runner the image-building jobs use.
 
-# A new push to a pull request stops its last run, so the one runner isn't kept busy with it.
+# A new push to a pull request stops its last run.
 # Pushes to main and release branches each run in full.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   # Turbo's cache outside the checkout, which checkout cleans, so a task whose inputs haven't
-  # changed since an earlier run replays instead of running: kept on our own runner's volume, or in
-  # GitHub's cache on hosted runners (build-test and contract). Pushes run every task.
+  # changed since an earlier run replays instead of running, kept in GitHub's cache (build-test and
+  # contract). Pushes run every task.
   TURBO_CACHE_DIR: /home/runner/.cache/turbo
   TURBO_FORCE: ${{ github.event_name == 'push' }}
 jobs:
@@ -48,19 +44,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
       # On GitHub's runners the turbo cache starts empty, so every task ran every time. Keep it in
       # GitHub's cache instead: restored from this branch's (or its base's) last run, entries older
       # than a week dropped, saved again under this commit.
-      - if: runner.environment == 'github-hosted'
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ${{ env.TURBO_CACHE_DIR }}
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
-      - if: runner.environment == 'github-hosted'
-        run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
+      - run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
       - run: pnpm check:boundaries
       - run: pnpm check:reasons
       - run: pnpm check:versions
@@ -78,11 +72,10 @@ jobs:
       - name: Every change says how it is released
         if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
         run: pnpm changeset status --since=origin/${{ github.base_ref }}
-      # Turbo's default of ten tasks at once is too many for our 8 GB runner on a shared server:
-      # builds were killed for memory, and tests timed out and deadlocked in Postgres. About 2 GB a
-      # task (a Vite build, or a package's tests), after 1.5 GB for Postgres and the runner, and no
-      # more than the CPUs: three on the 8 GB runner, four on GitHub's. Tests run two at most, as
-      # they share the one database. More memory (CI_MEMORY) makes this quicker by itself.
+      # Turbo's default of ten tasks at once is too many for a small runner: builds are killed for
+      # memory, and tests time out and deadlock in Postgres. About 2 GB a task (a Vite build, or a
+      # package's tests), after 1.5 GB for Postgres and the runner, and no more than the CPUs: four
+      # on GitHub's. Tests run two at most, as they share the one database.
       - name: How many tasks at once
         id: fit
         run: |
@@ -161,19 +154,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+          cache: pnpm
       - if: steps.folio.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
       - if: steps.folio.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: ${{ runner.environment == 'github-hosted' && 'pip' || '' }}
+          cache: pip
           cache-dependency-path: apps/folio/worker/pyproject.toml
       # Torch's CPU-only build, as the image has it.
       - if: steps.folio.outputs.run == 'true'
         run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -e "apps/folio/worker[test]"
-      - if: steps.folio.outputs.run == 'true' && runner.environment == 'github-hosted'
+      - if: steps.folio.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
@@ -210,7 +203,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm create-app scaffold-check --name "Scaffold check"
       - run: pnpm turbo run build --filter="@apps/scaffold-check*" --filter=@augur/registry
@@ -252,19 +245,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+          cache: pnpm
       - if: steps.shell.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
       # On GitHub's runners the turbo cache starts empty, so every task ran every time. Keep it in
       # GitHub's cache instead: restored from this branch's (or its base's) last run, entries older
       # than a week dropped, saved again under this commit.
-      - if: steps.shell.outputs.run == 'true' && runner.environment == 'github-hosted'
+      - if: steps.shell.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: ${{ env.TURBO_CACHE_DIR }}
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
           restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
-      - if: steps.shell.outputs.run == 'true' && runner.environment == 'github-hosted'
+      - if: steps.shell.outputs.run == 'true'
         run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
       - if: steps.shell.outputs.run == 'true'
         run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
@@ -275,7 +268,7 @@ jobs:
         if: steps.shell.outputs.run == 'true'
         id: playwright
         run: echo "version=$(pnpm --filter @augur/contract-tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - if: steps.shell.outputs.run == 'true' && runner.environment == 'github-hosted'
+      - if: steps.shell.outputs.run == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright

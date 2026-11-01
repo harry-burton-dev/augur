@@ -25,7 +25,7 @@ const label = (target) => `${target.name}, Folio ${target.folio ? 'on' : 'off'}`
 // about as long as one. Each build's output is printed whole once it finishes.
 // Each run (a shell, Folio's service, two browsers) takes up to about 2.5 GB, so a
 // machine or container with less memory runs fewer at once rather than having the
-// kernel kill one part way through (as on an 8 GB self-hosted runner, docs/ci-runner.md).
+// kernel kill one part way through (as on a small CI runner).
 // Each also keeps about two cores busy, and the tests give the shell a few seconds to
 // answer a key or a floor change: on a 2-core hosted runner, three at once starved them
 // and different tests timed out on each run. CONTRACT_AT_ONCE sets it outright.

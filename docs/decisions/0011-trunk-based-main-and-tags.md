@@ -21,4 +21,4 @@ Work merges into one trunk branch. Releases are tags on it. Dev, preview and pro
 
 ## Links
 
-- Delivery design: https://claude.ai/artifact/5CRmFQHPyR9Fmu7213DRgn
+- Delivery design (a private design note)
