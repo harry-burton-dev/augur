@@ -19,7 +19,7 @@ CI built, type-checked and tested, but nothing linted, nothing looked for secret
 
 Option 1:
 
-- **ESLint** (flat config, `eslint.config.mjs`) with `@eslint/js` and `typescript-eslint` recommended rules, and `eslint-plugin-react-hooks` for the React frontends (ADR 0015). `pnpm lint`; CI fails on any error.
+- **ESLint 10** (flat config, `eslint.config.mjs`) with `@eslint/js` and `typescript-eslint` recommended rules, and `eslint-plugin-react-hooks` (rules of hooks and exhaustive deps) for the React frontends (ADR 0015). `pnpm lint`; CI fails on any error.
 - **gitleaks** scans every pull request's commits for secrets.
 - **OSV-Scanner** checks `pnpm-lock.yaml` against the OSV database on every pull request. It lists every known vulnerability in the run's summary, and fails only on ones the pull request brings in: those already on `main` are fixed by Renovate's weekly updates (ADR 0033), not by whoever happens to open the next PR.
 - **Trivy** scans each AUGUR release's images in the deploy test, once per release, and fails on a critical vulnerability that has a fix. A finding we accept goes in `.trivyignore` with the reason and a date to look again.

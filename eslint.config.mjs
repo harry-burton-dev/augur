@@ -23,6 +23,7 @@ export default tseslint.config(
   {
     files: ['**/*.{tsx,jsx}'],
     plugins: { 'react-hooks': reactHooks },
-    rules: reactHooks.configs.recommended.rules,
+    // The two classic hooks rules. The React Compiler rules in the plugin's newer presets wait for the React move.
+    rules: { 'react-hooks/rules-of-hooks': 'error', 'react-hooks/exhaustive-deps': 'warn' },
   },
 );
