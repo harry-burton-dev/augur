@@ -306,6 +306,8 @@ describe('upgrading', () => {
     expect((await ask(fresh(), '0.3.0')).statusCode).toBe(202);
     const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
     expect(target).toMatchObject({ from: '0.4.0', version: '0.3.0', images });
+    // Going back isn't watched: a problem there would only send it forward again.
+    expect(target.watch).toBeUndefined();
     await server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, step: 'verify', state: 'done', outcome: 'done' } });
     expect(entries.map((e) => `${e.action} ${e.target}`)).toEqual(['platform.go-back-requested 0.3.0', 'platform.went-back 0.3.0']);
   });
@@ -333,6 +335,8 @@ describe('upgrading', () => {
     const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
     expect(target).toMatchObject({ version: '0.3.0', from: '0.2.0', images, state: 'requested', parts: { '@augur/registry': '0.3.0', '@augur/mfe-sdk': '1.1.0' }, deploy: { 'compose.yml': 'cc' } });
     expect(target.required).toEqual(expect.any(Array));
+    // Moving forward is watched for 10 minutes first (ADR 0020).
+    expect(target.watch).toEqual({});
 
     const report = (payload: Record<string, unknown>) => server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, ...payload } });
     expect((await report({ step: 'preflight', state: 'done' })).json()).toMatchObject({ state: 'running' });

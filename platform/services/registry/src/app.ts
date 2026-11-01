@@ -939,12 +939,21 @@ export const buildApp = async ({
         if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') return reply.code(204).send();
         const { id, from, version, images, state } = upgrade;
         const manifest = updates.result.releases.find((r) => r.version === version)?.manifest;
+        // Moving forward is watched before it's done (ADR 0020); going back by itself is unsafe past a breaking release.
+        const forward = semver.valid(version) && semver.valid(from) && semver.gt(version, from);
+        const breakingSince = forward
+          ? updates.result.releases
+              .filter((r) => semver.valid(r.version) && semver.gt(r.version, from) && semver.lte(r.version, version) && r.manifest?.breaking.length)
+              .map((r) => r.version)
+              .sort(semver.compare)[0]
+          : undefined;
         return {
           id,
           from,
           version,
           images,
           state,
+          ...(forward ? { watch: breakingSince ? { breakingSince } : {} } : {}),
           ...(upgradeSettings?.id === id ? { settings: upgradeSettings.settings } : {}),
           ...(manifest
             ? {

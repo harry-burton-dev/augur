@@ -17,7 +17,7 @@ const target = (more: Partial<Target> = {}): Target => ({
 });
 
 /** A server that does what it's told, and remembers it; `breaks` makes one thing go wrong. */
-type Breaks = 'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack' | 'oldUpdater' | 'edited' | 'badFile';
+type Breaks = 'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack' | 'oldUpdater' | 'edited' | 'badFile' | 'errors' | 'signIn' | 'blip';
 const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
   const did: string[] = [];
   // The deploy folder, as the running release (0.2.0) left it, unless it's been edited; and the next release's.
@@ -30,6 +30,7 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
   const newVersions: Record<string, string> = { identity: '0.4.0', registry: breaks.registry ? '0.4.0' : '0.5.0', folio: '0.2.0', web: '' };
   const oldVersions = { ...versions };
   let rolledBack = false;
+  let looks = 0;
   const server: Server = {
     readEnv: async () => env,
     writeEnv: async (text) => {
@@ -80,6 +81,13 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
       // A worker runs on (no exit code) unless it fell over.
       if (service === 'folio-worker') return breaks.worker && onNew ? 1 : undefined;
       return breaks.storage && service === 'storage' && onNew ? 1 : 0;
+    },
+    // After the upgrade: one in ten calls failing with `errors`, sign-in down with `signIn`, or down for one look with `blip`.
+    traffic: async () => ({ requests: 100, serverErrors: breaks.errors && env.includes('PLATFORM_VERSION=0.3.0') ? 10 : 0 }),
+    signInProblem: async () => {
+      looks += 1;
+      if (breaks.signIn || (breaks.blip && looks === 3)) return 'the sign-in service answered 503.';
+      return undefined;
     },
     wait: async () => {},
   };
@@ -267,3 +275,35 @@ describe('an upgrade', () => {
     expect(fake.did).toEqual([]);
   });
 });
+
+describe('the watch after an upgrade (ADR 0020)', () => {
+  it('calls it done only after the new release has run with sign-in and calls working, a blip forgiven', async () => {
+    const { server } = fakeServer({ blip: true });
+    const { outcome, steps, last } = await run(target({ watch: {} }), server);
+    expect(outcome).toBe('done');
+    expect(steps.slice(-3)).toEqual(['verify done', 'watch running', 'watch done → done']);
+    expect(last.message).toBe('AUGUR 0.3.0 ran for 10 minutes with sign-in working and calls answering.');
+  });
+
+  it('goes back by itself when calls start failing or sign-in stops', async () => {
+    const errors = fakeServer({ errors: true });
+    const failed = await run(target({ watch: {} }), errors.server);
+    expect(failed.outcome).toBe('rolled-back');
+    expect(failed.steps.slice(-3)).toEqual(['watch failed', 'roll-back running', 'roll-back done → rolled-back']);
+    expect(failed.last.message).toContain('10 of the 100 calls through the gateway in the last 1 minute failed, more than 5%.');
+    expect(errors.rolledBack()).toBe(true);
+
+    const signIn = await run(target({ watch: {} }), fakeServer({ signIn: true }).server);
+    expect(signIn.last.message).toContain('Signing in stopped working after the upgrade: the sign-in service answered 503.');
+  });
+
+  it('leaves a release with a breaking one between running, and says so for a person', async () => {
+    const { server, rolledBack } = fakeServer({ errors: true });
+    const { outcome, last } = await run(target({ watch: { breakingSince: '0.2.5' } }), server);
+    expect(outcome).toBe('failed');
+    expect(last).toMatchObject({ step: 'watch', state: 'failed', outcome: 'failed' });
+    expect(last.message).toContain('it didn’t go back by itself, because 0.2.5 between is breaking');
+    expect(rolledBack()).toBe(false);
+  });
+});
+

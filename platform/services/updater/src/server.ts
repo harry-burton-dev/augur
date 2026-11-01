@@ -22,6 +22,10 @@ export interface ServerOptions {
   signer: { identity: string; issuer: string };
   /** Each service's health address inside the Compose network. */
   healthUrls?: Record<string, string>;
+  /** The gateway inside the Compose network, whose /traffic the watch after an upgrade reads. */
+  gatewayUrl?: string;
+  /** The sign-in realm as the updater reaches it (OIDC_INTERNAL_URL, else OIDC_ISSUER), which the watch checks answers. */
+  signInUrl?: string;
 }
 
 /** Where each part answers inside the Compose network (infra/deploy/compose.yml). */
@@ -96,7 +100,7 @@ export const command = (file: string, args: string[], env: Record<string, string
     if (input !== undefined) child.stdin?.end(input);
   });
 
-export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrls = HEALTH_URLS }: ServerOptions): Server & { login(registry: string, user: string, token: string): Promise<void>; replaceSelf(): Promise<void> } => {
+export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrls = HEALTH_URLS, gatewayUrl = 'http://gateway:8080', signInUrl }: ServerOptions): Server & { login(registry: string, user: string, token: string): Promise<void>; replaceSelf(): Promise<void> } => {
   // Only what the CLIs need: a PLATFORM_VERSION here would win over the settings file.
   const env = (more: Record<string, string> = {}) => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dockerConfig, DOCKER_HOST: dockerHost, DOCKER_CONFIG: dockerConfig, ...more });
   const envFile = join(dir, '.env');
@@ -195,6 +199,21 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
       const containers = (said.startsWith('[') ? JSON.parse(said) : said.split('\n').filter(Boolean).map((line) => JSON.parse(line))) as { State: string; ExitCode: number }[];
       const last = containers.at(-1);
       return last && last.State === 'exited' ? last.ExitCode : undefined;
+    },
+    async traffic(minutes) {
+      const res = await fetch(`${gatewayUrl}/traffic?minutes=${minutes}`, { signal: AbortSignal.timeout(5_000) });
+      // An older gateway has no /traffic: nothing to go on.
+      if (!res.ok) return undefined;
+      return (await res.json()) as { requests: number; serverErrors: number };
+    },
+    async signInProblem() {
+      if (!signInUrl) return undefined;
+      try {
+        const res = await fetch(`${signInUrl.replace(/\/$/, '')}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(5_000) });
+        return res.ok ? undefined : `the sign-in service answered ${res.status}.`;
+      } catch (err) {
+        return `the sign-in service didn’t answer (${(err as Error).message}).`;
+      }
     },
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     async login(registry, user, token) {
