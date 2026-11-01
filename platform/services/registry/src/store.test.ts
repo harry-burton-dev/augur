@@ -90,6 +90,25 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.follows()).toEqual([expect.objectContaining({ app: 'notes', channel: 'stable', policy: 'hold', setBy: 'u-2' })]);
   });
 
+  it('keeps each unit’s desired state with its history, keeps a follow’s other fields, and marks results looked at', async () => {
+    await store.setDesiredState({ unit: 'augur', channel: 'stable', policy: 'automatic', automaticUpTo: 'minor', pin: '0.13.x', windows: [{ day: 0, start: '02:00', hours: 3 }], timeZone: 'Europe/London', setBy: 'u-1' });
+    await store.setDesiredState({ unit: 'augur', channel: 'stable', policy: 'hold', automaticUpTo: 'minor', windows: [], setBy: 'u-2' });
+    expect(await store.desiredStates()).toEqual([expect.objectContaining({ unit: 'augur', policy: 'hold', windows: [], setBy: 'u-2' })]);
+    expect((await store.desiredStateHistory('augur')).map((h) => `${h.policy} ${h.pin ?? '-'} ${h.timeZone ?? '-'}`)).toEqual(['hold - -', 'automatic 0.13.x Europe/London']);
+    // AUGUR's record isn't an app's follow; a follow keeps the rest of its app's record.
+    expect(await store.follows()).toEqual([]);
+    await store.setDesiredState({ unit: 'notes', channel: 'stable', policy: 'automatic', automaticUpTo: 'patch', pin: '1.x', windows: [], setBy: 'u-1' });
+    await store.setFollow({ app: 'notes', channel: 'beta', policy: 'ask', setBy: 'u-3' });
+    expect((await store.desiredStates()).find((s) => s.unit === 'notes')).toMatchObject({ channel: 'beta', policy: 'ask', automaticUpTo: 'patch', pin: '1.x', setBy: 'u-3' });
+
+    await store.requestUpgrade({ id: 'up-9', from: '0.1.0', version: '0.2.0', images: {}, requestedBy: 'u-1' });
+    expect(await store.markSeen('upgrade', 'up-9', 'u-1')).toBe(false);
+    await store.progressUpgrade('up-9', { step: 'verify', state: 'failed' }, { state: 'failed' });
+    expect(await store.markSeen('upgrade', 'up-9', 'u-1')).toBe(true);
+    expect(await store.upgrade()).toMatchObject({ id: 'up-9', seenBy: 'u-1', seenAt: expect.any(String) });
+    expect(await store.markSeen('app-job', 'none', 'u-1')).toBe(false);
+  });
+
   it('keeps pull requests’ previews apart from the app, and who may try them', async () => {
     const release = (version: string) => ({ schema: 'augur.app-release/v1' as const, id: 'notes', version, channel: 'preview', manifest: { ...library, id: 'notes', version }, service: { image: 'x@sha256:aa' }, frontend: null, signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' } });
     expect(await store.requestAppJob({ id: 'p-1', app: 'notes', action: 'preview', release: release('1.1.0-pr.3.1'), pr: 3, requestedBy: 'automatic' })).toBe(true);
@@ -271,14 +290,14 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades, registry.app_frontends, registry.app_jobs, registry.app_follows, registry.app_developers, registry.preview_choices cascade');
+      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades, registry.app_frontends, registry.app_jobs, registry.app_follows, registry.app_developers, registry.preview_choices, registry.desired_states, registry.desired_state_history cascade');
     },
   );
 
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {
