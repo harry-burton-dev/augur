@@ -28,7 +28,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/techdocs-ref: dir:..
     augur.dev/release-unit: augur
-    augur.dev/version: 0.13.0
+    augur.dev/version: 0.13.1
 spec:
   owner: group:default/augur-core
   domain: augur
@@ -271,7 +271,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/registry/
     augur.dev/package: "@augur/registry"
-    augur.dev/version: 0.13.0
+    augur.dev/version: 0.13.1
     augur.dev/release-unit: augur
 spec:
   type: service
