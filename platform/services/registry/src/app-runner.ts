@@ -5,6 +5,7 @@ import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceId
 import { changesIn } from './changes.ts';
 import { LiveOverrides } from './live.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
+import { automaticProblem, defaultDesiredState, windowAt } from './desired-state.ts';
 import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
 import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore, type RunningPreview } from './store.ts';
@@ -110,6 +111,8 @@ export interface AppRunnerRouteOptions {
   sdkVersion: string;
   /** Records what happens without a request, such as an update starting by itself. */
   audit?: (entry: NewAuditEntry) => Promise<void>;
+  /** The deployment's time zone (DEPLOYMENT_TIME_ZONE), for records that don't name their own. */
+  timeZone?: string;
   now?: () => Date;
   /** Which app or platform service sent this call; undefined when the reply has been sent. */
   serviceOf: (req: FastifyRequest, reply: FastifyReply) => Promise<ServiceIdentity | null | undefined>;
@@ -121,10 +124,13 @@ export interface AppRunnerRouteOptions {
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, pillars, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), now = () => new Date() }: AppRunnerRouteOptions) =>
+  ({ store, pillars, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date() }: AppRunnerRouteOptions) =>
   async (app: FastifyInstance) => {
     /** When the runner last asked what to do; it lives only as long as this process. */
     let runnerSeenAt: string | undefined;
+    /** When automatic updates were last looked for on a runner's poll. */
+    let lastAutoAt = 0;
+    const AUTO_EVERY_MS = 60_000;
 
     /** How an app follows releases: by default stable on Automatic. A production server never follows beta or dev, whatever was chosen before. */
     const followOf = (follows: AppFollow[], id: string): Pick<AppFollow, 'channel' | 'policy'> => {
@@ -137,12 +143,18 @@ export const appRunnerRoutes =
      * that asks for nothing new gets an install job, unless that release already failed to install.
      */
     const autoUpdate = async () => {
-      const [installed, follows] = await Promise.all([store.installedApps(), store.follows()]);
+      const [installed, follows, states] = await Promise.all([store.installedApps(), store.follows(), store.desiredStates()]);
       for (const { app: id, release: current } of installed) {
         const follow = followOf(follows, id);
         if (follow.policy !== 'automatic') continue;
-        const newest = newestOn(updates.result.releases, id, follow.channel);
-        if (!newest?.release || !semver.gt(newest.version, current.version) || updateNeeds(current, newest.release, sdkVersion).length) continue;
+        // The app's desired state (ADR 0020): how far Automatic goes, its pin, and when it may start.
+        const stored = states.find((s) => s.unit === id);
+        const state = { ...defaultDesiredState(id, ring, timeZone), ...stored, ...follow, timeZone: stored?.timeZone ?? timeZone };
+        if (!windowAt(state, now()).open) continue;
+        // The newest release Automatic reaches: inside the pin, and no bigger a step than it takes.
+        const reached = updates.result.releases.filter((r) => r.app === id && semver.gt(r.version, current.version) && !automaticProblem(state, current.version, r.version));
+        const newest = newestOn(reached, id, follow.channel);
+        if (!newest?.release || updateNeeds(current, newest.release, sdkVersion).length) continue;
         if (releaseProblem(newest.release, pillars)) continue;
         const jobs = await store.appJobs(id);
         if (jobs.some((j) => j.pr === undefined && j.release?.version === newest.version && j.state === 'failed')) continue;
@@ -506,6 +518,11 @@ export const appRunnerRoutes =
     app.get('/app-runner/next', async (req, reply) => {
       if (!(await isRunner(req, reply))) return reply;
       runnerSeenAt = new Date().toISOString();
+      // A window may have opened since the last check: look again, at most once a minute.
+      if (now().getTime() - lastAutoAt >= AUTO_EVERY_MS) {
+        lastAutoAt = now().getTime();
+        await autoUpdate().catch((err) => req.log.warn({ err }, 'automatic app updates failed'));
+      }
       const job = await store.nextAppJob();
       return job ?? reply.code(204).send();
     });
