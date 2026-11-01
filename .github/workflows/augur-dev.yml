@@ -1,5 +1,5 @@
 name: AUGUR dev builds
-# Every merge into dev that changes AUGUR (the platform, the apps that ship with it, or how it is
+# Every merge into main that changes AUGUR (the platform, the apps that ship with it, or how it is
 # deployed) gets a dev build: every image, built, pushed and signed as the Release workflow does,
 # with the version <next patch>-dev.<run>, released as the pre-release augur@<that version>. What it
 # changes and its notes come from the changesets waiting. Only the workbench (SERVER_RING=dev) takes
@@ -7,7 +7,8 @@ name: AUGUR dev builds
 # See docs/release-channels.md, "AUGUR dev builds".
 on:
   push:
-    branches: [dev]
+    # dev until it is renamed main (docs/release-channels.md).
+    branches: [main, dev]
     paths:
       - 'platform/**'
       - 'apps/folio/**'
@@ -22,11 +23,11 @@ concurrency:
 permissions:
   contents: write
   packages: write
-  # Signed keyless, as refs/heads/dev: the updater takes a dev build only from this workflow on dev.
+  # Signed keyless, as refs/heads/main: the updater takes a dev build only from this workflow on main.
   id-token: write
 jobs:
   dev:
-    if: github.ref_name == 'dev'
+    if: github.ref_name == 'main' || github.ref_name == 'dev'
     # Builds and pushes images, so only on an x86-64 runner (docs/ci-runner.md, "An Arm runner").
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
@@ -59,7 +60,6 @@ jobs:
           echo "The workbench (SERVER_RING=dev) upgrades to it by itself at its updater's next check, after a backup." >> "$GITHUB_STEP_SUMMARY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_BRANCH: dev
           RELEASE_TARGET: ${{ github.sha }}
   # The workbench learns of the dev build from the feed beside the images.
   feed:

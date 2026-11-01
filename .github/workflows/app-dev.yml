@@ -1,12 +1,13 @@
 name: App dev builds
-# Every merge into dev that changes an app in apps/ (other than those that ship with AUGUR) gets a dev
+# Every merge into main that changes an app in apps/ (other than those that ship with AUGUR) gets a dev
 # build of each app it changes: a signed bundle, as the Release workflow makes, with the version
 # <next patch>-dev.<run>, released as the pre-release app/<id>@<that version>. Only a preview server
 # (SERVER_RING=preview) whose admin set the app to take dev builds installs it, after a backup, as it
 # would a release. Each app keeps its newest few dev builds. See docs/release-channels.md, "Dev builds".
 on:
   push:
-    branches: [dev]
+    # dev until it is renamed main (docs/release-channels.md).
+    branches: [main, dev]
     paths: ['apps/**']
 concurrency:
   group: app-dev
@@ -14,7 +15,7 @@ concurrency:
 permissions:
   contents: write
   packages: write
-  # Signed keyless, as refs/heads/dev: the app runner takes a dev build only from this workflow on dev.
+  # Signed keyless, as refs/heads/main: the app runner takes a dev build only from this workflow on main.
   id-token: write
 jobs:
   dev:

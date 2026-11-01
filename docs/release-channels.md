@@ -1,48 +1,38 @@
-# Release channels: dev, preview, production
+# Release channels: one branch, three rings
 
-Work merges into `dev`. `dev` is promoted to `preview`, which runs on the preview server. `preview` is promoted to `production`, one unit at a time, for every other deployment. A release is built and signed once, on `preview`; production takes that same release, so a production server runs exactly what preview ran.
+Work merges into `main`, the only long-lived branch. Each release is built and signed **once**, as a GitHub pre-release on the **beta** channel. Making it **stable** changes only its label: production servers then take that same release, so they run exactly what the preview server ran. There are no `preview` or `production` branches, and no promotion pull requests.
 
-A **unit** is what moves on its own: **AUGUR** (the platform, its services and the pillar apps, as one `augur@x.y.z` release) or one **app** the app runner installs (`app/<id>@x.y.z`, Mandate today). The plan this follows: [release channels spec](https://claude.ai/artifact/DPaF1kkMzfAvPghpTYgLDJ).
+A **unit** is what moves on its own: **AUGUR** (the platform, its services and the pillar apps, as one `augur@x.y.z` release) or one **app** the app runner installs (`app/<id>@x.y.z`, Mandate today).
 
-| Branch | What goes into it | What a merge does |
+| Step | What happens | Who |
 | --- | --- | --- |
-| `dev` (the default branch) | every pull request | keeps the **Version packages** pull request; once that's merged, opens or refreshes **Promote to preview** |
-| `preview` | `dev` (through Promote to preview), a back-merge from `production`, or a `hotfix/*` branch | builds, signs and releases each unit whose version has no release yet, as a GitHub **pre-release** |
-| `production` | a `promote/*` branch (from the Promote workflow) or a `hotfix/*` branch, merged by the repository's owner | marks the promoted release as on production: no image is rebuilt. Only a hotfix's new version is built here |
+| Merge a pull request into `main` | CI runs; each changed unit gets a **dev build**, which only the workbench takes | anyone with a green pull request |
+| Merge **Version packages** | cuts the versions, then builds, signs and releases each unit whose version moved, as a **beta** | the repository's owner |
+| Run **Promote to stable** | marks a beta release stable, with `promotion.json` attached: nothing is rebuilt | the repository's owner only |
 
-Versions are only cut on `dev`. If `preview` or `production` ever holds changesets that were never versioned, the Release workflow there releases nothing and says why in its summary, instead of opening a Version packages pull request into that branch.
+CI holds these rules on every pull request (`node scripts/promote.mjs check-pr`). Into `main` anything goes, with a changeset. Into a hotfix's `release/<unit>-<major>.<minor>` branch only a `hotfix/*` branch (or its Version packages pull request) goes, changing only that unit's files, and keeping to that line: a hotfix is a patch.
 
-CI holds these rules on every pull request (`node scripts/promote.mjs check-pr`): a pull request into `preview` or `production` from anywhere else fails, as does one that carries changesets no Version packages run has spent, or a promotion that changes another unit's files.
+## Working on main
 
-## Working on dev
+Open pull requests against `main`, with a changeset ([versioning.md](versioning.md#making-a-change)). Merging releases nothing on its own: the Release workflow keeps the **Version packages** pull request open while changesets wait. Merging that bumps each changed package, writes the changelogs and `release/augur-release.json`, and then, in the same run, builds, pushes and signs each unit whose version has no release yet, and makes its GitHub pre-release with its release file. The feed is published once at the end. Servers following beta (the preview ring) see it at their next check; production servers, which follow stable, don't.
 
-Open pull requests against `dev`, with a changeset as before ([versioning.md](versioning.md#making-a-change)). Merging into `dev` releases nothing. The Release workflow on `dev` keeps the Version packages pull request open, which cuts the versions: merging it bumps each changed package, writes the changelogs and `release/augur-release.json`, exactly as it did on `main`.
+The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, choose **New releases: betas too** on the installed app in Admin → Apps, so its betas install there.
 
-## Promote to preview
+## Promote to stable
 
-Once Version packages is merged and nothing is waiting, the Release workflow opens **Promote to preview**, a pull request from `dev` into `preview`. It lists each unit whose version is different from preview's, from and to. While new changesets wait on `dev`, its CI fails and says to merge Version packages first, so only versioned code reaches preview.
+In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`augur`, or an app's id such as `mandate`) and, if you like, the version (by default, that unit's newest beta). It attaches `promotion.json` (who made it stable, from which run, when), takes off the pre-release mark and, for AUGUR's newest stable, marks it the repository's latest release. Production servers see it at their next check. Only the repository's owner may run it: anyone else's run fails before it changes anything.
 
-Merging it runs the Release workflow on `preview`: each new version is built, pushed and signed, then released as a GitHub pre-release with its release file, and the feed is published. Servers following beta (the preview server) see it at their next check. Production servers, which follow stable, don't.
-
-The preview server follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, choose **New releases: betas too** on the installed app in Admin → Apps, so preview releases of it install there.
-
-## Promote to production
-
-In GitHub, **Actions → Promote → Run workflow**, with the unit (`augur`, or an app's id such as `mandate`) and, if you like, the version (by default, the one preview has). It opens **Promote <name> <version> to production**: a branch from `production` with only that unit's files from `preview`, and `pnpm-lock.yaml` made again for production's packages. CI on it checks the unit against production: an app's SDK range against production's AUGUR, the contract tests and the migrations lock.
-
-Merge it yourself. The Release workflow on `production` then finds the release preview made, attaches `promotion.json` (who merged which pull request, from which commit) and takes off its pre-release mark, so it is on the stable channel and production servers see it at their next check. It refuses when the pull request wasn't merged by the repository's owner.
-
-Units move independently: Mandate can go to production while AUGUR stays where it is, and the other way round.
+Units move independently: Mandate can become stable while AUGUR stays where it is, and the other way round.
 
 ## Hotfixes
 
-For a fix production can't wait for: branch `hotfix/<what>` from `production`, make the fix with a changeset, run `pnpm version-packages` on the branch and commit (so it carries a new version and no waiting changesets), and open a pull request into `production`. Merging it builds and releases the new version on production, the one time production builds. The Release workflow then opens back-merge pull requests from `production` into `preview` and `dev`, so the fix isn't lost at the next promotion.
+For a fix that can't wait for what's on `main`: cut `release/<unit>-<major>.<minor>` from the release's tag (such as `git switch -c release/augur-0.14 augur@0.14.0`), branch `hotfix/<what>` from it, make the fix with a changeset and open a pull request into the release branch. Merging it opens a Version packages pull request on that branch; merging that releases the patch as a beta, and **Promote to stable** makes it stable. Then make the same fix on `main` (cherry-pick it, with its own changeset), so the next release has it too. Keep the release branch while that line is supported; delete it after.
 
 ## Signatures
 
-Releases are signed by the Release workflow on the branch it ran on. The updater and the mirror take a signature from `release.yml` on `main`, `preview` or `production` (`releaseIdentity` in `platform/services/updater/src/signers.ts`), and still refuse any other branch or workflow. `main` stays on the list for releases made before it was renamed.
+Releases are signed by the Release workflow on the branch it ran on. The updater and the mirror take a signature from `release.yml` on `main` or a `release/<unit>-<major>.<minor>` branch (`releaseIdentity` in `platform/services/updater/src/signers.ts`), and still refuse any other branch or workflow. `preview` and `production` stay on the list for the releases made on them before 0.14, which a deployment may roll back to.
 
-AUGUR's dev builds are signed by `augur-dev.yml` on `dev`, which the updater takes only for a dev build, and only on the workbench ([AUGUR dev builds](#augur-dev-builds)).
+Dev builds are signed by `augur-dev.yml` (AUGUR) or `app-dev.yml` (apps) on `main`, which the updater takes only for a dev build, and only on the workbench ([AUGUR dev builds](#augur-dev-builds)). `dev` stays on that list until `main` replaces it.
 
 ## Server rings
 
@@ -71,32 +61,32 @@ For an app, **Admin → Apps → Go back** installs one of its three versions be
 
 ## Dev builds
 
-Every merge into `dev` that changes a runner app (Mandate today) builds it at once, with no Version packages: **App dev builds** (`.github/workflows/app-dev.yml`) makes `app/<id>@<next patch>-dev.<run>` (such as `0.1.3-dev.212` after `0.1.2`), signed by that workflow on `refs/heads/dev`, and keeps each app's three newest. A dev build sorts above the release it follows and below the next one.
+Every merge into `main` that changes a runner app (Mandate today) builds it at once, with no Version packages: **App dev builds** (`.github/workflows/app-dev.yml`) makes `app/<id>@<next patch>-dev.<run>` (such as `0.1.3-dev.212` after `0.1.2`), signed by that workflow on `refs/heads/main`, and keeps each app's three newest. A dev build sorts above the release it follows and below the next one.
 
 Only a dev or preview server takes them. On the installed app in Admin → Apps, choose **New releases: Dev builds too**; with **Automatic**, each dev build installs at the server's next check (blue/green, as any install). Before each one, the updater takes a backup of the database, since a dev build runs on the server's real data; the install's first step names the file. On a production server the choice stays in the list, greyed, saying why; the registry refuses one, and the updater refuses to install a dev build unless `.env` says `SERVER_RING=dev` or `preview`.
 
-Because a dev build has run its migrations on the preview server, a migration is frozen once it's on `dev`, not only once it's released: CI on a pull request into `dev` fails if it changes or removes one that's already there (`MIGRATIONS_FROZEN_AT=origin/dev pnpm check:migrations`). Add a new migration instead.
+Because a dev build has run its migrations on a real server, a migration is frozen once it's on `main`, not only once it's released: CI on a pull request into `main` fails if it changes or removes one that's already there (`MIGRATIONS_FROZEN_AT=origin/main pnpm check:migrations`). Add a new migration instead.
 
 ## AUGUR dev builds
 
-AUGUR itself gets a dev build of every merge into `dev` that changes the platform, the apps that ship with it (Folio, Auspex, Data Atlas) or how it's deployed: **AUGUR dev builds** (`.github/workflows/augur-dev.yml`) builds, pushes and signs every image as a release does and makes the pre-release `augur@<next patch>-dev.<run>` (such as `0.12.1-dev.48` after `0.12.0`). Its parts keep the last release's versions, since nothing is versioned until the Version packages PR; what it changes, what's breaking and its notes come from the changesets waiting (`node scripts/augur-release.mjs dev <run>`). AUGUR keeps its three newest dev builds, and the feed its two newest beside its releases.
+AUGUR itself gets a dev build of every merge into `main` that changes the platform, the apps that ship with it (Folio, Auspex, Data Atlas) or how it's deployed: **AUGUR dev builds** (`.github/workflows/augur-dev.yml`) builds, pushes and signs every image as a release does and makes the pre-release `augur@<next patch>-dev.<run>` (such as `0.12.1-dev.48` after `0.12.0`). Its parts keep the last release's versions, since nothing is versioned until the Version packages PR; what it changes, what's breaking and its notes come from the changesets waiting (`node scripts/augur-release.mjs dev <run>`). AUGUR keeps its three newest dev builds, and the feed its two newest beside its releases.
 
 Only the workbench takes them. With `SERVER_RING=dev`, the registry follows the dev channel by default (`RELEASE_CHANNEL=dev`), which holds dev builds and every release. When a dev build is next and nothing needs a person (no breaking change, and no new required setting the updater can't make up), the registry asks the updater for it by itself, and it runs as any upgrade: backup first, then roll forward, rolling back if it doesn't come up. The history says **By itself**. A dev build that didn't finish, or that an admin took back or went back from, is never asked for again by itself: it waits for an admin, as does a release. A dev build with something that needs you waits on Updates, saying what.
 
-The updater checks a dev build's images against the AUGUR dev builds workflow on `refs/heads/dev` (`AUGUR_DEV_SIGNER` in the updater overrides it), not the Release workflow, and refuses one unless `.env` says `SERVER_RING=dev`. On a preview or production server `RELEASE_CHANNEL=dev` is ignored, and Updates says so.
+The updater checks a dev build's images against the AUGUR dev builds workflow on `refs/heads/main` (`AUGUR_DEV_SIGNER` in the updater overrides it), not the Release workflow, and refuses one unless `.env` says `SERVER_RING=dev`. On a preview or production server `RELEASE_CHANNEL=dev` is ignored, and Updates says so.
 
 ## The pipeline feed
 
-Beside the release feed, `ghcr.io/<repo>/feed:pipeline` says where everything is between the branches, for Backstage (every unit, every deployment) and each deployment's Upgrade Centre (this server's place on the line). The **Pipeline feed** workflow (`.github/workflows/pipeline.yml`, `scripts/pipeline.mjs`) writes it again on every push to `dev`, `preview` or `production`, when a pull request into one opens or closes, and after each workflow that makes or removes releases. It's read with the deployment's read key, as the release feed is. It holds:
+Beside the release feed, `ghcr.io/<repo>/feed:pipeline` says where everything is on its way from `main` to stable, for Backstage (every unit, every deployment) and each deployment's Upgrade Centre (this server's place on the line). The **Pipeline feed** workflow (`.github/workflows/pipeline.yml`, `scripts/pipeline.mjs`) writes it again on every push to `main`, when a pull request into it opens or closes, and after each workflow that makes, promotes or removes releases. It's read with the deployment's read key, as the release feed is. Its three stages are the rings: **dev** is `main`, **preview** is each unit's newest release (beta or stable), **production** its newest stable release. It holds:
 
-- each unit (AUGUR, and each app the app runner installs) with its version on each branch, its newest dev build, and its pull requests' newest previews
-- the changesets waiting on `dev`, and which units each moves: what the next Version packages PR will release
-- the pull requests merged into `dev` that `preview` hasn't got, and into `preview` that `production` hasn't, newest first
-- the open Version packages, Promote to preview and Promote to production pull requests
+- each unit (AUGUR, and each app the app runner installs) with its version at each stage, its newest dev build, and its pull requests' newest previews
+- the changesets waiting on `main`, and which units each moves: what the next Version packages PR will release
+- the pull requests merged since AUGUR's newest release, and between its newest release and its newest stable one, newest first
+- the open Version packages pull request
 
 It only describes the line. Nothing reads it to decide what to install: that stays the release feed's job.
 
-Admin → **Upgrade Centre** (it replaced Updates) shows it as **The line**: each part on each branch, this server's version highlighted where it sits, what's waiting between the branches, and the open Version packages and Promote pull requests, each linked to GitHub. It shows and links only: merging and promoting stay in GitHub. With `PORTAL_URL` set to the company's Backstage, each part links to its system there. The registry reads the pipeline at most once a minute, from `feed:pipeline` beside the release feed (`PIPELINE_FEED_URL` says otherwise, `off` hides it); a server on a mirror has none, and the page says so.
+Admin → **Upgrade Centre** (it replaced Updates) shows it as **The line**: each part at each stage, this server's version highlighted where it sits, what's waiting between the stages, and the open Version packages pull request, linked to GitHub. It shows and links only: merging and promoting stay in GitHub. With `PORTAL_URL` set to the company's Backstage, each part links to its system there. The registry reads the pipeline at most once a minute, from `feed:pipeline` beside the release feed (`PIPELINE_FEED_URL` says otherwise, `off` hides it); a server on a mirror has none, and the page says so.
 
 ## Feature previews
 
@@ -126,11 +116,11 @@ For the kit on its own, `pnpm --filter @augur/ui-kit storybook`. Every pull requ
 
 ## What's left to build
 
-Signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, so servers on older releases keep reading the feed.
+Signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, and the pipeline feed still calls its stages branches, so servers on older releases keep reading the feeds.
 
 ## Once, in GitHub (the repository's owner)
 
-1. Rename `main` to `production` (Settings → General → Default branch, or Branches → rename). Open pull requests and links follow it.
-2. Create `preview` and `dev` from `production`, and make `dev` the default branch.
-3. Rulesets, if your plan enforces them on a private repository: `production` and `preview` need a pull request and passing checks, and no force-pushes; `dev` needs passing checks. On GitHub Free they aren't enforced, and the checks above still hold.
-4. `RELEASE_TOKEN` needs nothing new: it opens the promotion pull requests so CI runs on them.
+1. Rename `dev` to `main` (Settings → Branches), which keeps it the default branch. Open pull requests and links follow it. Do it before the next Version packages merge: the Release workflow only runs on `main`, since a release signed on `dev` is one no updater takes. Close the old `changeset-release/dev` pull request; the next run opens one from `changeset-release/main`.
+2. Delete the `preview` and `production` branches. Their releases and tags stay.
+3. Until the workbench runs the first release made on `main` (0.14), its updater still takes dev builds only as signed on `dev`, so it refuses dev builds from `main` at their signature check. Upgrade it to that release and they install by themselves again.
+4. Rulesets, if your plan enforces them on a private repository: `main` and `release/*` need a pull request and passing checks, and no force-pushes. On GitHub Free they aren't enforced, and the checks above still hold.

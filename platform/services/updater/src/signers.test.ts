@@ -6,8 +6,13 @@ describe('release signers', () => {
   const identity = releaseIdentity('o/r/.github/workflows/release.yml');
   const matches = (ref: string) => new RegExp(identity).test(`https://github.com/o/r/.github/workflows/release.yml@${ref}`);
 
-  it('take a release made on main, preview or production, and nothing else', () => {
+  it('take a release made on main, a hotfix branch, or (before 0.14) preview or production, and nothing else', () => {
     expect(matches('refs/heads/main')).toBe(true);
+    expect(matches('refs/heads/release/augur-0.14')).toBe(true);
+    expect(matches('refs/heads/release/team-notes-1.2')).toBe(true);
+    expect(matches('refs/heads/release/augur')).toBe(false);
+    expect(matches('refs/heads/release/augur-0.14x')).toBe(false);
+    expect(matches('refs/heads/hotfix/login')).toBe(false);
     expect(matches('refs/heads/preview')).toBe(true);
     expect(matches('refs/heads/production')).toBe(true);
     expect(matches('refs/heads/dev')).toBe(false);
@@ -26,6 +31,10 @@ describe('release signers', () => {
     expect(isDevBuild('0.12.1-dev.48')).toBe(true);
     expect(isDevBuild('0.12.1')).toBe(false);
     expect(isDevBuild('0.12.1-pr.3.4')).toBe(false);
-    expect(augurDevIdentity('o/r')).toBe('https://github.com/o/r/.github/workflows/augur-dev.yml@refs/heads/dev');
+    const dev = new RegExp(augurDevIdentity('o/r'));
+    expect(dev.test('https://github.com/o/r/.github/workflows/augur-dev.yml@refs/heads/main')).toBe(true);
+    expect(dev.test('https://github.com/o/r/.github/workflows/augur-dev.yml@refs/heads/dev')).toBe(true);
+    expect(dev.test('https://github.com/o/r/.github/workflows/augur-dev.yml@refs/heads/release/augur-0.14')).toBe(false);
+    expect(dev.test('https://github.com/o/r/.github/workflows/release.yml@refs/heads/main')).toBe(false);
   });
 });

@@ -21,8 +21,8 @@ import semver from 'semver';
 
 const REPO = process.env.AUGUR_REPO ?? 'harry-burton-dev/im-platform';
 /** Who signs AUGUR's images: this repository's Release workflow (infra/release-images.sh). */
-/** The branches releases are made from (docs/release-channels.md): main until it became production. */
-export const RELEASE_BRANCHES = ['main', 'preview', 'production'];
+/** The branches releases are made from (docs/release-channels.md): main, a hotfix's release/<unit>-<major.minor>, and (before 0.14) preview and production. */
+export const RELEASE_BRANCHES = ['main', 'preview', 'production', 'release/[a-z][a-z0-9-]*-[0-9]+\\.[0-9]+'];
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** A workflow's certificate identity on any branch releases are made from, as a pattern for --certificate-identity-regexp. */
 export const releaseIdentity = (workflow) => `^${escape(`https://github.com/${workflow}`)}@refs/heads/(${RELEASE_BRANCHES.join('|')})$`;

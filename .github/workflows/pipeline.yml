@@ -1,18 +1,18 @@
 name: Pipeline feed
-# Keeps ghcr.io/<repo>/feed:pipeline, where each unit is between dev, preview and production
-# (scripts/pipeline.mjs), in step: on every push to the three branches, when a pull request into one
-# opens or closes (Version packages, Promote), and after the release feed changes. Backstage and each
+# Keeps ghcr.io/<repo>/feed:pipeline, where each unit is between main, its newest beta and its newest
+# stable release (scripts/pipeline.mjs), in step: on every push to main, when a pull request into it
+# opens or closes, and after a workflow that makes, promotes or removes releases. Backstage and each
 # deployment's Upgrade Centre read it with the same read key as the release feed. See
 # docs/release-channels.md, "The pipeline feed".
 on:
   push:
-    branches: [dev, preview, production]
+    branches: [main, dev]
   pull_request:
     types: [opened, reopened, closed]
-    branches: [dev, preview, production]
+    branches: [main, dev]
   # After a workflow that makes or removes releases (dev builds, previews, releases) finishes.
   workflow_run:
-    workflows: [Release, Release feed, AUGUR dev builds, App dev builds, App previews]
+    workflows: [Release, Promote to stable, AUGUR dev builds, App dev builds, App previews]
     types: [completed]
   workflow_dispatch:
 concurrency:
@@ -29,11 +29,11 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
-      # The script from this commit; what it describes comes from origin/dev, preview and production.
+      # The script from this commit; what it describes comes from the default branch and the release tags.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - run: git fetch --no-tags origin dev preview production
+      - run: git fetch --tags origin ${{ github.event.repository.default_branch }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -47,3 +47,4 @@ jobs:
         run: node scripts/pipeline.mjs --out "$RUNNER_TEMP/pipeline.json" --push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRUNK: ${{ github.event.repository.default_branch }}

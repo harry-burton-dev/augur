@@ -266,7 +266,7 @@ export const notes = (release, parts) => {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/production/docs/upgrade.md).`);
+  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/HEAD/docs/upgrade.md).`);
   return lines.join('\n');
 };
 
@@ -329,12 +329,11 @@ const main = () => {
     writeFileSync(asset, `${JSON.stringify({ ...previous, images, deploy, changelogs }, null, 2)}\n`);
     const notesFile = join(dir, 'notes.md');
     writeFileSync(notesFile, notes(previous, parts));
-    // Made on preview, a release is a pre-release until it is promoted to production (scripts/promote.mjs).
-    // A dev build always is, and is never the latest.
-    const pre = previous.channel !== 'stable' || process.env.RELEASE_BRANCH === 'preview';
+    // Every release starts as a pre-release, the beta channel, until the Promote workflow makes it stable
+    // (scripts/promote.mjs); only then may it be the latest. A dev build always is one.
     execFileSync(
       'gh',
-      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${titleOf(previous)}${previous.channel === 'beta' ? ' (beta)' : previous.channel === 'dev' ? ' (dev build)' : ''}`, '--notes-file', notesFile, ...(pre ? ['--prerelease'] : ['--latest']), asset],
+      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${titleOf(previous)}${previous.channel === 'beta' ? ' (beta)' : previous.channel === 'dev' ? ' (dev build)' : ''}`, '--notes-file', notesFile, '--prerelease', asset],
       { cwd: root, stdio: 'inherit' },
     );
     console.log(`Released ${tag}.`);

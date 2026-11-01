@@ -1,41 +1,44 @@
-name: Promote
-# Opens "Promote <unit> <version> to production": a branch from production with only that unit's
-# files from preview, so production takes the release preview ran (docs/release-channels.md). The
-# unit is augur or an app's id; the version, by default, is the one preview has.
+name: Promote to stable
+# Makes a beta release stable (docs/release-channels.md): the same release, built and signed once, is
+# marked stable, with promotion.json attached to say who did it and when. Nothing is rebuilt, and no
+# branch or pull request is made. Only the repository's owner may run it. The unit is augur or an
+# app's id; the version, by default, is that unit's newest beta.
 on:
   workflow_dispatch:
     inputs:
       unit:
-        description: 'What to promote: augur, or an app id (such as mandate)'
+        description: 'What to make stable: augur, or an app id (such as mandate)'
         required: true
+        default: augur
       version:
-        description: 'The version (by default, the one on preview)'
+        description: 'The version (by default, the newest beta)'
         required: false
 concurrency: promote-${{ inputs.unit }}
 permissions:
   contents: write
-  pull-requests: write
+  packages: write
 jobs:
   promote:
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    runs-on: ubuntu-latest
+    outputs:
+      promoted: ${{ steps.stable.outputs.promoted }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: production
-          fetch-depth: 0
-          # The promotion's pull request must start CI, which the built-in token's pushes don't.
-          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - run: node scripts/promote.mjs promote "$UNIT" "$VERSION"
+      - name: Make it stable
+        id: stable
+        run: node scripts/promote.mjs stable "$UNIT" "$VERSION"
         env:
           UNIT: ${{ inputs.unit }}
           VERSION: ${{ inputs.version }}
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # Deployments learn the release is stable from the feed beside the images.
+  feed:
+    needs: promote
+    if: needs.promote.outputs.promoted != ''
+    uses: ./.github/workflows/feed.yml
