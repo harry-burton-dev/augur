@@ -375,7 +375,9 @@ export class PgEventStore implements EventStore {
     try {
       await client.query('begin');
       await client.query("select pg_advisory_xact_lock(hashtext('events.migrate'))");
-      await client.query('create schema if not exists events');
+      // On a server the storage job makes the schema for events's own login, which may not create schemas.
+      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'events'");
+      if (!hasSchema) await client.query('create schema events');
       await client.query('create table if not exists events.migrations (id text primary key, applied_at timestamptz not null default now())');
       const { rows } = await client.query<{ id: string }>('select id from events.migrations');
       const applied = new Set(rows.map((r) => r.id));

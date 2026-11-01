@@ -50,6 +50,10 @@ The pull fetches that release's images before anything stops. Each service migra
 
 ## Release notes that need you
 
+### Each platform service gets its own database login
+
+Identity, the registry, events, models and Keycloak stop connecting as Postgres's admin login (`platform`). Each gets a login that owns only its own schema, or for Keycloak its own database. The release adds five required settings: `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD` and `KEYCLOAK_DATABASE_PASSWORD`. The Upgrade Centre makes them up for you. If you upgrade by hand, add each to `.env` first (`openssl rand -hex 32`). On the first `up`, the storage job makes the logins and hands each one the tables its service made while it ran as `platform`. The upgrade's backup comes first, as always. Going back to the earlier release still works, because that release connects as `platform` again.
+
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
 ### A call that names no floor is checked on the organisation's
