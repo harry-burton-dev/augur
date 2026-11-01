@@ -1,8 +1,8 @@
 # 0027. The runs service also runs ordinary background jobs
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
-- **Decided by:** waiting on Harry
+- **Decided by:** Harry
 
 ## Context
 
@@ -13,7 +13,7 @@ Artifacts built its own queue (a renditions table with leases) and its own timer
 1. **One engine:** the runs service runs scheduled and background jobs as well as agent runs, with one grant, audit and cancel model.
 2. **Each app keeps its own queue.** Simple per app, with three ways to see, cancel and audit work.
 
-## Decision (proposed)
+## Decision
 
 Option 1, if ADR 0014 is accepted. Artifacts' queue moves over once the runs service exists. Until then, no new app builds its own queue.
 

@@ -29,6 +29,12 @@ export interface AuditEntry extends NewAuditEntry {
   id: string;
   at: string;
   workspace?: EventFloor;
+  /**
+   * The service that wrote the entry, from its signed token: an app's id or a platform
+   * service's name. `actor` is what that service says; this is who said it. Missing on
+   * entries written before it was kept.
+   */
+  recordedBy?: string;
 }
 
 export interface AuditFilter {
@@ -90,7 +96,7 @@ export interface EventStore {
   unread(recipient: string, limit: number): Promise<Notification[]>;
   /** Marks a person's notification read or unread; false when they have no such notification. */
   setRead(recipient: string, id: string, read: boolean): Promise<boolean>;
-  appendAudit(entry: NewAuditEntry, floor?: EventFloor): Promise<AuditEntry>;
+  appendAudit(entry: NewAuditEntry, floor?: EventFloor, recordedBy?: string): Promise<AuditEntry>;
   /** Newest first. */
   audit(filter: AuditFilter): Promise<AuditEntry[]>;
   subscribe(listener: Listener): () => void;
@@ -151,8 +157,8 @@ export class MemoryEventStore implements EventStore {
     return true;
   }
 
-  async appendAudit(entry: NewAuditEntry, floor?: EventFloor) {
-    const e = { ...entry, id: String(++this.seq), at: new Date().toISOString(), ...(floor ? { workspace: floor } : {}) };
+  async appendAudit(entry: NewAuditEntry, floor?: EventFloor, recordedBy?: string) {
+    const e = { ...entry, id: String(++this.seq), at: new Date().toISOString(), ...(floor ? { workspace: floor } : {}), ...(recordedBy ? { recordedBy } : {}) };
     this.entries.push(e);
     return e;
   }
@@ -278,6 +284,12 @@ export const migrations: { id: string; sql: string }[] = [
       create index domain_events_topic on events.domain_events (topic, seq);
       create index domain_events_at on events.domain_events (at);`,
   },
+  {
+    id: '005_audit_recorded_by',
+    sql: `
+      -- The service that wrote each entry, from its signed token, beside the actor it named.
+      alter table events.audit add column recorded_by text;`,
+  },
 ];
 
 const CHANNEL = 'events_notification';
@@ -325,6 +337,7 @@ type AuditRow = {
   detail: Record<string, unknown> | null;
   workspace_id: string | null;
   workspace_path: string[] | null;
+  recorded_by: string | null;
 };
 
 const fromAuditRow = (r: AuditRow): AuditEntry => ({
@@ -336,6 +349,7 @@ const fromAuditRow = (r: AuditRow): AuditEntry => ({
   ...(r.target ? { target: r.target } : {}),
   ...(r.detail ? { detail: r.detail } : {}),
   ...floorFrom(r.workspace_id, r.workspace_path),
+  ...(r.recorded_by ? { recordedBy: r.recorded_by } : {}),
 });
 
 /**
@@ -459,10 +473,10 @@ export class PgEventStore implements EventStore {
     return rowCount === 1;
   }
 
-  async appendAudit(e: NewAuditEntry, floor?: EventFloor) {
+  async appendAudit(e: NewAuditEntry, floor?: EventFloor, recordedBy?: string) {
     const { rows } = await this.pool.query<AuditRow>(
-      `insert into events.audit (actor_id, actor_kind, app, action, target, detail, workspace_id, workspace_path) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
-      [e.actor.id, e.actor.kind, e.app, e.action, e.target ?? null, e.detail ?? null, floor?.id ?? null, floor?.path ?? null],
+      `insert into events.audit (actor_id, actor_kind, app, action, target, detail, workspace_id, workspace_path, recorded_by) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *`,
+      [e.actor.id, e.actor.kind, e.app, e.action, e.target ?? null, e.detail ?? null, floor?.id ?? null, floor?.path ?? null, recordedBy ?? null],
     );
     return fromAuditRow(rows[0]);
   }
