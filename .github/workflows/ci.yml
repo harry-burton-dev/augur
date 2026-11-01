@@ -125,7 +125,7 @@ jobs:
           elif ! git rev-parse -q --verify "${range%%..*}^{commit}" >/dev/null || ! git diff --quiet "$range" -- \
               platform/packages/ui-kit/src platform/packages/ui-kit/.storybook \
               platform/packages/kit-common/src platform/packages/kit-common/tokens \
-              platform/packages/app-kit/src platform/packages/shell-kit/src; then
+              platform/packages/app-kit/src platform/packages/shell-kit/src platform/storybook; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "No kit or story changed: Chromatic keeps the Storybook it has."
@@ -144,14 +144,15 @@ jobs:
       - if: steps.kits.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
       - if: steps.kits.outputs.run == 'true'
-        run: pnpm turbo run build --filter=@augur/ui-kit... --filter=@augur/app-kit... --filter=@augur/shell-kit...
+        run: pnpm turbo run build --filter=@augur/storybook^...
+      # One Storybook: the React kits, with the frozen Lit kit's built into it under lit/.
       # --stats-json tells TurboSnap which stories each changed file reaches.
       - if: steps.kits.outputs.run == 'true'
-        run: pnpm --filter @augur/ui-kit build-storybook --stats-json
+        run: pnpm --filter @augur/storybook build-all
       # A pull request's visual changes are accepted or denied in Chromatic, on its own check;
       # this job only fails if the build can't be published. Main's build is the new baseline.
       - if: steps.kits.outputs.run == 'true'
-        working-directory: platform/packages/ui-kit
+        working-directory: platform/storybook
         run: pnpm exec chromatic --storybook-build-dir storybook-static --only-changed --exit-zero-on-changes --auto-accept-changes main
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}

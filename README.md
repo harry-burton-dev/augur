@@ -28,10 +28,11 @@ platform/                 everything the platform owns; never imports from apps/
     kit-common/           Common: the design tokens, the Tailwind theme, parts both kits share
     app-kit/              Quill: the React kit apps build with
     shell-kit/            Aerie: the shell's own React kit
-    ui-kit/               the Lit web components, frozen until SDK 2 (and Storybook)
+    ui-kit/               the Lit web components, frozen until SDK 2
     mfe-sdk/              the contract between shell and apps
     service-kit/          helpers every backend service uses
     records/              the rules every app's records share (levels, lifecycle, access, tags, links, publishing up)
+  storybook/              the one Storybook: the React kits, with the Lit kit inside (ADR 0016)
   services/
     gateway/              the only public entry for APIs
     identity/             people, teams, floors, preferences
@@ -69,9 +70,10 @@ Home and Admin are built like any app: one ES module the shell imports.
 
 | Package | Purpose |
 | --- | --- |
-| `@augur/kit-common` | Common (ADR 0015). Tokens come from `tokens/*.tokens.json` (common, shell and app; the only files to edit; `pnpm --filter @augur/kit-common tokens` regenerates the rest, the Tailwind theme included). |
+| `@augur/kit-common` | Common (ADR 0015): the shared controls (Button, IconButton, Icon, with `kit.css`) and the tokens. Tokens come from `tokens/*.tokens.json` (common, shell and app; the only files to edit; `pnpm --filter @augur/kit-common tokens` regenerates the rest, the Tailwind theme included). |
 | `@augur/app-kit`, `@augur/shell-kit` | Quill, the React kit apps build with, and Aerie, the shell's own. Only the shell may import Aerie. |
-| `@augur/ui-kit` | The Lit components every screen uses today, frozen until SDK 2. Storybook: `pnpm --filter @augur/ui-kit storybook`, and hosted on Chromatic from `main` (ADR 0016). |
+| `@augur/storybook` | The one Storybook (ADR 0016): `pnpm --filter @augur/storybook storybook` for the React kits; `build-all` adds the Lit kit's under `lit/`, and CI publishes that to Chromatic. |
+| `@augur/ui-kit` | The Lit components every screen uses today, frozen until SDK 2. Its own Storybook: `pnpm --filter @augur/ui-kit storybook`. |
 | `@augur/mfe-sdk` | What an app gets from the shell: `defineMicroFrontend`, the mount context (`ctx.person`, `ctx.workspace`, `ctx.fetch`, `notify`, `raise`/`request` intents, event bus), and the manifest types. Breaking it breaks apps, so it is versioned carefully. |
 | `@augur/service-kit` | For backend services: read the caller the gateway verified, sign in as the service itself, register an app, send notifications and audit entries, check floors and grants, logging. |
 | `@augur/records` | The rules every app's records share, for services and frontends alike: levels a tree is built from, lifecycles, read/edit/manage down a tree, tags, relationships, and publishing up the floors with one owner. See [App patterns](docs/app-patterns.md). |

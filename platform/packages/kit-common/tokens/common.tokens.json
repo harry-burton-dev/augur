@@ -272,6 +272,26 @@
       "$value": "70",
       "$type": "number",
       "$description": "AgentToast: the one thing allowed above everything."
+    },
+    "target-md": {
+      "$value": "48px",
+      "$type": "dimension",
+      "$description": "The height of a control people press: a button, a field. Enough for a finger as well as a pointer."
+    },
+    "target-sm": {
+      "$value": "36px",
+      "$type": "dimension",
+      "$description": "The height of a small control, in a toolbar or a row."
+    },
+    "focus-ring": {
+      "$value": "1.5px",
+      "$type": "dimension",
+      "$description": "The width of the focus outline every control draws when it has keyboard focus."
+    },
+    "focus-gap": {
+      "$value": "3px",
+      "$type": "dimension",
+      "$description": "The gap between a control and its focus outline."
     }
   },
   "tracking": {
