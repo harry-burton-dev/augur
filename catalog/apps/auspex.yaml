@@ -9,7 +9,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/apps/auspex/
     augur.dev/release-unit: augur
-    augur.dev/version: 0.2.0
+    augur.dev/version: 0.2.1
     augur.dev/app-id: auspex
     augur.dev/route: /auspex
     augur.dev/sdk-range: ^1.4.0
@@ -32,7 +32,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/apps/auspex/frontend/
     augur.dev/package: "@apps/auspex-frontend"
-    augur.dev/version: 0.2.0
+    augur.dev/version: 0.2.1
     augur.dev/release-unit: augur
     augur.dev/app-id: auspex
 spec:
@@ -53,7 +53,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/apps/auspex/service/
     augur.dev/package: "@apps/auspex"
-    augur.dev/version: 0.1.0
+    augur.dev/version: 0.1.1
     augur.dev/release-unit: augur
     augur.dev/app-id: auspex
 spec:

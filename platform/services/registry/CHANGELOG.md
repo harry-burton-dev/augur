@@ -1,5 +1,23 @@
 # @augur/registry
 
+## 0.13.0
+
+### Minor Changes
+
+- 8d67974: AUGUR dev builds: every merge into `dev` that changes AUGUR is built, signed and released as the pre-release `augur@<next patch>-dev.<run>`, and the workbench (`SERVER_RING=dev`) takes each one by itself, after a backup, when nothing needs a person. The registry's new `dev` channel (`RELEASE_CHANNEL=dev`, the workbench's default) follows dev builds and every release; the updater checks a dev build's signature against the AUGUR dev builds workflow on `dev` and refuses one on any other server (docs/release-channels.md, "AUGUR dev builds").
+- 92547d6: A third server ring, `SERVER_RING=dev`, for the workbench you build on: everything a preview server takes (preview releases, apps' dev builds, pull requests' builds, opt-in feature previews), and later AUGUR's own dev builds. Set it on the workbench in place of `preview` (docs/release-channels.md, "Server rings").
+- 1a55170: Live on the workbench: `pnpm dev:app <id> --live` loads your app's frontend, from source on your machine over the tailnet, into the workbench's real shell, with real sign-in, floors and data, for you alone. Paste the address it prints into Previews, **Live from my machine**. Only an app's developers can, and only on the workbench (`SERVER_RING=dev`), where the front door's Content Security Policy allows `https://*.ts.net`; elsewhere Previews says why (docs/release-channels.md, "Live on the workbench").
+- efea56f: The Upgrade Centre replaces Admin → Updates. It shows this server, then the line from dev to production: each part's version on dev, preview and production from the new pipeline feed, where this server sits, what's waiting between the branches, and the open Version packages and Promote pull requests, linked to GitHub. Set `PORTAL_URL` to the company's Backstage for links to each part there. The registry reads the pipeline beside the release feed (`PIPELINE_FEED_URL` overrides it) and adds `line` and `portalUrl` to the updates page.
+
+### Patch Changes
+
+- da6159a: Live on the workbench loads apps only from machines on the workbench's own tailnet, taken from `PLATFORM_URL`, not from any `*.ts.net` address: every Tailscale user's machines are under `*.ts.net`. The front door's Content Security Policy allows `https://*.<tailnet>.ts.net` alone, and a workbench whose `PLATFORM_URL` isn't on Tailscale loads from no machine and says why in Previews.
+- ea41136: Services stay up through a Postgres restart: a dropped idle connection is logged (`steadyPool` in the service kit) rather than ending the process, and the events service listens again on a new connection, so open notification streams don't go quiet for good.
+- Updated dependencies [ea41136]
+- Updated dependencies [5ab5009]
+  - @augur/service-kit@0.10.0
+  - @augur/mfe-sdk@1.9.0
+
 ## 0.12.1
 
 ### Patch Changes

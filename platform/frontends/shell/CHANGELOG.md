@@ -1,5 +1,29 @@
 # @augur/shell
 
+## 0.11.0
+
+### Minor Changes
+
+- 1a55170: Live on the workbench: `pnpm dev:app <id> --live` loads your app's frontend, from source on your machine over the tailnet, into the workbench's real shell, with real sign-in, floors and data, for you alone. Paste the address it prints into Previews, **Live from my machine**. Only an app's developers can, and only on the workbench (`SERVER_RING=dev`), where the front door's Content Security Policy allows `https://*.ts.net`; elsewhere Previews says why (docs/release-channels.md, "Live on the workbench").
+- 5ab5009: Departments and teams are now two different levels. Teams right below the org are Departments, and those inside them are Teams. An admin can rename the levels, up to five, in Admin → Departments → Level names. The new `GET`/`PUT /v1/admin/levels` endpoints are audited as `levels.renamed` (identity contract 1.12.0), and a level deeper than the last name takes that name.
+
+  Each floor's `level` reaches the shell and apps: identity's floors, and `WorkspaceRef.level` in SDK 1.9. Apps can say it where they'd say "team", and `kind` stays `team` at every level, so no app breaks.
+
+  The shell names the level on the title card, the gauge, Account and the top left. A department also has its own icon and water colours, from the new tokens `floor-department-low` (violet) and `floor-department-high` (lavender, also its gauge mark). The kit adds `floorTone()`, `floorKindOf()`, `floorIconOf()` and `teamDepth()`, and `ShellFloorRef.level`.
+
+### Patch Changes
+
+- 2a05a51: Artifacts gets the three-column app layout from the live session with Harry: a rail that folds to icons (the app's name on top opens its front page, then Your collections, Shared libraries, From below, and the open collection), the content in the middle with Back above its title and a search above the grid, and a drawer on the right that says what's on screen. Collections, folders and documents are tiles that answer hover by rank; right-click one, or the empty grid, for a ring of what can be done with it. The front page shows only what needs you, what's new, and your collections. What was "Published to you" sits under Shared libraries. The reader keeps its facts and actions in the drawer too.
+
+  New in the kit: `ui-tile`/`ui-tiles`, `ui-toolbar`, `ui-radial-menu`, and `ui-app-frame` gains a folding rail and a drawer. `pnpm dev:app` now runs on Windows.
+
+- b72d1df: The front door now sends text compressed (gzip): the shell, the kit and apps' bundles go out at about a third of their size (the kit 429 kB → 127 kB). The notification stream isn't compressed, so it's never held back.
+- Updated dependencies [2a05a51]
+- Updated dependencies [4c1bb55]
+- Updated dependencies [5ab5009]
+  - @augur/ui-kit@1.8.0
+  - @augur/mfe-sdk@1.9.0
+
 ## 0.10.1
 
 ### Patch Changes

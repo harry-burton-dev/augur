@@ -1,5 +1,23 @@
 # @augur/ui-kit
 
+## 1.8.0
+
+### Minor Changes
+
+- 2a05a51: Artifacts gets the three-column app layout from the live session with Harry: a rail that folds to icons (the app's name on top opens its front page, then Your collections, Shared libraries, From below, and the open collection), the content in the middle with Back above its title and a search above the grid, and a drawer on the right that says what's on screen. Collections, folders and documents are tiles that answer hover by rank; right-click one, or the empty grid, for a ring of what can be done with it. The front page shows only what needs you, what's new, and your collections. What was "Published to you" sits under Shared libraries. The reader keeps its facts and actions in the drawer too.
+
+  New in the kit: `ui-tile`/`ui-tiles`, `ui-toolbar`, `ui-radial-menu`, and `ui-app-frame` gains a folding rail and a drawer. `pnpm dev:app` now runs on Windows.
+
+- 5ab5009: Departments and teams are now two different levels. Teams right below the org are Departments, and those inside them are Teams. An admin can rename the levels, up to five, in Admin → Departments → Level names. The new `GET`/`PUT /v1/admin/levels` endpoints are audited as `levels.renamed` (identity contract 1.12.0), and a level deeper than the last name takes that name.
+
+  Each floor's `level` reaches the shell and apps: identity's floors, and `WorkspaceRef.level` in SDK 1.9. Apps can say it where they'd say "team", and `kind` stays `team` at every level, so no app breaks.
+
+  The shell names the level on the title card, the gauge, Account and the top left. A department also has its own icon and water colours, from the new tokens `floor-department-low` (violet) and `floor-department-high` (lavender, also its gauge mark). The kit adds `floorTone()`, `floorKindOf()`, `floorIconOf()` and `teamDepth()`, and `ShellFloorRef.level`.
+
+### Patch Changes
+
+- 4c1bb55: The reader loads markdown-it the first time it shows a document, not with the kit: every page downloads about 48 KB (gzipped) less before the shell starts. `await reader.updateComplete` still finds the document shown.
+
 ## 1.7.0
 
 ### Minor Changes
