@@ -59,3 +59,4 @@ nav:
       - 0030. The Upgrade Centre is its own platform frontend, released with AUGUR: decisions/0030-upgrade-centre-platform-frontend.md
       - 0031. A mirror's feed is the organisation's own, and carries the publisher's halt marks: decisions/0031-mirror-feeds-are-the-organisations-own.md
       - 0032. Apps that ship with AUGUR are platform apps or pillar apps: decisions/0032-platform-apps-and-pillar-apps.md
+      - 0033. Renovate proposes dependency updates, weekly and grouped: decisions/0033-renovate-for-dependency-updates.md
