@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
 import { releaseChanges, type Change } from './changes.ts';
+import { automaticProblem, windowAt, type DesiredState } from './desired-state.ts';
 import { checkPublisherFeed, FeedTrustProblem, type FeedSignatureCheck, type FeedTrust } from './feed-trust.ts';
 import { PRODUCTION_ONLY, takesAugurDevBuilds, takesPreview, type Ring } from './ring.ts';
 import type { AppRecord, Upgrade } from './store.ts';
@@ -638,3 +639,18 @@ export const automaticDevUpgrade = (view: UpdatesView, history: Pick<Upgrade, 'v
   if (history.some((u) => u.version === view.next)) return undefined;
   return view.next;
 };
+
+/**
+ * The release AUGUR should upgrade to by itself under its desired state (ADR 0020), if any: the next
+ * release when the policy is Automatic and reaches it, inside the pin, while a window is open, when
+ * nothing needs a person, and never one asked for before (one that didn't finish waits for an admin).
+ * The workbench's dev builds go by automaticDevUpgrade instead.
+ */
+export const automaticUpgrade = (view: UpdatesView, state: DesiredState, history: Pick<Upgrade, 'version' | 'state'>[], now: Date): string | undefined => {
+  if (!view.next || isDevBuild(view.next)) return undefined;
+  if (automaticProblem(state, view.running.version, view.next) || !windowAt(state, now).open) return undefined;
+  if (view.needsYou.some((n) => n.kind !== 'setting' || (n.required && !n.madeUp))) return undefined;
+  if (history.some((u) => u.version === view.next)) return undefined;
+  return view.next;
+};
+
