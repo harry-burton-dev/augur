@@ -260,7 +260,7 @@ jobs:
       - if: steps.shell.outputs.run == 'true'
         run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
       - if: steps.shell.outputs.run == 'true'
-        run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
+        run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/shell^... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
       # The browser is cached by Playwright version. No --with-deps: the runner image
       # already has Chrome's system libraries, and apt-get was the slow, uneven part
       # (half a minute on a good day, twelve on a bad one).

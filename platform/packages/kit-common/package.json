@@ -1,0 +1,36 @@
+{
+  "name": "@augur/kit-common",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Common: AUGUR's tokens, the Tailwind theme built from them, and the parts both kits (Aerie for the shell, Quill for apps) share.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./tokens": {
+      "types": "./dist/generated/tokens.d.ts",
+      "default": "./dist/generated/tokens.js"
+    },
+    "./tokens.css": "./dist/tokens.css",
+    "./theme.css": "./dist/theme.css",
+    "./theme-shell.css": "./dist/theme-shell.css",
+    "./theme-app.css": "./dist/theme-app.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "tokens": "node scripts/build-tokens.mjs",
+    "build": "node scripts/build-tokens.mjs && tsc -p tsconfig.json",
+    "typecheck": "node scripts/build-tokens.mjs && tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/build-tokens.mjs && vitest run"
+  },
+  "devDependencies": {
+    "style-dictionary": "5.7.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}
