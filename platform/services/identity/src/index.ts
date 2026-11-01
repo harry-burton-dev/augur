@@ -17,7 +17,7 @@ loadConfigOrExit('identity', [
   commonSettings.gateway,
   { name: 'KEYCLOAK_URL', about: 'Keycloak as identity reaches it, such as http://keycloak:8080/sso.', required: true },
   { name: 'KEYCLOAK_REALM', about: 'the Keycloak realm people sign in to (default platform).' },
-  { name: 'KEYCLOAK_ADMIN_USER', about: 'Keycloak’s own admin, which identity uses only at start to let its own client manage the realm.' },
+  { name: 'KEYCLOAK_ADMIN_USER', about: 'Keycloak’s own admin, set only for one start to repair identity’s own sign-in if it has lost its rights in the realm.' },
   { name: 'KEYCLOAK_ADMIN_PASSWORD', about: 'that admin’s password.', secret: true },
   { name: 'SERVICE_CLIENT_SECRETS', about: 'each platform service’s sign-in secret, client=secret, comma separated, for identity to make their Keycloak clients.', secret: true },
   { name: 'PLATFORM_ADMIN_USER', about: 'the first admin’s username, who is given the deployment-admin role when nobody has it.' },
@@ -64,12 +64,22 @@ if (ownSecret || keycloakAdmin) {
   directory = keycloak;
   appClients = new KeycloakAppClients(keycloak);
   const prepare = async () => {
-    if (ownSecret && keycloakAdmin) {
+    // The realm file gives identity's own sign-in its rights on a new server, and earlier starts gave
+    // them on older ones, so Keycloak's master admin is only a way to repair a sign-in that lost them.
+    if (ownSecret && !(await keycloak.hasRealmAdmin())) {
+      if (!keycloakAdmin) {
+        throw new Error(
+          `identity's own sign-in (${IDENTITY_CLIENT}) can't manage the ${KEYCLOAK_REALM} realm, and Keycloak's admin isn't in its settings to repair it. ` +
+            'Give identity KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD for one start (docs/deploy.md, "Keycloak\'s admin"), then take them out again',
+        );
+      }
       const bootstrap = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, signIn: { admin: keycloakAdmin } });
       await new KeycloakAppClients(bootstrap).ensure(IDENTITY_CLIENT, ownSecret);
       const granted = await bootstrap.grantRealmAdmin(IDENTITY_CLIENT);
-      if (granted.length) console.info(`Identity's own sign-in (${IDENTITY_CLIENT}) may now manage the ${KEYCLOAK_REALM} realm (${granted.join(', ')}). It no longer needs Keycloak's admin after this start.`);
+      console.info(`Identity's own sign-in (${IDENTITY_CLIENT}) may now manage the ${KEYCLOAK_REALM} realm${granted.length ? ` (${granted.join(', ')})` : ''}. Take Keycloak's admin out of identity's settings again: it isn't needed after this start.`);
       keycloak.forgetSignIn();
+    } else if (ownSecret && keycloakAdmin && production) {
+      console.warn("Keycloak's admin password is in identity's settings but isn't needed: identity's own sign-in already manages the realm. Take KEYCLOAK_ADMIN_PASSWORD out of identity's environment.");
     } else if (!ownSecret) {
       console.warn("SERVICE_CLIENT_SECRET is not set: identity manages people as Keycloak's own admin.");
     }

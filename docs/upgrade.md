@@ -51,6 +51,10 @@ The pull fetches that release's images before anything stops. Each service migra
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Keycloak's admin leaves identity
+
+Identity no longer gets `KEYCLOAK_ADMIN_PASSWORD`. Its own sign-in already holds its rights on every server that has started identity before, so there's nothing to do. Keep the password in `.env`: Keycloak reads it on a new server, and it's the way back in if every deployment admin loses their one-time code. If identity's log ever says its sign-in can't manage the realm, see **Keycloak's admin** in deploy.md.
+
 ### The read key
 
 While the repository is private, a deployment needs one **read key**: a GitHub token that can read this repository's packages and nothing else. With it, the registry checks GitHub for new AUGUR releases (Admin → Upgrade Centre) and new app releases (Admin → Apps) itself, and the updater pulls both. The releases are listed in a feed the Release workflow keeps beside the images, `ghcr.io/harry-burton-dev/im-platform/feed`, so the one token GitHub's container registry accepts covers everything. It replaces the two tokens servers needed before (`release-feed-token` and `image-pull-token`), which still work until you swap them.

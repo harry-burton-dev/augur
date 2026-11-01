@@ -1,8 +1,8 @@
 # 0025. Apps keep their own links to entities and publish them as events
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
-- **Decided by:** waiting on Harry
+- **Decided by:** Harry
 
 ## Context
 
@@ -13,7 +13,7 @@ Artifacts, Intent and later tools all need to say "this is about HMS X". Data At
 1. **Each app stores its own bindings and publishes `<app>.bound` / `<app>.unbound` domain events.** Atlas follows them to answer "what points at this entity".
 2. **A central links service** that every app writes to. One more platform service, which every app depends on at write time.
 
-## Decision (proposed)
+## Decision
 
 Option 1.
 

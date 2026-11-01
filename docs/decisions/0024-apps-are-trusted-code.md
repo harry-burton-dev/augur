@@ -1,8 +1,8 @@
 # 0024. Apps in the shell are trusted code until outside apps run sandboxed
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
-- **Decided by:** waiting on Harry
+- **Decided by:** Harry
 
 ## Context
 
@@ -14,7 +14,7 @@ Apps are imported into the shell's own window (ADR 0003). `ctx.fetch` adds the p
 2. **Remove `getToken` in SDK 2.0 and mark `ctx.fetch` requests,** so the gateway can refuse admin routes to them. This breaks every app, and an app in the same window can still get around it.
 3. **Run outside apps in a sandboxed iframe** with a postMessage bridge and a token scoped to that app's upstreams.
 
-## Decision (proposed)
+## Decision
 
 Option 1 now, with option 3 as the rule for any app the deployment's own team didn't write:
 

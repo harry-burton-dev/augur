@@ -29,12 +29,12 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0021](0021-feature-flags-openfeature-flagd.md) | Feature flags use OpenFeature with flagd | Accepted | 2026-11-01 |
 | [0022](0022-upgrade-roles-step-up.md) | Upgrades need a deployment or app admin role and a step-up sign-in | Accepted | 2026-11-01 |
 | [0023](0023-air-gap-bundle-oci-layout.md) | The air-gap bundle is a standard OCI image layout | Accepted | 2026-11-01 |
-| [0024](0024-apps-are-trusted-code.md) | Apps in the shell are trusted code until outside apps run sandboxed | Proposed | 2026-11-01 |
-| [0025](0025-apps-own-entity-bindings.md) | Apps keep their own links to entities and publish them as events | Proposed | 2026-11-01 |
-| [0026](0026-inbox-separate-from-notifications.md) | The Inbox holds work that waits on someone, apart from notifications | Proposed | 2026-11-01 |
-| [0027](0027-runs-is-the-jobs-engine.md) | The runs service also runs ordinary background jobs | Proposed | 2026-11-01 |
-| [0028](0028-discussion-starts-in-intent.md) | Discussion starts inside Intent behind a ref-keyed API | Proposed | 2026-11-01 |
-| [0029](0029-reserve-focus-and-marking.md) | The SDK reserves a working context and a protective marking now | Proposed | 2026-11-01 |
+| [0024](0024-apps-are-trusted-code.md) | Apps in the shell are trusted code until outside apps run sandboxed | Accepted | 2026-11-01 |
+| [0025](0025-apps-own-entity-bindings.md) | Apps keep their own links to entities and publish them as events | Accepted | 2026-11-01 |
+| [0026](0026-inbox-separate-from-notifications.md) | The Inbox holds work that waits on someone, apart from notifications | Accepted | 2026-11-01 |
+| [0027](0027-runs-is-the-jobs-engine.md) | The runs service also runs ordinary background jobs | Accepted | 2026-11-01 |
+| [0028](0028-discussion-starts-in-intent.md) | Discussion starts inside Intent behind a ref-keyed API | Accepted | 2026-11-01 |
+| [0029](0029-reserve-focus-and-marking.md) | The SDK reserves a working context and a protective marking now | Accepted | 2026-11-01 |
 | [0030](0030-upgrade-centre-platform-frontend.md) | The Upgrade Centre is its own platform frontend, released with AUGUR | Accepted | 2026-11-01 |
 | [0032](0032-platform-apps-and-pillar-apps.md) | Apps that ship with AUGUR are platform apps or pillar apps | Proposed | 2026-11-01 |
 
