@@ -3,14 +3,23 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
 import { releaseChanges, type Change } from './changes.ts';
-import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
+import { PRODUCTION_ONLY, takesAugurDevBuilds, takesPreview, type Ring } from './ring.ts';
 import type { AppRecord, Upgrade } from './store.ts';
 
 /**
- * Which releases a deployment follows: stable (promoted to production) only, or beta too (on preview;
- * every release starts there). Admin calls them Production and Preview (docs/release-channels.md).
+ * Which releases a deployment follows: stable (promoted to production) only, beta too (on preview;
+ * every release starts there), or dev too (a build of every merge into dev, for the workbench only).
+ * Admin calls them Production, Preview and Dev builds (docs/release-channels.md).
  */
-export type Channel = 'stable' | 'beta';
+export type Channel = 'stable' | 'beta' | 'dev';
+
+/** An AUGUR dev build's version: the next patch, then -dev. and the workflow run (scripts/augur-release.mjs). */
+export const isDevBuild = (version: string) => /-dev\.\d+$/.test(version);
+
+/** Whether a server following `channel` takes a release on `release`: dev takes all, beta all but dev, stable only stable. */
+export const follows = (channel: Channel, release: Channel) => channel === 'dev' || (channel === 'beta' ? release !== 'dev' : release === 'stable');
+
+const feedChannel = (version: string, prerelease: boolean): Channel => (isDevBuild(version) ? 'dev' : prerelease ? 'beta' : 'stable');
 
 /** An AUGUR release file, as scripts/augur-release.mjs writes it and the Release workflow attaches it. */
 export interface ReleaseManifest {
@@ -187,7 +196,7 @@ export const releaseFeed =
 
     if (items.some(isManifest)) {
       // A mirror: the release files themselves.
-      return items.filter(isManifest).map((m) => ({ version: m.version, channel: m.channel === 'stable' ? 'stable' : 'beta', released: m.released, ...(m.notesUrl ? { notesUrl: m.notesUrl } : {}), manifest: m }));
+      return items.filter(isManifest).map((m) => ({ version: m.version, channel: feedChannel(m.version, m.channel !== 'stable'), released: m.released, ...(m.notesUrl ? { notesUrl: m.notesUrl } : {}), manifest: m }));
     }
 
     const releases = (items as GitHubRelease[])
@@ -201,7 +210,7 @@ export const releaseFeed =
     ].map((r) => r.version));
     return Promise.all(
       releases.map(async ({ release, version }): Promise<FeedRelease> => {
-        const base: FeedRelease = { version, channel: release.prerelease ? 'beta' : 'stable', released: release.published_at, notesUrl: release.html_url };
+        const base: FeedRelease = { version, channel: feedChannel(version, release.prerelease), released: release.published_at, notesUrl: release.html_url };
         const asset = release.assets?.find((a) => a.name === 'augur-release.json');
         if (!wanted.has(version) || !asset) return base;
         // Asked for as bytes, GitHub redirects to the file; fetch drops the token on the way.
@@ -257,10 +266,13 @@ export class UpdateChecker {
     this.feed = feed;
     this.running = running;
     this.ring = ring;
-    // A preview server follows preview unless told otherwise; a production server only ever stable.
-    const wanted = channel ?? (takesPreview(ring) ? 'beta' : 'stable');
-    this.channel = takesPreview(ring) ? wanted : 'stable';
-    if (wanted !== this.channel) this.channelNote = `${PRODUCTION_ONLY} RELEASE_CHANNEL=beta is ignored.`;
+    // The workbench follows dev builds and a preview server preview, unless told otherwise; a production
+    // server only ever stable, and only the workbench takes dev builds.
+    const wanted = channel ?? (takesAugurDevBuilds(ring) ? 'dev' : takesPreview(ring) ? 'beta' : 'stable');
+    this.channel = !takesPreview(ring) ? 'stable' : wanted === 'dev' && !takesAugurDevBuilds(ring) ? 'beta' : wanted;
+    if (wanted !== this.channel) {
+      this.channelNote = this.channel === 'stable' ? `${PRODUCTION_ONLY} RELEASE_CHANNEL=${wanted} is ignored.` : 'Only the workbench (SERVER_RING=dev) takes AUGUR’s dev builds, so this server follows Preview. RELEASE_CHANNEL=dev is ignored.';
+    }
     this.now = now;
   }
 
@@ -391,7 +403,7 @@ const GO_BACK_LISTED = 5;
 export const goBackTargets = (checker: UpdateChecker): GoBackTarget[] => {
   const { running, channel } = checker;
   const releases = checker.result.releases;
-  const onChannel = (r: FeedRelease) => channel === 'beta' || r.channel === 'stable';
+  const onChannel = (r: FeedRelease) => follows(channel, r.channel);
   const older = releases.filter((r) => onChannel(r) && semver.lt(r.version, running.version)).sort((a, b) => semver.rcompare(a.version, b.version)).slice(0, GO_BACK_LISTED);
   return older.map((r) => {
     const base = { version: r.version, channel: r.channel, ...(r.released ? { released: r.released } : {}) };
@@ -454,7 +466,7 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
   const { running, channel } = checker;
   const { checkedAt, problem, releases } = checker.result;
   const base = { running, channel, goBack: goBackTargets(checker), ring: checker.ring, ...(checker.channelNote ? { channelNote: checker.channelNote } : {}), feed: checker.on ? ('on' as const) : ('off' as const), ...(checkedAt ? { checkedAt } : {}), ...(problem ? { problem } : {}) };
-  const onChannel = (r: FeedRelease) => channel === 'beta' || r.channel === 'stable';
+  const onChannel = (r: FeedRelease) => follows(channel, r.channel);
   const newer = releases.filter((r) => onChannel(r) && semver.gt(r.version, running.version)).sort((a, b) => semver.rcompare(a.version, b.version));
   const newestBeta = releases.filter((r) => r.channel === 'beta' && semver.gt(r.version, newer[0]?.version ?? running.version)).sort((a, b) => semver.rcompare(a.version, b.version))[0];
   // Only a preview server can switch to it, so only one is told of it.
@@ -517,4 +529,17 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
     ...(next.manifest && reachable(next, running.version) ? { next: next.version } : {}),
     needsYou,
   };
+};
+
+/**
+ * The dev build the workbench should upgrade to by itself, if any (docs/release-channels.md, "AUGUR dev
+ * builds"): only on the workbench following dev builds, only a dev build, only when nothing needs a
+ * person (a setting the updater can make up, or an optional one, doesn't), and never one asked for before:
+ * one that didn't finish, or that an admin went back from, waits for an admin.
+ */
+export const automaticDevUpgrade = (view: UpdatesView, history: Pick<Upgrade, 'version' | 'state'>[]): string | undefined => {
+  if (!takesAugurDevBuilds(view.ring) || view.channel !== 'dev' || !view.next || !isDevBuild(view.next)) return undefined;
+  if (view.needsYou.some((n) => n.kind !== 'setting' || (n.required && !n.madeUp))) return undefined;
+  if (history.some((u) => u.version === view.next)) return undefined;
+  return view.next;
 };

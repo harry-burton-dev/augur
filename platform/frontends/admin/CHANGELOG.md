@@ -1,5 +1,27 @@
 # @augur/admin
 
+## 0.11.0
+
+### Minor Changes
+
+- 5ab5009: Departments and teams are now two different levels. Teams right below the org are Departments, and those inside them are Teams. An admin can rename the levels, up to five, in Admin → Departments → Level names. The new `GET`/`PUT /v1/admin/levels` endpoints are audited as `levels.renamed` (identity contract 1.12.0), and a level deeper than the last name takes that name.
+
+  Each floor's `level` reaches the shell and apps: identity's floors, and `WorkspaceRef.level` in SDK 1.9. Apps can say it where they'd say "team", and `kind` stays `team` at every level, so no app breaks.
+
+  The shell names the level on the title card, the gauge, Account and the top left. A department also has its own icon and water colours, from the new tokens `floor-department-low` (violet) and `floor-department-high` (lavender, also its gauge mark). The kit adds `floorTone()`, `floorKindOf()`, `floorIconOf()` and `teamDepth()`, and `ShellFloorRef.level`.
+
+- efea56f: The Upgrade Centre replaces Admin → Updates. It shows this server, then the line from dev to production: each part's version on dev, preview and production from the new pipeline feed, where this server sits, what's waiting between the branches, and the open Version packages and Promote pull requests, linked to GitHub. Set `PORTAL_URL` to the company's Backstage for links to each part there. The registry reads the pipeline beside the release feed (`PIPELINE_FEED_URL` overrides it) and adds `line` and `portalUrl` to the updates page.
+
+### Patch Changes
+
+- 8d67974: AUGUR dev builds: every merge into `dev` that changes AUGUR is built, signed and released as the pre-release `augur@<next patch>-dev.<run>`, and the workbench (`SERVER_RING=dev`) takes each one by itself, after a backup, when nothing needs a person. The registry's new `dev` channel (`RELEASE_CHANNEL=dev`, the workbench's default) follows dev builds and every release; the updater checks a dev build's signature against the AUGUR dev builds workflow on `dev` and refuses one on any other server (docs/release-channels.md, "AUGUR dev builds").
+- 92547d6: A third server ring, `SERVER_RING=dev`, for the workbench you build on: everything a preview server takes (preview releases, apps' dev builds, pull requests' builds, opt-in feature previews), and later AUGUR's own dev builds. Set it on the workbench in place of `preview` (docs/release-channels.md, "Server rings").
+- Updated dependencies [2a05a51]
+- Updated dependencies [4c1bb55]
+- Updated dependencies [5ab5009]
+  - @augur/ui-kit@1.8.0
+  - @augur/mfe-sdk@1.9.0
+
 ## 0.10.1
 
 ### Patch Changes

@@ -22,9 +22,15 @@ The first half of this guide is for everyone who uses it. The second half is for
 
 ### Getting around
 
-Artifacts opens straight into its own menu down the side: the floor's libraries, what's been published or shared with you, and the open library's folders, views and series. Esc never takes you out of it. To get back to the menu of every app, press **Back** at the top left. The top bar stays on every screen: the floor you're on is at the top left, and Artifacts' name sits in the middle under the look-up handle.
+Every screen in Artifacts has the same three columns. Down the left is its own menu, the rail: **ARTIFACTS** at the top opens its front page, then **Your collections**, **Shared libraries** and, when something has come up from the floors below, **From below**. Under a rule is the collection you have open, with its folders, series and saved views. The rail folds down to a column of icons; point at one for its name. In the middle is what you're looking at, with **Back** above its title and a search above the grid. On the right, a drawer says what it is: what kind of unit, where it sits, what's inside, when it changed. It folds away too.
 
-What Artifacts shows is always the floor you're on. The floor gauge at the right edge lights that floor and pins Artifacts beside it; point at it to see every floor you can go to, who sees what's on each, and which one Artifacts is showing. Going to another floor keeps you in Artifacts, at the start of that floor's libraries.
+Actions aren't buttons on the page. **Right-click** anything (a collection, a folder, a document, or the empty space of the grid for the place you're in) for a ring of what you can do with it; the context-menu key does the same. Everything you can right-click answers the pointer, more strongly the higher it is: collections lift and light up, folders lift a little, documents only firm their edge. **Add**, above the grid, offers what can go in the place you're in.
+
+The front page shows only what needs you (drafts waiting on a lead), what's new to you, and your collections.
+
+Esc never takes you out of Artifacts. To get back to the menu of every app, press **Back** at the top left. The top bar stays on every screen: the floor you're on is at the top left, and Artifacts' name sits in the middle under the look-up handle.
+
+What Artifacts shows is always the floor you're on. The floor gauge at the right edge lights that floor and pins Artifacts beside it; point at it to see every floor you can go to, who sees what's on each, and which one Artifacts is showing. Going to another floor keeps you in Artifacts, at the start of that floor's collections.
 
 ### Libraries and their shape
 
@@ -40,14 +46,16 @@ Every library has the same shape, top down. Each place in it is a **unit**:
 | **Subseries** | A part of a series | Files |
 | **File** | A document, with all its versions | |
 
-A level can be skipped (a file can sit straight in the collection) but never moved: a series never holds a subcollection. The org's leads can rename the levels for the whole org, from the org's floor, with **Level names** in the side rail. Everyone else sees what they're called there. A new name changes only the words, never the shape.
+A level can be skipped (a file can sit straight in the collection) but never moved: a series never holds a subcollection. The org's leads can rename the levels for the whole org, from the org's floor, with **Level names**: right-click the empty space on **Your collections**. Everyone else sees what they're called there. A new name changes only the words, never the shape.
 
 ![A library: its subcollections and series as cards, and the folders in the side rail](images/folio/library.webp)
 
-- **New library** makes one (a floor's leads). Give it a name and, if you like, a line saying what it's for.
-- **New subcollection**, **New series** and so on make the next level down inside the one you're in. The button offers only the levels that fit. A unit can be removed once it's empty.
-- **Details** shows a unit's metadata, its tags, its links, and its state: Open, Closed (kept as it is, nothing new goes in) or Archived. Whoever manages the library moves it on.
-- **Archive** takes a library off the floor's list. It deletes nothing.
+(The screenshots in this guide are from before the three-column layout; the screens hold the same things.)
+
+- **New collection** makes one (a floor's leads): the dashed tile after the last one, or **Add** on Your collections. Give it a name and, if you like, a line saying what it's for.
+- **New subcollection**, **New series** and so on make the next level down inside the one you're in, from **Add** or by right-clicking the grid. Only the levels that fit are offered. A unit can be removed once it's empty: right-click it.
+- **Details** (right-click the grid) shows a unit's metadata, its tags, its links, and its state: Open, Closed (kept as it is, nothing new goes in) or Archived. Whoever manages the collection moves it on.
+- **Archive** (right-click a collection) takes it off the floor's list. It deletes nothing.
 
 ![A series: its files, each with its lifecycle state](images/folio/units.webp)
 
@@ -55,11 +63,11 @@ A level can be skipped (a file can sit straight in the collection) but never mov
 
 ![Level names: what each level is called, and what it holds](images/folio/levels.webp)
 
-The side rail shows the floor's libraries. Under them are what's been published to you, what's been shared with you from other floors, and the open library's folders, saved views and series.
+The rail shows the open collection's folders, saved views and series. What's been shared with you from other floors is under **Shared libraries**, with **Published to you** at its foot.
 
 ### Adding documents
 
-Drop files on the library, or press **Choose a file**. Artifacts takes PDF, Word (.docx), HTML, Markdown and plain text. A file can be up to 200 MB, unless an admin has set a lower limit. The tags under **Tags for what you add** go on everything you drop.
+Press **Add**, then **Add files**, and choose them. They go into the place you're in. Artifacts takes PDF, Word (.docx), HTML, Markdown and plain text. A file can be up to 200 MB, unless an admin has set a lower limit. Tag them once they're in, from **Change it** on each.
 
 Artifacts keeps every file exactly as it was uploaded. Dropping a new file on a document adds it as the next version, and every earlier version stays, so it can still be downloaded. **Change it** retitles a document, moves it to another folder, or changes its tags.
 
@@ -107,11 +115,11 @@ Opening a document shows it as a page of text. This is its **reader copy**, whic
 
 ![The reader: contents on the left, the text in the middle, the version's lifecycle and actions on the right](images/folio/reader.webp)
 
-Above the title is where the file sits; press it to go back there. At the side are the version's lifecycle state (move it on from there), **Publish up the floors**, and its **Links**.
+**Back**, above the title, names where the file sits and goes back there. The drawer on the right has the version's lifecycle state (move it on from there), **Publish up the floors**, its versions and its **Links**.
 
 **Download the original** gives you the file exactly as it was uploaded. Each heading and paragraph has its own address, so you can link straight to part of a document.
 
-To tell Data Atlas about something a document names, such as a ship, a port, a person or an organisation, select the words and choose **Add to Data Atlas** at the side. Data Atlas asks what kind of thing it is and sends it to your floor's Triage, where a lead decides what it is. Nothing is added to what's known until they do.
+To tell Data Atlas about something a document names, such as a ship, a port, a person or an organisation, select the words and choose **Add to Data Atlas** in the drawer. Data Atlas asks what kind of thing it is and sends it to your floor's Triage, where a lead decides what it is. Nothing is added to what's known until they do.
 
 It can take a moment to make a reader copy. If one couldn't be made, the page says so, and whoever can change the document can ask for it to be made again.
 
@@ -125,11 +133,11 @@ Anyone who manages a library, a folder or a document can let others in with **Sh
 | Add documents, folders and versions, and change any document | | yes | yes |
 | Share it, rename or archive it | | | yes |
 
-Whoever manages a library can also share one folder with **Share** inside it. Whoever it's shared with sees everything inside that folder, the folders below it too, for as long as it stays inside: a document moved out of the folder is no longer shared with them. They find it under **Shared with you**, and the library itself stays closed to them. A document's **Share** lists anyone who reaches it through a folder it's in, and the floors it's **Published up to**, each with the floors it came up through and the states it shows there.
+Whoever manages a library can also share one folder with **Share** inside it. Whoever it's shared with sees everything inside that folder, the folders below it too, for as long as it stays inside: a document moved out of the folder is no longer shared with them. They find it under **Shared libraries**, and the collection itself stays closed to them. A document's **Share** lists anyone who reaches it through a folder it's in, and the floors it's **Published up to**, each with the floors it came up through and the states it shows there.
 
 ![Who can see a document: no one shared with it alone, and the org through its being published up](images/folio/share.webp)
 
-Whatever has been shared with you appears under **Shared with you** on every floor of yours. Anyone who can see something can also see who else can. **Who can open this, explained** opens Auspex over Artifacts: each person and team with how many people that is, how it reaches them (its floor, its library, a folder it's in, shared with it alone, or published up, with the floors it came through and what it shows), and everyone else at the org who can't.
+Whatever has been shared with you appears under **Shared libraries** on every floor of yours: one library for each floor or person that shared something, opening on what they shared, and documents shared on their own beside them. Anyone who can see something can also see who else can. **Who can open this, explained** opens Auspex over Artifacts: each person and team with how many people that is, how it reaches them (its floor, its library, a folder it's in, shared with it alone, or published up, with the floors it came through and what it shows), and everyone else at the org who can't.
 
 ### Publishing up the floors
 
@@ -159,7 +167,7 @@ A series' issues are the exception: each new issue still goes out to the series'
 
 Every time something was published stays on its record. To show one person a document, share it with them instead.
 
-**Published to you** lists everything that has been put out to you, newest first. Artifacts' card on Home says how much is new since you last looked. For a floor's leads, it also says how many drafts are waiting.
+**Published to you**, at the foot of Shared libraries, lists everything that has been put out to you, newest first. Artifacts' card on Home says how much is new since you last looked. For a floor's leads, it also says how many drafts are waiting.
 
 ![Published to you](images/folio/published.webp)
 ![Artifacts' card on Home](images/folio/home.webp)
@@ -196,7 +204,7 @@ All of the following are in **Admin → Apps → Artifacts** unless it says othe
 | Limit the size of uploads | Choose a **Largest upload** below Artifacts' 200 MB. |
 | Keep deleted documents for longer or shorter | Set **Keep deleted documents for** (1 to 3650 days; 30 if you leave it empty). Artifacts checks every hour. Past that time, a deleted document's files and text are removed for good. Every change is recorded in the activity log. |
 | Let someone publish to the whole org | Give them the **publisher** role in **Admin → People**. |
-| Keep the org's tags | The leads on the org's floor do this from **Tags** in any library on the org's floor. |
+| Keep the org's tags | The leads on the org's floor do this from **Tags** (right-click the grid) in any collection on the org's floor. |
 
 **Where things are kept.** Documents' details live in Artifacts' own schema (`folio`) in the database. The files themselves (originals, reader copies, thumbnails and pictures) live in Artifacts' own bucket. The nightly backup takes both ([deploy.md](deploy.md#backups)). This means a document removed after its retention period stays in older backups until they age out (`BACKUP_KEEP_DAYS`, 14 days by default).
 

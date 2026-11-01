@@ -47,7 +47,9 @@ import {
   type AppEntry,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
-import { goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
+import { LiveOverrides } from './live.ts';
+import { lineView, type PipelineReader } from './pipeline.ts';
+import { automaticDevUpgrade, goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
@@ -97,6 +99,12 @@ export interface RegistryOptions {
   allowPrPreviews?: boolean;
   /** The app feed, for the app runner's installs and updates (Admin → Apps). Without one nothing is offered. */
   appUpdates?: AppUpdateChecker;
+  /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
+  pipeline?: PipelineReader;
+  /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to. AUGUR never calls it. */
+  portalUrl?: string;
+  /** The workbench's own tailnet, from PLATFORM_URL: Live on the workbench loads only from machines on it. */
+  tailnet?: string;
 }
 
 /** PILLAR_APPS: the ids of the apps this deployment ships with, space or comma separated. */
@@ -171,8 +179,12 @@ export const buildApp = async ({
   frontendFiles,
   appUpdates = new AppUpdateChecker(),
   allowPrPreviews = true,
+  pipeline,
+  portalUrl,
+  tailnet,
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
+  const live = new LiveOverrides(updates.ring, tailnet);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
@@ -229,7 +241,10 @@ export const buildApp = async ({
             // for a developer trying one of its pull requests, that build's. And the feature previews on for this person (SDK 1.7).
             .map((r) => {
               const on = previewsOnFor(r, optIns, updates.ring, at);
-              return { ...servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
+              const served = servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept);
+              // Live on the workbench: this developer's own machine's frontend, in place of any build.
+              const from = live.of(caller?.id, r.entry.id);
+              return { ...served, ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
             });
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
@@ -406,7 +421,7 @@ export const buildApp = async ({
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record }));
-      await app.register(appRunnerRoutes({ store, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
+      await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(
         '/apps/:id',
@@ -752,7 +767,18 @@ export const buildApp = async ({
         const view = updatesView({ checker: updates, apps: await store.records() });
         const [upgrade, history] = await Promise.all([store.upgrade(), store.upgrades()]);
         const shown = upgrade && (!upgrade.finishedAt || Date.now() - Date.parse(upgrade.finishedAt) < UPGRADE_SHOWN_MS);
-        return { ...view, ...(shown ? { upgrade } : {}), ...(updaterSeenAt ? { updaterSeenAt } : {}), history: history.map(historyEntry) };
+        // The line: what this server runs of each unit, on the pipeline from dev to production.
+        const installed = await store.installedApps();
+        const running = { augur: view.running.version, ...Object.fromEntries(installed.map((a) => [a.app, a.release.version])) };
+        const line = lineView(await pipeline?.current(), running);
+        return {
+          ...view,
+          ...(shown ? { upgrade } : {}),
+          ...(updaterSeenAt ? { updaterSeenAt } : {}),
+          history: history.map(historyEntry),
+          line,
+          ...(portalUrl ? { portalUrl } : {}),
+        };
       };
 
       /**
@@ -868,7 +894,19 @@ export const buildApp = async ({
       app.get('/platform/upgrade/target', async (req, reply) => {
         if (!(await isUpdater(req, reply))) return reply;
         updaterSeenAt = new Date().toISOString();
-        const upgrade = await store.upgrade();
+        let upgrade = await store.upgrade();
+        // The workbench takes AUGUR's dev builds by itself, as it would after an admin asked, backup first.
+        if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') {
+          const view = updatesView({ checker: updates, apps: await store.records() });
+          const version = automaticDevUpgrade(view, await store.upgrades());
+          const images = version ? updates.result.releases.find((r) => r.version === version)?.manifest?.images ?? {} : {};
+          if (version && Object.keys(images).length && (await store.requestUpgrade({ id: randomUUID(), from: view.running.version, version, images, requestedBy: 'automatic' }))) {
+            upgradeSettings = undefined;
+            req.log.info({ from: view.running.version, to: version }, 'dev build upgrade requested');
+            await record(req, { actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'platform.upgrade-requested', target: version, detail: { from: view.running.version, automatic: true } });
+            upgrade = await store.upgrade();
+          }
+        }
         if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') return reply.code(204).send();
         const { id, from, version, images, state } = upgrade;
         const manifest = updates.result.releases.find((r) => r.version === version)?.manifest;

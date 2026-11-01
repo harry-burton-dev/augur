@@ -162,7 +162,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
         return { workspace: req.params.id, workspaces: rollupFor(floors, req.params.id) };
       });
 
-      await app.register(adminRoutes({ directory: teams, audit }), { prefix: '/admin' });
+      await app.register(adminRoutes({ directory: teams, workspaces, audit }), { prefix: '/admin' });
       await app.register(appClientRoutes({ clients: appClients, audit }), { prefix: '/admin/apps' });
     },
     { prefix: `/${API_VERSION}` },

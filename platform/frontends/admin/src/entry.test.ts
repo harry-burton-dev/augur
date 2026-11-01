@@ -8,6 +8,7 @@ import { headline, stateOf, type AdminStatus } from './status.js';
 import { headline as updatesHeadline, type AdminUpdates } from './updates.js';
 import { describe as sentence, namesFrom, rangeFor, type AdminActivity } from './activity.js';
 import type { AdminPeople } from './people.js';
+import type { AdminDepartments } from './departments.js';
 
 const finance: Department = { id: 'd-1', name: 'Finance', members: ['u-1'] };
 const payroll: Department = { id: 'd-2', name: 'Payroll', parentId: 'd-1', members: [] };
@@ -25,6 +26,7 @@ const gateway = () => {
     if (url === '/api/identity/v1/admin/people' && method === 'GET') return json([alex, sam]);
     if (url === '/api/identity/v1/admin/departments') return json([finance, payroll]);
     if (url === '/api/identity/v1/admin/roles') return json([{ name: 'admin' }, { name: 'editor' }]);
+    if (url === '/api/identity/v1/admin/levels') return json(method === 'PUT' ? { levels: body.levels, max: 5 } : { levels: ['Department', 'Team'], max: 5 });
     if (url === '/api/identity/v1/admin/people' && method === 'POST') {
       return json({ person: { ...sam, id: 'u-3', ...body, username: 'jo', enabled: true, invited: true }, temporaryPassword: 'abcd-efgh-jkmn' }, 201);
     }
@@ -124,6 +126,32 @@ describe('admin', () => {
     expect(appStatus({ ...app, enabled: false }, '1.0.0')).toMatchObject({ status: 'paused', label: 'Off' });
   });
 
+  it('says each department’s level, and lets an admin rename the levels', async () => {
+    const { api, sent } = gateway();
+    document.body.innerHTML = '<admin-departments></admin-departments>';
+    const departments = document.querySelector('admin-departments') as AdminDepartments;
+    Object.assign(departments, { api });
+    await settle(departments);
+    const table = departments.querySelector('ui-table') as UiTable;
+    expect(table.rows.map((r) => [r.name, r.level])).toEqual([
+      ['Finance', 'Department'],
+      ['Finance / Payroll', 'Team'],
+    ]);
+    departments.naming = true;
+    await settle(departments);
+    const dialog = departments.querySelector('ui-dialog') as UiDialog;
+    const field = (name: string) => departments.querySelector(`[name="${name}"]`) as HTMLElement & { value: string };
+    field('level1').value = 'Division';
+    field('level2').value = '';
+    field('level3').value = 'Crew';
+    expect(await dialog.confirm()).toBe(false); // a level can't be left unnamed between two named ones
+    field('level2').value = 'Squadron';
+    expect(await dialog.confirm()).toBe(true);
+    await settle(departments);
+    expect(sent.find((c) => c.method === 'PUT')!.body).toEqual({ levels: ['Division', 'Squadron', 'Crew'] });
+    expect(table.rows.map((r) => r.level)).toEqual(['Division', 'Squadron']);
+  });
+
   it('names a department with the ones it sits inside', () => {
     expect(departmentPath('d-2', [finance, payroll])).toBe('Finance / Payroll');
   });
@@ -200,7 +228,7 @@ describe('admin', () => {
     it('heads the screen with what’s out, or that all is current', () => {
       expect(updatesHeadline(out)).toEqual({ heading: 'AUGUR 0.4.0 is out', summary: 'You’re on 0.2.0. 1 thing needs you before upgrading.' });
       expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, newer: [], needsYou: [] }).heading).toBe('You’re up to date');
-      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, problem: 'The release feed answered 502.', newer: [], needsYou: [] }).heading).toBe('Updates can’t be checked');
+      expect(updatesHeadline({ running, channel: 'beta', feed: 'on', checkedAt: out.checkedAt, problem: 'The release feed answered 502.', newer: [], needsYou: [] }).heading).toBe('New releases can’t be checked');
       expect(updatesHeadline({ running, channel: 'stable', feed: 'off', newer: [], needsYou: [] }).summary).toContain('RELEASE_FEED_URL is off');
     });
 

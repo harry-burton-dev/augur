@@ -8,7 +8,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 
 ## Before you start
 
-**Admin → Updates** shows whether a newer release is out, what changes in each part, and a **Needs you first** list: a release you have to go through first, settings to add, breaking changes, and apps that won't open on the new SDK. It fills in the version for the steps below. The registry checks once a day; **Check now** checks straight away.
+**Admin → Upgrade Centre** shows whether a newer release is out, what changes in each part, and a **Needs you first** list: a release you have to go through first, settings to add, breaking changes, and apps that won't open on the new SDK. It fills in the version for the steps below. The registry checks once a day; **Check now** checks straight away.
 
 **Upgrade to …** on that page asks the deployment's updater to run these steps for you: it asks for your password again, then the updater takes a backup, pulls, restarts each part and goes back by itself if anything fails, and the page follows each step. The updater is optional: until you've set it up ([The updater](#the-updater)), an upgrade you ask for just waits; cancel it there and use the steps below. When a release changes the deploy files (`infra/deploy`), such as a new service or a new Keycloak setting, the updater writes them too, and a new required setting that's a secret it makes up itself ([The updater](#the-updater)). The steps below are for a server without the updater, or for when the page says an upgrade has to be done by hand.
 
@@ -53,7 +53,7 @@ The pull fetches that release's images before anything stops. Each service migra
 
 ### The read key
 
-While the repository is private, a deployment needs one **read key**: a GitHub token that can read this repository's packages and nothing else. With it, the registry checks GitHub for new AUGUR releases (Admin → Updates) and new app releases (Admin → Apps) itself, and the updater pulls both. The releases are listed in a feed the Release workflow keeps beside the images, `ghcr.io/harry-burton-dev/im-platform/feed`, so the one token GitHub's container registry accepts covers everything. It replaces the two tokens servers needed before (`release-feed-token` and `image-pull-token`), which still work until you swap them.
+While the repository is private, a deployment needs one **read key**: a GitHub token that can read this repository's packages and nothing else. With it, the registry checks GitHub for new AUGUR releases (Admin → Upgrade Centre) and new app releases (Admin → Apps) itself, and the updater pulls both. The releases are listed in a feed the Release workflow keeps beside the images, `ghcr.io/harry-burton-dev/im-platform/feed`, so the one token GitHub's container registry accepts covers everything. It replaces the two tokens servers needed before (`release-feed-token` and `image-pull-token`), which still work until you swap them.
 
 Give each deployment its own key, so you can take one away without touching the others. Keys belong to a GitHub account, so use one that can do nothing but read: a separate account for deployments (a "machine user", such as `augur-deploy`, made with its own email address).
 
@@ -73,7 +73,7 @@ Give each deployment its own key, so you can take one away without touching the 
    echo '<the token>' | docker login ghcr.io -u <the account> --password-stdin
    ```
    and in `.env`, `GITHUB_READ_USER=<the account>`. `docker login` is for pulling by hand (`pc pull`); the updater signs itself in with the same key.
-3. `pc up -d registry updater`, then **Check now** on Admin → Updates. It lists releases, or says the key was refused and why. The old `release-feed-token`, `image-pull-token` and `IMAGE_PULL_USER` can then go.
+3. `pc up -d registry updater`, then **Check now** on Admin → Upgrade Centre. It lists releases, or says the key was refused and why. The old `release-feed-token`, `image-pull-token` and `IMAGE_PULL_USER` can then go.
 
 To take a deployment's access away, delete its token in the account's **Settings → Developer settings → Personal access tokens**; the others carry on. When a token is near its expiry, make a new one and repeat step 2.
 
@@ -85,11 +85,11 @@ A new required setting, `SERVER_RING`: `preview` on the server that runs what's 
 
 ### Data Atlas ships with AUGUR
 
-Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from the Updates page makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). See [atlas.md](atlas.md).
+Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from Admin → Upgrade Centre makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). See [atlas.md](atlas.md).
 
 ### Auspex ships with AUGUR
 
-Auspex, which shows people where they are on AUGUR, who's there, and why they can or can't use each app, is now part of every release: a new container, `auspex`, and its frontend inside `web`. It keeps nothing of its own (no schema, no bucket) and puts itself in Admin, Apps on its first start. It needs one new setting, `AUSPEX_CLIENT_SECRET`, its sign-in: an upgrade from the Updates page makes it up for you. Upgrading by hand, add it to `.env` first (`openssl rand -hex 32`). See [auspex.md](auspex.md).
+Auspex, which shows people where they are on AUGUR, who's there, and why they can or can't use each app, is now part of every release: a new container, `auspex`, and its frontend inside `web`. It keeps nothing of its own (no schema, no bucket) and puts itself in Admin, Apps on its first start. It needs one new setting, `AUSPEX_CLIENT_SECRET`, its sign-in: an upgrade from Admin → Upgrade Centre makes it up for you. Upgrading by hand, add it to `.env` first (`openssl rand -hex 32`). See [auspex.md](auspex.md).
 
 ### Folio is called Artifacts
 
@@ -114,7 +114,7 @@ Then upgrade as usual. The worker's image is large (about 2 GB: the models that 
 
 ### The Updates page
 
-Admin gets an **Updates** page, under AUGUR. It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. [The read key](#the-read-key) now does this, and the steps below are how servers did it before:
+Admin gets an **Updates** page, under AUGUR (since replaced by the **Upgrade Centre**, [release-channels.md](release-channels.md)). It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. [The read key](#the-read-key) now does this, and the steps below are how servers did it before:
 
 1. In GitHub, **Settings → Developer settings → Fine-grained tokens**, make a token for this repository only, with **Contents: Read-only** and nothing else. (The `read:packages` token you sign Docker in with can't read releases.)
 2. Save it where only the registry reads it, then upgrade as usual:
@@ -129,7 +129,7 @@ Optional, in `.env`: `RELEASE_CHANNEL=stable` or `beta` (by default, the channel
 
 ### The updater
 
-An optional container that runs an upgrade asked for with **Upgrade to …** on Admin → Updates. It checks every image is signed by this repository's Release workflow and is the one the release names, checks the settings it needs are set, takes a backup and test-restores it, pulls, then reruns storage’s set-up and restarts identity, registry, events, models, gateway and web in turn, waiting for each to answer on its new version. If one doesn't, it puts every part back on the release you were on, and the page says why and which backup was taken. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
+An optional container that runs an upgrade asked for with **Upgrade to …** on Admin → Upgrade Centre. It checks every image is signed by this repository's Release workflow and is the one the release names, checks the settings it needs are set, takes a backup and test-restores it, pulls, then reruns storage’s set-up and restarts identity, registry, events, models, gateway and web in turn, waiting for each to answer on its new version. If one doesn't, it puts every part back on the release you were on, and the page says why and which backup was taken. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
 
 **Deploy files and new settings.** Each release's updater image carries that release's deploy files (`infra/deploy`, as `augur@<version>` has them). When the release you upgrade to changes some, the updater takes them from the new release's updater image, checks each against the release file (which the Release workflow signs with the images), writes them into `infra/deploy`, then starts anything they add and makes again anything that mounts a changed file (Keycloak's realm, say). Going back puts the old files back and takes new parts away. Two things stop it, and the page says which:
 - A file the release changes has been **edited on the server** since the release you run. The updater never overwrites your edits: put the file back as `augur@<your version>` has it (`git checkout augur@<version> -- infra/deploy/<file>`), and keep your change in `.env` or a `compose.override.yml` of your own instead.
@@ -239,7 +239,7 @@ Two optional touches:
 
 ## Going back
 
-**Admin → Updates → Go back** does this for you while no release between is breaking ([release-channels.md](release-channels.md#going-back)). By hand:
+**Admin → Upgrade Centre → Go back** does this for you while no release between is breaking ([release-channels.md](release-channels.md#going-back)). By hand:
 
 Code and data are separate, so going back is two steps, and the second is only needed if the new release migrated data:
 

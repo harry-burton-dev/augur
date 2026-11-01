@@ -109,10 +109,29 @@ const behavesLikeAWorkspaceStore = (make: () => WorkspaceStore, reset: () => Pro
     ]);
     expect(floors[3].path.map((p) => p.name)).toEqual(['Acme', 'Finance', 'Payroll']);
     expect(floors[3].path[0]).toEqual({ id: org.id, kind: 'org', name: 'Acme', slug: 'org' });
+    // Teams are named by their level: Department right below the org, Team below that.
+    expect(floors.map((f) => f.level)).toEqual([undefined, undefined, 'Department', 'Team']);
+    expect(floors[3].path.map((p) => p.level)).toEqual([undefined, 'Department', 'Team']);
     // Being on Finance doesn't put you on Payroll.
     await store.setMember(finance.id, 'u-2', 'member');
     expect((await floorsFor(store, { id: 'u-2', name: 'Sam' })).map((f) => f.name)).toEqual(['You', 'Acme', 'Finance']);
     expect(floors.some((f) => f.id === legal.id)).toBe(false);
+  });
+
+  it('names the levels of team, the last name standing for any level deeper', async () => {
+    expect(await store.levels()).toEqual(['Department', 'Team']);
+    const a = await store.createTeam('Ops');
+    const b = await store.createTeam('Fleet', a.id);
+    const c = await store.createTeam('Bridge', b.id);
+    await store.setMember(c.id, 'u-1', 'member');
+    expect((await floorsFor(store, { id: 'u-1', name: 'Alex' })).slice(2).map((f) => f.level)).toEqual(['Department', 'Team', 'Team']);
+    expect(await store.setLevels([' Division ', 'Squadron', 'Crew'])).toEqual(['Division', 'Squadron', 'Crew']);
+    expect(await store.levels()).toEqual(['Division', 'Squadron', 'Crew']);
+    expect((await floorsFor(store, { id: 'u-1', name: 'Alex' })).slice(2).map((f) => f.level)).toEqual(['Division', 'Squadron', 'Crew']);
+    await expect(store.setLevels([])).rejects.toThrow(/between 1 and 5/);
+    await expect(store.setLevels(['Team', 'team'])).rejects.toThrow(/both be called/);
+    await expect(store.setLevels(['  '])).rejects.toThrow(/needs a name/);
+    expect(await store.levels()).toEqual(['Division', 'Squadron', 'Crew']);
   });
 };
 
@@ -131,7 +150,7 @@ describe.runIf(process.env.DATABASE_URL)('PgWorkspaceStore', () => {
 
   behavesLikeAWorkspaceStore(
     () => new PgWorkspaceStore(pool, { orgName: 'Acme' }),
-    async () => void (await pool.query('truncate identity.workspace_members, identity.imports, identity.workspaces')),
+    async () => void (await pool.query('truncate identity.workspace_members, identity.imports, identity.workspaces, identity.team_levels')),
   );
 
   it('takes slugs safely when teams are added at once', async () => {

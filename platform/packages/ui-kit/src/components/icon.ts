@@ -2,8 +2,8 @@ import { LitElement, css, html, svg, type SVGTemplateResult } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import {
   Activity, Anchor, ArrowLeft, ArrowRight, ArrowUpDown, Ban, Bell, BellOff, Bird, Bookmark, Building, Building2, CalendarRange, ChartColumn, Check, CalendarDays, Car, ChevronDown, Clock, Compass, Diamond, Download, EighthNotes, Ellipsis,
-  FileText, Folder, Info, Gauge, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, Link, List, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Network, Palette, Pause, Plane, Play, Plus, Power, Search, Server, Ship,
-  Send, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, User, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
+  FileText, Folder, Info, Gauge, GitPullRequest, History, House, Image, Inbox, KeyRound, LayoutGrid, Library, Link, List, ListFilter, Lock, Mail, Map as MapIcon, MapPin, Monitor, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Palette, Pause, Plane, Play, Plus, Power, Search, Server, Ship,
+  Send, Pencil, Trash2, Archive, FolderPlus, ShieldCheck, SlidersHorizontal, Sparkles, Star, Tag, Triangle, Undo2, Upload, User, UserPlus, UserRound, UsersRound, Video, Warehouse, Wifi, X,
   type IconNode,
 } from 'lucide';
 import { base } from '../shared.js';
@@ -106,6 +106,16 @@ export const icons = {
   info: draw(Info),
   // A link between records (`@augur/records`' relations).
   link: draw(Link),
+  // ui-app-frame's rail and drawer, open and closed.
+  'rail-close': draw(PanelLeftClose),
+  'rail-open': draw(PanelLeftOpen),
+  'drawer-close': draw(PanelRightClose),
+  'drawer-open': draw(PanelRightOpen),
+  // An object's actions in ui-radial-menu.
+  rename: draw(Pencil),
+  delete: draw(Trash2),
+  archive: draw(Archive),
+  'folder-plus': draw(FolderPlus),
 } satisfies Record<string, SVGTemplateResult>;
 
 export type IconName = keyof typeof icons;

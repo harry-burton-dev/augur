@@ -34,6 +34,9 @@ export { UiAppFrame, type FrameMeasure } from './components/app-frame.js';
 export { UiPageHead, type TrailStep, type PageAction } from './components/page-head.js';
 export { UiSection } from './components/section.js';
 export { UiCard, UiCards, floorMark } from './components/card.js';
+export { UiTile, UiTiles } from './components/tile.js';
+export { UiRadialMenu, type RadialAction } from './components/radial-menu.js';
+export { UiToolbar } from './components/toolbar.js';
 export { UiTally, type TallyCount } from './components/tally.js';
 export { UiDetails, type Detail } from './components/details.js';
 export { UiTimeline, dayWords, type TimelineItem } from './components/timeline.js';
@@ -63,7 +66,7 @@ export {
   type ShellViewRenderer,
   type AreaCard,
 } from './components/shell.js';
-export { floorStack, floorBeside, floorDirection, floorIcon, floorKindName, floorLevel, floorMeaning, type ShellFloor, type ShellFloorRef, type FloorKind, type FloorDirection } from './components/floors.js';
+export { floorStack, floorBeside, floorDirection, floorIcon, floorIconOf, floorKindName, floorKindOf, floorLevel, floorMeaning, floorTone, teamDepth, type ShellFloor, type ShellFloorRef, type FloorKind, type FloorDirection, type FloorTone } from './components/floors.js';
 export {
   UiWaveBackground,
   wavePresets,

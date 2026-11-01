@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { steadyPool } from '@augur/service-kit';
 
 /** What admins set in Admin: whether models can be used at all, and how many calls each app gets a day. */
 export interface ModelSettings {
@@ -106,7 +107,7 @@ export class PgModelStore implements ModelStore {
   constructor(private readonly pool: pg.Pool) {}
 
   static async connect(connectionString: string) {
-    const store = new PgModelStore(new pg.Pool({ connectionString }));
+    const store = new PgModelStore(steadyPool(new pg.Pool({ connectionString })));
     await store.migrate();
     return store;
   }

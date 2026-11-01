@@ -53,6 +53,7 @@ jobs:
       - run: pnpm check:reasons
       - run: pnpm check:versions
       - run: pnpm check:release
+      - run: pnpm check:catalog
       - run: pnpm test:scripts
       # Into preview and production only dev, promotions, back-merges and hotfixes go, all versioned
       # already (docs/release-channels.md).
@@ -285,12 +286,27 @@ jobs:
             -e APP_ORIGINS=https://apps.example.org -p 8088:8080 platform-web
           for i in $(seq 1 20); do curl -fsI http://localhost:8088/admin > /tmp/headers && break; sleep 1; done
           cat /tmp/headers
-          grep -iE "^content-security-policy: default-src 'self'; script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https://apps.example.org;" /tmp/headers
+          grep -iE "^content-security-policy: default-src 'self'; script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https://apps.example.org ?;" /tmp/headers
+          # Anywhere but the workbench, nothing on the tailnet may run in the shell.
+          ! grep -i "ts.net" /tmp/headers
           # Folio ships with AUGUR, so the front door serves its frontend too.
           curl -fsI http://localhost:8088/apps/folio/entry.js
           curl -fsI http://localhost:8088/apps/auspex/entry.js
           curl -fsI http://localhost:8088/apps/atlas/entry.js
           docker rm -f web
+      - name: On the workbench, the shell may load an app from a machine on its own tailnet
+        run: |
+          docker run -d --name web-dev --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -e SERVER_RING=dev -e PLATFORM_URL=https://augur.tail1234.ts.net -p 8089:8080 platform-web
+          for i in $(seq 1 20); do curl -fsI http://localhost:8089/admin > /tmp/headers-dev && break; sleep 1; done
+          grep -iE "^content-security-policy: .*script-src 'self' 'sha256-[A-Za-z0-9+/=]+'  https://\*\.tail1234\.ts\.net wss://\*\.tail1234\.ts\.net;" /tmp/headers-dev
+          # Never every Tailscale user's machines.
+          ! grep -iE "[ /]\*\.ts\.net" /tmp/headers-dev
+          docker rm -f web-dev
+          # A workbench that isn't at a Tailscale address loads from no machine.
+          docker run -d --name web-dev2 --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -e SERVER_RING=dev -e PLATFORM_URL=https://augur.example.org -p 8090:8080 platform-web
+          for i in $(seq 1 20); do curl -fsI http://localhost:8090/admin > /tmp/headers-dev2 && break; sleep 1; done
+          ! grep -i "ts.net" /tmp/headers-dev2
+          docker rm -f web-dev2
       - name: The nightly backup writes a restorable dump
         run: |
           docker run -d --name pg -e POSTGRES_PASSWORD=ci postgres:16-alpine

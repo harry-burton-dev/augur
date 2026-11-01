@@ -2,10 +2,11 @@ import { LitElement, html, nothing, type TemplateResult } from 'lit';
 import type { Fact } from '@augur/ui-kit';
 import { ApiError, type AdminApi, type PlatformUpdates, type Upgrade, type UpgradeStepState } from './api.js';
 import { changeList, gatherChanges, historyList } from './changes.js';
+import { lineSection } from './line.js';
 import { line, page, section } from './parts.js';
 
 /** Stable releases are on production, beta ones on preview (docs/release-channels.md). */
-const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Production' : 'Preview');
+const channelWord = (c: PlatformUpdates['channel']) => (c === 'stable' ? 'Production' : c === 'dev' ? 'Dev build' : 'Preview');
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 /** How often the page asks again while an upgrade is waiting or under way. */
@@ -43,7 +44,7 @@ const stepWords: Record<UpgradeStepState['step'], string> = {
 
 /** The heading: an upgrade under way or just ended, something's out, all's current, or the feed can't be read. */
 export const headline = (u?: PlatformUpdates, error?: string): { heading: string; summary: string } => {
-  if (error || !u) return { heading: 'Updates', summary: 'Whether a newer AUGUR release is out, and what it needs first.' };
+  if (error || !u) return { heading: 'Upgrade Centre', summary: 'Where AUGUR is between dev and production, what this server runs, and what upgrading needs first.' };
   const up = u.upgrade;
   if (up?.state === 'requested') {
     return { heading: `Upgrading to ${up.version}`, summary: u.updaterSeenAt ? 'Waiting for the updater to start.' : 'Waiting for an updater. None has asked for work since the registry started.' };
@@ -51,13 +52,13 @@ export const headline = (u?: PlatformUpdates, error?: string): { heading: string
   if (up?.state === 'running') return { heading: `Upgrading to ${up.version}`, summary: 'There’s a short gap while each part restarts. This page follows along.' };
   if (up?.state === 'rolled-back' && up.from === u.running.version) return { heading: `Back on ${up.from}`, summary: up.message ?? `The upgrade to ${up.version} didn’t finish, so it went back by itself.` };
   if (up?.state === 'failed' && up.from === u.running.version) return { heading: `The upgrade to ${up.version} needs you`, summary: up.message ?? 'It stopped partway. See “Going back” in docs/upgrade.md.' };
-  if (u.feed === 'off') return { heading: 'Updates', summary: 'This deployment doesn’t check for new releases: RELEASE_FEED_URL is off.' };
+  if (u.feed === 'off') return { heading: 'Upgrade Centre', summary: 'This deployment doesn’t check for new releases: RELEASE_FEED_URL is off.' };
   if (u.available) {
     // A secret the updater makes up needs nothing from anyone.
     const n = u.needsYou.filter((x) => !x.madeUp).length;
     return { heading: `AUGUR ${u.available.version} is out`, summary: `You’re on ${u.running.version}. ${n ? `${n === 1 ? '1 thing needs' : `${n} things need`} you before upgrading.` : 'Nothing needs you before upgrading.'}` };
   }
-  if (u.problem) return { heading: 'Updates can’t be checked', summary: u.problem };
+  if (u.problem) return { heading: 'New releases can’t be checked', summary: u.problem };
   return { heading: 'You’re up to date', summary: `AUGUR ${u.running.version} is the newest ${u.channel} release.` };
 };
 
@@ -180,7 +181,7 @@ export class AdminUpdates extends LitElement {
     if (!this.goingBack) return nothing;
     return html`<ui-dialog
       open
-      eyebrow="Updates"
+      eyebrow="Upgrade Centre"
       heading=${`Go back to AUGUR ${this.goingBack}?`}
       summary="Everyone is cut off for a minute or two while the parts restart. It backs up first, as an upgrade does."
       action-label="Go back"
@@ -258,8 +259,8 @@ export class AdminUpdates extends LitElement {
   private facts(u: PlatformUpdates) {
     const facts: Fact[] = [
       { label: 'Running', value: `AUGUR ${u.running.version}` },
-      ...(u.ring ? [{ label: 'Server', value: u.ring === 'production' ? 'Production' : 'Preview' }] : []),
-      { label: 'Following', value: `${channelWord(u.channel)} releases` },
+      ...(u.ring ? [{ label: 'Server', value: u.ring === 'production' ? 'Production' : u.ring === 'dev' ? 'Workbench' : 'Preview' }] : []),
+      { label: 'Following', value: u.channel === 'dev' ? 'Dev builds, taken by itself, and releases' : `${channelWord(u.channel)} releases` },
       ...(u.available ? [{ label: 'Newest', value: `AUGUR ${u.available.version}${u.available.released ? `, ${day(u.available.released)}` : ''}` }] : []),
       ...(u.feed === 'on' ? [{ label: 'Last checked', value: u.checkedAt ? new Date(u.checkedAt).toLocaleString() : 'Not yet' }] : []),
     ];
@@ -321,7 +322,7 @@ export class AdminUpdates extends LitElement {
     if (!this.confirming || !u.next) return nothing;
     return html`<ui-dialog
       open
-      eyebrow="Updates"
+      eyebrow="Upgrade Centre"
       heading=${`Upgrade to AUGUR ${u.next}?`}
       summary="Everyone is cut off for a minute or two while the parts restart. It backs up first and goes back by itself if anything fails."
       action-label="Upgrade"
@@ -394,9 +395,9 @@ export class AdminUpdates extends LitElement {
     const body = this.loading
       ? html`<ui-rows loading count="3"></ui-rows>`
       : this.error && !u
-        ? html`<ui-state kind="error" heading="Updates can’t be shown" body=${this.error} action="Try again" @ui-action=${() => this.load()}></ui-state>`
+        ? html`<ui-state kind="error" heading="The Upgrade Centre can’t be shown" body=${this.error} action="Try again" @ui-action=${() => this.load()}></ui-state>`
         : u
-          ? html`${this.facts(u)} ${this.details(u)} ${this.confirmDialog(u)} ${this.goBackDialog(u)}
+          ? html`${section('This server', this.facts(u))} ${lineSection(u.line, u.portalUrl)} ${this.details(u)} ${this.confirmDialog(u)} ${this.goBackDialog(u)}
               ${this.error ? html`<p style="margin:0;color:var(--danger)">${this.error}</p>` : nothing}
               ${u.feed === 'on'
                 ? html`<div><ui-button data-check kind="secondary" size="sm" ?busy=${this.checking} @click=${() => this.checkNow()}>Check now</ui-button></div>`

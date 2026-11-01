@@ -16,6 +16,33 @@ export type MemberRole = 'member' | 'lead';
 /** Teams nest at most this deep below the org. */
 export const MAX_TEAM_DEPTH = 5;
 
+/**
+ * What each level of team is called, from the top: teams right below the org
+ * are Departments, and those below them Teams, unless an admin renames them.
+ * A level deeper than the names given takes the last one. The kind stays
+ * `team` whatever it's called, so apps that check the kind keep working.
+ */
+export const DEFAULT_LEVELS = ['Department', 'Team'];
+
+/** A level's name at most this long. */
+export const MAX_LEVEL_NAME = 40;
+
+/** The name of the level a team sits at: 1 right below the org. */
+export const levelName = (levels: string[], depth: number) => levels[Math.min(depth, levels.length) - 1] ?? DEFAULT_LEVELS[DEFAULT_LEVELS.length - 1];
+
+/** Tidied names for each level, or why they can't be used. */
+export const checkLevels = (names: string[]): string[] => {
+  const tidy = names.map((n) => n.trim().replace(/\s+/g, ' '));
+  if (!tidy.length || tidy.length > MAX_TEAM_DEPTH) throw new DirectoryError(`Name between 1 and ${MAX_TEAM_DEPTH} levels.`, 400);
+  if (tidy.some((n) => !n || n.length > MAX_LEVEL_NAME)) throw new DirectoryError(`Each level needs a name of up to ${MAX_LEVEL_NAME} characters.`, 400);
+  const seen = new Set<string>();
+  for (const n of tidy) {
+    if (seen.has(n.toLowerCase())) throw new DirectoryError(`Two levels can’t both be called “${n}”: people tell them apart by name.`, 400);
+    seen.add(n.toLowerCase());
+  }
+  return tidy;
+};
+
 export interface Workspace {
   id: string;
   kind: WorkspaceKind;
@@ -61,6 +88,10 @@ export interface WorkspaceStore {
   createTeam(name: string, parentId?: string): Promise<Workspace>;
   /** Renames a team. Its slug stays, so links to it keep working. */
   renameTeam(id: string, name: string): Promise<Workspace>;
+  /** What each level of team is called, from the top (see DEFAULT_LEVELS). */
+  levels(): Promise<string[]>;
+  /** Renames the levels; the names are checked with checkLevels. */
+  setLevels(names: string[]): Promise<string[]>;
   /** Adds someone to a team or changes their role; `null` takes them off it. */
   setMember(team: string, person: string, role: MemberRole | null): Promise<void>;
   /**
@@ -132,6 +163,7 @@ export class MemoryWorkspaceStore implements WorkspaceStore {
   private members: Membership[] = [];
   private readonly imported = new Set<string>();
   private readonly orgName: string;
+  private named = [...DEFAULT_LEVELS];
 
   constructor({ orgName = 'Organisation' }: OrgSettings = {}) {
     this.orgName = orgName;
@@ -167,6 +199,15 @@ export class MemoryWorkspaceStore implements WorkspaceStore {
   async workspace(id: string) {
     const w = this.all.get(id);
     return w && structuredClone(w);
+  }
+
+  async levels() {
+    return [...this.named];
+  }
+
+  async setLevels(names: string[]) {
+    this.named = checkLevels(names);
+    return [...this.named];
   }
 
   async memberships(filter: { person?: string; workspace?: string } = {}) {
@@ -256,6 +297,16 @@ export const workspaceMigrations: { id: string; sql: string }[] = [
       create table identity.imports (
         source text primary key,
         imported_at timestamptz not null default now()
+      );`,
+  },
+  {
+    // What each level of team is called, 1 right below the org; without a row, DEFAULT_LEVELS.
+    id: '003_team_levels',
+    sql: `
+      create table identity.team_levels (
+        depth int primary key check (depth between 1 and ${MAX_TEAM_DEPTH}),
+        name text not null,
+        updated_at timestamptz not null default now()
       );`,
   },
 ];
@@ -378,6 +429,28 @@ export class PgWorkspaceStore implements WorkspaceStore {
     return rows.map((r) => ({ workspace: r.workspace_id, person: r.person, role: r.role }));
   }
 
+  async levels() {
+    const { rows } = await this.pool.query<{ name: string }>('select name from identity.team_levels order by depth');
+    return rows.length ? rows.map((r) => r.name) : [...DEFAULT_LEVELS];
+  }
+
+  async setLevels(names: string[]) {
+    const levels = checkLevels(names);
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      await client.query('delete from identity.team_levels');
+      for (const [i, name] of levels.entries()) await client.query('insert into identity.team_levels (depth, name) values ($1, $2)', [i + 1, name]);
+      await client.query('commit');
+    } catch (err) {
+      await client.query('rollback');
+      throw err;
+    } finally {
+      client.release();
+    }
+    return levels;
+  }
+
   createTeam(name: string, parentId?: string) {
     return this.locked(async (q) => {
       const parent = placeTeam(await this.orgIn(q), await this.teamsIn(q), name, parentId);
@@ -440,6 +513,8 @@ export interface WorkspaceRef {
   kind: WorkspaceKind;
   name: string;
   slug: string;
+  /** A team's level, by name: "Department" right below the org, "Team" below that, unless an admin renamed them. */
+  level?: string;
 }
 
 /** A floor someone can stand on, as they see it. */
@@ -455,7 +530,16 @@ export interface Floor extends WorkspaceRef {
   direct: boolean;
 }
 
-const ref = (w: Workspace, name = w.name): WorkspaceRef => ({ id: w.id, kind: w.kind, name, slug: w.slug });
+/** A team's depth below the org: 1 right below it. */
+export const depthOf = (w: Pick<Workspace, 'path'>) => w.path.length - 1;
+
+const ref = (w: Workspace, levels: string[], name = w.name): WorkspaceRef => ({
+  id: w.id,
+  kind: w.kind,
+  name,
+  slug: w.slug,
+  ...(w.kind === 'team' ? { level: levelName(levels, depthOf(w)) } : {}),
+});
 
 /**
  * Every floor a person can stand on: their own, the org, each team they're on,
@@ -464,15 +548,15 @@ const ref = (w: Workspace, name = w.name): WorkspaceRef => ({ id: w.id, kind: w.
  * in tree order.
  */
 export const floorsFor = async (store: WorkspaceStore, person: { id: string; name: string }): Promise<Floor[]> => {
-  const [own, org, teams, mine] = await Promise.all([store.personal(person.id, person.name), store.org(), store.teams(), store.memberships({ person: person.id })]);
+  const [own, org, teams, mine, levels] = await Promise.all([store.personal(person.id, person.name), store.org(), store.teams(), store.memberships({ person: person.id }), store.levels()]);
   const byId = new Map([org, ...teams].map((w) => [w.id, w]));
   const direct = new Map(mine.map((m) => [m.workspace, m.role]));
   const reachable = new Set<string>();
   for (const m of mine) for (const id of byId.get(m.workspace)?.path ?? []) reachable.add(id);
-  const pathOf = (w: Workspace) => w.path.map((id) => byId.get(id)).filter((x): x is Workspace => !!x).map((x) => ref(x));
-  const floor = (w: Workspace, role: MemberRole, isDirect: boolean): Floor => ({ ...ref(w), path: pathOf(w), role, direct: isDirect });
+  const pathOf = (w: Workspace) => w.path.map((id) => byId.get(id)).filter((x): x is Workspace => !!x).map((x) => ref(x, levels));
+  const floor = (w: Workspace, role: MemberRole, isDirect: boolean): Floor => ({ ...ref(w, levels), path: pathOf(w), role, direct: isDirect });
   return [
-    { ...ref(own, 'You'), path: [ref(own, 'You')], role: 'lead', direct: true },
+    { ...ref(own, levels, 'You'), path: [ref(own, levels, 'You')], role: 'lead', direct: true },
     floor(org, 'member', true),
     ...teams.filter((t) => reachable.has(t.id)).map((t) => floor(t, direct.get(t.id) ?? 'member', direct.has(t.id))),
   ];

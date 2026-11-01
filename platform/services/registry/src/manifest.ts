@@ -226,7 +226,7 @@ export const platformApps: AppEntry[] = [
         area: 'system',
         items: [
           { label: 'Status', icon: 'gauge', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },
-          { label: 'Updates', icon: 'download', path: '/updates', detail: 'New AUGUR releases', keywords: 'upgrade release version new' },
+          { label: 'Upgrade Centre', icon: 'download', path: '/updates', detail: 'From dev to production, and upgrading', keywords: 'updates upgrade release version new dev preview production pipeline' },
           { label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' },
         ],
       },

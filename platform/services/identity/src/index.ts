@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
-import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, steadyPool } from '@augur/service-kit';
 import { ensureClients, KeycloakAppClients, parseClientSecrets, retrying, type AppClients } from './clients.ts';
 import { DEPLOYMENT_ADMIN_ROLE, KeycloakDirectory, PLATFORM_ROLES, type Directory } from './directory.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
@@ -33,7 +33,7 @@ const orgName = process.env.ORG_NAME || 'Organisation';
 let store: PreferenceStore;
 let workspaces: WorkspaceStore;
 if (process.env.DATABASE_URL) {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL }));
   const prefs = new PgPreferenceStore(pool);
   await prefs.migrate();
   store = prefs;

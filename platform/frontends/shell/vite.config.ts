@@ -3,7 +3,7 @@ import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isSharedModule } from '@augur/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
-import { defineConfig, type Plugin, type ProxyOptions } from 'vite';
+import { defineConfig, normalizePath, type Plugin, type ProxyOptions } from 'vite';
 
 /**
  * Local stand-in for where apps are hosted: /apps/<id>/* is served from that
@@ -116,7 +116,7 @@ const devApp = (dir: string | undefined) => {
   const previews = ((manifest.previews ?? []) as { id: string }[]).map((p) => p.id);
   const asked = (process.env.DEV_PREVIEWS ?? '').split(',').map((p) => p.trim()).filter(Boolean);
   const previewsOn = asked.includes('all') ? previews : previews.filter((p) => asked.includes(p));
-  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs${resolve(dir, 'frontend/src/entry.ts')}`, ...(previewsOn.length ? { previewsOn } : {}) };
+  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs/${normalizePath(resolve(dir, 'frontend/src/entry.ts')).replace(/^\//, '')}`, ...(previewsOn.length ? { previewsOn } : {}) };
   const caller = {
     'x-user-id': 'dev-person',
     'x-user-name': encodeURIComponent('Dev Person'),
@@ -173,6 +173,12 @@ export default defineConfig({
     // DEV_HOST=0.0.0.0 opens it to other machines, such as your phone or the preview server, on the tailnet (*.ts.net) or DEV_ALLOWED_HOSTS.
     ...(process.env.DEV_HOST
       ? { host: process.env.DEV_HOST, allowedHosts: ['.ts.net', ...(process.env.DEV_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)] }
+      : {}),
+    // Live on the workbench (`pnpm dev:app <id> --live`): the workbench's shell loads the app's entry from
+    // here, through `tailscale serve` at https://<DEV_LIVE_HOST>, so its pages on *.ts.net may fetch it, and
+    // the reload socket goes back to this machine rather than to the page's own address.
+    ...(process.env.DEV_LIVE_HOST
+      ? { cors: { origin: /^https:\/\/[a-z0-9.-]+\.ts\.net$/ }, hmr: { host: process.env.DEV_LIVE_HOST, protocol: 'wss', clientPort: 443 } }
       : {}),
     // The app's own service first: the first matching prefix wins.
     proxy: { ...dev?.proxy, '/api': process.env.GATEWAY_URL ?? 'http://localhost:8080' },

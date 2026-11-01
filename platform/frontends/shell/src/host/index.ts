@@ -12,6 +12,7 @@ export { HOME_CHANNEL, MAX_CARDS, needsFor, cardOf, cardsFor, SurfaceMounter, ty
 export {
   loadPreviews,
   choosePreview,
+  chooseLive,
   previewPr,
   previewLine,
   loadFeaturePreviews,

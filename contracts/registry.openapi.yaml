@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.27.0
+  version: 1.31.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -979,6 +979,8 @@ paths:
                         version: { type: string, description: The installed version }
                         chosen: { type: integer }
                         previews: { type: array, items: { $ref: "#/components/schemas/Preview" } }
+                        live: { type: string, description: "Live on the workbench: the entry on the caller's own machine the shell loads instead of the app" }
+                        liveProblem: { type: string, description: "Why the app can't be loaded from the caller's machine here (only the workbench, SERVER_RING=dev, does)" }
         "401": { description: Not signed in }
   /previews/{id}:
     put:
@@ -1002,6 +1004,30 @@ paths:
         "401": { description: Not signed in }
         "403": { description: Not one of the app's developers }
         "404": { description: No preview of that pull request is running }
+  /previews/{id}/live:
+    put:
+      summary: Load an app's frontend from the caller's own machine, for them alone (Live on the workbench)
+      description: >
+        Only on the workbench (SERVER_RING=dev), whose front door lets the shell load scripts from *.ts.net.
+        The shell is given `url` as the app's entry for the caller until they send `null` or the registry
+        restarts. The app's service stays the installed one.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties: { url: { type: [string, "null"], maxLength: 2048, description: "https://<machine>.ts.net/…/entry.ts, as pnpm dev:app <id> --live prints it" } }
+      responses:
+        "204": { description: Loading it from there, or stopped }
+        "400": { description: Not an app entry on a machine on the tailnet }
+        "401": { description: Not signed in }
+        "403": { description: Not one of the app's developers }
+        "409": { description: This server isn't the workbench }
 components:
   schemas:
     AppInstalls:
@@ -1211,6 +1237,59 @@ components:
         message: { type: string }
         finishedAt: { type: string, format: date-time }
     UpgradeStep: { type: string, enum: [preflight, backup, pull, roll-forward, verify, roll-back] }
+    PipelineBranch: { type: string, enum: [dev, preview, production] }
+    PipelinePull:
+      type: object
+      required: [number, title, url]
+      properties: { number: { type: integer }, title: { type: string }, url: { type: string } }
+    PipelineLine:
+      type: object
+      description: "The Upgrade Centre's line: each unit between dev, preview and production, from the pipeline feed (docs/release-channels.md, The pipeline feed), with what this server runs of it"
+      required: [feed, units, steps]
+      properties:
+        feed: { type: string, enum: ["on", "off"], description: Off when there's no pipeline feed (a mirror, or PIPELINE_FEED_URL=off) }
+        checkedAt: { type: string, format: date-time }
+        problem: { type: string, description: Why the last read failed; what it read before still shows }
+        generatedAt: { type: string, format: date-time }
+        repository: { type: string }
+        units:
+          type: array
+          items:
+            type: object
+            required: [id, name, versions, waiting, previews]
+            properties:
+              id: { type: string, description: "augur, or an app's id" }
+              name: { type: string }
+              versions:
+                type: object
+                properties: { dev: { type: [string, "null"] }, preview: { type: [string, "null"] }, production: { type: [string, "null"] } }
+              devBuild: { type: object, required: [version], properties: { version: { type: string }, released: { type: string } } }
+              waiting: { type: array, items: { type: string }, description: The changesets on dev that move it }
+              previews: { type: array, items: { type: object, required: [pr, version], properties: { pr: { type: integer }, version: { type: string } } } }
+              running: { type: string, description: The version this server runs, when it runs it }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [from, to, merged, pulls]
+            properties:
+              from: { $ref: "#/components/schemas/PipelineBranch" }
+              to: { $ref: "#/components/schemas/PipelineBranch" }
+              merged: { type: integer, description: How many pull requests are on from that aren't on to yet }
+              pulls: { type: array, items: { type: object, required: [number, title], properties: { number: { type: integer }, title: { type: string }, mergedAt: { type: string } } } }
+        pulls:
+          type: object
+          properties:
+            versionPackages: { $ref: "#/components/schemas/PipelinePull" }
+            promoteToPreview: { $ref: "#/components/schemas/PipelinePull" }
+            promoteToProduction:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/PipelinePull"
+                  - type: object
+                    required: [unit, version]
+                    properties: { unit: { type: string }, version: { type: string } }
     PlatformUpdates:
       type: object
       required: [running, channel, feed, newer, needsYou]
@@ -1250,6 +1329,8 @@ components:
               problem: { type: string, description: "Why it can't go back straight; absent when it can" }
               breakingAfter: { type: string, description: The breaking release between, whose backup going back by hand restores }
         updaterSeenAt: { type: string, format: date-time, description: When the updater last asked for work, since the registry started }
+        portalUrl: { type: string, description: "The company's Backstage (PORTAL_URL), which the Upgrade Centre links to" }
+        line: { $ref: "#/components/schemas/PipelineLine" }
         needsYou:
           type: array
           items:
@@ -1263,8 +1344,8 @@ components:
               required: { type: boolean }
               madeUp: { type: boolean, description: "For kind setting: a secret the updater makes up itself" }
               app: { type: string, description: The app that won't run on the new SDK, for kind app }
-    ReleaseChannel: { type: string, enum: [stable, beta], description: "stable is on production, beta on preview (docs/release-channels.md)" }
-    ServerRing: { type: string, enum: [preview, production], description: "What kind of server this is (SERVER_RING in .env): a production one takes only releases promoted to production" }
+    ReleaseChannel: { type: string, enum: [stable, beta, dev], description: "stable is on production, beta on preview, dev a dev build of the dev branch that only the workbench takes (docs/release-channels.md)" }
+    ServerRing: { type: string, enum: [dev, preview, production], description: "What kind of server this is (SERVER_RING in .env): dev is the workbench, which also runs AUGUR's dev builds; a production one takes only releases promoted to production" }
     ReleaseSummary:
       type: object
       required: [version, channel, breaking]

@@ -1,5 +1,5 @@
 /**
- * Changelogs as Admin → Updates shows them: each change once, however many parts it moved, with how
+ * Changelogs as Admin → Upgrade Centre shows them: each change once, however many parts it moved, with how
  * big it is. They come from Changesets' CHANGELOG.md sections, which the Release workflow attaches to
  * each release (AUGUR's `changelogs`, an app's `notes`).
  */

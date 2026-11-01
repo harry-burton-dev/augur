@@ -65,7 +65,7 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.user` | Who is signed in: `id`, `name`, `email`, `departments`, `roles` |
 | `ctx.path` | Where in your app they are, below its route: `/reports/q3` for `/expenses/reports/q3` |
 | `ctx.getToken()` | A current token to send as `Authorization: Bearer …` to `/api/<id>/…` |
-| `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. SDK 1.1 |
+| `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. A team also has its `level`, what its level is called ("Department" right below the org, "Team" below that, unless an admin renamed them, SDK 1.9): say it where you'd say "team". The `kind` stays `team` at every level. SDK 1.1 |
 | `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on, and a call to your app on a floor where it's off for them (a call naming no floor is checked on the organisation's). SDK 1.1 |
 | `ctx.notify({ title, body?, needsYou?, actions? })` | A notification on the shell's stream. `actions` (SDK 1.2) is up to two `{ label, intent }` buttons on it; pressing one raises the intent through the shell, as `ctx.raise` does |
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
@@ -92,7 +92,10 @@ Apps show more than the shell does, but each thing in them still says little: **
 | `ui-notice` | One sentence in a page that needs attention, with one action: `tone` needs, warning, refused or info |
 | `ui-note` | A quiet line that explains; `why` keeps the longer reason one press away; `live` for an action's result ("Saved.") |
 | `ui-can` | What you can do from here (up to two actions), and who can do the rest |
-| `ui-app-frame` | The page: the slate ground, an optional `rail` slot, the main column and an optional `aside` slot. `measure` is `wide`, `read` or `full` |
+| `ui-app-frame` | The page: the slate ground, an optional `rail` slot (folds to icons), the main column, an optional `aside` slot and an optional `drawer` slot at the right edge (folds away; says more about what's on screen). `measure` is `wide`, `read` or `full`; set `screen` to the screen's id and the main column and drawer change together |
+| `ui-tile` in `ui-tiles` | One thing you walk into, by its icon or picture and name alone. Its actions open in a `ui-radial-menu` on right-click, never on the tile. `add` makes the dashed tile that makes another; `rank` (`high`, `mid`, `low`) says how high it is, which sets its hover |
+| `ui-toolbar` | Above a grid: a search (`ui-search`), filters in its slot, and one `add` (`ui-add`) |
+| `ui-radial-menu` | An object's actions in a ring around it: `show(target)`, then `ui-select` with the action or `ui-close` |
 | `ui-page-head` | The trail of what it's inside, eyebrow, title, one line of summary, and its `.actions`: two show (one primary at most), the rest go in ⋯ |
 | `ui-section` | A labelled part with its count, one quiet `action` and a `why`; shows five children and folds the rest behind "3 more" |
 | `ui-card` in `ui-cards` | One thing in a grid. Its floor is a dot in the floor's colour with the floor's name (never a coloured edge), `.meta` takes up to three facts, `note` is the one line that changes what you'd do. A `ui-tally` goes in its `tally` slot. `unavailable` with a `reason` keeps it in the grid, locked, saying why |

@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { base, label } from '../shared.js';
 import { animate, motionMode, tokenEasing, tokenValue } from '../motion.js';
 import { settleSurfaces } from './surface.js';
-import { floorBeside, floorDirection, floorIcon, floorKindName, floorLevel, floorMeaning, floorStack, type FloorDirection, type ShellFloor } from './floors.js';
+import { floorBeside, floorDirection, floorIconOf, floorKindOf, floorLevel, floorMeaning, floorStack, floorTone, type FloorDirection, type ShellFloor } from './floors.js';
 import { statusUrgency, type StatusName } from './status.js';
 import './icon.js';
 import './menu.js';
@@ -612,8 +612,15 @@ export class UiShell extends LitElement {
     }
   };
 
+  /** An app's drawer took (or gave back) the right edge: the floor gauge moves to stay just left of it. */
+  private onDrawer = (e: Event) => {
+    const inset = (e as CustomEvent<{ inset?: number }>).detail?.inset ?? 0;
+    this.style.setProperty('--app-drawer-inset', `${Math.max(0, inset)}px`);
+  };
+
   override connectedCallback() {
     super.connectedCallback();
+    window.addEventListener('ui-drawer', this.onDrawer);
     window.addEventListener('keydown', this.onWindowKey);
     for (const type of ['keydown', 'pointerdown', 'wheel'] as const) window.addEventListener(type, this.endCard, { capture: true, passive: true });
     this.clock = setInterval(() => (this.now = Date.now()), 30_000);
@@ -621,6 +628,7 @@ export class UiShell extends LitElement {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener('ui-drawer', this.onDrawer);
     window.removeEventListener('keydown', this.onWindowKey);
     for (const type of ['keydown', 'pointerdown', 'wheel'] as const) window.removeEventListener(type, this.endCard, { capture: true });
     clearInterval(this.clock);
@@ -642,7 +650,7 @@ export class UiShell extends LitElement {
     const direction = floorDirection(from, here);
     this.said = direction === 'up' ? `Up to ${here.name}` : direction === 'down' ? (here.kind === 'personal' ? 'Down to you' : `Down to ${here.name}`) : here.name;
     this.inbound = direction;
-    this.showCard({ kind: 'floor', kick: floorKindName[here.kind], name: here.name, line: floorMeaning(here) });
+    this.showCard({ kind: 'floor', kick: floorKindOf(here), name: here.name, line: floorMeaning(here) });
     void this.updateComplete.then(() => this.waves?.move(direction));
   }
 
@@ -953,8 +961,9 @@ export class UiShell extends LitElement {
       .where b { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       :host { --floor-mark: var(--floor-you-high); }
       :host([floor-kind='team']) { --floor-mark: var(--floor-team-high); }
+      :host([floor-tone='department']) { --floor-mark: var(--floor-department-high); }
       :host([floor-kind='org']) { --floor-mark: var(--floor-org-high); }
-      .gauge { position: absolute; z-index: 3; right: var(--space-2); top: 50%; transform: translateY(-50%); padding: var(--space-2); border-radius: var(--radius-inset); border: 1px solid transparent; transition: opacity var(--motion-slow) var(--ease-standard), background var(--motion-base) var(--ease-standard), border-color var(--motion-base) var(--ease-standard); }
+      .gauge { position: absolute; z-index: 3; right: calc(var(--space-2) + var(--app-drawer-inset, 0px)); top: 50%; transform: translateY(-50%); padding: var(--space-2); border-radius: var(--radius-inset); border: 1px solid transparent; transition: right var(--motion-slow) var(--ease-out), opacity var(--motion-slow) var(--ease-standard), background var(--motion-base) var(--ease-standard), border-color var(--motion-base) var(--ease-standard); }
       .gauge ol { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
       .gauge ol::before { content: ''; position: absolute; top: var(--space-4); bottom: var(--space-4); right: 13.5px; width: 1px; background: var(--hairline); }
       :host([open]) .gauge { opacity: 0; pointer-events: none; }
@@ -1087,8 +1096,8 @@ export class UiShell extends LitElement {
   private renderWhere() {
     const here = this.currentFloor;
     if (!here) return html`<div class="mark"><b>${this.product}</b>${this.workspace ? html`<span>${this.workspace}</span>` : nothing}</div>`;
-    return html`<p class="where" aria-label=${`You’re on ${here.kind === 'personal' ? 'your own floor' : here.name}`}>
-      <ui-icon name=${floorIcon[here.kind]} size="16"></ui-icon><b aria-hidden="true">${here.name}</b>
+    return html`<p class="where" aria-label=${`You’re on ${here.kind === 'personal' ? 'your own floor' : here.kind === 'team' ? `${here.name}, a ${floorKindOf(here).toLowerCase()}` : here.name}`}>
+      <ui-icon name=${floorIconOf(here)} size="16"></ui-icon><b aria-hidden="true">${here.name}</b>
     </p>`;
   }
 
@@ -1131,11 +1140,11 @@ export class UiShell extends LitElement {
             ?data-waiting=${count > 0} @click=${() => !rest && this.goToFloor(f.id)}>
             <span class="label" id=${`floor-${f.id}`}><span>
               <b>${name} ${here ? html`<em>You’re here</em>` : count ? html`<em class="waiting">${count} waiting</em>` : nothing}</b>
-              <span>${floorMeaning(f)}</span>
+              <span>${f.kind === 'team' ? `${floorKindOf(f)}. ` : ''}${floorMeaning(f)}</span>
               ${here && app && !rest ? html`<span class="bound"><ui-icon name=${app.icon ?? 'apps'} size="14"></ui-icon>${app.name} is showing this floor</span>` : nothing}
             </span></span>
             ${here && app ? html`<span class="pinned" aria-hidden="true"><ui-icon name=${app.icon ?? 'apps'} size="12"></ui-icon></span>` : nothing}
-            <span class="notch"><ui-icon name=${floorIcon[f.kind]} size="14"></ui-icon>${count ? html`<span class="dot"></span>` : nothing}</span>
+            <span class="notch"><ui-icon name=${floorIconOf(f)} size="14"></ui-icon>${count ? html`<span class="dot"></span>` : nothing}</span>
           </button></li>`;
         })}
       </ol>
@@ -1148,8 +1157,9 @@ export class UiShell extends LitElement {
     if (!here) return { level: 0 };
     if (here.kind === 'personal' || !this.isConnected) return { level: floorLevel[here.kind] };
     const cs = getComputedStyle(this);
-    const navy = cs.getPropertyValue(`--floor-${here.kind}-low`).trim();
-    const green = cs.getPropertyValue(`--floor-${here.kind}-high`).trim();
+    const tone = floorTone(here);
+    const navy = cs.getPropertyValue(`--floor-${tone}-low`).trim();
+    const green = cs.getPropertyValue(`--floor-${tone}-high`).trim();
     return { colors: navy && green ? { navy, green } : undefined, level: floorLevel[here.kind] };
   }
 
@@ -1354,8 +1364,8 @@ export class UiShell extends LitElement {
             <ul class="floors">
               ${this.floors.map(
                 (f) => html`<li><button class="row" aria-current=${f.id === this.floor ? 'location' : nothing} @click=${() => (this.goToFloor(f.id), this.close())}>
-                  <ui-icon name=${floorIcon[f.kind]}></ui-icon>
-                  <span class="text"><b>${f.kind === 'personal' ? 'Your own floor' : f.name}${f.path.length > 1 ? html`<i> in ${f.path.slice(0, -1).map((p) => p.name).join(' / ')}</i>` : nothing}</b><span>${floorMeaning(f)}</span></span>
+                  <ui-icon name=${floorIconOf(f)}></ui-icon>
+                  <span class="text"><b>${f.kind === 'personal' ? 'Your own floor' : f.name}${f.path.length > 1 ? html`<i> in ${f.path.slice(0, -1).map((p) => p.name).join(' / ')}</i>` : nothing}</b><span>${f.kind === 'team' ? `${floorKindOf(f)}. ` : ''}${floorMeaning(f)}</span></span>
                   ${f.id === this.floor ? html`<span class="meta">You’re here</span>` : waiting.get(f.id) ? html`<span class="meta">${waiting.get(f.id)} waiting</span>` : nothing}
                 </button></li>`,
               )}
@@ -1427,6 +1437,8 @@ export class UiShell extends LitElement {
     const kind = this.currentFloor?.kind;
     if (kind) this.setAttribute('floor-kind', kind);
     else this.removeAttribute('floor-kind');
+    if (this.currentFloor) this.setAttribute('floor-tone', floorTone(this.currentFloor));
+    else this.removeAttribute('floor-tone');
     return html`
       <div class="ground" part="ground">${this.background && this.background !== 'none'
         ? html`<ui-wave-background preset=${this.background} .colors=${water.colors} .level=${water.level}></ui-wave-background>`

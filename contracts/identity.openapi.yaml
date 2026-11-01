@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.11.0
+  version: 1.12.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -403,6 +403,34 @@ paths:
               schema: { $ref: "#/components/schemas/Department" }
         "400": { description: "The name is empty or has a /, the parent doesn't exist, or it would sit more than 5 deep" }
         "409": { description: A department beside it already has that name }
+  /admin/levels:
+    get:
+      summary: What each level of department is called, from the top
+      responses:
+        "200":
+          description: The names, the first for departments right below the org; a level deeper than the names takes the last one
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeamLevels" }
+    put:
+      summary: Rename the levels, audited as levels.renamed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [levels]
+              properties:
+                levels: { type: array, minItems: 1, maxItems: 5, items: { type: string, minLength: 1, maxLength: 40 } }
+      responses:
+        "200":
+          description: Renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeamLevels" }
+        "400": { description: "No names, more than 5, an empty or too-long name, or two levels with the same name" }
   /admin/departments/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
@@ -442,6 +470,12 @@ paths:
         "404": { description: No such person or department }
 components:
   schemas:
+    TeamLevels:
+      type: object
+      required: [levels, max]
+      properties:
+        levels: { type: array, items: { type: string }, description: 'Default ["Department", "Team"]' }
+        max: { type: integer, description: How many levels departments can nest }
     WorkspaceRef:
       type: object
       required: [id, kind, name, slug]
@@ -450,6 +484,7 @@ components:
         kind: { type: string, enum: [personal, team, org] }
         name: { type: string, description: '"You" for your own floor' }
         slug: { type: string, description: 'The word in links, /@finance/…; your own floor is always "me"' }
+        level: { type: string, description: 'Teams only: the name of the level the team sits at, "Department" right below the org and "Team" below that unless an admin renamed them (GET /admin/levels). The kind stays team.' }
     Floor:
       allOf:
         - { $ref: "#/components/schemas/WorkspaceRef" }
