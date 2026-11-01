@@ -3,19 +3,31 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Upgrade Centre: what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Its state model comes first; the screens follow on the app kit.",
+  "description": "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL.",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@augur/app-kit": "workspace:*",
+    "@augur/kit-common": "workspace:*",
     "@augur/mfe-sdk": "workspace:*",
+    "@augur/ui-kit": "workspace:*",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "semver": "^7.8.5"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/semver": "^7.8.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "happy-dom": "^20.0.0",
+    "tailwindcss": "4.3.3",
     "typescript": "^5.6.0",
+    "vite": "^7.3.7",
     "vitest": "^3.2.0"
   }
 }
