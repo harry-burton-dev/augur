@@ -1,0 +1,4 @@
+{
+  "about": "AUGUR's release names, used in order: each new minor or major AUGUR version takes the next one, and patches keep their release's name. Add names at the end; never reorder or remove one already used.",
+  "names": ["Avocet", "Bittern", "Curlew", "Dunlin", "Egret", "Falcon", "Goshawk", "Heron", "Ibis", "Jacana", "Kestrel", "Lapwing", "Merlin", "Nightjar", "Osprey", "Plover", "Quail", "Raven", "Shrike", "Tern", "Umbrellabird", "Vireo", "Wren", "Xenops", "Yellowhammer", "Zebra finch"]
+}

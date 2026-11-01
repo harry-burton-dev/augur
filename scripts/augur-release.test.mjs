@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, versionModule } from './augur-release.mjs';
+import { deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, releaseName, titleOf, versionModule } from './augur-release.mjs';
 
 const settings = { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL'] };
 const first = nextRelease(undefined, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-10-23');
@@ -96,4 +96,19 @@ test('only the newest few of AUGUR’s dev builds are kept, and never a release'
   const tags = ['augur@0.12.0', 'augur@0.12.1-dev.40', 'augur@0.12.1-dev.48', 'augur@0.12.1-dev.9', 'augur@0.13.1-dev.50', 'app/notes@0.1.1-dev.3'];
   assert.deepEqual(oldDevBuilds(tags), ['augur@0.12.1-dev.9']);
   assert.deepEqual(oldDevBuilds(tags, ['augur@0.12.1-dev.9'], 1), ['augur@0.12.1-dev.48', 'augur@0.12.1-dev.40']);
+});
+
+test('a new minor or major takes the next release name, and a patch keeps its release’s', () => {
+  const names = ['Avocet', 'Bittern'];
+  assert.equal(releaseName(undefined, '0.1.0', names), 'Avocet');
+  assert.equal(releaseName({ version: '0.13.0' }, '0.14.0', names), 'Avocet', 'after a release with no name, the first');
+  assert.equal(releaseName({ version: '0.14.0', name: 'Avocet' }, '0.14.1', names), 'Avocet');
+  assert.equal(releaseName({ version: '0.14.1', name: 'Avocet' }, '0.15.0', names), 'Bittern');
+  assert.equal(releaseName({ version: '0.15.0', name: 'Bittern' }, '1.0.0', names), undefined, 'the list ran out');
+  const named = nextRelease({ ...first, version: '0.14.0', name: 'Avocet' }, { '@augur/registry': { version: '0.4.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-11-01', names);
+  assert.equal(named.version, '0.15.0');
+  assert.equal(named.name, 'Bittern');
+  assert.equal(titleOf(named), '0.15.0 Bittern');
+  assert.equal(titleOf({ version: '0.13.0' }), '0.13.0');
+  assert.equal(after(first, { '@augur/registry': '0.3.1', '@augur/mfe-sdk': '1.1.0' }).name, undefined, 'no names given, no name');
 });
