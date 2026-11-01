@@ -1,8 +1,8 @@
 # 0029. The SDK reserves a working context and a protective marking now
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
-- **Decided by:** waiting on Harry
+- **Decided by:** Harry
 
 ## Context
 
@@ -16,7 +16,7 @@ Two things would break the SDK if they were added after apps depend on it.
 1. **Reserve both now, empty:** an optional `focus` manifest field and `ctx.focus` that stays empty until the shell fills it; an optional `marking` on `Ref` that nothing enforces yet.
 2. **Wait,** and take an SDK 2.0 if either is needed.
 
-## Decision (proposed)
+## Decision
 
 Option 1. Both are optional and additive. Nothing reads `marking` until PER-149 settles the scheme, and the shell doesn't fill `ctx.focus` until working context is built.
 
