@@ -15,10 +15,19 @@ x-hardened: &hardened
   security_opt: [no-new-privileges:true]
   cap_drop: [ALL]
 
+# OpenTelemetry (ADR 0034, docs/observability.md): every Node service loads the service kit's telemetry
+# first. It does nothing unless OTEL_EXPORTER_OTLP_ENDPOINT names a collector, such as the
+# `observability` profile's at http://otel-lgtm:4318.
+x-telemetry: &telemetry
+  NODE_OPTIONS: --import @augur/service-kit/telemetry
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production}
+
 x-service: &service
   <<: *hardened
   restart: unless-stopped
   environment: &env
+    <<: *telemetry
     NODE_ENV: production
     IDENTITY_URL: http://identity:8081
     EVENTS_URL: http://events:8084
@@ -218,6 +227,7 @@ services:
       start_period: 30s
     restart: unless-stopped
     environment:
+      <<: *telemetry
       NODE_ENV: production
       IDENTITY_URL: http://identity:8081
       REGISTRY_URL: http://registry:8082
@@ -384,6 +394,7 @@ services:
       start_period: 30s
     restart: unless-stopped
     environment:
+      <<: *telemetry
       NODE_ENV: production
       PORT: 8090
       IDENTITY_URL: http://identity:8081
@@ -436,6 +447,7 @@ services:
     profiles: [updater]
     restart: unless-stopped
     environment:
+      <<: *telemetry
       NODE_ENV: production
       REGISTRY_URL: http://registry:8082
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
@@ -464,6 +476,21 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker]
 
+  # Optional: somewhere to look at the services' traces, metrics and logs (ADR 0034,
+  # docs/observability.md). Grafana's all-in-one OpenTelemetry stack, for one server: add observability to
+  # COMPOSE_PROFILES and set OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-lgtm:4318 in .env.
+  # Grafana answers on the server itself only, at http://127.0.0.1:3001.
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.37.0
+    profiles: [observability]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+    ports:
+      - 127.0.0.1:3001:3000
+    volumes:
+      - otel-lgtm:/data
+
 networks:
   default:
   # Nothing on it reaches anywhere else.
@@ -475,3 +502,4 @@ volumes:
   tailscale:
   garage-meta:
   garage-data:
+  otel-lgtm:
