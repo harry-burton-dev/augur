@@ -27,6 +27,8 @@ import {
 } from '@augur/service-kit';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import { appRunnerRoutes } from './app-runner.ts';
+import { AUGUR_UNIT, resolvedState } from './desired-state.ts';
+import { overviewRoutes } from './overview.ts';
 import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
@@ -49,7 +51,7 @@ import {
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { LiveOverrides } from './live.ts';
 import { lineView, type PipelineReader } from './pipeline.ts';
-import { automaticDevUpgrade, goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
+import { automaticDevUpgrade, automaticUpgrade, goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
@@ -108,6 +110,9 @@ export interface RegistryOptions {
   portalUrl?: string;
   /** The workbench's own tailnet, from PLATFORM_URL: Live on the workbench loads only from machines on it. */
   tailnet?: string;
+  /** The deployment's time zone (DEPLOYMENT_TIME_ZONE), which upgrade windows are in unless a unit names its own. */
+  timeZone?: string;
+  now?: () => Date;
 }
 
 /** PILLAR_APPS: the ids of the apps this deployment ships with, space or comma separated. */
@@ -185,6 +190,8 @@ export const buildApp = async ({
   pipeline,
   portalUrl,
   tailnet,
+  timeZone = 'UTC',
+  now = () => new Date(),
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
   const live = new LiveOverrides(updates.ring, tailnet);
@@ -425,7 +432,8 @@ export const buildApp = async ({
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record }));
-      await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record }));
+      await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now }));
+      await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now }));
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(
         '/apps/:id',
@@ -902,11 +910,15 @@ export const buildApp = async ({
         // The workbench takes AUGUR's dev builds by itself, as it would after an admin asked, backup first.
         if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') {
           const view = updatesView({ checker: updates, apps: await store.records() });
-          const version = automaticDevUpgrade(view, await store.upgrades());
+          const history = await store.upgrades();
+          // AUGUR's desired state (ADR 0020): Automatic within its reach, pin and window.
+          const state = resolvedState(AUGUR_UNIT, (await store.desiredStates()).find((s) => s.unit === AUGUR_UNIT), updates.ring, timeZone, updates.channel);
+          // Ask first or Hold stops dev builds too; they ignore windows, as the workbench takes them at any time.
+          const version = state.policy === 'automatic' ? (automaticDevUpgrade(view, history) ?? automaticUpgrade(view, state, history, now())) : undefined;
           const images = version ? updates.result.releases.find((r) => r.version === version)?.manifest?.images ?? {} : {};
           if (version && Object.keys(images).length && (await store.requestUpgrade({ id: randomUUID(), from: view.running.version, version, images, requestedBy: 'automatic' }))) {
             upgradeSettings = undefined;
-            req.log.info({ from: view.running.version, to: version }, 'dev build upgrade requested');
+            req.log.info({ from: view.running.version, to: version }, 'automatic upgrade requested');
             await record(req, { actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'platform.upgrade-requested', target: version, detail: { from: view.running.version, automatic: true } });
             upgrade = await store.upgrade();
           }
