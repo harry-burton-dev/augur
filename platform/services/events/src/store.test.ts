@@ -79,6 +79,14 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect(await store.audit({ actor: 'library', limit: 10 })).toMatchObject([{ action: 'app.registered' }]);
   });
 
+  it('keeps which service wrote each audit entry', async () => {
+    await store.appendAudit({ actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.deleted' }, undefined, 'library');
+    await store.appendAudit({ actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.moved' });
+    const [unknown, recorded] = await store.audit({ limit: 10 });
+    expect(recorded.recordedBy).toBe('library');
+    expect(unknown).not.toHaveProperty('recordedBy');
+  });
+
   it('pages through the audit log from the oldest entry shown, and keeps to a date range', async () => {
     for (const n of [1, 2, 3, 4, 5]) await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: `u-${n}` });
     const first = await store.audit({ limit: 2 });
