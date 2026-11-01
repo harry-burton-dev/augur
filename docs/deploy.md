@@ -155,6 +155,10 @@ It's the address AUGUR already has (`PLATFORM_URL`), so sign-in, Keycloak's redi
 
 The policy reaches the machine within a minute, with no restart. `public.sh on` checks it first and says so if Funnel isn't allowed yet. If Tailscale still won't start open, the container comes back private by itself rather than going down, and `public.sh status` says what happened (`pc logs tailscale` has the details).
 
+## Traces, metrics and logs
+
+Each service can send OpenTelemetry to a collector: the `observability` profile's Grafana stack on the server, or your organisation's own. It's off until `OTEL_EXPORTER_OTLP_ENDPOINT` is set. See [observability.md](observability.md).
+
 ## Upgrading
 
 See [upgrade.md](upgrade.md) for moving from one release to the next.
