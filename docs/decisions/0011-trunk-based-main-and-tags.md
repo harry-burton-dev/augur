@@ -15,8 +15,9 @@ Work merges into one trunk branch. Releases are tags on it. Dev, preview and pro
 
 ## Consequences
 
-- Until the move is finished, pull requests still go to `dev`, as CLAUDE.md says.
-- docs/release-channels.md will be rewritten when the move lands.
+- Every release is built and signed once on the trunk as a beta; **Promote to stable** (owner only) relabels it. docs/release-channels.md describes the whole flow.
+- Hotfixes go through `release/<unit>-<major>.<minor>`, cut from the release's tag.
+- `dev` is renamed `main` once the workflows that release from `main` are merged; until then pull requests still go to `dev`.
 
 ## Links
 

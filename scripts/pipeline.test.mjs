@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildPipeline, mergesFrom, releaseOf, releasePulls, unitsOf } from './pipeline.mjs';
+import { buildPipeline, mergesFrom, releaseOf, releasePulls, stagesFrom, unitsOf } from './pipeline.mjs';
 
 test('a release tag is of AUGUR or one app', () => {
   assert.deepEqual(releaseOf('augur@0.12.1-dev.48'), { unit: 'augur', version: '0.12.1-dev.48' });
@@ -13,21 +13,36 @@ test('a changeset moves AUGUR for its parts and an app for its own packages', ()
   assert.deepEqual(unitsOf({ '@augur/registry': 'minor', '@apps/mandate-frontend': 'patch', '@other/x': 'patch' }, ['@augur/registry'], { '@apps/mandate-frontend': 'mandate' }), ['augur', 'mandate']);
 });
 
-test('the merges between two branches come from the merge commits', () => {
-  const log = 'Merge pull request #164 from o/b\x1fUC2: AUGUR dev builds\n\nMore.\x1f2026-10-30T21:55:53+00:00\x1e\nVersion packages\x1f\x1f2026-10-30T20:00:00+00:00\x1e\n';
-  assert.deepEqual(mergesFrom(log), [{ number: 164, title: 'UC2: AUGUR dev builds', mergedAt: '2026-10-30T21:55:53+00:00' }]);
+test('the merges between two commits come from squash merges and merge commits', () => {
+  const log = 'Merge pull request #164 from o/b\x1fUC2: AUGUR dev builds\n\nMore.\x1f2026-10-30T21:55:53+00:00\x1e\nName each AUGUR minor (#178)\x1fBody.\x1f2026-11-01T18:20:00+00:00\x1e\nVersion packages\x1f\x1f2026-10-30T20:00:00+00:00\x1e\n';
+  assert.deepEqual(mergesFrom(log), [
+    { number: 164, title: 'UC2: AUGUR dev builds', mergedAt: '2026-10-30T21:55:53+00:00' },
+    { number: 178, title: 'Name each AUGUR minor', mergedAt: '2026-11-01T18:20:00+00:00' },
+  ]);
 });
 
-test('the open pull requests the line waits on are told apart by their branches', () => {
+test('the line waits only on the Version packages pull request into the trunk', () => {
   const pulls = releasePulls([
-    { number: 1, title: 'Version packages', url: 'u1', headRefName: 'changeset-release/dev', baseRefName: 'dev' },
-    { number: 2, title: 'Promote to preview', url: 'u2', headRefName: 'dev', baseRefName: 'preview' },
-    { number: 3, title: 'Promote mandate 0.1.4 to production', url: 'u3', headRefName: 'promote/mandate-0.1.4', baseRefName: 'production' },
-    { number: 4, title: 'A feature', url: 'u4', headRefName: 'feature', baseRefName: 'dev' },
+    { number: 1, title: 'Version packages', url: 'u1', headRefName: 'changeset-release/main', baseRefName: 'main' },
+    { number: 2, title: 'Version packages (release/augur-0.14)', url: 'u2', headRefName: 'changeset-release/release/augur-0.14', baseRefName: 'release/augur-0.14' },
+    { number: 4, title: 'A feature', url: 'u4', headRefName: 'feature', baseRefName: 'main' },
   ]);
-  assert.equal(pulls.versionPackages.number, 1);
-  assert.equal(pulls.promoteToPreview.number, 2);
-  assert.deepEqual(pulls.promoteToProduction, [{ number: 3, title: 'Promote mandate 0.1.4 to production', url: 'u3', unit: 'mandate', version: '0.1.4' }]);
+  assert.deepEqual(pulls, { versionPackages: { number: 1, title: 'Version packages', url: 'u1' }, promoteToProduction: [] });
+  assert.equal(releasePulls([{ number: 1, title: 'Version packages', url: 'u1', headRefName: 'changeset-release/dev', baseRefName: 'dev' }], 'dev').versionPackages.number, 1);
+});
+
+test('preview is each unit’s newest release and production its newest stable one', () => {
+  const stages = stagesFrom([
+    { tagName: 'augur@0.14.1-dev.3', isPrerelease: true },
+    { tagName: 'augur@0.14.0', isPrerelease: true },
+    { tagName: 'augur@0.13.0', isPrerelease: false },
+    { tagName: 'augur@0.12.0', isPrerelease: false },
+    { tagName: 'app/mandate@0.1.6-pr.20.1', isPrerelease: true },
+    { tagName: 'app/mandate@0.1.5', isPrerelease: false },
+    { tagName: 'app/notes@0.1.0', isPrerelease: true },
+    { tagName: '@augur/registry@0.3.0', isPrerelease: false },
+  ]);
+  assert.deepEqual(stages, { preview: { augur: '0.14.0', mandate: '0.1.5', notes: '0.1.0' }, production: { augur: '0.13.0', mandate: '0.1.5' } });
 });
 
 test('the pipeline puts each unit on each branch, with its newest dev build, previews and what waits', () => {

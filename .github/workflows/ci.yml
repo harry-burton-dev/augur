@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, dev, preview, production]
+    branches: [main, dev, 'release/**']
 # Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
 # others, such as ["self-hosted","augur-ci"] for our own (docs/ci-runner.md). The same goes for
 # the Release, App previews and Release feed workflows.
@@ -12,7 +12,7 @@ on:
 # on hosted runners: from our server they downloaded ~1 GB a run at about 7 MB/s.
 
 # A new push to a pull request stops its last run, so the one runner isn't kept busy with it.
-# Pushes to dev, preview and production each run in full.
+# Pushes to main and release branches each run in full.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -67,8 +67,8 @@ jobs:
       - run: pnpm check:release
       - run: pnpm check:catalog
       - run: pnpm test:scripts
-      # Into preview and production only dev, promotions, back-merges and hotfixes go, all versioned
-      # already (docs/release-channels.md).
+      # Into a hotfix's release/<unit>-<major.minor> branch only that unit's fixes go, as patches
+      # (docs/release-channels.md).
       - name: May it go into its branch?
         if: github.event_name == 'pull_request'
         run: node scripts/promote.mjs check-pr
@@ -76,7 +76,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           HEAD_REF: ${{ github.head_ref }}
       - name: Every change says how it is released
-        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/') && github.base_ref != 'preview' && github.base_ref != 'production'
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
         run: pnpm changeset status --since=origin/${{ github.base_ref }}
       # Turbo's default of ten tasks at once is too many for our 8 GB runner on a shared server:
       # builds were killed for memory, and tests timed out and deadlocked in Postgres. About 2 GB a
@@ -104,8 +104,8 @@ jobs:
       - run: pnpm check:manifest
       - run: pnpm check:migrations
         env:
-          # Into dev, a migration already on dev is frozen too: dev builds have run it on the preview server.
-          MIGRATIONS_FROZEN_AT: ${{ github.base_ref == 'dev' && 'origin/dev' || '' }}
+          # Into main, a migration already on main is frozen too: dev builds have run it on the workbench.
+          MIGRATIONS_FROZEN_AT: ${{ (github.base_ref == 'main' || github.base_ref == 'dev') && format('origin/{0}', github.base_ref) || '' }}
       - run: pnpm typecheck --concurrency=${{ steps.fit.outputs.tasks }}
       - run: pnpm test --concurrency=${{ steps.fit.outputs.tests }}
         env:

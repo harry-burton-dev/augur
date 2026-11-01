@@ -1,11 +1,11 @@
 name: Release
-# Release channels (docs/release-channels.md): on dev it keeps the Version packages PR and, once
-# that's merged, Promote to preview; on preview it builds, signs and releases each unit as a
-# pre-release; on production it marks the promoted release as on production, building only a
-# hotfix's new version.
+# Release channels (docs/release-channels.md): on main and on a hotfix's release/<unit>-<major.minor> branch, it keeps the Version packages PR open while
+# changesets wait; once that's merged, it builds, signs and releases each unit whose version moved,
+# once, as a pre-release: the beta channel. The Promote workflow makes a release stable, with no rebuild.
 on:
   push:
-    branches: [dev, preview, production]
+    # Not dev: a release signed there is one no updater takes. Rename dev to main first.
+    branches: [main, 'release/**']
 concurrency: release-${{ github.ref }}
 permissions:
   contents: write
@@ -18,7 +18,7 @@ jobs:
     # Builds and pushes images, so only on an x86-64 runner (docs/ci-runner.md, "An Arm runner").
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
     outputs:
-      released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') || steps.promoted.outputs.promoted == 'true' }}
+      released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,52 +33,15 @@ jobs:
           # Our own runner keeps the pnpm store between jobs (docs/ci-runner.md).
           cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - run: pnpm install --frozen-lockfile
-      # While changesets are waiting, keeps one "Version packages" PR open that bumps
-      # versions and writes changelogs. Packages get no tag or GitHub release of their own.
-      # On dev, versions are cut but nothing is released: the Version packages PR only.
-      - uses: changesets/action@v1
-        id: dev-changesets
-        if: github.ref_name == 'dev'
-        with:
-          title: Version packages
-          commit: Version packages
-          version: pnpm version-packages
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-      - name: Promote to preview
-        if: github.ref_name == 'dev' && steps.dev-changesets.outputs.hasChangesets == 'false'
-        run: node scripts/promote.mjs preview-pr
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-      # A promotion merged into production: its release is on production now, with no rebuild.
-      - name: Mark what was promoted
-        id: promoted
-        if: github.ref_name == 'production'
-        run: node scripts/promote.mjs production
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-      # Versions are only ever cut on dev. Changesets waiting here came in some other way (the branches
-      # were made from a commit that had some, or a hotfix that skipped `pnpm version-packages`): say so,
-      # and release nothing, rather than open a Version packages pull request into preview or production.
-      - name: Any changesets waiting?
-        id: waiting
-        if: github.ref_name != 'dev'
-        run: |
-          waiting=$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md -printf '%f ')
-          echo "names=$waiting" >> "$GITHUB_OUTPUT"
-          if [ -n "$waiting" ]; then
-            echo "::warning::${{ github.ref_name }} has changesets no Version packages run has spent ($waiting), so nothing is released. Versions are cut on dev: merge its Version packages pull request, then Promote to preview. On a hotfix branch, run pnpm version-packages and commit."
-            echo "Nothing released: ${{ github.ref_name }} has changesets that were never versioned ($waiting). See docs/release-channels.md." >> "$GITHUB_STEP_SUMMARY"
-          fi
+      # While changesets are waiting, keeps one "Version packages" PR open that bumps versions and
+      # writes changelogs. No publish step: packages aren't tagged or released one by one. The only
+      # GitHub releases are the units a deployment installs, augur@<version> and app/<id>@<version>, made below.
       - uses: changesets/action@v1
         id: changesets
-        if: github.ref_name != 'dev' && steps.waiting.outputs.names == ''
         with:
-          title: Version packages
+          title: ${{ startsWith(github.ref_name, 'release/') && format('Version packages ({0})', github.ref_name) || 'Version packages' }}
           commit: Version packages
           version: pnpm version-packages
-          # No publish step: packages aren't tagged or released one by one. The only GitHub releases
-          # are the units a deployment installs, augur@<version> and app/<id>@<version>, made below.
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       # Once nothing is waiting (the Version packages PR just merged), releases the AUGUR version
@@ -105,7 +68,6 @@ jobs:
         if: steps.augur.outputs.new == 'true'
         run: node scripts/augur-release.mjs publish "$RUNNER_TEMP/images.json"
         env:
-          RELEASE_BRANCH: ${{ github.ref_name }}
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       # Apps in apps/ that don't ship with AUGUR are released on their own, whenever their version
       # moves: each gets a signed bundle (service image and frontend) and the GitHub release
@@ -135,7 +97,6 @@ jobs:
             node scripts/app-release.mjs publish "$id" "$RUNNER_TEMP/$id.json"
           done
         env:
-          RELEASE_BRANCH: ${{ github.ref_name }}
           PENDING: ${{ steps.apps.outputs.pending }}
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
   # Deployments learn of what was just released from the feed beside the images, read with their read key.

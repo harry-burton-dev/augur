@@ -77,12 +77,12 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   see docs/versioning.md.
 
 ## Pull requests and releases
-- Open pull requests against `dev`, never `preview` or `production`
-  (docs/release-channels.md) until the move to one trunk branch (ADR 0011)
-  lands; then this section changes with it.
-- Never merge a pull request into `production`: only Harry does.
+- Open pull requests against `main` (`dev` until Harry renames it), the only
+  long-lived branch (ADR 0011, docs/release-channels.md). A hotfix goes into
+  its `release/<unit>-<major>.<minor>` branch, and then onto `main` too.
+- Only Harry makes a release stable (Actions → Promote to stable).
 - Harry's standing rule: merge your own PR once CI is green, after merging
-  fresh `origin/dev` into it and re-running the checks. Don't ask for review;
+  fresh `origin/main` (or `origin/dev`) into it and re-running the checks. Don't ask for review;
   post one summary per phase, ending with anything Harry must do on his
   server as a short numbered list.
 - One PR at a time per thread, small enough to review in one sitting. Say

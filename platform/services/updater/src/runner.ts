@@ -16,7 +16,7 @@
  */
 import { appSecretFor } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
-import { isDevBuild, releaseIdentity } from './signers.ts';
+import { devBuildIdentity, isDevBuild, releaseIdentity } from './signers.ts';
 
 /** What an app's release file says (scripts/app-release.mjs); only what the runner reads. */
 export interface AppRelease {
@@ -147,12 +147,12 @@ const envPrefix = (app: string) => app.toUpperCase().replace(/-/g, '_');
 export const signerIdentity = (publisher: string, pr?: number) => (pr === undefined ? releaseIdentity(publisher) : `https://github.com/${publisher}@refs/pull/${pr}/merge`);
 /** The workflow that builds pull requests' previews, in a repository trusted to publish apps. */
 export const PREVIEW_WORKFLOW = '.github/workflows/app-preview.yml';
-/** The workflow that builds every merge into dev, in a repository trusted to publish apps. */
+/** The workflow that builds every merge into main, in a repository trusted to publish apps. */
 export const DEV_WORKFLOW = '.github/workflows/app-dev.yml';
 /** A dev build's version: <next patch>-dev.<run>. */
 export { isDevBuild };
-/** A dev build's certificate identity: the dev workflow, on dev. */
-export const devIdentity = (repository: string) => `https://github.com/${repository}/${DEV_WORKFLOW}@refs/heads/dev`;
+/** A dev build's certificate identity: the dev workflow, on main. */
+export const devIdentity = (repository: string) => devBuildIdentity(`${repository}/${DEV_WORKFLOW}`);
 
 /** APP_PUBLISHERS in .env: `owner/repo` (its release.yml) or `owner/repo/.github/workflows/<file>`, space or comma separated. */
 export const publishersFrom = (setting = '') =>

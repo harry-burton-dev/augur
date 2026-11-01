@@ -120,7 +120,7 @@ describe('the app runner', () => {
     const t = setup(`${ENV}SERVER_RING=preview\n`);
     t.versions.set(image('c'), '1.0.1-dev.40');
     expect(await t.run(install('1.0.1-dev.40', 'c', dev))).toBe('done');
-    expect(t.did.slice(0, 2)).toEqual(['verify https://github.com/o/r/.github/workflows/app-dev.yml@refs/heads/dev', 'backup']);
+    expect(t.did.slice(0, 2)).toEqual(['verify ^https://github\\.com/o/r/\\.github/workflows/app-dev\\.yml@refs/heads/(main|dev)$', 'backup']);
     expect(t.reports.find((r) => r.step === 'verify' && r.state === 'done')?.message).toMatch(/Backup platform-20261030-0100\.sql\.gz/);
 
     // Signed by the release workflow, a dev version isn't taken as a dev build.

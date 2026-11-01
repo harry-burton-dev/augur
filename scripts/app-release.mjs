@@ -230,14 +230,14 @@ const main = async () => {
       preview
         ? `A preview of ${release.manifest.name} from pull request #${preview.pr}${preview.title ? `, ${preview.title}` : ''}. It runs beside the app for its developers, and goes when the pull request closes.\n`
         : dev
-          ? `A dev build of ${release.manifest.name}, from ${process.env.RELEASE_TARGET || 'dev'} on dev. Only a preview server set to take dev builds of it installs it.\n`
+          ? `A dev build of ${release.manifest.name}, from ${process.env.RELEASE_TARGET || 'main'}. Only a preview server set to take dev builds of it installs it.\n`
           : `${release.manifest.name} ${release.version}.\n\n${release.notes || '_No changelog entry._'}\n`,
     );
-    // Made on preview, a release is a pre-release until it is promoted to production (scripts/promote.mjs).
-    const beta = release.channel !== 'stable' || process.env.RELEASE_BRANCH === 'preview';
+    // Every release starts as a pre-release, the beta channel, until the Promote workflow makes it stable
+    // (scripts/promote.mjs). An app's release is never the repository's latest: AUGUR's is.
     // A pull request's merge commit isn't on a branch, so its preview is tagged on the pull request's head.
     const target = process.env.RELEASE_TARGET || git('rev-parse', 'HEAD');
-    execFileSync('gh', ['release', 'create', tag, '--target', target, '--title', `${release.manifest.name} ${release.version}`, '--notes-file', notesFile, ...(beta ? ['--prerelease'] : ['--latest=false']), asset], { cwd: root, stdio: 'inherit' });
+    execFileSync('gh', ['release', 'create', tag, '--target', target, '--title', `${release.manifest.name} ${release.version}`, '--notes-file', notesFile, '--prerelease', '--latest=false', asset], { cwd: root, stdio: 'inherit' });
     console.log(`Released ${tag}.`);
   } else {
     console.error('Usage: node scripts/app-release.mjs pending | pack <id> <file> | describe <id> [bundle.json] | publish <id> <bundle.json> | changed <base> | preview <id> <pr> <run> | previews-clean <pr> [<tag>...] | dev <id> <run> | devs-clean <id> [<tag>...]');
