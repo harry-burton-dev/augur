@@ -1,13 +1,12 @@
 name: Release feed
 # Keeps ghcr.io/<repo>/feed:latest, the list of AUGUR's and apps' releases that deployments read with
 # their read key (scripts/publish-feed.mjs, docs/upgrade.md "The read key"), in step with GitHub's
-# releases: after the Release and App previews workflows make or remove one, and whenever someone
-# edits one here, such as promoting a release to stable by unticking pre-release.
+# releases. Each workflow that makes or removes releases (Release, the dev builds, App previews) calls
+# it once when it's done, so it runs once per release run, not once per release event. Run it by hand
+# after changing a release in GitHub yourself.
 on:
   workflow_call:
   workflow_dispatch:
-  release:
-    types: [published, edited, released, prereleased, unpublished, deleted]
 concurrency:
   group: release-feed
   cancel-in-progress: false
