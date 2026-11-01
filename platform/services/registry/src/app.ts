@@ -68,6 +68,9 @@ import {
   type UpgradeStepState,
 } from './store.ts';
 
+/** How identity names the organisation's floor, for a call that names none. */
+const ORG_FLOOR = 'org';
+
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
@@ -390,7 +393,9 @@ export const buildApp = async ({
        * What an app may do on a floor, for the platform's services to check its
        * calls against: the scopes it asks for and an admin has granted, where it
        * is on. Nothing where it is off, on a floor that no longer exists, or
-       * anywhere while it is turned off.
+       * anywhere while it is turned off. A call that names no floor is checked
+       * on the organisation's, as the gateway does, so an app that is off for
+       * the organisation can't act everywhere by naming none (ADR 0007).
        */
       app.get<{ Params: { id: string }; Querystring: { workspace?: string } }>(
         '/apps/:id/grants',
@@ -402,17 +407,16 @@ export const buildApp = async ({
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const { workspace } = req.query;
-          if (!workspace) return { app: found.entry.id, scopes: found.enabled ? usableScopes(found) : [] };
           let place: FloorPlace | undefined;
           if (!floors) return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up: the registry has no way to reach identity.' });
           try {
-            place = await floors(workspace);
+            place = await floors(workspace ?? ORG_FLOOR);
           } catch (err) {
             if (!(err instanceof FloorsUnavailable)) throw err;
             return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now.' });
           }
           const on = place ? floorState(found, place, await store.rules(found.entry.id)).on : false;
-          return { app: found.entry.id, workspace, scopes: on ? usableScopes(found) : [] };
+          return { app: found.entry.id, workspace: workspace ?? place?.id, scopes: on ? usableScopes(found) : [] };
         },
       );
 
