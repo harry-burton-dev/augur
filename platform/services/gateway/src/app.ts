@@ -20,6 +20,7 @@ import {
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
+import { Traffic, TRAFFIC_PATH } from './traffic.ts';
 import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
 import { Readable } from 'node:stream';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
@@ -60,7 +61,7 @@ export const defaultUpstreams = (env = process.env): Upstreams => {
 };
 
 /** The only routes anyone may reach without signing in. Everything else, including anything unmatched, needs a token. */
-const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH]);
+const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH]);
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -74,6 +75,8 @@ declare module 'fastify' {
 export interface GatewayOptions {
   upstreams?: Upstreams;
   auth?: AuthConfig;
+  /** Counts calls and server errors for GET /traffic. */
+  traffic?: Traffic;
   /** Checks every upstream for Status. By default one is made for the upstreams and started. */
   monitor?: HealthMonitor;
   /** Where the backup container writes its results (BACKUP_DIR). Without it Status says nothing about backups. */
@@ -105,7 +108,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, signer = callerSignerFromEnv(), access, apps }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, signer = callerSignerFromEnv(), access, apps, traffic = new Traffic() }: GatewayOptions = {}) => {
   const appUpstreams = apps ?? (upstreams.registry ? registryUpstreams({ registryUrl: upstreams.registry, signer }) : undefined);
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
@@ -115,6 +118,13 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     reply.header(REQUEST_ID_HEADER, req.id);
   });
   app.get('/healthz', async () => health('gateway', version, API_VERSION));
+  // How calls through the gateway have answered lately, for the updater's watch after an upgrade.
+  // Only the deployment's own network reaches it: nginx forwards only /api/.
+  app.addHook('onResponse', async (req, reply) => {
+    if (req.routeOptions.url && PUBLIC_ROUTES.has(req.routeOptions.url)) return;
+    traffic.record(reply.statusCode);
+  });
+  app.get<{ Querystring: { minutes?: number } }>(TRAFFIC_PATH, { schema: { querystring: { type: 'object', properties: { minutes: { type: 'integer', minimum: 1, maximum: 15 } } } } }, async (req) => traffic.snapshot(req.query.minutes));
   // The public key services check signed callers with. It is public, so anyone may fetch it.
   app.get(CALLER_KEYS_PATH, async () => signer.keys());
 
