@@ -34,6 +34,12 @@ x-service: &service
   depends_on:
     postgres: { condition: service_healthy }
 
+# A platform service with its own database login waits for the storage job, which makes the login
+# and hands it the service's schema (PLATFORM_DATABASE_LOGINS below; docs/deploy.md).
+x-own-login: &own-login
+  postgres: { condition: service_healthy }
+  storage: { condition: service_completed_successfully }
+
 # Folio's own schema and bucket, for its service and its rendition worker. The storage service
 # makes both from these secrets; the bucket key's id is worked out from its secret.
 x-folio-storage: &folio-storage
@@ -144,8 +150,9 @@ services:
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
 
-  # Gives each app in APP_STORAGE its own database login and schema, and its own bucket and key,
-  # from the secrets in .env, then stops. Runs on every `up`; see docs/app-storage.md.
+  # Gives each platform service and Keycloak a database login of their own, and each app in
+  # APP_STORAGE its own database login and schema, and its own bucket and key, from the secrets
+  # in .env, then stops. Runs on every `up`; see docs/app-storage.md.
   storage:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
@@ -157,6 +164,9 @@ services:
       GARAGE_ADMIN_URL: http://garage:3903
       # Folio's and Data Atlas's, which ship with AUGUR, and any others named in .env.
       APP_STORAGE: folio atlas ${APP_STORAGE:-}
+      # The platform's services that get a login owning only their own schema, each with its
+      # <SERVICE>_DATABASE_PASSWORD from .env. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
+      PLATFORM_DATABASE_LOGINS: identity registry events models
     depends_on:
       postgres: { condition: service_healthy }
       garage: { condition: service_started }
@@ -169,8 +179,9 @@ services:
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: platform
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Its own login, owning only its own database; the storage job makes it.
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DATABASE_PASSWORD:?set KEYCLOAK_DATABASE_PASSWORD in .env}
       KC_HOSTNAME: ${PLATFORM_URL:?set PLATFORM_URL in .env}/sso
       KC_HTTP_RELATIVE_PATH: /sso
       KC_HTTP_ENABLED: "true"
@@ -192,8 +203,7 @@ services:
       PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Platform}
     volumes:
       - ./keycloak/platform-realm.json:/opt/keycloak/data/import/platform-realm.json:ro
-    depends_on:
-      postgres: { condition: service_healthy }
+    depends_on: *own-login
 
   gateway:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/gateway:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
@@ -238,6 +248,8 @@ services:
     environment:
       <<: *env
       PORT: 8081
+      # Its own login, owning only the identity schema.
+      DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # Admin's People screen: identity manages people in Keycloak as its own client, whose rights in
       # the realm come from the realm file. Keycloak's master admin is not in identity's settings; see
       # docs/deploy.md, "Keycloak's admin", to repair a lost sign-in. Departments are identity's own
@@ -250,6 +262,7 @@ services:
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Identity makes each platform service's sign-in in Keycloak with these secrets.
       SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env},app-atlas=${ATLAS_CLIENT_SECRET:?set ATLAS_CLIENT_SECRET in .env}
+    depends_on: *own-login
 
   registry:
     <<: *service
@@ -264,6 +277,8 @@ services:
       <<: *env
       PORT: 8082
       SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}"
+      # Its own login, owning only the registry schema.
+      DATABASE_URL: postgres://platform_registry:${REGISTRY_DATABASE_PASSWORD:?set REGISTRY_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # The deployment's read key (secrets/github-read-key) and whose it is: the registry checks GitHub
       # for new AUGUR and app releases with it, and the updater pulls with it (docs/upgrade.md).
       GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
@@ -288,6 +303,7 @@ services:
       - ./secrets:/run/secrets/augur:ro
       # A mirror's feed kept on this server, for RELEASE_FEED_URL=file:///run/augur/releases/releases.json (docs/mirror.md).
       - ./releases:/run/augur/releases:ro
+    depends_on: *own-login
 
   events:
     <<: *service
@@ -298,7 +314,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-    environment: { <<: *env, PORT: 8084, SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}" }
+    environment:
+      <<: *env
+      PORT: 8084
+      SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}"
+      # Its own login, owning only the events schema: the audit log, notifications and domain events.
+      DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+    depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
   # no model and Agents stay off; with one, an admin turns models on in Admin. See docs/agents.md.
@@ -315,10 +337,13 @@ services:
       <<: *env
       PORT: 8085
       SERVICE_CLIENT_SECRET: "${MODELS_CLIENT_SECRET:-}"
+      # Its own login, owning only the models schema.
+      DATABASE_URL: postgres://platform_models:${MODELS_DATABASE_PASSWORD:?set MODELS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       MODEL_API_URL: "${MODEL_API_URL:-}"
       MODEL_API_KEY: "${MODEL_API_KEY:-}"
       MODEL_NAME: "${MODEL_NAME:-}"
       MODEL_EMBEDDING_NAME: "${MODEL_EMBEDDING_NAME:-}"
+    depends_on: *own-login
 
   # Folio, the document libraries: the app every deployment ships with (a pillar app). It's an ordinary
   # app all the same, with its own sign-in, schema and bucket, and it puts itself in the catalogue when it

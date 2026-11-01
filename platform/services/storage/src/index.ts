@@ -1,11 +1,11 @@
-// Gives apps their storage: for each app in APP_STORAGE, a database login that owns one schema,
+// Gives the platform's services and Keycloak each a database login of their own, and apps their storage: for each app in APP_STORAGE, a database login that owns one schema,
 // and a bucket with a key that opens only it. Runs to the end and stops, on every `up`; running it
 // again changes nothing unless a secret in .env changed. See docs/app-storage.md.
 // With APP_STORAGE_DROP, it instead takes one pull request's preview's scratch storage away.
 import pg from 'pg';
 import { configFromEnv, FRONTENDS_BUCKET, FRONTENDS_KEY } from './config.ts';
 import { garageAdmin, keyIdFor } from './garage.ts';
-import { dropDatabase, prepareDatabase, provisionDatabase, roleFor, schemaFor } from './postgres.ts';
+import { dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
 import { emptyBucket } from './s3.ts';
 
 const config = configFromEnv();
@@ -43,8 +43,26 @@ try {
     await provisionDatabase(client, { app, password: databasePassword });
     console.log(`storage: ${app} has database login ${roleFor(app)}, owning schema ${schemaFor(app)}`);
   }
+  for (const { service, databasePassword } of config.services) {
+    const handed = await provisionServiceDatabase(client, { service, password: databasePassword });
+    console.log(`storage: ${service} has database login ${serviceRoleFor(service)}, owning schema ${service}${handed ? ` (handed it ${handed} things the admin login made)` : ''}`);
+  }
 } finally {
   await client.end();
+}
+
+if (config.keycloak) {
+  const { database, role, password } = config.keycloak;
+  const url = new URL(config.databaseUrl);
+  url.pathname = `/${database}`;
+  const keycloak = new pg.Client({ connectionString: url.toString() });
+  await keycloak.connect();
+  try {
+    const handed = await provisionKeycloakDatabase(keycloak, { role, password });
+    console.log(`storage: Keycloak has database login ${role}, owning database ${database}${handed ? ` (handed it ${handed} things the admin login made)` : ''}`);
+  } finally {
+    await keycloak.end();
+  }
 }
 
 if (config.garage) {

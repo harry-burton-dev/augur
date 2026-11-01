@@ -27,6 +27,13 @@ export interface StorageConfig {
    * 64 hex characters. Without it apps' frontends aren't kept by version (docs/upgrade.md).
    */
   frontendsSecret?: string;
+  /**
+   * The platform's own services that get a login owning only their schema (PLATFORM_DATABASE_LOGINS),
+   * each with its password (<SERVICE>_DATABASE_PASSWORD).
+   */
+  services: { service: string; databasePassword: string }[];
+  /** Keycloak's own login and database (KEYCLOAK_DATABASE_PASSWORD, KEYCLOAK_DATABASE), when set. */
+  keycloak?: { database: string; role: string; password: string };
 }
 
 /** The bucket each app's frontend is kept in, by version, and served from at /apps/<id>/<version>/. */
@@ -78,6 +85,18 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
   if (env.APP_SECRETS_KEY && env.APP_SECRETS_KEY.length < 32) problems.push('APP_SECRETS_KEY must be at least 32 characters; `openssl rand -hex 32` makes one.');
   const frontendsSecret = env.FRONTENDS_BUCKET_SECRET || undefined;
   if (frontendsSecret && !/^[0-9a-f]{64}$/.test(frontendsSecret)) problems.push('FRONTENDS_BUCKET_SECRET must be 64 lowercase hex characters; `openssl rand -hex 32` makes one.');
+  const services: StorageConfig['services'] = [];
+  for (const service of (env.PLATFORM_DATABASE_LOGINS ?? '').split(/[\s,]+/).filter(Boolean)) {
+    if (!APP_ID.test(service)) {
+      problems.push(`"${service}" in PLATFORM_DATABASE_LOGINS is not a service name (2 to 40 lowercase letters, digits and dashes).`);
+      continue;
+    }
+    const databasePassword = env[`${envPrefix(service)}_DATABASE_PASSWORD`] ?? '';
+    if (databasePassword.length < 16) problems.push(`${envPrefix(service)}_DATABASE_PASSWORD must be at least 16 characters; \`openssl rand -hex 32\` makes one.`);
+    else services.push({ service, databasePassword });
+  }
+  const keycloakPassword = env.KEYCLOAK_DATABASE_PASSWORD || undefined;
+  if (keycloakPassword && keycloakPassword.length < 16) problems.push('KEYCLOAK_DATABASE_PASSWORD must be at least 16 characters; `openssl rand -hex 32` makes one.');
   if (problems.length || !databaseUrl) return { problems };
   const url = new URL(databaseUrl);
   return {
@@ -87,5 +106,7 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     apps,
     ...(dropping ? { drop: { app: dropping, ...(({ databasePassword, bucketSecret }) => ({ databasePassword, bucketSecret }))(secretsOf(dropping)) } } : {}),
     ...(frontendsSecret ? { frontendsSecret } : {}),
+    services,
+    ...(keycloakPassword ? { keycloak: { database: env.KEYCLOAK_DATABASE || 'keycloak', role: env.KEYCLOAK_DATABASE_USER || 'keycloak', password: keycloakPassword } } : {}),
   };
 };
