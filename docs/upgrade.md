@@ -77,6 +77,10 @@ Identity, the registry, events, models and Keycloak stop connecting as Postgres'
 
 An app's service calls (notifications, audit, models, people lookups) that name no floor used to get the app's scopes wherever it was on at all. Now they're checked on the organisation's floor, as the gateway already checked people's calls. Nothing changes for an app that is on for the whole organisation, which is every app AUGUR ships with unless you turned one off. If you turned an app off for the organisation and on for some teams, its service must now name the team's floor to send there. A refused call shows in that app's service log (`pc logs <app>`) as a 403 saying it isn't granted the scope.
 
+### Only a deployment admin can upgrade
+
+Upgrading AUGUR, going back to an earlier release, taking back a waiting upgrade, and changing how a unit takes updates (policy, pin, windows) now need the `deployment-admin` role, not just `admin` (ADR 0022). The first admin (`PLATFORM_ADMIN_USER`) has held it since the deployment-admin release, because identity gives it to them when nobody else has it. Anyone else who upgrades needs it in Admin, People. Someone without it sees the Upgrade Centre's buttons refused with the role named. Installing and removing apps still needs `admin`.
+
 ### Keycloak's admin leaves identity
 
 Identity no longer gets `KEYCLOAK_ADMIN_PASSWORD`. Its own sign-in already holds its rights on every server that has started identity before, so there's nothing to do. Keep the password in `.env`: Keycloak reads it on a new server, and it's the way back in if every deployment admin loses their one-time code. If identity's log ever says its sign-in can't manage the realm, see **Keycloak's admin** in deploy.md.
