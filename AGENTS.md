@@ -42,6 +42,11 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   "Wave" or "platform" in anything a person reads.
 - Folio is shown to people as **Artifacts**. Its id, route, schema, bucket and
   `FOLIO_*` keys stay `folio`.
+- Auspex is shown to people as **Explorer**, a platform app (ADR 0032). Its
+  id, route, intents, packages, container and `AUSPEX_*` keys stay `auspex`.
+- Apps that ship with AUGUR are **platform apps** (using and managing AUGUR:
+  Home, Admin, Upgrade Centre, Explorer) or **pillar apps** (the foundation of
+  its output: Artifacts, Mandate, Data Atlas). Code names stay out of what people read.
 - Old ids kept on purpose so live servers keep working: Keycloak realm
   `platform` and clients `platform-*`, Postgres db/user `platform`, Compose
   project `platform`, `PLATFORM_*` env keys. Don't rename them without an
@@ -57,11 +62,12 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   (including `src/components/icon.ts`), `platform/services/gateway`. Keep
   changes there in their own small PR and merge it first.
 
-## Design rules (ADR 0004)
+## Design rules (ADR 0015)
 - Shell behaviour is a rule driven by manifests and floors, never a special
   case for one app or screen.
 - Colours, durations and distances come only from
-  `platform/packages/ui-kit/tokens/tokens.json`. New `floor-*` tokens must
+  the token files in `platform/packages/ui-kit/tokens/` (`common`, `shell`,
+  `app`; ADR 0015). New `floor-*` tokens must
   also be copied into the design tool Wave is made in (tell Harry).
 - Icons come from Lucide through `icon.ts`. Never hand-write SVG.
 - App layout and interaction rules agreed with Harry live in

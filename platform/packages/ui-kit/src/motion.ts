@@ -36,7 +36,7 @@ export function finishMotion() {
   }
 }
 
-/** A token's length in ms or px, read from the page, so durations and distances only ever come from tokens.json. */
+/** A token's length in ms or px, read from the page, so durations and distances only ever come from the token files. */
 export function tokenValue(name: string, fallback: number): number {
   if (typeof getComputedStyle !== 'function' || typeof document === 'undefined') return fallback;
   const raw = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim();

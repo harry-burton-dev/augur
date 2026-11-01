@@ -25,7 +25,8 @@ const places: Record<string, FloorPlace> = {
   w1: { id: 'w1', kind: 'team', path: ['o', 'w1'], org: 'o' },
   m: { id: 'm', kind: 'personal', path: ['m'], org: 'o' },
 };
-const floors = async (id: string) => places[id];
+// Identity answers `org` with the organisation's floor.
+const floors = async (id: string) => (id === 'org' ? places.o : places[id]);
 /** Someone standing on a floor, as the gateway passes it on. */
 const on = (id: string) => callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id, kind: places[id].kind, role: 'member' } });
 
@@ -568,6 +569,17 @@ describe('registry', () => {
       expect(await grants('f')).toEqual(['notifications:send']);
       expect(await grants('l')).toEqual([]);
       expect(await grants('gone')).toEqual([]);
+    });
+
+    it('checks a call that names no floor on the organisation’s', async () => {
+      const { app, set } = await setup({ ...library, scopes: ['notifications:send'] });
+      const unnamed = async () => (await app.inject({ method: 'GET', url: '/v1/apps/library/grants', headers: as('platform-events') })).json();
+      expect(await unnamed()).toEqual({ app: 'library', workspace: 'o', scopes: ['notifications:send'] });
+      // Off for the organisation but on for one team: naming no floor no longer gets it through.
+      await set('o', 'off');
+      await set('f', 'on');
+      expect((await unnamed()).scopes).toEqual([]);
+      expect((await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=f', headers: as('platform-events') })).json().scopes).toEqual(['notifications:send']);
     });
 
     it('holds back scopes a new version asks for until an admin grants them', async () => {

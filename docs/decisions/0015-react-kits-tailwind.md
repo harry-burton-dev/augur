@@ -1,6 +1,6 @@
 # 0015. Frontends are React, with a shell kit and an app kit on one common base, styled with Tailwind
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 - **Decided by:** Harry
 - **Replaces:** [0004](0004-ui-kit-lit-tokens-lucide.md) once accepted; changes the shared modules in [0003](0003-import-maps-not-module-federation.md)
@@ -33,7 +33,7 @@ Option 2.
 
 ## Consequences
 
-- Tailwind, React Aria Components, Style Dictionary, `lucide-react` and Storybook's React renderer become dependencies. This record covers them.
+- Tailwind, React Aria Components, Style Dictionary, `lucide-react`, Fontsource (the typefaces, served by AUGUR instead of Google Fonts) and Storybook's React renderer become dependencies. This record covers them.
 - Every app pins to the shell's React major. A React major is an SDK major and a coordinated upgrade across app repositories.
 - Apps can no longer be written in other frameworks.
 - `pnpm check:boundaries` gains a rule that apps never import `@augur/shell-kit`. A stylelint or Tailwind rule keeps raw palette tokens out of components.

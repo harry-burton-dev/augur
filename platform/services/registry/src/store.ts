@@ -903,7 +903,9 @@ export class PgAppStore implements AppStore {
     try {
       await client.query('begin');
       await client.query("select pg_advisory_xact_lock(hashtext('registry.migrate'))");
-      await client.query('create schema if not exists registry');
+      // On a server the storage job makes the schema for registry's own login, which may not create schemas.
+      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'registry'");
+      if (!hasSchema) await client.query('create schema registry');
       await client.query('create table if not exists registry.migrations (id text primary key, applied_at timestamptz not null default now())');
       const { rows } = await client.query<{ id: string }>('select id from registry.migrations');
       const applied = new Set(rows.map((r) => r.id));
