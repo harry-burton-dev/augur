@@ -29,7 +29,8 @@
     "012_app_follows": "0867e84dc2f2e71a",
     "013_previews": "a4d10aed714138f7",
     "014_upgrade_names": "ff96e379d0f8e3bd",
-    "015_feature_previews": "5045396635ad85bd"
+    "015_feature_previews": "5045396635ad85bd",
+    "016_desired_state": "e980edefce9d09fb"
   },
   "@apps/atlas": {
     "001_entities": "7e8edd330db1dea4",

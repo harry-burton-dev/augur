@@ -2,6 +2,7 @@ import pg from 'pg';
 import type { Scope } from '@augur/service-kit';
 import { steadyPool } from '@augur/service-kit';
 import type { AppEntry } from './manifest.ts';
+import { AUGUR_UNIT, defaultDesiredState, type StoredDesiredState } from './desired-state.ts';
 
 /** Another app took the route first (two registrations racing). */
 export class RouteTakenError extends Error {}
@@ -142,6 +143,9 @@ export interface Upgrade {
   steps: UpgradeStepState[];
   message?: string;
   finishedAt?: string;
+  /** Who marked it looked at, once it finished (Upgrade Centre, Needs you). */
+  seenBy?: string;
+  seenAt?: string;
 }
 
 export type UpgradeOutcome = 'done' | 'rolled-back' | 'failed';
@@ -203,6 +207,9 @@ export interface AppJob {
   steps: AppJobStepState[];
   message?: string;
   finishedAt?: string;
+  /** Who marked it looked at, once it finished (Upgrade Centre, Needs you). */
+  seenBy?: string;
+  seenAt?: string;
 }
 
 export type AppJobOutcome = 'done' | 'failed';
@@ -325,6 +332,14 @@ export interface AppStore {
   /** What admins chose for each installed app's updates; an app with none follows stable, automatically. */
   follows(): Promise<AppFollow[]>;
   setFollow(follow: Omit<AppFollow, 'setAt'>): Promise<AppFollow>;
+  /** Each unit's desired state an admin set (ADR 0020); a unit with none has its default. */
+  desiredStates(): Promise<StoredDesiredState[]>;
+  /** Sets a unit's desired state, and keeps it in the unit's history. */
+  setDesiredState(state: Omit<StoredDesiredState, 'setAt'>): Promise<StoredDesiredState>;
+  /** The records a unit has had, newest first (at most 50). */
+  desiredStateHistory(unit: string): Promise<StoredDesiredState[]>;
+  /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
+  markSeen(kind: 'upgrade' | 'app-job', id: string, by: string): Promise<boolean>;
   /** The previews running now: each pull request's last finished preview job, unless it was a removal. */
   runningPreviews(): Promise<RunningPreview[]>;
   /** Who may try previews: of one app, or of every app. */
@@ -351,6 +366,20 @@ const APP_JOBS_LISTED = 50;
 /** How many upgrades the Updates page's history lists. */
 const UPGRADES_LISTED = 50;
 
+/** How many records of a unit's desired state its history lists. */
+const DESIRED_HISTORY_LISTED = 50;
+
+/** An app's follow, read from its desired state. */
+const followsOf = (states: StoredDesiredState[]): AppFollow[] =>
+  states.filter((s) => s.unit !== AUGUR_UNIT).map((s) => ({ app: s.unit, channel: s.channel, policy: s.policy, setBy: s.setBy, setAt: s.setAt }));
+
+/** A follow set from Admin → Apps changes only its app's channel and policy; the rest of the record stays. */
+const withFollow = (states: StoredDesiredState[], f: Omit<AppFollow, 'setAt'>): Omit<StoredDesiredState, 'setAt'> => {
+  const { timeZone: _zone, setAt: _at, ...base } = states.find((s) => s.unit === f.app) ?? defaultDesiredState(f.app, 'production');
+  const kept = states.find((s) => s.unit === f.app)?.timeZone;
+  return { ...base, ...(kept ? { timeZone: kept } : {}), channel: f.channel, policy: f.policy, setBy: f.setBy };
+};
+
 /** For tests, and for running the registry locally without Postgres. Forgets everything on restart. */
 export class MemoryAppStore implements AppStore {
   private apps = new Map<string, AppRecord>();
@@ -360,7 +389,8 @@ export class MemoryAppStore implements AppStore {
   private upgradeList: Upgrade[] = [];
   private kept: StoredFrontend[] = [];
   private jobs: AppJob[] = [];
-  private following = new Map<string, AppFollow>();
+  private desired = new Map<string, StoredDesiredState>();
+  private desiredHistory: StoredDesiredState[] = [];
   private devs: AppDeveloper[] = [];
   private choices: PreviewChoice[] = [];
   private optIns: FeatureOptIn[] = [];
@@ -422,13 +452,35 @@ export class MemoryAppStore implements AppStore {
   }
 
   async follows() {
-    return [...this.following.values()].map((f) => ({ ...f }));
+    return followsOf(await this.desiredStates());
   }
 
   async setFollow(follow: Omit<AppFollow, 'setAt'>) {
-    const set = { ...follow, setAt: new Date().toISOString() };
-    this.following.set(follow.app, set);
-    return { ...set };
+    const set = await this.setDesiredState(withFollow(await this.desiredStates(), follow));
+    return { ...follow, setAt: set.setAt };
+  }
+
+  async desiredStates() {
+    return [...this.desired.values()].sort((a, b) => a.unit.localeCompare(b.unit)).map((s) => structuredClone(s));
+  }
+
+  async setDesiredState(state: Omit<StoredDesiredState, 'setAt'>) {
+    const set = { ...structuredClone(state), setAt: new Date().toISOString() };
+    this.desired.set(state.unit, set);
+    this.desiredHistory.push(set);
+    return structuredClone(set);
+  }
+
+  async desiredStateHistory(unit: string) {
+    return this.desiredHistory.filter((s) => s.unit === unit).slice(-DESIRED_HISTORY_LISTED).reverse().map((s) => structuredClone(s));
+  }
+
+  async markSeen(kind: 'upgrade' | 'app-job', id: string, by: string) {
+    const found = kind === 'upgrade' ? this.upgradeList.find((u) => u.id === id) : this.jobs.find((j) => j.id === id);
+    if (!found?.finishedAt) return false;
+    found.seenBy = by;
+    found.seenAt = new Date().toISOString();
+    return true;
   }
 
   async appJobs(app?: string) {
@@ -846,6 +898,39 @@ export const migrations: { id: string; sql: string }[] = [
         primary key (person_id, app_id, preview_id)
       );`,
   },
+  {
+    id: '016_desired_state',
+    sql: `
+      -- Each unit's desired state (ADR 0020): AUGUR ('augur') and each installed app. A null time_zone takes the deployment's.
+      create table registry.desired_states (
+        unit text primary key,
+        channel text not null,
+        policy text not null,
+        automatic_up_to text not null,
+        pin text,
+        windows jsonb not null default '[]',
+        time_zone text,
+        set_by text not null,
+        set_at timestamptz not null default now()
+      );
+      -- Every record set, newest last, for the Upgrade Centre's history.
+      create table registry.desired_state_history (
+        id bigserial primary key,
+        unit text not null,
+        record jsonb not null,
+        set_by text not null,
+        set_at timestamptz not null default now()
+      );
+      create index desired_state_history_unit on registry.desired_state_history (unit, id);
+      -- What admins chose for apps before there were records: patch and minor releases, at any time.
+      insert into registry.desired_states (unit, channel, policy, automatic_up_to, set_by, set_at)
+        select app_id, channel, policy, 'minor', set_by, set_at from registry.app_follows;
+      -- Who looked at a finished upgrade or app job, so Needs you is the same for every admin.
+      alter table registry.upgrades add column seen_by text;
+      alter table registry.upgrades add column seen_at timestamptz;
+      alter table registry.app_jobs add column seen_by text;
+      alter table registry.app_jobs add column seen_at timestamptz;`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -1262,17 +1347,51 @@ export class PgAppStore implements AppStore {
   }
 
   async follows() {
-    const { rows } = await this.pool.query<{ app_id: string; channel: AppFollow['channel']; policy: AppFollow['policy']; set_by: string; set_at: Date }>('select * from registry.app_follows order by app_id');
-    return rows.map((r) => ({ app: r.app_id, channel: r.channel, policy: r.policy, setBy: r.set_by, setAt: r.set_at.toISOString() }));
+    return followsOf(await this.desiredStates());
   }
 
   async setFollow(f: Omit<AppFollow, 'setAt'>) {
-    const { rows } = await this.pool.query<{ set_at: Date }>(
-      `insert into registry.app_follows (app_id, channel, policy, set_by) values ($1, $2, $3, $4)
-       on conflict (app_id) do update set channel = excluded.channel, policy = excluded.policy, set_by = excluded.set_by, set_at = now() returning set_at`,
-      [f.app, f.channel, f.policy, f.setBy],
-    );
-    return { ...f, setAt: rows[0].set_at.toISOString() };
+    const set = await this.setDesiredState(withFollow(await this.desiredStates(), f));
+    return { ...f, setAt: set.setAt };
+  }
+
+  async desiredStates() {
+    const { rows } = await this.pool.query<DesiredStateRow>('select * from registry.desired_states order by unit');
+    return rows.map(fromDesiredStateRow);
+  }
+
+  async setDesiredState(state: Omit<StoredDesiredState, 'setAt'>) {
+    return this.transaction(async (client) => {
+      const { rows } = await client.query<DesiredStateRow>(
+        `insert into registry.desired_states (unit, channel, policy, automatic_up_to, pin, windows, time_zone, set_by) values ($1, $2, $3, $4, $5, $6, $7, $8)
+         on conflict (unit) do update set channel = excluded.channel, policy = excluded.policy, automatic_up_to = excluded.automatic_up_to, pin = excluded.pin,
+           windows = excluded.windows, time_zone = excluded.time_zone, set_by = excluded.set_by, set_at = now()
+         returning *`,
+        [state.unit, state.channel, state.policy, state.automaticUpTo, state.pin ?? null, JSON.stringify(state.windows), state.timeZone ?? null, state.setBy],
+      );
+      const set = fromDesiredStateRow(rows[0]);
+      await client.query('insert into registry.desired_state_history (unit, record, set_by) values ($1, $2, $3)', [set.unit, JSON.stringify(set), set.setBy]);
+      // Kept too for a release before desired states, which reads app_follows, if the server goes back to one.
+      if (set.unit !== AUGUR_UNIT) {
+        await client.query(
+          `insert into registry.app_follows (app_id, channel, policy, set_by) values ($1, $2, $3, $4)
+           on conflict (app_id) do update set channel = excluded.channel, policy = excluded.policy, set_by = excluded.set_by, set_at = now()`,
+          [set.unit, set.channel, set.policy, set.setBy],
+        );
+      }
+      return set;
+    });
+  }
+
+  async desiredStateHistory(unit: string) {
+    const { rows } = await this.pool.query<{ record: StoredDesiredState }>('select record from registry.desired_state_history where unit = $1 order by id desc limit $2', [unit, DESIRED_HISTORY_LISTED]);
+    return rows.map((r) => r.record);
+  }
+
+  async markSeen(kind: 'upgrade' | 'app-job', id: string, by: string) {
+    const table = kind === 'upgrade' ? 'registry.upgrades' : 'registry.app_jobs';
+    const { rowCount } = await this.pool.query(`update ${table} set seen_by = $2, seen_at = now() where id = $1 and finished_at is not null`, [id, by]);
+    return rowCount === 1;
   }
 
   close() {
@@ -1292,6 +1411,8 @@ type UpgradeRow = {
   steps: UpgradeStepState[];
   message: string | null;
   finished_at: Date | null;
+  seen_by?: string | null;
+  seen_at?: Date | null;
 };
 
 const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
@@ -1306,6 +1427,7 @@ const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
   steps: r.steps,
   ...(r.message ? { message: r.message } : {}),
   ...(r.finished_at ? { finishedAt: r.finished_at.toISOString() } : {}),
+  ...(r.seen_by ? { seenBy: r.seen_by, ...(r.seen_at ? { seenAt: r.seen_at.toISOString() } : {}) } : {}),
 });
 
 type AppJobRow = {
@@ -1321,6 +1443,8 @@ type AppJobRow = {
   steps: AppJobStepState[];
   message: string | null;
   finished_at: Date | null;
+  seen_by?: string | null;
+  seen_at?: Date | null;
 };
 
 const fromAppJobRow = (r: AppJobRow): AppJob => ({
@@ -1336,4 +1460,29 @@ const fromAppJobRow = (r: AppJobRow): AppJob => ({
   steps: r.steps,
   ...(r.message ? { message: r.message } : {}),
   ...(r.finished_at ? { finishedAt: r.finished_at.toISOString() } : {}),
+  ...(r.seen_by ? { seenBy: r.seen_by, ...(r.seen_at ? { seenAt: r.seen_at.toISOString() } : {}) } : {}),
+});
+
+type DesiredStateRow = {
+  unit: string;
+  channel: StoredDesiredState['channel'];
+  policy: StoredDesiredState['policy'];
+  automatic_up_to: StoredDesiredState['automaticUpTo'];
+  pin: string | null;
+  windows: StoredDesiredState['windows'];
+  time_zone: string | null;
+  set_by: string;
+  set_at: Date;
+};
+
+const fromDesiredStateRow = (r: DesiredStateRow): StoredDesiredState => ({
+  unit: r.unit,
+  channel: r.channel,
+  policy: r.policy,
+  automaticUpTo: r.automatic_up_to,
+  ...(r.pin ? { pin: r.pin } : {}),
+  windows: r.windows,
+  ...(r.time_zone ? { timeZone: r.time_zone } : {}),
+  setBy: r.set_by,
+  setAt: r.set_at.toISOString(),
 });

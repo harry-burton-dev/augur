@@ -3,6 +3,7 @@ import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
 import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
+import { knownTimeZone } from './desired-state.ts';
 import { tailnetOf } from './live.ts';
 import { PipelineReader, pipelineUrlFor } from './pipeline.ts';
 import { cosignFeedCheck, feedSigner, repoOfFeed, TRUSTED_ROOT_IN_REGISTRY } from './feed-trust.ts';
@@ -29,6 +30,7 @@ loadConfigOrExit('registry', [
   { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
   { name: 'ALLOW_PR_PREVIEWS', about: 'on: run pull requests’ builds for apps’ developers on a production server too.' },
   { name: 'APP_FEED_URL', about: 'where new versions of apps are listed, or off.' },
+  { name: 'DEPLOYMENT_TIME_ZONE', about: 'the time zone upgrade windows are in, such as Europe/London (default UTC).' },
   { name: 'FEED_SIGNER', about: 'who must sign the release feed, for a fork (default: this repository’s Release feed workflow).' },
   { name: 'PILLAR_APPS', about: 'the apps that ship with AUGUR, which register themselves.' },
   { name: 'FRONTENDS_BUCKET_SECRET', about: 'the registry’s key to the bucket apps’ frontends are kept in by version.', secret: true },
@@ -79,6 +81,9 @@ const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: 
 const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel, ring });
 // The line from dev to production, for the Upgrade Centre: beside the release feed, read with the same key.
 const pipeline = new PipelineReader(process.env.PIPELINE_FEED_URL || (feedUrl === 'off' ? 'off' : pipelineUrlFor(feedUrl)), { token: feedTokenFromEnv(), key: readKey });
+// Upgrade windows (ADR 0020) are in the deployment's own time zone unless a unit names another.
+const timeZone = process.env.DEPLOYMENT_TIME_ZONE || 'UTC';
+if (!knownTimeZone(timeZone)) throw new Error(`DEPLOYMENT_TIME_ZONE is a time zone such as Europe/London, not "${timeZone}".`);
 const portalUrl = process.env.PORTAL_URL?.replace(/\/+$/, '') || undefined;
 if (portalUrl && !/^https?:\/\//.test(portalUrl)) throw new Error('PORTAL_URL is an http(s) address.');
 updates.start();
@@ -99,5 +104,5 @@ if (!frontendFiles) console.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fr
 
 // Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
 // this deployment ships with, which register themselves like any other.
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, tailnet });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, tailnet, timeZone });
 await app.listen({ port, host: '0.0.0.0' });
