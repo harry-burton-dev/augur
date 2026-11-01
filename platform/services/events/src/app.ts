@@ -293,6 +293,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
             await store.appendAudit(
               { actor: { id: caller.id, kind: 'user' }, app: 'events', action: req.body.on ? 'team-notices.on' : 'team-notices.off', target: req.params.workspace },
               floor ? { id: floor.id, path: floor.path } : { id: req.params.workspace, path: [req.params.workspace] },
+              'events',
             );
           }
           return { workspace: req.params.workspace, on: req.body.on };
@@ -399,7 +400,8 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const floor = await floorOf(req, reply);
         if (floor === undefined) return reply;
         const place = floor ? { id: floor.id, path: floor.path } : undefined;
-        const entry = await store.appendAudit(req.body, place);
+        // `actor` is the service's own claim; the signed token says which service made it.
+        const entry = await store.appendAudit(req.body, place, serviceName(service));
         const platformEvent = service.kind === 'platform' ? PLATFORM_EVENTS[`${req.body.app} ${req.body.action}`] : undefined;
         if (platformEvent) {
           await store.publish(req.body.app, [{ topic: platformEvent.topic, id: `audit-${entry.id}`, payload: platformEvent.payload(req.body), floor: place }]);
