@@ -162,6 +162,14 @@ In the app repository's workflows `NODE_AUTH_TOKEN` is its own `GITHUB_TOKEN`, o
 
 The UI kit is still served by the shell at runtime (see [The shared kit](#the-shared-kit)); an app installs it only to build and type-check against, and keeps it out of its bundle. A hotfix published from a `release/<unit>-<major>.<minor>` branch gets the dist-tag `release-<unit>-<major>.<minor>`, so `latest` stays the newest version from `main`.
 
+## Dependency updates
+
+Renovate proposes dependency updates (ADR 0033, `renovate.json`). It runs once a week, early on Monday, and opens one PR for npm minor and patch updates, one for container images and one for GitHub Actions. Security fixes come at any time. A major update stays on the **Dependency Dashboard** issue until someone ticks it there. Renovate never merges anything itself. To merge one of its PRs:
+
+1. Merge fresh `main` into it and let CI run.
+2. Add a changeset (`pnpm changeset`): a patch for each unit whose dependencies moved, or `--empty` when only dev tooling changed.
+3. If it's labelled `needs-upgrade-note` (a major update to Postgres, pgvector, Keycloak or Garage), write the note in docs/upgrade.md first, including how to go back.
+
 ## Going back to an earlier app version
 
 The registry keeps the last 5 versions each app registered (and any version an admin is holding it at). In **Admin → Apps**, open an app and choose what to give the shell:

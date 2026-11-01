@@ -1,0 +1,102 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Dependency updates for AUGUR: weekly, grouped, never merged by Renovate. See docs/decisions/0033-renovate-for-dependency-updates.md.",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":disableRateLimiting"
+  ],
+  "timezone": "Europe/London",
+  "schedule": [
+    "before 7am on monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "automerge": false,
+  "prConcurrentLimit": 6,
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "rangeStrategy": "auto",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 7am on the first day of the month"
+    ]
+  },
+  "vulnerabilityAlerts": {
+    "labels": [
+      "dependencies",
+      "security"
+    ],
+    "schedule": [
+      "at any time"
+    ],
+    "minimumReleaseAge": null
+  },
+  "packageRules": [
+    {
+      "description": "One PR a week for every minor and patch update to npm packages past 1.0.",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchCurrentVersion": "!/^0/",
+      "groupName": "npm minor and patch updates"
+    },
+    {
+      "description": "Container images in compose and the Dockerfiles, together.",
+      "matchManagers": [
+        "docker-compose",
+        "dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "container images"
+    },
+    {
+      "description": "GitHub Actions used by the workflows, together.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Majors wait on the dashboard until someone asks for them: each one may need code or an upgrade note.",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Postgres, pgvector and Keycloak change what's on disk across majors; docs/upgrade.md needs a note first.",
+      "matchPackageNames": [
+        "postgres",
+        "pgvector/pgvector",
+        "quay.io/keycloak/keycloak",
+        "dxflrs/garage"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true,
+      "labels": [
+        "dependencies",
+        "needs-upgrade-note"
+      ]
+    },
+    {
+      "description": "The frozen contract builds stand for released apps and are never rebuilt.",
+      "matchFileNames": [
+        "platform/contract/frozen/**"
+      ],
+      "enabled": false
+    }
+  ]
+}
