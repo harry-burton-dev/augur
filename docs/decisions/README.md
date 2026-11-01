@@ -39,5 +39,13 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0031](0031-mirror-feeds-are-the-organisations-own.md) | A mirror's feed is the organisation's own, and carries the publisher's halt marks | Accepted | 2026-11-01 |
 | [0032](0032-platform-apps-and-pillar-apps.md) | Apps that ship with AUGUR are platform apps or pillar apps | Proposed | 2026-11-01 |
 | [0033](0033-renovate-for-dependency-updates.md) | Renovate proposes dependency updates, weekly and grouped, and never merges them | Accepted | 2026-11-01 |
+| [0035](0035-email-through-the-organisations-relay.md) | AUGUR sends email through the organisation's own SMTP relay | Accepted | 2026-11-01 |
+| [0036](0036-account-area-in-the-shell.md) | People manage their own account in the shell, through identity, with credentials on Keycloak's screens | Accepted | 2026-11-01 |
+| [0037](0037-keycloak-stays-current.md) | Keycloak moves to the current 26.x and stays current | Accepted | 2026-11-01 |
+| [0038](0038-two-step-sign-in-and-password-policy.md) | Two-step sign-in is required for admin roles and offered to everyone; passwords follow NIST SP 800-63B | Accepted | 2026-11-01 |
+| [0039](0039-profile-in-keycloak-preferences-in-identity.md) | Who you are lives in Keycloak's user profile; how AUGUR behaves for you lives in identity | Accepted | 2026-11-01 |
+| [0040](0040-account-lifecycle-and-personal-data.md) | Accounts start with an email invite, end through the leaver flow, and idle accounts turn off on their own | Accepted | 2026-11-01 |
+| [0041](0041-keycloakify-sign-in-theme.md) | Sign-in and email pages use a Keycloakify theme in AUGUR's look | Accepted | 2026-11-01 |
+| [0042](0042-organisation-settings-in-identity.md) | Organisation settings live in identity and are edited in Admin | Accepted | 2026-11-01 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.
