@@ -43,6 +43,7 @@ The pull fetches that release's images before anything stops. Each service migra
 
 ## Check
 
+- `pc ps` shows each of AUGUR's services as `healthy` about a minute after it starts: Compose asks each one's `/healthz` every 30 seconds. One that stays `unhealthy` or `starting` is the one to look at in `pc logs`.
 - Open **Admin → Status**. Give it a minute: every part should be Running, with the new versions in the Version column.
 - Sign in as yourself and as someone without the admin role, and open an app or two.
 - `pc logs --since 10m gateway identity registry events` shouldn't show errors. Every log line carries a `requestId`; the same id is in the `x-request-id` header of the response, so a problem someone reports can be found across every service's logs.
