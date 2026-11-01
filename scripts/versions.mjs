@@ -49,7 +49,7 @@ export const SDK_VERSION = '${sdkVersion}';
 
 // ---- the platform's own apps, which the registry lists from code ----
 
-const platformAppVersions = Object.fromEntries(['home', 'admin'].map((id) => [id, readJson(`platform/frontends/${id}/package.json`).version]));
+const platformAppVersions = Object.fromEntries(['home', 'admin', 'upgrades'].map((id) => [id, readJson(`platform/frontends/${id}/package.json`).version]));
 expectFile(
   'platform/services/registry/src/platform-app-versions.ts',
   `// Written by scripts/versions.mjs from each frontend's package.json; don't edit by hand.
