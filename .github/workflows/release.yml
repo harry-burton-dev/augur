@@ -42,6 +42,15 @@ jobs:
           version: pnpm version-packages
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      # Once nothing is waiting, publishes each library in platform/packages whose version isn't in
+      # GitHub Packages yet, as @<owner>/augur-<name>, for apps built in their own repositories.
+      - name: Publish the library packages
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          pnpm turbo run build --filter='./platform/packages/*'
+          node scripts/publish-packages.mjs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Once nothing is waiting (the Version packages PR just merged), releases the AUGUR version
       # that PR wrote to release/augur-release.json, unless it's out already: builds, pushes and
       # signs every image, then makes the GitHub release augur@<version> with the file attached.

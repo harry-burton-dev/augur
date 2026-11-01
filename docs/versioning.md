@@ -136,6 +136,32 @@ Apps don't bundle the UI kit or Lit: the shell serves one copy of each through a
 - Moving the shared Lit to a new major is a kit major too.
 - The contract tests in `platform/contract` hold the shell to this: they mount a reference app built against each earlier SDK minor, and fail CI when the shell breaks one.
 
+## Building an app in its own repository
+
+Apps are moving to their own repositories (ADR 0012), so the libraries in `platform/packages` (the SDK, the UI kit, service-kit, records and any added there later) are published to GitHub Packages. The Release workflow does it once the Version packages PR has merged, with `scripts/publish-packages.mjs`: each package whose version isn't there yet is published, and nothing else. Nobody publishes by hand.
+
+GitHub's npm registry only takes packages scoped to the repository's owner, so `@augur/<name>` is published as `@<owner>/augur-<name>` (the owner comes from the repository, or `PACKAGE_SCOPE`). An app repository aliases each one back, so its imports stay `@augur/...`:
+
+```json
+"dependencies": {
+  "@augur/mfe-sdk": "npm:@<owner>/augur-mfe-sdk@^1.9.0"
+},
+"devDependencies": {
+  "@augur/ui-kit": "npm:@<owner>/augur-ui-kit@^1.8.0"
+}
+```
+
+and reads them with a `.npmrc` beside its package.json:
+
+```ini
+@<owner>:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+In the app repository's workflows `NODE_AUTH_TOKEN` is its own `GITHUB_TOKEN`, once the package's settings give that repository read access (Package settings → Manage Actions access). On a laptop it's a personal access token with `read:packages`.
+
+The UI kit is still served by the shell at runtime (see [The shared kit](#the-shared-kit)); an app installs it only to build and type-check against, and keeps it out of its bundle. A hotfix published from a `release/<unit>-<major>.<minor>` branch gets the dist-tag `release-<unit>-<major>.<minor>`, so `latest` stays the newest version from `main`.
+
 ## Going back to an earlier app version
 
 The registry keeps the last 5 versions each app registered (and any version an admin is holding it at). In **Admin → Apps**, open an app and choose what to give the shell:
