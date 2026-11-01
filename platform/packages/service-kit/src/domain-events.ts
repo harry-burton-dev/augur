@@ -50,6 +50,7 @@ export async function publishEvents({ eventsUrl, credentials, fetchImpl, events 
 
 /** What the outbox needs from a database connection; `pg`'s clients and pools fit. */
 export interface Queryable {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- matches pg's own Pool.query, so any pool fits
   query(text: string, values?: unknown[]): Promise<{ rows: any[]; rowCount?: number | null }>;
 }
 export interface ConnectionPool {

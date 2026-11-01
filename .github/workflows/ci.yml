@@ -57,6 +57,8 @@ jobs:
       - run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
       - run: pnpm check:boundaries
       - run: pnpm check:reasons
+      # ESLint (ADR 0043): errors fail the run.
+      - run: pnpm lint
       - run: pnpm check:versions
       - run: pnpm check:release
       - run: pnpm check:catalog
@@ -323,6 +325,29 @@ jobs:
         run: pnpm --filter @augur/contract-tests test:contract
 
   # The server setup in infra/deploy: the compose file is valid and the images build.
+  # Secrets committed by mistake, and dependencies with known vulnerabilities (ADR 0043).
+  # Pinned scanner images; no install, so it finishes in well under a minute.
+  scan:
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: No secrets in the commits (gitleaks)
+        run: |
+          # A pull request's own commits; on a push, the commits it added.
+          range="origin/${BASE_REF}..HEAD"
+          [ -z "$BASE_REF" ] && range="${BEFORE}..HEAD"
+          [ "$BEFORE" = 0000000000000000000000000000000000000000 ] && range=HEAD~1..HEAD
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo ghcr.io/gitleaks/gitleaks:v8.24.0 \
+            git --redact --no-banner --log-opts="$range" .
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+      - name: No dependencies with known vulnerabilities (OSV-Scanner)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src ghcr.io/google/osv-scanner:v2.0.2 \
+            scan source --config=osv-scanner.toml -L pnpm-lock.yaml
   deploy-images:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:

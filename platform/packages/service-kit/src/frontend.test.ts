@@ -66,7 +66,7 @@ describe('publishFrontend', () => {
 
   it('answers false where frontends aren’t kept, and says why it was refused', async () => {
     const answer = (status: number) =>
-      (async (input: string) =>
+      (async (_input: string) =>
         new Response(JSON.stringify({ message: 'Different files.' }), { status })) as typeof fetch;
     const base = { registryUrl: 'http://registry:8082', credentials, app: 'expenses', version: '1.2.0', dir: built() };
     expect(await publishFrontend({ ...base, fetchImpl: answer(501) })).toBe(false);

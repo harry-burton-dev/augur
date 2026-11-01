@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import './reader.js';
 import './contents.js';
 import { slugFor, type UiReader } from './reader.js';
-import type { UiContents } from './contents.js';
 
 const mount = async (markdown: string, imageSource?: UiReader['imageSource']) => {
   const reader = document.createElement('ui-reader');

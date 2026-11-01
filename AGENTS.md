@@ -75,7 +75,7 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   in the same PR.
 
 ## Working on a change
-- `pnpm install`, then `pnpm build`, `pnpm test`, `pnpm typecheck`. Also run
+- `pnpm install`, then `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint`. Also run
   `pnpm check:boundaries`, `pnpm check:manifest`, `pnpm check:migrations`,
   `pnpm check:reasons` and `pnpm check:catalog` when you touch those areas.
 - Shell or kit changes: run the contract tests in `platform/contract`.
