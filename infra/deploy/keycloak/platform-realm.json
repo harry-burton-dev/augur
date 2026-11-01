@@ -66,6 +66,24 @@
       "requiredActions": [
         "UPDATE_PASSWORD"
       ]
+    },
+    {
+      "username": "service-account-platform-identity",
+      "enabled": true,
+      "serviceAccountClientId": "platform-identity",
+      "clientRoles": {
+        "realm-management": [
+          "view-realm",
+          "manage-realm",
+          "view-users",
+          "query-users",
+          "manage-users",
+          "query-groups",
+          "view-clients",
+          "query-clients",
+          "manage-clients"
+        ]
+      }
     }
   ],
   "clients": [
@@ -131,6 +149,17 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "platform-identity",
+      "name": "Identity service",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${IDENTITY_CLIENT_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false
     }
   ]
 }

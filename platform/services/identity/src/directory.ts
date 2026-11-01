@@ -324,6 +324,27 @@ export class KeycloakDirectory implements Directory {
     return this.token.value;
   }
 
+  /**
+   * Whether this sign-in already holds every role in `REALM_ADMIN_ROLES`, read from its own token.
+   * False when Keycloak refuses the sign-in (no such client yet, or a wrong secret); throws only
+   * when Keycloak can't be reached, so the caller can try again.
+   */
+  async hasRealmAdmin(): Promise<boolean> {
+    this.token = undefined;
+    let token: string;
+    try {
+      token = await this.accessToken();
+    } catch (err) {
+      if (err instanceof DirectoryError && err.message.startsWith('The sign-in service can’t be reached')) throw err;
+      return false;
+    }
+    const part = token.split('.')[1];
+    if (!part) return false;
+    const claims = JSON.parse(Buffer.from(part, 'base64url').toString('utf8')) as { resource_access?: Record<string, { roles?: string[] }> };
+    const held = new Set(claims.resource_access?.['realm-management']?.roles ?? []);
+    return REALM_ADMIN_ROLES.every((r) => held.has(r));
+  }
+
   /** Signs in again on the next call, for rights given since the last sign-in. */
   forgetSignIn() {
     this.token = undefined;
