@@ -1,28 +1,11 @@
 {
-  "version": "0.13.0",
+  "version": "0.13.1",
   "channel": "beta",
   "released": "2026-11-01",
   "upgradeFrom": ">=0.1.0",
   "changed": [
-    "@augur/mfe-sdk",
-    "@augur/service-kit",
-    "@augur/ui-kit",
-    "@augur/events",
-    "@augur/gateway",
-    "@augur/identity",
-    "@augur/models",
     "@augur/registry",
-    "@augur/storage",
-    "@augur/updater",
-    "@augur/admin",
-    "@augur/home",
-    "@augur/shell",
-    "@apps/folio-frontend",
-    "@apps/folio",
-    "@apps/auspex-frontend",
-    "@apps/auspex",
-    "@apps/atlas-frontend",
-    "@apps/atlas"
+    "@augur/updater"
   ],
   "breaking": [],
   "settings": {
@@ -117,12 +100,7 @@
       "PLATFORM_ADMIN_DEPARTMENT",
       "SERVER_RING"
     ],
-    "added": [
-      "KEYCLOAK_ADMIN_USER",
-      "APP_FEED_URL",
-      "PIPELINE_FEED_URL",
-      "PORTAL_URL"
-    ],
+    "added": [],
     "removed": []
   },
   "parts": {
@@ -151,13 +129,13 @@
       "version": "0.3.1"
     },
     "@augur/registry": {
-      "version": "0.13.0"
+      "version": "0.13.1"
     },
     "@augur/storage": {
       "version": "0.3.1"
     },
     "@augur/updater": {
-      "version": "0.7.0"
+      "version": "0.7.1"
     },
     "@augur/admin": {
       "version": "0.11.0"

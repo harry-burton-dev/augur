@@ -1,5 +1,11 @@
 # @augur/registry
 
+## 0.13.1
+
+### Patch Changes
+
+- afafeb6: AUGUR releases carry a release name beside their version: each new minor or major takes the next bird in `release/names.json`, and patches keep their release's.
+
 ## 0.13.0
 
 ### Minor Changes
