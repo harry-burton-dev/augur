@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       from:
-        description: The AUGUR release to upgrade from, such as 0.13.1 (default the newest)
+        description: The AUGUR release to upgrade from, such as 0.13.1 (default the newest release, dev builds aside)
         required: false
 concurrency:
   group: deploy-test-${{ github.event.pull_request.number || github.sha }}
@@ -52,7 +52,7 @@ jobs:
         run: |
           from="$FROM"
           if [ -z "$from" ]; then
-            from=$(gh release list --limit 100 --json tagName --jq '[.[].tagName | select(startswith("augur@"))][0] | ltrimstr("augur@")')
+            from=$(gh release list --limit 100 --json tagName --jq '[.[].tagName | select(startswith("augur@") and (contains("-dev.") | not))][0] | ltrimstr("augur@")')
           fi
           echo "version=$from" >> "$GITHUB_OUTPUT"
           echo "Upgrading from augur@$from" >> "$GITHUB_STEP_SUMMARY"

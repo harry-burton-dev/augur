@@ -91,11 +91,11 @@ serving() {
 
 # Waits until every service answers its /healthz and the front door serves; prints the versions they report.
 wait_ready() {
-  local label=$1 deadline=$((SECONDS + timeout)) versions=''
+  local label=$1 start=$SECONDS deadline=$((SECONDS + timeout)) versions=''
   while (( SECONDS < deadline )); do
     versions=$(probe || true)
     if [ -n "$versions" ] && jq -e 'to_entries | all(.value != "down" and (.value | startswith("HTTP") | not))' <<<"$versions" >/dev/null && serving; then
-      echo "$label: ready after ${SECONDS}s" >&2
+      echo "$label: ready after $((SECONDS - start))s" >&2
       echo "$versions"
       return 0
     fi
