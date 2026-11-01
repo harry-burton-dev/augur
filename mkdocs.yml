@@ -26,3 +26,19 @@ nav:
   - Signed caller: signed-caller.md
   - Upgrading AUGUR: upgrade.md
   - Versioning: versioning.md
+  - Decisions:
+      - Index: decisions/README.md
+      - 0001. Record decisions as ADRs in the repository: decisions/0001-record-decisions.md
+      - 0002. One platform, apps on top; the platform never imports an app: decisions/0002-platform-and-apps-separation.md
+      - 0003. The shell loads apps through a native import map, not Module Federation: decisions/0003-import-maps-not-module-federation.md
+      - 0004. The UI kit is Lit web components, with one tokens file and Lucide icons: decisions/0004-ui-kit-lit-tokens-lucide.md
+      - 0005. Services are TypeScript on Fastify, with a Postgres schema each and OpenAPI contracts: decisions/0005-services-fastify-postgres.md
+      - 0006. Keycloak signs people in; the identity service owns people, teams and floors: decisions/0006-keycloak-and-identity-service.md
+      - "0007. Workspaces are floors: you, nested teams, and one organisation": decisions/0007-floors.md
+      - 0008. Apps have their own identity, and services trust only the gateway's signed caller: decisions/0008-per-app-identity-signed-caller.md
+      - 0009. Files go in S3-compatible object storage, run with Garage: decisions/0009-object-storage-garage.md
+      - 0010. Deployments run on Docker Compose; no Kubernetes for now: decisions/0010-docker-compose-deployments.md
+      - 0011. One trunk branch and release tags, instead of environment branches: decisions/0011-trunk-based-main-and-tags.md
+      - 0012. Every app lives in its own repository, and pillar apps are default-installed apps: decisions/0012-apps-in-own-repositories.md
+      - 0013. One AUGUR version for deployments, and GitHub releases only for AUGUR and apps: decisions/0013-versions-and-releases.md
+      - 0014. Agents are apps, run by a durable runs service on DBOS: decisions/0014-agent-runtime.md

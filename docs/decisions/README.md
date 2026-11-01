@@ -1,0 +1,24 @@
+# Decisions
+
+The technical decisions AUGUR is built on, one record each. Read the ones that touch your work before you change it. If your change goes against an Accepted record, write a new Proposed record in the same pull request and say so (see [0001](0001-record-decisions.md)).
+
+Product, naming and process decisions live in the AUGUR handbook on Google Drive (`04 Decisions`), and its Decision register lists these records too.
+
+| # | Decision | Status | Date |
+| --- | --- | --- | --- |
+| [0001](0001-record-decisions.md) | Record decisions as ADRs in the repository | Accepted | 2026-11-01 |
+| [0002](0002-platform-and-apps-separation.md) | One platform, apps on top; the platform never imports an app | Accepted | 2026-10-18 |
+| [0003](0003-import-maps-not-module-federation.md) | The shell loads apps through a native import map, not Module Federation | Accepted | 2026-10-27 |
+| [0004](0004-ui-kit-lit-tokens-lucide.md) | The UI kit is Lit web components, with one tokens file and Lucide icons | Accepted | 2026-10-17 |
+| [0005](0005-services-fastify-postgres.md) | Services are TypeScript on Fastify, with a Postgres schema each and OpenAPI contracts | Accepted | 2026-10-17 |
+| [0006](0006-keycloak-and-identity-service.md) | Keycloak signs people in; the identity service owns people, teams and floors | Accepted | 2026-10-18 |
+| [0007](0007-floors.md) | Workspaces are floors: you, nested teams, and one organisation | Accepted | 2026-10-19 |
+| [0008](0008-per-app-identity-signed-caller.md) | Apps have their own identity, and services trust only the gateway's signed caller | Accepted | 2026-10-23 |
+| [0009](0009-object-storage-garage.md) | Files go in S3-compatible object storage, run with Garage | Accepted | 2026-10-17 |
+| [0010](0010-docker-compose-deployments.md) | Deployments run on Docker Compose; no Kubernetes for now | Accepted | 2026-11-01 |
+| [0011](0011-trunk-based-main-and-tags.md) | One trunk branch and release tags, instead of environment branches | Accepted | 2026-11-01 |
+| [0012](0012-apps-in-own-repositories.md) | Every app lives in its own repository, and pillar apps are default-installed apps | Accepted | 2026-11-01 |
+| [0013](0013-versions-and-releases.md) | One AUGUR version for deployments, and GitHub releases only for AUGUR and apps | Accepted | 2026-11-01 |
+| [0014](0014-agent-runtime.md) | Agents are apps, run by a durable runs service on DBOS | Proposed | 2026-10-24 |
+
+New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

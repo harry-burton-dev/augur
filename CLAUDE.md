@@ -1,5 +1,95 @@
-# Working in this repository
+# AUGUR: notes for Claude
 
-- Open pull requests against `dev`, never `preview` or `production` (docs/release-channels.md). Promote to preview is the only way into `preview`, and the Promote workflow the only way into `production`.
-- Never merge a pull request into `production`: only the repository's owner does.
-- Every pull request carries a changeset (`pnpm changeset`, or `pnpm changeset --empty`), see docs/versioning.md.
+AUGUR is an app platform built to be deployed many times: Harry's dev
+workbench, a demo, and later his organisation's private cloud. A shell in the
+browser loads separately built apps (native import map plus `import()`, not
+Module Federation). Behind one gateway sit the platform services: identity,
+registry, events, storage, models, updater. It is in BETA; there is no phone
+layout yet.
+
+## Where to look first
+1. **Decisions:** `docs/decisions/` (ADRs). Check the ones that touch your
+   work before changing it. If your change goes against an Accepted record,
+   add a new Proposed record in the same PR, tell Harry, and don't merge the
+   deviating part until he accepts it (ADR 0001).
+2. **The task:** its Linear issue (team PER, initiative AUGUR).
+3. **Product, principles, naming, how we work:** the AUGUR handbook, Google
+   Drive folder "Augur". Its Decision register lists every decision.
+4. **Guides:** `docs/` has one guide per topic; update the matching guide in
+   the same PR.
+
+Project memory holds current state (what's in flight, ids, links), not rules.
+If a rule is only in memory, it belongs here, in an ADR or in the handbook.
+
+## Rules that hold everywhere
+- **Many deployments, one codebase.** Every name, label, URL, limit and app
+  id comes from state, config or a manifest. Harry's examples in chat
+  ("Department 1 library", "ARTIFACTS") are illustrations, not specs: a
+  literal string copied from chat into code is a bug.
+- **Prefer established tools.** Use a maintained open-source library or
+  standard before writing our own, and follow common conventions. Adding a
+  dependency, tool or service needs an ADR.
+- **Explain, never hide.** Anything unavailable stays visible, looks
+  unavailable and says why and who can change it. Hide only what someone may
+  not know exists. Full rules: docs/shell-principles.md.
+- **Recommend what it should be,** not only what was asked, and say where you
+  went beyond the ask.
+
+## Names
+- The platform is **AUGUR**. Never "IM platform", "Information Platform",
+  "Wave" or "platform" in anything a person reads.
+- Folio is shown to people as **Artifacts**. Its id, route, schema, bucket and
+  `FOLIO_*` keys stay `folio`.
+- Old ids kept on purpose so live servers keep working: Keycloak realm
+  `platform` and clients `platform-*`, Postgres db/user `platform`, Compose
+  project `platform`, `PLATFORM_*` env keys. Don't rename them without an
+  upgrade note in docs/upgrade.md.
+
+## Structure (ADR 0002)
+- `platform/` owns the shell, SDK, UI kit, services. `apps/` holds apps, which
+  are moving to their own repositories (ADR 0012). Nothing in `platform/`
+  imports an app and apps never import each other: `pnpm check:boundaries`.
+- Apps reach AUGUR only through `@augur/*` packages, the gateway, the
+  manifest and domain events.
+- Shared hot spots: `platform/packages/mfe-sdk`, `platform/packages/ui-kit`
+  (including `src/components/icon.ts`), `platform/services/gateway`. Keep
+  changes there in their own small PR and merge it first.
+
+## Design rules (ADR 0004)
+- Shell behaviour is a rule driven by manifests and floors, never a special
+  case for one app or screen.
+- Colours, durations and distances come only from
+  `platform/packages/ui-kit/tokens/tokens.json`. New `floor-*` tokens must
+  also be copied into Claude Design (tell Harry).
+- Icons come from Lucide through `icon.ts`. Never hand-write SVG.
+- App layout and interaction rules agreed with Harry live in
+  docs/app-patterns.md. A live design session writes each agreed rule there
+  in the same PR.
+
+## Working on a change
+- `pnpm install`, then `pnpm build`, `pnpm test`, `pnpm typecheck`. Also run
+  `pnpm check:boundaries`, `pnpm check:manifest`, `pnpm check:migrations`,
+  `pnpm check:reasons` and `pnpm check:catalog` when you touch those areas.
+- Shell or kit changes: run the contract tests in `platform/contract`.
+- Every PR carries a changeset (`pnpm changeset`, or `pnpm changeset --empty`),
+  see docs/versioning.md.
+
+## Pull requests and releases
+- Open pull requests against `dev`, never `preview` or `production`
+  (docs/release-channels.md) until the move to one trunk branch (ADR 0011)
+  lands; then this section changes with it.
+- Never merge a pull request into `production`: only Harry does.
+- Harry's standing rule: merge your own PR once CI is green, after merging
+  fresh `origin/dev` into it and re-running the checks. Don't ask for review;
+  post one summary per phase, ending with anything Harry must do on his
+  server as a short numbered list.
+- One PR at a time per thread, small enough to review in one sitting. Say
+  "Part of PER-x" in the body when an issue spans several PRs, because Linear
+  closes an issue when any linked PR merges.
+
+## Servers
+- Deployments run on Docker Compose behind Tailscale (ADR 0010). Claude
+  can't see Harry's servers: never assume a step there worked; ask, or give a
+  command whose output he can paste.
+- Upgrades go through the Upgrade Centre in Admin; docs/upgrade.md has the
+  manual path.
