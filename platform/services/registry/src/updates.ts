@@ -24,6 +24,8 @@ const feedChannel = (version: string, prerelease: boolean): Channel => (isDevBui
 /** An AUGUR release file, as scripts/augur-release.mjs writes it and the Release workflow attaches it. */
 export interface ReleaseManifest {
   version: string;
+  /** Its release name (release/names.json), shown beside the version; a patch keeps its release's. */
+  name?: string;
   channel: Channel;
   released?: string;
   upgradeFrom: string;

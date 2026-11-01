@@ -20,6 +20,10 @@
 //   - anything else is a fix
 // While AUGUR is 0.x (the beta channel), breaking changes and features both bump the minor and fixes
 // the patch, as semver allows before 1.0. From 1.0 on: major, minor, patch.
+//
+// Each new minor or major AUGUR version also takes a release name, the next one in release/names.json
+// ("AUGUR 0.14 Avocet"); a patch keeps its release's name. The version is still what everything
+// compares: the name is only shown beside it.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -32,6 +36,7 @@ const RELEASE_FILE = 'release/augur-release.json';
 const DEPLOY_DIR = 'infra/deploy';
 const ENV_EXAMPLE = `${DEPLOY_DIR}/.env.example`;
 const VERSION_FILE = 'platform/services/registry/src/augur-version.ts';
+const NAMES_FILE = 'release/names.json';
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 
 /**
@@ -68,8 +73,21 @@ export const readSettings = () => {
   return { all, required };
 };
 
+/** The release names, in the order they're taken. */
+export const readNames = () => (existsSync(join(root, NAMES_FILE)) ? readJson(NAMES_FILE).names : []);
+
+/**
+ * The name of the release after `previous` at `version`: a patch keeps its name, a new minor or major
+ * takes the next unused one (the first, after a release that had none). Undefined once the list runs out.
+ */
+export const releaseName = (previous, version, names) => {
+  if (previous && semver.major(version) === semver.major(previous.version) && semver.minor(version) === semver.minor(previous.version)) return previous.name;
+  const at = previous?.name ? names.indexOf(previous.name) + 1 : 0;
+  return names[at];
+};
+
 /** The next release, from the last one and the parts as they are now. Returns the last one unchanged when nothing moved. */
-export const nextRelease = (previous, parts, settings, today) => {
+export const nextRelease = (previous, parts, settings, today, names = []) => {
   const before = previous?.parts ?? {};
   const changed = [];
   const breaking = [];
@@ -86,7 +104,7 @@ export const nextRelease = (previous, parts, settings, today) => {
 
   const shape = Object.fromEntries(Object.entries(parts).map(([name, { version }]) => [name, { version }]));
   if (!previous) {
-    return { version: '0.1.0', channel: 'beta', released: today, upgradeFrom: '>=0.1.0', changed: Object.keys(parts), breaking: [], settings: { ...settings, added: [], removed: [] }, parts: shape };
+    return { version: '0.1.0', ...(names[0] ? { name: names[0] } : {}), channel: 'beta', released: today, upgradeFrom: '>=0.1.0', changed: Object.keys(parts), breaking: [], settings: { ...settings, added: [], removed: [] }, parts: shape };
   }
   const settingsAdded = settings.all.filter((k) => !previous.settings.all.includes(k));
   const settingsRemoved = previous.settings.all.filter((k) => !settings.all.includes(k));
@@ -94,8 +112,11 @@ export const nextRelease = (previous, parts, settings, today) => {
 
   const beta = semver.major(previous.version) === 0;
   const bump = breaking.length ? (beta ? 'minor' : 'major') : feature ? 'minor' : 'patch';
+  const version = semver.inc(previous.version, bump);
+  const name = releaseName(previous, version, names);
   return {
-    version: semver.inc(previous.version, bump),
+    version,
+    ...(name ? { name } : {}),
     channel: beta ? 'beta' : 'stable',
     released: today,
     // Breaking: go through the previous release first. Otherwise, whatever could reach the previous one can reach this one.
@@ -204,6 +225,9 @@ export const versionModule = (release) =>
   `/** The AUGUR release this registry ships in. */\n` +
   `export const AUGUR_RELEASE = { version: '${release.version}', channel: '${release.channel}' } as const;\n`;
 
+/** How a release is called in its GitHub release and notes: "AUGUR 0.14.0 Avocet". */
+export const titleOf = (release) => `${release.version}${release.name ? ` ${release.name}` : ''}`;
+
 const write = (release) => {
   mkdirSync(join(root, 'release'), { recursive: true });
   writeFileSync(join(root, RELEASE_FILE), `${JSON.stringify(release, null, 2)}\n`);
@@ -232,7 +256,7 @@ export const notes = (release, parts) => {
     if (!release.changed.length) lines.push('_Nothing: no changesets are waiting._');
     return lines.join('\n');
   }
-  const lines = [`AUGUR ${release.version} (${release.channel}).`, ''];
+  const lines = [`AUGUR ${titleOf(release)} (${release.channel}).`, ''];
   if (release.upgradeFrom) lines.push(`Upgrades from AUGUR ${release.upgradeFrom.replace('>=', '')} or later.`, '');
   if (release.breaking.length) lines.push('### Breaking', '', ...release.breaking.map((b) => `- ${b}`), '');
   if (release.settings.added.length) lines.push('### New settings', '', `Add to your \`.env\` before upgrading (see \`${ENV_EXAMPLE}\`). The updater makes up a required one ending in _SECRET, _PASSWORD or _TOKEN itself:`, '', ...release.settings.added.map((k) => `- \`${k}\`${release.settings.required.includes(k) ? ' (required)' : ''}`), '');
@@ -252,10 +276,12 @@ const main = () => {
   const previous = existsSync(join(root, RELEASE_FILE)) ? readJson(RELEASE_FILE) : undefined;
 
   if (mode === 'version') {
-    const next = nextRelease(previous, parts, readSettings(), new Date().toISOString().slice(0, 10));
+    const names = readNames();
+    const next = nextRelease(previous, parts, readSettings(), new Date().toISOString().slice(0, 10), names);
     if (next === previous) return console.log(`AUGUR stays at ${previous.version}: no part changed.`);
     write(next);
-    console.log(`AUGUR ${previous?.version ?? '(none)'} → ${next.version}${next.breaking.length ? ' (breaking)' : ''}.`);
+    console.log(`AUGUR ${previous?.version ?? '(none)'} → ${titleOf(next)}${next.breaking.length ? ' (breaking)' : ''}.`);
+    if (!next.name && names.length) console.warn(`::warning::${NAMES_FILE} has no name left for AUGUR ${next.version}: add more at the end.`);
   } else if (mode === 'dev') {
     // In this checkout only: the images, the registry's own idea of its release and the release say the dev build's version.
     const build = devBuild(previous, parts, readSettings(), pendingChangesets(), process.argv[3], new Date().toISOString().slice(0, 10));
@@ -308,7 +334,7 @@ const main = () => {
     const pre = previous.channel !== 'stable' || process.env.RELEASE_BRANCH === 'preview';
     execFileSync(
       'gh',
-      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${previous.version}${previous.channel === 'beta' ? ' (beta)' : previous.channel === 'dev' ? ' (dev build)' : ''}`, '--notes-file', notesFile, ...(pre ? ['--prerelease'] : ['--latest']), asset],
+      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${titleOf(previous)}${previous.channel === 'beta' ? ' (beta)' : previous.channel === 'dev' ? ' (dev build)' : ''}`, '--notes-file', notesFile, ...(pre ? ['--prerelease'] : ['--latest']), asset],
       { cwd: root, stdio: 'inherit' },
     );
     console.log(`Released ${tag}.`);

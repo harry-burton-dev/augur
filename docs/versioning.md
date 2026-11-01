@@ -46,6 +46,7 @@ A deployment runs many parts at once, so it is on one **AUGUR version**, such as
 | Field | Meaning |
 | --- | --- |
 | `version` | The AUGUR version. |
+| `name` | Its release name, from `release/names.json` (birds, A to Z): each new minor or major takes the next one and a patch keeps its release's, so AUGUR 0.14.0 and 0.14.1 are both *Avocet*. It's shown beside the version and never used in place of it. Add names at the end of the list, and never reorder one already used. |
 | `channel` | `beta` while AUGUR is 0.x, then `stable`. |
 | `upgradeFrom` | The AUGUR versions a deployment can upgrade from in one step. After a breaking release, only the release before it. |
 | `changed` | The parts this release moves. |
