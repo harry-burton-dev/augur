@@ -325,6 +325,47 @@
   .augur-dialog-cancel kbd {
     font: inherit; font-size: var(--type-small); line-height: 1; padding: 3px 6px; border: 1px solid var(--hairline-strong); border-radius: var(--radius-key);
   }
+
+  /* Menus: a short list of actions from a button, on a near-opaque surface. */
+  .augur-menu { min-width: 200px; max-width: 320px; padding: var(--space-1); background: var(--surface-overlay); border-color: var(--hairline-strong); border-radius: var(--radius-card); box-shadow: var(--shadow-overlay); }
+  .augur-menu-item {
+    display: flex; align-items: center; gap: var(--space-3); min-height: var(--target-sm); padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-key); color: var(--ink); font-size: var(--type-meta); line-height: var(--leading-meta); cursor: pointer; outline: none;
+  }
+  .augur-menu-item[data-focused], .augur-menu-item[data-hovered] { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .augur-menu-item[data-focus-visible] { box-shadow: inset 0 0 0 var(--focus-ring) var(--focus); }
+  .augur-menu-item[data-disabled] { cursor: default; }
+  .augur-menu-item[data-disabled] .augur-menu-icon, .augur-menu-item[data-disabled] .augur-menu-label, .augur-menu-item[data-disabled] .augur-menu-key { opacity: 0.4; }
+  .augur-menu-item[data-danger] { color: var(--danger); }
+  .augur-menu-icon { flex: none; color: var(--ink-muted); }
+  .augur-menu-item[data-danger] .augur-menu-icon { color: var(--danger); }
+  .augur-menu-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .augur-menu-why { font-size: var(--type-small); line-height: var(--leading-small); color: var(--ink-muted); }
+  .augur-menu-key { font: inherit; font-size: var(--type-label); color: var(--ink-muted); }
+  .augur-menu-line { border: 0; border-top: 1px solid var(--hairline); margin: var(--space-1) 0; }
+
+  /* Tabs: views of one thing, with an ink rule under the one you're on. */
+  .augur-tabs { display: flex; flex-direction: column; gap: var(--space-5); }
+  .augur-tab-list { display: flex; gap: var(--space-5); border-bottom: 1px solid var(--hairline); overflow-x: auto; }
+  .augur-tab {
+    position: relative; display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--target-sm); padding: var(--space-2) 0;
+    font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); white-space: nowrap; cursor: pointer; outline: none;
+    transition: color var(--motion-base) var(--ease-standard);
+  }
+  .augur-tab[data-hovered] { color: var(--ink); }
+  .augur-tab[data-selected] { color: var(--ink); }
+  .augur-tab::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 1px; background: var(--ink);
+    transform: scaleX(0); transition: transform var(--motion-base) var(--ease-standard);
+  }
+  .augur-tab[data-selected]::after { transform: none; }
+  .augur-tab[data-focus-visible] { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); border-radius: var(--radius-key); }
+  .augur-tab[data-unavailable] { opacity: 0.4; }
+  .augur-tab[data-unavailable][data-selected] { opacity: 1; }
+  .augur-tab-count { font-variant-numeric: tabular-nums; color: var(--ink-muted); }
+  .augur-tab-panel { outline: none; }
+  .augur-tab-panel[data-focus-visible] { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+  .augur-tab-why { margin: 0; max-width: var(--measure-prose); color: var(--ink-muted); }
 }
 
 @keyframes augur-spin { to { transform: rotate(1turn); } }

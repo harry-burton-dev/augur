@@ -20,3 +20,5 @@ export { Checkbox, CheckboxGroup, type CheckboxProps, type CheckboxGroupProps } 
 export { Heading, type HeadingProps } from './heading.js';
 export { Dialog, type DialogProps, type DialogSubmit } from './dialog.js';
 export { FieldChecks, useFieldCheck, type FieldChecker } from './field.js';
+export { Menu, type MenuAction, type MenuEntry, type MenuProps } from './menu.js';
+export { Tabs, TabList, Tab, TabPanel, type TabsProps, type TabProps } from './tabs.js';
