@@ -14,7 +14,9 @@ layout yet.
    deviating part until he accepts it (ADR 0001).
 2. **The task:** its Linear issue (team PER, initiative AUGUR).
 3. **Product, principles, naming, how we work:** the AUGUR handbook, Google
-   Drive folder "Augur". Its Decision register lists every decision.
+   Drive folder "Augur", starting from its "Start here" document
+   (https://drive.google.com/drive/folders/1CDGBoi620UrDG3DY2biDXIHrpA8dICDh).
+   Its Decision register lists every ADR and PDR; add a row when you add one.
 4. **Guides:** `docs/` has one guide per topic; update the matching guide in
    the same PR.
 
