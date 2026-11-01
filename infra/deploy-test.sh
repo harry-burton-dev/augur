@@ -16,6 +16,7 @@ mode=${1:?usage: infra/deploy-test.sh fresh | upgrade <from-version>}
 from=${2:-}
 here=$(cd "$(dirname "$0")" && pwd)
 deploy="$here/deploy"
+dir=$deploy
 project=${PROJECT:-augur-deploy-test}
 local_tag=${LOCAL_TAG:-ci}
 port=${WEB_PORT:-8088}
@@ -42,7 +43,19 @@ cleanup() {
 trap cleanup EXIT
 
 # Every secret in .env.example gets a new random value; the rest are what a small server would set.
-sed -e '/^#/d' -e '/^$/d' "$deploy/.env.example" | while IFS='=' read -r key value; do
+# An upgrade starts from the release's own deploy files, as a server that checked out its tag has them.
+dir=$deploy
+if [ "$mode" = upgrade ] && [ -n "$from" ]; then
+  tag="augur@$from"
+  git -C "$here/.." rev-parse -q --verify "refs/tags/$tag" >/dev/null || git -C "$here/.." fetch -q --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+  mkdir -p "$work/from"
+  git -C "$here/.." archive "$tag" infra/deploy | tar -x -C "$work/from"
+fi
+old_deploy="$work/from/infra/deploy"
+
+# Both releases' settings, the newer one's first: an admin adds the new keys before upgrading.
+cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_deploy/.env.example" ) |
+  sed -e '/^#/d' -e '/^$/d' | awk -F= '!seen[$1]++' | while IFS='=' read -r key value; do
   case "$key" in
     PLATFORM_URL) value="http://localhost:$port" ;;
     TS_AUTHKEY) value=unused ;;
@@ -62,10 +75,18 @@ services:
     ports: ["127.0.0.1:$port:8080"]
 EOF
 
+# Compose on the deploy files in use: this checkout's, or the old release's. Volumes are named after
+# the project, so both see the same data, as on a server.
 pc() {
-  docker compose -p "$project" -f "$deploy/compose.yml" -f "$deploy/compose.build.yml" -f "$work/compose.test.yml" --env-file "$deploy/.env" "$@"
+  local files=(-f "$dir/compose.yml")
+  [ -e "$dir/compose.build.yml" ] && files+=(-f "$dir/compose.build.yml")
+  docker compose -p "$project" "${files[@]}" -f "$work/compose.test.yml" --env-file "$dir/.env" "$@"
 }
-set_version() { sed -i "s/^PLATFORM_VERSION=.*/PLATFORM_VERSION=$1/" "$deploy/.env"; }
+# Which release's deploy files and images to run: this checkout's, or the one it upgrades from.
+use() {
+  if [ "$1" = "$local_tag" ]; then dir=$deploy; else dir=$old_deploy; cp "$deploy/.env" "$dir/.env"; fi
+  sed -i "s/^PLATFORM_VERSION=.*/PLATFORM_VERSION=$1/" "$dir/.env"
+}
 services() { pc config --services | grep -vx tailscale; }
 
 # Each service's /healthz, as the compose network sees it, from a container that has Node.
@@ -145,7 +166,7 @@ fi
 
 case "$mode" in
   fresh)
-    set_version "$local_tag"
+    use "$local_tag"
     up
     wait_ready "Fresh install of this checkout"
     no_restarts
@@ -153,7 +174,7 @@ case "$mode" in
     ;;
   upgrade)
     [ -n "$from" ] || { echo "upgrade needs the release to start from, such as 0.13.1" >&2; exit 2; }
-    set_version "$from"
+    use "$from"
     pc pull --quiet $(services) >&2
     up
     old=$(wait_ready "augur@$from")
@@ -161,7 +182,7 @@ case "$mode" in
     on_version "$from"
     tables > "$work/before"
 
-    set_version "$local_tag"
+    use "$local_tag"
     up
     new=$(wait_ready "Upgrade from augur@$from to this checkout")
     no_restarts
@@ -172,7 +193,7 @@ case "$mode" in
     echo "Versions after:  $new" >&2
 
     # A server can always go back to the release it came from, so its tables must still work for it.
-    set_version "$from"
+    use "$from"
     up
     wait_ready "Back to augur@$from" >/dev/null
     no_restarts

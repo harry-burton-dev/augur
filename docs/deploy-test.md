@@ -7,7 +7,7 @@ The **Deploy test** workflow (`.github/workflows/deploy-test.yml`) runs it on ev
 ## What it checks
 
 1. **A fresh server.** Every part starts on empty volumes. Each service's `/healthz` answers, the front door serves the shell, sign-in (`/sso/realms/platform/.well-known/openid-configuration`) and each pillar app's frontend, and no container keeps restarting.
-2. **An upgrade.** The newest `augur@` release (dev builds aside) starts first and is left to fill its tables, then the commit's images replace it, as `pc up -d` does on a server. The same checks pass, every service reports its new version, and no table that had rows is gone or empty.
+2. **An upgrade.** The newest `augur@` release (dev builds aside) starts first, from its own tag's deploy files as a server that checked it out has them, and is left to fill its tables, then the commit's images replace it, as `pc up -d` does on a server. The same checks pass, every service reports its new version, and no table that had rows is gone or empty.
 3. **Going back.** The release it came from starts again on the upgraded data (docs/upgrade.md, "Going back"). This is what the migration rules in [versioning.md](versioning.md#database-migrations) promise, now tried for real.
 
 Tailscale isn't started: the front door is published on `localhost:8088` instead. The test's own `.env` has new random secrets each time.
