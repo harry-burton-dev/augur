@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Button, ListBox, ListBoxItem, Popover, Select as AriaSelect, SelectValue, type Key } from 'react-aria-components';
 import { cx } from './cx.js';
-import { FieldHead, FieldHint, NEEDS_YOU, shownState, useMessage, useValue, type FieldProps, type FieldState } from './field.js';
+import { FieldHead, FieldHint, NEEDS_YOU, shownState, useMessage, useValue, type FieldProps, type FieldState, useFieldCheck } from './field.js';
 import { Icon } from './icon.js';
 import { useReason, warnNoReason } from './reason.js';
 
@@ -45,6 +45,17 @@ export function Select({ label, hint, required, optional, disabled, reason, stat
   const shown = shownState(state, message || (none ? empty : undefined), own);
   const { reasoned, describe, caption } = useReason(disabled, reason);
   const { describedBy, line } = useMessage(shown.message);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useFieldCheck({
+    check: () => {
+      if (!required || picked != null || reasoned || readOnly) return true;
+      setOwn({ state: 'attention', message: NEEDS_YOU });
+      return false;
+    },
+    focus: () => trigger.current?.focus(),
+    name,
+    value: () => picked ?? '',
+  });
   const key = useRef({});
   warnNoReason(key.current, `Select "${label}"`, disabled, reason);
 
@@ -80,6 +91,7 @@ export function Select({ label, hint, required, optional, disabled, reason, stat
       <FieldHead label={label} required={required} optional={optional} />
       <FieldHint hint={hint} />
       <Button
+        ref={trigger}
         className="augur-field-box augur-select-box"
         {...describe}
         aria-describedby={[describe['aria-describedby'], describedBy].filter(Boolean).join(' ') || undefined}

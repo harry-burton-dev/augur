@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Input, TextArea, TextField as AriaTextField } from 'react-aria-components';
 import { cx } from './cx.js';
-import { FieldHead, FieldHint, NEEDS_YOU, StateMark, shownState, useMessage, useValue, type FieldCheck, type FieldProps, type FieldState } from './field.js';
+import { FieldHead, FieldHint, NEEDS_YOU, StateMark, shownState, useMessage, useValue, type FieldCheck, type FieldProps, type FieldState, useFieldCheck } from './field.js';
 import { useReason, warnNoReason } from './reason.js';
 
 export interface TextFieldProps extends FieldProps {
@@ -48,10 +48,16 @@ export function TextField({
   warnNoReason(key.current, `TextField "${label}"`, disabled, reason);
 
   const check = (v: string) => {
-    if (required && !v.trim()) return setOwn({ state: 'attention', message: NEEDS_YOU });
+    if (required && !v.trim()) {
+      setOwn({ state: 'attention', message: NEEDS_YOU });
+      return false;
+    }
     const result = v ? validate?.(v) : null;
     setOwn(result ? { state: result.state, message: result.message } : { state: showValid && v ? 'valid' : 'idle' });
+    return result?.state !== 'error';
   };
+  const input = useRef<HTMLInputElement>(null);
+  useFieldCheck({ check: () => reasoned || readOnly || check(text), focus: () => (area.current ?? input.current)?.focus(), name, value: () => text });
 
   const grow = () => {
     const el = area.current;
@@ -100,7 +106,7 @@ export function TextField({
         {multiline ? (
           <TextArea ref={area} rows={rows} placeholder={placeholder} className="augur-input" aria-disabled={describe['aria-disabled']} />
         ) : (
-          <Input placeholder={placeholder} className="augur-input" aria-disabled={describe['aria-disabled']} />
+          <Input ref={input} placeholder={placeholder} className="augur-input" aria-disabled={describe['aria-disabled']} />
         )}
         <StateMark state={shown.state} />
       </div>

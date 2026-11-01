@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Label, Text } from 'react-aria-components';
 import { Icon } from './icon.js';
 
@@ -96,3 +96,29 @@ export function useMessage(message: string | undefined) {
 /** The state to show: the one set from outside while it isn't idle, then the field's own check, then idle with any message given. */
 export const shownState = (state: FieldState | undefined, message: string | undefined, own: { state: FieldState; message?: string }) =>
   state && state !== 'idle' ? { state, message } : own.state !== 'idle' ? own : { state: 'idle' as FieldState, message };
+
+/** What a field tells the form around it, so the form's primary can check every field and go to the first gap. */
+export interface FieldChecker {
+  /** Check now and show the result. True when nothing needs fixing. */
+  check(): boolean;
+  focus(): void;
+  name?: string;
+  value(): string;
+}
+
+/** The fields inside a form (a Dialog's, for one), in the order they mounted. */
+export const FieldChecks = createContext<Set<{ current: FieldChecker }> | null>(null);
+
+/** Tell the surrounding form about this field, if there is one. */
+export function useFieldCheck(checker: FieldChecker) {
+  const checks = useContext(FieldChecks);
+  const latest = useRef(checker);
+  latest.current = checker;
+  useEffect(() => {
+    if (!checks) return;
+    checks.add(latest);
+    return () => {
+      checks.delete(latest);
+    };
+  }, [checks]);
+}
