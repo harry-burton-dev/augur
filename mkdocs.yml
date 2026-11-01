@@ -50,3 +50,4 @@ nav:
       - 0021. Feature flags use OpenFeature with flagd: decisions/0021-feature-flags-openfeature-flagd.md
       - 0022. Upgrades need a deployment or app admin role and a step-up sign-in: decisions/0022-upgrade-roles-step-up.md
       - 0023. The air-gap bundle is a standard OCI image layout: decisions/0023-air-gap-bundle-oci-layout.md
+      - 0030. The Upgrade Centre is its own platform frontend, released with AUGUR: decisions/0030-upgrade-centre-platform-frontend.md

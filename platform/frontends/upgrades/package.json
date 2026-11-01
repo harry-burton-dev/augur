@@ -1,0 +1,21 @@
+{
+  "name": "@augur/upgrades",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Upgrade Centre: what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Its state model comes first; the screens follow on the app kit.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@augur/mfe-sdk": "workspace:*",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}
