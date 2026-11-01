@@ -9,6 +9,9 @@ import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from '.
 import { TeamDirectory } from './teams.ts';
 import { floorsFor, MemoryWorkspaceStore, rollupFor, type WorkspaceStore } from './workspaces.ts';
 
+/** Names the organisation's floor in `/workspaces/:id`; floor ids are random hex, so it can't clash with one. */
+const ORG_FLOOR = 'org';
+
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
@@ -82,12 +85,14 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
        * Where a floor sits, for the platform's own services: its kind and the
        * ids from its root down to it. The registry and events store only a
        * floor's id and ask here for the rest. `org` is the floor every rule
-       * starts from, a personal floor included.
+       * starts from, a personal floor included. `org` in place of an id names
+       * the organisation's own floor, for a call that names no floor.
        */
       app.get<{ Params: { id: string } }>('/workspaces/:id', async (req, reply) => {
         if (!(await platformOnly(req, reply))) return reply;
         await teams?.ready();
-        const [floor, org] = await Promise.all([workspaces.workspace(req.params.id), workspaces.org()]);
+        const org = await workspaces.org();
+        const floor = req.params.id === ORG_FLOOR ? org : await workspaces.workspace(req.params.id);
         if (!floor) return reply.code(404).send({ error: 'not_found', message: 'There is no such floor.' });
         return { id: floor.id, kind: floor.kind, path: floor.path, org: org.id, ...(floor.archivedAt ? { archivedAt: floor.archivedAt } : {}) };
       });
