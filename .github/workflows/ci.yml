@@ -103,14 +103,58 @@ jobs:
       - run: pnpm test --concurrency=${{ steps.fit.outputs.tests }}
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
-      - run: pnpm --filter @augur/ui-kit build-storybook
-      # The pull request's Storybook, to look through before it merges: download "storybook" from the run, unzip it and serve the folder (`npx serve`).
-      - if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+
+  # The kits' Storybook, published to Chromatic (ADR 0016), only when a kit's code, tokens or stories
+  # change: on a pull request, or on the push to main that brings the change in. Chromatic hosts each build, links it from the pull request, and shows
+  # what looks different there to accept or deny. TurboSnap (--only-changed) snapshots only the
+  # stories whose code changed, to stay inside the free tier. The job still reports when it has
+  # nothing to do, so it can be a required check.
+  storybook:
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
         with:
-          name: storybook
-          path: platform/packages/ui-kit/storybook-static
-          retention-days: 14
+          fetch-depth: 0
+      - name: Should the Storybook be published?
+        id: kits
+        run: |
+          # A pull request against where it left main; a push to main against the push before it.
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then range="origin/$BASE...HEAD"; else range="$BEFORE..HEAD"; fi
+          if [ -z "$CHROMATIC_PROJECT_TOKEN" ]; then
+            echo "::notice title=Storybook not published::The CHROMATIC_PROJECT_TOKEN repository secret isn't set, so nothing goes to Chromatic. A repository admin adds it in Settings, Secrets and variables, Actions (ADR 0016)."
+          elif ! git rev-parse -q --verify "${range%%..*}^{commit}" >/dev/null || ! git diff --quiet "$range" -- \
+              platform/packages/ui-kit/src platform/packages/ui-kit/.storybook \
+              platform/packages/kit-common/src platform/packages/kit-common/tokens \
+              platform/packages/app-kit/src platform/packages/shell-kit/src; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No kit or story changed: Chromatic keeps the Storybook it has."
+          fi
+        env:
+          BASE: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+      - if: steps.kits.outputs.run == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.kits.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: steps.kits.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.kits.outputs.run == 'true'
+        run: pnpm turbo run build --filter=@augur/ui-kit... --filter=@augur/app-kit... --filter=@augur/shell-kit...
+      # --stats-json tells TurboSnap which stories each changed file reaches.
+      - if: steps.kits.outputs.run == 'true'
+        run: pnpm --filter @augur/ui-kit build-storybook --stats-json
+      # A pull request's visual changes are accepted or denied in Chromatic, on its own check;
+      # this job only fails if the build can't be published. Main's build is the new baseline.
+      - if: steps.kits.outputs.run == 'true'
+        working-directory: platform/packages/ui-kit
+        run: pnpm exec chromatic --storybook-build-dir storybook-static --only-changed --exit-zero-on-changes --auto-accept-changes main
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
 
   # Folio's rendition worker, in Python: its tests against a real Postgres with Folio's
   # schema, PDFs included (Docling fetches its models once; they're cached), and its image
@@ -260,7 +304,7 @@ jobs:
       - if: steps.shell.outputs.run == 'true'
         run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
       - if: steps.shell.outputs.run == 'true'
-        run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
+        run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/shell^... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
       # The browser is cached by Playwright version. No --with-deps: the runner image
       # already has Chrome's system libraries, and apt-get was the slow, uneven part
       # (half a minute on a good day, twelve on a bad one).

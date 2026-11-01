@@ -1,4 +1,5 @@
-export { tokens, token, type TokenName } from './generated/tokens.js';
+// Tokens live in Common now (ADR 0015); the Lit kit passes them on unchanged through SDK 1.x.
+export { tokens, token, type TokenName } from '@augur/kit-common/tokens';
 export { reducedMotion } from './shared.js';
 export { motionMode, finishMotion, moving, liftGhost, type Ghost, type MotionMode } from './motion.js';
 export { UiButton, type ButtonKind } from './components/button.js';

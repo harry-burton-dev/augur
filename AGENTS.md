@@ -66,7 +66,7 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 - Shell behaviour is a rule driven by manifests and floors, never a special
   case for one app or screen.
 - Colours, durations and distances come only from
-  the token files in `platform/packages/ui-kit/tokens/` (`common`, `shell`,
+  the token files in `platform/packages/kit-common/tokens/` (`common`, `shell`,
   `app`; ADR 0015). New `floor-*` tokens must
   also be copied into the design tool Wave is made in (tell Harry).
 - Icons come from Lucide through `icon.ts`. Never hand-write SVG.

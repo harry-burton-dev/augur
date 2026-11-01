@@ -43,6 +43,8 @@ The pull fetches that release's images before anything stops. Each service migra
 
 ## Check
 
+Every release has been through the [deploy test](deploy-test.md) in CI: the release before it is upgraded to it with data, and gone back to. Your server can still differ, so check it yourself too.
+
 - `pc ps` shows each of AUGUR's services as `healthy` about a minute after it starts: Compose asks each one's `/healthz` every 30 seconds. One that stays `unhealthy` or `starting` is the one to look at in `pc logs`.
 - Open **Admin → Status**. Give it a minute: every part should be Running, with the new versions in the Version column.
 - Sign in as yourself and as someone without the admin role, and open an app or two.
@@ -51,6 +53,15 @@ The pull fetches that release's images before anything stops. Each service migra
 ## Release notes that need you
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
+
+### Upgrades follow each unit's policy and window
+
+AUGUR and every installed app now have one record each saying how they take new releases ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)): **Automatic**, **Ask first** or **Hold**; how far Automatic goes (patch releases only, or minor ones too); an optional pin, a version range such as `0.13.x`; and the weekly windows an automatic upgrade may start in. A major release, one that needs a setting only a person can give, or one an earlier try didn't finish always waits for an admin. An upgrade an admin asks for starts at once, whatever the window.
+
+Until an admin changes it, **AUGUR on a production server installs its patch releases by itself on Sunday at 02:00, for two hours**, in the deployment's time zone. On a preview server or the workbench it installs them at any time. Apps keep what they had: patch and minor releases, at any time, with the channel and policy set in Admin → Apps. To change any of it, use the Upgrade Centre (the API is `PUT /platform/units/<unit>/desired-state` in contracts/registry.openapi.yaml); to keep AUGUR's upgrades to the ones you start, set its policy to Ask first.
+
+- Set `DEPLOYMENT_TIME_ZONE` in `.env` to your time zone, such as `Europe/London`. Without it windows are in UTC.
+- A failed upgrade or one that went back by itself stays in the Upgrade Centre's **Needs you** for every admin until one of them marks it looked at.
 
 ### Each platform service gets its own database login
 

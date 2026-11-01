@@ -104,6 +104,8 @@ services:
       KEYCLOAK_CONSOLE: ${KEYCLOAK_CONSOLE:-closed}
       # On the workbench (dev) only, the shell may load an app from a developer's machine on the tailnet.
       SERVER_RING: ${SERVER_RING:-}
+      # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
+      DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
       # Its tailnet is the only one it loads apps from then (infra/deploy/live-origins.envsh).
       PLATFORM_URL: ${PLATFORM_URL}
     depends_on: [gateway, keycloak]
@@ -298,6 +300,8 @@ services:
       PIPELINE_FEED_URL: ${PIPELINE_FEED_URL:-}
       PORTAL_URL: ${PORTAL_URL:-}
       SERVER_RING: ${SERVER_RING:-}
+      # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
+      DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
       # On the workbench, Live on the workbench loads apps only from machines on this address's tailnet.
       PLATFORM_URL: ${PLATFORM_URL}
       ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}

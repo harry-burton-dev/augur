@@ -18,6 +18,7 @@ jobs:
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
     outputs:
       released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') }}
+      augur: ${{ steps.augur.outputs.new == 'true' && steps.augur.outputs.version || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,3 +112,11 @@ jobs:
     needs: release
     if: needs.release.outputs.released == 'true'
     uses: ./.github/workflows/feed.yml
+  # A new AUGUR release is installed fresh, upgraded to from the release before, and gone back
+  # from, with the images just pushed (docs/deploy-test.md). Once per release, nothing rebuilt.
+  deploy-test:
+    needs: release
+    if: needs.release.outputs.augur != ''
+    uses: ./.github/workflows/deploy-test.yml
+    with:
+      to: ${{ needs.release.outputs.augur }}

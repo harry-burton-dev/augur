@@ -47,9 +47,9 @@ if (existsSync(servicePkg)) {
 }
 if (kit) {
   // Tokens, then the kit's TypeScript, then the shared modules the shell serves: each rebuilds when the one before changes.
-  run(['--filter', '@augur/ui-kit', 'exec', 'node', '--watch-path=tokens', 'scripts/build-tokens.mjs']);
+  run(['--filter', '@augur/kit-common', 'exec', 'node', '--watch-path=tokens', 'scripts/build-tokens.mjs']);
   run(['--filter', '@augur/ui-kit', 'exec', 'tsc', '-p', 'tsconfig.json', '--watch', '--preserveWatchOutput']);
-  run(['--filter', '@augur/shell', 'exec', 'vite', 'build', '-c', 'vite.shared.config.ts', '--watch']);
+  run(['--filter', '@augur/shell', 'exec', 'vite', 'build', '-c', 'vite.shared.config.ts', '--mode', 'development', '--watch']);
 }
 // Live on the workbench: this machine's name on the tailnet, which `tailscale serve` answers on with https.
 let liveEnv = {};

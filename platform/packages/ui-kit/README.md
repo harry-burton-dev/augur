@@ -1,6 +1,6 @@
 # @augur/ui-kit
 
-The platform's UI kit: design tokens generated from the Wave design system and Lit web components rebuilt from its specs. Works in any framework.
+AUGUR's Lit kit. It is **frozen** (ADR 0015): served unchanged through SDK 1.x so apps keep working, fixed but not added to, and dropped in SDK 2. New parts go into the React kits on Common (`@augur/kit-common`): Quill (`@augur/app-kit`) for apps and Aerie (`@augur/shell-kit`) for the shell. Its tokens come from Common's token files.
 
 ```sh
 pnpm --filter @augur/ui-kit storybook        # catalogue at http://localhost:6006

@@ -649,6 +649,79 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PlatformUpdates" }
         "403": { description: Not an admin }
+  /platform/overview:
+    get:
+      summary: Every unit this server runs, with its desired state, what's next and what needs an admin (admins only)
+      description: >
+        AUGUR first, then each app the app runner installed. Each unit has its desired state (ADR 0020):
+        channel, policy, how far Automatic goes, a semver pin and the weekly windows an automatic upgrade
+        may start in, with whether a window is open now. Needs you lists a halted release being run, and
+        a failed or went-back result until an admin marks it looked at.
+      responses:
+        "200":
+          description: The overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Overview" }
+        "403": { description: Not an admin }
+  /platform/units/{unit}/desired-state:
+    put:
+      summary: Set how a unit takes new releases (admins only)
+      description: >
+        `unit` is augur or an installed app's id. AUGUR's channel comes from RELEASE_CHANNEL, so a
+        different one is refused with 409; a production server's apps follow stable only (409
+        production_server). Without timeZone the record takes the deployment's (DEPLOYMENT_TIME_ZONE).
+        Kept in the unit's history and audited as platform.desired-state-set, with the record before.
+      parameters:
+        - { name: unit, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DesiredStateInput" }
+      responses:
+        "200":
+          description: The overview, with the new record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Overview" }
+        "400": { description: "A bad pin, time zone or window, with how to write it" }
+        "403": { description: Not an admin }
+        "404": { description: This server runs no such unit }
+        "409": { description: "AUGUR's channel is set in .env, or a production server's apps follow stable only" }
+  /platform/units/{unit}/desired-state/history:
+    get:
+      summary: The records a unit has had, newest first (admins only, at most 50)
+      parameters:
+        - { name: unit, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unit, history]
+                properties:
+                  unit: { type: string }
+                  history: { type: array, items: { $ref: "#/components/schemas/DesiredState" } }
+        "403": { description: Not an admin }
+        "404": { description: This server runs no such unit }
+  /platform/results/{kind}/{id}/seen:
+    post:
+      summary: Mark a finished upgrade or app install looked at, for every admin (admins only)
+      description: It leaves Needs you. Audited as platform.result-seen.
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string, enum: [upgrade, app-job] } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Overview" }
+        "403": { description: Not an admin }
+        "404": { description: No finished upgrade or job with that id }
   /platform/go-back:
     put:
       summary: Go back to an earlier AUGUR release (admins who just entered their password)
@@ -1367,6 +1440,88 @@ components:
         reason: { type: string }
         at: { type: string, format: date-time }
         by: { type: string, description: Who halted it }
+    UpgradeWindow:
+      type: object
+      description: A weekly slot an automatic upgrade may start in, in the unit's time zone
+      required: [day, start, hours]
+      properties:
+        day: { type: integer, minimum: 0, maximum: 6, description: 0 is Sunday }
+        start: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", description: "HH:MM, 24-hour" }
+        hours: { type: number, minimum: 1, maximum: 24 }
+    DesiredStateInput:
+      type: object
+      additionalProperties: false
+      required: [channel, policy, automaticUpTo, windows]
+      properties:
+        channel: { type: string, enum: [stable, beta, dev] }
+        policy: { type: string, enum: [automatic, ask, hold], description: "automatic installs what it reaches by itself; ask waits for an admin; hold offers nothing" }
+        automaticUpTo: { type: string, enum: [patch, minor], description: How far Automatic goes. A major always waits for an admin. }
+        pin: { type: string, description: "A semver range the unit stays within, such as 0.13.x" }
+        windows: { type: array, maxItems: 14, items: { $ref: "#/components/schemas/UpgradeWindow" }, description: When an automatic upgrade may start; none means at any time }
+        timeZone: { type: string, description: "An IANA time zone; absent takes the deployment's" }
+    DesiredState:
+      allOf:
+        - $ref: "#/components/schemas/DesiredStateInput"
+        - type: object
+          required: [unit, setBy, setAt]
+          properties:
+            unit: { type: string }
+            setBy: { type: string, description: "Who set it; default for a unit nobody has set" }
+            setAt: { type: string, format: date-time }
+    Overview:
+      type: object
+      required: [ring, timeZone, feed, units, needsYou]
+      properties:
+        ring: { $ref: "#/components/schemas/ServerRing" }
+        timeZone: { type: string, description: The deployment's (DEPLOYMENT_TIME_ZONE) }
+        feed: { type: string, enum: ["on", "off"] }
+        feedTrust: { $ref: "#/components/schemas/FeedTrust" }
+        checkedAt: { type: string, format: date-time }
+        units:
+          type: array
+          items:
+            type: object
+            required: [unit, name, running, desired, policy, window]
+            properties:
+              unit: { type: string, description: augur, or an app's id }
+              name: { type: string }
+              running: { type: string }
+              available: { type: string, description: The newest release on its channel, when newer }
+              halted: { $ref: "#/components/schemas/Halt" }
+              desired:
+                allOf:
+                  - $ref: "#/components/schemas/DesiredState"
+                  - type: object
+                    required: [timeZone, isDefault]
+                    properties: { isDefault: { type: boolean, description: Nobody has set it; these are the defaults } }
+              policy: { type: string, description: The record in a sentence }
+              window: { type: object, required: [open], properties: { open: { type: boolean }, nextAt: { type: string, format: date-time } } }
+              automatic: { type: object, description: "What Automatic does with the next release: takes it, or why it waits", properties: { takes: { type: string }, waits: { type: string } } }
+              open: { type: object, required: [id, state], properties: { id: { type: string }, version: { type: string }, state: { type: string, enum: [requested, running] } } }
+              lastResult: { $ref: "#/components/schemas/UnitResult" }
+        needsYou:
+          type: array
+          items:
+            type: object
+            required: [kind, unit, message]
+            properties:
+              kind: { type: string, enum: [halted, failed, went-back] }
+              unit: { type: string }
+              message: { type: string }
+              result: { type: object, required: [kind, id], properties: { kind: { type: string, enum: [upgrade, app-job] }, id: { type: string } }, description: The result to mark looked at }
+    UnitResult:
+      type: object
+      required: [kind, id, state, finishedAt]
+      properties:
+        kind: { type: string, enum: [upgrade, app-job] }
+        id: { type: string }
+        from: { type: string }
+        version: { type: string }
+        state: { type: string, enum: [done, rolled-back, failed, cancelled] }
+        message: { type: string }
+        finishedAt: { type: string, format: date-time }
+        seenBy: { type: string }
+        seenAt: { type: string, format: date-time }
     FeedTrust:
       type: object
       description: "How far the release feed this server read can be trusted (ADR 0017)"
