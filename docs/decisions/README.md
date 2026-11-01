@@ -35,5 +35,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0027](0027-runs-is-the-jobs-engine.md) | The runs service also runs ordinary background jobs | Proposed | 2026-11-01 |
 | [0028](0028-discussion-starts-in-intent.md) | Discussion starts inside Intent behind a ref-keyed API | Proposed | 2026-11-01 |
 | [0029](0029-reserve-focus-and-marking.md) | The SDK reserves a working context and a protective marking now | Proposed | 2026-11-01 |
+| [0032](0032-platform-apps-and-pillar-apps.md) | Apps that ship with AUGUR are platform apps or pillar apps | Proposed | 2026-11-01 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

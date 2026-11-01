@@ -3,7 +3,7 @@ apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
   name: auspex
-  title: Auspex
+  title: Explorer
   description: Where you are on AUGUR, who’s there, and why you can or can’t use things
   annotations:
     github.com/project-slug: harry-burton-dev/im-platform
@@ -17,7 +17,7 @@ metadata:
     augur.dev/scopes: people:read,events:subscribe
   links:
     - url: https://github.com/harry-burton-dev/im-platform/tree/dev/docs/auspex.md
-      title: Auspex guide
+      title: Explorer guide
 spec:
   owner: group:default/augur-core
   domain: augur
@@ -72,8 +72,8 @@ apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: auspex-intents
-  title: Auspex intents
-  description: What other apps can ask Auspex for, through ctx.raise or ctx.request
+  title: Explorer intents
+  description: What other apps can ask Explorer for, through ctx.raise or ctx.request
 spec:
   type: augur-intent
   lifecycle: experimental

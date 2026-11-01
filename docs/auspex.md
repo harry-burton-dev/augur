@@ -1,6 +1,6 @@
-# Auspex
+# Explorer
 
-Auspex shows people where they are on AUGUR: the floors they can go to and why, who's on each, which apps they can use there, and why an app is off. It ships with AUGUR, like Folio (a pillar app), at `/auspex`. It changes nothing: every screen says who can make a change instead.
+Explorer shows people where they are on AUGUR: the floors they can go to and why, who's on each, which apps they can use there, and why an app is off. It is a platform app, one of the apps for using and managing AUGUR itself, and ships with every deployment at `/auspex` ([ADR 0032](decisions/0032-platform-apps-and-pillar-apps.md)). Its code name is Auspex: its app id, route, intents, packages, container, image and `AUSPEX_*` keys stay `auspex`, so live servers keep working. It changes nothing: every screen says who can make a change instead.
 
 There were two designs: a full explorer, and a quieter one for everyone. This first version builds the second, drawn rather than tabled.
 
@@ -25,13 +25,13 @@ Every screen answers three questions: what am I looking at (the heading), what c
 | --- | --- | --- |
 | Your floors, closed teams, members and leads | identity `GET /v1/me/map` | the person, through the gateway |
 | Each app on a floor and why | registry `GET /v1/me/apps?workspace=` | the person, on that floor (the gateway checks they can stand there) |
-| What changed on a floor | Auspex `GET /v1/changes` | the person, on that floor |
-| Names of whoever set a rule | Auspex `GET /v1/names` | the person |
+| What changed on a floor | Explorer `GET /v1/changes` | the person, on that floor |
+| Names of whoever set a rule | Explorer `GET /v1/names` | the person |
 | Each part's health, and the backups (plant room) | gateway `GET /v1/status` | an admin |
 | The running release, the newest out, and the upgrade under way (plant room) | registry `GET /v1/platform/updates` | an admin |
 | Installs and removals, and previews (plant room) | registry `GET /v1/app-runner/jobs` and `/v1/app-runner/apps` | an admin |
 
-Auspex's own service keeps nothing on disk. It follows `platform.team.*` and `platform.app.*` ([domain-events.md](domain-events.md)) from the start of the events service's 30 days on every start, and remembers them in memory. It shows a floor only its own changes; the org floor also gets app changes made for everyone. Nobody's sign-in being turned on or off is ever shown.
+Explorer's own service keeps nothing on disk. It follows `platform.team.*` and `platform.app.*` ([domain-events.md](domain-events.md)) from the start of the events service's 30 days on every start, and remembers them in memory. It shows a floor only its own changes; the org floor also gets app changes made for everyone. Nobody's sign-in being turned on or off is ever shown.
 
 Intents it handles: `floor.map` (open the map, or `{ floor }` to open on one), `auspex.open` (`{ path }`), and `access.explain`, a request any app can make with `ctx.request`:
 
@@ -46,7 +46,7 @@ await ctx.request({
 });
 ```
 
-The app sends who it lets in, as it already shows them; Auspex adds what it knows about the floors. `principal` is `person:<id>`, `team:<id>`, `tree:<id>` or `org`; entries it can't read are left out. Artifacts raises it from **Who can see it**. When no app handles it, the asking app says so and keeps its own list. Something published up the floors adds `chain` (the floors it came up through, from where it was made) and `shows` (the states it shows there) to its entry, and Auspex says "Up from Payroll through Finance, showing Complete and Issued".
+The app sends who it lets in, as it already shows them; Explorer adds what it knows about the floors. `principal` is `person:<id>`, `team:<id>`, `tree:<id>` or `org`; entries it can't read are left out. Artifacts raises it from **Who can see it**. When no app handles it, the asking app says so and keeps its own list. Something published up the floors adds `chain` (the floors it came up through, from where it was made) and `shows` (the states it shows there) to its entry, and Explorer says "Up from Payroll through Finance, showing Complete and Issued".
 
 ## Running it
 

@@ -137,7 +137,7 @@ Whoever manages a library can also share one folder with **Share** inside it. Wh
 
 ![Who can see a document: no one shared with it alone, and the org through its being published up](images/folio/share.webp)
 
-Whatever has been shared with you appears under **Shared libraries** on every floor of yours: one library for each floor or person that shared something, opening on what they shared, and documents shared on their own beside them. Anyone who can see something can also see who else can. **Who can open this, explained** opens Auspex over Artifacts: each person and team with how many people that is, how it reaches them (its floor, its library, a folder it's in, shared with it alone, or published up, with the floors it came through and what it shows), and everyone else at the org who can't.
+Whatever has been shared with you appears under **Shared libraries** on every floor of yours: one library for each floor or person that shared something, opening on what they shared, and documents shared on their own beside them. Anyone who can see something can also see who else can. **Who can open this, explained** opens Explorer over Artifacts: each person and team with how many people that is, how it reaches them (its floor, its library, a folder it's in, shared with it alone, or published up, with the floors it came through and what it shows), and everyone else at the org who can't.
 
 ### Publishing up the floors
 

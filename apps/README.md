@@ -39,4 +39,4 @@ await notify({ eventsUrl, credentials, workspace, notification: {
 | --- | --- |
 | `folio/` | Folio, the first pillar app: document libraries on your own floor, a team's or the org's, published for people to read in a readable reader view. |
 | `atlas/` | Data Atlas, a pillar app: the entities the organisation keeps track of, fenced by floor, on an ontology from the Common Core Ontologies. |
-| `auspex/` | Auspex, a pillar app: where you are on AUGUR, who's on each floor, and why you can or can't use each app. |
+| `auspex/` | Explorer (code name Auspex), a platform app: where you are on AUGUR, who's on each floor, and why you can or can't use each app. |
