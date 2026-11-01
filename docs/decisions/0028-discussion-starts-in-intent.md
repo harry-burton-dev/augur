@@ -1,8 +1,8 @@
 # 0028. Discussion starts inside Intent behind a ref-keyed API
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
-- **Decided by:** waiting on Harry
+- **Decided by:** Harry
 
 ## Context
 
@@ -13,7 +13,7 @@ Back-briefs on an intent, questions on an artifact and notes on an entity fact a
 1. **A platform discussion service now.**
 2. **Start inside Intent,** with an API keyed by `Ref` (ADR 0025), and lift it into the platform when a second app needs comments.
 
-## Decision (proposed)
+## Decision
 
 Option 2. The API takes a `Ref`, never an Intent-only id, so moving it later doesn't change callers.
 

@@ -165,6 +165,8 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       # Read by the realm file on first start: who you sign in as.
       PLATFORM_URL: ${PLATFORM_URL}
+      # And identity's own sign-in, which manages the realm, so identity never needs Keycloak's admin.
+      IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:?set PLATFORM_ADMIN_USER in .env}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?set PLATFORM_ADMIN_PASSWORD in .env}
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:?set PLATFORM_ADMIN_EMAIL in .env}
@@ -206,12 +208,11 @@ services:
     environment:
       <<: *env
       PORT: 8081
-      # Admin's People screen: identity manages people in Keycloak as its own client, which Keycloak's
-      # admin gives the realm's admin rights as identity starts. Departments are identity's own teams,
-      # copied in once from Keycloak's groups.
+      # Admin's People screen: identity manages people in Keycloak as its own client, whose rights in
+      # the realm come from the realm file. Keycloak's master admin is not in identity's settings; see
+      # docs/deploy.md, "Keycloak's admin", to repair a lost sign-in. Departments are identity's own
+      # teams, copied in once from Keycloak's groups.
       KEYCLOAK_URL: http://keycloak:8080/sso
-      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # What the top floor, the whole organisation, is called.

@@ -1,8 +1,8 @@
 # 0026. The Inbox holds work that waits on someone, apart from notifications
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
-- **Decided by:** waiting on Harry
+- **Decided by:** Harry
 
 ## Context
 
@@ -13,7 +13,7 @@ Notifications tell people things. Nothing holds work that waits on a person or a
 1. **Inbox items as a kind of notification.** Fewer concepts, but notifications have no owner, state or hand-on.
 2. **A separate Inbox:** items have an owner (person or team), a state (open, done, declined, handed on) and a `Ref` back to the app. The events service stores them, the service kit has `inboxItem()`, and the shell shows them.
 
-## Decision (proposed)
+## Decision
 
 Option 2. "Requests" (PER-155) folds into Intent plus the Inbox, so it doesn't need an app of its own.
 

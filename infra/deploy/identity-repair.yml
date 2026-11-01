@@ -1,0 +1,9 @@
+# Give identity Keycloak's master admin for one start, to repair its own sign-in if it has lost its
+# rights in the realm. Use it only when identity's log asks for it (docs/deploy.md, "Keycloak's admin"):
+#   docker compose -f infra/deploy/compose.yml -f infra/deploy/identity-repair.yml --env-file infra/deploy/.env up -d identity
+# then run `pc up -d identity` without it, so the password leaves identity's settings again.
+services:
+  identity:
+    environment:
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
