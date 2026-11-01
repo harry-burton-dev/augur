@@ -44,7 +44,7 @@ const themed = (token, all) => {
   if (group === 'tracking') return [[`--tracking-${n.replace(/^tracking-/, '')}`, v]];
   if (group === 'motion' && n.startsWith('ease-')) return [[`--ease-${n.replace(/^ease-/, '')}`, v]];
   if (group === 'structure' && n.startsWith('measure-')) return [[`--container-${n.replace(/^measure-/, '')}`, v]];
-  if (group === 'structure' && n.startsWith('edge')) return [[`--spacing-${n}`, v]];
+  if (group === 'structure' && (n.startsWith('edge') || n.startsWith('target-'))) return [[`--spacing-${n}`, v]];
   if (group === 'type' && n.startsWith('weight-')) return [[`--font-weight-${n.replace(/^weight-/, '')}`, v]];
   if (group === 'type' && n.startsWith('type-')) {
     // A type role is one utility: its size, with its own leading, tracking and weight when it has them.

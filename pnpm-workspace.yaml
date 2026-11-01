@@ -3,6 +3,7 @@ packages:
   - "platform/services/*"
   - "platform/frontends/*"
   - "platform/contract"
+  - "platform/storybook"
   - "apps/*/*"
 onlyBuiltDependencies:
   - esbuild

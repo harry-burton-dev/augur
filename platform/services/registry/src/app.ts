@@ -69,6 +69,7 @@ import {
   type UpgradeOutcome,
   type UpgradeStepState,
 } from './store.ts';
+import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 
 /** How identity names the organisation's floor, for a call that names none. */
 const ORG_FLOOR = 'org';
@@ -162,6 +163,7 @@ const catalogueEntry = (r: AppRecord, allowed: string[], pillar: boolean) => {
 
 /** How recently an admin must have entered their password to start an upgrade. */
 export const UPGRADE_SIGN_IN_MS = 10 * 60 * 1000;
+
 /** A finished upgrade stays on the Updates page this long. */
 const UPGRADE_SHOWN_MS = 7 * 24 * 60 * 60 * 1000;
 /** The platform service that applies upgrades on a Compose deployment (its Keycloak client is platform-updater). */
@@ -816,7 +818,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can upgrade AUGUR.' });
+          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('upgrade AUGUR'));
           if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
             return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to upgrade. It’s asked for anything this drastic.' });
           }
@@ -858,7 +860,7 @@ export const buildApp = async ({
         { schema: { body: { type: 'object', additionalProperties: false, required: ['version'], properties: { version: { type: 'string', minLength: 1, maxLength: 64 } } } } },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can take AUGUR back to an earlier release.' });
+          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('take AUGUR back to an earlier release'));
           if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
             return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to go back. It’s asked for anything this drastic.' });
           }
@@ -880,7 +882,7 @@ export const buildApp = async ({
       /** Takes back an upgrade the updater hasn't started. One under way can't be stopped halfway. */
       app.delete('/platform/upgrade', async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can upgrade AUGUR.' });
+        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('take back an upgrade'));
         const upgrade = await store.upgrade();
         if (upgrade?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes or rolls back by itself.' });
         if (!upgrade || !(await store.cancelUpgrade(upgrade.id))) return reply.code(404).send({ error: 'not_found', message: 'No upgrade is waiting.' });

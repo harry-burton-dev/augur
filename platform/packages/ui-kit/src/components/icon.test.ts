@@ -36,3 +36,10 @@ describe('ui-icon', () => {
     expect(named.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe('Find');
   });
 });
+
+describe('the React kits', () => {
+  it('know every icon by the same name as the Lit kit', async () => {
+    const common = await import('@augur/kit-common');
+    expect([...common.iconNames].sort()).toEqual([...iconNames].sort());
+  });
+});
