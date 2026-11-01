@@ -25,6 +25,8 @@ import {
   isUnitRef,
   openUnit,
   type UnitRef,
+  isMarkingOrNone,
+  isRef,
 } from './index.js';
 
 describe('event bus', () => {
@@ -186,5 +188,39 @@ describe('entity intents', () => {
     request.mockResolvedValueOnce({ id: 'x' });
     await expect(proposeEntity({ request: request as MountContext['request'] }, offer)).rejects.toMatchObject({ name: 'IntentError' });
     await expect(proposeEntity({ request: request as MountContext['request'] }, { source, text: '' })).rejects.toMatchObject({ name: 'IntentError' });
+  });
+});
+
+describe('refs and markings (SDK 1.10)', () => {
+  const task = { kind: 'ref', app: 'intent', type: 'task', id: 't-1', label: 'Brief the desk' } as const;
+  const marking = { scheme: 'house', label: 'Internal' };
+
+  it('checks a Ref, with or without a marking', () => {
+    expect(isRef(task)).toBe(true);
+    expect(isRef({ ...task, marking })).toBe(true);
+    expect(isRef({ ...task, kind: 'entity' })).toBe(false);
+    expect(isRef({ ...task, app: '' })).toBe(false);
+    expect(isRef({ ...task, marking: 'Internal' })).toBe(false);
+    expect(isRef({ ...task, marking: { scheme: 'house' } })).toBe(false);
+  });
+
+  it('lets every reference carry a marking without changing what it accepts', () => {
+    const doc = { app: 'folio', id: 'd1', title: 'Plan' };
+    const unit = { kind: 'unit', app: 'folio', id: 'lib/u1', level: 'file', name: 'Plan' };
+    const entity = { kind: 'entity', id: 'ent_01HZX0000000000000000000AB', type: 'vessel' };
+    for (const [check, ref] of [
+      [isDocumentRef, doc],
+      [isUnitRef, unit],
+      [isEntityRef, entity],
+    ] as const) {
+      expect(check(ref)).toBe(true);
+      expect(check({ ...ref, marking })).toBe(true);
+      expect(check({ ...ref, marking: { label: 'Internal' } })).toBe(false);
+    }
+  });
+
+  it('accepts no marking at all', () => {
+    expect(isMarkingOrNone(undefined)).toBe(true);
+    expect(isMarkingOrNone(null)).toBe(false);
   });
 });

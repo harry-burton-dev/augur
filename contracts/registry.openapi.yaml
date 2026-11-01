@@ -1468,6 +1468,7 @@ components:
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
         orbit: { type: boolean, description: "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus" }
         sameOnEveryFloor: { type: boolean, description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)" }
+        focus: { type: boolean, description: "true: the app can narrow what it shows to a working context inside the floor, from ctx.focus (SDK 1.10). Reserved: the shell offers none yet (ADR 0029)" }
         previews:
           type: array
           maxItems: 8

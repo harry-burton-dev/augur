@@ -1,5 +1,6 @@
 import type { Intent, MountContext } from './contract.js';
 import { IntentError } from './intents.js';
+import { isMarkingOrNone, type Marking } from './refs.js';
 
 /**
  * The standard document intents (SDK 1.4). Any app may handle them by listing
@@ -22,6 +23,8 @@ export interface DocumentRef {
   version?: string;
   /** What to call it, so the asking app can show it before opening it. */
   title: string;
+  /** Reserved (SDK 1.10, ADR 0029): a protective marking, kept as found and never enforced yet. */
+  marking?: Marking;
 }
 
 /** A library of documents, as apps pass it between them. */
@@ -48,7 +51,7 @@ const text = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 
 export const isDocumentRef = (v: unknown): v is DocumentRef => {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
-  return text(r.app, 40) && text(r.id, 200) && text(r.title, 300) && (r.version === undefined || text(r.version, 40));
+  return text(r.app, 40) && text(r.id, 200) && text(r.title, 300) && (r.version === undefined || text(r.version, 40)) && isMarkingOrNone(r.marking);
 };
 
 /** True for something shaped like a LibraryRef. */
