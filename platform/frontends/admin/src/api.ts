@@ -325,7 +325,7 @@ export interface PlatformUpdates {
 
 /** One step the app runner took (see contracts/registry.openapi.yaml). */
 export interface AppJobStepState {
-  step: 'verify' | 'storage' | 'sign-in' | 'start' | 'health' | 'switch' | 'retire' | 'remove';
+  step: 'verify' | 'storage' | 'sign-in' | 'start' | 'health' | 'switch' | 'watch' | 'retire' | 'remove';
   state: 'running' | 'done' | 'failed';
   at: string;
   message?: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { appSecretFor } from '@augur/service-kit';
-import { appRunner, appsProject, containerEnv, publishersFrom, READY_MS, RETIRE_MS, type AppHost, type AppJob, type JobReport, type PlatformCalls, type RunnerState } from './runner.ts';
+import { APP_WATCH_EVERY_MS, appRunner, appsProject, containerEnv, publishersFrom, READY_MS, RETIRE_MS, type AppHost, type AppJob, type JobReport, type PlatformCalls, type RunnerState } from './runner.ts';
 import { releaseIdentity } from './signers.ts';
 
 const KEY = 'k'.repeat(64);
@@ -134,7 +134,7 @@ describe('the app runner', () => {
     expect(await t.run(install('1.0.0'))).toBe('done');
     expect(t.did).toEqual([`verify ${releaseIdentity('o/r/.github/workflows/release.yml')}`, 'storage notes', 'start app-notes-blue']);
     expect(t.calls.did).toEqual([`credential notes ${appSecretFor(KEY, 'notes', 'sign-in').slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
-    expect(t.state().apps.notes).toEqual({ active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: true, bucket: false } } });
+    expect(t.state().apps.notes).toEqual({ active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: true, bucket: false }, manifest: expect.objectContaining({ id: 'notes', version: '1.0.0' }) } });
     expect(t.reports.at(-1)).toMatchObject({ step: 'retire', outcome: 'done', message: 'Notes 1.0.0 is installed.' });
     expect(t.envFiles()['app-notes-blue']).toContain(`DATABASE_URL=postgres://app_notes:${appSecretFor(KEY, 'notes', 'database')}@postgres:5432/platform`);
     expect(t.envFiles()['app-notes-blue']).toContain('APP_REGISTERED_BY=runner');
@@ -156,6 +156,38 @@ describe('the app runner', () => {
     await t.runner.retireDue();
     expect(t.running.has('app-notes-blue')).toBe(false);
     expect(Object.keys(t.project()!.services)).toEqual(['app-notes-green']);
+  });
+
+  it('watches an upgrade for 5 minutes after the switch, and goes back by itself when it stops answering', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    const wait = t.host.wait;
+    // The new version answers through the health step, then falls over two minutes after the switch.
+    let switchedAt: number | undefined;
+    t.host.wait = async (ms) => {
+      await wait(ms);
+      if (ms === APP_WATCH_EVERY_MS) switchedAt ??= t.clock() - ms;
+      if (switchedAt !== undefined && t.clock() - switchedAt >= 2 * 60_000) t.running.delete('app-notes-green');
+    };
+    t.calls.did.length = 0;
+    expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
+    expect(t.reports.at(-1)).toMatchObject({ step: 'watch', state: 'failed', outcome: 'failed', message: 'Notes 1.1.0 stopped answering after the switch. Back on 1.0.0 by itself.' });
+    expect(t.calls.did.slice(-2)).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
+    expect(t.running.has('app-notes-blue')).toBe(true);
+    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue', version: '1.0.0' }) });
+  });
+
+  it('says so, and leaves it running, when the old version was installed before the runner kept its manifest', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    delete (t.state().apps.notes.active as { manifest?: unknown }).manifest;
+    const wait = t.host.wait;
+    t.host.wait = async (ms) => {
+      await wait(ms);
+      if (ms === APP_WATCH_EVERY_MS) t.running.delete('app-notes-green');
+    };
+    expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
+    expect(t.reports.at(-1)?.message).toBe('Notes 1.1.0 stopped answering after the switch. It didn’t go back by itself: 1.0.0 was installed before the runner kept what it needs to go back. Install 1.0.0 again from Admin → Apps.');
   });
 
   it('leaves the old version serving when the new one doesn’t come up on its version', async () => {
