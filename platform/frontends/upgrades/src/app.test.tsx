@@ -101,6 +101,20 @@ describe('needs you', () => {
     expect(items[0]!.title).toBe('Artifacts runs a halted release');
     expect(items[1]!.result).toEqual({ kind: 'upgrade', id: 'u1' });
   });
+
+  it('asks for AUGUR’s first upgrade on a server by hand, after anything worse', () => {
+    const items = needsYou(
+      overview({
+        needsYou: [
+          { kind: 'first-upgrade', unit: 'augur', message: 'AUGUR 0.13.2 is ready. Automatic starts after an admin has upgraded AUGUR on this server once.' },
+          { kind: 'halted', unit: 'folio', message: 'Uploads fail on 1.0.0.' },
+        ],
+      }),
+      [],
+    );
+    expect(items.map((i) => i.kind)).toEqual(['halted', 'first-upgrade']);
+    expect(items[1]).toMatchObject({ title: 'AUGUR’s first upgrade here is yours to run', action: { verb: 'Upgrade', to: '/augur' } });
+  });
 });
 
 describe('Upgrade Centre', () => {

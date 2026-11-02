@@ -1,4 +1,5 @@
 import semver from 'semver';
+import { isZeroMinor } from './desired-state.ts';
 import type { AppRelease } from './store.ts';
 import { FeedProblem, feedReader, feedSource, haltOf, type FeedChecking, type GitHubRelease, type Halt, type ReadKey } from './updates.ts';
 
@@ -187,6 +188,7 @@ export const updateNeeds = (from: AppRelease, to: AppRelease, sdkVersion: string
   const a = from.manifest;
   const b = to.manifest;
   if (semver.major(to.version) > semver.major(from.version)) needs.push(`${to.version} is a major version: it may change how ${b.name} works.`);
+  else if (isZeroMinor(from.version, to.version)) needs.push(`${to.version} is a 0.x minor version, which may change how ${b.name} works like a major.`);
   const newScopes = (b.scopes ?? []).filter((s) => !(a.scopes ?? []).includes(s));
   if (newScopes.length) needs.push(`It asks for more: ${newScopes.join(', ')}.`);
   if ((b.storage?.database && !a.storage?.database) || (b.storage?.bucket && !a.storage?.bucket)) needs.push('It asks for storage it didn’t have.');

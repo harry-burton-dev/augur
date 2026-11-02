@@ -82,6 +82,9 @@ describe('what an update needs', () => {
       'It needs SDK ^2.0.0, and this AUGUR has 1.3.0.',
     ]);
     expect(updateNeeds(release('1.0.0', { floors: ['org'] }), release('1.0.1'), '1.3.0')).toEqual(['It asks to work on more kinds of floor.']);
+    // A 0.x minor may break things, so it waits like a major (ADR 0020, amended 2 Nov); a 0.x patch doesn't.
+    expect(updateNeeds(release('0.3.2'), release('0.4.0'), '1.3.0')).toEqual(['0.4.0 is a 0.x minor version, which may change how Notes works like a major.']);
+    expect(updateNeeds(release('0.3.2'), release('0.3.3'), '1.3.0')).toEqual([]);
   });
 });
 

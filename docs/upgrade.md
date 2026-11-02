@@ -54,6 +54,13 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### The first upgrade on each server is yours, and a 0.x minor waits for you
+
+Two defaults changed ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md), amended 2 November):
+
+- **Automatic waits for one upgrade by hand.** On each server, AUGUR doesn't upgrade by itself, dev builds included, until an admin has upgraded it there once from the Upgrade Centre and it finished. Until then **Needs you** says so, with **Upgrade**. A server where an admin has already upgraded AUGUR and it finished carries on as before.
+- **A 0.x minor counts as a major.** Under semver a 0.x minor (0.3 to 0.4) may break things, so Automatic takes only 0.x patches, for AUGUR and apps alike. A 0.x minor waits under **Needs you** for an admin, whatever the record says about minors.
+
 ### Reporting to Backstage
 
 From this release a deployment can tell the company's Backstage what it runs ([ADR 0019](decisions/0019-deployment-reporting.md)). Nothing changes until you set it up; until then the Upgrade Centre's Reporting section, under Worth knowing on its front page, says reporting isn't set up and what to set.
@@ -74,7 +81,7 @@ The updater does nothing else in those 10 minutes, so an app install asked for m
 
 ### Upgrades follow each unit's policy and window
 
-AUGUR and every installed app now have one record each saying how they take new releases ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)): **Automatic**, **Ask first** or **Hold**; how far Automatic goes (patch releases only, or minor ones too); an optional pin, a version range such as `0.13.x`; and the weekly windows an automatic upgrade may start in. A major release, one that needs a setting only a person can give, or one an earlier try didn't finish always waits for an admin. An upgrade an admin asks for starts at once, whatever the window.
+AUGUR and every installed app now have one record each saying how they take new releases ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)): **Automatic**, **Ask first** or **Hold**; how far Automatic goes (patch releases only, or minor ones too); an optional pin, a version range such as `0.13.x`; and the weekly windows an automatic upgrade may start in. A major release, a 0.x minor, one that needs a setting only a person can give, or one an earlier try didn't finish always waits for an admin, and nothing starts by itself until an admin has upgraded AUGUR on that server once. An upgrade an admin asks for starts at once, whatever the window.
 
 Until an admin changes it, **AUGUR on a production server installs its patch releases by itself on Sunday at 02:00, for two hours**, in the deployment's time zone. On a preview server or the workbench it installs them at any time. Apps keep what they had: patch and minor releases, at any time, with the channel and policy set in Admin → Apps. To change any of it, use the Upgrade Centre (the API is `PUT /platform/units/<unit>/desired-state` in contracts/registry.openapi.yaml); to keep AUGUR's upgrades to the ones you start, set its policy to Ask first.
 
@@ -243,7 +250,7 @@ Admin → Apps lists, under the catalogue, the apps this repository has released
 Open an installed app to choose how it takes new releases:
 
 - **New releases**: stable only, or betas too.
-- **When one is out**: **Automatic** (the default) installs a newer version by itself when it's a fix or a feature that asks for nothing new: no major version, no new scopes, storage, kinds of floor or bigger uploads, an SDK range this AUGUR opens, and the same signer. Anything else waits under **Needs you** with why. **Ask first** makes every version wait for you, and **Hold** offers none. A version that failed to install isn't tried again by itself.
+- **When one is out**: **Automatic** (the default) installs a newer version by itself when it's a fix or a feature that asks for nothing new: no major version or 0.x minor, no new scopes, storage, kinds of floor or bigger uploads, an SDK range this AUGUR opens, and the same signer. Anything else waits under **Needs you** with why. **Ask first** makes every version wait for you, and **Hold** offers none. A version that failed to install isn't tried again by itself.
 
 The same page follows each job step by step, and **Remove from the server** stops an app's containers; its data stays, and removing it from the catalogue too stops it being listed. Every install, update, removal and choice is in Activity.
 

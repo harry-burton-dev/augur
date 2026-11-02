@@ -1,6 +1,6 @@
 # 0045. Promote to stable asks the portal for bake time over Tailscale
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-02
 - **Decided by:** Harry
 - **Replaces:** none

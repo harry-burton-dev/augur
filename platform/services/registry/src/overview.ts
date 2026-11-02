@@ -8,6 +8,7 @@ import { newestOn, type AppFeedRelease, type AppUpdateChecker } from './app-upda
 import {
   AUGUR_UNIT,
   automaticProblem,
+  firstUpgradeProblem,
   desiredStateProblems,
   MAX_WINDOWS,
   policySentence,
@@ -55,7 +56,7 @@ export interface UnitOverview {
 }
 
 export interface OverviewNeed {
-  kind: 'halted' | 'failed' | 'went-back';
+  kind: 'halted' | 'failed' | 'went-back' | 'first-upgrade';
   unit: string;
   message: string;
   /** The result to mark looked at, for failed and went-back. */
@@ -122,6 +123,8 @@ export const overviewOf = (input: OverviewInput): Overview => {
   };
 
   const augurState = stateOf(AUGUR_UNIT, augur.channel);
+  // Automatic waits for one upgrade by hand on each server (ADR 0020, amended 2 Nov).
+  const firstUpgrade = augurState.policy === 'automatic' ? firstUpgradeProblem(input.upgrades) : undefined;
   const openUpgrade = input.upgrades.find((u) => isOpen(u.state));
   const lastUpgrade = input.upgrades.map(upgradeResult).find(Boolean);
   const halt = augur.needsYou.find((n) => n.kind === 'halted');
@@ -135,7 +138,7 @@ export const overviewOf = (input: OverviewInput): Overview => {
       desired: augurState,
       policy: policySentence(augurState),
       window: windowAt(augurState, now),
-      ...(augur.next ? { automatic: automaticFor(augurState, augur.running.version, augur.next) } : {}),
+      ...(augur.next ? { automatic: firstUpgrade ? { waits: firstUpgrade } : automaticFor(augurState, augur.running.version, augur.next) } : {}),
       ...(openUpgrade ? { open: { id: openUpgrade.id, version: openUpgrade.version, state: openUpgrade.state as 'requested' | 'running' } } : {}),
       ...(lastUpgrade ? { lastResult: lastUpgrade } : {}),
     },
@@ -168,6 +171,7 @@ export const overviewOf = (input: OverviewInput): Overview => {
   const needsYou: OverviewNeed[] = [];
   for (const u of units) {
     if (u.unit === AUGUR_UNIT && halt) needsYou.push({ kind: 'halted', unit: u.unit, message: halt.message });
+    if (u.unit === AUGUR_UNIT && firstUpgrade && augur.next && !u.open) needsYou.push({ kind: 'first-upgrade', unit: u.unit, message: `AUGUR ${augur.next} is ready. ${firstUpgrade}` });
     else if (u.halted) needsYou.push({ kind: 'halted', unit: u.unit, message: `${u.name} ${u.running}, which this server runs, was halted by its publisher: ${u.halted.reason}` });
     const need = resultNeed(u);
     if (need) needsYou.push(need);
