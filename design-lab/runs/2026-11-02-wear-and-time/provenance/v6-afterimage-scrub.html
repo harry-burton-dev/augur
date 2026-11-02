@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provenance · V6 afterimage scrub</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<style>
+/* Proposed tokens (each listed under "needs token" in notes.md) */
+:root{
+  --x-type-micro: .6875rem;                 /* proposed --type-micro */
+  --x-stratum-mix: 34%;                     /* proposed --stratum-mix */
+  --x-seam: color-mix(in srgb, var(--light) 80%, transparent);   /* proposed --mark-seam */
+  --x-fault: var(--warning);                /* proposed --mark-fault */
+  --x-hatch: repeating-linear-gradient(135deg, transparent 0 var(--space-1), var(--hairline-strong) var(--space-1) calc(var(--space-1) + 1px));  /* proposed --mark-stale-hatch */
+  /* focal planes from the cinematic run, reused: the past sits on farther planes */
+  --x-focus-far-blur: 6px; --x-focus-far-saturate: .45; --x-focus-far-dim: .82;
+  --x-afterimage-step: var(--space-5);      /* proposed --afterimage-step: offset per older state */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+body{overflow:hidden}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink)}
+.head{position:fixed;top:var(--edge);left:calc(var(--edge) + var(--space-2))}
+.head h1{margin:var(--space-2) 0 0;font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.head .attr{margin-top:var(--space-1);font-size:var(--type-meta);color:var(--ink-muted);letter-spacing:var(--tracking-soft)}
+.keys{position:fixed;right:var(--edge);top:var(--edge);display:flex;gap:var(--space-3);align-items:center;font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+
+/* stage: the card and its afterimages */
+.stage{position:fixed;left:0;right:0;top:calc(var(--band-top) * 2);bottom:calc(var(--band-bottom) * 2)}
+.card{position:absolute;width:var(--measure-decision);padding:var(--space-4) var(--space-5);border-radius:var(--radius-inset);
+  background:var(--surface-pane);border:1px solid var(--hairline-strong);box-shadow:var(--shadow-raised);
+  transition:transform var(--motion-slow) var(--ease-standard),filter var(--motion-slow) var(--ease-standard),opacity var(--motion-slow) var(--ease-standard)}
+.card .v{font:200 var(--type-display)/var(--leading-display) var(--font-mono);color:var(--light);margin:var(--space-1) 0}
+.card .v small{font:400 var(--type-meta)/1 var(--font-sans);color:var(--ink-muted);margin-left:var(--space-2);letter-spacing:var(--tracking-soft)}
+.card .meta{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.card .meta span{color:var(--ink-muted)}
+.card .badge{display:inline-flex;align-items:center;gap:var(--space-2);margin-top:var(--space-3);font:400 var(--type-small)/1 var(--font-mono);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline)}
+.card .badge.stale{background:var(--x-hatch);color:var(--ink)}
+.card .why{margin-top:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.card.gap{background:var(--x-hatch),var(--surface-pane)}
+.card.gap .v{color:var(--ink-muted)}
+.card .split{display:flex;gap:var(--space-4);align-items:baseline}
+.card .split .v:last-child{transform:translateY(calc(var(--space-2) * -1))}
+.card .split i{font-style:normal;color:var(--x-fault);font:300 var(--type-heading)/1 var(--font-mono)}
+.card .pend{margin:var(--space-4) calc(var(--space-5) * -1) calc(var(--space-4) * -1);padding:var(--space-3) var(--space-5);border-top:1px solid color-mix(in srgb,var(--green) 35%,transparent);
+  border-radius:0 0 var(--radius-inset) var(--radius-inset);background:color-mix(in srgb,var(--green) 7%,transparent);color:var(--green);font-size:var(--type-meta);display:flex;justify-content:space-between;align-items:center}
+.card .pend .btn{border:1px solid color-mix(in srgb,var(--green) 50%,transparent);border-radius:var(--radius-key);padding:var(--space-1) var(--space-3);font-size:var(--type-small)}
+.card.live{z-index:5}
+.card.ghost{pointer-events:none;box-shadow:none;background:var(--surface-inset)}
+.card.ghost .meta,.card.ghost .badge,.card.ghost .why,.card.ghost .pend{display:none}
+.card.ghost .v{font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--ink)}
+.seam-edge{position:absolute;left:0;right:0;top:0;height:2px;border-radius:var(--radius-inset) var(--radius-inset) 0 0;background:var(--x-seam)}
+.glabel{position:absolute;font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap;transition:opacity var(--motion-slow) var(--ease-standard)}
+
+/* rung 3: all values at once */
+svg#all{position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity var(--motion-calm) var(--ease-standard);pointer-events:none}
+body[data-rung="3"] svg#all{opacity:1}
+body[data-rung="3"] .card.ghost,body[data-rung="3"] .glabel{opacity:0!important}
+body[data-rung="3"] .card.live{opacity:0;transform:translateY(var(--travel-near));pointer-events:none}
+body[data-rung="1"] .card.ghost,body[data-rung="1"] .glabel{opacity:0!important}
+
+/* the ladder */
+.ladder{position:fixed;right:var(--edge);top:calc(var(--band-top) * 2);display:grid;gap:var(--space-2);width:calc(var(--measure-rail) + var(--space-5))}
+.rung{display:grid;grid-template-columns:auto 1fr;gap:var(--space-1) var(--space-3);padding:var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline);font-size:var(--type-meta);color:var(--ink-muted)}
+.rung b{font-weight:400;color:var(--ink)}
+.rung small{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small)}
+.rung[aria-pressed="true"]{border-color:color-mix(in srgb,var(--info) 50%,transparent);background:color-mix(in srgb,var(--info) 8%,transparent)}
+.rung[aria-pressed="true"] b{color:var(--light)}
+
+/* the scrubber */
+.scrub{position:fixed;left:calc(var(--space-8) - var(--space-4));right:calc(var(--space-8) + var(--space-7));bottom:calc(var(--band-bottom) - var(--space-2));height:var(--space-7)}
+.scrub svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.play{position:absolute;top:calc(var(--space-2) * -1);bottom:var(--space-4);width:var(--space-4);transform:translateX(-50%);display:flex;justify-content:center;transition:left var(--motion-quick) var(--ease-standard)}
+.play::before{content:"";width:2px;background:var(--info);border-radius:1px}
+.play span{position:absolute;bottom:calc(100% + var(--space-1));white-space:nowrap;font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--info)}
+.t-micro{font:400 var(--x-type-micro) var(--font-mono);letter-spacing:var(--tracking-caps)}
+</style>
+</head>
+<body data-rung="2">
+<header class="head">
+  <div class="eyebrow" id="crumb"></div>
+  <h1 id="ename"></h1>
+  <div class="attr" id="attr"></div>
+</header>
+<div class="keys"><span><span class="kbd">←</span> <span class="kbd">→</span> scrub</span><span><span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span> ladder</span><span><span class="kbd">N</span> back to now</span><span><span class="kbd">R</span> replay</span></div>
+<section class="stage" id="stage" aria-live="polite"><svg id="all" aria-hidden="true"></svg></section>
+<nav class="ladder" id="ladder" aria-label="Ladder of abstraction"></nav>
+<div class="scrub" id="scrub"><svg id="ssvg" aria-hidden="true"></svg><div class="play" id="play" role="slider" tabindex="0" aria-label="Moment in the record"><span id="playL"></span></div></div>
+<div class="x-cap"><b>Provenance · V6</b> afterimage scrub: replay in place, the past on farther focal planes · Victor's ladder, onion skinning</div>
+<script src="../../../_kit/icons.js"></script>
+<script>
+/* ------------------------------------------------------------------ sample data (one object) */
+const DATA = {
+  now: '2026-11-02', start: '2023-03-01', end: '2027-04-30',
+  app: 'Data Atlas',
+  viewer: { name: 'Harry', teams: ['Supplier data'] },
+  entity: { type: 'Supplier', name: 'Kestrel Logistics' },
+  fact: { attr: 'Headcount', unit: 'employees', refreshMonths: 12, steward: 'Supplier data' },
+  sources: {
+    register: { label: 'Companies register', floor: 'org' },
+    report: { label: 'Annual report', floor: 'department' },
+    questionnaire: { label: 'Supplier questionnaire', floor: 'team' },
+    payroll: { label: 'Payroll extract', floor: 'department' },
+    web: { label: 'Web profile crawl', floor: null }
+  },
+  record: [
+    { kind: 'value', from: '2023-03-06', value: 240, source: 'register', by: 'Register import', note: 'First record' },
+    { kind: 'value', from: '2023-09-18', value: 265, source: 'report', by: 'Dana Okafor', note: 'Annual report 2023, page 4' },
+    { kind: 'rejected', at: '2023-12-02', value: 268, source: 'web', by: 'Dana Okafor', reason: 'Rounded copy of the annual report' },
+    { kind: 'gap', from: '2024-01-10', to: '2024-11-04', reason: 'Register feed paused (licence lapsed)' },
+    { kind: 'value', from: '2024-11-04', value: 265, source: 'report', by: 'Sam Reyes', note: 'Re-checked after the gap' },
+    { kind: 'rejected', at: '2024-11-04', value: 410, source: 'web', by: 'Sam Reyes', reason: 'Counts contractors, not employees' },
+    { kind: 'value', from: '2025-02-20', value: 312, source: 'questionnaire', by: 'Sam Reyes', note: 'Questionnaire, Q1 2025' },
+    { kind: 'dispute', from: '2025-06-03', to: '2025-08-14', sides: [ { value: 290, party: 'Procurement', floor: 'team' }, { value: 312, party: 'Finance', floor: 'department' } ] },
+    { kind: 'value', from: '2025-08-14', value: 305, source: 'payroll', by: 'Ines Duarte', seam: true, note: 'Payroll extract settled the dispute' },
+    { kind: 'pending', at: '2026-04-22', value: 330, source: 'report', by: 'Annual report import', note: 'Annual report 2025, page 6' }
+  ],
+  ahead: [ { at: '2026-12-01', label: 'Questionnaire Q4' }, { at: '2027-03-31', label: 'Annual report 2026' } ],
+  maxAfterimages: 5
+};
+
+/* ------------------------------------------------------------------ helpers */
+const $ = s => document.querySelector(s);
+const D = s => new Date(s + 'T00:00:00Z');
+const days = (a, b) => Math.round((D(b) - D(a)) / 864e5);
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmt = s => { const d = D(s); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+const fmtM = s => { const d = D(s); return MON[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+const age = n => n < 45 ? n + ' days' : n < 540 ? Math.round(n / 30.4) + ' months' : (n / 365).toFixed(1) + ' years';
+const addMonths = (s, m) => { const d = D(s); d.setUTCMonth(d.getUTCMonth() + m); return d.toISOString().slice(0, 10); };
+const css = v => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v));
+const FV = { org: '--floor-org-high', department: '--floor-department-high', team: '--floor-team-high', you: '--floor-you-high' };
+const fill = f => f ? `color-mix(in srgb, var(${FV[f]}) var(--x-stratum-mix), var(--slate-deep))` : 'color-mix(in srgb, var(--ink-muted) 22%, var(--slate-deep))';
+const edge = f => f ? `var(${FV[f]})` : 'var(--ink-muted)';
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, a, p) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); p && p.appendChild(e); return e; };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const canTriage = DATA.viewer.teams.includes(DATA.fact.steward);
+
+const STOPS = [...new Set(DATA.record.map(r => r.from || r.at).concat([DATA.now]))].sort((a, b) => D(a) - D(b));
+const VALS = DATA.record.filter(r => r.kind === 'value');
+
+/* the record as it stood on day t */
+function at(t) {
+  const vals = VALS.filter(v => D(v.from) <= D(t));
+  const cur = vals[vals.length - 1];
+  const gap = DATA.record.find(r => r.kind === 'gap' && D(r.from) <= D(t) && D(t) < D(r.to));
+  const dispute = DATA.record.find(r => r.kind === 'dispute' && D(r.from) <= D(t) && D(t) < D(r.to));
+  const staleFrom = addMonths(cur.from, DATA.fact.refreshMonths);
+  const pend = DATA.record.find(r => r.kind === 'pending' && D(r.at) <= D(t));
+  const rej = DATA.record.filter(r => r.kind === 'rejected' && r.at === t);
+  return { t, cur, vals, gap, dispute, stale: D(t) >= D(staleFrom), staleFrom, pend, rej };
+}
+
+function cardHTML(s, live) {
+  const src = DATA.sources[s.cur.source];
+  const isNow = s.t === DATA.now;
+  let v = `<div class="v">${s.cur.value}<small>${DATA.fact.unit}</small></div>`;
+  if (s.dispute) v = `<div class="split"><div class="v">${s.dispute.sides[0].value}</div><i>|</i><div class="v">${s.dispute.sides[1].value}</div></div>`;
+  let badge = s.gap ? `<span class="badge stale">no source confirmed this · ${age(days(s.gap.from, s.t))}</span>`
+    : s.dispute ? `<span class="badge" style="border-color:color-mix(in srgb,var(--x-fault) 50%,transparent);color:var(--x-fault)">disputed · ${s.dispute.sides.map(x => x.party).join(' and ')}</span>`
+    : s.stale ? `<span class="badge stale">stale ${age(days(s.staleFrom, s.t))} · due ${fmt(s.staleFrom)}</span>`
+    : `<span class="badge">verified · next check ${fmtM(s.staleFrom)}</span>`;
+  let why = s.rej.length ? `On this day: ${s.rej.map(r => r.value + ' was proposed and rejected (' + r.reason.toLowerCase() + ')').join('; ')}.`
+    : s.gap ? `${s.gap.reason}. The value kept showing, with nothing behind it.`
+    : s.cur.seam && s.t === s.cur.from ? 'A correction: this value settled the dispute. It stays visible as a seam.'
+    : isNow && s.stale ? `The ${DATA.fact.steward} team can refresh it${canTriage ? '; you are in it' : ''}.` : '';
+  const pend = live && s.pend ? `<div class="pend"><span>${s.pend.value} proposed · ${days(s.pend.at, s.t)} days in triage</span>${isNow && canTriage ? '<button class="btn">Review</button>' : ''}</div>` : '';
+  return `${s.cur.seam && !s.dispute ? '<div class="seam-edge"></div>' : ''}<div class="eyebrow">${DATA.fact.attr} · ${isNow ? 'now, ' : 'as shown on '}${fmt(s.t)}</div>${v}
+    <div class="meta">${src.label} <span>· accepted by ${s.cur.by} · ${fmt(s.cur.from)}</span></div>${badge}${why ? `<div class="why">${why}</div>` : ''}${pend}`;
+}
+
+/* ------------------------------------------------------------------ layout */
+let L, idx = STOPS.length - 1;
+function layout() {
+  const st = $('#stage'), W = st.clientWidth, H = st.clientHeight;
+  const ladderL = innerWidth - css('--edge') - css('--measure-rail') - css('--space-5');
+  const cw = css('--measure-decision');
+  const cx = Math.max(css('--space-8'), Math.min((ladderL - cw) / 2 + css('--space-6'), ladderL - cw - DATA.maxAfterimages * css('--x-afterimage-step') - 230));
+  L = { W, H, cx, cy: H * .5, cw, ladderL };
+  /* scrubber */
+  const s = $('#ssvg'); s.innerHTML = '';
+  const sw = $('#scrub').clientWidth, sh = $('#scrub').clientHeight;
+  const x = t => days(DATA.start, t) / days(DATA.start, DATA.end) * sw; L.x = x;
+  const defs = el('defs', {}, s);
+  const pat = el('pattern', { id: 'hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+  el('line', { x1: 0, y1: 0, x2: 0, y2: 6, style: 'stroke:var(--hairline-strong);stroke-width:1.5' }, pat);
+  const ty = sh * .35, th = 10;
+  VALS.forEach((v, i) => {
+    const to = (DATA.record.slice(DATA.record.indexOf(v) + 1).find(q => q.kind !== 'rejected' && q.kind !== 'pending') || { from: DATA.now }).from;
+    el('rect', { x: x(v.from), y: ty - th / 2, width: x(to) - x(v.from), height: th, style: `fill:${fill(DATA.sources[v.source].floor)}` }, s);
+    if (v.seam) el('line', { x1: x(v.from), x2: x(v.from), y1: ty - th, y2: ty + th, style: 'stroke:var(--x-seam);stroke-width:2' }, s);
+  });
+  DATA.record.forEach(r => {
+    if (r.kind === 'gap') el('rect', { x: x(r.from), y: ty - th / 2, width: x(r.to) - x(r.from), height: th, fill: 'url(#hatch)', style: 'stroke:var(--hairline-strong);stroke-dasharray:2 3' }, s);
+    if (r.kind === 'dispute') r.sides.forEach((sd, k) => el('rect', { x: x(r.from), y: ty - th / 2 + k * th / 2, width: x(r.to) - x(r.from), height: th / 2, style: `fill:${fill(sd.floor)};stroke:var(--x-fault);stroke-opacity:.6;stroke-width:.75` }, s));
+    if (r.kind === 'rejected') el('circle', { cx: x(r.at), cy: ty - th - 4, r: 3, style: 'fill:none;stroke:var(--ink-muted)' }, s);
+    if (r.kind === 'pending') el('circle', { cx: x(r.at), cy: ty - th - 4, r: 3.5, style: 'fill:var(--green)' }, s);
+  });
+  const cur = VALS[VALS.length - 1], sf = addMonths(cur.from, DATA.fact.refreshMonths);
+  el('rect', { x: x(sf), y: ty - th / 2, width: x(DATA.now) - x(sf), height: th, fill: 'url(#hatch)' }, s);
+  STOPS.forEach(t => el('line', { x1: x(t), x2: x(t), y1: ty + th / 2 + 2, y2: ty + th / 2 + 6, style: 'stroke:var(--ink-muted)' }, s));
+  for (let yr = 2024; yr <= 2027; yr++) { const t = el('text', { x: x(yr + '-01-01'), y: sh - 2, class: 't-micro', style: 'fill:var(--ink-muted)' }, s); t.textContent = yr; }
+  const nx = x(DATA.now);
+  el('line', { x1: nx, x2: nx, y1: -6, y2: sh - 14, style: 'stroke:var(--light);stroke-opacity:.6' }, s);
+  const nt = el('text', { x: nx - 6, y: sh - 14, 'text-anchor': 'end', class: 't-micro', style: 'fill:var(--light)' }, s); nt.textContent = 'NOW · ' + fmt(DATA.now).toUpperCase();
+  DATA.ahead.forEach((a, k) => {
+    const yy = ty + (k ? 4 : -4);
+    el('line', { x1: nx, x2: x(a.at), y1: yy, y2: yy, style: 'stroke:var(--ink-muted);stroke-dasharray:3 4' }, s);
+    el('circle', { cx: x(a.at), cy: yy, r: 2.5, style: 'fill:none;stroke:var(--ink-muted)' }, s);
+    const t = el('text', { x: x(a.at) + 6, y: yy + (k ? 12 : -4), style: 'fill:var(--ink-muted);font:400 var(--type-small) var(--font-sans)' }, s); t.textContent = a.label + ' · in ' + age(days(DATA.now, a.at));
+  });
+  allValues();
+}
+
+/* rung 3: every value at once, value against time, the moment marked */
+function allValues() {
+  const s = $('#all'); s.innerHTML = '';
+  const { W, H, ladderL } = L;
+  const x0 = $('#scrub').getBoundingClientRect().left, sw = $('#scrub').clientWidth;
+  const x = t => x0 + days(DATA.start, t) / days(DATA.start, DATA.end) * sw;
+  const vs = DATA.record.flatMap(r => r.kind === 'dispute' ? r.sides.map(q => q.value) : r.kind === 'rejected' ? [] : [r.value]).filter(v => v != null);
+  const lo = Math.min(...vs) - 20, hi = Math.max(...vs) + 20;
+  const top = 24, bot = H - 30;
+  const y = v => bot - (Math.min(v, hi) - lo) / (hi - lo) * (bot - top);
+  for (let v = Math.ceil(lo / 50) * 50; v <= hi; v += 50) {
+    el('line', { x1: x(DATA.start), x2: x(DATA.end), y1: y(v), y2: y(v), style: 'stroke:var(--hairline)' }, s);
+    const t = el('text', { x: x(DATA.start) - 8, y: y(v) + 4, 'text-anchor': 'end', class: 't-micro', style: 'fill:var(--ink-muted)' }, s); t.textContent = v;
+  }
+  VALS.forEach(v => {
+    const to = (DATA.record.slice(DATA.record.indexOf(v) + 1).find(q => q.kind !== 'rejected' && q.kind !== 'pending') || { from: DATA.now }).from;
+    el('rect', { x: x(v.from), y: y(v.value) - 4, width: x(to) - x(v.from), height: 8, style: `fill:${fill(DATA.sources[v.source].floor)};stroke:${edge(DATA.sources[v.source].floor)};stroke-opacity:.5` }, s);
+    const t = el('text', { x: x(v.from) + 4, y: y(v.value) - 10, style: 'fill:var(--ink);font:400 var(--type-small) var(--font-mono)' }, s); t.textContent = v.value;
+  });
+  DATA.record.forEach(r => {
+    if (r.kind === 'gap') { const prev = VALS.filter(v => D(v.from) < D(r.from)).pop(); el('rect', { x: x(r.from), y: y(prev.value) - 4, width: x(r.to) - x(r.from), height: 8, fill: 'url(#hatch)', style: 'stroke:var(--hairline-strong);stroke-dasharray:2 3' }, s); }
+    if (r.kind === 'dispute') r.sides.forEach(sd => el('rect', { x: x(r.from), y: y(sd.value) - 3, width: x(r.to) - x(r.from), height: 6, style: `fill:${fill(sd.floor)};stroke:var(--x-fault);stroke-opacity:.6` }, s));
+    if (r.kind === 'rejected') { const cy = r.value > hi ? top : y(r.value); el('circle', { cx: x(r.at), cy, r: 4, style: 'fill:none;stroke:var(--ink-muted)' }, s); const t = el('text', { x: x(r.at) + 8, y: cy + 4, style: 'fill:var(--ink-muted);font:400 var(--type-small) var(--font-sans)' }, s); t.textContent = r.value + ' rejected' + (r.value > hi ? ' (off scale)' : ''); }
+    if (r.kind === 'pending') { el('circle', { cx: x(DATA.now), cy: y(r.value), r: 4.5, style: 'fill:var(--green)' }, s); const t = el('text', { x: x(DATA.now) - 8, y: y(r.value) - 8, 'text-anchor': 'end', style: 'fill:var(--green);font:400 var(--type-small) var(--font-sans)' }, s); t.textContent = r.value + ' proposed'; }
+  });
+  const hv = Math.max(...VALS.map(v => v.value));
+  el('line', { x1: x(DATA.start), x2: x(DATA.now), y1: y(hv) - 5, y2: y(hv) - 5, style: 'stroke:var(--info);stroke-opacity:.4;stroke-dasharray:6 4' }, s);
+  const ht = el('text', { x: x(DATA.start), y: y(hv) - 10, class: 't-micro', style: 'fill:var(--info);opacity:.8' }, s); ht.textContent = 'HIGH-WATER MARK ' + hv;
+  const pg = el('g', { id: 'allpt' }, s);
+  el('circle', { r: 6, style: 'fill:none;stroke:var(--info);stroke-width:1.5' }, pg);
+  el('text', { x: 12, y: -26, style: 'fill:var(--light);font:400 var(--type-meta) var(--font-sans);paint-order:stroke;stroke:var(--slate-deep);stroke-width:4' }, pg);
+  L.ay = y;
+  el('line', { id: 'allcur', x1: 0, x2: 0, y1: top - 10, y2: bot + 10, style: 'stroke:var(--info);stroke-width:1.25' }, s);
+  el('line', { x1: x(DATA.now), x2: x(DATA.now), y1: top - 10, y2: bot + 10, style: 'stroke:var(--light);stroke-opacity:.5' }, s);
+  L.ax = x;
+}
+
+/* ------------------------------------------------------------------ the moment and its afterimages */
+function show(k) {
+  idx = Math.max(0, Math.min(STOPS.length - 1, k));
+  const t = STOPS[idx], s = at(t), st = $('#stage');
+  st.querySelectorAll('.card,.glabel').forEach(n => n.remove());
+  /* afterimages: each earlier distinct state, older = farther plane */
+  const past = [];
+  for (let j = idx - 1; j >= 0 && past.length < DATA.maxAfterimages; j--) {
+    const p = at(STOPS[j]);
+    const key = p.dispute ? 'd' + p.dispute.from : p.gap ? 'g' + p.gap.from : 'v' + p.cur.from;
+    const ck = s.dispute ? 'd' + s.dispute.from : s.gap ? 'g' + s.gap.from : 'v' + s.cur.from;
+    if (key !== ck && !past.find(q => q.key === key)) past.push({ key, p });
+  }
+  const step = css('--x-afterimage-step');
+  past.reverse().forEach((q, i) => {
+    const depth = past.length - i;
+    const c = document.createElement('div');
+    c.className = 'card ghost' + (q.p.gap ? ' gap' : '');
+    c.innerHTML = cardHTML(q.p, false);
+    const blur = Math.min(1, depth / 3) * css('--x-focus-far-blur');
+    c.style.cssText = `left:${L.cx + depth * step}px;top:${L.cy - 90 - depth * step}px;z-index:${5 - depth};opacity:${(1 - depth * .15).toFixed(2)};filter:blur(${blur.toFixed(1)}px) saturate(var(--x-focus-far-saturate)) brightness(var(--x-focus-far-dim))`;
+    st.appendChild(c);
+    const lab = document.createElement('div'); lab.className = 'glabel';
+    const from = q.p.dispute ? q.p.dispute.from : q.p.gap ? q.p.gap.from : q.p.cur.from;
+    lab.textContent = fmtM(from) + ' · ' + (q.p.gap ? 'no record' : q.p.dispute ? 'disputed ' + q.p.dispute.sides.map(x => x.value).join('/') : q.p.cur.value);
+    lab.style.cssText = `left:${L.cx + depth * step + L.cw + css('--space-2')}px;top:${L.cy - 90 - depth * step + css('--space-4')}px;opacity:${(1 - depth * .12).toFixed(2)}`;
+    st.appendChild(lab);
+  });
+  const c = document.createElement('div');
+  c.className = 'card live' + (s.gap ? ' gap' : '');
+  c.innerHTML = cardHTML(s, true);
+  c.style.cssText = `left:${L.cx}px;top:${L.cy - 90}px`;
+  st.appendChild(c);
+  $('#play').style.left = L.x(t) + 'px';
+  $('#playL').textContent = t === DATA.now ? 'Now' : fmt(t);
+  $('#play').setAttribute('aria-valuetext', fmt(t));
+  const ac = $('#allcur'); if (ac) { ac.setAttribute('x1', L.ax(t)); ac.setAttribute('x2', L.ax(t)); }
+  const ap = $('#allpt'); if (ap) { const v = s.dispute ? s.dispute.sides[0].value : s.cur.value; ap.setAttribute('transform', `translate(${L.ax(t)},${L.ay(v)})`); ap.querySelector('text').textContent = (s.dispute ? 'disputed ' + s.dispute.sides.map(x => x.value).join(' / ') : s.gap ? s.cur.value + ' · no source confirmed it' : s.cur.value + ' · ' + DATA.sources[s.cur.source].label) + ' · ' + fmt(t); }
+}
+
+/* ------------------------------------------------------------------ the ladder */
+const RUNGS = [
+  ['One moment', 'The fact as anyone saw it on that day.'],
+  ['With afterimages', 'Earlier states fall back to farther focal planes.'],
+  ['All values at once', 'Every value held, rejected or proposed, against time.']
+];
+function rung(n) {
+  document.body.dataset.rung = n;
+  $('#ladder').querySelectorAll('.rung').forEach((b, i) => b.setAttribute('aria-pressed', i + 1 === n ? 'true' : 'false'));
+}
+$('#ladder').innerHTML = '<div class="eyebrow">Ladder of abstraction</div>' + RUNGS.map(([a, b], i) => `<button class="rung" aria-pressed="${i === 1}"><span class="kbd">${i + 1}</span><b>${a}</b><small>${b}</small></button>`).join('');
+$('#ladder').querySelectorAll('.rung').forEach((b, i) => b.onclick = () => rung(i + 1));
+
+/* ------------------------------------------------------------------ demo: replay from the first record to now */
+let timers = [];
+function demo() {
+  timers.forEach(clearTimeout); timers = [];
+  layout(); rung(2); show(0);
+  const start = css('--motion-run'), step = reduce ? 0 : css('--motion-quick');
+  if (reduce) timers.push(setTimeout(() => show(STOPS.length - 1), start));
+  else STOPS.forEach((t, k) => timers.push(setTimeout(() => show(k), start + k * step)));
+}
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') demo();
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); show(idx - 1); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); show(idx + 1); }
+  else if (e.key === 'n' || e.key === 'N') show(STOPS.length - 1);
+  else if (['1', '2', '3'].includes(e.key)) rung(+e.key);
+});
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { layout(); show(idx); }, 100); });
+$('#crumb').textContent = DATA.app + ' · ' + DATA.entity.type;
+$('#ename').textContent = DATA.entity.name;
+$('#attr').textContent = DATA.fact.attr + ' (' + DATA.fact.unit + ') · replay it where it stands';
+demo();
+</script>
+</body>
+</html>

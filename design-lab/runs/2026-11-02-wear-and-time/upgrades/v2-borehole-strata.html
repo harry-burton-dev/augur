@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-shot-wait" content="4200">
+<title>Borehole strata</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------- Proposed tokens (not in the kit yet; listed in notes.md as "needs token") ---------- */
+:root{
+  --x-type-micro: .6875rem;      /* needs token: 11px mono numerals for dense marks (mono only) */
+  /* stale hatch: the same diagonal hatch as "unavailable" in the cinematic run. Proposed: --pattern-stale */
+  --x-stale-hatch: repeating-linear-gradient(135deg, transparent 0 var(--space-1), var(--hairline-strong) var(--space-1) calc(var(--space-1) * 1.5));
+  --x-past: .62;                 /* needs token: --time-past-opacity, how much quieter the past is than now */
+  --x-seam: color-mix(in srgb, var(--light) 78%, transparent);   /* seam: a repair, kept visible */
+  --x-scar: color-mix(in srgb, var(--danger) 55%, var(--ink-muted)); /* scar: a rollback, past so muted */
+  --x-org: var(--floor-org-high);
+  --x-org-low: var(--floor-org-low);
+  --x-head: calc(var(--space-8) - var(--space-2));
+}
+button{font:inherit;color:inherit}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+svg :focus-visible{outline:none}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.micro{font:400 var(--x-type-micro)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid currentColor;border-radius:var(--radius-key);opacity:.8;letter-spacing:0;text-transform:none}
+.x-cap .k{margin-left:var(--space-3);color:var(--ink-muted)}
+.x-cap .k b{color:var(--ink)}
+
+/* ---------- Page head: title, the deployment sentence, the one thing that needs you ---------- */
+.head{position:fixed;left:0;right:0;top:0;height:var(--x-head);display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:var(--space-5);
+  padding:0 var(--edge) 0 calc(var(--edge) + var(--space-2));border-bottom:1px solid var(--hairline);
+  background:linear-gradient(to bottom,color-mix(in srgb,var(--slate-deep) 80%,transparent),color-mix(in srgb,var(--slate-deep) 30%,transparent));z-index:var(--layer-chrome)}
+.head .ttl{display:flex;flex-direction:column;gap:var(--space-1)}
+.head h1{margin:0;font:var(--weight-title-s) var(--type-heading)/var(--leading-heading) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.head .run{font-size:var(--type-meta);color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head .run b{font-weight:400;color:var(--ink)}
+.need{display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-4);border-radius:var(--radius-pill);background:var(--surface-raised);
+  border:1px solid color-mix(in srgb,var(--green) 55%,transparent);color:var(--ink);font-size:var(--type-meta);cursor:pointer;white-space:nowrap;
+  box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--green) 30%,transparent)}  /* bloom: needs you (light language) */
+.need .dot{width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--green);box-shadow:0 0 var(--space-2) var(--green)}
+.need small{font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--green)}
+
+/* ---------- "Why are you like this, and since when?" card, in place ---------- */
+.why{position:fixed;z-index:var(--layer-overlay);width:var(--measure-card);padding:var(--space-4) var(--space-4) var(--space-3);border-radius:var(--radius-inset);
+  background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));-webkit-backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);box-shadow:var(--shadow-overlay);
+  opacity:0;transform:translateY(var(--space-1));pointer-events:none;transition:opacity var(--motion-base) var(--ease-standard),transform var(--motion-base) var(--ease-out)}
+.why.on{opacity:1;transform:none;pointer-events:auto}
+.why h3{margin:var(--space-1) 0 var(--space-3);font:400 var(--type-body)/var(--leading-body) var(--font-sans);color:var(--light)}
+.why dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:var(--space-2) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.why dt{font:400 var(--x-type-micro)/var(--leading-meta) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.why dd{margin:0;color:var(--ink)}
+.why .foot{margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--hairline);display:flex;justify-content:space-between;gap:var(--space-3)}
+.why .tag{display:inline-flex;align-items:center;gap:var(--space-2)}
+.why .tag svg{color:var(--ink-muted)}
+
+/* marks shared by the variants (recipes; the grammar sheet names them) */
+.hatch{background:var(--x-stale-hatch)}
+.legend{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4)}
+.legend span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.sw{display:inline-block;width:var(--space-4);height:var(--space-3);border-radius:2px}
+
+.stage{position:fixed;left:0;right:0;top:var(--x-head);bottom:var(--space-6)}
+.stage svg{width:100%;height:100%;display:block}
+.lbl{font:400 var(--x-type-micro) var(--font-mono);letter-spacing:var(--tracking-caps);fill:var(--ink-muted);text-transform:uppercase}
+.lbl.v{fill:var(--ink)} .lbl.now{fill:var(--light)} .lbl.need{fill:var(--green)} .lbl.h{fill:var(--ink);letter-spacing:var(--tracking-label)}
+.ttl{font:300 var(--type-meta) var(--font-sans);fill:var(--ink-muted);letter-spacing:var(--tracking-soft)}
+.bed{cursor:pointer;transition:filter var(--motion-quick) var(--ease-standard)}
+.bed:hover,.bed:focus{filter:brightness(1.35)}
+.corr{fill:none;stroke:var(--x-org);stroke-opacity:.55;stroke-width:1;stroke-dasharray:var(--len);stroke-dashoffset:var(--len)}
+.corr.on{stroke-dashoffset:0;transition:stroke-dashoffset var(--motion-run) var(--ease-out)}
+.corr.p{stroke-opacity:.18;stroke-dasharray:none}
+.past{opacity:var(--x-past)}
+.side{position:fixed;right:var(--edge);top:calc(var(--x-head) + var(--space-4));width:calc(var(--measure-rail) - var(--space-4));display:flex;flex-direction:column;gap:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.side h2{margin:0;font:var(--weight-heading) var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.key{display:grid;grid-template-columns:var(--space-5) 1fr;gap:var(--space-2) var(--space-3);align-items:center}
+.key i{display:block;height:var(--space-3);border-radius:2px}
+@media (max-width: 1400px){ .side{display:none} }
+</style>
+</head>
+<body>
+<header class="head" id="head"></header>
+<main class="stage" id="stage"><svg id="svg" role="img" aria-labelledby="svgT"><title id="svgT"></title></svg></main>
+<aside class="side" id="side"></aside>
+<div class="why" id="why" role="dialog" aria-live="polite"></div>
+<div class="sr" id="live" aria-live="polite"></div>
+<div class="x-cap"><b>Upgrade Centre · V2</b> borehole strata: each server a core, releases as beds, correlation lines show the lag · stratigraphic correlation, wireline logs<span class="k"><b>Tab</b> beds · <b>Esc</b> close · <b>R</b> replay</span></div>
+<script>
+const DATA = {
+  /* ---- shared sample data (the same deployment in every variant). In AUGUR it comes from the
+     updater, the registry, the events service and the deployment's config. ---- */
+  product: 'AUGUR',
+  app: { title: 'Upgrade Centre', floor: 'Org', area: 'Admin' },
+  deployment: { name: 'Org cloud', servers: 5 },
+  now: '2026-11-02T21:14',
+  window: { label: 'Thursday window', dow: 4, start: '22:00', end: '23:00', note: 'Set in Admin · Upgrades by Org admins' },
+  limits: { watch: 1, limit: 2, unit: '%', label: 'errors during the bake' },
+  people: { harry: 'Harry Burton', sam: 'Sam Okafor', priya: 'Priya Nair' },
+  roles: { approver: 'priya', alsoApprover: 'harry', onCall: 'sam' },
+  channels: [
+    { id: 'dev', label: 'Dev', note: 'every merge, nightly' },
+    { id: 'preview', label: 'Preview', note: 'release candidates' },
+    { id: 'stable', label: 'Stable', note: 'what deployments take' }],
+  servers: [
+    { id: 's1', label: 'Server 1', short: 'S1', people: 164 },
+    { id: 's2', label: 'Server 2', short: 'S2', people: 188 },
+    { id: 's3', label: 'Server 3', short: 'S3', people: 212 },
+    { id: 's4', label: 'Server 4', short: 'S4', people: 140 },
+    { id: 's5', label: 'Server 5', short: 'S5', people: 96, stale: { since: '2026-11-02T20:27', why: 'Its updater agent stopped reporting.', who: 'Sam Okafor (on call) or any Org admin can restart it.' } }],
+  birds: { '0.8': 'Wren', '0.9': 'Kestrel', '0.10': 'Heron', '0.11': 'Swift', '0.12': 'Plover', '0.13': 'Curlew', '0.14': 'Dunlin', '0.15': 'Snipe' },
+  apps: [
+    { id: 'home', label: 'Home', kind: 'platform' }, { id: 'admin', label: 'Admin', kind: 'platform' },
+    { id: 'upgrade', label: 'Upgrade Centre', kind: 'platform' }, { id: 'explorer', label: 'Explorer', kind: 'platform' },
+    { id: 'artifacts', label: 'Artifacts', kind: 'pillar' }, { id: 'mandate', label: 'Mandate', kind: 'pillar' },
+    { id: 'atlas', label: 'Data Atlas', kind: 'pillar' }],
+  /* every release this deployment has seen. here = when it was applied here (in a window); state says how it ended */
+  releases: [
+    { v: '0.8.0', kind: 'minor', dev: '2026-02-12', preview: '2026-02-23', stable: '2026-03-05', here: '2026-03-12T22:08', by: 'harry', peak: .5, state: 'applied', note: 'First install of this deployment',
+      apps: { home: '1.0.0', admin: '1.0.0', upgrade: '1.0.0', explorer: '0.9.0', artifacts: '1.0.0', mandate: '0.6.0', atlas: '0.3.0' } },
+    { v: '0.8.1', kind: 'patch', dev: '2026-03-16', preview: '2026-03-18', stable: '2026-03-20', here: '2026-03-26T22:06', by: 'harry', peak: .3, state: 'applied', apps: { artifacts: '1.0.1' } },
+    { v: '0.9.0', kind: 'minor', dev: '2026-03-19', preview: '2026-04-01', stable: '2026-04-09', here: '2026-04-16T22:05', by: 'harry', peak: .7, state: 'applied', apps: { artifacts: '1.2.0', mandate: '0.7.0', home: '1.1.0' } },
+    { v: '0.9.1', kind: 'patch', dev: '2026-04-20', preview: '2026-04-22', stable: '2026-04-24', here: '2026-04-30T22:04', by: 'sam', peak: .3, state: 'applied', apps: { atlas: '0.4.0' } },
+    { v: '0.9.2', kind: 'patch', dev: '2026-05-04', preview: '2026-05-06', stable: '2026-05-08', here: '2026-05-14T22:03', by: 'sam', peak: .2, state: 'applied', apps: {} },
+    { v: '0.10.0', kind: 'minor', dev: '2026-05-07', preview: '2026-05-20', stable: '2026-05-28', here: '2026-06-04T22:07', by: 'harry', peak: .9, state: 'applied', apps: { artifacts: '2.0.0', explorer: '1.0.0', admin: '1.1.0' } },
+    { v: '0.10.1', kind: 'patch', dev: '2026-06-08', preview: '2026-06-10', stable: '2026-06-12', here: '2026-06-18T22:05', by: 'sam', peak: .4, state: 'applied', apps: { mandate: '0.8.0' } },
+    { v: '0.10.2', kind: 'patch', dev: '2026-06-29', preview: '2026-07-01', stable: '2026-07-03', here: null, seen: '2026-07-23T09:00', state: 'inferred', note: 'Applied while there is no record; first seen running on 23 Jul', apps: { atlas: '0.5.0' } },
+    { v: '0.11.0', kind: 'minor', dev: '2026-06-25', preview: '2026-07-08', stable: '2026-07-16', here: '2026-07-23T22:06', by: 'harry', peak: .8, state: 'applied', apps: { artifacts: '2.2.0', mandate: '1.0.0', upgrade: '1.1.0' } },
+    { v: '0.11.1', kind: 'patch', dev: '2026-07-24', preview: '2026-07-27', stable: '2026-07-28', here: '2026-07-30T22:04', by: 'sam', peak: .4, state: 'applied', apps: {} },
+    { v: '0.11.2', kind: 'patch', dev: '2026-07-29', preview: '2026-07-31', stable: '2026-08-03', here: '2026-08-06T22:12', by: 'sam', peak: 3.1, state: 'rolledback', apps: { artifacts: '2.2.1' },
+      rollback: { at: '2026-08-06T22:41', server: 's3', to: '0.11.1', reached: ['s1', 's2', 's3'], by: 'sam',
+        why: 'The sync index rebuild failed on Server 3. Errors passed the 2% limit, the bake halted itself and Sam Okafor rolled Servers 1 to 3 back to 0.11.1.' } },
+    { v: '0.11.3', kind: 'hotfix', dev: '2026-08-10', preview: '2026-08-11', stable: '2026-08-12', here: '2026-08-13T22:05', by: 'harry', peak: .3, state: 'applied', repairs: '0.11.2', note: 'Repairs the sync index rebuild that failed in 0.11.2', apps: { artifacts: '2.2.2' } },
+    { v: '0.12.0', kind: 'minor', dev: '2026-08-13', preview: '2026-08-26', stable: '2026-09-03', here: '2026-09-10T22:06', by: 'harry', peak: 1.0, state: 'applied', apps: { artifacts: '2.4.0', atlas: '0.7.0', explorer: '1.1.0', home: '1.2.0' } },
+    { v: '0.12.1', kind: 'patch', dev: '2026-09-14', preview: '2026-09-16', stable: '2026-09-18', here: '2026-09-24T22:04', by: 'sam', peak: .3, state: 'applied', apps: {} },
+    { v: '0.12.2', kind: 'patch', dev: '2026-09-24', preview: '2026-09-25', stable: '2026-09-28', here: '2026-10-08T22:05', by: 'harry', peak: .4, state: 'applied', missed: '2026-10-01T22:00', apps: { mandate: '1.2.0' } },
+    { v: '0.13.0', kind: 'minor', dev: '2026-09-21', preview: '2026-10-01', stable: '2026-10-08', here: '2026-10-15T22:08', by: 'harry', peak: 1.2, state: 'applied', apps: { artifacts: '2.6.0', atlas: '0.9.0', admin: '1.3.0', upgrade: '1.3.0' } },
+    { v: '0.13.1', kind: 'patch', dev: '2026-10-16', preview: '2026-10-17', stable: '2026-10-19', here: '2026-10-22T22:04', by: 'sam', peak: .3, state: 'applied', apps: {} },
+    { v: '0.13.2', kind: 'patch', dev: '2026-10-19', preview: '2026-10-20', stable: '2026-10-21', here: null, state: 'skipped', note: 'Superseded by 0.13.4 before the next window', apps: {} },
+    { v: '0.13.3', kind: 'patch', dev: '2026-10-21', preview: '2026-10-22', stable: '2026-10-24', here: null, state: 'skipped', note: 'Superseded by 0.13.4 before the next window', apps: {} },
+    { v: '0.13.4', kind: 'patch', dev: '2026-10-25', preview: '2026-10-26', stable: '2026-10-27', here: '2026-10-29T22:03', by: 'sam', peak: .2, state: 'applied', apps: { atlas: '0.9.1', mandate: '1.4.2' } },
+    { v: '0.14.0', kind: 'minor', dev: '2026-10-12', preview: '2026-10-22', stable: '2026-10-30', here: '2026-11-05T22:00', state: 'scheduled', previewPeak: .7, apps: { artifacts: '2.7.0', explorer: '1.2.0', home: '1.3.0', upgrade: '1.4.0' } },
+    { v: '0.15.0', kind: 'minor', dev: '2026-10-28', preview: '2026-11-09', stable: '2026-11-19', here: null, state: 'upcoming', estimate: true, apps: {} }],
+  /* where the record is missing */
+  gaps: [{ from: '2026-06-19', to: '2026-07-23', label: 'No record',
+    why: 'The events store moved to a new disk on 19 Jun. The updater’s log from then to 23 Jul was not carried over.',
+    who: 'Nobody can restore it. The 23 Jul report shows 0.10.2 was running, so it was applied in between.' }],
+  /* windows that passed with a release waiting */
+  missed: [{ at: '2026-10-01T22:00', v: '0.12.2', why: 'The approval was still waiting when the window opened, so it waited a week.', who: 'Priya Nair approves upgrades; Harry Burton can too.' }],
+  /* the one thing that needs you */
+  pending: { v: '0.14.0', approveBy: '2026-11-05T21:00', ifWait: 'It misses Thursday’s window and waits for 12 Nov.', words: 'Approve 0.14.0 before Thursday’s window' },
+
+  /* V2 only */
+  labels: { upstream: 'Upstream channels', here: 'This deployment', log: 'Bake log · {s}', ground: 'Now', ahead: 'Ahead · drawn {k}× taller',
+    fault: 'Fault · rolled back', pinch: 'never reached', unconformity: 'Unconformity · no record', tide: 'Tide line · window missed', hwm: 'High-water mark' },
+  logServer: 's3', aheadScale: 8
+};
+// ---------- shared helpers for the Upgrade Centre explorations ----------
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const ROOT = getComputedStyle(document.documentElement);
+const tok = n => ROOT.getPropertyValue('--' + n).trim();
+const T = n => parseFloat(tok('motion-' + n));          // a motion token, in ms
+const PX = n => parseFloat(tok(n));                       // a distance token, in px
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const D = s => new Date(s.length <= 10 ? s + 'T12:00' : s);
+const NOW = D(DATA.now);
+const DAY = 864e5;
+const days = (a, b) => (D(b) - D(a)) / DAY;
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const fd = s => { const d = D(s); return d.getDate() + ' ' + MON[d.getMonth()]; };
+const ft = s => { const d = D(s); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const fdt = s => fd(s) + ' · ' + ft(s);
+const fwd = s => WD[D(s).getDay()] + ' ' + fd(s);
+const minorOf = v => v.split('.').slice(0, 2).join('.');
+const bird = v => DATA.birds[minorOf(v)] || '';
+const rname = v => v + ' ' + bird(v);
+const person = id => DATA.people[id] || id;
+const rel = v => DATA.releases.find(r => r.v === v);
+const server = id => DATA.servers.find(s => s.id === id);
+const appLabel = id => (DATA.apps.find(a => a.id === id) || {}).label || id;
+/* how far: "in 3 d 0 h 46 m" or "47 min ago" */
+const span = ms => { const m = Math.round(Math.abs(ms) / 6e4), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60;
+  return d ? `${d} d ${h} h ${mm} m` : h ? `${h} h ${mm} m` : `${mm} min`; };
+const until = s => 'in ' + span(D(s) - NOW);
+const ago = s => span(NOW - D(s)) + ' ago';
+const running = () => { const a = DATA.releases.filter(r => r.state === 'applied' && D(r.here) <= NOW); return a[a.length - 1]; };
+const pendingRel = () => rel(DATA.pending.v);
+const ageDays = s => Math.round((NOW - D(s)) / DAY);
+/* the app versions running after a release (accumulated) */
+const appsAt = v => { const o = {}; for (const r of DATA.releases) { if (r.state === 'skipped' || r.state === 'upcoming') { if (r.v === v) break; continue; } if (r.state !== 'rolledback') Object.assign(o, r.apps); if (r.v === v) break; } return o; };
+
+let _timers = [];
+const later = (ms, fn) => { const id = setTimeout(fn, ms); _timers.push(id); return id; };
+const clearLater = () => { _timers.forEach(clearTimeout); _timers = []; };
+const say = m => { const l = $('#live'); if (l) l.textContent = m; };
+
+function renderHead() {
+  const cur = running(), p = pendingRel(), A = DATA.app;
+  const servers = DATA.servers.length, stale = DATA.servers.filter(s => s.stale);
+  $('#head').innerHTML = `
+    <div class="ttl"><span class="eyebrow">${esc(A.floor)} · ${esc(A.area)}</span><h1>${esc(A.title)}</h1></div>
+    <div class="run">${esc(DATA.deployment.name)} runs <b>${esc(DATA.product)} ${esc(rname(cur.v))}</b> on ${servers} servers since ${fd(cur.here)}${stale.length ? ` · <b>${esc(stale.map(s => s.label).join(', '))}</b> not reporting for ${span(NOW - D(stale[0].stale.since))}` : ''}</div>
+    <button class="need" id="need" aria-describedby="needWhy"><span class="dot" aria-hidden="true"></span><small>Needs you</small><span>${esc(DATA.pending.words.replace(p.v, rname(p.v)))}</span><span class="mono" style="color:var(--ink-muted)">by ${WD[D(DATA.pending.approveBy).getDay()]} ${ft(DATA.pending.approveBy)}</span></button>
+    <span class="sr" id="needWhy">${esc(DATA.pending.ifWait)}</span>`;
+  $('#need').onclick = () => showWhy($('#need'), needCard());
+}
+function needCard() {
+  const p = pendingRel();
+  return { eyebrow: 'Needs you · ' + DATA.app.floor, title: `${rname(p.v)} waits for the ${DATA.window.label}`,
+    rows: [['Why', `It reached Stable on ${fd(p.stable)}. Upgrades need an approval before the window opens.`],
+      ['When', `${fwd(p.here)} ${DATA.window.start}–${DATA.window.end} · ${until(p.here)}. Approve by ${ft(DATA.pending.approveBy)}.`],
+      ['If you wait', DATA.pending.ifWait],
+      ['Who', `${person(DATA.roles.approver)} approves upgrades; ${person(DATA.roles.alsoApprover)} can too.`]],
+    foot: [['calendar-clock', DATA.window.note]] };
+}
+/* the in-place answer to "why are you like this, and since when?" */
+function showWhy(anchor, c, at) {
+  const w = $('#why');
+  w.innerHTML = `<div class="eyebrow">${esc(c.eyebrow)}</div><h3>${esc(c.title)}</h3><dl>${c.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    ${c.foot ? `<div class="foot micro">${c.foot.map(([i, t]) => `<span class="tag">${Icons.svg(i, { size: 14 })}${esc(t)}</span>`).join('')}</div>` : ''}`;
+  const r = at || anchor.getBoundingClientRect(), W = innerWidth, H = innerHeight, g = PX('space-3');
+  const ww = w.offsetWidth, wh = w.offsetHeight;
+  let x = r.right + g, y = r.top;
+  if (x + ww > W - g || (r.prefer === 'left' && r.left - ww - g > g)) x = r.left - ww - g;
+  if (x < g) x = Math.min(W - ww - g, Math.max(g, r.left));
+  if (x === Math.max(g, r.left) || x < r.right && x + ww > r.left) y = r.bottom + g;
+  if (r.above) y = r.top - wh - g;
+  if (y + wh > H - PX('space-6')) y = Math.max(PX('space-8'), H - PX('space-6') - wh);
+  w.style.left = x + 'px'; w.style.top = y + 'px'; w.classList.add('on');
+  say(c.title + '. ' + c.rows.map(r => r.join(': ')).join('. '));
+}
+const hideWhy = () => $('#why').classList.remove('on');
+
+function boot(render, demo) {
+  const go = () => { clearLater(); hideWhy(); render(); Icons.hydrate(); later(T('run'), demo); };   // the moment shows after one --motion-run
+  addEventListener('keydown', e => {
+    if (e.key === 'r' || e.key === 'R') { if (!e.metaKey && !e.ctrlKey) go(); }
+    if (e.key === 'Escape') hideWhy();
+  });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { render(); Icons.hydrate(); }, T('base')); });
+  go();
+}
+
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, a, p) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+const text = (p, x, y, s, cls = '', anchor = 'start') => { const t = el('text', { x, y, class: 'lbl ' + cls, 'text-anchor': anchor, 'dominant-baseline': 'middle' }, p); t.textContent = s; return t; };
+const t0 = D(DATA.releases[0].dev);
+const applied = DATA.releases.filter(r => r.here && D(r.here) <= NOW);
+
+function layout() {
+  const W = $('#stage').clientWidth - (innerWidth > 1400 ? PX('measure-rail') + PX('edge') : 0), H = $('#stage').clientHeight;
+  const top = PX('space-7') + PX('space-4'), ground = top + PX('space-7') + PX('space-2'), bottom = H - PX('space-4');
+  const k = DATA.aheadScale, perDay = (bottom - ground) / ((NOW - t0) / DAY);
+  const y = s => { const d = (NOW - D(s)) / DAY; return d >= 0 ? ground + d * perDay : ground + d * perDay * k; };
+  const left = PX('space-8') * .7, gap = PX('space-3');
+  const upW = PX('space-7') + PX('space-2'), midW = PX('space-8') + PX('space-6'), logW = PX('space-8') + PX('space-5');
+  const sw = (W - left - 3 * upW - 2 * gap - midW - logW - PX('space-5') - 4 * gap * 1.5 - PX('edge')) / DATA.servers.length;
+  const cols = [];
+  let x = left;
+  DATA.channels.forEach(c => { cols.push({ id: c.id, label: c.label, x, w: upW, up: true }); x += upW + gap; });
+  x += midW - gap;
+  DATA.servers.forEach(s => { cols.push({ id: s.id, label: s.short, x, w: sw, s }); x += sw + gap * 1.5; });
+  const logX = x + PX('space-5') - gap * 1.5;
+  return { W, H, top, ground, bottom, y, cols, left, midX: left + 3 * (upW + gap), midW, logX, logW, k };
+}
+/* beds for one column: [{r, from, to}] */
+function beds(col) {
+  if (col.up) {
+    const list = DATA.releases.filter(r => D(r[col.id]) <= NOW).sort((a, b) => D(a[col.id]) - D(b[col.id]));
+    return list.map((r, i) => ({ r, from: r[col.id], to: list[i + 1] ? list[i + 1][col.id] : DATA.now }));
+  }
+  const list = DATA.releases.filter(r => (r.here && D(r.here) <= NOW && r.state !== 'rolledback') || r.state === 'inferred');
+  const at = r => r.here || r.seen;
+  return list.map((r, i) => ({ r, from: at(r), to: list[i + 1] ? at(list[i + 1]) : DATA.now }));
+}
+let minorIdx = {}; Object.keys(DATA.birds).forEach((m, i) => minorIdx[m] = i);
+const tone = r => `color-mix(in srgb, ${tok('floor-org-low')} ${minorIdx[minorOf(r.v)] % 2 ? 36 : 20}%, ${tok('slate-deep')})`;
+
+function card(kind, r, col) {
+  if (kind === 'fault') { const b = r.rollback, fix = DATA.releases.find(x => x.repairs === r.v);
+    return { eyebrow: DATA.labels.fault + ' · ' + fdt(r.here), title: `${rname(r.v)} ran for ${Math.round((D(b.at) - D(r.here)) / 6e4)} minutes, then was rolled back`,
+      rows: [['Why', b.why], ['Where', `${b.reached.map(s => server(s).short).join(', ')}. ${DATA.servers.filter(s => !b.reached.includes(s.id)).map(s => s.short).join(' and ')} ${DATA.labels.pinch}: the bed pinches out.`], ['Seam', `${fix.v} repaired it on ${fd(fix.here)}.`], ['Who', person(b.by)]] }; }
+  if (kind === 'gap') { const g = DATA.gaps[0]; return { eyebrow: DATA.labels.unconformity, title: `${Math.round(days(g.from, g.to))} days missing on every server`, rows: [['Why', g.why], ['Since', `${fd(g.from)} to ${fd(g.to)}`], ['Who', g.who]] }; }
+  if (kind === 'tide') { const m = DATA.missed[0]; return { eyebrow: DATA.labels.tide + ' · ' + fdt(m.at), title: `${rname(m.v)} waited a week`, rows: [['Why', m.why], ['Lag', `On Stable ${fd(rel(m.v).stable)}, here ${fd(rel(m.v).here)}: ${Math.round(days(rel(m.v).stable, rel(m.v).here))} days, the steepest line.`], ['Who', m.who]] }; }
+  if (kind === 'stale') { const s = col.s; return { eyebrow: 'Stale · ' + s.label, title: `${s.label} has not reported for ${span(NOW - D(s.stale.since))}`, rows: [['Why', s.stale.why], ['Last known', `${running().v} at ${ft(s.stale.since)}`], ['Who', s.stale.who]] }; }
+  if (kind === 'need') return needCard();
+  if (col && col.up) return { eyebrow: col.label + ' · ' + fd(r[col.id]), title: `${rname(r.v)} on ${col.label}`, rows: [['Since', fd(r[col.id])], ['Note', r.note || DATA.channels.find(c => c.id === col.id).note], ['Here', r.here ? (r.state === 'skipped' ? 'Not taken: ' + r.note : r.state === 'scheduled' ? 'Scheduled ' + fwd(r.here) : fd(r.here)) : r.state === 'inferred' ? 'Inferred' : 'Not yet']] };
+  return { eyebrow: (col ? col.s.label + ' · ' : '') + (r.state === 'inferred' ? 'Inferred' : fdt(r.here)), title: `${DATA.product} ${rname(r.v)}`,
+    rows: [['Why', r.state === 'inferred' ? r.note : `Applied by ${person(r.by)} in the ${DATA.window.label}.`], ['Lag', `${Math.round(days(r.stable, r.here || r.seen))} days after Stable`], ['Bake', r.peak != null ? `Errors peaked at ${r.peak}${DATA.limits.unit}` : 'No record'], ['Apps', Object.entries(r.apps).map(([a, v]) => appLabel(a) + ' ' + v).join(' · ') || 'No app changes']] };
+}
+
+function render() {
+  renderHead();
+  const L = layout(), svg = $('#svg');
+  svg.innerHTML = `<title id="svgT">${esc(DATA.deployment.name)}: releases as beds in ${L.cols.length} columns</title>`;
+  svg.setAttribute('viewBox', `0 0 ${$('#stage').clientWidth} ${L.H}`);
+  const defs = el('defs', {}, svg);
+  const pat = el('pattern', { id: 'hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+  el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: tok('hairline-strong'), 'stroke-width': 2 }, pat);
+  const sky = el('linearGradient', { id: 'sky', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+  el('stop', { offset: 0, 'stop-color': tok('green'), 'stop-opacity': 0 }, sky); el('stop', { offset: 1, 'stop-color': tok('green'), 'stop-opacity': .08 }, sky);
+
+  // group titles
+  text(svg, L.left, L.top - PX('space-6'), DATA.labels.upstream, 'h');
+  text(svg, L.cols[3].x, L.top - PX('space-6'), DATA.labels.here + ' · ' + DATA.deployment.name, 'h');
+  // time axis: months, past quieter
+  const ax = el('g', { class: 'past' }, svg);
+  for (let m = new Date(t0.getFullYear(), t0.getMonth() + 1, 1); m < NOW; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+    const yy = L.y(m.toISOString().slice(0, 10));
+    el('line', { x1: L.left - PX('space-3'), x2: L.logX + L.logW, y1: yy, y2: yy, stroke: tok('hairline'), 'stroke-width': 1 }, ax);
+    text(ax, L.left - PX('space-4'), yy, MON[m.getMonth()], '', 'end');
+  }
+  // ahead: sky above the ground, the window as a dashed horizon
+  const p = pendingRel(), wy = L.y(p.here);
+  el('rect', { x: L.cols[3].x - PX('space-2'), y: wy, width: L.logX - L.cols[3].x, height: L.ground - wy, fill: 'url(#sky)' }, svg);
+  el('line', { x1: L.cols[3].x - PX('space-2'), x2: L.logX - PX('space-3'), y1: wy, y2: wy, stroke: tok('green'), 'stroke-width': 1.5, 'stroke-dasharray': '2 5', style: `filter:drop-shadow(0 0 ${tok('space-1')} ${tok('green')})` }, svg);
+  const need = el('g', { class: 'bed', tabindex: 0, role: 'button', 'aria-label': rname(p.v) + ' scheduled' }, svg);
+  text(need, L.cols[3].x, wy - PX('space-3'), `${rname(p.v)} · ${fwd(p.here)} ${DATA.window.start}`, 'need');
+  text(need, L.logX - PX('space-3'), wy - PX('space-3'), `Distance to travel · ${until(p.here)}`, 'need', 'end');
+  bindCard(need, () => card('need'));
+  text(svg, L.midX + L.midW - PX('space-4'), (wy + L.ground) / 2, DATA.labels.ahead.replace('{k}', L.k), '', 'end');
+
+  // columns
+  const tops = {};
+  L.cols.forEach(c => {
+    const g = el('g', {}, svg);
+    text(g, c.x + c.w / 2, L.top - PX('space-4'), c.label, c.up ? '' : 'v', 'middle');
+    beds(c).forEach(b => {
+      const y0 = L.y(b.to), y1 = L.y(b.from), r = b.r;
+      const skipped = r.state === 'skipped', upcoming = r.state === 'upcoming' || r.state === 'scheduled';
+      const recency = c.up ? .7 : .55 + .45 * (1 - (NOW - D(b.from)) / (NOW - t0));
+      const rect = el('rect', { x: c.x, y: y0, width: c.w, height: Math.max(1, y1 - y0), fill: r.state === 'inferred' && !c.up ? 'url(#hatch)' : tone(r), opacity: recency, class: 'bed', tabindex: c.up ? -1 : 0, role: 'button', 'aria-label': `${c.label} ${rname(r.v)}` }, g);
+      if (upcoming) rect.setAttribute('fill', `color-mix(in srgb, ${tok('floor-org-low')} 55%, ${tok('slate-deep')})`);
+      bindCard(rect, () => card('bed', r, c));
+      // bedding plane: minors thick, patches thin, skipped hairline
+      el('line', { x1: c.x, x2: c.x + c.w, y1: y1, y2: y1, stroke: r.kind === 'minor' ? tok('floor-org-high') : tok('hairline-strong'), 'stroke-opacity': r.kind === 'minor' ? .3 + (r.peak || .5) * .15 : skipped ? .5 : .9, 'stroke-width': r.kind === 'minor' ? 1.5 : 1, 'pointer-events': 'none' }, g);
+      if (r.repairs && !c.up) el('line', { x1: c.x, x2: c.x + c.w, y1: y1, y2: y1, stroke: tok('light'), 'stroke-opacity': .85, 'stroke-width': 1.5, style: `filter:drop-shadow(0 0 ${tok('space-1')} ${tok('light')})`, 'pointer-events': 'none' }, g);
+    });
+    // the ground at now
+    el('rect', { x: c.x, y: L.ground - 1, width: c.w, height: 2, fill: tok('ink') }, g);
+    // stale cap
+    if (c.s && c.s.stale) { const cap = el('rect', { x: c.x, y: L.ground + 1, width: c.w, height: PX('space-4'), fill: 'url(#hatch)', class: 'bed', tabindex: 0, role: 'button', 'aria-label': c.s.label + ' stale' }, g);
+      el('rect', { x: c.x, y: L.ground + 1, width: c.w, height: PX('space-4'), fill: tok('slate-deep'), opacity: .55, 'pointer-events': 'none' }, g).after(cap);
+      text(g, c.x + c.w / 2, L.ground + PX('space-4') / 2 + 1, 'no report ' + span(NOW - D(c.s.stale.since)), '', 'middle'); bindCard(cap, () => card('stale', null, c)); }
+  });
+  text(svg, L.midX + L.midW - PX('space-4'), L.ground, DATA.labels.ground + ' · ' + ft(DATA.now), 'now', 'end');
+
+  // unconformity across this deployment
+  DATA.gaps.forEach(gp => {
+    const y0 = L.y(gp.to), y1 = L.y(gp.from), x0 = L.cols[3].x, x1 = L.cols[L.cols.length - 1].x + L.cols[L.cols.length - 1].w;
+    let d = ''; for (let x = x0; x <= x1; x += 4) d += (x === x0 ? 'M' : 'L') + x + ',' + (y0 + Math.sin(x / 6) * 2).toFixed(1);
+    L.cols.filter(c => !c.up).forEach(c => el('rect', { x: c.x, y: y0, width: c.w, height: y1 - y0, fill: 'url(#hatch)', 'pointer-events': 'none' }, svg));
+    el('path', { d, fill: 'none', stroke: tok('ink'), 'stroke-opacity': .7, 'stroke-width': 1.25 }, svg);
+    const hit = el('rect', { x: L.midX, y: y0 - 4, width: L.midW - PX('space-3'), height: y1 - y0 + 8, fill: 'transparent', class: 'bed', tabindex: 0, role: 'button', 'aria-label': DATA.labels.unconformity }, svg);
+    text(svg, L.midX + L.midW - PX('space-4'), y0 + PX('space-3'), DATA.labels.unconformity, 'v', 'end');
+    text(svg, L.midX + L.midW - PX('space-4'), y0 + PX('space-3') + PX('space-4'), `${fd(gp.from)} – ${fd(gp.to)}`, '', 'end');
+    bindCard(hit, () => card('gap'));
+  });
+  // tide line: a window that passed with a release waiting
+  DATA.missed.forEach(m => { const yy = L.y(m.at);
+    el('line', { x1: L.cols[2].x, x2: L.logX - PX('space-3'), y1: yy, y2: yy, stroke: tok('ink'), 'stroke-opacity': .6, 'stroke-dasharray': '1 3' }, svg);
+    const t = text(svg, L.cols[L.cols.length - 1].x + L.cols[L.cols.length - 1].w - PX('space-2'), yy - PX('space-3'), DATA.labels.tide, 'v', 'end'); t.setAttribute('paint-order', 'stroke'); t.setAttribute('stroke', tok('slate-deep')); t.setAttribute('stroke-width', 4); t.classList.add('bed'); t.setAttribute('tabindex', 0); bindCard(t, () => card('tide')); });
+  // minor labels in the middle gutter at each server bed
+  Object.keys(DATA.birds).forEach(m => { const r = applied.find(x => minorOf(x.v) === m && x.kind === 'minor'); if (!r) return;
+    const nx = applied.find(x => x.kind === 'minor' && D(x.here) > D(r.here)); const yy = (L.y(r.here) + L.y(nx ? nx.here : DATA.now)) / 2;
+    if (DATA.gaps.some(g => D(g.from) < D(nx ? nx.here : DATA.now) && D(g.to) > D(r.here)) && m === '0.10') return text(svg, L.midX + L.midW - PX('space-4'), L.y(r.here) - PX('space-3'), m + ' ' + DATA.birds[m], 'v', 'end');
+    text(svg, L.midX + L.midW - PX('space-4'), yy, m + ' ' + DATA.birds[m], 'v', 'end'); });
+
+  // correlation lines: the base of each minor, column to column
+  const corr = el('g', {}, svg);
+  DATA.releases.forEach(r => {
+    const pts = L.cols.map(c => { const at = c.up ? r[c.id] : (r.here && (D(r.here) <= NOW || r.state === 'scheduled') ? r.here : r.seen); if (!at || (c.up && D(at) > NOW)) return null;
+      if (!c.up && r.state === 'skipped') return null; if (!c.up && r.state === 'scheduled') return [c.x + c.w / 2, L.y(at)]; return [c.x + c.w / 2, L.y(at)]; }).filter(Boolean);
+    if (pts.length < 2 || r.state === 'rolledback') return;
+    const d = 'M' + pts.map(p => p.join(',')).join(' L');
+    const path = el('path', { d, class: 'corr' + (r.kind === 'minor' ? '' : ' p'), 'stroke-dasharray': r.state === 'scheduled' ? '3 4' : null }, corr);
+    if (r.state === 'scheduled') { path.setAttribute('stroke', tok('green')); path.style.stroke = 'var(--green)'; }
+  });
+  // the fault: a rolled-back release, a thin lens with a jagged edge that pinches out
+  DATA.releases.filter(r => r.rollback).forEach(r => { const b = r.rollback, yy = L.y(r.here);
+    const g = el('g', { class: 'bed', tabindex: 0, role: 'button', 'aria-label': DATA.labels.fault + ' ' + r.v }, svg);
+    b.reached.forEach(sid => { const c = L.cols.find(x => x.id === sid);
+      let d = `M${c.x},${yy}`; for (let i = 1; i <= 8; i++) d += ` L${c.x + c.w * i / 8},${yy + (i % 2 ? -3 : 3) * (sid === b.server ? 1.4 : .8)}`;
+      el('path', { d, fill: 'none', stroke: `color-mix(in srgb, ${tok('danger')} 55%, ${tok('ink-muted')})`, 'stroke-width': sid === b.server ? 2 : 1.25 }, g); });
+    const last = L.cols.find(x => x.id === b.reached[b.reached.length - 1]);
+    el('path', { d: `M${last.x + last.w},${yy} L${last.x + last.w + PX('space-3')},${yy}`, stroke: `color-mix(in srgb, ${tok('danger')} 55%, ${tok('ink-muted')})`, 'stroke-dasharray': '1 3' }, g);
+    text(g, last.x + last.w + PX('space-4'), yy, `${r.v} · ${DATA.labels.fault.split(' · ')[1]}`, '', 'start').style.fill = `color-mix(in srgb, var(--danger) 55%, var(--ink-muted))`;
+    bindCard(g, () => card('fault', r)); });
+
+  // wireline log for one server: bake errors as a trace, the high-water mark marked
+  const ls = server(DATA.logServer), lx = L.logX, lw = L.logW, sc = v => lx + (v / (DATA.limits.limit * 1.6)) * lw;
+  text(svg, lx, L.top - PX('space-4'), DATA.labels.log.replace('{s}', ls.short), 'v');
+  el('line', { x1: lx, x2: lx, y1: L.top, y2: L.bottom, stroke: tok('hairline-strong') }, svg);
+  [[DATA.limits.watch, 'watch'], [DATA.limits.limit, 'limit']].forEach(([v, n]) => { el('line', { x1: sc(v), x2: sc(v), y1: L.ground, y2: L.bottom, stroke: n === 'limit' ? tok('warning') : tok('hairline-strong'), 'stroke-opacity': n === 'limit' ? .45 : 1, 'stroke-dasharray': '2 3' }, svg); text(svg, sc(v), L.ground - PX('space-3'), v + DATA.limits.unit, '', 'middle'); });
+  let d = `M${sc(.2)},${L.bottom}`; const spikes = DATA.releases.filter(r => r.peak != null && r.here && D(r.here) <= NOW).sort((a, b) => D(a.here) - D(b.here));
+  spikes.forEach(r => { const yy = L.y(r.here); d += ` L${sc(.2)},${yy + 3} L${sc(r.peak)},${yy} L${sc(.2)},${yy - 3}`; });
+  d += ` L${sc(.2)},${L.ground}`;
+  el('path', { d, fill: 'none', stroke: tok('ink'), 'stroke-opacity': .7, 'stroke-width': 1 }, svg);
+  const hw = spikes.reduce((a, b) => b.peak > a.peak ? b : a);
+  const hy = L.y(hw.here);
+  el('path', { d: `M${sc(hw.peak) + 2},${hy} l${PX('space-2')},-${PX('space-1')} v${PX('space-2')} z`, fill: tok('ink') }, svg);
+  text(svg, sc(hw.peak) - PX('space-2'), hy - PX('space-4'), DATA.labels.hwm, 'v', 'end');
+  text(svg, sc(hw.peak) - PX('space-2'), hy + PX('space-4'), `${hw.peak}${DATA.limits.unit} · ${fd(hw.here)}`, '', 'end');
+  // preview's bake for the release ahead, as a dashed forecast
+  el('path', { d: `M${sc(.2)},${wy + 3} L${sc(p.previewPeak)},${wy} L${sc(.2)},${wy - 3}`, fill: 'none', stroke: tok('green'), 'stroke-dasharray': '2 2' }, svg);
+  text(svg, sc(p.previewPeak) + PX('space-2'), wy, `on Preview ${p.previewPeak}${DATA.limits.unit}`, 'need');
+
+  renderSide();
+}
+function bindCard(node, fn) {
+  node.addEventListener('click', e => { e.stopPropagation(); showWhy(node, fn()); });
+  node.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showWhy(node, fn()); } });
+}
+function renderSide() {
+  $('#side').innerHTML = `<div class="eyebrow">Reading the section</div><h2>Deeper is older. The ground is now; the sky is ahead.</h2>
+    <p style="margin:0">Each column is a core: three upstream channels, then each server. A line joins where one release begins in every core, so its slope is how long it took to reach you.</p>
+    <div class="key">
+      <i style="background:color-mix(in srgb,var(--x-org-low) 36%,var(--slate-deep));border-top:2px solid color-mix(in srgb,var(--x-org) 50%,transparent)"></i><span>bed = a release, thick top = a minor</span>
+      <i style="border-top:1px solid var(--x-org);margin-top:var(--space-2)"></i><span>correlation line</span>
+      <i style="border-top:2px solid var(--x-scar);margin-top:var(--space-2)"></i><span>fault = rolled back</span>
+      <i style="border-top:2px solid var(--x-seam);margin-top:var(--space-2);box-shadow:0 0 var(--space-2) var(--light)"></i><span>seam = the repair</span>
+      <i class="hatch"></i><span>unconformity / stale</span>
+      <i style="border-top:1px dotted var(--ink);margin-top:var(--space-2)"></i><span>tide line = window missed</span>
+      <i style="border-top:2px dashed var(--green);margin-top:var(--space-2)"></i><span>window ahead</span>
+    </div>`;
+}
+function demo() {
+  $$('.corr').forEach(p => { const len = p.getTotalLength(); p.style.setProperty('--len', len); p.style.strokeDasharray = p.classList.contains('p') ? '' : len; p.style.strokeDashoffset = p.classList.contains('p') ? 0 : len; });
+  requestAnimationFrame(() => requestAnimationFrame(() => $$('.corr').forEach((p, i) => { p.style.transitionDelay = `calc(var(--motion-instant) * ${i % 8})`; p.classList.add('on'); p.style.strokeDashoffset = 0; })));
+  later(REDUCED ? T('base') : T('run') + T('calm'), () => { const f = $$('#svg g.bed').find(g => (g.getAttribute('aria-label') || '').startsWith(DATA.labels.fault)); if (f) showWhy(f, card('fault', DATA.releases.find(r => r.rollback))); });
+}
+document.addEventListener('click', e => { if (!e.target.closest('.why')) hideWhy(); });
+boot(render, demo);
+</script>
+</body>
+</html>

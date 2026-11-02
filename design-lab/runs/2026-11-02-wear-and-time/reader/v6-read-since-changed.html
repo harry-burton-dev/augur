@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader · V6 · Read since it changed</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens (time language, see ../grammar/v1-time-language.html).
+   Each is "needs token" in notes.md. All are combinations of kit tokens.
+   --------------------------------------------------------------- */
+:root{
+  --x-seam: color-mix(in srgb, var(--warning) 55%, var(--ink));          /* proposed --mark-seam: repair gold, never "warning" */
+  --x-wear: color-mix(in srgb, var(--ink) 55%, transparent);             /* proposed --mark-wear: matter, never light */
+  --x-wear-read: color-mix(in srgb, var(--ink-muted) 45%, transparent);  /* proposed --mark-wear-read */
+  --x-tide: color-mix(in srgb, var(--ink-muted) 60%, transparent);       /* proposed --mark-tide: a past date left behind */
+  --x-now: color-mix(in srgb, var(--light) 80%, transparent);            /* proposed --mark-now: the one now line */
+  --x-hatch: color-mix(in srgb, var(--ink-muted) 26%, transparent);      /* proposed --mark-stale-hatch ink */
+  --x-stale: repeating-linear-gradient(45deg, transparent 0 var(--space-2), var(--x-hatch) var(--space-2) calc(var(--space-2) + 1px)); /* 45deg: shadow (unavailable) is 135deg */
+  --x-past-dim: .62;                                                      /* proposed --time-past-dim: past is quieter than now */
+  --x-margin: var(--space-8);
+  --x-aside: var(--measure-drawer);
+  --f-department: var(--floor-department-high);
+  --f-team: var(--floor-team-high);
+  --f-org: var(--floor-org-high);
+  --f-you: var(--floor-you-high);
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.lucide{flex:none}
+.kbd{display:inline-block;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:var(--space-1) var(--space-2)}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.water{position:fixed;inset:0;pointer-events:none;background:radial-gradient(70% 45% at 50% 115%, color-mix(in srgb, var(--navy) 42%, transparent), transparent 70%)}
+
+/* top band */
+.band{position:fixed;top:0;left:0;right:0;height:var(--band-top);display:flex;align-items:center;gap:var(--space-4);padding:0 var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb, var(--slate-deep) 82%, transparent);z-index:var(--layer-chrome)}
+.app-name{font-size:var(--type-meta);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.fchip{--fc:var(--f-department);display:inline-flex;align-items:center;gap:var(--space-2);height:var(--space-5);padding:0 var(--space-3);border-radius:var(--radius-pill);border:1px solid color-mix(in srgb, var(--fc) 40%, transparent);color:var(--fc);font-size:var(--type-small);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-2);height:var(--space-2);border-radius:50%;background:currentColor}
+.crumbs{display:flex;align-items:center;gap:var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);white-space:nowrap;min-width:0}
+.crumbs b{font-weight:400;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.band-r{margin-left:auto;display:flex;align-items:center;gap:var(--space-4);font:400 var(--type-small)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.me{width:var(--target-sm);height:var(--target-sm);border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb, var(--f-you) 18%, var(--slate-deep));border:1px solid color-mix(in srgb, var(--f-you) 45%, transparent);color:var(--light);font:400 var(--type-small)/1 var(--font-sans);letter-spacing:var(--tracking-soft)}
+
+/* reader */
+.stage{position:fixed;top:var(--band-top);left:0;right:0;bottom:0}
+.reader{position:absolute;top:0;bottom:0;left:0;right:var(--x-aside);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+body.noaside{--x-aside:0px}
+.page{position:relative;width:calc(var(--measure-read) + 2 * var(--x-margin));margin:0 auto;padding:var(--space-6) 0 var(--space-8)}
+.row{position:relative;display:grid;grid-template-columns:var(--x-margin) var(--measure-read) var(--x-margin)}
+.ml,.mr{position:relative;min-width:0}
+.tx{margin:0;min-width:0}
+.dhead .tx{padding-bottom:var(--space-5);border-bottom:1px solid var(--hairline);margin-bottom:var(--space-5)}
+.dhead h1{margin:var(--space-2) 0 var(--space-2);font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-soft);color:var(--light)}
+.dmeta{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.dmeta b{font-weight:400;color:var(--ink)}
+.sec{margin-bottom:var(--space-5)}
+.hrow h2{margin:0 0 var(--space-3);font-weight:400;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.hrow h2 .n{font:400 var(--type-meta)/1 var(--font-mono);color:var(--ink-muted);margin-right:var(--space-3)}
+.prow p{margin:0 0 var(--space-4);color:var(--ink);font-size:var(--type-body);line-height:var(--leading-body)}
+.fix{color:inherit}
+
+.aside{position:absolute;top:0;bottom:0;right:0;width:var(--x-aside);border-left:1px solid var(--hairline);background:color-mix(in srgb, var(--slate-deep) 62%, transparent);padding:var(--space-5) var(--space-4) var(--space-7);overflow:hidden;display:flex;flex-direction:column;gap:var(--space-4)}
+body.noaside .aside{display:none}
+.aside h3{margin:0;font-weight:400;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.aside p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);background:var(--surface-inset);font-size:var(--type-meta);white-space:nowrap;transition:background var(--motion-quick)}
+.btn:hover{background:var(--surface-raised)}
+.btn[aria-disabled="true"]{cursor:not-allowed;color:var(--ink-muted);border-style:dashed;background:repeating-linear-gradient(135deg,transparent 0 var(--space-2),var(--hairline) var(--space-2) calc(var(--space-2) + 1px))}
+.why{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.why b{font-weight:400;color:var(--ink)}
+
+.hints{position:fixed;left:var(--edge-tight);bottom:calc(var(--edge-tight) + var(--space-5));z-index:999;display:flex;gap:var(--space-4);align-items:center;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);background:var(--scrim);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key)}
+.hints span{display:inline-flex;gap:var(--space-2);align-items:center}
+.hints .kbd{padding:2px var(--space-1)}
+
+/* floor colours for people */
+[data-floor="department"]{--fc:var(--f-department)}
+[data-floor="team"]{--fc:var(--f-team)}
+[data-floor="org"]{--fc:var(--f-org)}
+[data-floor="you"]{--fc:var(--f-you)}
+
+/* tip: in-place "why and since when" */
+.tip{position:fixed;z-index:var(--layer-overlay);max-width:var(--measure-card);padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);box-shadow:var(--shadow-overlay);font-size:var(--type-meta);line-height:var(--leading-meta);pointer-events:none;opacity:0;transform:translateY(var(--space-1));transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out)}
+.tip.on{opacity:1;transform:none}
+.tip .eyebrow{display:block;margin-bottom:var(--space-1)}
+.tip .l{display:flex;gap:var(--space-2);align-items:baseline;color:var(--ink-muted)}
+.tip .l b{font-weight:400;color:var(--ink)}
+@media (prefers-reduced-motion: reduce){.tip{transform:none}}
+
+</style>
+<style>
+:root{--x-aside:calc(var(--measure-drawer) + var(--space-6))}
+@media (max-width:1440px){:root{--x-margin:var(--space-7)}}
+/* section gauge: a waterline per audience group */
+.hrow .tx{display:grid;grid-template-columns:1fr auto;align-items:center;gap:var(--space-4)}
+.gauge{position:relative;display:flex;align-items:center;gap:var(--space-3);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);transition:color var(--motion-base)}
+.gauge .bars{display:flex;gap:2px;width:calc(var(--space-8) * .9);height:var(--space-2)}
+.gb{position:relative;flex:var(--n);border-radius:1px;background:var(--hairline);overflow:hidden}
+.gb i{position:absolute;left:0;top:0;bottom:0;width:calc(var(--f) * 100%);background:color-mix(in srgb, var(--fc) 60%, transparent);transition:width var(--motion-calm) var(--ease-out)}
+.gb.all{--fc:var(--ink-muted)}
+/* needs you: you have not read a change you are expected to know (light language: bloom, then dim when done) */
+.gauge.need{color:var(--green)}
+.gauge.need::before{content:"";position:absolute;inset:calc(var(--space-2) * -1);border-radius:var(--radius-inset);background:radial-gradient(closest-side, color-mix(in srgb, var(--green) 22%, transparent), transparent);z-index:-1;animation:breathe var(--motion-still) var(--ease-standard) infinite alternate}
+@keyframes breathe{from{opacity:calc(1 - var(--breathe) * 3)}to{opacity:1}}
+.gauge.done{color:var(--ink-muted)}
+.sec{isolation:isolate}
+.unread-note{display:flex;gap:var(--space-2);align-items:center;margin:0 0 var(--space-3);font-size:var(--type-meta);color:var(--green);transition:opacity var(--motion-slow)}
+.unread-note.done{opacity:0}
+/* panel */
+.aside{gap:var(--space-3)}
+.big{display:flex;align-items:baseline;gap:var(--space-2)}
+.big b{font:200 var(--type-display)/1 var(--font-sans);color:var(--light);font-variant-numeric:tabular-nums}
+.big span{color:var(--ink-muted);font-size:var(--type-meta)}
+.grp{display:grid;gap:var(--space-2)}
+.gr{display:grid;grid-template-columns:1fr auto;gap:var(--space-1) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.gr .v{font-family:var(--font-mono);font-size:var(--type-small);color:var(--ink-muted)}
+.gr .gb{grid-column:1 / -1;height:var(--space-2)}
+.tide-chart svg{display:block;width:100%;overflow:visible}
+.tide-chart .hw{stroke:var(--ink-muted);stroke-dasharray:4 3;stroke-width:1}
+.tide-chart .ln{fill:none;stroke:var(--ink);stroke-width:1.5}
+.tide-chart .ar{fill:color-mix(in srgb, var(--ink) 8%, transparent)}
+.tide-chart .ch{stroke:var(--x-seam);stroke-width:1.5}
+.tide-chart .now{stroke:var(--x-now);stroke-width:1}
+.tide-chart .gap{stroke:var(--ink-muted);stroke-width:1;stroke-dasharray:1 3}
+.tide-chart text{font:400 var(--type-small) var(--font-mono);fill:var(--ink-muted)}
+.tide-chart text.hi{fill:var(--ink)}
+.priv{display:grid;grid-template-columns:auto 1fr;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-inset);border:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.priv b{font-weight:400;color:var(--ink)}
+.seg{display:inline-flex;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);overflow:hidden}
+.seg button{height:var(--target-sm);padding:0 var(--space-3);font-size:var(--type-meta);color:var(--ink-muted)}
+.seg button[aria-pressed="true"]{background:var(--surface-raised);color:var(--light)}
+.head{display:flex;justify-content:space-between;align-items:center;gap:var(--space-3)}
+.acts{display:grid;gap:var(--space-1)}
+.swap{transition:opacity var(--motion-quick)}
+.swap.out{opacity:0}
+</style>
+</head>
+<body class="">
+<div class="water" aria-hidden="true"></div>
+<header class="band" id="band"></header>
+<main class="stage">
+  <div class="reader" id="reader"><article class="page" id="page"></article></div>
+  <aside class="aside" id="aside">
+    <div class="head"><span class="eyebrow">Read since it changed</span><div class="seg" role="group" aria-label="View as"><button aria-pressed="true" data-as="you">You</button><button aria-pressed="false" data-as="owner">Owner</button></div></div>
+    <div class="swap" id="panel"></div>
+  </aside>
+</main>
+
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+<div class="hints"><span><span class="kbd">O</span> view as owner</span><span>the panel follows the section you are reading</span> <span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Reader · V6</b> who has read this since it changed: counts by group, a high-water mark, privacy floor · tide marks, k-anonymity</div>
+<script>
+/* ===== Sample data: every name, label and count on this page comes from here. ===== */
+const DATA = {
+  now: '2026-11-02',
+  app: 'Artifacts',
+  orgName: 'Org',
+  floor: { kind: 'department', name: 'Finance' },
+  library: 'Policies',
+  you: { id: 'you', initials: 'MO', name: 'You', lastReadAgo: 24 },
+  people: {
+    pr: { name: 'Priya Raman', floor: 'department', role: 'Policy owner' },
+    sk: { name: 'Sana Kader', floor: 'department', role: 'Editor' },
+    jm: { name: 'Jonas Meyer', floor: 'team', role: 'Editor, Field Operations' },
+    al: { name: 'Ade Lawal', floor: 'org', role: 'Org compliance' }
+  },
+  audience: { groups: [ { floor: 'department', name: 'Finance', n: 22 }, { floor: 'team', name: 'Field Operations', n: 16 } ] },
+  privacy: { minGroup: 5, namesNeedConsent: true },       /* a question for Harry, not a decision */
+  readTrackingSinceAgo: 500,                              /* read events only exist from here: older is an unconformity */
+  historyKeptSinceAgo: 900,                               /* imported from the old intranet; nothing older survives */
+  doc: { kind: 'Policy', title: 'Travel and expenses policy', owner: 'pr', status: 'Published' },
+  sections: [
+    { id: 's1', title: 'Purpose', reviewedAgo: 120, reviewEvery: 365, refresh: 'pr', readSince: { department: 18, team: 13 },
+      edits: [[900,'pr','write'],[610,'pr','edit']],
+      paras: [
+        { id: 'p1', read: .92, edit: .10, ret: 4, t: 'This policy sets out how we book, pay for and claim back travel and expenses for work. It applies the same rules to everyone and keeps spending visible to the people who approve it.' },
+        { id: 'p2', read: .55, edit: .25, ret: 2, t: 'Where this policy and a local agreement disagree, the stricter rule applies until the policy owner says otherwise.' } ] },
+    { id: 's2', title: 'Who this applies to', reviewedAgo: 120, reviewEvery: 365, refresh: 'pr', readSince: { department: 16, team: 11 },
+      edits: [[900,'pr','write'],[400,'al','edit'],[210,'al','edit']],
+      paras: [
+        { id: 'p1', read: .45, edit: .50, ret: 3, t: 'Everyone who travels or spends money on behalf of the department, including contractors with a purchase order. Guests we invite are covered by section 7.' },
+        { id: 'p2', read: .30, edit: .30, ret: 1, t: 'Team leads make sure new starters read this policy in their first week.' } ] },
+    { id: 's3', title: 'Booking travel', reviewedAgo: 75, reviewEvery: 365, refresh: 'jm', readSince: { department: 13, team: 9 },
+      edits: [[900,'pr','write'],[200,'jm','edit'],[75,'jm','correction']],
+      paras: [
+        { id: 'p1', read: .85, edit: .60, ret: 19, t: 'Book rail travel at least {14 days} ahead where you can, and choose standard class unless the journey is longer than three hours.',
+          seam: { ago: 75, who: 'jm', was: '7 days', why: 'The 14-day rule took effect in April and this line was missed when the section was updated.' },
+          history: [[900,'Book rail travel at least 7 days ahead where you can, and choose standard class.'],[200,'Book rail travel at least 7 days ahead where you can, and choose standard class unless the journey is longer than three hours.']] },
+        { id: 'p2', read: .70, edit: .30, ret: 11, t: 'Flights need approval before booking. Ask the travel desk for two quotes and attach both to the request.' },
+        { id: 'p3', read: .40, edit: .45, ret: 6, t: 'Hotels should be within the city cap in the allowance table. If none is available, book the nearest option and note why.' } ] },
+    { id: 's4', title: 'Daily allowances', reviewedAgo: 9, reviewEvery: 365, refresh: 'sk', readSince: { department: 4, team: 2 }, readBefore: 31, changedSinceYou: true,
+      edits: [[900,'pr','write'],[300,'pr','edit'],[40,'sk','edit'],[9,'sk','correction']],
+      paras: [
+        { id: 'p1', read: .97, edit: .85, ret: 46, t: 'The daily allowance for an overnight stay is {€54}, which covers breakfast, dinner and incidental costs. Lunch is covered only when you are away from your usual place of work for more than five hours.',
+          seam: { ago: 9, who: 'sk', was: '€45', why: 'The figure was transposed when the new year’s rate table was copied in. €45 was never the approved rate.' },
+          history: [[900,'The daily allowance for an overnight stay is €42, which covers breakfast, dinner and incidental costs.'],[300,'The daily allowance for an overnight stay is €48, which covers breakfast, dinner and incidental costs. Lunch is covered only when you are away for more than five hours.'],[40,'The daily allowance for an overnight stay is €45, which covers breakfast, dinner and incidental costs. Lunch is covered only when you are away from your usual place of work for more than five hours.']] },
+        { id: 'p2', read: .60, edit: .35, ret: 9, t: 'Allowances are paid with your next salary run. You do not need receipts for the allowance itself, only for costs above it.' } ] },
+    { id: 's5', title: 'Approvals', reviewedAgo: 30, reviewEvery: 365, refresh: 'pr', readSince: { department: 9, team: 5 }, readBefore: 26, changedSinceYou: true,
+      edits: [[900,'pr','write'],[200,'jm','edit'],[190,'al','edit'],[185,'jm','edit'],[180,'al','edit'],[60,'pr','edit'],[45,'jm','edit'],[44,'al','edit'],[30,'pr','edit']],
+      paras: [
+        { id: 'p1', read: .50, edit: .98, ret: 14, t: 'Any single cost above €1,000 needs approval from your budget holder before you commit to it. Below that, your line manager approves.',
+          history: [[900,'Any single cost above €500 needs approval from your budget holder.'],[200,'Any single cost above €1,000 needs approval from your budget holder.'],[190,'Any single cost above €500 needs approval from your budget holder.'],[185,'Any single cost above €1,000 needs approval from your budget holder.'],[180,'Any single cost above €500 needs approval from your budget holder.'],[60,'Any single cost above €750 needs approval from your budget holder before you commit to it.'],[45,'Any single cost above €1,000 needs approval from your budget holder before you commit to it.'],[44,'Any single cost above €750 needs approval from your budget holder before you commit to it.']] },
+        { id: 'p2', read: .35, edit: .40, ret: 3, t: 'Approvals are recorded against the request, so anyone in the approval chain can see who agreed and when.' } ] },
+    { id: 's6', title: 'Claiming and receipts', reviewedAgo: 430, reviewEvery: 180, refresh: 'jm', readSince: { department: 17, team: 13 },
+      stale: 'It still names the paper claim form, which was retired in June. Claims now go through the Expenses app.',
+      edits: [[900,'pr','write'],[430,'jm','edit']],
+      paras: [
+        { id: 'p1', read: .75, edit: .20, ret: 12, t: 'Claim expenses within 30 days using the paper claim form, signed by your line manager, and post it to the finance office with your receipts.' },
+        { id: 'p2', read: .50, edit: .15, ret: 5, t: 'Keep original receipts for six years. Scans are accepted only for costs under €50.' } ] },
+    { id: 's7', title: 'Exceptions', reviewedAgo: 300, reviewEvery: 365, refresh: 'pr', readSince: { department: 6, team: 3 },
+      edits: [[900,'pr','write'],[700,'pr','edit']],
+      paras: [
+        { id: 'p1', read: .12, edit: .10, ret: 1, t: 'Exceptions to this policy need written agreement from the policy owner. Each exception is recorded and looked at again at the next policy review.' } ] }
+  ]
+};
+
+/* ===== helpers ===== */
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const root = document.documentElement;
+const tok = n => getComputedStyle(root).getPropertyValue(n).trim();
+const ms = n => parseFloat(tok(n)) || 0;
+const px = n => { const v = tok(n); return v.endsWith('rem') ? parseFloat(v) * 16 : parseFloat(v) || 0; };
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const NOW = new Date(DATA.now + 'T12:00:00');
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dateOf = ago => { const d = new Date(NOW); d.setDate(d.getDate() - ago); return d; };
+const fdate = ago => { const d = dateOf(ago); return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear(); };
+const span = d => { d = Math.abs(d); if (d < 1) return 'today'; if (d < 14) return d + (d === 1 ? ' day' : ' days'); if (d < 60) return Math.round(d / 7) + ' weeks'; if (d < 540) return Math.round(d / 30.4) + ' months'; return (Math.round(d / 36.5) / 10) + ' years'; };
+const ago = d => d < 1 ? 'today' : span(d) + ' ago';
+const person = id => id === 'you' ? DATA.you : DATA.people[id];
+const audienceTotal = () => DATA.audience.groups.reduce((a, g) => a + g.n, 0);
+const lastChange = s => Math.min(...s.edits.map(e => e[0]));
+const lastEdit = s => s.edits.reduce((a, e) => e[0] < a[0] ? e : a);
+const docChanged = () => Math.min(...DATA.sections.map(lastChange));
+const versions = () => [...new Set(DATA.sections.flatMap(s => s.edits.map(e => e[0])))].sort((a, b) => b - a);
+const readSinceTotal = s => Object.values(s.readSince).reduce((a, b) => a + b, 0);
+const dueIn = s => s.reviewEvery - s.reviewedAgo;            /* negative: overdue */
+const seamHTML = (p, cls = 'fix') => p.t.replace(/\{([^}]*)\}/g, (_, w) => `<span class="${cls}" data-fix="${p.id}">${w}</span>`);
+const plain = t => t.replace(/[{}]/g, '');
+const wait = t => new Promise(r => setTimeout(r, RM ? Math.min(t, ms('--motion-instant')) : t));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sid = (s, p) => s.id + '-' + p.id;
+
+/* band */
+function renderBand() {
+  const o = person(DATA.doc.owner);
+  $('#band').innerHTML = `
+    <span class="app-name">${esc(DATA.app)}</span>
+    <span class="fchip" data-floor="${DATA.floor.kind}">${esc(DATA.floor.name)}</span>
+    <nav class="crumbs" aria-label="Breadcrumb">${esc(DATA.library)} <i data-lucide="chevron-right" data-size="14"></i> <b>${esc(DATA.doc.title)}</b></nav>
+    <div class="band-r"><span>Version ${versions().length}</span><span>${esc(DATA.doc.status)}</span><span class="me" title="${esc(DATA.you.name)}">${esc(DATA.you.initials)}</span></div>`;
+}
+
+/* document */
+function renderDoc(opts = {}) {
+  const o = person(DATA.doc.owner);
+  let h = `<header class="row dhead"><div class="ml"></div><div class="tx">
+      <div class="eyebrow">${esc(DATA.doc.kind)} · ${esc(DATA.library)}</div>
+      <h1>${esc(DATA.doc.title)}</h1>
+      <div class="dmeta"><span>Owner <b>${esc(o.name)}</b></span><span>Changed <b>${ago(docChanged())}</b></span><span>Audience <b>${audienceTotal()}</b></span>${opts.meta || ''}</div>
+    </div><div class="mr"></div></header>`;
+  DATA.sections.forEach((s, i) => {
+    h += `<section class="sec" id="${s.id}" data-sid="${s.id}"><div class="row hrow"><div class="ml"></div><h2 class="tx"><span class="n">${i + 1}</span>${esc(s.title)}</h2><div class="mr"></div></div>`;
+    s.paras.forEach(p => { h += `<div class="row prow" data-pid="${sid(s, p)}"><div class="ml"></div><p class="tx">${seamHTML(p)}</p><div class="mr"></div></div>`; });
+    h += `</section>`;
+  });
+  $('#page').innerHTML = h;
+}
+
+/* tip */
+function tip(html, x, y, place = 'left', maxW) {
+  const t = $('#tip'); t.innerHTML = html; Icons.hydrate(t); t.style.maxWidth = maxW ? maxW + 'px' : '';
+  const r = t.getBoundingClientRect(), W = innerWidth, H = innerHeight, g = px('--space-3');
+  let L = place === 'left' ? x - r.width - g : place === 'below' ? x - r.width / 2 : x + g, T = place === 'below' ? y + g : y - r.height / 2;
+  L = Math.max(g, Math.min(W - r.width - g, L)); T = Math.max(px('--band-top') + g, Math.min(H - r.height - g * 4, T));
+  t.style.left = L + 'px'; t.style.top = T + 'px'; t.classList.add('on');
+}
+/* room between the text column and a right-hand x */
+const roomRight = x => x - $('#page .prow .tx').getBoundingClientRect().right - px('--space-3');
+const untip = () => $('#tip').classList.remove('on');
+
+/* demo runner: shows its moment ~1.2 s after load; R replays */
+let RUN = 0;
+async function play() {
+  const my = ++RUN; const alive = () => my === RUN;
+  untip(); if (typeof reset === 'function') reset();
+  await wait(ms('--motion-run'));
+  if (alive() && typeof demo === 'function') await demo(alive);
+}
+document.addEventListener('keydown', e => {
+  if (e.target.matches && e.target.matches('input,textarea')) return;
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); play(); }
+  if (e.key === 'Escape') untip();
+});
+function boot() { renderBand(); if (typeof setup === 'function') setup(); Icons.hydrate(); play(); }
+
+/* ===== variant ===== */
+const K = DATA.privacy.minGroup, TOT = audienceTotal();
+let SEL = 's4', AS = 'you', READ = new Set();
+const groupCount = (s, g) => s.readSince[g.floor] + (READ.has(s.id) && g.floor === DATA.floor.kind ? 1 : 0);
+const total = s => DATA.audience.groups.reduce((a, g) => a + groupCount(s, g), 0);
+/* privacy floor: a breakdown shows only when every group has at least K readers; otherwise the others would reveal the small one */
+const split = s => DATA.audience.groups.every(g => groupCount(s, g) >= K);
+function bars(s) { return split(s) ? DATA.audience.groups.map(g => `<span class="gb" data-floor="${g.floor}" style="--n:${g.n}"><i style="--f:${groupCount(s, g) / g.n}"></i></span>`).join('') : `<span class="gb all" style="--n:1"><i style="--f:${total(s) / TOT}"></i></span>`; }
+const needs = s => s.changedSinceYou && !READ.has(s.id) && s.paras.some(p => p.seam && p.seam.ago < DATA.you.lastReadAgo);
+function gauge(s) {
+  const el = $('#' + s.id + ' .gauge'); el.innerHTML = `<span>${total(s)} of ${TOT}</span><span class="bars">${bars(s)}</span>`;
+  el.classList.toggle('need', needs(s)); el.classList.toggle('done', READ.has(s.id));
+  el.setAttribute('aria-label', `${total(s)} of ${TOT} have read this section since it changed ${ago(lastChange(s))}.${needs(s) ? ' You have not read this change yet.' : ''}`);
+}
+function setup() {
+  renderDoc({ meta: `<span>Read since last change <b id="docread"></b></span>` });
+  DATA.sections.forEach(s => {
+    const h = $('#' + s.id + ' .hrow .tx'); h.innerHTML = `<span>${h.innerHTML}</span><button class="gauge" data-sec="${s.id}"></button>`;
+    if (needs(s)) $('#' + s.id + ' .hrow').insertAdjacentHTML('afterend', `<div class="row"><div class="ml"></div><p class="tx unread-note" data-note="${s.id}"><i data-lucide="eye" data-size="16"></i>Changed since you last read it, ${ago(DATA.you.lastReadAgo)}: a figure was corrected.</p><div class="mr"></div></div>`);
+    gauge(s);
+  });
+  $$('.gauge').forEach(b => b.addEventListener('click', () => select(b.dataset.sec)));
+  $$('.seg button').forEach(b => b.addEventListener('click', () => viewAs(b.dataset.as)));
+  document.addEventListener('keydown', e => { if (e.key === 'o' || e.key === 'O') viewAs(AS === 'you' ? 'owner' : 'you'); });
+  $('#reader').addEventListener('scroll', spy, { passive: true });
+  docRead(); panel();
+}
+function docRead() { const s = DATA.sections.reduce((a, s) => lastChange(s) < lastChange(a) ? s : a); $('#docread').textContent = `${total(s)} of ${TOT}`; }
+function viewAs(a) { AS = a; $$('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.as === a)); panel(); }
+let spyT = 0;
+function spy() {
+  clearTimeout(spyT); spyT = setTimeout(() => {
+    const r = $('#reader'), mid = r.scrollTop + r.clientHeight * .4;
+    const s = [...DATA.sections].reverse().find(s => $('#' + s.id).offsetTop <= mid) || DATA.sections[0];
+    if (s.id !== SEL) select(s.id);
+  }, ms('--motion-quick'));
+}
+function select(id) { SEL = id; const p = $('#panel'); p.classList.add('out'); setTimeout(() => { panel(); p.classList.remove('out'); }, RM ? 0 : ms('--motion-quick')); }
+function chart(s) {
+  const le = lastEdit(s);
+  /* cumulative readers since the change, against the high-water mark the previous version reached */
+  const W = $('#aside').clientWidth - px('--space-4') * 2 - px('--space-2'), H = px('--space-8'), days = Math.max(1, lastChange(s)), hw = s.readBefore || total(s), max = Math.max(hw, total(s)) * 1.15;
+  const y = v => H - v / max * H, x = d => d / days * W;
+  const n = total(s), pts = []; for (let d = 0; d <= days; d += Math.max(1, Math.round(days / 24))) pts.push([x(d), y(n * Math.sqrt(d / days))]); pts.push([x(days), y(n)]);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('');
+  return `<svg height="${H + px('--space-5')}" viewBox="0 0 ${W} ${H + px('--space-5')}" role="img" aria-label="${n} readers since the change; the previous version reached ${hw}">
+    <path class="ar" d="${line} L${x(days)},${H} L0,${H} Z"/><path class="ln" d="${line}"/>
+    <line class="ch" x1="0" y1="0" x2="0" y2="${H}" style="${le[2] === 'correction' ? '' : 'stroke:var(--ink-muted)'}"/>
+    ${s.readBefore ? `<line class="hw" x1="0" y1="${y(hw)}" x2="${W}" y2="${y(hw)}"/><text x="${W}" y="${y(hw) - px('--space-2')}" text-anchor="end" class="hi">${hw} read the old version</text>
+      <line class="gap" x1="${x(days) - px('--space-2')}" y1="${y(hw)}" x2="${x(days) - px('--space-2')}" y2="${y(n)}"/><text x="${x(days) - px('--space-3')}" y="${(y(hw) + y(n)) / 2 + 4}" text-anchor="end">${hw - n} still to read it</text>` : ''}
+    <line class="now" x1="${x(days)}" y1="0" x2="${x(days)}" y2="${H}"/>
+    <text x="0" y="${H + px('--space-4')}">changed ${fdate(days).slice(0, -5)}</text><text x="${x(days)}" y="${H + px('--space-4')}" text-anchor="end">now</text></svg>`;
+}
+function panel() {
+  const s = DATA.sections.find(x => x.id === SEL), n = total(s), le = lastEdit(s), owner = person(DATA.doc.owner), stale = s.readBefore ? s.readBefore - n : 0;
+  $('#panel').innerHTML = `<div style="display:grid;gap:var(--space-3)">
+    <h3>${esc(s.title)}</h3>
+    <p>Changed <b>${ago(le[0])}</b> by ${esc(person(le[1]).name)}${le[2] === 'correction' ? ', a repair' : ''}.</p>
+    <div class="big"><b>${n}</b><span>of ${TOT} have read it since</span></div>
+    <div class="grp">${split(s) ? DATA.audience.groups.map(g => `<div class="gr"><span>${esc(g.name)}</span><span class="v">${groupCount(s, g)} of ${g.n}</span><span class="gb" data-floor="${g.floor}"><i style="--f:${groupCount(s, g) / g.n}"></i></span></div>`).join('')
+      : `<div class="gr"><span>${DATA.audience.groups.map(g => esc(g.name)).join(' · ')}</span><span class="v">breakdown hidden</span><span class="why" style="grid-column:1 / -1">One group has fewer than ${K} readers since the change. Showing the other would give its number away, so only the total is shown.</span></div>`}</div>
+    <div class="tide-chart">${chart(s)}</div>
+    <div class="acts">${AS === 'owner'
+      ? `<button class="btn"><i data-lucide="send" data-size="16"></i>Tell the ${stale > 0 ? stale + ' who read the old version' : 'audience'}</button><span class="why">Sends one note with what changed. You will not see who they are.</span>`
+      : `<button class="btn" aria-disabled="true" aria-describedby="tell-why"><i data-lucide="send" data-size="16"></i>Tell the ${stale > 0 ? stale + ' who read the old version' : 'audience'}</button><span class="why" id="tell-why">Only <b>${esc(owner.name)}</b> (${esc(owner.role.toLowerCase())}) can notify readers.</span>`}</div>
+    <div class="priv"><i data-lucide="lock" data-size="16"></i><span><b>Counts only, never names.</b> Groups are split out only when each has ${K} or more readers, so nobody can be picked out. ${AS === 'owner' ? 'Owners see the same counts as everyone.' : 'Your own reading counts once you have been on a section for a while.'}</span></div></div>`;
+  Icons.hydrate($('#panel'));
+}
+function markRead(id) { READ.add(id); const s = DATA.sections.find(x => x.id === id); gauge(s); const n = $(`[data-note="${id}"]`); if (n) { n.classList.add('done'); setTimeout(() => n.closest('.row').hidden = true, RM ? 0 : ms('--motion-slow')); } docRead(); if (SEL === id) panel(); }
+function reset() { READ.clear(); DATA.sections.forEach(gauge); $$('.unread-note').forEach(n => { n.classList.remove('done'); n.closest('.row').hidden = false; }); docRead(); viewAs('you'); SEL = 's1'; $('#reader').scrollTo({ top: 0 }); panel(); }
+async function demo(alive) {
+  const s = DATA.sections.find(s => needs(s)), r = $('#reader');
+  await wait(ms('--motion-calm')); if (!alive()) return;
+  r.scrollTo({ top: $('#' + s.id).offsetTop - px('--space-6'), behavior: RM ? 'auto' : 'smooth' });
+  await wait(ms('--motion-run')); if (!alive()) return;
+  select(s.id);
+  await wait(ms('--motion-run') * 2); if (!alive()) return;   /* dwell: reading counts after a while on the section */
+  markRead(s.id);
+}
+boot();
+</script>
+</body>
+</html>

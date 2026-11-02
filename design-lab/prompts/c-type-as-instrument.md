@@ -1,7 +1,7 @@
 ---
 batch: 1
 kind: steered
-concepts: [hierarchy-without-containers, the-object-explains-itself]
+concepts: [hierarchy-without-containers, the-object-explains-itself, time-is-matter]
 ---
 
 # Prompt C: Type as instrument. Hierarchy without boxes.
@@ -89,3 +89,8 @@ count its containers, and rebuild it with half as many.
   weight per size against `--ink` and `--ink-muted`.
 - What to change in the kits (Aerie and Quill) and in the type tokens,
   and what needs an ADR (fonts, axes).
+
+## Carry from earlier runs
+Read `design-lab/concepts/README.md`. In particular:
+- `time-is-matter` (wear and time run): carry age and staleness in type (weight, tone, hatch), never in colour or light.
+- `visible-repair`: how a correction is set in type (a seam in the line) next to an ordinary edit.
