@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { cx, Icon, IconButton, type IconName } from '@augur/kit-common';
+import { FocusStage, type Depth } from './focus.js';
+import { RingProvider, type RingShape } from './radial-menu.js';
 
 /** Where the person's choice to fold the rail or the drawer is kept, on this device. */
 const KEPT = { rail: 'augur-app-frame:rail-closed', drawer: 'augur-app-frame:drawer-closed' };
@@ -42,6 +44,10 @@ export interface AppFrameProps {
   busy?: boolean;
   /** Which screen is showing. A new value fades the main column in and turns the drawer with it. */
   screen?: string;
+  /** How the app goes out of focus behind a dialog, the radial menu or the palette (PDR-010). `veil` by default. */
+  depth?: Depth;
+  /** How the radial menu lays out its actions: `auto` (a ring, a list past eight) by default. */
+  ringShape?: RingShape;
   children: ReactNode;
 }
 
@@ -53,8 +59,13 @@ export interface AppFrameProps {
  * bar, so the frame has no header of its own. Whenever the drawer opens, folds
  * or goes, the frame fires `ui-drawer` on the window with the width it takes,
  * so the shell keeps its floor gauge clear of it.
+ *
+ * The frame is a focus stage (PDR-010): a dialog, the palette or the radial
+ * menu racks it out of focus rather than covering it with a scrim. It holds
+ * the app's one radial menu, so anything inside can open it with
+ * `useRingTarget`.
  */
-export function AppFrame({ app, onFront, rail, railLabel = 'Sections', drawer, drawerLabel = 'Details', aside, measure = 'wide', busy, screen, children }: AppFrameProps) {
+export function AppFrame({ app, onFront, rail, railLabel = 'Sections', drawer, drawerLabel = 'Details', aside, measure = 'wide', busy, screen, depth, ringShape, children }: AppFrameProps) {
   const [railClosed, setRailClosed] = useState(() => remembered(KEPT.rail));
   const [drawerClosed, setDrawerClosed] = useState(() => remembered(KEPT.drawer));
   const [turning, setTurning] = useState(false);
@@ -93,45 +104,49 @@ export function AppFrame({ app, onFront, rail, railLabel = 'Sections', drawer, d
   };
 
   return (
-    <div
-      ref={frame}
-      className="quill-frame"
-      data-rail={rail ? (railClosed ? 'closed' : 'open') : undefined}
-      data-drawer={drawer ? (drawerClosed ? 'closed' : 'open') : undefined}
-      data-measure={measure}
-      data-turning={turning || undefined}
-    >
-      {rail ? (
-        <nav className="quill-rail" aria-label={railLabel}>
-          <div className="quill-rail-head">
-            <button type="button" className="quill-app" onClick={onFront} aria-label={railClosed ? `${app.name}, front page` : undefined}>
-              <Icon name={app.icon} size={20} />
-              {railClosed ? null : <span>{app.name}</span>}
-            </button>
-            <IconButton size="sm" icon={railClosed ? 'rail-open' : 'rail-close'} label={railClosed ? `Show ${railLabel}` : `Hide ${railLabel}`} onPress={() => fold('rail')} aria-expanded={!railClosed} />
-          </div>
-          <RailFolded.Provider value={railClosed}>
-            <div className="quill-rail-body">{rail}</div>
-          </RailFolded.Provider>
-        </nav>
-      ) : null}
-      <main className="quill-main" aria-busy={busy || undefined}>
-        <div className={cx('quill-page', aside ? 'quill-page-aside' : undefined)} data-busy={busy || undefined}>
-          <div className="quill-column">{children}</div>
-          {aside ? <aside className="quill-column quill-aside">{aside}</aside> : null}
+    <FocusStage depth={depth}>
+      <RingProvider shape={ringShape}>
+        <div
+          ref={frame}
+          className="quill-frame"
+          data-rail={rail ? (railClosed ? 'closed' : 'open') : undefined}
+          data-drawer={drawer ? (drawerClosed ? 'closed' : 'open') : undefined}
+          data-measure={measure}
+          data-turning={turning || undefined}
+        >
+          {rail ? (
+            <nav className="quill-rail" aria-label={railLabel}>
+              <div className="quill-rail-head">
+                <button type="button" className="quill-app" onClick={onFront} aria-label={railClosed ? `${app.name}, front page` : undefined}>
+                  <Icon name={app.icon} size={20} />
+                  {railClosed ? null : <span>{app.name}</span>}
+                </button>
+                <IconButton size="sm" icon={railClosed ? 'rail-open' : 'rail-close'} label={railClosed ? `Show ${railLabel}` : `Hide ${railLabel}`} onPress={() => fold('rail')} aria-expanded={!railClosed} />
+              </div>
+              <RailFolded.Provider value={railClosed}>
+                <div className="quill-rail-body">{rail}</div>
+              </RailFolded.Provider>
+            </nav>
+          ) : null}
+          <main className="quill-main" aria-busy={busy || undefined}>
+            <div className={cx('quill-page', aside ? 'quill-page-aside' : undefined)} data-busy={busy || undefined}>
+              <div className="quill-column">{children}</div>
+              {aside ? <aside className="quill-column quill-aside">{aside}</aside> : null}
+            </div>
+          </main>
+          {drawer ? (
+            <div className="quill-drawer" role="complementary" aria-label={drawerLabel}>
+              <div className="quill-drawer-head">
+                <IconButton size="sm" icon={drawerClosed ? 'drawer-open' : 'drawer-close'} label={drawerClosed ? `Show ${drawerLabel}` : `Hide ${drawerLabel}`} onPress={() => fold('drawer')} aria-expanded={!drawerClosed} />
+              </div>
+              <div className="quill-drawer-inner" inert={drawerClosed || undefined}>
+                {drawer}
+              </div>
+            </div>
+          ) : null}
         </div>
-      </main>
-      {drawer ? (
-        <div className="quill-drawer" role="complementary" aria-label={drawerLabel}>
-          <div className="quill-drawer-head">
-            <IconButton size="sm" icon={drawerClosed ? 'drawer-open' : 'drawer-close'} label={drawerClosed ? `Show ${drawerLabel}` : `Hide ${drawerLabel}`} onPress={() => fold('drawer')} aria-expanded={!drawerClosed} />
-          </div>
-          <div className="quill-drawer-inner" inert={drawerClosed || undefined}>
-            {drawer}
-          </div>
-        </div>
-      ) : null}
-    </div>
+      </RingProvider>
+    </FocusStage>
   );
 }
 

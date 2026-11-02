@@ -111,6 +111,253 @@
   }
   .quill-selection-count { font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .quill-selection-actions { display: flex; align-items: center; gap: var(--space-2); }
+  /* The title card a front page can open with (look="title"): the floor small, the app's name wide, search under it. */
+  .quill-title-card { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; }
+  .quill-title-eyebrow { display: flex; align-items: center; gap: var(--space-3); margin: 0; color: var(--ink-muted); font-size: var(--type-label); line-height: var(--leading-label); letter-spacing: var(--tracking-title); text-transform: uppercase; }
+  .quill-title-eyebrow::before, .quill-title-eyebrow::after { content: ''; width: var(--space-6); height: 1px; background: var(--hairline-strong); }
+  .quill-title-name { margin: 0; font-size: var(--type-title); line-height: var(--leading-title); font-weight: var(--weight-display); letter-spacing: var(--tracking-title); text-transform: uppercase; color: var(--ink); }
+  .quill-title-summary { margin: 0; color: var(--ink-muted); font-size: var(--type-meta); line-height: var(--leading-meta); }
+  .quill-front-search { align-self: center; width: min(var(--measure-glance), 100%); }
+  .quill-front-section[data-tone='action'] > .quill-section-title { color: var(--green); }
+
+  /* Depth and focus (PDR-010). The stage holds the app's plane and the rack that takes it out of focus. */
+  .quill-stage { position: relative; display: flex; flex-direction: column; min-height: 100%; isolation: isolate; }
+  .quill-plane {
+    display: flex; flex-direction: column; flex: 1 0 auto; transform-origin: 50% 40%;
+    transition: transform var(--motion-calm) var(--ease-out), filter var(--motion-calm) var(--ease-out);
+  }
+  .quill-plane > .quill-frame { flex: 1 0 auto; }
+  /* Depth decoupling: the out-of-focus plane shrinks a touch, kept on the GPU so a big page never repaints. */
+  .quill-stage[data-racked] > .quill-plane,
+  body:has(.augur-veil, .quill-palette-veil) .quill-stage > .quill-plane { transform: translateZ(0) scale(var(--depth-scale)); will-change: transform; }
+  /* Lens: the plane itself loses detail and colour. */
+  .quill-stage[data-depth='lens'][data-racked] > .quill-plane,
+  body:has(.augur-veil) .quill-stage[data-depth='lens'] > .quill-plane { filter: blur(var(--depth-blur)) saturate(var(--depth-saturate)); will-change: transform, filter; }
+  /* Veil (Harry's): a layer over the plane blurs and desaturates what is behind it, with a hole for a subject. */
+  .quill-rack {
+    position: fixed; inset: 0; z-index: var(--layer-overlay); pointer-events: none; opacity: 0; visibility: hidden;
+    transition: opacity var(--motion-calm) var(--ease-out), visibility var(--motion-calm) step-end;
+  }
+  .quill-stage[data-racked] > .quill-rack { opacity: 1; visibility: visible; transition: opacity var(--motion-calm) var(--ease-out), visibility var(--motion-calm) step-start; }
+  .quill-stage[data-depth='veil'] > .quill-rack { background: var(--depth-tint); backdrop-filter: blur(var(--depth-blur)) saturate(var(--depth-saturate)); transform: translateZ(0); will-change: opacity; }
+  .quill-stage[data-depth='scrim'] > .quill-rack { background: var(--veil); }
+  body:has(.quill-palette-veil) .quill-stage:not([data-depth='lens']) > .quill-rack { opacity: 1; visibility: visible; transition: opacity var(--motion-calm) var(--ease-out), visibility var(--motion-calm) step-start; }
+  body:has(.quill-palette-veil) .quill-stage[data-depth='lens'] > .quill-plane { filter: blur(var(--depth-blur)) saturate(var(--depth-saturate)); }
+  .quill-rack[data-hole] {
+    mask-image: linear-gradient(var(--shade) 0 0), linear-gradient(var(--shade) 0 0);
+    mask-size: 100% 100%, var(--hole-w) var(--hole-h);
+    mask-position: 0 0, var(--hole-x) var(--hole-y);
+    mask-repeat: no-repeat; mask-composite: exclude;
+  }
+  /* Common's dialogs over a Quill app rack it too, rather than laying a scrim over it. */
+  body:has(.quill-stage[data-depth='veil']) .augur-veil { background: var(--depth-tint); backdrop-filter: blur(var(--depth-blur)) saturate(var(--depth-saturate)); }
+  body:has(.quill-stage[data-depth='lens']) .augur-veil { background: transparent; backdrop-filter: none; }
+
+  /* Focus pull: while one thing in a field is pulled, the rest sit ambient. Hover or focus brings one back at once. */
+  .quill-focus-item { transition: filter var(--motion-slow) var(--ease-out), opacity var(--motion-slow) var(--ease-out); }
+  .quill-field[data-pulling] .quill-focus-item:not([data-focus='pulled']),
+  .quill-focus-item[data-focus='ambient'] { filter: blur(var(--ambient-blur)) saturate(var(--ambient-saturate)) brightness(var(--ambient-brightness)); }
+  .quill-field[data-ambience='quiet'][data-pulling] .quill-focus-item:not([data-focus='pulled']),
+  .quill-field[data-ambience='quiet'] .quill-focus-item[data-focus='ambient'] { filter: saturate(var(--ambient-saturate)) brightness(var(--ambient-brightness)); }
+  .quill-field .quill-focus-item:hover, .quill-field .quill-focus-item:focus-within, .quill-focus-item[data-focus='ambient']:hover, .quill-focus-item[data-focus='ambient']:focus-within { filter: none; }
+
+  /* The radial menu: the subject ringed and sharp, its actions round it, names outside the ring. */
+  .quill-ring { position: fixed; inset: 0; z-index: calc(var(--layer-chrome) + 2); animation: quill-fade var(--motion-quick) var(--ease-out); }
+  .quill-ring[data-leaving] { opacity: 0; transition: opacity var(--motion-quick) var(--ease-out); }
+  .quill-ring-subject {
+    position: fixed; border-radius: var(--radius-key); pointer-events: none;
+    box-shadow: 0 0 0 var(--focus-gap) var(--focus), 0 0 0 calc(var(--focus-gap) + var(--space-1)) color-mix(in srgb, var(--focus) 20%, transparent);
+  }
+  .quill-ring-orbit { position: fixed; border-radius: 50%; border: 1px solid var(--hairline); pointer-events: none; animation: quill-ring-grow var(--motion-base) var(--ease-out); }
+  .quill-ring-item {
+    position: fixed; display: block; width: var(--ring-button); height: var(--ring-button); padding: 0; transform: translate(-50%, -50%);
+    border: 0; background: none; color: var(--ink); font: inherit; cursor: pointer;
+    animation: quill-ring-in var(--motion-base) var(--ease-spring) both; animation-delay: var(--ring-delay, var(--motion-instant));
+  }
+  .quill-ring-item:focus-visible { outline: none; }
+  .quill-ring-button {
+    display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%;
+    background: var(--surface-overlay); border: 1px solid var(--hairline-strong); box-shadow: var(--shadow-raised); backdrop-filter: blur(var(--surface-blur));
+    transition: transform var(--motion-quick) var(--ease-spring), background var(--motion-quick) var(--ease-standard);
+  }
+  .quill-ring-item:hover .quill-ring-button, .quill-ring-item:focus-visible .quill-ring-button { transform: scale(1.1); background: color-mix(in srgb, var(--ink) 16%, var(--slate)); }
+  .quill-ring-item:focus-visible .quill-ring-button { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+  .quill-ring-name {
+    position: absolute; top: 50%; display: flex; flex-direction: column; align-items: flex-start; width: max-content; max-width: var(--measure-card); text-align: left;
+    transform: translateY(-50%); font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink); pointer-events: none;
+    text-shadow: 0 1px var(--space-2) var(--slate-deep);
+  }
+  .quill-ring-item[data-side='right'] .quill-ring-name { left: calc(100% + var(--space-2)); }
+  .quill-ring-item[data-side='left'] .quill-ring-name { right: calc(100% + var(--space-2)); text-align: right; align-items: flex-end; }
+  .quill-ring-item[data-side='top'] .quill-ring-name { top: auto; bottom: calc(100% + var(--space-1)); left: 50%; transform: translateX(-50%); align-items: center; text-align: center; }
+  .quill-ring-item[data-side='bottom'] .quill-ring-name { top: calc(100% + var(--space-1)); left: 50%; transform: translateX(-50%); align-items: center; text-align: center; }
+  .quill-ring-why { color: var(--ink-muted); font-size: var(--type-label); line-height: var(--leading-label); }
+  .quill-ring-item[aria-disabled] { cursor: not-allowed; }
+  .quill-ring-item[aria-disabled] .quill-ring-button { color: var(--ink-muted); background: var(--surface-inset); box-shadow: none; }
+  .quill-ring-item[aria-disabled] .quill-ring-label { color: var(--ink-muted); }
+  .quill-ring-danger .quill-ring-button { color: var(--danger); }
+  /* The list shape: past eight actions, or when chosen. */
+  .quill-ring-list {
+    position: fixed; display: flex; flex-direction: column; min-width: var(--measure-rail); padding: var(--space-1);
+    background: var(--surface-overlay); backdrop-filter: blur(var(--surface-blur)); border: 1px solid var(--hairline-strong); border-radius: var(--radius-card); box-shadow: var(--shadow-overlay);
+  }
+  .quill-ring-list .quill-ring-item { position: static; display: flex; align-items: center; gap: var(--space-3); width: auto; height: auto; min-height: var(--target-sm); padding: var(--space-1) var(--space-3); transform: none; border-radius: var(--radius-key); text-align: left; animation: none; }
+  .quill-ring-list .quill-ring-item:hover, .quill-ring-list .quill-ring-item:focus-visible { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+  .quill-ring-list .quill-ring-item:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: calc(var(--focus-gap) * -1); }
+  .quill-ring-list .quill-ring-button { width: auto; height: auto; background: none; border: 0; box-shadow: none; backdrop-filter: none; transform: none; outline: none; }
+  .quill-ring-list .quill-ring-item:hover .quill-ring-button, .quill-ring-list .quill-ring-item:focus-visible .quill-ring-button { transform: none; background: none; outline: none; }
+  .quill-ring-list .quill-ring-name { position: static; transform: none; text-shadow: none; }
+
+  /* The navigation path: the path you took is lit, its neighbours dimmed, a line joins it from the top down. */
+  .quill-tree { display: flex; flex-direction: column; min-width: 0; }
+  .quill-tree-row {
+    position: relative; display: flex; align-items: center; gap: var(--space-2); min-height: var(--target-sm); min-width: 0;
+    padding: 0 var(--space-3) 0 calc(var(--space-3) + var(--tree-level) * var(--space-4));
+    border-radius: var(--radius-key); color: var(--ink); font-size: var(--type-meta); line-height: var(--leading-meta); cursor: pointer;
+    transition: opacity var(--motion-slow) var(--ease-out), background var(--motion-quick) var(--ease-standard);
+  }
+  .quill-tree-row[data-level='0'] { font-size: var(--type-body); }
+  .quill-tree[data-light='path'] .quill-tree-row:not(.quill-tree-lit):not(.quill-tree-inside) { opacity: var(--path-dim); }
+  .quill-tree .quill-tree-row:hover, .quill-tree .quill-tree-row:focus-visible { opacity: 1; background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .quill-tree-row:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: calc(var(--focus-gap) * -1); }
+  .quill-tree-row[data-current] { background: color-mix(in srgb, var(--ink) 9%, transparent); font-weight: 500; }
+  .quill-tree-row[aria-disabled] { cursor: not-allowed; }
+  .quill-tree-dot { flex: none; width: var(--space-1); height: var(--space-1); margin-inline: 1px; border-radius: 50%; background: var(--ink-muted); transition: transform var(--motion-slow) var(--ease-out), background var(--motion-slow) var(--ease-out); }
+  .quill-tree-lit .quill-tree-dot { background: var(--ink); transform: scale(1.5); }
+  .quill-tree-row[data-current] .quill-tree-dot { transform: scale(2); box-shadow: 0 0 0 1px var(--focus); }
+  .quill-tree-icon { flex: none; color: var(--ink-muted); }
+  .quill-tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quill-tree-count { color: var(--ink-muted); font-size: var(--type-label); font-variant-numeric: tabular-nums; }
+  .quill-tree-line { position: absolute; left: calc(var(--space-3) + var(--line-level) * var(--space-4) + 2px); width: 1px; background: color-mix(in srgb, var(--ink) 55%, transparent); pointer-events: none; }
+  .quill-tree-line[data-part='start'] { top: 50%; bottom: 0; }
+  .quill-tree-line[data-part='through'] { top: 0; bottom: 0; }
+  .quill-tree-line[data-part='end'] { top: 0; height: 50%; }
+  .quill-tree-line[data-part='end']::after { content: ''; position: absolute; bottom: 0; left: 0; width: calc(var(--space-4) - var(--space-1)); height: 1px; background: inherit; }
+
+  /* A reel: a lane of cards, its light at the start when the cards are pulled in. */
+  .quill-reel {
+    --reel-light: var(--ink-muted);
+    display: grid; grid-template-columns: var(--space-7) minmax(0, 1fr); border-radius: var(--radius-inset); background: var(--surface-inset);
+  }
+  .quill-reel[data-reveal='all'] { grid-template-columns: minmax(0, 1fr); }
+  .quill-reel[data-tone='action'] { --reel-light: var(--green); }
+  .quill-reel[data-tone='new'] { --reel-light: var(--info); }
+  .quill-reel-light {
+    display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-3) 0;
+    border: 0; background: none; color: var(--ink); font: inherit; cursor: pointer;
+  }
+  .quill-reel-light[aria-disabled] { cursor: default; opacity: 0.4; }
+  .quill-reel-light:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: calc(var(--focus-gap) * -1); border-radius: var(--radius-inset); }
+  .quill-reel-count { font-size: var(--type-lead); line-height: var(--leading-lead); font-weight: var(--weight-title); font-variant-numeric: tabular-nums; }
+  .quill-reel-slit {
+    flex: 1; width: 2px; min-height: var(--space-7); border-radius: var(--radius-pill);
+    background: linear-gradient(to bottom, transparent, var(--reel-light) 20%, var(--light) 50%, var(--reel-light) 80%, transparent);
+    box-shadow: 0 0 var(--glow-blur) color-mix(in srgb, var(--reel-light) 60%, transparent);
+    transition: transform var(--motion-quick) var(--ease-spring), width var(--motion-quick) var(--ease-out);
+  }
+  .quill-reel-light[data-live] .quill-reel-slit { animation: quill-breathe var(--motion-still) ease-in-out infinite; }
+  .quill-reel-light[data-live]:hover .quill-reel-slit { width: var(--space-1); }
+  .quill-reel-light[data-live]:active .quill-reel-slit { transform: scaleY(0.86); }
+  .quill-reel-strip { min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--reel-light) 40%, transparent) transparent; padding: var(--space-4); }
+  .quill-reel-field { display: flex; gap: var(--space-4); width: max-content; }
+  .quill-reel-slot { flex: none; scroll-snap-align: start; }
+  .quill-reel-waiting { margin: 0; padding: var(--space-5) 0; color: var(--ink-muted); font-size: var(--type-meta); }
+  .quill-reel-card {
+    display: flex; flex-direction: column; gap: var(--space-3); width: var(--reel-card); min-height: calc(var(--reel-card) * 0.56);
+    padding: var(--space-3) var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-inset); text-align: left; color: var(--ink); font: inherit; cursor: pointer;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--reel-light) 16%, var(--slate)) 0%, var(--slate-deep) 100%);
+    box-shadow: var(--shadow-raised); transform: scale(0.94); transform-origin: 50% 100%;
+    transition: transform var(--motion-slow) var(--ease-out), border-color var(--motion-slow) var(--ease-out), box-shadow var(--motion-slow) var(--ease-out);
+  }
+  .quill-reel-card:hover { transform: translateY(calc(var(--space-1) * -1)) scale(0.96); }
+  .quill-reel-card[data-front] { transform: none; border-color: var(--hairline-strong); }
+  .quill-reel[data-tone='action'] .quill-reel-card[data-front] { box-shadow: var(--shadow-raised), 0 0 var(--space-7) calc(var(--space-4) * -1) var(--reel-light); }
+  .quill-reel-card:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+  .quill-reel-when { color: var(--ink-muted); font-size: var(--type-label); line-height: var(--leading-label); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+  .quill-reel-when[data-urgent] { color: var(--reel-light); }
+  .quill-reel[data-tone='quiet'] .quill-reel-when[data-urgent], .quill-reel[data-tone='upcoming'] .quill-reel-when[data-urgent] { color: var(--warning); }
+  .quill-reel-art { display: flex; align-items: center; gap: var(--space-3); min-height: var(--space-7); color: var(--ink-muted); }
+  .quill-reel-title { margin-top: auto; font-size: var(--type-body); line-height: var(--leading-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quill-reel-landing { animation: quill-summon var(--motion-run) var(--ease-out) backwards; }
+
+  /* Tiles: each kind has its own shape, lifts on hover and presses down. */
+  .quill-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--measure-card) / 2.2), 1fr)); gap: var(--space-5) var(--space-4); padding-top: var(--space-2); }
+  .quill-tile {
+    --tile-face: color-mix(in srgb, var(--ink) 8%, var(--slate));
+    --tile-drop: var(--space-1) var(--space-2) var(--space-5) calc(var(--space-2) * -1) color-mix(in srgb, var(--shade) 60%, transparent);
+    position: relative; display: flex; flex-direction: column; gap: var(--space-2); min-height: calc(var(--measure-card) / 2.4); padding: var(--space-4);
+    border: 0; border-radius: var(--radius-key); text-align: left; color: var(--ink); font: inherit; cursor: pointer;
+    background: var(--tile-face); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--light) 6%, transparent), var(--tile-drop);
+    transition: transform var(--motion-base) var(--ease-out), box-shadow var(--motion-base) var(--ease-out), filter var(--motion-base) var(--ease-out);
+  }
+  .quill-tile:hover { transform: translateY(calc(var(--space-1) * -1)); filter: brightness(1.06); }
+  .quill-tile:active { transform: translateY(1px); }
+  .quill-tile:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+  .quill-tile[data-kind='folder']::before { content: ''; position: absolute; left: 0; top: calc(var(--space-2) * -1); width: 38%; height: var(--space-2); border-radius: var(--radius-key) var(--radius-key) 0 0; background: var(--tile-face); }
+  .quill-tile[data-kind='folder'] { border-top-left-radius: 0; --tile-drop: 0 var(--space-1) var(--space-2) calc(var(--space-1) * -1) color-mix(in srgb, var(--shade) 45%, transparent); }
+  .quill-tile[data-kind='series'] {
+    --tile-drop: var(--space-1) calc(var(--space-1) * -1) 0 -1px color-mix(in srgb, var(--ink) 12%, var(--slate)), var(--space-2) calc(var(--space-2) * -1) 0 -2px color-mix(in srgb, var(--ink) 9%, var(--slate)),
+      var(--space-1) var(--space-2) var(--space-4) calc(var(--space-2) * -1) color-mix(in srgb, var(--shade) 55%, transparent);
+  }
+  .quill-tile[data-kind='series'] .quill-tile-count { font-size: var(--type-heading); line-height: var(--leading-heading); font-weight: var(--weight-title); }
+  .quill-tile[data-kind='document'] { --tile-face: var(--ink); color: var(--slate-deep); clip-path: polygon(0 0, calc(100% - var(--space-4)) 0, 100% var(--space-4), 100% 100%, 0 100%); }
+  .quill-tile[data-kind='document'] .quill-tile-top { color: color-mix(in srgb, var(--slate-deep) 70%, transparent); }
+  .quill-tile[data-kind='document'] .quill-tile-state { color: var(--navy); }
+  .quill-tile[data-kind='library'] { box-shadow: inset var(--space-1) 0 0 var(--tile-mark, var(--navy)), inset 0 1px 0 color-mix(in srgb, var(--light) 6%, transparent), var(--tile-drop); }
+  .quill-tile[data-kind='add'] { align-items: flex-start; justify-content: space-between; color: var(--ink-muted); background: var(--surface-inset); box-shadow: inset 0 var(--space-1) var(--space-3) color-mix(in srgb, var(--shade) 30%, transparent); }
+  .quill-tile[data-kind='add']:hover { color: var(--ink); filter: none; transform: none; background: color-mix(in srgb, var(--shade) 30%, transparent); }
+  .quill-tile[data-locked], .quill-tile[aria-disabled] { cursor: not-allowed; filter: saturate(0.5); }
+  .quill-tile[data-locked]:hover, .quill-tile[aria-disabled]:hover { transform: none; }
+  .quill-tile-ribbon { position: absolute; top: calc(var(--space-1) * -1); right: 30%; width: var(--space-3); height: var(--space-5); background: var(--green); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); }
+  .quill-tile-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); color: var(--ink-muted); font-size: var(--type-label); line-height: var(--leading-label); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+  .quill-tile-eyebrow { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--type-label); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+  .quill-tile-name { margin-top: auto; font-size: var(--type-body); line-height: var(--leading-body); font-weight: 500; overflow-wrap: anywhere; }
+  .quill-tile-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--type-label); line-height: var(--leading-label); }
+  .quill-tile-state { padding: 0 var(--space-1); border: 1px solid currentColor; letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+  .quill-tile-owner, .quill-tile-note, .quill-tile-why { color: var(--ink-muted); }
+  .quill-tile[data-kind='document'] .quill-tile-note { color: color-mix(in srgb, var(--slate-deep) 70%, transparent); }
+
+  /* The palette: find and go, over the racked app. */
+  .quill-palette-veil { position: fixed; inset: 0; z-index: calc(var(--layer-chrome) + 1); display: flex; justify-content: center; align-items: flex-start; padding: 14vh var(--edge) 0; }
+  .quill-palette-veil[data-entering] { animation: quill-fade var(--motion-slow) var(--ease-out); }
+  .quill-palette {
+    width: min(var(--measure-glance), 100%); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--surface-overlay); backdrop-filter: blur(var(--surface-blur)); border: 1px solid var(--hairline-strong); border-radius: var(--radius-card); box-shadow: var(--shadow-overlay);
+  }
+  .quill-palette-field { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--hairline); color: var(--ink-muted); }
+  .quill-palette-field input::-webkit-search-cancel-button { appearance: none; }
+  .quill-palette-field input { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: var(--type-lead); line-height: var(--leading-lead); outline: none; }
+  .quill-palette-list { margin: 0; padding: var(--space-2); list-style: none; overflow-y: auto; }
+  .quill-palette-group { margin: var(--space-2) var(--space-3) var(--space-1); color: var(--ink-muted); font-size: var(--type-label); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  .quill-palette-item { display: flex; align-items: center; gap: var(--space-3); min-height: var(--target-md); padding: var(--space-1) var(--space-3); border-radius: var(--radius-key); color: var(--ink); cursor: pointer; }
+  .quill-palette-item[aria-selected='true'] { background: color-mix(in srgb, var(--ink) 10%, transparent); box-shadow: inset var(--focus-ring) 0 0 var(--focus); }
+  .quill-palette-item[aria-disabled] { color: var(--ink-muted); cursor: not-allowed; }
+  .quill-palette-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .quill-palette-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quill-palette-detail { color: var(--ink-muted); font-size: var(--type-label); line-height: var(--leading-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quill-palette-meta { color: var(--ink-muted); font-size: var(--type-label); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+  .quill-palette-none { padding: var(--space-4); }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .quill-stage[data-depth] > .quill-rack, body:has(.quill-stage) .augur-veil { background: var(--veil); backdrop-filter: none; }
+    .quill-stage > .quill-plane { filter: none !important; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .quill-plane, .quill-rack, .quill-focus-item, .quill-tile, .quill-reel-card, .quill-tree-row, .quill-ring-button { transition: none; }
+    .quill-reel-landing, .quill-ring, .quill-ring-item, .quill-ring-orbit, .quill-reel-light[data-live] .quill-reel-slit { animation: none; }
+    .quill-plane { transform: none !important; }
+  }
 }
 
 @keyframes quill-rise { from { opacity: 0; transform: translateY(var(--space-4)); } to { opacity: 1; transform: none; } }
+@keyframes quill-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes quill-ring-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.4); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes quill-ring-grow { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
+@keyframes quill-breathe { 0%, 100% { opacity: 0.6; transform: scaleY(0.94); } 50% { opacity: 1; transform: scaleY(1); } }
+@keyframes quill-summon {
+  0% { opacity: 0; transform: translateX(calc(var(--reel-card) * -1)) scaleX(1.3); filter: blur(var(--depth-blur)); }
+  12% { opacity: 1; }
+  64% { transform: translateX(var(--space-3)); filter: none; }
+  82% { transform: translateX(calc(var(--space-1) * -1)); }
+  100% { transform: none; }
+}

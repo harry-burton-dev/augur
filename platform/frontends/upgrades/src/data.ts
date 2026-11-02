@@ -33,7 +33,8 @@ export const useUpgrades = (api: UpgradesApi) => {
     }
   }, [api]);
 
-  const running = Boolean(data.overview?.units.some((u) => u.open));
+  const open = (state?: string) => state === 'requested' || state === 'running';
+  const running = Boolean(data.overview?.units.some((u) => u.open) || open(data.updates?.upgrade?.state) || data.installs?.installed.some((a) => open(a.job?.state)));
 
   useEffect(() => {
     alive.current = true;
@@ -53,11 +54,20 @@ export const useUpgrades = (api: UpgradesApi) => {
     if (alive.current) setData((d) => ({ ...d, overview, error: undefined, readAt: new Date() }));
   }, []);
 
+  /** Takes AUGUR's updates a change answered with (an upgrade asked for, cancelled or going back), then reads the rest again. */
+  const tookUpdates = useCallback(
+    (updates: PlatformUpdates) => {
+      if (alive.current) setData((d) => ({ ...d, updates, error: undefined, readAt: new Date() }));
+      void read();
+    },
+    [read],
+  );
+
   const checkNow = useCallback(async () => {
     const updates = await api.checkNow();
     if (alive.current) setData((d) => ({ ...d, updates, error: undefined, readAt: new Date() }));
     void read();
   }, [api, read]);
 
-  return { data, running, reload: read, checkNow, took };
+  return { data, running, reload: read, checkNow, took, tookUpdates };
 };

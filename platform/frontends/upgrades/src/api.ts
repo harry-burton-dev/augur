@@ -1,6 +1,6 @@
 import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { isRefusal, type Refusal } from './model/roles.js';
-import type { AppInstalls, DesiredState, DesiredStateInput, Overview, PlatformUpdates } from './model/types.js';
+import type { AppInstalls, AppJob, DesiredState, DesiredStateInput, Overview, PlatformUpdates } from './model/types.js';
 
 /** A call the platform turned down, with the refusal when it explained itself. */
 export class ApiError extends Error {
@@ -8,6 +8,8 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly refusal?: Refusal,
+    /** The server's `error`, such as `sign_in_again` when the password is needed again. */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -37,7 +39,7 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     if (!res.ok) {
       const refusal = isRefusal(data) ? data : undefined;
       const message = (data as { message?: string }).message ?? `That didn’t work (${res.status}). Nothing was changed.`;
-      throw new ApiError(message, res.status, refusal);
+      throw new ApiError(message, res.status, refusal, (data as { error?: string }).error);
     }
     return data as T;
   };
@@ -51,7 +53,7 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     cancel: () => call<PlatformUpdates>('DELETE', '/platform/upgrade'),
     installs: () => call<AppInstalls>('GET', '/app-runner/apps'),
     checkApps: () => call<AppInstalls>('POST', '/app-runner/check'),
-    install: (app: string, version: string) => call('POST', '/app-runner/jobs', { action: 'install', app, version }),
+    install: (app: string, version: string) => call<AppJob>('POST', '/app-runner/jobs', { action: 'install', app, version }),
     remove: (app: string) => call('POST', '/app-runner/jobs', { action: 'remove', app }),
     /** The apps this person can open, for this app's own name and icon and each app's icon. */
     manifest: () => call<AppManifestEntry[]>('GET', '/manifest'),
