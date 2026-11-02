@@ -59,6 +59,8 @@ To go back, install an older version from Admin → Apps, or hold the shell at a
 
 Apps are moving out of this repository into their own ([ADR 0012](decisions/0012-apps-in-own-repositories.md)). Such an app releases from its own repository the same way, as `app/<id>@<version>` with its `app-release.json`, signed by that repository's own `release.yml` (and `app-dev.yml`, `app-preview.yml` for dev builds and previews).
 
+The release steps come from `@augur/app-tools`, published beside the SDK. Its `augur-app` command runs in the app repository's root (`manifest.json`, `frontend/`, `service/` and a `Dockerfile` for the service) and does what `scripts/app-release.mjs` and `infra/release-app.sh` do here: `augur-app pending`, `dev <run>`, `preview <pr> <run>`, `bundle <channel>` (build, push and sign), `publish <bundle.json>`, `clean-devs` and `clean-previews <pr>`. The app template's workflows call it.
+
 Servers still read one feed, AUGUR's ([ADR 0047](decisions/0047-app-repositories-in-augurs-feed.md)):
 
 - `release/app-repos.json` names the repository each moved app is published from. The pull request that moves an app out adds its line.
