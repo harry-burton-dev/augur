@@ -1,4 +1,4 @@
-import { LitElement, html, nothing, type TemplateResult } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import type { Fact } from '@augur/ui-kit';
 import { ApiError, type AdminApi, type FeedTrust, type PlatformUpdates, type Upgrade, type UpgradeStepState } from './api.js';
 import { changeList, gatherChanges, historyList } from './changes.js';

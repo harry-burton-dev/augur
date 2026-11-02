@@ -21,7 +21,7 @@ export const telemetryOn = (env: NodeJS.ProcessEnv = process.env): boolean =>
  * "registry"), and adds its version, so a deployment's compose file needn't name each one.
  */
 export const nameService = (env: NodeJS.ProcessEnv = process.env, dir = process.cwd()): void => {
-  let pkg: { name?: string; version?: string } = {};
+  let pkg: { name?: string; version?: string };
   try {
     pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   } catch {

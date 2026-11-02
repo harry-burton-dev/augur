@@ -24,13 +24,19 @@
     "dev:app": "node scripts/dev-app.mjs",
     "check:reasons": "node scripts/check-reasons.mjs",
     "catalog": "node scripts/catalog.mjs",
-    "check:catalog": "node scripts/catalog.mjs check"
+    "check:catalog": "node scripts/catalog.mjs check",
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
     "semver": "^7.8.5",
     "turbo": "^2.5.0",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.72.1",
     "yaml": "^2.9.1"
   }
 }

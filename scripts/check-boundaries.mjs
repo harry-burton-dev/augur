@@ -33,7 +33,9 @@ for (const app of readdirSync(join(root, 'apps'), { withFileTypes: true }).filte
     const pkg = join(root, 'apps', app.name, part.name, 'package.json');
     try {
       appOfPackage.set(JSON.parse(readFileSync(pkg, 'utf8')).name, app.name);
-    } catch {}
+    } catch {
+      // Not a readable package.json: nothing to map.
+    }
   }
 }
 
