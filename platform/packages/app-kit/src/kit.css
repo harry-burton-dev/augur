@@ -455,6 +455,29 @@
   .quill-people-box .augur-input { flex: 1 1 auto; min-width: 0; }
   .quill-people-chosen { margin-bottom: var(--space-1); }
 
+  /* Filter bar: a button per filter, the count and sort at the end, what's on as tags below. */
+  .quill-filter-bar { display: flex; flex-direction: column; gap: var(--space-3); }
+  .quill-filter-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .quill-filter-filters, .quill-filter-chips { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .quill-filter-end { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; }
+  .quill-filter-count { font-size: var(--type-small); color: var(--ink-muted); white-space: nowrap; transition: opacity var(--motion-quick) var(--ease-standard); }
+  .quill-filter-bar[data-busy] .quill-filter-count { opacity: 0.5; }
+  .quill-filter-open { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--target-sm); padding: 0 var(--space-3); border: 1px solid var(--hairline-strong); border-radius: var(--radius-pill); color: var(--ink); font-size: var(--type-meta); line-height: var(--leading-meta); cursor: pointer; white-space: nowrap; }
+  .quill-filter-open:hover, .quill-filter-open[aria-expanded='true'] { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+  .quill-filter-open[data-focus-visible] { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+  .quill-filter-open[data-on] { border-color: var(--ink); }
+  .quill-filter-open > svg { color: var(--ink-muted); }
+  .quill-filter-end .quill-filter-open { border-color: transparent; color: var(--ink-muted); }
+  .quill-filter-end .quill-filter-open strong { color: var(--ink); font-weight: 500; }
+  .quill-filter-n { min-width: 18px; padding: 0 5px; border-radius: var(--radius-pill); background: var(--ink); color: var(--surface-pane); font-size: var(--type-label); text-align: center; }
+  .quill-filter-panel { min-width: 220px; max-width: 320px; max-height: 320px; overflow-y: auto; }
+  .quill-filter-find .augur-input { width: 100%; margin-bottom: var(--space-1); }
+  .quill-filter-item[data-selected] .augur-option-mark { color: var(--ink); }
+  .quill-filter-none { margin: 0; padding: var(--space-2) var(--space-3); font-size: var(--type-small); color: var(--ink-muted); }
+  .quill-filter-clear { all: unset; font-size: var(--type-small); color: var(--ink-muted); cursor: pointer; border-radius: var(--radius-key); }
+  .quill-filter-clear:hover { color: var(--ink); text-decoration: underline; }
+  .quill-filter-clear:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+
   /* Lifecycle */
   .quill-lifecycle { display: flex; flex-direction: column; gap: var(--space-3); }
   .quill-lifecycle ol { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin: 0; padding: 0; list-style: none; }
