@@ -1,4 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { Button, Choice, Select, TextField } from '@augur/app-kit';
+import { useMemo, useState } from 'react';
 import { ApiError, type UpgradesApi } from './api.js';
 import { Muted } from './look.js';
 import { pinChoices } from './model/levels.js';
@@ -32,24 +33,6 @@ const same = (a: Draft, b: Draft) =>
 
 const inputClass = 'border border-hairline rounded-inset bg-surface-inset text-ink px-2 py-1 text-body';
 
-const Field = ({ legend, children, note, disabled }: { legend: string; children: ReactNode; note?: ReactNode; disabled?: boolean }) => (
-  <fieldset className="flex flex-col gap-2 border-0 p-0 m-0 disabled:opacity-60" disabled={disabled}>
-    <legend className="text-small text-ink-muted mb-2">{legend}</legend>
-    {children}
-    {note && <span className="text-small text-ink-muted">{note}</span>}
-  </fieldset>
-);
-
-const Choice = ({ name, checked, onChange, disabled, label, hint }: { name: string; checked: boolean; onChange: () => void; disabled?: boolean; label: string; hint?: string }) => (
-  <label className="flex gap-2 items-baseline">
-    <input type="radio" name={name} checked={checked} onChange={onChange} disabled={disabled} />
-    <span>
-      {label}
-      {hint && <span className="text-ink-muted"> · {hint}</span>}
-    </span>
-  </label>
-);
-
 /**
  * How one unit takes new releases: channel, policy, how far Automatic goes, a pin and the weekly
  * windows. The sentence for what's set now and for what saving would set stay side by side, with
@@ -77,6 +60,7 @@ export const SettingsEditor = (p: {
   const setWindow = (i: number, patch: Partial<Window>) => set({ windows: draft.windows.map((w, j) => (j === i ? { ...w, ...patch } : w)) });
 
   const problems = desiredProblems(draft);
+  const pinProblem = problems.find((m) => m.includes('version range'));
   const unchanged = same(draft, start);
   const automatic = draft.policy === 'automatic';
   const full = draft.windows.length >= MAX_WINDOWS;
@@ -106,76 +90,84 @@ export const SettingsEditor = (p: {
         if (!saveReason) void save();
       }}
     >
-      <Field
-        legend="Releases from"
-        note={isAugur ? 'AUGUR’s channel is set by RELEASE_CHANNEL in the server’s .env (docs/upgrade.md), so it can’t be changed here.' : undefined}
-      >
-        {channelsFor(p.ring).map((c) => {
+      <Choice
+        label="Releases from"
+        name="channel"
+        hint={isAugur ? 'AUGUR’s channel is set by RELEASE_CHANNEL in the server’s .env (docs/upgrade.md).' : undefined}
+        value={draft.channel}
+        onChange={(v) => set({ channel: v as Channel })}
+        options={channelsFor(p.ring).map((c) => {
           const allowed = isAugur ? c.channel === start.channel : c.allowed;
-          return (
-            <Choice
-              key={c.channel}
-              name="channel"
-              checked={draft.channel === c.channel}
-              disabled={!allowed}
-              onChange={() => set({ channel: c.channel as Channel })}
-              label={CHANNEL_WORDS[c.channel]}
-              hint={!allowed && !isAugur ? c.reason : undefined}
-            />
-          );
+          return {
+            value: c.channel,
+            label: CHANNEL_WORDS[c.channel],
+            disabled: !allowed,
+            reason: allowed ? undefined : isAugur ? 'Change RELEASE_CHANNEL in .env to follow this.' : c.reason,
+          };
         })}
-      </Field>
+      />
 
-      <Field legend="How new releases arrive">
-        {(['automatic', 'ask', 'hold'] as Policy[]).map((policy) => (
-          <Choice key={policy} name="policy" checked={draft.policy === policy} onChange={() => set({ policy })} label={POLICY_WORDS[policy]} hint={POLICY_HINT[policy]} />
-        ))}
-      </Field>
+      <Choice
+        label="How new releases arrive"
+        name="policy"
+        value={draft.policy}
+        onChange={(v) => set({ policy: v as Policy })}
+        options={(['automatic', 'ask', 'hold'] as Policy[]).map((policy) => ({ value: policy, label: POLICY_WORDS[policy], detail: POLICY_HINT[policy] }))}
+      />
 
-      <Field legend="Automatic takes" disabled={!automatic} note={!automatic ? 'Only Automatic uses this.' : 'A major release always waits for an admin.'}>
-        {(['patch', 'minor'] as AutomaticLevel[]).map((level) => (
-          <Choice
-            key={level}
-            name="automaticUpTo"
-            checked={draft.automaticUpTo === level}
-            onChange={() => set({ automaticUpTo: level })}
-            label={level === 'patch' ? 'Patch releases only' : 'Patch and minor releases'}
-          />
-        ))}
-      </Field>
-
-      <Field legend="Stay within" note="A pin keeps this unit inside a range of versions, whatever the policy.">
-        <Choice name="pin" checked={pinMode === 'none'} onChange={() => set({ pin: undefined })} label="Any version" />
-        {choices.map((c) => (
-          <Choice key={c.range} name="pin" checked={pinMode === c.range} onChange={() => set({ pin: c.range })} label={c.label} hint={c.range} />
-        ))}
-        <label className="flex gap-2 items-baseline">
-          <input type="radio" name="pin" checked={pinMode === 'custom'} onChange={() => set({ pin: customPin || choices[0]!.range })} />
-          <span>A range of your own</span>
-          <input
-            className={inputClass}
-            aria-label="Version range"
-            placeholder="^1.2.0"
-            value={pinMode === 'custom' ? draft.pin : customPin}
-            onChange={(e) => {
-              setCustomPin(e.target.value);
-              set({ pin: e.target.value || undefined });
-            }}
-          />
-        </label>
-      </Field>
-
-      <Field
-        legend="When Automatic may start"
+      <Choice
+        label="Automatic takes"
+        name="automaticUpTo"
+        hint="A major release always waits for an admin."
         disabled={!automatic}
-        note={!automatic ? 'Only Automatic uses windows. An upgrade an admin starts runs when they ask.' : 'An upgrade an admin starts runs when they ask, whatever the windows.'}
-      >
-        <Choice name="any" checked={draft.windows.length === 0} onChange={() => set({ windows: [] })} label="At any time" />
+        reason={automatic ? undefined : 'Only Automatic uses this.'}
+        value={draft.automaticUpTo}
+        onChange={(v) => set({ automaticUpTo: v as AutomaticLevel })}
+        options={[
+          { value: 'patch', label: 'Patch releases only' },
+          { value: 'minor', label: 'Patch and minor releases' },
+        ]}
+      />
+
+      <div className="flex flex-col gap-3">
         <Choice
-          name="any"
-          checked={draft.windows.length > 0}
-          onChange={() => draft.windows.length === 0 && set({ windows: [{ day: 0, start: '02:00', hours: 2 }] })}
-          label="Only in these weekly windows"
+          label="Stay within"
+          name="pin"
+          hint="A pin keeps this unit inside a range of versions, whatever the policy."
+          value={pinMode}
+          onChange={(v) => set({ pin: v === 'none' ? undefined : v === 'custom' ? customPin || choices[0]!.range : v })}
+          options={[
+            { value: 'none', label: 'Any version' },
+            ...choices.map((c) => ({ value: c.range, label: c.label, detail: c.range })),
+            { value: 'custom', label: 'A range of your own', detail: 'Type it below, such as ^1.2.0' },
+          ]}
+        />
+        <TextField
+          label="Version range"
+          placeholder="^1.2.0"
+          value={pinMode === 'custom' ? (draft.pin ?? '') : customPin}
+          state={pinMode === 'custom' && pinProblem ? 'error' : undefined}
+          message={pinMode === 'custom' ? pinProblem : undefined}
+          onChange={(v) => {
+            setCustomPin(v);
+            set({ pin: v || undefined });
+          }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <Choice
+          label="When Automatic may start"
+          name="when"
+          hint="An upgrade an admin starts runs when they ask, whatever the windows."
+          disabled={!automatic}
+          reason={automatic ? undefined : 'Only Automatic uses windows.'}
+          value={draft.windows.length ? 'windows' : 'any'}
+          onChange={(v) => set({ windows: v === 'any' ? [] : draft.windows.length ? draft.windows : [{ day: 0, start: '02:00', hours: 2 }] })}
+          options={[
+            { value: 'any', label: 'At any time' },
+            { value: 'windows', label: 'Only in these weekly windows' },
+          ]}
         />
         {draft.windows.map((w, i) => (
           <div key={i} className="flex flex-wrap gap-3 items-center pl-5" data-window={i}>
@@ -199,35 +191,32 @@ export const SettingsEditor = (p: {
               onChange={(e) => setWindow(i, { hours: Number(e.target.value) })}
             />
             <span>hours</span>
-            <ui-button kind="ghost" size="small" onClick={() => set({ windows: draft.windows.filter((_, j) => j !== i) })}>
+            <Button kind="ghost" size="sm" onPress={() => set({ windows: draft.windows.filter((_, j) => j !== i) })}>
               Remove
-            </ui-button>
+            </Button>
           </div>
         ))}
         {draft.windows.length > 0 && (
           <span className="pl-5">
-            <ui-button
+            <Button
               kind="secondary"
-              size="small"
-              disabled={full || undefined}
+              size="sm"
+              disabled={full}
               reason={full ? `At most ${MAX_WINDOWS} windows.` : undefined}
-              onClick={() => set({ windows: [...draft.windows, { day: (draft.windows.at(-1)!.day + 1) % 7, start: draft.windows.at(-1)!.start, hours: draft.windows.at(-1)!.hours }] })}
+              onPress={() => set({ windows: [...draft.windows, { day: (draft.windows.at(-1)!.day + 1) % 7, start: draft.windows.at(-1)!.start, hours: draft.windows.at(-1)!.hours }] })}
             >
               Add a window
-            </ui-button>
+            </Button>
           </span>
         )}
-        <label className="flex flex-wrap gap-2 items-baseline">
-          <span>Time zone</span>
-          <select className={inputClass} aria-label="Time zone" value={draft.timeZone} onChange={(e) => set({ timeZone: e.target.value })}>
-            {zones.map((z) => (
-              <option key={z} value={z}>
-                {z === p.deploymentZone ? `${z} (this deployment’s)` : z}
-              </option>
-            ))}
-          </select>
-        </label>
-      </Field>
+        <Select
+          label="Time zone"
+          hint="Windows are read in this zone."
+          value={draft.timeZone}
+          onChange={(v) => set({ timeZone: v })}
+          options={zones.map((z) => ({ value: z, label: z === p.deploymentZone ? `${z} (this deployment’s)` : z }))}
+        />
+      </div>
 
       <div className="flex flex-col gap-2 border-t border-hairline pt-4" aria-live="polite">
         <p className="m-0">
@@ -262,12 +251,12 @@ export const SettingsEditor = (p: {
         </p>
       )}
       <div className="flex gap-3">
-        <ui-button kind="primary" disabled={saveReason ? true : undefined} reason={saveReason} busy={saving || undefined} busy-label="Saving" onClick={() => !saveReason && void save()}>
+        <Button kind="primary" disabled={Boolean(saveReason)} reason={saveReason} busy={saving} busyLabel="Saving" onPress={() => void save()}>
           Save settings
-        </ui-button>
-        <ui-button kind="secondary" onClick={p.onDone}>
+        </Button>
+        <Button kind="secondary" onPress={p.onDone}>
           Cancel
-        </ui-button>
+        </Button>
       </div>
       {!unchanged && <Muted>Saving is kept in this unit’s history with your name.</Muted>}
     </form>

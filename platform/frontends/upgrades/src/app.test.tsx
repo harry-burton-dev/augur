@@ -8,6 +8,11 @@ import { stateOf } from './units.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+const manifest = [{ id: 'upgrades', name: 'Upgrade Centre', route: '/upgrades', entry: '', version: '0.0.0', sdk: '^1.10.0', icon: 'download' }];
+/** The button with these words, and what it says when it can't be pressed. */
+const buttonIn = (el: ParentNode, words: string) => [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === words) as HTMLButtonElement;
+const reasonOf = (b: Element) => document.getElementById(b.getAttribute('aria-describedby') ?? '')?.textContent ?? '';
+
 const updates = (over: Partial<PlatformUpdates> = {}): PlatformUpdates => ({
   running: { version: '0.13.1', channel: 'stable' },
   channel: 'stable',
@@ -129,6 +134,8 @@ describe('Upgrade Centre', () => {
         ? [200, updates()]
         : path.endsWith('/app-runner/apps')
           ? [200, installs]
+          : path.endsWith('/manifest')
+            ? [200, manifest]
           : [404, { error: 'not_found', message: 'Nothing there' }];
 
   it('answers the three overview questions, and says when nothing needs you', async () => {
@@ -143,13 +150,13 @@ describe('Upgrade Centre', () => {
 
   it('opens a unit inside the app, keeping its upgrade visible but explained', async () => {
     const { el } = await mount(['admin'], registry);
-    const link = [...el.querySelectorAll('nav a')].find((a) => a.textContent === 'AUGUR') as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe('/@me/upgrades/augur');
-    await act(async () => link.click());
+    expect(el.querySelector('[data-unit="augur"] a')?.getAttribute('href')).toBe('/@me/upgrades/augur');
+    const rail = [...el.querySelectorAll('nav button')].find((b) => b.textContent === 'AUGUR') as HTMLButtonElement;
+    await act(async () => rail.click());
     expect(window.location.pathname).toBe('/@me/upgrades/augur');
-    const button = el.querySelector('[data-release="0.13.2"] ui-button');
-    expect(button?.textContent).toBe('Upgrade AUGUR to 0.13.2');
-    expect(button?.getAttribute('reason')).toContain('deployment-admin');
+    const button = el.querySelector('[data-release="0.13.2"] button')!;
+    expect(button.textContent).toBe('Upgrade AUGUR to 0.13.2');
+    expect(reasonOf(button)).toContain('deployment-admin');
     expect(el.querySelector('[data-go-back="0.13.0"]')?.textContent).toContain('Can go back straight away');
     expect(el.textContent).toContain('AUGUR waits for you before taking any release from Production.');
     expect(el.textContent).toContain('These are the defaults');
@@ -159,7 +166,7 @@ describe('Upgrade Centre', () => {
     let fail = false;
     const { el } = await mount(['deployment-admin'], (path) => (fail ? [502, { message: 'The registry isn’t answering.' }] : registry(path)));
     fail = true;
-    const check = el.querySelector('ui-button') as HTMLElement;
+    const check = buttonIn(el, 'Check now');
     await act(async () => check.click());
     expect(el.querySelector('[role="alert"]')?.textContent).toContain('The registry isn’t answering.');
     expect(el.querySelector('[data-unit="augur"]')).not.toBeNull();
@@ -174,7 +181,7 @@ describe('marking a result looked at', () => {
     let current = overview({ needsYou: [{ kind: 'failed', unit: 'augur', message: 'Pull failed.', result: { kind: 'upgrade', id: 'u9' } }] });
     const fetch = vi.fn(async (path: string, init?: RequestInit) => {
       if (path.endsWith('/results/upgrade/u9/seen') && init?.method === 'POST') current = overview();
-      const body = path.includes('/platform/overview') || path.includes('/seen') ? current : path.endsWith('/platform/updates') ? updates() : installs;
+      const body = path.includes('/platform/overview') || path.includes('/seen') ? current : path.endsWith('/platform/updates') ? updates() : path.endsWith('/manifest') ? manifest : installs;
       return new Response(JSON.stringify(body), { status: 200 });
     });
     await act(async () => {
@@ -184,7 +191,7 @@ describe('marking a result looked at', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(el.querySelector('[data-need="failed"]')).not.toBeNull();
-    const looked = el.querySelector('[data-need="failed"] ui-button') as HTMLElement;
+    const looked = el.querySelector('[data-need="failed"] button') as HTMLElement;
     await act(async () => looked.click());
     expect(fetch).toHaveBeenCalledWith('/api/registry/v1/platform/results/upgrade/u9/seen', expect.objectContaining({ method: 'POST' }));
     expect(el.querySelector('[data-need="failed"]')).toBeNull();
@@ -206,7 +213,7 @@ describe('changing a unit’s settings', () => {
         if (body.channel !== 'stable') return new Response(JSON.stringify({ error: 'conflict', message: 'AUGUR follows stable releases, set by RELEASE_CHANNEL.' }), { status: 409 });
         current = overview({ units: [unit({ desired: { ...unit().desired, ...body, setBy: 'p1', isDefault: false }, policy: 'On hold: nothing new is offered.' }), ...overview().units.slice(1)] });
       }
-      const body = url.includes('/platform/overview') || url.includes('/desired-state') ? current : url.endsWith('/platform/updates') ? updates() : installs;
+      const body = url.includes('/platform/overview') || url.includes('/desired-state') ? current : url.endsWith('/platform/updates') ? updates() : url.endsWith('/manifest') ? manifest : installs;
       return new Response(JSON.stringify(body), { status: 200 });
     });
     await act(async () => {
@@ -217,18 +224,18 @@ describe('changing a unit’s settings', () => {
     });
     return { el, sent };
   };
-  const button = (el: HTMLElement, words: string) => [...el.querySelectorAll('ui-button')].find((b) => b.textContent === words) as HTMLElement;
+  const button = buttonIn;
 
   it('keeps Change settings visible without the role, saying which role it needs', async () => {
     const { el } = await open([]);
-    expect(button(el, 'Change settings').getAttribute('reason')).toContain('deployment-admin');
+    expect(reasonOf(button(el, 'Change settings'))).toContain('deployment-admin');
   });
 
   it('shows the sentence before and after, the next windows, and saves what the person chose', async () => {
     const { el, sent } = await open(['deployment-admin']);
     await act(async () => button(el, 'Change settings').click());
     const form = el.querySelector('form')!;
-    expect(button(el, 'Save settings').getAttribute('reason')).toBe('Nothing has changed yet.');
+    expect(reasonOf(button(el, 'Save settings'))).toBe('Nothing has changed yet.');
     const automatic = [...form.querySelectorAll('input[name="policy"]')][0] as HTMLInputElement;
     await act(async () => automatic.click());
     expect(form.querySelector('[data-after]')?.textContent).toContain('Automatic: patch releases install by themselves in Sunday 02:00 for 2 hours (Europe/London)');
@@ -248,13 +255,13 @@ describe('changing a unit’s settings', () => {
   it('won’t save a range that isn’t one, and says why in place', async () => {
     const { el, sent } = await open(['deployment-admin']);
     await act(async () => button(el, 'Change settings').click());
-    const range = el.querySelector('input[aria-label="Version range"]') as HTMLInputElement;
+    const range = el.querySelector('input[placeholder="^1.2.0"]') as HTMLInputElement;
     await act(async () => {
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
       set.call(range, 'banana');
       range.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    expect(button(el, 'Save settings').getAttribute('reason')).toContain('isn’t a version range');
+    expect(reasonOf(button(el, 'Save settings'))).toContain('isn’t a version range');
     expect(sent).toEqual([]);
   });
 });

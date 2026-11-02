@@ -70,6 +70,8 @@ export interface Overview {
   checkedAt?: string;
   units: UnitOverview[];
   needsYou: OverviewNeed[];
+  /** Whether this server reports what it runs to Backstage, and why not (ADR 0019). */
+  reporting?: { mode: 'send' | 'file' | 'off'; why: string };
 }
 
 const isOpen = (s: string) => s === 'requested' || s === 'running';
@@ -189,7 +191,29 @@ export interface OverviewRouteOptions {
   timeZone: string;
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
   now?: () => Date;
+  reporting?: { mode: 'send' | 'file' | 'off'; why: string };
 }
+
+/** The overview from the registry's store and checkers, for the routes and for the deployment's report. */
+export const overviewBuilder =
+  ({ store, updates, appUpdates, timeZone, now = () => new Date() }: Pick<OverviewRouteOptions, 'store' | 'updates' | 'appUpdates' | 'timeZone' | 'now'>) =>
+  async (): Promise<Overview> => {
+    const ring = updates.ring;
+    const [records, upgrades, installed, jobs, states] = await Promise.all([store.records(), store.upgrades(), store.installedApps(), store.appJobs(), store.desiredStates()]);
+    return overviewOf({
+      ring,
+      timeZone,
+      now: now(),
+      augur: updatesView({ checker: updates, apps: records }),
+      augurHalt: updates.result.releases.find((r) => r.version === updates.running.version)?.halted,
+      upgrades,
+      installed,
+      jobs,
+      appReleases: appUpdates.result.releases,
+      names: Object.fromEntries(records.map((r) => [r.entry.id, r.entry.name])),
+      states,
+    });
+  };
 
 const windowSchema = {
   type: 'object',
@@ -213,7 +237,7 @@ const desiredStateSchema = {
 };
 
 export const overviewRoutes =
-  ({ store, updates, appUpdates, timeZone, record, now = () => new Date() }: OverviewRouteOptions) =>
+  ({ store, updates, appUpdates, timeZone, record, now = () => new Date(), reporting }: OverviewRouteOptions) =>
   async (app: FastifyInstance) => {
     const ring = updates.ring;
     const adminOf = (req: FastifyRequest) => {
@@ -221,22 +245,9 @@ export const overviewRoutes =
       return caller?.roles.includes('admin') ? caller : undefined;
     };
 
-    const overview = async () => {
-      const [records, upgrades, installed, jobs, states] = await Promise.all([store.records(), store.upgrades(), store.installedApps(), store.appJobs(), store.desiredStates()]);
-      return overviewOf({
-        ring,
-        timeZone,
-        now: now(),
-        augur: updatesView({ checker: updates, apps: records }),
-        augurHalt: updates.result.releases.find((r) => r.version === updates.running.version)?.halted,
-        upgrades,
-        installed,
-        jobs,
-        appReleases: appUpdates.result.releases,
-        names: Object.fromEntries(records.map((r) => [r.entry.id, r.entry.name])),
-        states,
-      });
-    };
+    const built = overviewBuilder({ store, updates, appUpdates, timeZone, now });
+    // Whether Backstage sees what this server runs (ADR 0019), so the Upgrade Centre can say when it doesn't.
+    const overview = async (): Promise<Overview> => ({ ...(await built()), ...(reporting ? { reporting: { mode: reporting.mode, why: reporting.why } } : {}) });
 
     /** Every unit at once: what it runs, what it follows, what's next and what needs an admin. */
     app.get('/platform/overview', async (req, reply) => {

@@ -54,9 +54,21 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Reporting to Backstage
+
+From this release a deployment can tell the company's Backstage what it runs ([ADR 0019](decisions/0019-deployment-reporting.md)). Nothing changes until you set it up; until then the Upgrade Centre says reporting isn't set up.
+
+1. Add the deployment to Backstage's `org/deployments.yaml`, if it isn't there, and note its `metadata.name`.
+2. Set `DEPLOYMENT_ID` in `.env` to that name, with `PORTAL_URL` set to the Backstage address. Then `docker compose up -d registry`.
+3. Copy the deployment's public key, shown by `GET /api/registry/v1/platform/reporting` as an admin (the Upgrade Centre's Reporting section, once it shows it), into the annotation `augur.dev/report-key` on that entry, and let Backstage read the catalog again.
+
+The registry makes the deployment's own Ed25519 key the first time it's needed and keeps it in the database, so a restored backup reports as the same deployment. It signs a record of what the server runs and sends it two minutes after it starts (so after each AUGUR upgrade), whenever a version, an upgrade's result or something that needs you changes (it looks every 15 minutes), and once a day. The record holds the deployment's name and ring, AUGUR's and each app's version, what's available, each unit's policy and pin, health, the last results, and the feed's state. It holds no names or ids of people. Backstage refuses a record from a deployment it doesn't list, or not signed with the key it lists.
+
+An air-gapped server sets `DEPLOYMENT_ID` and no `PORTAL_URL`: nothing is sent, and an admin exports the record (`GET /api/registry/v1/platform/reporting/export`) and carries the file to the deployment's card in Backstage. `DEPLOYMENT_REPORTING=off` turns both off.
+
 ### Each upgrade is watched for 10 minutes
 
-An upgrade to a newer release isn't done once every part answers: the updater watches it for 10 more minutes ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)). Every half minute it checks that the sign-in realm answers, and how the gateway's calls went (`GET /traffic`, which only the deployment's own network reaches). If sign-in fails twice in a row, or more than 5% of at least 20 calls fail, it goes back to the release it came from by itself, as it does when a part doesn't come up, and the Upgrade Centre says what it saw. If a breaking release lies between, it doesn't go back by itself: it says what it saw, and the release keeps running for you to decide (Going back, below). Going back to an earlier release isn't watched.
+An upgrade to a newer release isn't done once every part answers: the updater watches it for 10 more minutes ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)). Every half minute it signs in as itself, with a fresh token (so Keycloak and its database must both work), and checks how AUGUR's own services' calls went at the gateway (`GET /traffic`, which only the deployment's own network reaches; apps are counted apart, so an app's errors can't send AUGUR back). Every two minutes it checks that every part is still ready. If sign-in fails twice in a row, a part stops answering, or more than 5% of at least 20 calls fail, it goes back to the release it came from by itself, as it does when a part doesn't come up, and the Upgrade Centre says what it saw. If a breaking release lies between, it doesn't go back by itself: it says what it saw, and the release keeps running for you to decide (Going back, below). Going back to an earlier release isn't watched. With fewer than 20 calls in the 10 minutes, as is usual in a night-time window, the result says it was too quiet to judge errors: only sign-in and the parts were watched.
 
 The updater does nothing else in those 10 minutes, so an app install asked for meanwhile starts after. Both sides need this release: an older updater ignores the watch, and an older gateway has no `/traffic`, so only sign-in is watched.
 

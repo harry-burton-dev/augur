@@ -299,6 +299,9 @@ services:
       RELEASE_CHANNEL: ${RELEASE_CHANNEL:-}
       PIPELINE_FEED_URL: ${PIPELINE_FEED_URL:-}
       PORTAL_URL: ${PORTAL_URL:-}
+      # What this server runs, signed and reported to that Backstage under this name (ADR 0019).
+      DEPLOYMENT_ID: ${DEPLOYMENT_ID:-}
+      DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
       SERVER_RING: ${SERVER_RING:-}
       # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
       DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
