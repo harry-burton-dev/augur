@@ -1,7 +1,7 @@
 // The Upgrade Centre's overview (GET /platform/overview): every unit this deployment runs, AUGUR and
 // each installed app, with its desired state (ADR 0020), what's next for it, the last result and what
 // needs an admin. Also the routes that change a unit's desired state and mark a result looked at.
-import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
+import { callerFromHeaders, signedInRecently, type NewAuditEntry } from '@augur/service-kit';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import semver from 'semver';
 import { newestOn, type AppFeedRelease, type AppUpdateChecker } from './app-updates.ts';
@@ -18,7 +18,7 @@ import {
   type StoredDesiredState,
 } from './desired-state.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
-import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
+import { CHANGE_SIGN_IN_MS, DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import type { AppJob, AppStore, InstalledApp, Upgrade } from './store.ts';
 import { updatesView, type Halt, type UpdateChecker, type UpdatesView } from './updates.ts';
 
@@ -255,6 +255,10 @@ export const overviewRoutes =
         const caller = callerFromHeaders(req.headers);
         // Policies, pins and windows decide what the server runs, so they need the deployment's own role (ADR 0022).
         if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('change how updates are taken'));
+        // And a password entered just now, as for an upgrade (ADR 0022).
+        if (!signedInRecently(caller, CHANGE_SIGN_IN_MS)) {
+          return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how updates are taken. It’s asked for anything this drastic.' });
+        }
         const { unit } = req.params;
         if (!(await knownUnit(unit))) return reply.code(404).send({ error: 'not_found', message: `This server runs no ${unit}.` });
         const body = req.body;

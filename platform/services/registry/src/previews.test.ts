@@ -24,7 +24,7 @@ const feedOf = (...releases: AppRelease[]): AppFeedRelease[] =>
     return { app: r.id, version: r.version, channel: pr ? 'preview' : 'stable', ...(pr ? { pr: Number(pr) } : {}), release: r };
   });
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
-const admin = () => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'], signedInAt: new Date().toISOString() });
+const admin = () => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: new Date().toISOString() });
 const person = (id: string) => callerHeaders({ id, name: id, departments: [], roles: [] });
 const verifyService = async (headers: Record<string, string | string[] | undefined>) =>
   headers.authorization === 'Bearer platform-updater' ? { kind: 'platform' as const, name: 'updater' } : undefined;

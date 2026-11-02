@@ -86,7 +86,7 @@ describe('what an update needs', () => {
 });
 
 describe('installs and updates in Admin → Apps', () => {
-  const fresh = () => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'], signedInAt: new Date().toISOString() });
+  const fresh = () => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: new Date().toISOString() });
   const verifyService = async (headers: Record<string, string | string[] | undefined>) =>
     headers.authorization === 'Bearer platform-updater' ? { kind: 'platform' as const, name: 'updater' } : undefined;
   const runner = { authorization: 'Bearer platform-updater' };
@@ -188,6 +188,11 @@ describe('installs and updates in Admin → Apps', () => {
     await follow({ channel: 'beta', policy: 'automatic' });
     expect((await t.runNext()).release.version).toBe('1.0.1-beta.1');
     expect((await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/tasks/follow', headers: fresh(), payload: { channel: 'stable', policy: 'ask' } })).statusCode).toBe(404);
+    // How an app takes releases is the deployment admin's, after a fresh sign-in (ADR 0022), as the desired state is.
+    const orgAdmin = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['admin'], signedInAt: new Date().toISOString() });
+    expect((await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: orgAdmin, payload: { channel: 'stable', policy: 'hold' } })).json()).toMatchObject({ error: 'forbidden', requiredRole: 'deployment-admin' });
+    const stale = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: new Date(Date.now() - 60 * 60_000).toISOString() });
+    expect((await t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: stale, payload: { channel: 'stable', policy: 'hold' } })).json()).toMatchObject({ error: 'sign_in_again' });
   });
 
   it('on a production server, follows stable releases only and offers no beta', async () => {
