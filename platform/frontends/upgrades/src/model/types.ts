@@ -178,7 +178,7 @@ export interface Overview {
   feedTrust?: FeedTrust;
   checkedAt?: string;
   units: OverviewUnit[];
-  needsYou: { kind: 'halted' | 'failed' | 'went-back'; unit: string; message: string; result?: { kind: 'upgrade' | 'app-job'; id: string } }[];
+  needsYou: { kind: 'halted' | 'failed' | 'went-back' | 'first-upgrade'; unit: string; message: string; result?: { kind: 'upgrade' | 'app-job'; id: string } }[];
   /** Whether this deployment tells Backstage what it runs (ADR 0019), and why. Absent from an older registry. */
   reporting?: { mode: ReportingMode; why: string };
 }

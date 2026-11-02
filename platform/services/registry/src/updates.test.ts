@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
-import type { AppRecord } from './store.ts';
+import { MemoryAppStore, type AppRecord } from './store.ts';
 import { feedSigner, repoOfFeed } from './feed-trust.ts';
 import { automaticDevUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRead, type FeedRelease, type ReleaseManifest } from './updates.ts';
 
@@ -122,15 +122,18 @@ describe('the server’s ring', () => {
       return updatesView({ checker, apps: [] });
     };
     const dev = release('0.4.1-dev.48', 'dev');
-    expect(automaticDevUpgrade(await workbench([dev]), [])).toBe('0.4.1-dev.48');
-    expect(automaticDevUpgrade(await workbench([dev]), [{ version: '0.4.1-dev.48', state: 'rolled-back' }])).toBeUndefined();
-    expect(automaticDevUpgrade(await workbench([dev], 'preview'), [])).toBeUndefined();
+    // An admin upgraded this server once and it finished, so Automatic may start (ADR 0020, amended 2 Nov).
+    const byHand = { version: '0.4.0', state: 'done' as const, requestedBy: 'u-1' };
+    expect(automaticDevUpgrade(await workbench([dev]), [])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([dev]), [byHand])).toBe('0.4.1-dev.48');
+    expect(automaticDevUpgrade(await workbench([dev]), [byHand, { version: '0.4.1-dev.48', state: 'rolled-back', requestedBy: 'automatic' }])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([dev], 'preview'), [byHand])).toBeUndefined();
     // A release, rather than a dev build, waits for an admin even on the workbench.
-    expect(automaticDevUpgrade(await workbench([release('0.5.0')]), [])).toBeUndefined();
-    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.49', 'dev', { breaking: ['@augur/mfe-sdk: SDK 2.'] })]), [])).toBeUndefined();
-    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.50', 'dev', { settings: settings(['MODELS_URL'], ['MODELS_URL']) })]), [])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([release('0.5.0')]), [byHand])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.49', 'dev', { breaking: ['@augur/mfe-sdk: SDK 2.'] })]), [byHand])).toBeUndefined();
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.50', 'dev', { settings: settings(['MODELS_URL'], ['MODELS_URL']) })]), [byHand])).toBeUndefined();
     // One the updater makes up itself doesn't need a person.
-    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.51', 'dev', { settings: settings(['MODELS_CLIENT_SECRET'], ['MODELS_CLIENT_SECRET']) })]), [])).toBe('0.4.1-dev.51');
+    expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.51', 'dev', { settings: settings(['MODELS_CLIENT_SECRET'], ['MODELS_CLIENT_SECRET']) })]), [byHand])).toBe('0.4.1-dev.51');
   });
 });
 
@@ -377,7 +380,11 @@ describe('upgrading', () => {
     const entries: { action: string; target?: string; actor: { id: string } }[] = [];
     const updates = new UpdateChecker({ feed: async () => [release('0.2.1-dev.48', 'dev', { images }), release('0.2.0')], running: { version: '0.2.0', channel: 'beta' }, ring: 'dev' });
     await updates.check();
-    const server = await buildApp({ verifyService, updates, audit: async (e) => void entries.push(e) });
+    // An admin upgraded this server once and it finished, so Automatic may start (ADR 0020, amended 2 Nov).
+    const store = new MemoryAppStore();
+    await store.requestUpgrade({ id: 'up-0', from: '0.1.0', version: '0.2.0', images, requestedBy: 'u-1' });
+    await store.progressUpgrade('up-0', { step: 'watch', state: 'done' }, { state: 'done' });
+    const server = await buildApp({ verifyService, store, updates, audit: async (e) => void entries.push(e) });
     const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
     expect(target).toMatchObject({ version: '0.2.1-dev.48', from: '0.2.0', images, state: 'requested' });
     expect(entries.map((e) => `${e.action} ${e.target} by ${e.actor.id}`)).toEqual(['platform.upgrade-requested 0.2.1-dev.48 by registry']);

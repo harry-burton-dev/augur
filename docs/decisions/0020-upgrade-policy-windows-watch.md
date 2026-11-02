@@ -27,6 +27,15 @@ Option 1.
 - The registry gains the desired-state record and its history. Every change to it is audited.
 - Thresholds start at an error rate above 5% or a failed sign-in, and are tuned after real use.
 
+## Amended 2026-11-02
+
+A red-team review (PER-201..203) found three gaps in these defaults. Harry took the recommended option on each:
+
+- **First upgrade by hand.** Automatic doesn't start AUGUR upgrades on a server, dev builds included, until an admin has upgraded AUGUR there once and it finished. Until then the Upgrade Centre's Needs you says why. The real upgrade chain is then first tried with someone watching.
+- **Watching into busy hours.** After the 10-minute watch, a light watch keeps going until AUGUR's services have had 20 calls, for at most 24 hours. A failure then shows in Needs you but doesn't go back by itself, because by then people's work is on the new release.
+- **A 0.x minor counts as a major.** Under semver a 0.x minor may break things, so Automatic takes only 0.x patches, for AUGUR and apps alike. A 0.x minor waits for an admin.
+- **App windows stay any time.** With 0.x minors waiting and app installs now watched, apps on production keep installing at any time.
+
 ## Links
 
 - Linear PER-177

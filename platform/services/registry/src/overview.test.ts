@@ -25,8 +25,16 @@ const manifest = (version: string): ReleaseManifest => ({
 });
 const release = (version: string): FeedRelease => ({ version, channel: 'stable', manifest: manifest(version) });
 
-/** A production server on 0.13.0, with `releases` out, at `at`. */
-const server = async (releases: FeedRelease[], at: string, store = new MemoryAppStore()) => {
+/** A store holding one upgrade an admin ran that finished, so Automatic may start (ADR 0020, amended 2 Nov). */
+const upgradedByHand = async (store = new MemoryAppStore()) => {
+  await store.requestUpgrade({ id: 'up-0', from: '0.12.0', version: '0.13.0', images, requestedBy: 'u-1' });
+  await store.progressUpgrade('up-0', { step: 'watch', state: 'done' }, { state: 'done' });
+  return store;
+};
+
+/** A production server on 0.13.0, with `releases` out, at `at`, already upgraded once by hand unless given a store. */
+const server = async (releases: FeedRelease[], at: string, store?: MemoryAppStore) => {
+  store ??= await upgradedByHand();
   const updates = new UpdateChecker({ feed: async () => releases, running: { version: '0.13.0', channel: 'stable' }, channel: 'stable', ring: 'production' });
   await updates.check();
   const entries: { action: string; target?: string; detail?: Record<string, unknown> }[] = [];
@@ -47,7 +55,7 @@ describe('the Upgrade Centre overview (ADR 0020)', () => {
       running: '0.13.0',
       available: '0.13.1',
       desired: { policy: 'automatic', automaticUpTo: 'patch', windows: [{ day: 0, start: '02:00', hours: 2 }], timeZone: 'Europe/London', isDefault: true },
-      policy: 'Automatic: patch releases install by themselves in Sunday 02:00 for 2 hours (Europe/London). Anything bigger waits for an admin.',
+      policy: 'Automatic: patch releases install by themselves in Sunday 02:00 for 2 hours (Europe/London). Anything bigger, and a 0.x minor, waits for an admin.',
       window: { open: false, nextAt: '2026-11-08T02:00:00.000Z' },
       automatic: { takes: '0.13.1' },
     });
@@ -65,7 +73,7 @@ describe('the Upgrade Centre overview (ADR 0020)', () => {
     const minor = await server([release('0.14.0'), release('0.13.0')], SUNDAY_2AM);
     expect((await minor.app.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
     const view = (await minor.app.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json();
-    expect(view.units[0].automatic).toEqual({ waits: '0.14.0 is a minor release, and Automatic takes patch releases only.' });
+    expect(view.units[0].automatic).toEqual({ waits: '0.14.0 is a 0.x minor release, which may break things like a major, so it waits for an admin.' });
   });
 
   it('lets a deployment admin change AUGUR’s record, refuses a bad one, keeps the history and audits it', async () => {
@@ -83,13 +91,26 @@ describe('the Upgrade Centre overview (ADR 0020)', () => {
     expect((await app.inject({ method: 'PUT', url: '/v1/platform/units/nothing/desired-state', headers: deployer, payload: record })).statusCode).toBe(404);
 
     const view = (await set(record)).json();
-    expect(view.units[0]).toMatchObject({ desired: { automaticUpTo: 'minor', pin: '0.x', setBy: 'u-1', isDefault: false }, automatic: { takes: '0.14.0' } });
+    // Even reaching minors, a 0.x minor waits for an admin.
+    expect(view.units[0]).toMatchObject({ desired: { automaticUpTo: 'minor', pin: '0.x', setBy: 'u-1', isDefault: false }, automatic: { waits: '0.14.0 is a 0.x minor release, which may break things like a major, so it waits for an admin.' } });
     expect(entries.at(-1)).toMatchObject({ action: 'platform.desired-state-set', target: 'augur' });
     await set({ ...record, policy: 'hold' });
     const history = (await app.inject({ method: 'GET', url: '/v1/platform/units/augur/desired-state/history', headers: admin })).json().history;
     expect(history.map((h: { policy: string }) => h.policy)).toEqual(['hold', 'automatic']);
     // On hold nothing starts by itself, even inside the window.
     expect((await app.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
+  });
+
+  it('leaves AUGUR’s first upgrade on a server to an admin, and says so in Needs you', async () => {
+    const { app } = await server([release('0.13.1'), release('0.13.0')], SUNDAY_2AM, new MemoryAppStore());
+    expect((await app.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
+    const view = (await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json();
+    const why = 'Automatic starts after an admin has upgraded AUGUR on this server once and it finished. Upgrade once from here and watch it.';
+    expect(view.units[0].automatic).toEqual({ waits: why });
+    expect(view.needsYou).toEqual([{ kind: 'first-upgrade', unit: 'augur', message: `AUGUR 0.13.1 is ready. ${why}` }]);
+    // Once an admin has asked, the open upgrade is the thing to watch.
+    expect((await app.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: deployer, payload: { version: '0.13.1' } })).statusCode).toBe(202);
+    expect((await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json().needsYou).toEqual([]);
   });
 
   it('keeps a go-back in Needs you until an admin marks it looked at, for every admin', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { automaticProblem, defaultDesiredState, desiredStateProblems, pinProblem, policySentence, windowAt, type DesiredState } from './desired-state.ts';
+import { automaticProblem, defaultDesiredState, desiredStateProblems, firstUpgradeProblem, pinProblem, policySentence, windowAt, type DesiredState } from './desired-state.ts';
 
 const state = (more: Partial<DesiredState> = {}): DesiredState => ({ ...defaultDesiredState('augur', 'production'), ...more });
 
@@ -34,8 +34,11 @@ describe('desired state (ADR 0020)', () => {
 
   it('lets Automatic take only what it reaches, inside the pin, and never a major', () => {
     expect(automaticProblem(state(), '0.13.0', '0.13.1')).toBeUndefined();
-    expect(automaticProblem(state(), '0.13.1', '0.14.0')).toBe('0.14.0 is a minor release, and Automatic takes patch releases only.');
-    expect(automaticProblem(state({ automaticUpTo: 'minor' }), '0.13.1', '0.14.0')).toBeUndefined();
+    expect(automaticProblem(state(), '1.3.1', '1.4.0')).toBe('1.4.0 is a minor release, and Automatic takes patch releases only.');
+    expect(automaticProblem(state({ automaticUpTo: 'minor' }), '1.3.1', '1.4.0')).toBeUndefined();
+    // A 0.x minor may break things, so it waits like a major (ADR 0020, amended 2 Nov).
+    expect(automaticProblem(state({ automaticUpTo: 'minor' }), '0.13.1', '0.14.0')).toBe('0.14.0 is a 0.x minor release, which may break things like a major, so it waits for an admin.');
+    expect(automaticProblem(state({ automaticUpTo: 'minor' }), '0.13.1', '0.13.2')).toBeUndefined();
     expect(automaticProblem(state({ automaticUpTo: 'minor' }), '0.13.1', '1.0.0')).toBe('1.0.0 is a major release, which always waits for an admin.');
     expect(automaticProblem(state({ automaticUpTo: 'minor', pin: '0.13.x' }), '0.13.1', '0.14.0')).toBe('0.14.0 is outside the pin 0.13.x.');
     expect(automaticProblem(state({ policy: 'ask' }), '0.13.0', '0.13.1')).toBe('Each update waits for an admin.');
@@ -43,8 +46,14 @@ describe('desired state (ADR 0020)', () => {
     expect(pinProblem(state({ pin: '0.13.x' }), '0.13.2-dev.4')).toBeUndefined();
   });
 
+  it('waits for one upgrade by hand that finished before Automatic starts AUGUR upgrades', () => {
+    expect(firstUpgradeProblem([])).toMatch(/^Automatic starts after an admin has upgraded AUGUR on this server once/);
+    expect(firstUpgradeProblem([{ requestedBy: 'automatic', state: 'done' }, { requestedBy: 'u-1', state: 'rolled-back' }])).toBeDefined();
+    expect(firstUpgradeProblem([{ requestedBy: 'u-1', state: 'done' }])).toBeUndefined();
+  });
+
   it('says the record in a sentence', () => {
-    expect(policySentence(state())).toBe('Automatic: patch releases install by themselves in Sunday 02:00 for 2 hours (UTC). Anything bigger waits for an admin.');
+    expect(policySentence(state())).toBe('Automatic: patch releases install by themselves in Sunday 02:00 for 2 hours (UTC). Anything bigger, and a 0.x minor, waits for an admin.');
     expect(policySentence(state({ policy: 'ask', pin: '0.13.x' }))).toBe('Ask first: each new release waits for an admin, within 0.13.x.');
   });
 });

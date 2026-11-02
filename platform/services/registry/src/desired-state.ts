@@ -119,14 +119,30 @@ export const windowAt = (state: Pick<DesiredState, 'windows' | 'timeZone'>, now:
   return { open: false, nextAt: new Date(Math.floor(now.getTime() / 60000) * 60000 + soonest * 60000).toISOString() };
 };
 
-/** A release's step up from `from`: its prerelease forms count as the step they lead to. */
-const stepOf = (from: string, to: string): 'major' | 'minor' | 'patch' | undefined => {
+/**
+ * A release's step up from `from`: its prerelease forms count as the step they lead to. Under semver
+ * a 0.x minor may break things, so it counts as a major (ADR 0020, amended 2 Nov).
+ */
+export const stepOf = (from: string, to: string): 'major' | 'minor' | 'patch' | undefined => {
   const d = semver.diff(from, to);
   if (!d) return undefined;
   if (d === 'major' || d === 'premajor') return 'major';
-  if (d === 'minor' || d === 'preminor') return 'minor';
+  if (d === 'minor' || d === 'preminor') return semver.major(from) === 0 ? 'major' : 'minor';
   return 'patch';
 };
+
+/** Whether `to` is a 0.x minor over `from`, which counts as a major. */
+export const isZeroMinor = (from: string, to: string) => semver.major(from) === 0 && semver.major(to) === 0 && semver.minor(to) > semver.minor(from);
+
+/**
+ * Why Automatic doesn't start AUGUR upgrades on this server yet, or nothing: it waits until an admin
+ * has upgraded AUGUR here once and it finished (ADR 0020, amended 2 Nov), so the real upgrade chain is
+ * first tried with someone watching.
+ */
+export const firstUpgradeProblem = (history: { requestedBy: string; state: string }[]) =>
+  history.some((u) => u.requestedBy !== 'automatic' && u.state === 'done')
+    ? undefined
+    : 'Automatic starts after an admin has upgraded AUGUR on this server once and it finished. Upgrade once from here and watch it.';
 
 /** Why the pin keeps `version` out, or nothing. */
 export const pinProblem = (state: Pick<DesiredState, 'pin' | 'unit'>, version: string) =>
@@ -142,6 +158,7 @@ export const automaticProblem = (state: DesiredState, from: string, to: string):
   const pin = pinProblem(state, to);
   if (pin) return pin;
   const step = stepOf(from, to);
+  if (step === 'major' && isZeroMinor(from, to)) return `${to} is a 0.x minor release, which may break things like a major, so it waits for an admin.`;
   if (step === 'major') return `${to} is a major release, which always waits for an admin.`;
   if (step === 'minor' && state.automaticUpTo === 'patch') return `${to} is a minor release, and Automatic takes patch releases only.`;
   return undefined;
@@ -155,7 +172,7 @@ export const policySentence = (state: DesiredState): string => {
   const pin = state.pin ? `, within ${state.pin}` : '';
   if (state.policy === 'hold') return `On hold: nothing new is offered${pin}.`;
   if (state.policy === 'ask') return `Ask first: each new release waits for an admin${pin}.`;
-  return `Automatic: ${state.automaticUpTo === 'patch' ? 'patch releases install' : 'patch and minor releases install'} by themselves${when}${pin}. Anything bigger waits for an admin.`;
+  return `Automatic: ${state.automaticUpTo === 'patch' ? 'patch releases install' : 'patch and minor releases install'} by themselves${when}${pin}. Anything bigger, and a 0.x minor, waits for an admin.`;
 };
 
 /**
