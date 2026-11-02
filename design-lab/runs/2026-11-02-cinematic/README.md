@@ -1,0 +1,3 @@
+One night of exploration (2 November 2026) into how AUGUR can use cinema and instrument panels to build hierarchy, pull focus and call people to act, using Harry's references (Territory Studio, Pushing Pixels, Open MCT, Bloomberg, Tufte, Make It So, avionics, Braun, Eurorack) and his principles: the 2.39:1 letterbox for urgent and important things (PDR-009) and depth and focus stacking with rack focus.
+
+Every page is a standalone HTML prototype built only from AUGUR's tokens and Lucide icons. Each plays its moment on load; **R** replays it. Round 1 tried six ideas per surface; round 2 combines the strongest into screens that could ship. Each surface has a written critique, including what fails. Nothing here touches the code: these are proposals for Harry to judge.
