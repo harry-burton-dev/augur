@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders, GATEWAY_CALLER, packFrontend, type FloorPlace } from '@augur/service-kit';
-import { MemoryFrontendFiles } from './frontends.ts';
+import { MemoryFrontendFiles, servedEntry } from './frontends.ts';
 import { buildApp } from './app.ts';
 
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0', handles: ['document.open'] };
@@ -250,14 +250,24 @@ describe('registry', () => {
     const served = async () => (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library');
 
     // Given before the version registers, so the shell never gets a version whose code isn't there.
-    expect((await give('0.1.0', tarball('one'))).statusCode).toBe(201);
-    expect(frontendFiles.objects.get('apps/library/0.1.0/entry.js')?.toString()).toBe('one');
+    // Each build is in a folder of its own: the version and the start of its digest.
+    const first = await give('0.1.0', tarball('one'));
+    expect(first.statusCode).toBe(201);
+    const one = `/apps/library/${first.json().folder}/`;
+    expect(one).toMatch(/^\/apps\/library\/0\.1\.0_[0-9a-f]{12}\/$/);
+    expect(frontendFiles.objects.get(`${one.slice(1)}entry.js`)?.toString()).toBe('one');
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
-    expect((await served()).entry).toBe('/apps/library/0.1.0/entry.js');
+    expect((await served()).entry).toBe(`${one}entry.js`);
 
-    // The same files again (every restart) are fine; other files under the same version aren't.
+    // The same files again (every restart) change nothing. A new build of the same version (a dev
+    // build, or a pillar rebuilt with a newer kit) takes its place, at an address no browser has kept.
     expect((await give('0.1.0', tarball('one'))).statusCode).toBe(200);
-    expect((await give('0.1.0', tarball('changed'))).statusCode).toBe(409);
+    const rebuilt = await give('0.1.0', tarball('changed'));
+    expect(rebuilt.statusCode).toBe(201);
+    const changed = `/apps/library/${rebuilt.json().folder}/`;
+    expect(changed).not.toBe(one);
+    expect(frontendFiles.objects.get(`${changed.slice(1)}entry.js`)?.toString()).toBe('changed');
+    expect((await served()).entry).toBe(`${changed}entry.js`);
     expect((await give('0.1.0', tarball('one'), as('app-other'))).statusCode).toBe(403);
     expect((await give('0.1.0', tarball('one'), editor)).statusCode).toBe(403);
     expect((await give('next', tarball('one'))).statusCode).toBe(400);
@@ -267,20 +277,25 @@ describe('registry', () => {
     // A version without a kept frontend is served from its manifest's entry as before.
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
     expect((await served()).entry).toBe('/apps/library/entry.js');
-    expect((await give('0.2.0', tarball('two'))).statusCode).toBe(201);
-    expect((await served()).entry).toBe('/apps/library/0.2.0/entry.js');
+    const two = `/apps/library/${(await give('0.2.0', tarball('two'))).json().folder}/`;
+    expect((await served()).entry).toBe(`${two}entry.js`);
 
     // Holding the app at an older version now holds its code too, and admins see each version's address.
     await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '0.1.0' } });
-    expect((await served()).entry).toBe('/apps/library/0.1.0/entry.js');
+    expect((await served()).entry).toBe(`${changed}entry.js`);
     const versions = (await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: admin })).json();
-    expect(versions.map((v: { entry: { entry: string } }) => v.entry.entry)).toEqual(['/apps/library/0.2.0/entry.js', '/apps/library/0.1.0/entry.js']);
+    expect(versions.map((v: { entry: { entry: string } }) => v.entry.entry)).toEqual([`${two}entry.js`, `${changed}entry.js`]);
 
     // An entry that isn't in the frontend it gave is served as registered.
     await app.inject({ method: 'DELETE', url: '/v1/apps/library/pin', headers: admin });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', entry: '/apps/library/main.js' } });
     expect((await served()).entry).toBe('/apps/library/main.js');
-    expect(entries.filter((e) => e.action === 'app.frontend-published')).toHaveLength(2);
+    expect(entries.filter((e) => e.action === 'app.frontend-published')).toHaveLength(3);
+  });
+
+  it('still serves a frontend kept before builds had folders from its version’s own', () => {
+    const kept = [{ app: 'library', version: '0.1.0', digest: 'sha256:a', files: ['entry.js'], bytes: 1, publishedBy: 'library', publishedAt: '' }];
+    expect(servedEntry({ ...library, entry: '/apps/library/entry.js' }, kept).entry).toBe('/apps/library/0.1.0/entry.js');
   });
 
   it('says so when the deployment doesn’t keep frontends', async () => {

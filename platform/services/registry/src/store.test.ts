@@ -21,10 +21,10 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect((await store.setUpstream('library', null))?.upstream).toBeUndefined();
   });
 
-  it('keeps a version’s first frontend, and forgets them with the app', async () => {
+  it('keeps a version’s newest frontend, and forgets them with the app', async () => {
     const first = await store.putFrontend({ app: 'library', version: '0.1.0', digest: 'sha256:a', files: ['entry.js'], bytes: 10, publishedBy: 'library' });
     expect(first).toMatchObject({ app: 'library', version: '0.1.0', digest: 'sha256:a', files: ['entry.js'], bytes: 10 });
-    expect(await store.putFrontend({ app: 'library', version: '0.1.0', digest: 'sha256:b', files: ['x.js'], bytes: 1, publishedBy: 'library' })).toMatchObject({ digest: 'sha256:a' });
+    expect(await store.putFrontend({ app: 'library', version: '0.1.0', digest: 'sha256:b', folder: '0.1.0_b', files: ['x.js'], bytes: 1, publishedBy: 'library' })).toMatchObject({ digest: 'sha256:b', folder: '0.1.0_b', files: ['x.js'] });
     await store.putFrontend({ app: 'papers', version: '1.0.0', digest: 'sha256:c', files: ['entry.js'], bytes: 1, publishedBy: 'papers' });
     expect((await store.frontends('library')).map((f) => f.version)).toEqual(['0.1.0']);
     expect(await store.frontends()).toHaveLength(2);
@@ -308,7 +308,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch', '019_frontend_folders']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {
