@@ -38,7 +38,7 @@ kind: Component
 metadata:
   name: augur-admin
   title: "@augur/admin"
-  description: "Admin: people, departments and apps. Built as one ES module the shell imports from the registry's entry URL."
+  description: "Admin: people, departments, apps, status and activity. Built as one ES module the shell imports from the registry's entry URL."
   annotations:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/admin/
