@@ -23,6 +23,17 @@ build() {
   jq -n --arg name "$name" --arg ref "$repo/$name@$digest" '{($name): $ref}' > "$out/$name.ref.json"
 }
 
+# An image built before from exactly these sources, tagged for this release and signed again by this
+# workflow, instead of built again.
+reuse() {
+  local name=$1 from=$2
+  docker buildx imagetools create -t "$repo/$name:$version" -t "$repo/$name:$channel" "$from" >&2
+  local digest
+  digest=$(docker buildx imagetools inspect "$from" --format '{{json .Manifest}}' | jq -r .digest)
+  cosign sign --yes "$repo/$name@$digest" >&2
+  jq -n --arg name "$name" --arg ref "$repo/$name@$digest" '{($name): $ref}' > "$out/$name.ref.json"
+}
+
 build web -f infra/web.Dockerfile --target web
 for service in gateway identity events models storage; do
   build "$service" -f infra/service.Dockerfile --build-arg "PACKAGE=@augur/$service" --target service
@@ -31,7 +42,17 @@ build registry -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry -
 build updater -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater
 # The apps that ship with AUGUR: Folio's service and its rendition worker, Auspex and Data Atlas.
 build folio -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend --target service
-build folio-worker -f apps/folio/worker/Dockerfile
+# Folio's worker is built only from apps/folio/worker, and takes about six minutes (Torch and Docling's
+# models), so each build is also tagged with that folder's git tree. A dev build whose worker is
+# unchanged reuses the last one built from the same tree; a beta or stable release always builds it
+# afresh, with today's base image and Python packages.
+worker_src="$repo/folio-worker:src-$(git rev-parse HEAD:apps/folio/worker)"
+if [ "$channel" = dev ] && docker buildx imagetools inspect "$worker_src" >/dev/null 2>&1; then
+  echo "folio-worker: unchanged since $worker_src, reused" >&2
+  reuse folio-worker "$worker_src"
+else
+  build folio-worker -f apps/folio/worker/Dockerfile -t "$worker_src"
+fi
 build auspex -f infra/service.Dockerfile --build-arg PACKAGE=@apps/auspex --build-arg FRONTEND=@apps/auspex-frontend --target service
 build atlas -f infra/service.Dockerfile --build-arg PACKAGE=@apps/atlas --build-arg FRONTEND=@apps/atlas-frontend --target service
 

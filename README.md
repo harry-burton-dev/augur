@@ -51,7 +51,7 @@ infra/
 scripts/                  repo tooling: create-app, dev-app, register-app, boundary/manifest/version checks
 docs/                     how-to guides (below)
 .changeset/               pending release notes; one per PR
-.github/workflows/        ci.yml (build, test, checks, contract tests) and release.yml
+.github/workflows/        CI, releases, dev builds, previews and feeds (docs/ci-cd.md)
 ```
 
 ## What each part is for
@@ -136,5 +136,6 @@ pnpm check:boundaries
 | [Mirror](docs/mirror.md) | Releases and apps for servers that can't reach GitHub |
 | [Agents and models](docs/agents.md) | Setting up the model behind Agents, and an app's service asking it |
 | [Versioning](docs/versioning.md) | Changesets, releases, API and SDK versions |
+| [CI/CD](docs/ci-cd.md) | Every workflow: what runs when, what it costs in minutes, and how to keep it cheap |
 | [apps/](apps/README.md) | How apps register and ask each other for things |
 | [platform/contract](platform/contract/README.md) | The shell's promise to apps and the frozen SDK builds |

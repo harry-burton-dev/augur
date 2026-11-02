@@ -17,4 +17,6 @@ Folio ships with AUGUR but an admin can turn it off, and either way the shell, H
 
 It runs every build side by side, each against its own copy of the shell on its own port (5180, 5181…), and prints each build's results once that build is done. Failures for a build are kept in `test-results/<build>/`.
 
+On an ordinary pull request CI runs today's build and only the oldest and newest frozen builds (`CONTRACT_FROZEN=edges`); the Version packages pull request runs every one ([docs/ci-cd.md](../../docs/ci-cd.md)).
+
 When a release bumps the SDK's minor (1.1, 1.2…), keep that release's build: `pnpm build && pnpm --filter @augur/contract-tests freeze`, and commit the new `frozen/` folder. A new part of the mount context gets a check in the reference app and the spec in the same pull request that adds it; the frozen builds don't use it, which is the point.
