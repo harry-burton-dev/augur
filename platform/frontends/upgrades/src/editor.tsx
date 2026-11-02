@@ -79,6 +79,7 @@ export const SettingsEditor = (p: {
   const problems = desiredProblems(draft);
   const unchanged = same(draft, start);
   const automatic = draft.policy === 'automatic';
+  const full = draft.windows.length >= MAX_WINDOWS;
   const next = automatic ? nextWindows(draft.windows, draft.timeZone, p.now, 3) : [];
   const saveReason = unchanged ? 'Nothing has changed yet.' : problems.length ? problems.join(' ') : undefined;
 
@@ -208,8 +209,8 @@ export const SettingsEditor = (p: {
             <ui-button
               kind="secondary"
               size="small"
-              disabled={draft.windows.length >= MAX_WINDOWS || undefined}
-              reason={draft.windows.length >= MAX_WINDOWS ? `At most ${MAX_WINDOWS} windows.` : undefined}
+              disabled={full || undefined}
+              reason={full ? `At most ${MAX_WINDOWS} windows.` : undefined}
               onClick={() => set({ windows: [...draft.windows, { day: (draft.windows.at(-1)!.day + 1) % 7, start: draft.windows.at(-1)!.start, hours: draft.windows.at(-1)!.hours }] })}
             >
               Add a window
