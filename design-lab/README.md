@@ -1,0 +1,59 @@
+# Design lab
+
+Exploratory design research for AUGUR: prompts, the runs they produced, and
+the concepts that steer what we explore next. Nothing here ships. Ideas move
+into the product through the usual path: a Proposed record or an entry in
+`docs/app-patterns.md`, then a kit change in its own PR.
+
+```
+design-lab/
+  brief.md        rules every run follows (read first)
+  _kit/           tokens.css (from the repo tokens), Lucide icons, screenshot and gallery scripts
+  concepts/       high-level concepts found by runs; README.md is the index
+  prompts/        the ready queue: prompts waiting to be run
+  runs/<date>-<slug>/
+    prompt.md     the prompt as it was run (moved here from prompts/)
+    concepts.md   the new concepts this run found
+    SHORTLIST.md  ranked build order, gaps, push-backs
+    index.html    gallery; one folder per surface with prototypes and notes.md
+```
+
+## The loop
+1. **Pick** a prompt from `prompts/`. Steered prompts first, unless Harry
+   asks for the wildcard.
+2. **Archive it on use:** `git mv prompts/<file>.md runs/<date>-<slug>/prompt.md`
+   in the run's first commit, so every prompt sits next to its output.
+3. **Run it** following `brief.md`: grammar sheet, six variants per surface,
+   critiques, gallery, a combining round, `SHORTLIST.md`.
+4. **Harvest concepts:** write `runs/<run>/concepts.md` with the new
+   high-level concepts the research turned up (ideas bigger than one
+   prototype, that could steer a whole future run). Add or update one file
+   per concept in `concepts/` and its row in `concepts/README.md`.
+5. **Refill the queue:** keep at least four prompts in `prompts/`. When it
+   drops below four, write the next **batch**: three or more steered prompts,
+   each naming the concepts it pushes, plus **one wildcard** (see below).
+   Number batches in each prompt's front matter.
+6. **Report**: one summary to Harry with the gallery, the shortlist and the
+   new concepts.
+
+## Prompt front matter
+```yaml
+---
+batch: 1
+kind: steered        # or wildcard
+concepts: [history-as-material, honest-blank]
+---
+```
+
+## Wildcards
+Every batch carries one wildcard so the lab doesn't only dig where it has
+already dug. A wildcard must come from a field no earlier prompt has drawn
+on, may ignore or deliberately argue against an existing concept, and is
+still grounded in a real practice with real references. If a wildcard run
+turns up a strong concept, the next batch steers on it like any other.
+
+## Runs so far
+| Run | Prompt | Result |
+|---|---|---|
+| [2026-11-02 cinematic](runs/2026-11-02-cinematic/) | cinematic and instrument-panel UI | 42 prototypes; shortlist led by the light language, focal planes, radial menu, urgent path |
+| [2026-11-02 wear and time](runs/2026-11-02-wear-and-time/) | history as a material | in progress |
