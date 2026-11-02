@@ -19,7 +19,7 @@ export { Toggle, type ToggleProps } from './toggle.js';
 export { Checkbox, CheckboxGroup, type CheckboxProps, type CheckboxGroupProps } from './checkbox.js';
 export { Heading, type HeadingProps } from './heading.js';
 export { Dialog, type DialogProps, type DialogSubmit } from './dialog.js';
-export { FieldChecks, useFieldCheck, type FieldChecker } from './field.js';
+export { FieldChecks, useFieldCheck, FieldHead, FieldHint, StateMark, useMessage, useValue, shownState, NEEDS_YOU, type FieldChecker } from './field.js';
 export { Menu, type MenuAction, type MenuEntry, type MenuProps } from './menu.js';
 export { Tabs, TabList, Tab, TabPanel, type TabsProps, type TabProps } from './tabs.js';
 export { Choice, Segmented, type ChoiceOption, type ChoiceProps, type SegmentOption, type SegmentedProps } from './choice.js';

@@ -1,7 +1,16 @@
 import { createEventBus, type EventBus, type MountContext } from '@augur/mfe-sdk';
-import type { UiList } from '@augur/ui-kit';
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import home, { HOME_CHANNEL, needsWords, type HomeState } from './entry.js';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+const mount = (el: HTMLElement, c: MountContext) => act(() => void home.mount(el, c));
+const unmount = (el: HTMLElement) => act(() => void home.unmount!(el));
+const heading = (el: HTMLElement) => el.querySelector('.augur-heading');
+const title = (el: HTMLElement) => heading(el)?.querySelector('.augur-title')?.textContent;
+const eyebrow = (el: HTMLElement) => heading(el)?.querySelector('.augur-eyebrow')?.textContent ?? '';
+const summary = (el: HTMLElement) => heading(el)?.querySelector('.augur-summary')?.textContent;
+const press = (b: Element | undefined) => act(() => (b as HTMLElement).click());
 
 const own = { id: 'w-me', kind: 'personal' as const, name: 'You', slug: 'me', path: [], role: 'lead' as const };
 const ctx = (bus: EventBus = createEventBus(), notify = vi.fn()): MountContext => ({
@@ -42,38 +51,32 @@ const shell = (answer: HomeState | null) => {
   return { bus, asked };
 };
 
-const list = async (el: HTMLElement) => {
-  const l = el.querySelector('ui-list') as UiList;
-  await l.updateComplete;
-  return l;
-};
+const rows = (el: HTMLElement) => [...el.querySelectorAll('.quill-list-row')];
 
 afterEach(() => vi.useRealTimers());
 
 describe('home', () => {
   it('greets the person by first name and clears up on unmount', async () => {
     const el = document.createElement('div');
-    await home.mount(el, ctx(shell(state).bus));
-    const heading = el.querySelector('ui-heading')!;
-    expect(heading.getAttribute('heading')).toMatch(/, Sam$/);
-    expect(heading.getAttribute('eyebrow')).toBe('');
-    await home.unmount!(el);
-    expect(el.querySelector('ui-heading')).toBeNull();
+    mount(el, ctx(shell(state).bus));
+    expect(title(el)).toMatch(/, Sam$/);
+    expect(eyebrow(el)).toBe('');
+    unmount(el);
+    expect(heading(el)).toBeNull();
   });
 
   it('names the floor it was opened on', async () => {
     const el = document.createElement('div');
     const finance = { id: 'w-fin', kind: 'team' as const, name: 'Finance', slug: 'finance', path: [], role: 'member' as const };
-    await home.mount(el, { ...ctx(shell(state).bus), workspace: finance });
-    expect(el.querySelector('ui-heading')!.getAttribute('eyebrow')).toBe('Finance');
+    mount(el, { ...ctx(shell(state).bus), workspace: finance });
+    expect(eyebrow(el)).toBe('Finance');
   });
 
   it('counts what needs you, and lists each with its actions', async () => {
     const el = document.body.appendChild(document.createElement('div'));
-    await home.mount(el, ctx(shell(state).bus));
-    expect(el.querySelector('ui-heading')!.getAttribute('summary')).toBe('2 things need you');
-    const rows = (await list(el)).items;
-    expect(rows.map((r) => [r.title, r.detail, r.actions?.map((a) => a.label)])).toEqual([
+    mount(el, ctx(shell(state).bus));
+    expect(summary(el)).toBe('2 things need you');
+    expect(rows(el).map((r) => [r.querySelector('b')!.textContent, r.querySelector('.quill-list-text span')?.textContent, [...r.querySelectorAll('button')].map((b) => b.textContent)])).toEqual([
       ['Approve Alex’s claim', 'Claims', ['Approve', 'Open']],
       ['Review the policy', 'Library · On Finance · By Friday', []],
     ]);
@@ -83,46 +86,45 @@ describe('home', () => {
   it('passes on what’s pressed: opening a row, or one of its actions', async () => {
     const { bus, asked } = shell(state);
     const el = document.body.appendChild(document.createElement('div'));
-    await home.mount(el, ctx(bus));
-    const l = await list(el);
-    l.shadowRoot!.querySelectorAll<HTMLButtonElement>('.act')[0].click();
-    l.shadowRoot!.querySelectorAll<HTMLButtonElement>('.row')[1].click();
+    mount(el, ctx(bus));
+    press(rows(el)[0]!.querySelector('button')!);
+    press(rows(el)[1]);
     expect(asked.filter((a) => !a.startsWith('mount'))).toEqual(['act n1 0', 'open n2']);
   });
 
   it('makes a tile for each card and has the shell mount it, saying so when it can’t', async () => {
     const { bus, asked } = shell({ needs: [], cards: [{ app: 'claims', name: 'Claims' }, { app: 'broken', name: 'Broken' }] });
     const el = document.body.appendChild(document.createElement('div'));
-    await home.mount(el, ctx(bus));
+    mount(el, ctx(bus));
     expect(asked).toEqual(['mount claims', 'mount broken']);
     expect(el.querySelector('[data-card="claims"]')!.textContent).toBe('claims card');
     expect(el.querySelector('[data-card="broken"]')!.hasAttribute('hidden')).toBe(true);
-    expect(el.querySelector('ui-state[kind="error"]')!.getAttribute('heading')).toBe('Broken couldn’t show this right now.');
+    expect(el.querySelector('.quill-state[data-kind="error"]')!.textContent).toBe('Broken couldn’t show this right now.');
     // A new state keeps the tiles it already has.
-    bus.emit(HOME_CHANNEL.state, { needs: [], cards: [{ app: 'claims', name: 'Claims' }] });
+    act(() => bus.emit(HOME_CHANNEL.state, { needs: [], cards: [{ app: 'claims', name: 'Claims' }] }));
     expect(asked).toEqual(['mount claims', 'mount broken', 'unmount']);
-    await home.unmount!(el);
+    unmount(el);
     expect(asked.at(-1)).toBe('unmount');
   });
 
   it('says nothing needs you when there’s nothing and no cards, or the shell doesn’t answer', async () => {
     const el = document.createElement('div');
-    await home.mount(el, ctx(shell({ needs: [], cards: [] }).bus));
-    expect(el.querySelector('ui-state')!.getAttribute('heading')).toBe('Nothing needs you right now.');
+    mount(el, ctx(shell({ needs: [], cards: [] }).bus));
+    expect(el.querySelector('.quill-state')!.textContent).toBe('Nothing needs you right now.');
     vi.useFakeTimers();
     const quiet = document.createElement('div');
-    await home.mount(quiet, ctx(shell(null).bus));
-    expect(quiet.querySelector('ui-list')!.hasAttribute('loading')).toBe(true);
-    vi.advanceTimersByTime(1000);
-    expect(quiet.querySelector('ui-state')).not.toBeNull();
-    await home.unmount!(quiet);
+    mount(quiet, ctx(shell(null).bus));
+    expect(quiet.querySelector('.quill-list [aria-busy="true"]')).not.toBeNull();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(quiet.querySelector('.quill-state')).not.toBeNull();
+    unmount(quiet);
   });
 
   it('sends a test notification through the shell', async () => {
     const notify = vi.fn();
     const el = document.createElement('div');
-    await home.mount(el, ctx(shell(state).bus, notify));
-    (el.querySelector('ui-button') as HTMLElement).click();
+    mount(el, ctx(shell(state).bus, notify));
+    press([...el.querySelectorAll('button')].find((b) => b.textContent === 'Send a test notification'));
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ needsYou: true }));
   });
 });

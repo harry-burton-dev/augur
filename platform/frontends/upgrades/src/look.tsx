@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
+import { Status, type StatusName } from '@augur/app-kit';
 import { STATE_LOOK, type UnitState } from './model/states.js';
 import { formatWhen } from './model/time.js';
 
 /** The kit's status mark for each unit state: a word and a shape, never colour alone. */
-const MARK: Record<UnitState, 'needs' | 'running' | 'queued' | 'paused' | 'done' | 'failed' | 'warning'> = {
+const MARK: Record<UnitState, StatusName> = {
   running: 'running',
   watching: 'running',
   halted: 'failed',
@@ -14,7 +15,7 @@ const MARK: Record<UnitState, 'needs' | 'running' | 'queued' | 'paused' | 'done'
   'up-to-date': 'done',
 };
 
-export const StateMark = ({ state }: { state: UnitState }) => <ui-status status={MARK[state]} label={STATE_LOOK[state].words} />;
+export const StateMark = ({ state }: { state: UnitState }) => <Status status={MARK[state]} label={STATE_LOOK[state].words} />;
 
 /** A version, in tabular figures, that can be selected and copied whole. */
 export const Version = ({ v, name }: { v: string; name?: string }) => (

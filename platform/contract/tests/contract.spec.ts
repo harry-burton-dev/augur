@@ -139,9 +139,9 @@ test('Home lists what needs you, and its actions raise their intents', async ({ 
   await page.goto('/reference/somewhere');
   await press(page, 'notify-action');
   await goTo(page, '/@me/home');
-  const row = page.locator('[data-app="home"] ui-list .row', { hasText: 'Reference action' });
+  const row = page.locator('[data-app="home"] .quill-list-row', { hasText: 'Reference action' });
   await expect(row).toBeVisible();
-  await page.locator('[data-app="home"] ui-list .act', { hasText: 'Show' }).click();
+  await row.getByRole('button', { name: /^Show/ }).click();
   await expect(check(page, 'intent')).toHaveText('reference.show {"n":2}');
 });
 
