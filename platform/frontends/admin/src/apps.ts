@@ -3,6 +3,9 @@ import semver from 'semver';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import type { DialogSubmit, Fact, Row, SelectOption, StatusName, TableColumn, TableRow } from '@augur/ui-kit';
 import { ApiError, fullName, type AdminApi, type AllowedOrigin, type AppChannel, type AppInstalls, type AppPolicy, type AppSettingValue, type AppVersion, type CatalogueApp, type Department, type FeaturePreviewMode, type FeaturePreviews, type FloorChoice, type FloorRule, type InstalledApp, type IssuedSignIn, type Person } from './api.js';
+
+/** A change to how an app takes releases, kept in this tab while its admin enters their password again. */
+const FOLLOW_KEY = 'augur.app-follow';
 import { asksWords, channelChoices, featureHint, featureModeChoices, JOB_REFRESH_MS, jobOpen, jobSteps, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
 import { appHistoryList, changeList } from './changes.js';
 import { line, page, section } from './parts.js';
@@ -240,19 +243,33 @@ export class AdminApps extends LitElement {
     }
   }
 
-  /** Back from entering the password again (`?install=<app>@<version>` or `?uninstall=<app>`): ask once more. */
+  /** Back from entering the password again (`?install=<app>@<version>`, `?uninstall=<app>` or `?follow=1` with the change kept in this tab): ask once more. */
   private resumeInstall() {
     const params = new URLSearchParams(window.location.search);
     const install = params.get('install');
     const uninstall = params.get('uninstall');
-    if (!install && !uninstall) return;
+    const follow = params.get('follow');
+    if (!install && !uninstall && !follow) return;
     params.delete('install');
     params.delete('uninstall');
+    params.delete('follow');
     const rest = params.toString();
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
     const at = install?.lastIndexOf('@') ?? -1;
     if (install && at > 0) this.askInstall(install.slice(0, at), install.slice(at + 1));
     if (uninstall) this.confirmRemove = this.installs?.installed.find((i) => i.app === uninstall);
+    if (follow) {
+      // The change they made in this tab before entering the password: made once more, as they chose it.
+      let kept: { app?: string; channel?: AppChannel; policy?: AppPolicy } = {};
+      try {
+        kept = JSON.parse(sessionStorage.getItem(FOLLOW_KEY) ?? '{}');
+        sessionStorage.removeItem(FOLLOW_KEY);
+      } catch {
+        // Nothing kept: they choose again.
+      }
+      const installed = this.installs?.installed.find((i) => i.app === kept.app);
+      if (installed && kept.channel && kept.policy) void this.follow(installed, kept.channel, kept.policy);
+    }
   }
 
   /** Opens "Install …?" for a release the feed offers, or an installed app's newer version. */
@@ -314,11 +331,22 @@ export class AdminApps extends LitElement {
     }
   }
 
+  /** Changes how an app takes new releases; when the password is needed again, goes to enter it and comes back to finish. */
   async follow(app: InstalledApp, channel: AppChannel, policy: AppPolicy) {
     this.installsError = '';
     try {
       this.installs = await this.api.followApp(app.app, channel, policy);
     } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') {
+        // Kept in this tab only, never in the address: a link can't make the change for someone.
+        try {
+          sessionStorage.setItem(FOLLOW_KEY, JSON.stringify({ app: app.app, channel, policy }));
+        } catch {
+          // Private browsing: they choose again when they're back.
+        }
+        this.signInAgain('follow=1');
+        return;
+      }
       this.installsError = (err as Error).message;
     }
   }

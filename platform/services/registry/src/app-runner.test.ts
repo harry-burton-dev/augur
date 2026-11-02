@@ -14,7 +14,7 @@ const release = {
   frontend: { artifact: `ghcr.io/o/r/apps/notes-frontend@${digest('b')}`, digest: digest('c'), mediaType: 'application/vnd.augur.frontend.v1.tar+gzip' },
   signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' },
 };
-const fresh = (at = new Date()) => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'], signedInAt: at.toISOString() });
+const fresh = (at = new Date()) => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: at.toISOString() });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
 const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
   const m = /^Bearer platform-(\S+)$/.exec(String(headers.authorization ?? ''));
@@ -30,9 +30,12 @@ const setup = async () => {
 };
 
 describe('the app runner', () => {
-  it('installs only for an admin who has just entered their password', async () => {
+  it('installs only for a deployment admin who has just entered their password', async () => {
     const { ask } = await setup();
     expect((await ask({ action: 'install', release }, editor)).statusCode).toBe(403);
+    // Installing changes what the server runs: an organisation admin alone can't (ADR 0022).
+    const orgAdmin = callerHeaders({ id: 'u-3', name: 'Sam', departments: [], roles: ['admin'], signedInAt: new Date().toISOString() });
+    expect((await ask({ action: 'install', release }, orgAdmin)).json()).toMatchObject({ error: 'forbidden', requiredRole: 'deployment-admin' });
     expect((await ask({ action: 'install', release }, fresh(new Date(Date.now() - 11 * 60_000)))).json()).toMatchObject({ error: 'sign_in_again' });
     const asked = await ask({ action: 'install', release });
     expect(asked.statusCode).toBe(202);

@@ -11,3 +11,9 @@ export const needsDeploymentAdmin = (doing: string) => ({
   requiredRole: DEPLOYMENT_ADMIN,
   message: `Only a deployment admin can ${doing}. Ask someone who holds the deployment-admin role (Admin, People).`,
 });
+
+/**
+ * How recently someone must have entered their password to change what the server runs (ADR 0022).
+ * The ADR's OIDC step-up (`acr_values`, `max_age`) replaces this check once identity offers it.
+ */
+export const CHANGE_SIGN_IN_MS = 10 * 60 * 1000;
