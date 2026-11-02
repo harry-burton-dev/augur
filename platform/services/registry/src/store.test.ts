@@ -169,6 +169,12 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.setSetting('nothing', 'other', 5, 'u-1')).toBeUndefined();
   });
 
+  it('keeps the first deployment key it is given', async () => {
+    expect(await store.deploymentKey()).toBeUndefined();
+    expect(await store.keepDeploymentKey({ privateKey: 'a', publicKey: 'A' })).toEqual({ privateKey: 'a', publicKey: 'A' });
+    expect(await store.keepDeploymentKey({ privateKey: 'b', publicKey: 'B' })).toEqual({ privateKey: 'a', publicKey: 'A' });
+  });
+
   it('keeps who gets each feature preview, and who turned one on, until the app goes', async () => {
     await store.put(library, 'library');
     expect((await store.setFeaturePreview('library', 'board', 'everyone', 'u-1'))?.featurePreviews?.board).toMatchObject({ mode: 'everyone', setBy: 'u-1' });
@@ -290,7 +296,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades, registry.app_frontends, registry.app_jobs, registry.app_follows, registry.app_developers, registry.preview_choices, registry.desired_states, registry.desired_state_history cascade');
+      await admin.query('truncate registry.apps, registry.allowed_origins, registry.upgrades, registry.app_frontends, registry.app_jobs, registry.app_follows, registry.app_developers, registry.preview_choices, registry.desired_states, registry.desired_state_history, registry.deployment_key cascade');
     },
   );
 

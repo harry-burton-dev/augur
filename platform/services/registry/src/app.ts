@@ -28,7 +28,8 @@ import {
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import { appRunnerRoutes } from './app-runner.ts';
 import { AUGUR_UNIT, resolvedState } from './desired-state.ts';
-import { overviewRoutes } from './overview.ts';
+import { overviewBuilder, overviewRoutes } from './overview.ts';
+import { reportRoutes, ReportSender, type Reporting } from './report.ts';
 import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
@@ -107,8 +108,12 @@ export interface RegistryOptions {
   appUpdates?: AppUpdateChecker;
   /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
   pipeline?: PipelineReader;
-  /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to. AUGUR never calls it. */
+  /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to and the deployment reports to. */
   portalUrl?: string;
+  /** Whether and where the deployment reports what it runs (ADR 0019; DEPLOYMENT_ID, DEPLOYMENT_REPORTING). Off without it. */
+  reporting?: Reporting;
+  /** Sends the record to Backstage; made from `reporting` when not given (tests give their own). */
+  reportFetch?: typeof fetch;
   /** The workbench's own tailnet, from PLATFORM_URL: Live on the workbench loads only from machines on it. */
   tailnet?: string;
   /** The deployment's time zone (DEPLOYMENT_TIME_ZONE), which upgrade windows are in unless a unit names its own. */
@@ -191,6 +196,8 @@ export const buildApp = async ({
   allowPrPreviews = true,
   pipeline,
   portalUrl,
+  reporting = { mode: 'off', why: 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage (org/deployments.yaml).' },
+  reportFetch,
   tailnet,
   timeZone = 'UTC',
   now = () => new Date(),
@@ -435,7 +442,13 @@ export const buildApp = async ({
 
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record }));
       await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now }));
-      await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now }));
+      await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
+      // What this deployment runs, reported to Backstage (ADR 0019).
+      const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });
+      const sender = new ReportSender({ reporting, store, overview, fetchImpl: reportFetch, now, log: { info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) } });
+      await app.register(reportRoutes({ reporting, store, sender, overview, now }));
+      sender.start();
+      app.addHook('onClose', async () => sender.stop());
 
       app.put<{ Params: { id: string }; Body: AppEntry }>(
         '/apps/:id',
