@@ -1,5 +1,19 @@
 # @augur/events
 
+## 0.6.0
+
+### Minor Changes
+
+- 9e98ef1: Every audit entry now keeps `recordedBy`: the service that wrote it, taken from its signed token. An app can still name any actor, but the entry shows which app made the claim. Entries written before this have no `recordedBy`.
+- 2021f8a: Deployment admins now hear in the shell when a new AUGUR or app release is available, and deployment admins and admins hear when an upgrade or install finishes, fails or goes back by itself (ADR 0044). Platform services can address a notification to an `audience` such as `role:deployment-admin`, worked out by identity as it's sent, and any sender can give one a `key` so each person is told that news once (events contract 1.7.0, identity contract 1.14.0).
+
+### Patch Changes
+
+- 23a2f8f: Each platform service and Keycloak connects to Postgres with its own login, which owns only its own schema (Keycloak: its own database). The storage job makes the logins from `PLATFORM_DATABASE_LOGINS` and the `*_DATABASE_PASSWORD` settings, and hands each one what its service made as the admin login. The services make their schema only when it isn't there, since their own logins may not create schemas.
+- Updated dependencies [137791c]
+- Updated dependencies [2021f8a]
+  - @augur/service-kit@0.11.0
+
 ## 0.5.1
 
 ### Patch Changes

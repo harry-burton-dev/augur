@@ -1,5 +1,21 @@
 # @augur/identity
 
+## 0.10.0
+
+### Minor Changes
+
+- 7927fd3: Identity no longer holds Keycloak's master admin password. The realm file gives identity's own sign-in its rights on a new server, and identity checks that it has them at start. If they're missing, it says how to repair them with `infra/deploy/identity-repair.yml` for one start.
+- 7aa2c19: A service call that names no floor is checked on the organisation's floor, as the gateway already does, so an app that is off for the organisation can't act everywhere by naming none. Identity's `/v1/workspaces/org` names the organisation's floor.
+- bab2360: Settings has a new switch, Toasts for new notifications, which is off by default. When it's on, each new notification is also shown once as an Aerie toast at the bottom of the screen, with Open. When it's off, the shell behaves as it does today: it only pulses. Identity keeps the choice as the `toasts` preference (identity contract 1.13.0).
+- 2021f8a: Deployment admins now hear in the shell when a new AUGUR or app release is available, and deployment admins and admins hear when an upgrade or install finishes, fails or goes back by itself (ADR 0044). Platform services can address a notification to an `audience` such as `role:deployment-admin`, worked out by identity as it's sent, and any sender can give one a `key` so each person is told that news once (events contract 1.7.0, identity contract 1.14.0).
+
+### Patch Changes
+
+- 23a2f8f: Each platform service and Keycloak connects to Postgres with its own login, which owns only its own schema (Keycloak: its own database). The storage job makes the logins from `PLATFORM_DATABASE_LOGINS` and the `*_DATABASE_PASSWORD` settings, and hands each one what its service made as the admin login. The services make their schema only when it isn't there, since their own logins may not create schemas.
+- Updated dependencies [137791c]
+- Updated dependencies [2021f8a]
+  - @augur/service-kit@0.11.0
+
 ## 0.9.0
 
 ### Minor Changes

@@ -1,5 +1,22 @@
 # @augur/updater
 
+## 0.8.0
+
+### Minor Changes
+
+- 7bb3f92: An app upgrade is watched for 5 minutes after the switch, while the old version still runs. If the new version stops answering, the runner goes back to the old one by itself.
+- 0afbe4d: Apps that live in their own repositories (release/app-repos.json, ADR 0047) are trusted from there: the updater takes each such app only as signed by its own repository, and the release feed lists that repository's releases of it. No app is listed yet, so nothing changes on a server until one moves.
+- 7dffd91: A watch too quiet to judge errors by keeps going lightly until AUGUR's services have had 20 calls, for up to a day. A problem it finds then shows in Needs you and doesn't go back by itself (ADR 0020, amended).
+- 3d000f8: After an upgrade to a newer release, the updater watches it for 10 minutes before calling it done: sign-in must keep answering and no more than 5% of the gateway's calls may fail (ADR 0020). If either fails it goes back by itself, unless a breaking release lies between, when it leaves the release running and says so. The registry asks for the watch with each forward upgrade, and the new watch step is listed.
+- 9b033fd: The watch after an upgrade really signs in (a fresh token as the updater), checks every part stays ready, judges errors by AUGUR's own services' calls only, and says when it was too quiet to judge errors.
+
+### Patch Changes
+
+- 975801a: AUGUR's repository is about to be renamed from `im-platform`. The updater and registry now take AUGUR's releases, dev builds and release feed signed under either name, and an app built in AUGUR's repository counts as the same publisher under both. Images and the feed stay at `ghcr.io/harry-burton-dev/im-platform`, so nothing on a server changes. A server needs this release before the rename (docs/upgrade.md).
+- Updated dependencies [137791c]
+- Updated dependencies [2021f8a]
+  - @augur/service-kit@0.11.0
+
 ## 0.7.1
 
 ### Patch Changes

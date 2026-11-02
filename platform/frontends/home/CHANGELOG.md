@@ -1,5 +1,24 @@
 # @augur/home
 
+## 0.3.0
+
+### Minor Changes
+
+- d500567: Home is on React and Quill (ADR 0015): the same greeting, list of what needs you and glance cards. The Upgrade Centre's status marks are Quill's own, so it no longer loads the Lit kit.
+
+### Patch Changes
+
+- Updated dependencies [527a413]
+- Updated dependencies [f8e9b46]
+- Updated dependencies [da54ae3]
+- Updated dependencies [7c8027d]
+- Updated dependencies [d500567]
+- Updated dependencies [a8854e2]
+- Updated dependencies [fccb126]
+- Updated dependencies [d64d724]
+  - @augur/app-kit@0.2.0
+  - @augur/mfe-sdk@1.10.0
+
 ## 0.2.10
 
 ### Patch Changes
