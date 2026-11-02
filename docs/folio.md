@@ -32,9 +32,9 @@ Esc never takes you out of Artifacts. To get back to the menu of every app, pres
 
 What Artifacts shows is always the floor you're on. The floor gauge at the right edge lights that floor and pins Artifacts beside it; point at it to see every floor you can go to, who sees what's on each, and which one Artifacts is showing. Going to another floor keeps you in Artifacts, at the start of that floor's collections.
 
-### The new layout and the classic one
+### The layout
 
-Artifacts opens in its **new layout**, built on Quill with depth and focus (PDR-010). What changes:
+Artifacts is built on Quill, AUGUR's React kit for apps, with depth and focus (PDR-010):
 
 - **The front page** is a title card with three reels: **Actions** (drafts waiting on you as a lead, and series issues that are late), **New** (put out to you since you last looked) and **Upcoming** (the next issue each series expects). Actions and New pull their cards in one at a time behind a light; press the light, or a card to bring it forward, and again to open it. The page is built from a config (`ARTIFACTS_FRONT` in `apps/folio/frontend/src/quill/front.ts`), the same one any app can use.
 - **The rail** keeps your collections, Shared libraries, Published to you and From below. Inside a collection, the tree opens only along the path you took and lights it; everything beside the path dims.
@@ -43,7 +43,7 @@ Artifacts opens in its **new layout**, built on Quill with depth and focus (PDR-
 - **Find** with `/` from anywhere.
 - Dialogs rack the app out of focus behind them, rather than covering it with a dark scrim.
 
-Not everything is in the new layout yet: saved views, tags, level names, a series' own page, the details drawer and links open in the **classic layout**. Those places say so and offer a button, and **Classic layout** at the foot of the rail switches at the place you're on. In the classic layout, **Try the new layout** above it switches back. Each device remembers the choice (`augur-artifacts:layout` in the browser's storage).
+Filters, saved views, tags, level names, series, details, links, reading, sharing and publishing are all in this layout. The classic layout (Lit) is gone; a device that had chosen it opens this one.
 
 The alternatives PDR-010 proposes are one setting away in code: the plain front page look (`look: 'plain'`), quiet rather than blurred ambient cards (`ambience: 'quiet'`), all of Actions at once (`reveal: 'all'`), and the `lens` or `scrim` depth for desktops without a GPU.
 
