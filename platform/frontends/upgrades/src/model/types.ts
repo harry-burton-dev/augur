@@ -178,6 +178,21 @@ export interface Overview {
   checkedAt?: string;
   units: OverviewUnit[];
   needsYou: { kind: 'halted' | 'failed' | 'went-back'; unit: string; message: string; result?: { kind: 'upgrade' | 'app-job'; id: string } }[];
+  /** Whether this deployment tells Backstage what it runs (ADR 0019), and why. Absent from an older registry. */
+  reporting?: { mode: ReportingMode; why: string };
+}
+
+export type ReportingMode = 'send' | 'file' | 'off';
+
+/** How this deployment reports to Backstage, as `GET /platform/reporting` gives it to an admin. */
+export interface ReportingView {
+  mode: ReportingMode;
+  why: string;
+  /** Its name in Backstage (`DEPLOYMENT_ID`). */
+  deployment?: string;
+  /** The key Backstage checks the record with, for the `augur.dev/report-key` annotation. */
+  publicKey?: string;
+  last?: { at: string; reason: 'started' | 'changed' | 'daily' | 'export'; ok: boolean; problem?: string };
 }
 
 export interface AppJob {

@@ -1,6 +1,6 @@
 import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { isRefusal, type Refusal } from './model/roles.js';
-import type { AppInstalls, AppJob, DesiredState, DesiredStateInput, Overview, PlatformUpdates } from './model/types.js';
+import type { AppInstalls, AppJob, DesiredState, DesiredStateInput, Overview, PlatformUpdates, ReportingView } from './model/types.js';
 
 /** A call the platform turned down, with the refusal when it explained itself. */
 export class ApiError extends Error {
@@ -52,6 +52,8 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     goBack: (version: string) => call<PlatformUpdates>('PUT', '/platform/go-back', { version }),
     cancel: () => call<PlatformUpdates>('DELETE', '/platform/upgrade'),
     installs: () => call<AppInstalls>('GET', '/app-runner/apps'),
+    /** Every app's installs and removals, newest first, for the history. */
+    appJobs: async () => (await call<{ jobs: AppJob[] }>('GET', '/app-runner/jobs')).jobs,
     checkApps: () => call<AppInstalls>('POST', '/app-runner/check'),
     install: (app: string, version: string) => call<AppJob>('POST', '/app-runner/jobs', { action: 'install', app, version }),
     remove: (app: string) => call('POST', '/app-runner/jobs', { action: 'remove', app }),
@@ -62,6 +64,23 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     /** Sets how a unit takes new releases (ADR 0020), and answers with the overview. */
     setDesired: (id: string, input: DesiredStateInput) => call<Overview>('PUT', unit(id), input),
     desiredHistory: async (id: string) => (await call<{ history: DesiredState[] }>('GET', `${unit(id)}/history`)).history,
+    /** Whether this deployment reports to Backstage, its public key and how the last send went (ADR 0019). */
+    reporting: () => call<ReportingView>('GET', '/platform/reporting'),
+    /** The signed record as a file, with the name the registry gives it, to carry to Backstage by hand. */
+    exportReport: async (): Promise<{ name: string; blob: Blob }> => {
+      let res: Response;
+      try {
+        res = await ctx.fetch(`${REGISTRY}/platform/reporting/export`, { method: 'GET' });
+      } catch {
+        throw new ApiError('AUGUR can’t be reached. Check your connection and export again.', 0);
+      }
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+        throw new ApiError(data.message ?? `The export didn’t work (${res.status}).`, res.status, undefined, data.error);
+      }
+      const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'deployment-report.json';
+      return { name, blob: await res.blob() };
+    },
     /** Marks a finished upgrade or app job looked at, for every admin. */
     markSeen: (kind: 'upgrade' | 'app-job', id: string) => call<Overview>('POST', `/platform/results/${kind}/${encodeURIComponent(id)}/seen`),
   };
