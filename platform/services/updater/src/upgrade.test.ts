@@ -17,7 +17,7 @@ const target = (more: Partial<Target> = {}): Target => ({
 });
 
 /** A server that does what it's told, and remembers it; `breaks` makes one thing go wrong. */
-type Breaks = 'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack' | 'oldUpdater' | 'edited' | 'badFile' | 'errors' | 'signIn' | 'blip';
+type Breaks = 'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack' | 'oldUpdater' | 'edited' | 'badFile' | 'errors' | 'signIn' | 'blip' | 'quiet' | 'fallsOver';
 const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
   const did: string[] = [];
   // The deploy folder, as the running release (0.2.0) left it, unless it's been edited; and the next release's.
@@ -75,7 +75,11 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
       for (const s of services) versions[s] = onNew ? newVersions[s] : oldVersions[s];
       did.push(`up ${services.join(' ')}`);
     },
-    health: async (service) => ({ version: versions[service] }),
+    // `fallsOver`: registry stops answering a few minutes into the watch.
+    health: async (service) => {
+      if (breaks.fallsOver && service === 'registry' && looks >= 4 && env.includes('PLATFORM_VERSION=0.3.0')) throw new Error('connect ECONNREFUSED');
+      return { version: versions[service] };
+    },
     exitCode: async (service) => {
       const onNew = env.includes('PLATFORM_VERSION=0.3.0');
       // A worker runs on (no exit code) unless it fell over.
@@ -83,7 +87,7 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
       return breaks.storage && service === 'storage' && onNew ? 1 : 0;
     },
     // After the upgrade: one in ten calls failing with `errors`, sign-in down with `signIn`, or down for one look with `blip`.
-    traffic: async () => ({ requests: 100, serverErrors: breaks.errors && env.includes('PLATFORM_VERSION=0.3.0') ? 10 : 0 }),
+    traffic: async () => ({ requests: breaks.quiet ? 3 : 100, serverErrors: breaks.errors && env.includes('PLATFORM_VERSION=0.3.0') ? 10 : 0 }),
     signInProblem: async () => {
       looks += 1;
       if (breaks.signIn || (breaks.blip && looks === 3)) return 'the sign-in service answered 503.';
@@ -282,7 +286,20 @@ describe('the watch after an upgrade (ADR 0020)', () => {
     const { outcome, steps, last } = await run(target({ watch: {} }), server);
     expect(outcome).toBe('done');
     expect(steps.slice(-3)).toEqual(['verify done', 'watch running', 'watch done → done']);
-    expect(last.message).toBe('AUGUR 0.3.0 ran for 10 minutes with sign-in working and calls answering.');
+    expect(last.message).toBe('AUGUR 0.3.0 ran for 10 minutes with sign-in working and every part ready, and AUGUR’s services answered 100 calls with few errors.');
+  });
+
+  it('says when it was too quiet to judge errors, rather than passing in silence', async () => {
+    const { outcome, last } = await run(target({ watch: {} }), fakeServer({ quiet: true }).server);
+    expect(outcome).toBe('done');
+    expect(last.message).toBe('AUGUR 0.3.0 ran for 10 minutes with sign-in working and every part ready. Too quiet to judge errors: 3 calls to AUGUR’s services, and it takes 20.');
+  });
+
+  it('goes back when a part stops answering during the watch, not only at its end', async () => {
+    const fake = fakeServer({ fallsOver: true });
+    const { outcome, steps } = await run(target({ watch: {} }), fake.server);
+    expect(outcome).toBe('rolled-back');
+    expect(steps.slice(-3)).toEqual(['watch failed', 'roll-back running', 'roll-back done → rolled-back']);
   });
 
   it('goes back by itself when calls start failing or sign-in stops', async () => {
@@ -290,7 +307,7 @@ describe('the watch after an upgrade (ADR 0020)', () => {
     const failed = await run(target({ watch: {} }), errors.server);
     expect(failed.outcome).toBe('rolled-back');
     expect(failed.steps.slice(-3)).toEqual(['watch failed', 'roll-back running', 'roll-back done → rolled-back']);
-    expect(failed.last.message).toContain('10 of the 100 calls through the gateway in the last 1 minute failed, more than 5%.');
+    expect(failed.last.message).toContain('10 of the 100 calls to AUGUR’s services in the last 1 minute failed, more than 5%.');
     expect(errors.rolledBack()).toBe(true);
 
     const signIn = await run(target({ watch: {} }), fakeServer({ signIn: true }).server);

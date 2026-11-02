@@ -26,6 +26,12 @@ export interface ServerOptions {
   gatewayUrl?: string;
   /** The sign-in realm as the updater reaches it (OIDC_INTERNAL_URL, else OIDC_ISSUER), which the watch checks answers. */
   signInUrl?: string;
+  /**
+   * Really signs in, with a fresh token each time (the updater's own service sign-in): the watch's
+   * sign-in check when there is one, since the realm's discovery page answers even when tokens can't
+   * be issued. Without it only the discovery page is checked.
+   */
+  signIn?: () => Promise<unknown>;
 }
 
 /** Where each part answers inside the Compose network (infra/deploy/compose.yml). */
@@ -100,7 +106,7 @@ export const command = (file: string, args: string[], env: Record<string, string
     if (input !== undefined) child.stdin?.end(input);
   });
 
-export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrls = HEALTH_URLS, gatewayUrl = 'http://gateway:8080', signInUrl }: ServerOptions): Server & { login(registry: string, user: string, token: string): Promise<void>; replaceSelf(): Promise<void> } => {
+export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrls = HEALTH_URLS, gatewayUrl = 'http://gateway:8080', signInUrl, signIn }: ServerOptions): Server & { login(registry: string, user: string, token: string): Promise<void>; replaceSelf(): Promise<void> } => {
   // Only what the CLIs need: a PLATFORM_VERSION here would win over the settings file.
   const env = (more: Record<string, string> = {}) => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dockerConfig, DOCKER_HOST: dockerHost, DOCKER_CONFIG: dockerConfig, ...more });
   const envFile = join(dir, '.env');
@@ -204,9 +210,19 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
       const res = await fetch(`${gatewayUrl}/traffic?minutes=${minutes}`, { signal: AbortSignal.timeout(5_000) });
       // An older gateway has no /traffic: nothing to go on.
       if (!res.ok) return undefined;
-      return (await res.json()) as { requests: number; serverErrors: number };
+      const counted = (await res.json()) as { requests: number; serverErrors: number; platform?: { requests: number; serverErrors: number } };
+      // AUGUR is judged by its own services' calls; a gateway from before they were counted apart gives only the total.
+      return counted.platform ?? { requests: counted.requests, serverErrors: counted.serverErrors };
     },
     async signInProblem() {
+      if (signIn) {
+        try {
+          await Promise.race([signIn(), new Promise((_, fail) => setTimeout(() => fail(new Error('the sign-in service didn’t answer in 10 s.')), 10_000).unref())]);
+          return undefined;
+        } catch (err) {
+          return (err as Error).message;
+        }
+      }
       if (!signInUrl) return undefined;
       try {
         const res = await fetch(`${signInUrl.replace(/\/$/, '')}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(5_000) });
