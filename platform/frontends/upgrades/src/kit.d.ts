@@ -7,7 +7,7 @@ declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
       'ui-status': El<{ status: 'needs' | 'running' | 'queued' | 'paused' | 'done' | 'failed' | 'warning'; label?: string; 'mark-only'?: boolean }>;
-      'ui-button': El<{ kind?: 'primary' | 'secondary' | 'quiet' | 'danger'; size?: 'small'; disabled?: boolean; reason?: string; busy?: boolean; 'busy-label'?: string }>;
+      'ui-button': El<{ kind?: 'primary' | 'secondary' | 'tertiary' | 'ghost' | 'danger'; size?: 'small'; disabled?: boolean; reason?: string; busy?: boolean; 'busy-label'?: string }>;
       'ui-icon': El<{ name: string }>;
     }
   }

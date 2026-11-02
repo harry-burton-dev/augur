@@ -2,6 +2,7 @@ import type { MountContext } from '@augur/mfe-sdk';
 import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { upgradesApi } from './api.js';
 import { useUpgrades, type UpgradesData } from './data.js';
+import { SettingsEditor } from './editor.js';
 import { Facts, Muted, Section, StateMark, Version, When } from './look.js';
 import { needsYou } from './model/needs-you.js';
 import { canChange } from './model/roles.js';
@@ -105,7 +106,7 @@ export const App = ({ ctx }: { ctx: Pick<MountContext, 'fetch' | 'path' | 'user'
         ) : route.page === 'history' ? (
           <History data={data} now={now} zone={zone} />
         ) : (
-          <Unit data={data} row={rows.find((r) => r.id === route.unit)} unit={route.unit} now={now} zone={zone} gate={gate} />
+          <Unit key={route.unit} data={data} row={rows.find((r) => r.id === route.unit)} unit={route.unit} now={now} zone={zone} gate={gate} api={api} took={took} />
         )}
       </main>
     </div>
@@ -150,10 +151,8 @@ const Overview = (p: {
                   <p.Link to={i.action.to}>{i.action.verb}</p.Link>
                   {i.result && (
                     <ui-button
-                      kind="quiet"
+                      kind="tertiary"
                       size="small"
-                      disabled={!p.gate.allowed || undefined}
-                      reason={p.gate.allowed ? undefined : p.gate.reason}
                       onClick={async () => {
                         setSeenError(undefined);
                         await p.api
@@ -289,7 +288,18 @@ const Overview = (p: {
 
 const flowNotHere = 'Upgrading from this page arrives in the next release of the Upgrade Centre. Until then, use Admin, Upgrade Centre.';
 
-const Unit = (p: { data: UpgradesData; row?: UnitRow; unit: string; now: Date; zone: string; gate: Gate }) => {
+const Unit = (p: {
+  data: UpgradesData;
+  row?: UnitRow;
+  unit: string;
+  now: Date;
+  zone: string;
+  gate: Gate;
+  api: ReturnType<typeof upgradesApi>;
+  took: (o: OverviewData) => void;
+}) => {
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
   if (!p.row) return <Muted>Nothing called “{p.unit}” is installed on this deployment.</Muted>;
   const unit = p.data.overview!.units.find((x) => x.unit === p.unit)!;
   const isAugur = p.unit === AUGUR;
@@ -309,18 +319,22 @@ const Unit = (p: { data: UpgradesData; row?: UnitRow; unit: string; now: Date; z
       </header>
 
       <Section title="How it moves" id="policy">
-        <p className="m-0">{unit.policy}</p>
-        {unit.automatic?.takes && <Muted>{unit.automatic.takes}</Muted>}
-        {unit.automatic?.waits && <Muted>{unit.automatic.waits}</Muted>}
-        <Muted>
-          {unit.desired.isDefault ? (
-            'These are the defaults: nobody has changed them on this server.'
-          ) : (
-            <>
-              Set by {unit.desired.setBy} <When at={unit.desired.setAt} zone={p.zone} now={p.now} />.
-            </>
-          )}
-        </Muted>
+        {editing ? (
+          <SettingsEditor
+            unit={unit}
+            ring={p.data.overview!.ring}
+            deploymentZone={p.zone}
+            now={p.now}
+            api={p.api}
+            took={(o) => {
+              p.took(o);
+              setSaved(true);
+            }}
+            onDone={() => setEditing(false)}
+          />
+        ) : (
+          <HowItMoves unit={unit} zone={p.zone} now={p.now} gate={p.gate} saved={saved} onChange={() => (setSaved(false), setEditing(true))} />
+        )}
       </Section>
 
       <Section title="On offer" id="offer">
@@ -393,6 +407,30 @@ const Unit = (p: { data: UpgradesData; row?: UnitRow; unit: string; now: Date; z
     </>
   );
 };
+
+/** What a unit's settings are now, who set them, and the way into changing them. */
+const HowItMoves = (p: { unit: OverviewData['units'][number]; zone: string; now: Date; gate: Gate; saved: boolean; onChange: () => void }) => (
+  <>
+    <p className="m-0">{p.unit.policy}</p>
+    {p.unit.automatic?.takes && <Muted>{p.unit.automatic.takes}</Muted>}
+    {p.unit.automatic?.waits && <Muted>{p.unit.automatic.waits}</Muted>}
+    <Muted>
+      {p.unit.desired.isDefault ? (
+        'These are the defaults: nobody has changed them on this server.'
+      ) : (
+        <>
+          Set by {p.unit.desired.setBy} <When at={p.unit.desired.setAt} zone={p.zone} now={p.now} />.
+        </>
+      )}
+    </Muted>
+    {p.saved && <p role="status" className="m-0">Saved. The updater follows the new settings from its next check.</p>}
+    <span>
+      <ui-button kind="secondary" disabled={p.gate.allowed ? undefined : true} reason={p.gate.allowed ? undefined : p.gate.reason} onClick={() => p.gate.allowed && p.onChange()}>
+        Change settings
+      </ui-button>
+    </span>
+  </>
+);
 
 const OUTCOME: Record<string, string> = {
   requested: 'Waiting for the updater',
