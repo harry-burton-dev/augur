@@ -656,7 +656,8 @@ paths:
         AUGUR first, then each app the app runner installed. Each unit has its desired state (ADR 0020):
         channel, policy, how far Automatic goes, a semver pin and the weekly windows an automatic upgrade
         may start in, with whether a window is open now. Needs you lists a halted release being run, and
-        a failed or went-back result until an admin marks it looked at.
+        a failed or went-back result until an admin marks it looked at, and AUGUR's first upgrade on a
+        server, which Automatic leaves to an admin.
       responses:
         "200":
           description: The overview
@@ -1554,7 +1555,7 @@ components:
             type: object
             required: [kind, unit, message]
             properties:
-              kind: { type: string, enum: [halted, failed, went-back] }
+              kind: { type: string, enum: [halted, failed, went-back, first-upgrade] }
               unit: { type: string }
               message: { type: string }
               result: { type: object, required: [kind, id], properties: { kind: { type: string, enum: [upgrade, app-job] }, id: { type: string } }, description: The result to mark looked at }
