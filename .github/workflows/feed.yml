@@ -20,6 +20,10 @@ permissions:
   packages: write
   # Signs the feed keyless: deployments check it came from this workflow (ADR 0017).
   id-token: write
+env:
+  # Where AUGUR's images and release feed go. They stay at ghcr.io/<owner>/im-platform, the repository's
+  # first name, where servers pull them from; the IMAGE_REPO variable moves them (docs/upgrade.md).
+  IMAGE_REPO: ${{ vars.IMAGE_REPO || format('ghcr.io/{0}/im-platform', github.repository_owner) }}
 jobs:
   feed:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}

@@ -35,10 +35,28 @@ const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * Who signs the feed: the Release feed workflow (.github/workflows/feed.yml) of `repo` on main or a
- * hotfix's release branch, as a pattern for cosign's --certificate-identity-regexp.
+ * The repositories AUGUR is released from: its name now, then the name it had before. Its images and
+ * feed stay at ghcr.io/harry-burton-dev/im-platform, where servers pull them, so either name may have
+ * signed what is there (docs/upgrade.md).
  */
-export const feedSigner = (repo: string) => `^${escape(`https://github.com/${repo}/.github/workflows/feed.yml`)}@refs/heads/(main|release/[a-z][a-z0-9-]*-[0-9]+\\.[0-9]+)$`;
+export const AUGUR_REPOSITORIES = ['harry-burton-dev/augur', 'harry-burton-dev/im-platform'] as const;
+
+/** Whether two `owner/repo` names are the same repository: equal, or both names AUGUR has had. */
+export const sameRepository = (a: string, b: string) => {
+  const augur = (r: string) => (AUGUR_REPOSITORIES as readonly string[]).includes(r.toLowerCase());
+  return a.toLowerCase() === b.toLowerCase() || (augur(a) && augur(b));
+};
+
+/**
+ * Who signs the feed: the Release feed workflow (.github/workflows/feed.yml) of `repo` on main or a
+ * hotfix's release branch, as a pattern for cosign's --certificate-identity-regexp. A feed at one of
+ * AUGUR's names may be signed under any of them.
+ */
+export const feedSigner = (repo: string) => {
+  const repos = sameRepository(repo, AUGUR_REPOSITORIES[0]) ? [...AUGUR_REPOSITORIES] : [repo];
+  const workflows = repos.map((r) => escape(`https://github.com/${r}/.github/workflows/feed.yml`));
+  return `^${workflows.length === 1 ? workflows[0] : `(?:${workflows.join('|')})`}@refs/heads/(main|release/[a-z][a-z0-9-]*-[0-9]+\\.[0-9]+)$`;
+};
 
 /** The repository a feed address belongs to, `oci://ghcr.io/<owner>/<repo>/feed:<tag>`, when it is one on GitHub. */
 export const repoOfFeed = (target: string) => /^oci:\/\/ghcr\.io\/([^/]+\/[^/]+)\/feed:[^/]+$/i.exec(target)?.[1];

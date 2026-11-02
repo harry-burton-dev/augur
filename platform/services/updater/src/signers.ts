@@ -11,13 +11,25 @@ export const HOTFIX_BRANCH = 'release/[a-z][a-z0-9-]*-[0-9]+\\.[0-9]+';
 /** The branches dev builds are made from: `main`, and `dev` before it was renamed `main`. */
 export const DEV_BRANCHES = ['main', 'dev'] as const;
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * The repositories AUGUR is released from: its name now, then the name it had before. A release made
+ * before the rename is signed with the old name, and a server may still run it or go back to it. Its
+ * images and feed stay at ghcr.io/harry-burton-dev/im-platform, where servers pull them (docs/upgrade.md).
+ */
+export const AUGUR_REPOSITORIES = ['harry-burton-dev/augur', 'harry-burton-dev/im-platform'] as const;
+/** One workflow, or any of several (the same file in each of AUGUR_REPOSITORIES), as the start of a pattern. */
+const anyOf = (workflow: string | readonly string[]) => {
+  const urls = (typeof workflow === 'string' ? [workflow] : [...workflow]).map((w) => escape(`https://github.com/${w}`));
+  return urls.length === 1 ? urls[0] : `(?:${urls.join('|')})`;
+};
 /** The certificate identity of `workflow` (`owner/repo/.github/workflows/<file>`) on any branch releases are made from. */
 /** The workflow that builds AUGUR's dev builds on every merge into main (docs/release-channels.md, "AUGUR dev builds"). */
 export const AUGUR_DEV_WORKFLOW = '.github/workflows/augur-dev.yml';
 /** Who signs a dev build: `workflow` (`owner/repo/.github/workflows/<file>`) on a branch dev builds are made from, as a pattern. */
-export const devBuildIdentity = (workflow: string) => `^${escape(`https://github.com/${workflow}`)}@refs/heads/(${DEV_BRANCHES.join('|')})$`;
-/** The identity AUGUR's dev builds are signed with: that workflow, on main, in `repository` (owner/repo). */
-export const augurDevIdentity = (repository: string) => devBuildIdentity(`${repository}/${AUGUR_DEV_WORKFLOW}`);
+export const devBuildIdentity = (workflow: string | readonly string[]) => `^${anyOf(workflow)}@refs/heads/(${DEV_BRANCHES.join('|')})$`;
+/** The identity AUGUR's dev builds are signed with: that workflow, on main, in `repository` (owner/repo) or any of several. */
+export const augurDevIdentity = (repository: string | readonly string[]) =>
+  devBuildIdentity((typeof repository === 'string' ? [repository] : [...repository]).map((r) => `${r}/${AUGUR_DEV_WORKFLOW}`));
 /** An AUGUR or app version that's a dev build: <next patch>-dev.<run>. */
 export const isDevBuild = (version: string) => /-dev\.\d+$/.test(version);
-export const releaseIdentity = (workflow: string) => `^${escape(`https://github.com/${workflow}`)}@refs/heads/(${[...RELEASE_BRANCHES, HOTFIX_BRANCH].join('|')})$`;
+export const releaseIdentity = (workflow: string | readonly string[]) => `^${anyOf(workflow)}@refs/heads/(${[...RELEASE_BRANCHES, HOTFIX_BRANCH].join('|')})$`;

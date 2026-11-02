@@ -19,6 +19,8 @@ import { AUGUR, tagOf, versionsFrom } from './promote.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const REPO = process.env.GITHUB_REPOSITORY ?? 'harry-burton-dev/im-platform';
+/** Where the images, and so the feed, are: IMAGE_REPO, or the repository's own path. */
+const IMAGES = (process.env.IMAGE_REPO || `ghcr.io/${REPO}`).toLowerCase();
 /** The pipeline's media type in the registry. */
 export const PIPELINE_MEDIA_TYPE = 'application/vnd.augur.pipeline.v1+json';
 /** The stages, in the order code goes through them (docs/release-channels.md). The feed's v1 calls them branches. */
@@ -184,7 +186,7 @@ const main = (args) => {
   writeFileSync(out, `${JSON.stringify(pipeline, null, 2)}\n`);
   console.log(`${out}: ${pipeline.units.length} units, ${pipeline.changesets.length} changesets waiting, ${pipeline.steps.map((s) => `${s.merged} ${s.from}→${s.to}`).join(', ')}.`);
   if (args.includes('--push')) {
-    const target = `ghcr.io/${REPO.toLowerCase()}/feed:pipeline`;
+    const target = `${IMAGES}/feed:pipeline`;
     execFileSync('oras', ['push', target, '--artifact-type', PIPELINE_MEDIA_TYPE, '--annotation', `org.opencontainers.image.source=https://github.com/${REPO}`, `${basename(out)}:${PIPELINE_MEDIA_TYPE}`], {
       stdio: 'inherit',
       cwd: dirname(resolve(out)),

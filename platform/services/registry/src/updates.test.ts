@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryAppStore, type AppRecord } from './store.ts';
-import { feedSigner, repoOfFeed } from './feed-trust.ts';
+import { feedSigner, repoOfFeed, sameRepository } from './feed-trust.ts';
 import { automaticDevUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRead, type FeedRelease, type ReleaseManifest } from './updates.ts';
 
 const listOf = (read: FeedRelease[] | FeedRead) => (Array.isArray(read) ? read : read.releases);
@@ -455,6 +455,16 @@ describe('the signed feed (ADR 0017)', () => {
     expect(signer.test('https://github.com/o/r/.github/workflows/feed.yml@refs/heads/release/augur-0.14')).toBe(true);
     expect(signer.test('https://github.com/o/r/.github/workflows/feed.yml@refs/pull/12/merge')).toBe(false);
     expect(signer.test('https://github.com/o/r/.github/workflows/release.yml@refs/heads/main')).toBe(false);
+  });
+
+  it('takes AUGUR’s feed signed under the repository’s name now or before, where servers still read it', () => {
+    const signer = new RegExp(feedSigner('harry-burton-dev/im-platform'));
+    expect(signer.test('https://github.com/harry-burton-dev/im-platform/.github/workflows/feed.yml@refs/heads/main')).toBe(true);
+    expect(signer.test('https://github.com/harry-burton-dev/augur/.github/workflows/feed.yml@refs/heads/main')).toBe(true);
+    expect(signer.test('https://github.com/harry-burton-dev/augur-mandate/.github/workflows/feed.yml@refs/heads/main')).toBe(false);
+    expect(sameRepository('harry-burton-dev/im-platform', 'harry-burton-dev/augur')).toBe(true);
+    expect(sameRepository('harry-burton-dev/im-platform', 'harry-burton-dev/augur-mandate')).toBe(false);
+    expect(sameRepository('o/r', 'O/R')).toBe(true);
   });
 
   it('never offers a halted release, and tells a server running one where to go', async () => {

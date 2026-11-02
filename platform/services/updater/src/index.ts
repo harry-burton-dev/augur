@@ -12,7 +12,7 @@ import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appReposFrom, appRunner } from './runner.ts';
 import { composeAppHost, composeServer } from './server.ts';
-import { augurDevIdentity, releaseIdentity } from './signers.ts';
+import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity } from './signers.ts';
 import { lookAfterWatch, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
 
 // Every setting the updater reads, checked before it starts (in production, a missing one stops it).
@@ -29,8 +29,9 @@ loadConfigOrExit('updater', [
 ]);
 
 const POLL_MS = 30_000;
-/** This repository's Release workflow, which signs every image it publishes (infra/release-images.sh), on any branch releases are made from. */
-const RELEASE_SIGNER = releaseIdentity('harry-burton-dev/im-platform/.github/workflows/release.yml');
+/** AUGUR's Release workflow, which signs every image it publishes (infra/release-images.sh), on any branch releases are made from, under the repository's name now or before. */
+const RELEASE_WORKFLOWS = AUGUR_REPOSITORIES.map((repository) => `${repository}/.github/workflows/release.yml`);
+const RELEASE_SIGNER = releaseIdentity(RELEASE_WORKFLOWS);
 const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
 /** The deployment's read key, which the registry checks for releases with too (docs/upgrade.md). */
 const READ_KEY_FILE = '/run/secrets/augur/github-read-key';
@@ -50,7 +51,7 @@ const GITHUB_READ_USER = setting('GITHUB_READ_USER');
 const IMAGE_PULL_USER = setting('IMAGE_PULL_USER');
 if (!PLATFORM_DIR) throw new Error('PLATFORM_DIR is not set: the updater needs the deploy folder’s path on the host (docs/upgrade.md).');
 /** Who signs AUGUR's dev builds, which only a dev server runs: the dev builds workflow on dev, in the same repository. */
-const AUGUR_DEV_SIGNER = setting('AUGUR_DEV_SIGNER', augurDevIdentity('harry-burton-dev/im-platform'));
+const AUGUR_DEV_SIGNER = setting('AUGUR_DEV_SIGNER', augurDevIdentity(AUGUR_REPOSITORIES));
 const signer = { identity: IMAGE_SIGNER, issuer: setting('IMAGE_SIGNER_ISSUER', GITHUB_ISSUER) };
 // The watch after an upgrade checks the sign-in realm answers, as the updater reaches it inside Docker.
 const signInUrl = setting('OIDC_INTERNAL_URL') || setting('OIDC_ISSUER') || undefined;
@@ -81,7 +82,7 @@ const appRepos = existsSync(appReposFile) ? appReposFrom(JSON.parse(readFileSync
 const runner = appRunner({
   host: composeAppHost({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer }),
   calls: apps.calls,
-  publishers: [IMAGE_SIGNER.replace(/^https:\/\/github\.com\//, '').replace(/@.*$/, '')],
+  publishers: IMAGE_SIGNER === RELEASE_SIGNER ? RELEASE_WORKFLOWS : [IMAGE_SIGNER.replace(/^https:\/\/github\.com\//, '').replace(/@.*$/, '')],
   appRepos,
 });
 

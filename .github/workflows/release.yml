@@ -12,6 +12,10 @@ permissions:
   # AUGUR's images go to GitHub's container registry, signed keyless through GitHub's OIDC.
   packages: write
   id-token: write
+env:
+  # Where AUGUR's images and release feed go. They stay at ghcr.io/<owner>/im-platform, the repository's
+  # first name, where servers pull them from; the IMAGE_REPO variable moves them (docs/upgrade.md).
+  IMAGE_REPO: ${{ vars.IMAGE_REPO || format('ghcr.io/{0}/im-platform', github.repository_owner) }}
 jobs:
   release:
     # Builds and pushes images, so only on an x86-64 runner: RELEASE_RUNNER, if CI_RUNNER names an Arm one.

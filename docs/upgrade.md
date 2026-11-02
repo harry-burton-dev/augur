@@ -54,6 +54,12 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### AUGUR's repository gets a new name
+
+AUGUR's repository is being renamed from `im-platform` (Linear PER-244). Every release is signed by the repository's workflows, so from this release the updater and registry take AUGUR's releases, dev builds and feed signed under either name. A server must run this release **before** the rename, or it refuses everything released after it.
+
+Nothing else moves. Images and the feed stay at `ghcr.io/harry-burton-dev/im-platform`, so `PLATFORM_IMAGES` and your read key stay as they are, and GitHub forwards the old addresses to the new one. A git checkout of the repository keeps working too; to use the new address, run `git remote set-url origin https://github.com/harry-burton-dev/<new name>.git`.
+
 ### The first upgrade on each server is yours, and a 0.x minor waits for you
 
 Two defaults changed ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md), amended 2 November):
