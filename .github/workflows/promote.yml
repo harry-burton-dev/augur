@@ -13,6 +13,10 @@ on:
       version:
         description: 'The version (by default, the newest beta)'
         required: false
+      skip_bake:
+        description: 'Skip the bake time (ADR 0018): make it stable even if it hasn’t run long enough on a preview deployment. Recorded in promotion.json.'
+        type: boolean
+        default: false
 concurrency: promote-${{ inputs.unit }}
 permissions:
   contents: write
@@ -22,6 +26,9 @@ permissions:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    env:
+      # Secrets can't be tested in a step's `if`, so whether one is set is read from here.
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     outputs:
       promoted: ${{ steps.stable.outputs.promoted }}
     steps:
@@ -32,12 +39,23 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Bake time is asked of the portal (Backstage), which is only on the tailnet (ADR 0045). Without
+      # the Tailscale client and PORTAL_URL, the promotion says bake time wasn't checked.
+      - name: Join the tailnet to ask the portal
+        if: env.TS_OAUTH_CLIENT_ID != ''
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
       - name: Make it stable
         id: stable
         run: node scripts/promote.mjs stable "$UNIT" "$VERSION"
         env:
           UNIT: ${{ inputs.unit }}
           VERSION: ${{ inputs.version }}
+          SKIP_BAKE: ${{ inputs.skip_bake }}
+          PORTAL_URL: ${{ vars.PORTAL_URL }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # Deployments learn the release is stable from the feed beside the images.
   feed:
