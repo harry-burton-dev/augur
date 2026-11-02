@@ -1,10 +1,10 @@
 # Upgrade Centre
 
-`@augur/upgrades` is the Upgrade Centre: a platform frontend at `/upgrades`, for admins ([ADR 0030](../../../docs/decisions/0030-upgrade-centre-platform-frontend.md)). It shows what this deployment runs, what's on offer and how each unit (AUGUR and each installed app) moves. It is React (ADR 0015) and draws with the Lit kit's parts until Quill has its own, with Tailwind limited to AUGUR's tokens for its layout.
+`@augur/upgrades` is the Upgrade Centre: a platform frontend at `/upgrades`, for admins ([ADR 0030](../../../docs/decisions/0030-upgrade-centre-platform-frontend.md)). It shows what this deployment runs, what's on offer and how each unit (AUGUR and each installed app) moves. It is React (ADR 0015) on Quill (`@augur/app-kit`): `AppFrame` with a rail of units and History, the front page as `FrontPage` (Needs you, On offer, Worth knowing), an `About` drawer on each unit, and Common's controls. Its name and icon come from the manifest. Only the status mark is still the Lit kit's (`ui-status`). Tailwind, limited to AUGUR's tokens, lays out the rest.
 
 | Page | Path | What it shows |
 | --- | --- | --- |
-| Overview | `/` | Needs you, this deployment, every unit and its state, the next maintenance window, when the feed was last read (with Check now) |
+| Front page | `/` | Needs you, what's on offer, and worth knowing: this deployment, the next window, every unit and its state, when the feed was last read (with Check now) |
 | A unit | `/augur`, `/apps/<id>` | How it moves (the policy sentence) with Change settings, what's on offer, and what it can go back to |
 | History | `/history` | Every upgrade, newest first |
 

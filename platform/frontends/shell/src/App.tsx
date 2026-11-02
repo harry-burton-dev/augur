@@ -1,5 +1,7 @@
 import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import { defaultFunctions, finishMotion, type FloorDirection, liftGhost, moving, type Ghost, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@augur/ui-kit';
+import { Toasts } from '@augur/shell-kit';
+import type { ShellNotification } from '@augur/ui-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
@@ -46,6 +48,9 @@ import {
   titleMenu,
   titleTarget,
   toShellNotification,
+  toastFor,
+  withToast,
+  type ShellToast,
   type ImportEntry,
   type OpenRequest,
   type PreviewApp,
@@ -160,13 +165,24 @@ export function Host({
   );
   const findTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => search.stop(), [search]);
+  /** New notifications said once at the bottom of the screen, for someone who turned toasts on in Settings. */
+  const [toasts, setToasts] = useState<ShellToast[]>([]);
+  /** Puts a notification on the stream, and says it as a toast too when the person chose that. */
+  const tell = useCallback((n: ShellNotification) => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    shell.notify(n);
+    const t = toastFor(n, { on: !!shell.settings.toasts, muted: shell.muted });
+    if (t) setToasts((list) => withToast(list, t));
+  }, []);
+  const toastDone = useCallback((id: string) => setToasts((list) => list.filter((t) => t.id !== id)), []);
   const prefs = useMemo(
     () =>
       new PreferenceSync(preferencesUrl, session.getToken, {
         fetchImpl,
-        onError: (title) => shellRef.current?.notify(toShellNotification('platform', { title })),
+        onError: (title) => tell(toShellNotification('platform', { title })),
       }),
-    [preferencesUrl, session, fetchImpl],
+    [preferencesUrl, session, fetchImpl, tell],
   );
 
   /** The catalogue, and the floor it's for: until the new floor's arrives, nothing is shown from the last one's. */
@@ -254,15 +270,15 @@ export function Host({
       try {
         await chooseFeaturePreview(fetchImpl, featurePreviewsUrl, await session.getToken(), app.app, id, on);
         const name = app.previews.find((p) => p.id === id)?.name ?? id;
-        shellRef.current?.notify(toShellNotification('platform', { title: `${name} is ${on ? 'on' : 'off'} in ${app.name}`, body: 'Only for you. Turn it off again in Previews.' }));
+        tell(toShellNotification('platform', { title: `${name} is ${on ? 'on' : 'off'} in ${app.name}`, body: 'Only for you. Turn it off again in Previews.' }));
         setAttempt((n) => n + 1);
       } catch (err) {
-        shellRef.current?.notify(toShellNotification('platform', { title: `Couldn’t change it: ${(err as Error).message}` }));
+        tell(toShellNotification('platform', { title: `Couldn’t change it: ${(err as Error).message}` }));
       } finally {
         setSwitching(false);
       }
     },
-    [fetchImpl, featurePreviewsUrl, session],
+    [fetchImpl, featurePreviewsUrl, session, tell],
   );
 
   /** Loads an app from this person's own machine (Live on the workbench), or stops, then loads the catalogue again. */
@@ -271,7 +287,7 @@ export function Host({
       setSwitching(true);
       try {
         await chooseLive(fetchImpl, previewsUrl, await session.getToken(), app.app, entry);
-        shellRef.current?.notify(
+        tell(
           toShellNotification('platform', {
             title: entry === null ? `Back to ${app.name} ${app.version}` : `${app.name} is loading from your machine`,
             body: entry === null ? 'Everyone’s version again.' : 'Only for you, with the real sign-in, floors and data. Save a file and it reloads.',
@@ -280,12 +296,12 @@ export function Host({
         setPreviewsOpen(false);
         setAttempt((n) => n + 1);
       } catch (err) {
-        shellRef.current?.notify(toShellNotification('platform', { title: `Couldn’t switch: ${(err as Error).message}` }));
+        tell(toShellNotification('platform', { title: `Couldn’t switch: ${(err as Error).message}` }));
       } finally {
         setSwitching(false);
       }
     },
-    [fetchImpl, previewsUrl, session],
+    [fetchImpl, previewsUrl, session, tell],
   );
 
   /** Switches this person to a pull request's preview of an app, or back to the app, then loads the catalogue again. */
@@ -294,7 +310,7 @@ export function Host({
       setSwitching(true);
       try {
         await choosePreview(fetchImpl, previewsUrl, await session.getToken(), app.app, pr);
-        shellRef.current?.notify(
+        tell(
           toShellNotification('platform', {
             title: pr === null ? `Back to ${app.name} ${app.version}` : `You’re on pull request #${pr}’s preview of ${app.name}`,
             body: 'Only you. Its service takes your calls within half a minute.',
@@ -303,12 +319,12 @@ export function Host({
         setPreviewsOpen(false);
         setAttempt((n) => n + 1);
       } catch (err) {
-        shellRef.current?.notify(toShellNotification('platform', { title: `Couldn’t switch: ${(err as Error).message}` }));
+        tell(toShellNotification('platform', { title: `Couldn’t switch: ${(err as Error).message}` }));
       } finally {
         setSwitching(false);
       }
     },
-    [fetchImpl, previewsUrl, session],
+    [fetchImpl, previewsUrl, session, tell],
   );
 
   useEffect(() => {
@@ -336,11 +352,11 @@ export function Host({
         });
       } catch (err) {
         if (!(err instanceof IntentError)) throw err;
-        shellRef.current?.notify(toShellNotification('platform', { title: err.message }));
+        tell(toShellNotification('platform', { title: err.message }));
         throw err;
       }
     },
-    [manifest, navigate],
+    [manifest, navigate, tell],
   );
 
   // An action pressed on another floor's notification, raised now that its floor's apps are here.
@@ -359,13 +375,13 @@ export function Host({
       try {
         started = broker.current.begin(manifest, intent);
       } catch (err) {
-        if (err instanceof IntentError) shellRef.current?.notify(toShellNotification('platform', { title: err.message }));
+        if (err instanceof IntentError) tell(toShellNotification('platform', { title: err.message }));
         return Promise.reject(err);
       }
       setAnswering(started.request);
       return (started.answer as Promise<T>).finally(() => setAnswering(null));
     },
-    [manifest],
+    [manifest, tell],
   );
 
   // A new floor makes a new context, so the open app is mounted again on it.
@@ -379,7 +395,7 @@ export function Host({
       notify: (message) => {
         const n = toShellNotification(app.id, message);
         actions.current.remember(n.id, message.actions);
-        shellRef.current?.notify(n);
+        tell(n);
       },
       workspace: floor ?? home,
       getWorkspace: () => floorRef.current,
@@ -389,7 +405,7 @@ export function Host({
       reply,
       previewOn: (id) => app.previewsOn?.includes(id) ?? false,
     }),
-    [session, bus, raise, request, floor, home, fetchImpl],
+    [session, bus, raise, request, floor, home, fetchImpl, tell],
   );
 
   // The answering app mounts once per request. Its context is read when it opens, so the
@@ -673,14 +689,14 @@ export function Host({
       onNotification: (n) => {
         known.set(n.id, n);
         actions.current.remember(n.id, n.actions);
-        shell.notify(fromServer(n));
+        tell(fromServer(n));
       },
       onState: (state) => shell.setStream(state),
     });
     feed.current = f;
     f.start();
     return () => f.stop();
-  }, [session, fetchImpl, eventsUrl]);
+  }, [session, fetchImpl, eventsUrl, tell]);
 
   // Hand the Shell its data and listen to what it asks for.
   useEffect(() => {
@@ -702,7 +718,7 @@ export function Host({
       const shell = shellRef.current;
       if (!live || !shell) return;
       applyPreferences(p);
-      shell.settings = { reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false };
+      shell.settings = { reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false, toasts: !!p.toasts };
       shell.away = !!p.away;
       shell.muted = p.muted ?? [];
       shell.recent = [...new Set([...shell.recent, ...(p.recent ?? [])])].slice(0, 6);
@@ -774,7 +790,7 @@ export function Host({
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
-      if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles') prefs.set(key, !!value);
+      if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles' || key === 'toasts') prefs.set(key, !!value);
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       applyPreferences(prefs.current);
     };
@@ -885,6 +901,10 @@ export function Host({
           </ui-button>
         </aside>
       ) : null}
+      <Toasts
+        toasts={toasts.map((t) => ({ id: t.id, text: t.text, ...(t.open ? { action: { label: 'Open', onPress: () => homeAsks.current?.open(t.id) } } : {}) }))}
+        onDone={toastDone}
+      />
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
       {screen && screen.kind !== 'app' && manifest?.length ? (
         <ui-centre-menu

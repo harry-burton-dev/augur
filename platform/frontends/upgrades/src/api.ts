@@ -1,4 +1,4 @@
-import type { MountContext } from '@augur/mfe-sdk';
+import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { isRefusal, type Refusal } from './model/roles.js';
 import type { AppInstalls, DesiredState, DesiredStateInput, Overview, PlatformUpdates } from './model/types.js';
 
@@ -53,6 +53,8 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     checkApps: () => call<AppInstalls>('POST', '/app-runner/check'),
     install: (app: string, version: string) => call('POST', '/app-runner/jobs', { action: 'install', app, version }),
     remove: (app: string) => call('POST', '/app-runner/jobs', { action: 'remove', app }),
+    /** The apps this person can open, for this app's own name and icon and each app's icon. */
+    manifest: () => call<AppManifestEntry[]>('GET', '/manifest'),
     /** Every unit, its desired state, what's next and what needs an admin: the same shape Backstage's card reads. */
     overview: () => call<Overview>('GET', '/platform/overview'),
     /** Sets how a unit takes new releases (ADR 0020), and answers with the overview. */

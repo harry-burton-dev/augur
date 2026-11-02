@@ -4,6 +4,8 @@ export interface Preferences {
   density?: 'comfortable' | 'compact';
   /** Whether an area title card shows on arriving at a floor or opening an app; on unless false. */
   areaTitles?: boolean;
+  /** Whether each new notification is also said once as a toast at the bottom of the screen; off unless true. */
+  toasts?: boolean;
   away?: boolean;
   /** App ids, most recent first. */
   recent?: string[];

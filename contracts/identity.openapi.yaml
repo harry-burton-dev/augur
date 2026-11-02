@@ -623,6 +623,7 @@ components:
         reduceMotion: { type: boolean }
         density: { type: string, enum: [comfortable, compact] }
         areaTitles: { type: boolean, description: "Area title cards on arriving at a floor or opening an app; on unless false" }
+        toasts: { type: boolean, description: "Each new notification also said once as a toast; off unless true" }
         away: { type: boolean }
         recent:
           type: array
