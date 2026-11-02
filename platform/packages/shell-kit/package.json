@@ -9,11 +9,13 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./theme.css": "./theme.css"
+    "./theme.css": "./theme.css",
+    "./kit.css": "./dist/kit.css"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "tsc -p tsconfig.json && tailwindcss -i src/kit.css -o dist/kit.css --minify",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@augur/kit-common": "workspace:*"
@@ -23,6 +25,14 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "@tailwindcss/cli": "4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "happy-dom": "^20.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
   }
 }
