@@ -34,6 +34,7 @@ The parts apps used from the Lit kit, on React with the same words, looks and li
 | `ui-tag-picker` | `TagPicker` (a React Aria combo box; `onCreate` for a word that isn't a tag yet) |
 | `ui-lifecycle`, `ui-people-picker` | `Lifecycle` (`onMove`), `PeoplePicker` (`onPick`, and `onChange` with `multiple`) |
 | `ui-reader`, `ui-contents` | `Reader` (a ref gives `goTo`, `headingFor`, `marked`; `onOutline`, `onPosition`), `Contents` (`onSelect`) |
+| `ui-filter-bar` | `FilterBar` (React Aria menus; `onChange(value, sort)`, `actions` for the page's own buttons) |
 
 Common already had the controls (`Button`, `TextField`, `Select`, `Toggle`, `CheckboxGroup`, `Dialog`, `Menu`, `Heading`).
 

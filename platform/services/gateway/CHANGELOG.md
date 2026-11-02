@@ -1,5 +1,18 @@
 # @augur/gateway
 
+## 0.8.0
+
+### Minor Changes
+
+- bafbd8d: The gateway counts the calls it answers and its server errors over the last 15 minutes, at GET /traffic, for the updater's watch after an upgrade (ADR 0020). Only the deployment's own network reaches it: the front door forwards only /api/.
+- 84b454e: GET /traffic counts AUGUR's own services apart from apps, so the watch after an upgrade can judge AUGUR by its own calls and an app's errors can't send it back.
+
+### Patch Changes
+
+- Updated dependencies [137791c]
+- Updated dependencies [2021f8a]
+  - @augur/service-kit@0.11.0
+
 ## 0.7.1
 
 ### Patch Changes

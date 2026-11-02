@@ -1,5 +1,12 @@
 # @augur/mfe-sdk
 
+## 1.10.0
+
+### Minor Changes
+
+- fccb126: The React kits begin (ADR 0015). Three new packages: Common (`@augur/kit-common`), which now holds the token files and builds a Tailwind v4 theme from them with nothing of Tailwind's own palette or scales; Quill (`@augur/app-kit`), the kit apps build with; and Aerie (`@augur/shell-kit`), the shell's own kit. The shell now serves React 19, Common and Quill through the import map (`sharedModules` in the SDK), and uses that copy of React itself. Aerie is never shared, and `pnpm check:boundaries` fails if anything but the shell imports it. The Lit kit is frozen through SDK 1.x and reads its tokens from Common; nothing looks different.
+- d64d724: SDK 1.10: a generic `Ref` and `EntityBinding` for apps that bind their things to entities (ADR 0025), an optional reserved `marking` on every reference, and a reserved `ctx.focus` with a `focus` manifest field (ADR 0029). Nothing sets or enforces either yet. The registry accepts `focus` in a manifest.
+
 ## 1.9.0
 
 ### Minor Changes

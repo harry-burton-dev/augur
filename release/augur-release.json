@@ -1,11 +1,34 @@
 {
-  "version": "0.13.1",
+  "version": "0.14.0",
+  "name": "Avocet",
   "channel": "beta",
-  "released": "2026-11-01",
+  "released": "2026-11-02",
   "upgradeFrom": ">=0.1.0",
   "changed": [
+    "@augur/app-kit",
+    "@augur/app-tools",
+    "@augur/kit-common",
+    "@augur/mfe-sdk",
+    "@augur/service-kit",
+    "@augur/shell-kit",
+    "@augur/ui-kit",
+    "@augur/events",
+    "@augur/gateway",
+    "@augur/identity",
+    "@augur/models",
     "@augur/registry",
-    "@augur/updater"
+    "@augur/storage",
+    "@augur/updater",
+    "@augur/admin",
+    "@augur/home",
+    "@augur/shell",
+    "@augur/upgrades",
+    "@apps/folio-frontend",
+    "@apps/folio",
+    "@apps/auspex-frontend",
+    "@apps/auspex",
+    "@apps/atlas-frontend",
+    "@apps/atlas"
   ],
   "breaking": [],
   "settings": {
@@ -17,6 +40,11 @@
       "TS_AUTHKEY",
       "POSTGRES_PASSWORD",
       "KEYCLOAK_ADMIN_PASSWORD",
+      "IDENTITY_DATABASE_PASSWORD",
+      "REGISTRY_DATABASE_PASSWORD",
+      "EVENTS_DATABASE_PASSWORD",
+      "MODELS_DATABASE_PASSWORD",
+      "KEYCLOAK_DATABASE_PASSWORD",
       "GARAGE_RPC_SECRET",
       "GARAGE_ADMIN_TOKEN",
       "FRONTENDS_BUCKET_SECRET",
@@ -63,13 +91,18 @@
       "APP_FEED_URL",
       "SERVER_RING",
       "RELEASE_CHANNEL",
+      "DEPLOYMENT_TIME_ZONE",
       "PIPELINE_FEED_URL",
       "PORTAL_URL",
+      "DEPLOYMENT_ID",
+      "DEPLOYMENT_REPORTING",
       "ALLOW_PR_PREVIEWS",
       "COMPOSE_PROFILES",
       "PLATFORM_DIR",
       "UPDATER_CLIENT_SECRET",
-      "IMAGE_PULL_USER"
+      "IMAGE_PULL_USER",
+      "OTEL_EXPORTER_OTLP_ENDPOINT",
+      "GRAFANA_ADMIN_PASSWORD"
     ],
     "required": [
       "PLATFORM_VERSION",
@@ -78,6 +111,11 @@
       "TS_AUTHKEY",
       "POSTGRES_PASSWORD",
       "KEYCLOAK_ADMIN_PASSWORD",
+      "IDENTITY_DATABASE_PASSWORD",
+      "REGISTRY_DATABASE_PASSWORD",
+      "EVENTS_DATABASE_PASSWORD",
+      "MODELS_DATABASE_PASSWORD",
+      "KEYCLOAK_DATABASE_PASSWORD",
       "GARAGE_RPC_SECRET",
       "GARAGE_ADMIN_TOKEN",
       "FRONTENDS_BUCKET_SECRET",
@@ -100,69 +138,95 @@
       "PLATFORM_ADMIN_DEPARTMENT",
       "SERVER_RING"
     ],
-    "added": [],
+    "added": [
+      "IDENTITY_DATABASE_PASSWORD",
+      "REGISTRY_DATABASE_PASSWORD",
+      "EVENTS_DATABASE_PASSWORD",
+      "MODELS_DATABASE_PASSWORD",
+      "KEYCLOAK_DATABASE_PASSWORD",
+      "DEPLOYMENT_TIME_ZONE",
+      "DEPLOYMENT_ID",
+      "DEPLOYMENT_REPORTING",
+      "OTEL_EXPORTER_OTLP_ENDPOINT",
+      "GRAFANA_ADMIN_PASSWORD"
+    ],
     "removed": []
   },
   "parts": {
+    "@augur/app-kit": {
+      "version": "0.2.0"
+    },
+    "@augur/app-tools": {
+      "version": "0.2.0"
+    },
+    "@augur/kit-common": {
+      "version": "0.2.0"
+    },
     "@augur/mfe-sdk": {
-      "version": "1.9.0"
+      "version": "1.10.0"
     },
     "@augur/records": {
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.10.0"
+      "version": "0.11.0"
+    },
+    "@augur/shell-kit": {
+      "version": "0.2.0"
     },
     "@augur/ui-kit": {
-      "version": "1.8.0"
+      "version": "1.9.0"
     },
     "@augur/events": {
-      "version": "0.5.1"
+      "version": "0.6.0"
     },
     "@augur/gateway": {
-      "version": "0.7.1"
+      "version": "0.8.0"
     },
     "@augur/identity": {
-      "version": "0.9.0"
+      "version": "0.10.0"
     },
     "@augur/models": {
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     "@augur/registry": {
-      "version": "0.13.1"
+      "version": "0.14.0"
     },
     "@augur/storage": {
-      "version": "0.3.1"
+      "version": "0.4.0"
     },
     "@augur/updater": {
-      "version": "0.7.1"
+      "version": "0.8.0"
     },
     "@augur/admin": {
-      "version": "0.11.0"
+      "version": "0.12.0"
     },
     "@augur/home": {
-      "version": "0.2.10"
+      "version": "0.3.0"
     },
     "@augur/shell": {
-      "version": "0.11.0"
+      "version": "0.12.0"
+    },
+    "@augur/upgrades": {
+      "version": "0.1.0"
     },
     "@apps/folio-frontend": {
-      "version": "0.5.0"
+      "version": "0.6.0"
     },
     "@apps/folio": {
-      "version": "0.3.1"
+      "version": "0.3.2"
     },
     "@apps/auspex-frontend": {
-      "version": "0.2.1"
+      "version": "0.3.0"
     },
     "@apps/auspex": {
-      "version": "0.1.1"
+      "version": "0.1.2"
     },
     "@apps/atlas-frontend": {
-      "version": "0.1.5"
+      "version": "0.2.0"
     },
     "@apps/atlas": {
-      "version": "0.1.1"
+      "version": "0.1.2"
     }
   }
 }

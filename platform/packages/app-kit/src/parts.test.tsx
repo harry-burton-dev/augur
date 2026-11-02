@@ -9,6 +9,7 @@ import { Details, Notice, State } from './states.js';
 import { Refs, Tally, Timeline } from './things.js';
 import { TagPicker, tagChoices } from './tag-picker.js';
 import { Lifecycle } from './lifecycle.js';
+import { FilterBar, filterValue } from './filter-bar.js';
 import { Contents, Reader, loadReader, slugFor, type ReaderHandle } from './reader.js';
 import { PeoplePicker, principalRows } from './people-picker.js';
 
@@ -224,6 +225,39 @@ describe('lifecycles and people', () => {
     expect(change).toHaveBeenLastCalledWith([{ kind: 'person', id: 'u1', name: 'Nora Briggs', detail: 'Ops' }]);
     expect(document.querySelector('.quill-ref-name')!.textContent).toBe('Nora Briggs');
     expect(document.querySelector('input')!.value).toBe('');
+  });
+});
+
+describe('filtering', () => {
+  const filters = [
+    { id: 'tag', label: 'Tags', options: [{ value: 't1', label: 'Travel' }, { value: 't2', label: 'Leave' }] },
+    { id: 'since', label: 'Changed', single: true, options: [{ value: 'week', label: 'Past week' }] },
+  ];
+
+  it('drops unknown or empty filters from a value', () => {
+    expect(filterValue(filters, { tag: ['t1', 'gone'], since: [], other: ['x'] })).toEqual({ tag: ['t1'] });
+  });
+
+  it('counts, shows what’s on as tags, takes one off, and clears them all', () => {
+    const change = vi.fn();
+    draw(<FilterBar label="Filter documents" filters={filters} value={{ tag: ['t1', 't2'] }} sorts={[{ value: 'title', label: 'Title' }]} sort="title" count={3} noun={['document', 'documents']} onChange={change} />);
+    expect(text()).toContain('3 documents');
+    expect(text()).toContain('Sort: Title');
+    expect(button('Tags, 2 chosen')).toBeDefined();
+    expect([...document.querySelectorAll('.quill-filter-chips .quill-tag-word')].map((t) => t.textContent)).toEqual(['Travel', 'Leave']);
+    act(() => button('Remove Tags: Travel').click());
+    expect(change).toHaveBeenLastCalledWith({ tag: ['t2'] }, 'title');
+    act(() => button('Clear all').click());
+    expect(change).toHaveBeenLastCalledWith({}, 'title');
+  });
+
+  it('adds a choice from a filter’s menu, and replaces it for a single one', async () => {
+    const change = vi.fn();
+    draw(<FilterBar label="Filter documents" filters={filters} value={{ tag: ['t1'] }} onChange={change} />);
+    await act(async () => button('Tags, 1 chosen').click());
+    const leave = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find((i) => i.textContent?.includes('Leave'))!;
+    await act(async () => leave.click());
+    expect(change).toHaveBeenLastCalledWith({ tag: ['t1', 't2'] }, '');
   });
 });
 
