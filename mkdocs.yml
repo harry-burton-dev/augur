@@ -14,6 +14,7 @@ nav:
   - Explorer: auspex.md
   - Build an app: build-an-app.md
   - The catalog: catalog.md
+  - "CI/CD: how AUGUR is checked, built and released": ci-cd.md
   - The deploy test: deploy-test.md
   - Running AUGUR on your own server: deploy.md
   - Domain events: domain-events.md

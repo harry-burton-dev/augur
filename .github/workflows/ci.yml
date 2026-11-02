@@ -3,22 +3,50 @@ on:
   pull_request:
   push:
     branches: [main, 'release/**']
+  # Everything, every frozen build included, whatever changed.
+  workflow_dispatch:
 # Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
 # others (as JSON, such as a runner provider's label). The same goes for every other workflow;
 # RELEASE_RUNNER, if set, names the x86-64 runner the image-building jobs use.
 
 # A new push to a pull request stops its last run.
-# Pushes to main and release branches each run in full.
+# What each run does, and what it costs, is in docs/ci-cd.md. In short: a pull request runs only the
+# jobs its change needs (scripts/ci-changes.sh); the push that merges it runs only build-test and the
+# Storybook, because the pull request already ran the rest on the same code.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   # Turbo's cache outside the checkout, which checkout cleans, so a task whose inputs haven't
   # changed since an earlier run replays instead of running, kept in GitHub's cache (build-test and
-  # contract). Pushes run every task.
+  # contract). A push to main replays what its base already had, and saves the cache every new pull
+  # request starts from.
   TURBO_CACHE_DIR: /home/runner/.cache/turbo
-  TURBO_FORCE: ${{ github.event_name == 'push' }}
 jobs:
+  # Which of the jobs below this change needs. The others are skipped before they take a runner, so
+  # they cost nothing and still count as passed where they are required checks.
+  changes:
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    outputs:
+      storybook: ${{ steps.changes.outputs.storybook }}
+      contract: ${{ steps.changes.outputs.contract }}
+      contract_frozen: ${{ steps.changes.outputs.contract_frozen }}
+      images: ${{ steps.changes.outputs.images }}
+      folio: ${{ steps.changes.outputs.folio }}
+      worker: ${{ steps.changes.outputs.worker }}
+      scaffold: ${{ steps.changes.outputs.scaffold }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: scripts/ci-changes.sh
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          BEFORE: ${{ github.event.before }}
+
   build-test:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     # The registry's Postgres store is tested against a real database.
@@ -109,33 +137,26 @@ jobs:
   # The kits' Storybook, published to Chromatic (ADR 0016), only when a kit's code, tokens or stories
   # change: on a pull request, or on the push to main that brings the change in. Chromatic hosts each build, links it from the pull request, and shows
   # what looks different there to accept or deny. TurboSnap (--only-changed) snapshots only the
-  # stories whose code changed, to stay inside the free tier. The job still reports when it has
-  # nothing to do, so it can be a required check.
+  # stories whose code changed, to stay inside the free tier.
   storybook:
+    needs: changes
+    if: needs.changes.outputs.storybook == 'true'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Should the Storybook be published?
+      - name: Can the Storybook be published?
         id: kits
         run: |
-          # A pull request against where it left main; a push to main against the push before it.
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then range="origin/$BASE...HEAD"; else range="$BEFORE..HEAD"; fi
           if [ -z "$CHROMATIC_PROJECT_TOKEN" ]; then
             echo "::notice title=Storybook not published::The CHROMATIC_PROJECT_TOKEN repository secret isn't set, so nothing goes to Chromatic. A repository admin adds it in Settings, Secrets and variables, Actions (ADR 0016)."
-          elif ! git rev-parse -q --verify "${range%%..*}^{commit}" >/dev/null || ! git diff --quiet "$range" -- \
-              platform/packages/ui-kit/src platform/packages/ui-kit/.storybook \
-              platform/packages/kit-common/src platform/packages/kit-common/tokens \
-              platform/packages/app-kit/src platform/packages/shell-kit/src platform/storybook; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            echo "No kit or story changed: Chromatic keeps the Storybook it has."
+            echo "run=true" >> "$GITHUB_OUTPUT"
           fi
         env:
-          BASE: ${{ github.base_ref }}
-          BEFORE: ${{ github.event.before }}
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+      - if: steps.kits.outputs.run == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - if: steps.kits.outputs.run == 'true'
         uses: pnpm/action-setup@v4
       - if: steps.kits.outputs.run == 'true'
@@ -163,6 +184,8 @@ jobs:
   # schema, PDFs included (Docling fetches its models once; they're cached), and its image
   # when the worker changed.
   folio-worker:
+    needs: changes
+    if: needs.changes.outputs.folio == 'true'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }}
     services:
       postgres:
@@ -181,60 +204,31 @@ jobs:
       DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # Only when Folio (its worker, or the service whose tables it works on) or this workflow
-      # changed; pushes run it always. The job still reports, so it can stay a required check.
-      - name: Does this change Folio?
-        id: folio
-        run: |
-          if [ "$GITHUB_EVENT_NAME" != pull_request ] || ! git diff --quiet "origin/$BASE..." -- apps/folio .github/workflows/ci.yml; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Folio is unchanged: nothing to test here."
-          fi
-        env:
-          BASE: ${{ github.base_ref }}
-      - if: steps.folio.outputs.run == 'true'
-        uses: pnpm/action-setup@v4
-      - if: steps.folio.outputs.run == 'true'
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - if: steps.folio.outputs.run == 'true'
-        run: pnpm install --frozen-lockfile
-      - if: steps.folio.outputs.run == 'true'
-        uses: actions/setup-python@v5
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: apps/folio/worker/pyproject.toml
       # Torch's CPU-only build, as the image has it.
-      - if: steps.folio.outputs.run == 'true'
-        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -e "apps/folio/worker[test]"
-      - if: steps.folio.outputs.run == 'true'
-        uses: actions/cache@v4
+      - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -e "apps/folio/worker[test]"
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
           key: docling-models-${{ hashFiles('apps/folio/worker/pyproject.toml') }}
       # The worker works on the tables Folio's service makes, which needs the packages Folio's store is built on.
-      - if: steps.folio.outputs.run == 'true'
-        run: pnpm turbo run build --filter="@apps/folio^..."
-      - if: steps.folio.outputs.run == 'true'
-        run: pnpm --filter @apps/folio migrate
-      - if: steps.folio.outputs.run == 'true'
-        run: python -m pytest apps/folio/worker -v
+      - run: pnpm turbo run build --filter="@apps/folio^..."
+      - run: pnpm --filter @apps/folio migrate
+      - run: python -m pytest apps/folio/worker -v
         env:
           RUN_PDF_TESTS: "1"
-      - name: Did the worker change?
-        if: steps.folio.outputs.run == 'true'
-        id: changed
-        run: |
-          base=${{ github.event_name == 'pull_request' && format('origin/{0}...', github.base_ref) || 'HEAD~1' }}
-          git diff --quiet "$base" -- apps/folio/worker || echo "worker=true" >> "$GITHUB_OUTPUT"
       - name: The worker's image builds, holds its models and doesn't run as root
-        if: steps.changed.outputs.worker == 'true'
+        if: needs.changes.outputs.worker == 'true'
         run: |
           docker build -f apps/folio/worker/Dockerfile -t folio-worker .
           test "$(docker run --rm folio-worker id -u)" != 0
@@ -243,6 +237,8 @@ jobs:
 
   # The developer kit still makes an app that builds, passes its tests and is accepted by the registry.
   app-scaffold:
+    needs: changes
+    if: needs.changes.outputs.scaffold == 'true'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
@@ -263,72 +259,53 @@ jobs:
   # The shell keeps its promise to apps: the reference app, as built today and
   # as built against each earlier SDK minor, mounted by the real shell, with
   # Folio (which ships with AUGUR) on and off.
+  # The longest job. On an ordinary pull request it runs today's build and the oldest and newest
+  # frozen ones; on the Version packages pull request, and by hand, every frozen build.
   contract:
+    needs: changes
+    if: needs.changes.outputs.contract == 'true'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }} # Playwright 1.56 has no browsers for ubuntu-latest (26.04) yet
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # The longest job (about 5 minutes), and only the shell, Home, the shared packages, Folio
-      # (which it mounts) or the tests themselves can break the promise it checks. On a pull request
-      # that changes none of them (nor the root package, the lockfile or this workflow) it stops
-      # here; pushes run it always.
-      # The job still reports, so it can stay a required check.
-      - name: Could this change break apps in the shell?
-        id: shell
-        run: |
-          if [ "$GITHUB_EVENT_NAME" != pull_request ] || ! git diff --quiet "origin/$BASE..." -- \
-              platform/frontends platform/packages platform/contract \
-              apps/folio package.json pnpm-lock.yaml .github/workflows/ci.yml; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Nothing the contract tests cover changed: nothing to test here."
-          fi
-        env:
-          BASE: ${{ github.base_ref }}
-      - if: steps.shell.outputs.run == 'true'
-        uses: pnpm/action-setup@v4
-      - if: steps.shell.outputs.run == 'true'
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - if: steps.shell.outputs.run == 'true'
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       # On GitHub's runners the turbo cache starts empty, so every task ran every time. Keep it in
       # GitHub's cache instead: restored from this branch's (or its base's) last run, entries older
       # than a week dropped, saved again under this commit.
-      - if: steps.shell.outputs.run == 'true'
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ${{ env.TURBO_CACHE_DIR }}
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
-          restore-keys: turbo-${{ runner.os }}-${{ github.job }}-
-      - if: steps.shell.outputs.run == 'true'
-        run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
-      - if: steps.shell.outputs.run == 'true'
-        run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/shell^... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
+          # Its builds are build-test's too, and main saves only build-test's cache.
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ github.job }}-
+            turbo-${{ runner.os }}-build-test-
+      - run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
+      - run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/shell^... --filter=@augur/home --filter=@apps/folio... --filter=@apps/folio-frontend...
       # The browser is cached by Playwright version. No --with-deps: the runner image
       # already has Chrome's system libraries, and apt-get was the slow, uneven part
       # (half a minute on a good day, twelve on a bad one).
       - name: Playwright version
-        if: steps.shell.outputs.run == 'true'
         id: playwright
         run: echo "version=$(pnpm --filter @augur/contract-tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - if: steps.shell.outputs.run == 'true'
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
-      - if: steps.shell.outputs.run == 'true'
-        run: pnpm --filter @augur/contract-tests exec playwright install --only-shell chromium
-      - if: steps.shell.outputs.run == 'true'
-        run: pnpm --filter @augur/contract-tests test:contract
+      - run: pnpm --filter @augur/contract-tests exec playwright install --only-shell chromium
+      - run: pnpm --filter @augur/contract-tests test:contract
+        env:
+          CONTRACT_FROZEN: ${{ needs.changes.outputs.contract_frozen }}
 
   # The server setup in infra/deploy: the compose file is valid and the images build.
   # Secrets committed by mistake, and dependencies with known vulnerabilities (ADR 0043).
   # Pinned scanner images; no install, so it finishes in well under a minute.
   scan:
+    if: github.event_name == 'pull_request'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
@@ -367,82 +344,55 @@ jobs:
           echo "Nothing new: $(wc -l < "$RUNNER_TEMP/now.txt") known, all already on the base branch."
         env:
           BASE_REF: ${{ github.base_ref }}
+  # About 8 minutes, so only when the change could alter an image beyond the code build-test builds:
+  # the Dockerfiles and deploy files, the dependencies, or this workflow. A push doesn't run it: the
+  # dev build builds the same images for real.
   deploy-images:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # The images take about 8 minutes to build, so a pull request builds them only when it changes
-      # what goes into them beyond the code build-test already builds: the Dockerfiles and deploy
-      # files, the dependencies, or this workflow. A push to main always builds them.
-      - name: Does this change the images?
-        id: paths
-        run: |
-          if [ "$GITHUB_EVENT_NAME" != pull_request ] || ! git diff --quiet "origin/$BASE...HEAD" -- \
-              infra .dockerignore pnpm-lock.yaml pnpm-workspace.yaml package.json '*/package.json' '**/package.json' .github/workflows/ci.yml; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No Dockerfile, deploy file or dependency changed: the images aren't rebuilt (the release builds them)."
-          fi
-        env:
-          BASE: ${{ github.base_ref }}
-      - if: steps.paths.outputs.run == 'true'
-        name: Compose file is valid
+      - name: Compose file is valid
         run: |
           sed -e 's/=$/=ci-placeholder/' infra/deploy/.env.example > /tmp/ci.env
           docker compose -f infra/deploy/compose.yml --env-file /tmp/ci.env config -q
           docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
           COMPOSE_PROFILES=updater docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
-      - if: steps.paths.outputs.run == 'true'
-        run: docker build -f infra/web.Dockerfile --target web -t platform-web .
-      - if: steps.paths.outputs.run == 'true'
-        run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity --target service -t platform-identity .
-      - if: steps.paths.outputs.run == 'true'
-        run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage --target service -t platform-storage .
-      - if: steps.paths.outputs.run == 'true'
-        run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater -t platform-updater .
+      - run: docker build -f infra/web.Dockerfile --target web -t platform-web .
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity --target service -t platform-identity .
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage --target service -t platform-storage .
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater -t platform-updater .
       # Folio ships with AUGUR: its service is in every release (its worker is built in folio-worker).
-      - if: steps.paths.outputs.run == 'true'
-        run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend --target service -t platform-folio .
-      - if: steps.paths.outputs.run == 'true'
-        name: Folio's image carries its manifest, to register itself with
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend --target service -t platform-folio .
+      - name: Folio's image carries its manifest, to register itself with
         run: docker run --rm --entrypoint node platform-folio -e "const m = require('/app/dist/manifest.json'); if (m.id !== 'folio') process.exit(1); console.log(m.id, m.version)"
-      - if: steps.paths.outputs.run == 'true'
-        name: Folio's image carries its frontend, to give the registry by version
+      - name: Folio's image carries its frontend, to give the registry by version
         run: docker run --rm --entrypoint test platform-folio -f /app/frontend/entry.js
       # Auspex ships with AUGUR too.
-      - if: steps.paths.outputs.run == 'true'
-        run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/auspex --build-arg FRONTEND=@apps/auspex-frontend --target service -t platform-auspex .
-      - if: steps.paths.outputs.run == 'true'
-        name: Auspex's image carries its manifest and frontend
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/auspex --build-arg FRONTEND=@apps/auspex-frontend --target service -t platform-auspex .
+      - name: Auspex's image carries its manifest and frontend
         run: |
           docker run --rm --entrypoint node platform-auspex -e "const m = require('/app/dist/manifest.json'); if (m.id !== 'auspex') process.exit(1); console.log(m.id, m.version)"
           docker run --rm --entrypoint test platform-auspex -f /app/frontend/entry.js
       # And Data Atlas.
-      - if: steps.paths.outputs.run == 'true'
-        run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/atlas --build-arg FRONTEND=@apps/atlas-frontend --target service -t platform-atlas .
-      - if: steps.paths.outputs.run == 'true'
-        name: Data Atlas's image carries its manifest and frontend
+      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/atlas --build-arg FRONTEND=@apps/atlas-frontend --target service -t platform-atlas .
+      - name: Data Atlas's image carries its manifest and frontend
         run: |
           docker run --rm --entrypoint node platform-atlas -e "const m = require('/app/dist/manifest.json'); if (m.id !== 'atlas') process.exit(1); console.log(m.id, m.version)"
           docker run --rm --entrypoint test platform-atlas -f /app/frontend/entry.js
-      - if: steps.paths.outputs.run == 'true'
-        name: The updater has the tools it drives
+      - name: The updater has the tools it drives
         run: docker run --rm --entrypoint sh platform-updater -c 'docker --version && docker compose version && cosign version'
-      - if: steps.paths.outputs.run == 'true'
-        name: The images don't run as root
+      - name: The images don't run as root
         run: |
           for image in platform-web platform-identity platform-storage platform-updater platform-folio platform-auspex platform-atlas; do
             uid=$(docker run --rm --entrypoint id "$image" -u)
             echo "$image runs as $uid"
             test "$uid" != 0
           done
-      - if: steps.paths.outputs.run == 'true'
-        name: The front door's nginx config loads
+      - name: The front door's nginx config loads
         run: docker run --rm --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 platform-web nginx -t
-      - if: steps.paths.outputs.run == 'true'
-        name: The shell's page carries its Content Security Policy
+      - name: The shell's page carries its Content Security Policy
         run: |
           docker run -d --name web --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 \
             -e APP_ORIGINS=https://apps.example.org -p 8088:8080 platform-web
@@ -456,8 +406,7 @@ jobs:
           curl -fsI http://localhost:8088/apps/auspex/entry.js
           curl -fsI http://localhost:8088/apps/atlas/entry.js
           docker rm -f web
-      - if: steps.paths.outputs.run == 'true'
-        name: On the workbench, the shell may load an app from a machine on its own tailnet
+      - name: On the workbench, the shell may load an app from a machine on its own tailnet
         run: |
           docker run -d --name web-dev --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -e SERVER_RING=dev -e PLATFORM_URL=https://augur.tail1234.ts.net -p 8089:8080 platform-web
           for i in $(seq 1 20); do curl -fsI http://localhost:8089/admin > /tmp/headers-dev && break; sleep 1; done
@@ -470,8 +419,7 @@ jobs:
           for i in $(seq 1 20); do curl -fsI http://localhost:8090/admin > /tmp/headers-dev2 && break; sleep 1; done
           ! grep -i "ts.net" /tmp/headers-dev2
           docker rm -f web-dev2
-      - if: steps.paths.outputs.run == 'true'
-        name: The nightly backup writes a restorable dump
+      - name: The nightly backup writes a restorable dump
         run: |
           docker run -d --name pg -e POSTGRES_PASSWORD=ci postgres:16-alpine
           # Over TCP: during first start Postgres answers on its socket before its real start.
@@ -499,16 +447,14 @@ jobs:
           grep -q '"ok":true' /tmp/backups/last-backup.json
           tar -tzf /tmp/backups/objects-*.tar.gz | tee /tmp/objects.txt
           grep -q '^data/00/block$' /tmp/objects.txt && grep -q '^meta/snapshots/s1$' /tmp/objects.txt && ! grep -q 'db.sqlite' /tmp/objects.txt
-      - if: steps.paths.outputs.run == 'true'
-        name: The updater's backup is a fresh one, and the newest
+      - name: The updater's backup is a fresh one, and the newest
         run: |
           docker run --rm --link pg -e PGHOST=pg -e PGUSER=postgres -e PGPASSWORD=ci \
             -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
             postgres:16-alpine /bin/sh /backup/backup.sh --now | tee /tmp/now.log
           grep -E "backup: wrote /backups/platform-[0-9-]+T[0-9]+Z\.sql\.gz" /tmp/now.log
           test "$(ls /tmp/backups/platform-*.sql.gz | sort | tail -n 1)" = "$(grep -oE '/backups/platform-[^ ]+' /tmp/now.log | sed 's#^#/tmp#')"
-      - if: steps.paths.outputs.run == 'true'
-        name: The weekly restore test restores the newest backup and checks it
+      - name: The weekly restore test restores the newest backup and checks it
         run: |
           docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
             postgres:16-alpine /bin/sh /backup/backup.sh --restore-test

@@ -2,6 +2,8 @@
 
 Work merges into `main`, the only long-lived branch. Each release is built and signed **once**, as a GitHub pre-release on the **beta** channel. Making it **stable** changes only its label: production servers then take that same release, so they run exactly what the preview server ran. There are no `preview` or `production` branches, and no promotion pull requests.
 
+Which workflow does each step, when it runs and what it costs in CI minutes: [ci-cd.md](ci-cd.md).
+
 A **unit** is what moves on its own: **AUGUR** (the platform, its services and the pillar apps, as one `augur@x.y.z` release) or one **app** the app runner installs (`app/<id>@x.y.z`, Mandate today).
 
 | Step | What happens | Who |
