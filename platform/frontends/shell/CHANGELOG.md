@@ -1,5 +1,40 @@
 # @augur/shell
 
+## 0.12.0
+
+### Minor Changes
+
+- fccb126: The React kits begin (ADR 0015). Three new packages: Common (`@augur/kit-common`), which now holds the token files and builds a Tailwind v4 theme from them with nothing of Tailwind's own palette or scales; Quill (`@augur/app-kit`), the kit apps build with; and Aerie (`@augur/shell-kit`), the shell's own kit. The shell now serves React 19, Common and Quill through the import map (`sharedModules` in the SDK), and uses that copy of React itself. Aerie is never shared, and `pnpm check:boundaries` fails if anything but the shell imports it. The Lit kit is frozen through SDK 1.x and reads its tokens from Common; nothing looks different.
+- bab2360: Settings has a new switch, Toasts for new notifications, which is off by default. When it's on, each new notification is also shown once as an Aerie toast at the bottom of the screen, with Open. When it's off, the shell behaves as it does today: it only pulses. Identity keeps the choice as the `toasts` preference (identity contract 1.13.0).
+
+### Patch Changes
+
+- d994d7b: Common gets its first React controls: Button, IconButton and Icon, with React Aria behaviour, Lucide icons, a reason for every disabled control and `kit.css` for their styles. The shell loads `kit.css`. One Storybook in `platform/storybook` now shows the React kits, with the frozen Lit kit inside it.
+- cccd9ea: Tokens now live in three W3C design token files (`tokens/common.tokens.json`, `shell.tokens.json`, `app.tokens.json`) and are built with Style Dictionary. Every CSS variable and token value is unchanged. The typefaces are now served by AUGUR through Fontsource instead of loading from Google Fonts at runtime, so a deployment without internet access still shows them. While an app's title card plays, the screen waiting unseen behind it can no longer be pressed; before, a press could land on a control that was about to rise into place.
+- f8e9b46: Quill gets its first parts: AppFrame (three columns with a rail that folds to icons, the app's name opening its front page, and a drawer), RailLink, FrontPage, About, More and SelectionBar. Quill re-exports Common, and the shell loads Quill's `kit.css`. The tokens-only test now covers every kit's source.
+- Updated dependencies [f8e9b46]
+- Updated dependencies [2a827a0]
+- Updated dependencies [d994d7b]
+- Updated dependencies [2a827a0]
+- Updated dependencies [2a827a0]
+- Updated dependencies [2a827a0]
+- Updated dependencies [2a827a0]
+- Updated dependencies [cccd9ea]
+- Updated dependencies [527a413]
+- Updated dependencies [f8e9b46]
+- Updated dependencies [da54ae3]
+- Updated dependencies [7c8027d]
+- Updated dependencies [d500567]
+- Updated dependencies [a8854e2]
+- Updated dependencies [fccb126]
+- Updated dependencies [d64d724]
+- Updated dependencies [bab2360]
+  - @augur/kit-common@0.2.0
+  - @augur/shell-kit@0.2.0
+  - @augur/ui-kit@1.9.0
+  - @augur/app-kit@0.2.0
+  - @augur/mfe-sdk@1.10.0
+
 ## 0.11.0
 
 ### Minor Changes

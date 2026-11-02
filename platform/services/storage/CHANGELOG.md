@@ -1,5 +1,17 @@
 # @augur/storage
 
+## 0.4.0
+
+### Minor Changes
+
+- 23a2f8f: Each platform service and Keycloak connects to Postgres with its own login, which owns only its own schema (Keycloak: its own database). The storage job makes the logins from `PLATFORM_DATABASE_LOGINS` and the `*_DATABASE_PASSWORD` settings, and hands each one what its service made as the admin login. The services make their schema only when it isn't there, since their own logins may not create schemas.
+
+### Patch Changes
+
+- Updated dependencies [137791c]
+- Updated dependencies [2021f8a]
+  - @augur/service-kit@0.11.0
+
 ## 0.3.1
 
 ### Patch Changes

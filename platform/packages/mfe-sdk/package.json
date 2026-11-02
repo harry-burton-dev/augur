@@ -1,6 +1,6 @@
 {
   "name": "@augur/mfe-sdk",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": true,
   "type": "module",
   "description": "The contract between the shell and micro frontends: registration, mount context, event bus and intents.",

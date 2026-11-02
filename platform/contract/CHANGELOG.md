@@ -1,5 +1,19 @@
 # @augur/contract-tests
 
+## 0.1.11
+
+### Patch Changes
+
+- 5638112: Artifacts' card on Home and the picker other apps open it as (`document.pick`) are on React and Quill, part of moving every frontend onto the React kits (PER-243). They look and behave as before.
+- 409b8bd: Artifacts opens in a new layout on Quill (PDR-010): a front page built from config with Actions, New and Upcoming reels; the lit path in the rail; tiles shaped by kind; every object's actions in its radial menu, with what you can't do saying why; find on `/`; and dialogs that rack the app out of focus instead of a scrim. The classic layout stays one press away, at the same place, for what isn't rebuilt yet.
+- bfdbb6c: CI spends about half the minutes: the push that merges a pull request no longer runs its checks again, jobs a change doesn't need are skipped before they take a runner, an ordinary pull request runs only the oldest and newest frozen SDK builds in the contract tests, the images install the workspace once, and a dev build reuses Folio's worker image when the worker hasn't changed. docs/ci-cd.md describes the whole pipeline.
+- Updated dependencies [cccd9ea]
+- Updated dependencies [fccb126]
+- Updated dependencies [d64d724]
+- Updated dependencies [bab2360]
+  - @augur/ui-kit@1.9.0
+  - @augur/mfe-sdk@1.10.0
+
 ## 0.1.10
 
 ### Patch Changes

@@ -1,5 +1,27 @@
 # @augur/ui-kit
 
+## 1.9.0
+
+### Minor Changes
+
+- bab2360: Settings has a new switch, Toasts for new notifications, which is off by default. When it's on, each new notification is also shown once as an Aerie toast at the bottom of the screen, with Open. When it's off, the shell behaves as it does today: it only pulses. Identity keeps the choice as the `toasts` preference (identity contract 1.13.0).
+
+### Patch Changes
+
+- cccd9ea: Tokens now live in three W3C design token files (`tokens/common.tokens.json`, `shell.tokens.json`, `app.tokens.json`) and are built with Style Dictionary. Every CSS variable and token value is unchanged. The typefaces are now served by AUGUR through Fontsource instead of loading from Google Fonts at runtime, so a deployment without internet access still shows them. While an app's title card plays, the screen waiting unseen behind it can no longer be pressed; before, a press could land on a control that was about to rise into place.
+- fccb126: The React kits begin (ADR 0015). Three new packages: Common (`@augur/kit-common`), which now holds the token files and builds a Tailwind v4 theme from them with nothing of Tailwind's own palette or scales; Quill (`@augur/app-kit`), the kit apps build with; and Aerie (`@augur/shell-kit`), the shell's own kit. The shell now serves React 19, Common and Quill through the import map (`sharedModules` in the SDK), and uses that copy of React itself. Aerie is never shared, and `pnpm check:boundaries` fails if anything but the shell imports it. The Lit kit is frozen through SDK 1.x and reads its tokens from Common; nothing looks different.
+- Updated dependencies [f8e9b46]
+- Updated dependencies [2a827a0]
+- Updated dependencies [d994d7b]
+- Updated dependencies [2a827a0]
+- Updated dependencies [2a827a0]
+- Updated dependencies [2a827a0]
+- Updated dependencies [2a827a0]
+- Updated dependencies [f8e9b46]
+- Updated dependencies [da54ae3]
+- Updated dependencies [d500567]
+  - @augur/kit-common@0.2.0
+
 ## 1.8.0
 
 ### Minor Changes

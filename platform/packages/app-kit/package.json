@@ -1,6 +1,6 @@
 {
   "name": "@augur/app-kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Quill: the React kit apps build with, on Common. Served to every app through the shell's import map, under the SDK promise.",
