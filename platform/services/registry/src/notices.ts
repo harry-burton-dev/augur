@@ -4,7 +4,7 @@
 import { notify, type NewNotification, type ServiceCredentials } from '@augur/service-kit';
 import semver from 'semver';
 import { AUGUR_UNIT } from './desired-state.ts';
-import { gatherOverview, type Overview, type OverviewRouteOptions, type UnitOverview } from './overview.ts';
+import { overviewBuilder, type Overview, type OverviewRouteOptions, type UnitOverview } from './overview.ts';
 import { DEPLOYMENT_ADMIN } from './roles.ts';
 
 /** The app whose screen these open: the Upgrade Centre. */
@@ -67,7 +67,7 @@ const haltNotice = (u: UnitOverview): NewNotification | undefined =>
 export const noticesFrom = (overview: Overview, now: Date): NewNotification[] =>
   overview.units.flatMap((u) => [resultNotice(u, now), haltNotice(u), availableNotice(u)].filter((n): n is NewNotification => !!n));
 
-export interface UpdateNoticesOptions extends Omit<OverviewRouteOptions, 'record'> {
+export interface UpdateNoticesOptions extends Pick<OverviewRouteOptions, 'store' | 'updates' | 'appUpdates' | 'timeZone' | 'now'> {
   eventsUrl: string;
   credentials: ServiceCredentials;
   /** How often to look; a result is told within this. */
@@ -82,10 +82,11 @@ export interface UpdateNoticesOptions extends Omit<OverviewRouteOptions, 'record
  */
 export const updateNotices = ({ eventsUrl, credentials, everyMs = 60_000, send, onError = () => {}, ...overview }: UpdateNoticesOptions) => {
   const sent = new Set<string>();
+  const build = overviewBuilder(overview);
   const deliver = send ?? ((notification: NewNotification) => notify({ eventsUrl, credentials, notification }));
   const tick = async () => {
     const now = overview.now?.() ?? new Date();
-    for (const n of noticesFrom(await gatherOverview(overview), now)) {
+    for (const n of noticesFrom(await build(), now)) {
       if (sent.has(n.key!)) continue;
       try {
         await deliver(n);

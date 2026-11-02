@@ -257,6 +257,12 @@ export interface PreviewChoice {
 }
 
 /** Where registered apps are kept. */
+/** An Ed25519 key pair, both halves PEM. */
+export interface DeploymentKey {
+  privateKey: string;
+  publicKey: string;
+}
+
 export interface AppStore {
   /** Origins apps may load their entry from, besides the platform itself. */
   origins(): Promise<AllowedOrigin[]>;
@@ -338,6 +344,10 @@ export interface AppStore {
   setDesiredState(state: Omit<StoredDesiredState, 'setAt'>): Promise<StoredDesiredState>;
   /** The records a unit has had, newest first (at most 50). */
   desiredStateHistory(unit: string): Promise<StoredDesiredState[]>;
+  /** The key this deployment signs its reports with (ADR 0019), once one is made. */
+  deploymentKey(): Promise<DeploymentKey | undefined>;
+  /** Keeps a new key unless one is already kept, and returns the one kept. */
+  keepDeploymentKey(key: DeploymentKey): Promise<DeploymentKey>;
   /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
   markSeen(kind: 'upgrade' | 'app-job', id: string, by: string): Promise<boolean>;
   /** The previews running now: each pull request's last finished preview job, unless it was a removal. */
@@ -469,6 +479,17 @@ export class MemoryAppStore implements AppStore {
     this.desired.set(state.unit, set);
     this.desiredHistory.push(set);
     return structuredClone(set);
+  }
+
+  private key?: DeploymentKey;
+
+  async deploymentKey() {
+    return this.key && { ...this.key };
+  }
+
+  async keepDeploymentKey(key: DeploymentKey) {
+    this.key ??= { ...key };
+    return { ...this.key };
   }
 
   async desiredStateHistory(unit: string) {
@@ -931,6 +952,18 @@ export const migrations: { id: string; sql: string }[] = [
       alter table registry.app_jobs add column seen_by text;
       alter table registry.app_jobs add column seen_at timestamptz;`,
   },
+  {
+    id: '017_deployment_key',
+    sql: `
+      -- The key this deployment signs its reports to the company's Backstage with (ADR 0019): made once,
+      -- kept with the data, so a restored backup reports as the same deployment.
+      create table registry.deployment_key (
+        id smallint primary key default 1 check (id = 1),
+        private_key text not null,
+        public_key text not null,
+        made_at timestamptz not null default now()
+      );`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -1353,6 +1386,16 @@ export class PgAppStore implements AppStore {
   async setFollow(f: Omit<AppFollow, 'setAt'>) {
     const set = await this.setDesiredState(withFollow(await this.desiredStates(), f));
     return { ...f, setAt: set.setAt };
+  }
+
+  async deploymentKey() {
+    const { rows } = await this.pool.query<{ private_key: string; public_key: string }>('select private_key, public_key from registry.deployment_key');
+    return rows[0] && { privateKey: rows[0].private_key, publicKey: rows[0].public_key };
+  }
+
+  async keepDeploymentKey(key: DeploymentKey) {
+    await this.pool.query('insert into registry.deployment_key (private_key, public_key) values ($1, $2) on conflict (id) do nothing', [key.privateKey, key.publicKey]);
+    return (await this.deploymentKey())!;
   }
 
   async desiredStates() {

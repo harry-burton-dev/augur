@@ -7,7 +7,7 @@
  *   node dist/index.js replace   replace the updater's own container (see server.ts)
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { commonSettings, loadConfigOrExit, platformCredentialsFromEnv, serviceAuthFromEnv } from '@augur/service-kit';
+import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, platformCredentialsFromEnv, serviceAuthFromEnv } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appRunner } from './runner.ts';
@@ -54,7 +54,12 @@ const AUGUR_DEV_SIGNER = setting('AUGUR_DEV_SIGNER', augurDevIdentity('harry-bur
 const signer = { identity: IMAGE_SIGNER, issuer: setting('IMAGE_SIGNER_ISSUER', GITHUB_ISSUER) };
 // The watch after an upgrade checks the sign-in realm answers, as the updater reaches it inside Docker.
 const signInUrl = setting('OIDC_INTERNAL_URL') || setting('OIDC_ISSUER') || undefined;
-const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl });
+// It also really signs in, as the updater, with a fresh token each time: that needs Keycloak and its database.
+const serviceSecret = process.env.SERVICE_CLIENT_SECRET;
+const signInCheck = serviceSecret
+  ? () => clientCredentials({ tokenUrl: serviceAuthFromEnv().tokenUrl, clientId: platformClientId('updater'), clientSecret: serviceSecret })()
+  : undefined;
+const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl, signIn: signInCheck });
 
 if (process.argv[2] === 'replace') {
   // Lets the updater that started this finish saying how the upgrade went first.

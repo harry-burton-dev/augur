@@ -188,12 +188,14 @@ const running = async (server: Server, service: string) => {
 };
 
 /**
- * Watches the new release for WATCH_MS: sign-in must keep answering and the gateway's calls mostly
- * succeed. Throws StepFailed with what it saw when either stops being so. Every part must still be
- * on its new version at the end.
+ * Watches the new release for WATCH_MS: sign-in must keep working, every part must stay ready, and
+ * AUGUR's own calls through the gateway must mostly succeed. Throws StepFailed with what it saw when
+ * any stops being so. Says how many calls it judged by, so a quiet watch (fewer than MIN_CALLS, as
+ * in a night-time window) isn't taken for one that saw errors stay low.
  */
-const watch = async (server: Server, services: readonly string[], versionOf: (service: string) => string | undefined) => {
+const watch = async (server: Server, services: readonly string[], versionOf: (service: string) => string | undefined): Promise<{ calls?: number }> => {
   let signInMisses = 0;
+  let judged: number | undefined;
   for (let watched = WATCH_EVERY_MS; watched <= WATCH_MS; watched += WATCH_EVERY_MS) {
     await server.wait(WATCH_EVERY_MS);
     const problem = await server.signInProblem().catch((err) => reason(err));
@@ -203,10 +205,22 @@ const watch = async (server: Server, services: readonly string[], versionOf: (se
     const minutes = Math.min(10, Math.ceil(watched / 60_000));
     const calls = await server.traffic(minutes).catch(() => undefined);
     if (calls && calls.requests >= MIN_CALLS && calls.serverErrors / calls.requests > ERROR_RATE) {
-      throw new StepFailed(`${calls.serverErrors} of the ${calls.requests} calls through the gateway in the last ${minutes} minute${minutes === 1 ? '' : 's'} failed, more than ${ERROR_RATE * 100}%.`);
+      throw new StepFailed(`${calls.serverErrors} of the ${calls.requests} calls to AUGUR’s services in the last ${minutes} minute${minutes === 1 ? '' : 's'} failed, more than ${ERROR_RATE * 100}%.`);
     }
+    if (calls) judged = calls.requests;
+    // Every part must stay up, not only be up at the start: a part that falls over meanwhile is seen.
+    if (watched % (2 * 60_000) === 0) await ready(server, services, versionOf);
   }
   await ready(server, services, versionOf);
+  return { calls: judged };
+};
+
+/** How the watch went, in a sentence, saying when there were too few calls to judge errors by. */
+export const watchedSentence = (version: string, { calls }: { calls?: number }) => {
+  const held = `AUGUR ${version} ran for ${WATCH_MS / 60_000} minutes with sign-in working and every part ready`;
+  if (calls === undefined) return `${held}. The gateway doesn’t count calls yet, so errors weren’t judged.`;
+  if (calls < MIN_CALLS) return `${held}. Too quiet to judge errors: ${calls} call${calls === 1 ? '' : 's'} to AUGUR’s services, and it takes ${MIN_CALLS}.`;
+  return `${held}, and AUGUR’s services answered ${calls} calls with few errors.`;
 };
 
 /** What went wrong, for the page: a message we wrote, or the first line of anything else. */
@@ -370,9 +384,9 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     }
     await report({ step, state: 'done', message: `Running AUGUR ${target.version}.` });
     step = 'watch';
-    await report({ step, state: 'running', message: `Watching sign-in and the gateway’s calls for ${WATCH_MS / 60_000} minutes.` });
-    await watch(server, services, versionOf);
-    await report({ step, state: 'done', message: `AUGUR ${target.version} ran for ${WATCH_MS / 60_000} minutes with sign-in working and calls answering.`, outcome: 'done' });
+    await report({ step, state: 'running', message: `Watching sign-in, every part and AUGUR’s calls for ${WATCH_MS / 60_000} minutes.` });
+    const watched = await watch(server, services, versionOf);
+    await report({ step, state: 'done', message: watchedSentence(target.version, watched), outcome: 'done' });
     return 'done';
   } catch (err) {
     if (err instanceof Withdrawn) throw err;
