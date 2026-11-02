@@ -7,6 +7,7 @@ import { List, Table } from './list.js';
 import { PageHead, Section } from './page.js';
 import { Details, Notice, State } from './states.js';
 import { Refs, Tally, Timeline } from './things.js';
+import { TagPicker, tagChoices } from './tag-picker.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -140,6 +141,29 @@ describe('the parts apps took from the Lit kit', () => {
     const act$ = vi.fn();
     draw(<Notice tone="needs" heading="Waiting for your back-brief." action="Write it" onAction={act$} more={2} />);
     expect(text()).toContain('2 more need you.');
+  });
+});
+
+describe('picking tags', () => {
+  const people = [
+    { value: 'u1', label: 'Nora Briggs' },
+    { value: 'u2', label: 'Ben Norris' },
+    { value: 'u3', label: 'Ada Lee' },
+  ];
+
+  it('offers what isn’t chosen, those that start with the word first, and a new one when it may', () => {
+    expect(tagChoices(people, ['u3'], 'nor', false).map((c) => c.id)).toEqual(['u1', 'u2']);
+    expect(tagChoices(people, [], 'Kim', true).map((c) => c.add)).toEqual(['Kim']);
+    expect(tagChoices(people, [], 'ada lee', true).some((c) => c.add)).toBe(false);
+  });
+
+  it('shows the chosen as tags, takes one off with its ×, and says when it’s full', () => {
+    const change = vi.fn();
+    draw(<TagPicker label="Developers" options={people} defaultValue={['u1', 'u2']} max={2} onChange={change} />);
+    expect([...document.querySelectorAll('.quill-tag-word')].map((t) => t.textContent)).toEqual(['Nora Briggs', 'Ben Norris']);
+    expect(document.querySelector('input')!.placeholder).toContain('most it takes: 2');
+    act(() => button('Remove Nora Briggs').click());
+    expect(change).toHaveBeenLastCalledWith(['u2']);
   });
 });
 

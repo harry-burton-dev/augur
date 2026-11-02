@@ -445,6 +445,9 @@
   .quill-tag[data-removable] { padding-right: 2px; }
   .quill-tag-word { overflow: hidden; text-overflow: ellipsis; }
   .quill-tag > svg { color: var(--ink-muted); }
+  /* A tag picker: the chosen tags sit in the field, before what's typed. */
+  .quill-tag-picker-box { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); padding-block: var(--space-1); cursor: text; }
+  .quill-tag-picker-input { flex: 1 1 auto; min-width: calc(var(--space-8) * 2); }
   .quill-tag button { all: unset; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: var(--ink-muted); cursor: pointer; }
   .quill-tag button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 10%, transparent); }
   .quill-tag button:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: 1px; }
