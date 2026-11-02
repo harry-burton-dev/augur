@@ -6,6 +6,8 @@ There were two designs: a full explorer, and a quieter one for everyone. This fi
 
 ## Screens
 
+A rail on the left, as in every app (docs/app-patterns.md), goes to Where you are, the floor you're on and your own floor, and, for whoever they're for, the building and the plant room. Explorer's name at its top goes back to Where you are.
+
 - **Where you are** (`/`): the org as a map, drawn left to right with d3-hierarchy's tidy tree. Your floors are lit in the floor colours, the one you're on is ringed, teams you see into (as a lead above them, or an admin) are dashed rings, and every other team is a closed mark that still says its name. A closed team's own teams fold into it ("Legal +2"). Your own floor sits under the map.
 - **A floor** (`/floors/<id>`, or `/here`): the floor's orb, why you can come in and who leads it, three facts, its apps as tiles with where each one's state comes from, its people as discs (leads ringed), and the week as a line of days with what changed.
 - **A closed team**: where it sits, the names of the teams inside it, and who to ask. Nothing about who's in it.

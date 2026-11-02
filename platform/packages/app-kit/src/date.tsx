@@ -96,6 +96,8 @@ export const DEFAULT_QUICK: DateQuick[] = [
 export interface DateFieldProps extends FieldProps {
   /** YYYY-MM-DD, or empty. */
   value?: string;
+  /** Where it starts when the part keeps its own value (no `value`). */
+  defaultValue?: string;
   onChange?: (value: string) => void;
   name?: string;
   /** What an empty day says when you're not typing. */
@@ -112,8 +114,8 @@ export interface DateFieldProps extends FieldProps {
  * calendar one press away. Its value is YYYY-MM-DD. Takes part in a Dialog's
  * checks like TextField.
  */
-export function DateField({ label, hint, required, optional, disabled, state, message, className, value: given, onChange, name, empty = 'Not set', quick = DEFAULT_QUICK, now = new Date() }: DateFieldProps) {
-  const [own, setOwnValue] = useState('');
+export function DateField({ label, hint, required, optional, disabled, state, message, className, value: given, defaultValue, onChange, name, empty = 'Not set', quick = DEFAULT_QUICK, now = new Date() }: DateFieldProps) {
+  const [own, setOwnValue] = useState(defaultValue ?? '');
   const value = given ?? own;
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const [check, setCheck] = useState<{ state: FieldState; message?: string }>({ state: 'idle' });
