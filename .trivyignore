@@ -1,0 +1,2 @@
+# Trivy's exceptions (ADR 0043): one vulnerability id per line, with a comment saying why it's
+# accepted and when to look again.

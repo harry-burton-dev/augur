@@ -48,5 +48,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0040](0040-account-lifecycle-and-personal-data.md) | Accounts start with an email invite, end through the leaver flow, and idle accounts turn off on their own | Accepted | 2026-11-01 |
 | [0041](0041-keycloakify-sign-in-theme.md) | Sign-in and email pages use a Keycloakify theme in AUGUR's look | Accepted | 2026-11-01 |
 | [0042](0042-organisation-settings-in-identity.md) | Organisation settings live in identity and are edited in Admin | Accepted | 2026-11-01 |
+| [0043](0043-ci-lint-and-scans.md) | CI lints with ESLint and scans with gitleaks, OSV-Scanner and Trivy | Accepted | 2026-11-01 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

@@ -1,0 +1,5 @@
+# OSV-Scanner's exceptions (ADR 0043). Each one says why it's accepted and when to look again:
+# [[IgnoredVulns]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# ignoreUntil = 2026-12-01
+# reason = "Only reachable from the dev server, never in a release."

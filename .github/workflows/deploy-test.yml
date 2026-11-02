@@ -53,16 +53,31 @@ jobs:
         run: |
           git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
           git checkout -q "augur@$TO"
-          # The test script is this workflow's, so an older release is tested the same way.
-          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh
+          # The test script and Trivy's exceptions are this workflow's, so an older release is tested the same way.
+          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh .trivyignore
         env:
           TO: ${{ steps.releases.outputs.to }}
       - name: A fresh server
         run: infra/deploy-test.sh fresh
         env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}
+      # The release's images, now pulled, against known vulnerabilities (ADR 0043): a critical one
+      # that has a fix fails the test. Accepted ones go in .trivyignore with a reason.
+      - name: No critical vulnerabilities with a fix (Trivy)
+        run: |
+          failed=0
+          for image in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep "^ghcr.io/.*:$TO$" | sort -u); do
+            echo "::group::$image"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+              -v "$GITHUB_WORKSPACE/.trivyignore:/.trivyignore:ro" aquasec/trivy:0.60.0 image --quiet \
+              --severity CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1 "$image" || failed=1
+            echo "::endgroup::"
+          done
+          exit $failed
+        env:
+          TO: ${{ steps.releases.outputs.to }}
       - name: Upgrade from the release before, then back
-        if: steps.releases.outputs.from != ''
+        if: ${{ !cancelled() && steps.releases.outputs.from != '' }}
         run: infra/deploy-test.sh upgrade "$FROM"
         env:
           FROM: ${{ steps.releases.outputs.from }}

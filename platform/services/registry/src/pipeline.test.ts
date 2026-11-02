@@ -33,7 +33,7 @@ describe('the pipeline feed', () => {
     let now = 0;
     let calls = 0;
     let body: unknown = pipeline;
-    const reader = new PipelineReader('https://x.example/pipeline.json', { fetchImpl: async (...a) => (calls++, serving(body)()), now: () => now });
+    const reader = new PipelineReader('https://x.example/pipeline.json', { fetchImpl: async (..._a) => (calls++, serving(body)()), now: () => now });
     expect((await reader.current())?.pipeline?.generatedAt).toBe(pipeline.generatedAt);
     await reader.current();
     expect(calls).toBe(1);

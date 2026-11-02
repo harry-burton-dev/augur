@@ -176,7 +176,7 @@ The UI kit is still served by the shell at runtime (see [The shared kit](#the-sh
 Renovate proposes dependency updates (ADR 0033, `renovate.json`). It runs once a week, early on Monday, and opens one PR for npm minor and patch updates, one for container images and one for GitHub Actions. Security fixes come at any time. A major update stays on the **Dependency Dashboard** issue until someone ticks it there. Renovate never merges anything itself. To merge one of its PRs:
 
 1. Merge fresh `main` into it and let CI run.
-2. Add a changeset (`pnpm changeset`): a patch for each unit whose dependencies moved, or `--empty` when only dev tooling changed.
+2. Check its changeset. The **Renovate changeset** workflow adds one to each Renovate PR: a patch for every package whose files it changes, or an empty one when it only changes tooling outside the packages (workflows, the root lockfile). Change it by hand if a unit should be released that it missed. The workflow pushes with a deploy key, because a push with the workflow's own token starts no CI: a repository admin adds a deploy key with write access (Settings, Deploy keys) and puts its private key in the `RENOVATE_CHANGESET_KEY` secret. Until then the workflow says so on the PR, and the changeset is added by hand (`pnpm changeset`).
 3. If it's labelled `needs-upgrade-note` (a major update to Postgres, pgvector, Keycloak or Garage), write the note in docs/upgrade.md first, including how to go back.
 
 ## Going back to an earlier app version
