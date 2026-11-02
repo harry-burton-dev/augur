@@ -528,6 +528,10 @@ describe('floors', () => {
     expect(titles.getAttribute('aria-checked')).toBe('false');
     titles.click();
     expect(changes).toHaveBeenCalledWith({ key: 'areaTitles', value: true });
+    const toasts = root().querySelector<HTMLButtonElement>('[aria-labelledby="ts"]')!;
+    expect(toasts.getAttribute('aria-checked')).toBe('false');
+    toasts.click();
+    expect(changes).toHaveBeenCalledWith({ key: 'toasts', value: true });
   });
 
   it('lets the screen leave a floor the way you’re going, and come in on the next', async () => {

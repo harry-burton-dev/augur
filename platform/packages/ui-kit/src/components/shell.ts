@@ -228,8 +228,11 @@ export class UiShell extends LitElement {
   declare findResults: ShellFindResult[];
   /** The groups of `findResults` in the order they're shown, each with whether it's still coming. */
   declare findGroups: ShellFindGroup[];
-  /** A person's settings. `areaTitles` (on unless false) shows an area title card on arriving at a floor or opening an app. */
-  declare settings: { reduceMotion?: boolean; density?: 'comfortable' | 'compact'; areaTitles?: boolean };
+  /**
+   * A person's settings. `areaTitles` (on unless false) shows an area title card on arriving at a floor or opening an app.
+   * `toasts` (off unless true) tells the host to say each new notification once as a toast; the Shell itself still only pulses.
+   */
+  declare settings: { reduceMotion?: boolean; density?: 'comfortable' | 'compact'; areaTitles?: boolean; toasts?: boolean };
   declare away: boolean;
   /** Whether Account offers Switch workspace; a host with one workspace turns it off. Floors replace it. */
   declare canSwitchWorkspace: boolean;
@@ -1392,7 +1395,7 @@ export class UiShell extends LitElement {
         <button class="link" @click=${() => this.emit('ui-function', { id: 'sign-out' })}>Sign out</button></div>`;
   }
 
-  private setSetting(key: 'reduceMotion' | 'density' | 'areaTitles', value: unknown) {
+  private setSetting(key: 'reduceMotion' | 'density' | 'areaTitles' | 'toasts', value: unknown) {
     this.settings = { ...this.settings, [key]: value };
     this.emit('ui-setting', { key, value });
   }
@@ -1403,6 +1406,8 @@ export class UiShell extends LitElement {
         <button class="switch" role="switch" aria-labelledby="rm" aria-checked=${s.reduceMotion ? 'true' : 'false'} @click=${() => this.setSetting('reduceMotion', !s.reduceMotion)}></button></div>
       <div class="pair"><span id="at">Area titles</span>
         <button class="switch" role="switch" aria-labelledby="at" aria-checked=${s.areaTitles === false ? 'false' : 'true'} @click=${() => this.setSetting('areaTitles', s.areaTitles === false)}></button></div>
+      <div class="pair"><span id="ts">Toasts for new notifications</span>
+        <button class="switch" role="switch" aria-labelledby="ts" aria-checked=${s.toasts ? 'true' : 'false'} @click=${() => this.setSetting('toasts', !s.toasts)}></button></div>
       <div class="pair"><span>Density</span>
         <div class="seg" role="group" aria-label="Density">
           ${(['comfortable', 'compact'] as const).map(
