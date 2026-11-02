@@ -57,3 +57,12 @@ describe('menuWarnings', () => {
     expect(menuWarnings(app({ icon: undefined, menu: [{ label: 'Cards', items: [{ label: 'All cards', path: '/cards' }] }] }))).toEqual([]);
   });
 });
+
+describe('platform apps', () => {
+  // They ship with this shell, so each must open in it: a range ahead of the SDK hides the app.
+  it('each asks for an SDK this AUGUR speaks', async () => {
+    const { SDK_VERSION } = await import('@augur/mfe-sdk');
+    const semver = (await import('semver')).default;
+    for (const app of platformApps) expect(semver.satisfies(SDK_VERSION, app.sdk), `${app.id} asks for SDK ${app.sdk}, this AUGUR has ${SDK_VERSION}`).toBe(true);
+  });
+});

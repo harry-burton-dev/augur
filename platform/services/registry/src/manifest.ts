@@ -240,7 +240,7 @@ export const platformApps: AppEntry[] = [
     route: '/upgrades',
     entry: '/apps/upgrades/entry.js',
     version: PLATFORM_APP_VERSIONS.upgrades,
-    sdk: '^1.10.0',
+    sdk: '^1.9.0',
     icon: 'download',
     description: 'What this deployment runs, and upgrading it',
     requiredRole: 'admin',
