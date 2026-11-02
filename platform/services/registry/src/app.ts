@@ -54,7 +54,7 @@ import { LiveOverrides } from './live.ts';
 import { lineView, type PipelineReader } from './pipeline.ts';
 import { automaticDevUpgrade, automaticUpgrade, goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
 import { afterLook, lookDue, MIN_CALLS as AFTER_MIN_CALLS, startAfterWatch } from './after-watch.ts';
-import { servedEntry, type FrontendFiles } from './frontends.ts';
+import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
 import { randomUUID } from 'node:crypto';
@@ -497,9 +497,11 @@ export const buildApp = async ({
       app.addContentTypeParser('application/gzip', { parseAs: 'buffer', bodyLimit: FRONTEND_LIMITS.bytes + 1024 * 1024 }, (_req, body, done) => done(null, body));
 
       /**
-       * Keeps one version of an app's frontend and serves it at /apps/<id>/<version>/: the app's own
-       * service gives it before registering that version, or a platform service or an admin does.
-       * A version's frontend never changes: the same files again is fine, other files are refused.
+       * Keeps one version of an app's frontend and serves it at /apps/<id>/<version>_<digest>/: the app's
+       * own service gives it before registering that version, or a platform service or an admin does.
+       * The same files again (every restart) change nothing. Other files for the same version are a new
+       * build of it (a dev build, or a pillar app rebuilt with a newer kit): they take the old build's
+       * place, in a folder of their own, so no browser goes on running the build it kept.
        */
       app.put<{ Params: { id: string; version: string }; Body: Buffer }>('/apps/:id/versions/:version/frontend', async (req, reply) => {
         const by = await changedBy(req, reply);
@@ -511,10 +513,7 @@ export const buildApp = async ({
         if (!Buffer.isBuffer(req.body)) return reply.code(415).send({ error: 'unsupported_media_type', message: 'Send the frontend as one gzipped tarball, Content-Type application/gzip.' });
         const digest = frontendDigest(req.body);
         const had = (await store.frontends(id)).find((f) => f.version === version);
-        if (had) {
-          if (had.digest === digest) return reply.code(200).send(had);
-          return reply.code(409).send({ error: 'conflict', message: `${id} ${version} already has a frontend, and a version’s frontend never changes. Release a new version.` });
-        }
+        if (had?.digest === digest) return reply.code(200).send(had);
         let files;
         try {
           files = unpackFrontend(req.body);
@@ -522,10 +521,11 @@ export const buildApp = async ({
           if (err instanceof FrontendProblem) return reply.code(400).send({ error: 'bad_request', message: err.message });
           throw err;
         }
-        await frontendFiles.put(id, version, files);
-        const stored = await store.putFrontend({ app: id, version, digest, files: files.map((f) => f.path), bytes: files.reduce((n, f) => n + f.data.length, 0), publishedBy: by.id });
-        req.log.info({ app: id, version, files: files.length, bytes: stored.bytes, by: by.id }, 'app frontend kept');
-        await record(req, { actor: by, app: 'registry', action: 'app.frontend-published', target: id, detail: { version, digest, files: files.length } });
+        const folder = frontendFolder(version, digest);
+        await frontendFiles.put(id, folder, files);
+        const stored = await store.putFrontend({ app: id, version, digest, folder, files: files.map((f) => f.path), bytes: files.reduce((n, f) => n + f.data.length, 0), publishedBy: by.id });
+        req.log.info({ app: id, version, folder, files: files.length, bytes: stored.bytes, by: by.id, replaced: had?.digest }, had ? 'app frontend rebuilt' : 'app frontend kept');
+        await record(req, { actor: by, app: 'registry', action: 'app.frontend-published', target: id, detail: { version, digest, files: files.length, ...(had ? { replaced: had.digest } : {}) } });
         return reply.code(201).send(stored);
       });
 

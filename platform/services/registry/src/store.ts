@@ -85,14 +85,16 @@ export interface AppVersion {
 }
 
 /**
- * One version of an app's frontend, kept in the frontends bucket at apps/<app>/<version>/ and served
+ * One version of an app's frontend, kept in the frontends bucket at apps/<app>/<folder>/ and served
  * from there. Kept apart from the app's versions: an app gives its frontend before it registers.
  */
 export interface StoredFrontend {
   app: string;
   version: string;
-  /** sha256 of the tarball it came in, `sha256:<hex>`. A version's frontend never changes. */
+  /** sha256 of the tarball it came in, `sha256:<hex>`. The newest build given for a version is the one kept. */
   digest: string;
+  /** The folder its files are in (frontendFolder); unset for ones kept before 019, which are in the version's own. */
+  folder?: string;
   /** Every file's path inside it, so an entry is only pointed at a file that's there. */
   files: string[];
   bytes: number;
@@ -294,7 +296,7 @@ export interface AppStore {
   remove(id: string): Promise<boolean>;
   /** The frontends kept for one app, or for every app. */
   frontends(app?: string): Promise<StoredFrontend[]>;
-  /** Records a version's frontend once its files are in the bucket; a version that has one keeps it. */
+  /** Records a version's frontend once its files are in the bucket; a newer build of the same version takes its place. */
   putFrontend(frontend: Omit<StoredFrontend, 'publishedAt'>): Promise<StoredFrontend>;
   /** Lets an app use these scopes. Undefined when there is no such app. */
   grant(id: string, scopes: Scope[]): Promise<AppRecord | undefined>;
@@ -551,10 +553,8 @@ export class MemoryAppStore implements AppStore {
   }
 
   async putFrontend(frontend: Omit<StoredFrontend, 'publishedAt'>) {
-    const had = this.kept.find((f) => f.app === frontend.app && f.version === frontend.version);
-    if (had) return structuredClone(had);
     const stored = { ...frontend, files: [...frontend.files], publishedAt: new Date().toISOString() };
-    this.kept.push(stored);
+    this.kept = [...this.kept.filter((f) => !(f.app === frontend.app && f.version === frontend.version)), stored];
     return structuredClone(stored);
   }
 
@@ -982,14 +982,22 @@ export const migrations: { id: string; sql: string }[] = [
       -- The light watch after a quiet 10-minute watch (ADR 0020, amended 2 Nov): its count so far, and how it ended.
       alter table registry.upgrades add column after_watch jsonb;`,
   },
+  {
+    id: '019_frontend_folders',
+    sql: `
+      -- Each build of a version's frontend in a folder of its own (version and digest), so a new build of the
+      -- same version replaces the old one without a browser running what it kept. Null: the version's own folder.
+      alter table registry.app_frontends add column folder text;`,
+  },
 ];
 
-type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
+type FrontendRow = { app_id: string; version: string; digest: string; folder: string | null; files: string[]; bytes: string; published_by: string; published_at: Date };
 
 const fromFrontendRow = (r: FrontendRow): StoredFrontend => ({
   app: r.app_id,
   version: r.version,
   digest: r.digest,
+  ...(r.folder ? { folder: r.folder } : {}),
   files: r.files,
   bytes: Number(r.bytes),
   publishedBy: r.published_by,
@@ -1185,9 +1193,10 @@ export class PgAppStore implements AppStore {
 
   async putFrontend(f: Omit<StoredFrontend, 'publishedAt'>) {
     await this.pool.query(
-      `insert into registry.app_frontends (app_id, version, digest, files, bytes, published_by) values ($1, $2, $3, $4, $5, $6)
-       on conflict (app_id, version) do nothing`,
-      [f.app, f.version, f.digest, JSON.stringify(f.files), f.bytes, f.publishedBy],
+      `insert into registry.app_frontends (app_id, version, digest, folder, files, bytes, published_by) values ($1, $2, $3, $4, $5, $6, $7)
+       on conflict (app_id, version) do update set digest = excluded.digest, folder = excluded.folder, files = excluded.files,
+         bytes = excluded.bytes, published_by = excluded.published_by, published_at = now()`,
+      [f.app, f.version, f.digest, f.folder ?? null, JSON.stringify(f.files), f.bytes, f.publishedBy],
     );
     const { rows } = await this.pool.query<FrontendRow>('select * from registry.app_frontends where app_id = $1 and version = $2', [f.app, f.version]);
     return fromFrontendRow(rows[0]);
