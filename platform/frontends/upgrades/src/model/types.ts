@@ -93,7 +93,8 @@ export interface PrepItem {
 
 /** GET /api/registry/v1/platform/updates */
 export interface PlatformUpdates {
-  running: { version: string; channel: Channel };
+  /** `build: 'source'` when the server was built from a checkout: `version` is then the last release it's based on. */
+  running: { version: string; channel: Channel; build?: 'source' };
   channel: Channel;
   ring?: Ring;
   channelNote?: string;

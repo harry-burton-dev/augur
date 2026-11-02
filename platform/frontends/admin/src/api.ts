@@ -293,7 +293,7 @@ export interface PipelineLine {
 }
 
 export interface PlatformUpdates {
-  running: { version: string; channel: ReleaseChannel };
+  running: { version: string; channel: ReleaseChannel; build?: 'source' };
   channel: ReleaseChannel;
   /** What kind of server this is (SERVER_RING), which bounds the channel. */
   ring?: 'dev' | 'preview' | 'production';

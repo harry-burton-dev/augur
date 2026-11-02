@@ -2,7 +2,8 @@
 # a change on a server before it's released. Use it on top of compose.yml:
 #   docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file infra/deploy/.env up -d --build
 # The images are tagged with PLATFORM_VERSION as usual, so set it to something that isn't a
-# release, such as `local`, or a later pull will replace them.
+# release, such as `local`, or a later pull will replace them. The Upgrade Centre shows the server as
+# a build from source, based on the last release; upgrading from there replaces it with released images.
 services:
   web:
     build: { context: ../.., dockerfile: infra/web.Dockerfile, target: web }
@@ -12,6 +13,9 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/identity" } }
   registry:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, target: registry, args: { PACKAGE: "@augur/registry" } }
+    # Says so in the Upgrade Centre: a build from source still carries the last release's number.
+    environment:
+      AUGUR_BUILD: source
   events:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
   models:

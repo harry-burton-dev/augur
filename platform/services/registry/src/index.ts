@@ -82,7 +82,9 @@ const allowPrPreviews = takesPreview(ring) || process.env.ALLOW_PR_PREVIEWS === 
 const signer = process.env.FEED_SIGNER || feedSigner(repoOfFeed(feedUrl) ?? repoOfFeed(DEFAULT_OCI_FEED_URL)!);
 const checking = { check: cosignFeedCheck({ identity: signer, trustedRoot: TRUSTED_ROOT_IN_REGISTRY }), signer };
 const feed = feedUrl === 'off' ? undefined : releaseFeed({ url: feedUrl, token: feedTokenFromEnv(), key: readKey, ...checking });
-const updates = new UpdateChecker({ feed, running: AUGUR_RELEASE, channel, ring });
+// A build from this checkout (compose.build.yml) still carries the last release's number, so it says so.
+const running = { ...AUGUR_RELEASE, ...(process.env.AUGUR_BUILD === 'source' ? { build: 'source' as const } : {}) };
+const updates = new UpdateChecker({ feed, running, channel, ring });
 // The line from dev to production, for the Upgrade Centre: beside the release feed, read with the same key.
 const pipeline = new PipelineReader(process.env.PIPELINE_FEED_URL || (feedUrl === 'off' ? 'off' : pipelineUrlFor(feedUrl)), { token: feedTokenFromEnv(), key: readKey });
 // Upgrade windows (ADR 0020) are in the deployment's own time zone unless a unit names another.

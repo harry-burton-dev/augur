@@ -327,8 +327,15 @@ export interface CheckResult {
 }
 
 /** Checks the feed once a day and when an admin asks, and keeps what it found. Never restarts anything. */
+/** The release this server runs. `build: 'source'` when it was built from a checkout, not pulled. */
+export interface Running {
+  version: string;
+  channel: Channel;
+  build?: 'source';
+}
+
 export class UpdateChecker {
-  readonly running: { version: string; channel: Channel };
+  readonly running: Running;
   readonly channel: Channel;
   readonly ring: Ring;
   /** Why the channel isn't the one asked for, when it isn't. */
@@ -339,7 +346,7 @@ export class UpdateChecker {
   private inFlight?: Promise<CheckResult>;
   private timer?: ReturnType<typeof setInterval>;
 
-  constructor({ feed, running, channel, ring = 'preview', now = () => new Date() }: { feed?: ReleaseFeed; running: { version: string; channel: Channel }; channel?: Channel; ring?: Ring; now?: () => Date }) {
+  constructor({ feed, running, channel, ring = 'preview', now = () => new Date() }: { feed?: ReleaseFeed; running: Running; channel?: Channel; ring?: Ring; now?: () => Date }) {
     this.feed = feed;
     this.running = running;
     this.ring = ring;
@@ -505,7 +512,7 @@ export const goBackTargets = (checker: UpdateChecker): GoBackTarget[] => {
 
 /** What the Updates page shows (see contracts/registry.openapi.yaml). */
 export interface UpdatesView {
-  running: { version: string; channel: Channel };
+  running: Running;
   channel: Channel;
   /** What kind of server this is (SERVER_RING), which bounds the channel. */
   ring: Ring;
