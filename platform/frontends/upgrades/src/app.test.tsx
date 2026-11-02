@@ -162,6 +162,61 @@ describe('Upgrade Centre', () => {
     expect(el.textContent).toContain('These are the defaults');
   });
 
+  it('shows how this deployment reports to Backstage, with its key, and offers the file when nothing is sent', async () => {
+    const why = 'No PORTAL_URL in .env, so nothing is sent: export the record and carry it to Backstage.';
+    const { el, fetch } = await mount(['admin'], (path) =>
+      path.endsWith('/platform/overview')
+        ? [200, { ...overview(), reporting: { mode: 'file', why } }]
+        : path.endsWith('/platform/reporting')
+          ? [200, { mode: 'file', why, deployment: 'workbench', publicKey: 'MCowBQYDK2VwAyEAkey' }]
+          : registry(path),
+    );
+    const section = el.querySelector('[data-reporting="file"]')!;
+    expect(section.textContent).toContain(why);
+    expect(section.textContent).toContain('workbench');
+    expect(section.querySelector('textarea')?.value).toBe('MCowBQYDK2VwAyEAkey');
+    expect(buttonIn(section, 'Export the record').disabled).toBe(false);
+    expect(fetch).toHaveBeenCalledWith('/api/registry/v1/platform/reporting', expect.anything());
+  });
+
+  it('keeps Export visible when reporting is off, saying how to turn it on', async () => {
+    const why = 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage (org/deployments.yaml).';
+    const { el } = await mount(['admin'], (path) =>
+      path.endsWith('/platform/overview') ? [200, { ...overview(), reporting: { mode: 'off', why } }] : path.endsWith('/platform/reporting') ? [200, { mode: 'off', why }] : registry(path),
+    );
+    const section = el.querySelector('[data-reporting="off"]')!;
+    expect(section.querySelector('textarea')).toBeNull();
+    expect(reasonOf(buttonIn(section, 'Export the record'))).toBe(why);
+  });
+
+  it('lists upgrades, app installs and setting changes in one history, filters it, and says what it couldn’t read', async () => {
+    const { el } = await mount(['admin'], (path) =>
+      path.endsWith('/app-runner/jobs')
+        ? [200, { jobs: [{ id: 'j1', app: 'folio', action: 'install', release: { version: '1.1.0', channel: 'stable' }, requestedBy: 'automatic', requestedAt: '2026-10-31T10:00:00Z', state: 'done' }] }]
+        : path.endsWith('/units/augur/desired-state/history')
+          ? [200, { unit: 'augur', history: [{ ...unit().desired, policy: 'hold', setBy: 'p1', setAt: '2026-10-31T12:00:00Z' }] }]
+          : path.endsWith('/units/folio/desired-state/history')
+            ? [500, { message: 'No.' }]
+            : registry(path),
+    );
+    const rail = [...el.querySelectorAll('nav button')].find((b) => b.textContent === 'History') as HTMLButtonElement;
+    await act(async () => rail.click());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect([...el.querySelectorAll('[data-history]')].map((e) => e.getAttribute('data-kind'))).toEqual(['setting', 'app-job', 'upgrade']);
+    expect(el.querySelector('[data-kind="setting"]')?.textContent).toContain('After: On hold: nothing new is offered.');
+    expect(el.querySelector('[data-kind="setting"]')?.textContent).toContain('Alex');
+    expect(el.querySelector('[data-kind="app-job"]')?.textContent).toContain('By itself');
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain('the settings history of Artifacts');
+    const unitFilter = [...el.querySelectorAll('select')][0] as HTMLSelectElement;
+    await act(async () => {
+      unitFilter.value = 'folio';
+      unitFilter.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect([...el.querySelectorAll('[data-history]')].map((e) => e.getAttribute('data-kind'))).toEqual(['app-job']);
+  });
+
   it('keeps what it last read when the registry stops answering, and says so', async () => {
     let fail = false;
     const { el } = await mount(['deployment-admin'], (path) => (fail ? [502, { message: 'The registry isn’t answering.' }] : registry(path)));
@@ -200,8 +255,8 @@ describe('marking a result looked at', () => {
 });
 
 describe('changing a unit’s settings', () => {
-  const open = async (roles: string[], path = '/augur') => {
-    window.history.replaceState(null, '', `/@me/upgrades${path}`);
+  const open = async (roles: string[], path = '/augur', refuse = false, search = '') => {
+    window.history.replaceState(null, '', `/@me/upgrades${path}${search}`);
     const el = document.createElement('div');
     document.body.append(el);
     let current = overview();
@@ -210,6 +265,7 @@ describe('changing a unit’s settings', () => {
       if (init?.method === 'PUT') {
         const body = JSON.parse(String(init.body));
         sent.push({ path: url, body });
+        if (refuse) return new Response(JSON.stringify({ error: 'sign_in_again', message: 'Enter your password again to change this.' }), { status: 401 });
         if (body.channel !== 'stable') return new Response(JSON.stringify({ error: 'conflict', message: 'AUGUR follows stable releases, set by RELEASE_CHANNEL.' }), { status: 409 });
         current = overview({ units: [unit({ desired: { ...unit().desired, ...body, setBy: 'p1', isDefault: false }, policy: 'On hold: nothing new is offered.' }), ...overview().units.slice(1)] });
       }
@@ -252,6 +308,28 @@ describe('changing a unit’s settings', () => {
     expect(el.querySelector('[role="status"]')?.textContent).toContain('Saved.');
   });
 
+  it('keeps the choices while the person enters the password again, and opens them on the way back', async () => {
+    const { el } = await open(['deployment-admin'], '/augur', true);
+    await act(async () => button(el, 'Change settings').click());
+    const hold = [...el.querySelectorAll('input[name="policy"]')][2] as HTMLInputElement;
+    await act(async () => hold.click());
+    const assign = vi.fn();
+    const real = window.location;
+    Object.defineProperty(window, 'location', { configurable: true, value: { pathname: real.pathname, search: real.search, assign } });
+    try {
+      await act(async () => button(el, 'Save settings').click());
+      expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/@me/upgrades/augur?settings=augur')}`);
+      expect(el.querySelector('[role="alert"]')).toBeNull();
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: real });
+    }
+    const back = await open(['deployment-admin'], '/augur', false, '?settings=augur');
+    const form = back.el.querySelector('form')!;
+    expect(form).not.toBeNull();
+    expect(([...form.querySelectorAll('input[name="policy"]')][2] as HTMLInputElement).checked).toBe(true);
+    expect(window.location.search).toBe('');
+  });
+
   it('won’t save a range that isn’t one, and says why in place', async () => {
     const { el, sent } = await open(['deployment-admin']);
     await act(async () => button(el, 'Change settings').click());
@@ -263,5 +341,80 @@ describe('changing a unit’s settings', () => {
     });
     expect(reasonOf(button(el, 'Save settings'))).toContain('isn’t a version range');
     expect(sent).toEqual([]);
+  });
+});
+
+describe('upgrading from the Upgrade Centre', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    window.history.replaceState(null, '', '/');
+  });
+
+  const open = async (respond: (url: string, init?: RequestInit) => [number, unknown] | undefined, current: { updates: PlatformUpdates }, search = '') => {
+    window.history.replaceState(null, '', `/@me/upgrades/augur${search}`);
+    const el = document.createElement('div');
+    document.body.append(el);
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const own = respond(url, init);
+      const [status, body] = own ?? [200, url.includes('/platform/overview') ? overview() : url.endsWith('/platform/updates') ? current.updates : url.endsWith('/manifest') ? manifest : installs];
+      return new Response(JSON.stringify(body), { status });
+    });
+    await act(async () => {
+      createRoot(el).render(<App ctx={{ fetch, path: '/augur', user: { id: 'p1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'] } }} />);
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    return { el, fetch };
+  };
+
+  it('asks, upgrades to the next release only, and follows it step by step', async () => {
+    const current = { updates: updates({ next: '0.13.2', newer: [{ version: '0.13.2', channel: 'stable', breaking: [] }, { version: '0.13.3', channel: 'stable', breaking: [] }] }) };
+    const { el, fetch } = await open((url, init) => {
+      if (url.endsWith('/platform/upgrade') && init?.method === 'PUT') {
+        current.updates = updates({ upgrade: { id: 'u2', from: '0.13.1', version: '0.13.2', requestedBy: 'p1', requestedByName: 'Alex', requestedAt: '2026-11-02T01:00:00Z', state: 'requested', steps: [] }, updaterSeenAt: '2026-11-02T00:59:00Z' });
+        return [202, current.updates];
+      }
+      return undefined;
+    }, current);
+    expect(reasonOf(el.querySelector('[data-release="0.13.3"] button')!)).toBe('Upgrade to 0.13.2 first: AUGUR moves one release at a time.');
+    await act(async () => buttonIn(el, 'Upgrade AUGUR to 0.13.2').click());
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain('Upgrade to AUGUR 0.13.2?');
+    expect(dialog.textContent).toContain('In the next window');
+    await act(async () => buttonIn(dialog, 'Upgrade').click());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fetch).toHaveBeenCalledWith('/api/registry/v1/platform/upgrade', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ version: '0.13.2' }) }));
+    expect(el.querySelector('[data-step="watch"]')?.textContent).toContain('Watch it for 10 minutes');
+    expect(el.querySelector('[data-waiting]')?.textContent).toContain('The updater will pick it up within a minute.');
+    expect(buttonIn(el, 'Cancel the upgrade')).toBeTruthy();
+  });
+
+  it('goes to enter the password again when the registry asks, and comes back to ask once more', async () => {
+    const current = { updates: updates({ next: '0.13.2' }) };
+    const { el } = await open((url, init) => (url.endsWith('/platform/upgrade') && init?.method === 'PUT' ? [401, { error: 'sign_in_again', message: 'Enter your password again to upgrade.' }] : undefined), current);
+    const assign = vi.fn();
+    const real = window.location;
+    Object.defineProperty(window, 'location', { configurable: true, value: { pathname: real.pathname, search: real.search, assign } });
+    try {
+      await act(async () => buttonIn(el, 'Upgrade AUGUR to 0.13.2').click());
+      const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+      await act(async () => buttonIn(dialog, 'Upgrade').click());
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/@me/upgrades/augur?upgrade=0.13.2')}`);
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: real });
+    }
+  });
+
+  it('opens the same question again on the way back, with the address tidied', async () => {
+    const { el } = await open(() => undefined, { updates: updates({ next: '0.13.2' }) }, '?upgrade=0.13.2');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Upgrade to AUGUR 0.13.2?');
+    expect(window.location.search).toBe('');
+    expect(el).toBeTruthy();
   });
 });

@@ -72,3 +72,4 @@ nav:
       - 0041. Sign-in and email pages use a Keycloakify theme in AUGUR's look: decisions/0041-keycloakify-sign-in-theme.md
       - 0042. Organisation settings live in identity and are edited in Admin: decisions/0042-organisation-settings-in-identity.md
       - 0043. CI lints with ESLint and scans with gitleaks, OSV-Scanner and Trivy: decisions/0043-ci-lint-and-scans.md
+      - 0045. Promote to stable asks the portal for bake time over Tailscale: decisions/0045-promote-asks-portal-over-tailscale.md

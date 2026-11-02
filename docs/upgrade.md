@@ -56,15 +56,15 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 ### Reporting to Backstage
 
-From this release a deployment can tell the company's Backstage what it runs ([ADR 0019](decisions/0019-deployment-reporting.md)). Nothing changes until you set it up; until then the Upgrade Centre says reporting isn't set up.
+From this release a deployment can tell the company's Backstage what it runs ([ADR 0019](decisions/0019-deployment-reporting.md)). Nothing changes until you set it up; until then the Upgrade Centre's Reporting section, under Worth knowing on its front page, says reporting isn't set up and what to set.
 
 1. Add the deployment to Backstage's `org/deployments.yaml`, if it isn't there, and note its `metadata.name`.
 2. Set `DEPLOYMENT_ID` in `.env` to that name, with `PORTAL_URL` set to the Backstage address. Then `docker compose up -d registry`.
-3. Copy the deployment's public key, shown by `GET /api/registry/v1/platform/reporting` as an admin (the Upgrade Centre's Reporting section, once it shows it), into the annotation `augur.dev/report-key` on that entry, and let Backstage read the catalog again.
+3. Copy the deployment's public key, shown by `GET /api/registry/v1/platform/reporting` as an admin (or **Copy key** in the Upgrade Centre's Reporting section), into the annotation `augur.dev/report-key` on that entry, and let Backstage read the catalog again.
 
 The registry makes the deployment's own Ed25519 key the first time it's needed and keeps it in the database, so a restored backup reports as the same deployment. It signs a record of what the server runs and sends it two minutes after it starts (so after each AUGUR upgrade), whenever a version, an upgrade's result or something that needs you changes (it looks every 15 minutes), and once a day. The record holds the deployment's name and ring, AUGUR's and each app's version, what's available, each unit's policy and pin, health, the last results, and the feed's state. It holds no names or ids of people. Backstage refuses a record from a deployment it doesn't list, or not signed with the key it lists.
 
-An air-gapped server sets `DEPLOYMENT_ID` and no `PORTAL_URL`: nothing is sent, and an admin exports the record (`GET /api/registry/v1/platform/reporting/export`) and carries the file to the deployment's card in Backstage. `DEPLOYMENT_REPORTING=off` turns both off.
+An air-gapped server sets `DEPLOYMENT_ID` and no `PORTAL_URL`: nothing is sent, and an admin exports the record (**Export the record** in the Upgrade Centre's Reporting section, or `GET /api/registry/v1/platform/reporting/export`) and carries the file to the deployment's card in Backstage. `DEPLOYMENT_REPORTING=off` turns both off.
 
 ### Each upgrade is watched for 10 minutes
 
