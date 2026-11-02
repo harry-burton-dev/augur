@@ -1278,7 +1278,7 @@ components:
               message: { type: string }
         message: { type: string }
         finishedAt: { type: string, format: date-time }
-    AppJobStep: { type: string, enum: [verify, storage, sign-in, start, health, switch, retire, remove] }
+    AppJobStep: { type: string, enum: [verify, storage, sign-in, start, health, switch, watch, retire, remove] }
     StoredFrontend:
       type: object
       required: [app, version, digest, files, bytes, publishedBy, publishedAt]
