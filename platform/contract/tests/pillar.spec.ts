@@ -6,6 +6,8 @@ import { folioOn, since } from './builds';
  * Either way the shell, Home, Find and other apps keep working: run.mjs runs every check with
  * Folio in the catalogue (its built frontend and its service) and without it, as when it's off.
  */
+/** Artifacts on screen, in either of its layouts: the new one on Quill or the classic `<folio-app>`. */
+const artifacts = (page: Page) => page.locator('[data-app="folio"]').locator('folio-app, .quill-frame');
 const reference = (page: Page) => page.locator('[data-app="reference"]').first();
 const check = (page: Page, name: string) => reference(page).locator(`[data-check="${name}"]`);
 const press = (page: Page, action: string) => reference(page).locator(`[data-action="${action}"]`).click();
@@ -31,12 +33,12 @@ test.describe('with Folio on', () => {
   test('Folio opens at its address', async ({ page }) => {
     await page.goto('/@me/folio/libraries');
     await expect(page.locator('[data-app="folio"]')).toBeVisible();
-    await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
+    await expect(artifacts(page)).toHaveCount(1);
   });
 
   test('Folio (Artifacts) opens straight in with its own menu, keeps Esc, and the band goes to Title or Home', async ({ page }) => {
     await page.goto('/@me/folio');
-    await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
+    await expect(artifacts(page)).toHaveCount(1);
     await expect(page.locator('ui-centre-menu')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/\/@me\/folio$/);
@@ -50,7 +52,7 @@ test.describe('with Folio on', () => {
       menu.setCategory(menu.categories.findIndex((c) => c.id === 'folio')),
     );
     await page.keyboard.press('Enter');
-    await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
+    await expect(artifacts(page)).toHaveCount(1);
     await band.getByRole('button', { name: 'Home', exact: true }).click();
     await expect(page).toHaveURL(/\/@me\/home$/);
     await expect(band.getByRole('button', { name: 'Home, you’re here' })).toBeVisible();
@@ -68,7 +70,7 @@ test.describe('with Folio on', () => {
     await expect(title.locator('.caption .title')).toHaveText('Artifacts');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/@me\/folio$/);
-    await expect(page.locator('[data-app="folio"] folio-app')).toHaveCount(1);
+    await expect(artifacts(page)).toHaveCount(1);
   });
 
   test('an app opens a document, and Folio answers', async ({ page }) => {
