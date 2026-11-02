@@ -1,6 +1,6 @@
 import type { MountContext } from '@augur/mfe-sdk';
 import { isRefusal, type Refusal } from './model/roles.js';
-import type { AppInstalls, PlatformUpdates, UnitRecord } from './model/types.js';
+import type { AppInstalls, DesiredState, DesiredStateInput, Overview, PlatformUpdates } from './model/types.js';
 
 /** A call the platform turned down, with the refusal when it explained itself. */
 export class ApiError extends Error {
@@ -41,7 +41,7 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     }
     return data as T;
   };
-  const unit = (id: string) => `/platform/units/${encodeURIComponent(id)}`;
+  const unit = (id: string) => `/platform/units/${encodeURIComponent(id)}/desired-state`;
   return {
     updates: () => call<PlatformUpdates>('GET', '/platform/updates'),
     checkNow: () => call<PlatformUpdates>('POST', '/platform/updates/check'),
@@ -53,9 +53,13 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     checkApps: () => call<AppInstalls>('POST', '/app-runner/check'),
     install: (app: string, version: string) => call('POST', '/app-runner/jobs', { action: 'install', app, version }),
     remove: (app: string) => call('POST', '/app-runner/jobs', { action: 'remove', app }),
-    /** The desired-state record (ADR 0020). Until the registry has it, the call answers 404 and the model shows offers as available. */
-    unit: (id: string) => call<UnitRecord>('GET', unit(id)),
-    setUnit: (id: string, record: Partial<UnitRecord>) => call<UnitRecord>('PUT', unit(id), record),
+    /** Every unit, its desired state, what's next and what needs an admin: the same shape Backstage's card reads. */
+    overview: () => call<Overview>('GET', '/platform/overview'),
+    /** Sets how a unit takes new releases (ADR 0020), and answers with the overview. */
+    setDesired: (id: string, input: DesiredStateInput) => call<Overview>('PUT', unit(id), input),
+    desiredHistory: async (id: string) => (await call<{ history: DesiredState[] }>('GET', `${unit(id)}/history`)).history,
+    /** Marks a finished upgrade or app job looked at, for every admin. */
+    markSeen: (kind: 'upgrade' | 'app-job', id: string) => call<Overview>('POST', `/platform/results/${kind}/${encodeURIComponent(id)}/seen`),
   };
 };
 

@@ -18,7 +18,7 @@ export interface Halted {
 
 /** Whether the feed could be trusted the last time it was read (ADR 0017, coming). */
 export interface FeedTrust {
-  state: 'verified' | 'mirror' | 'unchecked' | 'failed' | 'expired';
+  state: 'verified' | 'mirror' | 'unchecked';
   expires?: string;
   signer?: string;
   note?: string;
@@ -120,15 +120,64 @@ export interface Window {
   hours: number;
 }
 
-/** GET /platform/units/{unit}: how one unit should move (ADR 0020, coming). */
-export interface UnitRecord {
+export type AutomaticLevel = 'patch' | 'minor';
+
+/** How one unit takes new releases (ADR 0020): PUT /platform/units/{unit}/desired-state. */
+export interface DesiredStateInput {
   channel: Channel;
   policy: Policy;
+  automaticUpTo: AutomaticLevel;
   pin?: string;
-  hold?: { by: string; byName?: string; at: string; note?: string };
-  windows: Window[] | 'any';
+  /** None means an automatic upgrade may start at any time. */
+  windows: Window[];
+  timeZone?: string;
+}
+
+export interface DesiredState extends DesiredStateInput {
+  unit: string;
+  setBy: string;
+  setAt: string;
+}
+
+/** A unit's last finished upgrade or app job, and who has looked at it. */
+export interface UnitResult {
+  kind: 'upgrade' | 'app-job';
+  id: string;
+  from?: string;
+  version?: string;
+  state: 'done' | 'rolled-back' | 'failed' | 'cancelled';
+  message?: string;
+  finishedAt: string;
+  seenBy?: string;
+  seenAt?: string;
+}
+
+/** One unit in the overview: AUGUR first, then each installed app. */
+export interface OverviewUnit {
+  unit: string;
+  name: string;
+  running: string;
+  available?: string;
+  halted?: Halted;
+  desired: DesiredState & { timeZone: string; isDefault: boolean };
+  /** The record in one sentence, written by the registry. */
+  policy: string;
+  window: { open: boolean; nextAt?: string };
+  /** What Automatic does with the next release: takes it, or why it waits. */
+  automatic?: { takes?: string; waits?: string };
+  open?: { id: string; version?: string; state: 'requested' | 'running' };
+  lastResult?: UnitResult;
+}
+
+/** GET /api/registry/v1/platform/overview: the same shape Backstage's card reads. */
+export interface Overview {
+  ring: Ring;
   timeZone: string;
-  nextWindow?: string;
+  feed: 'on' | 'off';
+  feedTrust?: FeedTrust;
+  checkedAt?: string;
+  units: OverviewUnit[];
+  needsYou: { kind: 'halted' | 'failed' | 'went-back'; unit: string; message: string; result?: { kind: 'upgrade' | 'app-job'; id: string } }[];
 }
 
 export interface AppJob {
