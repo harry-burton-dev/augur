@@ -9,7 +9,7 @@ From a new app to running on your servers, with no manual update at any step. Ea
 | [Release it](#3-release-it) | CI | Merge, then merge Version packages |
 | [Servers take it](#4-servers-take-it) | Each server | Nothing, unless it asks for something new |
 
-This is for apps the app runner installs: every app in `apps/` but those that ship with AUGUR (Folio, for now), which come with AUGUR's own releases ([upgrade.md](upgrade.md)).
+This is for apps the app runner installs: every app in `apps/`, or in its own repository ([below](#an-app-in-its-own-repository)), but those that ship with AUGUR (Folio, for now), which come with AUGUR's own releases ([upgrade.md](upgrade.md)).
 
 ## Once per server (an admin)
 
@@ -54,3 +54,13 @@ Each server reads the app releases every 15 minutes. What happens next is up to 
 An install starts the new version beside the old, checks `/healthz`, then switches over. A version that fails its checks is removed, and the old one keeps running. Every step is in Activity ([upgrade.md](upgrade.md#the-app-runner)).
 
 To go back, install an older version from Admin → Apps, or hold the shell at an earlier manifest ([versioning.md](versioning.md#going-back-to-an-earlier-app-version)).
+
+## An app in its own repository
+
+Apps are moving out of this repository into their own ([ADR 0012](decisions/0012-apps-in-own-repositories.md)). Such an app releases from its own repository the same way, as `app/<id>@<version>` with its `app-release.json`, signed by that repository's own `release.yml` (and `app-dev.yml`, `app-preview.yml` for dev builds and previews).
+
+Servers still read one feed, AUGUR's ([ADR 0047](decisions/0047-app-repositories-in-augurs-feed.md)):
+
+- `release/app-repos.json` names the repository each moved app is published from. The pull request that moves an app out adds its line.
+- The Release feed workflow lists that repository's releases of that app, and only those signed there, beside AUGUR's own. It reads them with the `APP_RELEASES_TOKEN` secret, a fine-grained token that can read the app repositories' contents. The app's release workflow starts the Release feed workflow when it has released, with the same token, which can also run Actions in this repository.
+- The updater trusts that repository to sign that app, and only that app, so a server needs no `APP_PUBLISHERS` line for it. Releases of the app signed anywhere else, this repository included, are refused from then on.

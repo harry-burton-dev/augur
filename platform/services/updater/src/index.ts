@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, platformCredentialsFromEnv, serviceAuthFromEnv } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
-import { appRunner } from './runner.ts';
+import { appReposFrom, appRunner } from './runner.ts';
 import { composeAppHost, composeServer } from './server.ts';
 import { augurDevIdentity, releaseIdentity } from './signers.ts';
 import { runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
@@ -73,11 +73,16 @@ const credentials = platformCredentialsFromEnv('updater');
 if (!credentials) throw new Error('SERVICE_CLIENT_SECRET is not set: the updater signs in to the registry as platform-updater (UPDATER_CLIENT_SECRET in .env).');
 const registry = registryClient({ registryUrl: REGISTRY_URL, credentials });
 const apps = appRunnerClient({ registryUrl: REGISTRY_URL, identityUrl: IDENTITY_URL, credentials, oidc: serviceAuthFromEnv() });
-// The workflow that signs AUGUR's own images is trusted to sign apps too; APP_PUBLISHERS in .env adds others.
+// The workflow that signs AUGUR's own images is trusted to sign apps too, and each app that lives in its
+// own repository (release/app-repos.json, shipped in this image) is trusted from there; APP_PUBLISHERS in
+// .env adds others.
+const appReposFile = '/augur/app-repos.json';
+const appRepos = existsSync(appReposFile) ? appReposFrom(JSON.parse(readFileSync(appReposFile, 'utf8'))) : {};
 const runner = appRunner({
   host: composeAppHost({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer }),
   calls: apps.calls,
   publishers: [IMAGE_SIGNER.replace(/^https:\/\/github\.com\//, '').replace(/@.*$/, '')],
+  appRepos,
 });
 
 const readFile = (path: string) => (existsSync(path) ? readFileSync(path, 'utf8').trim() : '');
