@@ -4,9 +4,9 @@
 
 | Page | Path | What it shows |
 | --- | --- | --- |
-| Front page | `/` | Needs you, what's on offer, and worth knowing: this deployment, the next window, every unit and its state, when the feed was last read (with Check now) |
+| Front page | `/` | Needs you, what's on offer, and worth knowing: this deployment, the next window, every unit and its state, when the feed was last read (with Check now), and how it reports to Backstage |
 | A unit | `/augur`, `/apps/<id>` | How it moves (the policy sentence) with Change settings, what's on offer, and what it can go back to |
-| History | `/history` | Every upgrade, newest first |
+| History | `/history` | Every upgrade, app install or removal, and change of settings (with the sentence before and after), newest first; filters by unit, who started it (a person, By itself, Watch) and outcome; Export as CSV |
 
 "I've looked at this" on a failed or went-back result clears it for every admin.
 
@@ -22,7 +22,9 @@ When the registry asks for the password again (`sign_in_again`: upgrading, going
 | `src/app.tsx` | Pages and moving between them without reloading the shell. |
 | `src/data.ts` | Reads the registry's overview (the same one Backstage reads), AUGUR's updates and the apps' installs: every 2 s while a job runs, every 30 s otherwise. |
 | `src/change.tsx` | The upgrade, go back and install questions, following an upgrade step by step, and an app's job. |
+| `src/history.tsx` | The history page, from AUGUR's upgrade history, `GET /app-runner/jobs` and each unit's `desired-state/history`. A part it can't read is named, and the rest still shows. |
+| `src/reporting.tsx` | Reporting to Backstage (ADR 0019), under Worth knowing: the registry's why, the name in Backstage, the public key with Copy, the last send or its problem, and Export the record. |
 | `src/editor.tsx` | The settings editor: `PUT /platform/units/<unit>/desired-state`, answered with the overview. |
 | `src/units.ts` | A row per unit from the overview, and its state in the spec's words. |
 | `src/api.ts` | The registry calls, through `ctx.fetch`, and the gateway's refusals (`forbidden`, `step_up_required`). |
-| `src/model/` | State words, Needs you, maintenance windows in a time zone, levels and pins, the upgrade's steps and how it ended, the way back from entering the password, and the policy sentence and checks worded as the registry words them. |
+| `src/model/` | State words, Needs you, maintenance windows in a time zone, levels and pins, the upgrade's steps and how it ended, the history list and its CSV, the way back from entering the password, and the policy sentence and checks worded as the registry words them. |

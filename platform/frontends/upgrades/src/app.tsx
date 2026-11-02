@@ -5,6 +5,8 @@ import { upgradesApi } from './api.js';
 import { useUpgrades, type UpgradesData } from './data.js';
 import { AppJobLine, Following, GoBackDialog, InstallDialog, UpgradeDialog } from './change.js';
 import { SettingsEditor, type Draft } from './editor.js';
+import { History } from './history.js';
+import { Reporting } from './reporting.js';
 import { resumeFrom, takeDraft, takeEntered, type Resume } from './model/flow.js';
 import { Facts, Muted, Section, StateMark, Version, When } from './look.js';
 import { needsYou } from './model/needs-you.js';
@@ -126,7 +128,7 @@ export const App = ({ ctx }: { ctx: Pick<MountContext, 'fetch' | 'path' | 'user'
           ) : route.page === 'overview' ? (
             <Overview name={me?.name} data={data} rows={rows} now={now} zone={zone} checkNow={checkNow} took={took} api={api} Link={Link} />
           ) : route.page === 'history' ? (
-            <History data={data} now={now} zone={zone} />
+            <History data={data} api={api} now={now} zone={zone} user={ctx.user} />
           ) : (
             <Unit
               key={route.unit}
@@ -357,6 +359,7 @@ const Overview = (p: {
                   </p>
                 )}
               </div>
+              <Reporting overview={o} api={p.api} zone={p.zone} now={p.now} />
             </div>
           ),
         },
@@ -579,29 +582,3 @@ const OUTCOME: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-const History = (p: { data: UpgradesData; now: Date; zone: string }) => {
-  const entries = p.data.updates?.history ?? [];
-  return (
-    <section className="flex flex-col gap-3" aria-labelledby="history">
-      <Heading id="history" heading="History" size="l" level={1} />
-      {entries.length === 0 ? (
-        <Muted>No upgrades yet on this deployment.</Muted>
-      ) : (
-        <ul className="m-0 p-0 list-none flex flex-col gap-3">
-          {entries.map((h) => (
-            <li key={h.id} id={h.id} className="flex flex-col gap-1 border-t border-hairline pt-3" data-history={h.id}>
-              <span>
-                AUGUR <Version v={h.from} /> to <Version v={h.version} />: {OUTCOME[h.state] ?? h.state}
-              </span>
-              <span className="text-ink-muted text-small">
-                {h.requestedByName ?? h.requestedBy}, <When at={h.requestedAt} zone={p.zone} now={p.now} />
-                {h.backup ? ` · backup ${h.backup}` : ''}
-              </span>
-              {h.message && <span className="text-ink-muted">{h.message}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-};
