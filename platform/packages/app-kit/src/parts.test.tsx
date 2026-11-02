@@ -8,6 +8,9 @@ import { PageHead, Section } from './page.js';
 import { Details, Notice, State } from './states.js';
 import { Refs, Tally, Timeline } from './things.js';
 import { TagPicker, tagChoices } from './tag-picker.js';
+import { Lifecycle } from './lifecycle.js';
+import { Contents, Reader, loadReader, slugFor, type ReaderHandle } from './reader.js';
+import { PeoplePicker, principalRows } from './people-picker.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -164,6 +167,102 @@ describe('picking tags', () => {
     expect(document.querySelector('input')!.placeholder).toContain('most it takes: 2');
     act(() => button('Remove Nora Briggs').click());
     expect(change).toHaveBeenLastCalledWith(['u2']);
+  });
+});
+
+describe('lifecycles and people', () => {
+  const states = [
+    { id: 'draft', name: 'Draft' },
+    { id: 'review', name: 'In review' },
+    { id: 'issued', name: 'Issued' },
+    { id: 'retired', name: 'Retired' },
+  ];
+
+  it('rings where a record is, hides off-line states, and offers its moves or says why not', () => {
+    const move = vi.fn();
+    draw(<Lifecycle label="Version 3" states={states} state="review" offLine={['retired']} moves={['issued']} onMove={move} />);
+    expect([...document.querySelectorAll('.quill-lifecycle li')].map((l) => l.textContent)).toEqual(['Draft', 'In review', 'Issued']);
+    expect(document.querySelector('[aria-current="step"]')!.textContent).toBe('In review');
+    expect(document.querySelector('ol')!.getAttribute('aria-label')).toBe('Version 3: In review');
+    act(() => button('Make it Issued').click());
+    expect(move).toHaveBeenCalledWith('issued');
+    draw(<Lifecycle states={states} state="retired" offLine={['retired']} why="Only its library’s leads can move it." />);
+    expect(text()).toContain('Retired');
+    expect(text()).toContain('Only its library’s leads can move it.');
+    expect(document.querySelector('.quill-lifecycle-moves')).toBeNull();
+  });
+
+  it('says a team’s size, and why one can’t be chosen', () => {
+    const rows = principalRows(
+      [
+        { kind: 'team', id: 't1', name: 'Ops', size: 4 },
+        { kind: 'person', id: 'u1', name: 'Nora Briggs', detail: 'Ops' },
+      ],
+      [{ kind: 'person', id: 'u1', name: 'Nora Briggs' }],
+    );
+    expect(rows[0]).toMatchObject({ id: 'team:t1', detail: '4 people', icon: 'people' });
+    expect(rows[1]).toMatchObject({ disabled: true, reason: 'Already chosen.' });
+  });
+
+  it('looks after typing, and gathers what’s picked as chips', async () => {
+    const search = vi.fn(async () => [
+      { kind: 'person' as const, id: 'u1', name: 'Nora Briggs', detail: 'Ops' },
+      { kind: 'team' as const, id: 't1', name: 'Ops', size: 4 },
+    ]);
+    const change = vi.fn();
+    draw(<PeoplePicker label="Who" multiple kinds="people" search={search} pause={0} onChange={change} />);
+    const input = document.querySelector('input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'No');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 5));
+    });
+    expect(search).toHaveBeenCalledWith('No');
+    const rows = [...document.querySelectorAll<HTMLElement>('.quill-list-row')];
+    expect(rows).toHaveLength(1);
+    await act(async () => rows[0]!.click());
+    expect(change).toHaveBeenLastCalledWith([{ kind: 'person', id: 'u1', name: 'Nora Briggs', detail: 'Ops' }]);
+    expect(document.querySelector('.quill-ref-name')!.textContent).toBe('Nora Briggs');
+    expect(document.querySelector('input')!.value).toBe('');
+  });
+});
+
+describe('reading', () => {
+  it('anchors every block, drops a first heading that repeats the title, and escapes HTML', async () => {
+    await loadReader();
+    const outline = vi.fn();
+    const handle: { current: ReaderHandle | null } = { current: null };
+    draw(<Reader ref={handle} heading="Plan" markdown={'# Plan\n\nIntro <b>bold</b>\n\n## 2. Claims & receipts\n\nMore [up](#plan) and [out](https://example.org)'} onOutline={outline} />);
+    await act(async () => {});
+    const article = document.querySelector('.quill-reader')!;
+    expect(article.querySelector('h1')!.hidden).toBe(true);
+    expect(article.querySelector('b')).toBeNull();
+    expect(article.textContent).toContain('<b>bold</b>');
+    expect(article.querySelector('#claims-receipts')).not.toBeNull();
+    expect(article.querySelector('a[href^="https"]')!.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(outline).toHaveBeenLastCalledWith([{ id: 'claims-receipts', text: '2. Claims & receipts', level: 2 }]);
+    expect(handle.current!.headingFor('b4')).toBe('claims-receipts');
+    expect(handle.current!.goTo('b2', { focus: true })).toBe(true);
+    expect(document.activeElement?.id).toBe('b2');
+    expect(slugFor('Café ünd Ölé')).toBe('cafe-und-ole');
+  });
+
+  it('lists headings from the top level there is and marks the one being read', () => {
+    const pick = vi.fn();
+    draw(<Contents items={[{ id: 'a', text: 'A', level: 2 }, { id: 'b', text: 'B', level: 3 }]} current="b" onSelect={pick} />);
+    expect([...document.querySelectorAll('.quill-contents li')].map((l) => l.getAttribute('data-level'))).toEqual(['1', '2']);
+    expect(document.querySelector('[aria-current="location"]')!.textContent).toBe('B');
+    act(() => (document.querySelector('a') as HTMLElement).click());
+    expect(pick).toHaveBeenCalledWith('a');
+  });
+
+  it('loads pictures only through the host, and names the ones it can’t find', async () => {
+    await loadReader();
+    const source = vi.fn(async (src: string) => (src === 'a.png' ? 'blob:a' : undefined));
+    draw(<Reader markdown={'![Map](a.png)\n\n![Chart](b.png)'} imageSource={source} />);
+    await act(async () => {});
+    expect(document.querySelector('img')!.getAttribute('src')).toBe('blob:a');
+    expect(document.querySelector('.quill-reader-missing')!.textContent).toBe('[Picture: Chart]');
   });
 });
 

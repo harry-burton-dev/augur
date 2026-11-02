@@ -24,3 +24,6 @@ export { DateField, DropZone, Surface, parseDay, dayName, dayDistance, isoDay, a
 export { Editor, Prose, readMentions, writeMentions, plainText, type Mention, type MentionResult, type MentionSource, type EditorProps, type ProseProps } from './editor.js';
 export { Tree, treePath, type TreeNode, type TreeProps } from './tree.js';
 export { TagPicker, tagChoices, type TagOption, type TagPickerProps } from './tag-picker.js';
+export { Lifecycle, type LifecycleState, type LifecycleProps } from './lifecycle.js';
+export { PeoplePicker, principalKey, principalRows, type Principal, type PrincipalSearch, type PeoplePickerProps } from './people-picker.js';
+export { Reader, Contents, slugFor, loadReader, type ReaderProps, type ContentsProps, type ReaderHandle, type ReaderSize, type ReaderWidth, type OutlineItem, type MarkedPassage } from './reader.js';
