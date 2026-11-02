@@ -113,6 +113,31 @@ describe('the Upgrade Centre overview (ADR 0020)', () => {
     expect((await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json().needsYou).toEqual([]);
   });
 
+  it('keeps watching lightly after a quiet watch, and puts a late problem in Needs you without going back', async () => {
+    let at = SUNDAY_2AM;
+    const store = await upgradedByHand();
+    const updates = new UpdateChecker({ feed: async () => [release('0.13.1'), release('0.13.0')], running: { version: '0.13.0', channel: 'stable' }, channel: 'stable', ring: 'production' });
+    await updates.check();
+    const app = await buildApp({ verifyService, store, updates, timeZone: 'Europe/London', now: () => new Date(at), audit: async () => undefined });
+    const target = (await app.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
+    const progress = (payload: Record<string, unknown>) => app.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, ...payload } });
+    await progress({ step: 'watch', state: 'running' });
+    expect((await progress({ step: 'watch', state: 'done', outcome: 'done', calls: 3 })).json().afterWatch).toMatchObject({ state: 'watching', calls: 0 });
+
+    const due = () => app.inject({ method: 'GET', url: '/v1/platform/upgrade/after-watch', headers: updater });
+    expect((await due()).statusCode).toBe(204);
+    at = '2026-11-01T02:36:00Z';
+    expect((await due()).json()).toEqual({ id: target.id, version: '0.13.1', minutes: 6 });
+    const look = (payload: Record<string, unknown>) => app.inject({ method: 'POST', url: '/v1/platform/upgrade/after-watch', headers: updater, payload: { id: target.id, ...payload } });
+    expect((await look({ calls: 25, serverErrors: 5 })).json()).toMatchObject({ state: 'failed', calls: 25 });
+    expect((await look({ calls: 1, serverErrors: 0 })).statusCode).toBe(404);
+
+    const view = (await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json();
+    expect(view.needsYou).toEqual([{ kind: 'after-watch', unit: 'augur', message: expect.stringMatching(/^5 of the first 25 calls/), result: { kind: 'upgrade', id: target.id } }]);
+    await app.inject({ method: 'POST', url: `/v1/platform/results/upgrade/${target.id}/seen`, headers: admin });
+    expect((await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json().needsYou).toEqual([]);
+  });
+
   it('keeps a go-back in Needs you until an admin marks it looked at, for every admin', async () => {
     const { app, store } = await server([release('0.13.1'), release('0.13.0')], MONDAY);
     await store.requestUpgrade({ id: 'up-1', from: '0.13.0', version: '0.13.1', images, requestedBy: 'u-1' });

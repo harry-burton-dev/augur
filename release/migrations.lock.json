@@ -32,7 +32,8 @@
     "014_upgrade_names": "ff96e379d0f8e3bd",
     "015_feature_previews": "5045396635ad85bd",
     "016_desired_state": "e980edefce9d09fb",
-    "017_deployment_key": "e6e0addb0f5d02e1"
+    "017_deployment_key": "e6e0addb0f5d02e1",
+    "018_after_watch": "a3ded298146207db"
   },
   "@apps/atlas": {
     "001_entities": "7e8edd330db1dea4",

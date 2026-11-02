@@ -53,6 +53,7 @@ import { AUGUR_RELEASE } from './augur-version.ts';
 import { LiveOverrides } from './live.ts';
 import { lineView, type PipelineReader } from './pipeline.ts';
 import { automaticDevUpgrade, automaticUpgrade, goBackTargets, historyEntry, UpdateChecker, updatesView } from './updates.ts';
+import { afterLook, lookDue, MIN_CALLS as AFTER_MIN_CALLS, startAfterWatch } from './after-watch.ts';
 import { servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
@@ -968,7 +969,7 @@ export const buildApp = async ({
       });
 
       /** One step of the open upgrade, from the updater; with `outcome`, how it ended. */
-      app.post<{ Body: Omit<UpgradeStepState, 'at'> & { id: string; outcome?: UpgradeOutcome } }>(
+      app.post<{ Body: Omit<UpgradeStepState, 'at'> & { id: string; outcome?: UpgradeOutcome; calls?: number } }>(
         '/platform/upgrade/progress',
         {
           schema: {
@@ -982,16 +983,23 @@ export const buildApp = async ({
                 state: { enum: ['running', 'done', 'failed'] },
                 message: { type: 'string', maxLength: 2000 },
                 outcome: { enum: ['done', 'rolled-back', 'failed'] },
+                // How many of AUGUR's calls the watch judged by: too few starts the light watch after it.
+                calls: { type: 'integer', minimum: 0 },
               },
             },
           },
         },
         async (req, reply) => {
           if (!(await isUpdater(req, reply))) return reply;
-          const { id, outcome, message, ...step } = req.body;
+          const { id, outcome, message, calls, ...step } = req.body;
           const upgrade: Upgrade | undefined = await store.progressUpgrade(id, { ...step, ...(message ? { message } : {}) }, outcome ? { state: outcome, ...(message ? { message } : {}) } : undefined);
           if (!upgrade) return reply.code(404).send({ error: 'not_found', message: 'That isn’t the upgrade under way.' });
           if (outcome && upgradeSettings?.id === id) upgradeSettings = undefined;
+          // A watch too quiet to judge errors by keeps going, lightly, until there are enough calls (ADR 0020, amended 2 Nov).
+          if (outcome === 'done' && step.step === 'watch' && calls !== undefined && calls < AFTER_MIN_CALLS) {
+            const afterWatch = startAfterWatch(now());
+            if (await store.setAfterWatch(id, afterWatch)) upgrade.afterWatch = afterWatch;
+          }
           req.log.info({ upgrade: id, step: step.step, state: step.state, outcome }, 'upgrade progress');
           if (outcome) {
             await record(req, {
@@ -1004,6 +1012,57 @@ export const buildApp = async ({
             });
           }
           return upgrade;
+        },
+      );
+
+      /** The light watch's next look, for the updater: the upgrade it watches and how many minutes to read, or nothing (204). */
+      app.get('/platform/upgrade/after-watch', async (req, reply) => {
+        if (!(await isUpdater(req, reply))) return reply;
+        const latest = await store.upgrade();
+        const due = latest?.state === 'done' && latest.afterWatch ? lookDue(latest.afterWatch, now()) : undefined;
+        if (!latest || !due) return reply.code(204).send();
+        return { id: latest.id, version: latest.version, minutes: due.minutes };
+      });
+
+      /** One look of the light watch, from the updater: AUGUR's calls since the last look and whether sign-in worked. */
+      app.post<{ Body: { id: string; calls: number; serverErrors: number; signInProblem?: string } }>(
+        '/platform/upgrade/after-watch',
+        {
+          schema: {
+            body: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'calls', 'serverErrors'],
+              properties: {
+                id: { type: 'string', maxLength: 64 },
+                calls: { type: 'integer', minimum: 0 },
+                serverErrors: { type: 'integer', minimum: 0 },
+                signInProblem: { type: 'string', maxLength: 500 },
+              },
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!(await isUpdater(req, reply))) return reply;
+          const latest = await store.upgrade();
+          // Only the latest upgrade is watched: one asked for since ends the light watch of the one before.
+          if (!latest || latest.id !== req.body.id || latest.state !== 'done' || latest.afterWatch?.state !== 'watching') {
+            return reply.code(404).send({ error: 'not_found', message: 'That upgrade isn’t being watched.' });
+          }
+          const { id, ...look } = req.body;
+          const afterWatch = afterLook(latest.afterWatch, look, latest.version, now());
+          await store.setAfterWatch(id, afterWatch);
+          if (afterWatch.state !== 'watching') {
+            req.log.info({ upgrade: id, state: afterWatch.state }, 'light watch ended');
+            await record(req, {
+              actor: { id: UPDATER, kind: 'service' },
+              app: 'registry',
+              action: afterWatch.state === 'failed' ? 'platform.after-watch-failed' : 'platform.after-watch-ended',
+              target: latest.version,
+              detail: { state: afterWatch.state, calls: afterWatch.calls, serverErrors: afterWatch.serverErrors, ...(afterWatch.message ? { message: afterWatch.message } : {}) },
+            });
+          }
+          return afterWatch;
         },
       );
 

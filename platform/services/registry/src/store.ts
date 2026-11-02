@@ -2,6 +2,7 @@ import pg from 'pg';
 import type { Scope } from '@augur/service-kit';
 import { steadyPool } from '@augur/service-kit';
 import type { AppEntry } from './manifest.ts';
+import type { AfterWatch } from './after-watch.ts';
 import { AUGUR_UNIT, defaultDesiredState, type StoredDesiredState } from './desired-state.ts';
 
 /** Another app took the route first (two registrations racing). */
@@ -146,6 +147,8 @@ export interface Upgrade {
   /** Who marked it looked at, once it finished (Upgrade Centre, Needs you). */
   seenBy?: string;
   seenAt?: string;
+  /** The light watch after a quiet 10-minute watch (after-watch.ts). */
+  afterWatch?: AfterWatch;
 }
 
 export type UpgradeOutcome = 'done' | 'rolled-back' | 'failed';
@@ -320,6 +323,8 @@ export interface AppStore {
   progressUpgrade(id: string, step: Omit<UpgradeStepState, 'at'>, outcome?: { state: UpgradeOutcome; message?: string }): Promise<Upgrade | undefined>;
   /** Takes back an upgrade nothing has started yet; false when there is none waiting. */
   cancelUpgrade(id: string): Promise<boolean>;
+  /** Keeps the light watch of the finished upgrade `id`; false when there's no such upgrade done. */
+  setAfterWatch(id: string, afterWatch: AfterWatch): Promise<boolean>;
   /** The app runner's latest jobs, newest first: one app's, or every app's. */
   appJobs(app?: string): Promise<AppJob[]>;
   /** The oldest job not yet finished, for the app runner to do next. */
@@ -579,6 +584,13 @@ export class MemoryAppStore implements AppStore {
       if (outcome.message) u.message = outcome.message;
     }
     return structuredClone(u);
+  }
+
+  async setAfterWatch(id: string, afterWatch: AfterWatch) {
+    const u = this.upgradeList.find((x) => x.id === id);
+    if (!u || u.state !== 'done') return false;
+    u.afterWatch = structuredClone(afterWatch);
+    return true;
   }
 
   async cancelUpgrade(id: string) {
@@ -964,6 +976,12 @@ export const migrations: { id: string; sql: string }[] = [
         made_at timestamptz not null default now()
       );`,
   },
+  {
+    id: '018_after_watch',
+    sql: `
+      -- The light watch after a quiet 10-minute watch (ADR 0020, amended 2 Nov): its count so far, and how it ended.
+      alter table registry.upgrades add column after_watch jsonb;`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -1266,6 +1284,11 @@ export class PgAppStore implements AppStore {
     });
   }
 
+  async setAfterWatch(id: string, afterWatch: AfterWatch) {
+    const { rowCount } = await this.pool.query("update registry.upgrades set after_watch = $2 where id = $1 and state = 'done'", [id, JSON.stringify(afterWatch)]);
+    return rowCount === 1;
+  }
+
   async cancelUpgrade(id: string) {
     const { rowCount } = await this.pool.query("update registry.upgrades set state = 'cancelled', finished_at = now() where id = $1 and state = 'requested'", [id]);
     return rowCount === 1;
@@ -1456,6 +1479,7 @@ type UpgradeRow = {
   finished_at: Date | null;
   seen_by?: string | null;
   seen_at?: Date | null;
+  after_watch?: AfterWatch | null;
 };
 
 const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
@@ -1471,6 +1495,7 @@ const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
   ...(r.message ? { message: r.message } : {}),
   ...(r.finished_at ? { finishedAt: r.finished_at.toISOString() } : {}),
   ...(r.seen_by ? { seenBy: r.seen_by, ...(r.seen_at ? { seenAt: r.seen_at.toISOString() } : {}) } : {}),
+  ...(r.after_watch ? { afterWatch: r.after_watch } : {}),
 });
 
 type AppJobRow = {

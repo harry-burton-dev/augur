@@ -46,7 +46,12 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(done).toMatchObject({ id: 'up-1', state: 'done', message: 'Running 0.3.0', images: { web: 'web@sha256:aa' } });
     expect(done?.steps.map((s) => `${s.step} ${s.state}`)).toEqual(['preflight done', 'verify done']);
     expect(done?.finishedAt).toBeDefined();
+    // A finished upgrade keeps its light watch (ADR 0020, amended 2 Nov); an open one has none.
+    const watching = { state: 'watching' as const, since: '2026-11-01T02:20:00.000Z', until: '2026-11-02T02:20:00.000Z', calls: 3, serverErrors: 0, signInMisses: 0 };
+    expect(await store.setAfterWatch('up-1', watching)).toBe(true);
+    expect((await store.upgrade())?.afterWatch).toEqual(watching);
     expect(await ask('up-3')).toBe(true);
+    expect(await store.setAfterWatch('up-3', watching)).toBe(false);
     expect(await store.cancelUpgrade('up-3')).toBe(true);
     expect((await store.upgrade())?.state).toBe('cancelled');
     // The history keeps every one, newest first, with who asked.
@@ -303,7 +308,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

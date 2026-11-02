@@ -859,6 +859,10 @@ paths:
                 state: { type: string, enum: [running, done, failed] }
                 message: { type: string }
                 outcome: { type: string, enum: [done, rolled-back, failed] }
+                calls:
+                  type: integer
+                  minimum: 0
+                  description: How many of AUGUR's calls the watch judged by. Fewer than 20 starts the light watch (ADR 0020, amended).
       responses:
         "200":
           description: The upgrade as it stands
@@ -867,6 +871,49 @@ paths:
               schema: { $ref: "#/components/schemas/Upgrade" }
         "403": { description: Not the updater }
         "404": { description: Not the open upgrade }
+  /platform/upgrade/after-watch:
+    get:
+      summary: The light watch's next look (the deployment's updater only)
+      description: >
+        After a watch too quiet to judge errors by, the updater looks every 5 minutes until AUGUR's
+        services have had 20 calls, for at most a day (ADR 0020, amended). 204 when no look is due.
+      responses:
+        "200":
+          description: The upgrade being watched, and how many minutes of the gateway's counts to read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, version, minutes]
+                properties:
+                  id: { type: string }
+                  version: { type: string }
+                  minutes: { type: integer, minimum: 1, maximum: 15 }
+        "204": { description: No look is due }
+        "403": { description: Not the updater }
+    post:
+      summary: Report one look of the light watch (the deployment's updater only)
+      description: >
+        Adds AUGUR's calls since the last look. The watch ends held, failed (more than 5% of 20 calls, or
+        sign-in failing twice in a row; it doesn't go back by itself and shows in Needs you) or quiet
+        after a day, audited as platform.after-watch-failed or platform.after-watch-ended.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, calls, serverErrors]
+              properties:
+                id: { type: string }
+                calls: { type: integer, minimum: 0 }
+                serverErrors: { type: integer, minimum: 0 }
+                signInProblem: { type: string }
+      responses:
+        "200": { description: The light watch as it stands }
+        "403": { description: Not the updater }
+        "404": { description: That upgrade isn't being watched }
   /app-runner/jobs:
     get:
       summary: The app runner's recent jobs, newest first (admins only)
@@ -1555,7 +1602,7 @@ components:
             type: object
             required: [kind, unit, message]
             properties:
-              kind: { type: string, enum: [halted, failed, went-back, first-upgrade] }
+              kind: { type: string, enum: [halted, failed, went-back, first-upgrade, after-watch] }
               unit: { type: string }
               message: { type: string }
               result: { type: object, required: [kind, id], properties: { kind: { type: string, enum: [upgrade, app-job] }, id: { type: string } }, description: The result to mark looked at }
