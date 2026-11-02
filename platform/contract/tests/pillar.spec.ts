@@ -27,7 +27,7 @@ test.describe('with Folio on', () => {
     await page.goto('/@me/home');
     const card = page.locator('[data-app="home"] [data-card="folio"]');
     await expect(card).toContainText('New to you');
-    await expect(card.locator('ui-button', { hasText: 'Published to you' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Published to you' })).toBeVisible();
   });
 
   test('Folio opens at its address', async ({ page }) => {
@@ -85,9 +85,9 @@ test.describe('with Folio on', () => {
     since('1.3');
     await page.goto('/reference');
     await press(page, 'pick-document');
-    const picker = page.locator('ui-dialog [data-app="folio"] folio-picker');
+    const picker = page.locator('ui-dialog [data-app="folio"] [data-folio-picker]');
     await expect(picker).toBeVisible();
-    await picker.locator('ui-button', { hasText: 'Cancel' }).click();
+    await picker.getByRole('button', { name: 'Cancel' }).click();
     await expect(check(page, 'picked')).toHaveText('cancelled');
   });
 });
