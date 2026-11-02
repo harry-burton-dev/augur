@@ -17,6 +17,9 @@
   "prConcurrentLimit": 6,
   "minimumReleaseAge": "3 days",
   "internalChecksFilter": "strict",
+  "gitIgnoredAuthors": [
+    "41898282+github-actions[bot]@users.noreply.github.com"
+  ],
   "rangeStrategy": "auto",
   "lockFileMaintenance": {
     "enabled": true,

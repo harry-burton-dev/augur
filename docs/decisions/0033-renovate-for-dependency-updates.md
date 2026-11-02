@@ -28,7 +28,7 @@ Option 1, configured like this:
 ## Consequences
 
 - Dependency PRs land on a predictable rhythm, about three a week, instead of whenever someone remembers.
-- `pnpm changeset status` fails on a Renovate PR until it has a changeset. Adding one is part of merging it. A workflow step that adds one automatically belongs with the CI/CD work.
+- `pnpm changeset status` fails on a Renovate PR until it has a changeset. The Renovate changeset workflow adds one (a patch for each package the PR changes), pushing with a deploy key so CI runs on that commit; see docs/versioning.md.
 - Harry installs the Renovate GitHub app on the repository once. Until he does, `renovate.json` does nothing.
 - Apps in their own repositories (ADR 0012) copy this file.
 
