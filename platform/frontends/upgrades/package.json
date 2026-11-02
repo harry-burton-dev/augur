@@ -13,7 +13,6 @@
     "@augur/app-kit": "workspace:*",
     "@augur/kit-common": "workspace:*",
     "@augur/mfe-sdk": "workspace:*",
-    "@augur/ui-kit": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "semver": "^7.8.5"

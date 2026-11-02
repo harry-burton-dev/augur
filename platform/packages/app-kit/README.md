@@ -20,4 +20,18 @@ Quill re-exports all of Common, so an app imports everything from `@augur/app-ki
 - `About` is always in the same order: what it is, owner, floor, state, links and history. An empty row stays and says so.
 - `More` goes under a long list ("Showing 50 of 312 records"). `SelectionBar` holds what to do with several picked things.
 
+The parts apps used from the Lit kit, on React with the same words, looks and limits (PER-243). Events become callbacks (`ui-open` is `onOpen`, `ui-action` is `onAction`), and behaviour comes from React Aria where it has it:
+
+| Lit kit | Quill |
+| --- | --- |
+| `ui-state`, `ui-status`, `ui-facts`, `ui-rows` | `State`, `Status`, `Facts`, `Rows` |
+| `ui-notice`, `ui-note`, `ui-tag`, `ui-details` | `Notice`, `Note`, `Tag`, `Details` |
+| `ui-page-head`, `ui-section` | `PageHead`, `Section` |
+| `ui-list`, `ui-table` | `List` (a React Aria grid list), `Table` (a React Aria table) |
+| `ui-card`, `ui-cards`, `ui-tally`, `ui-timeline`, `ui-path`, `ui-ref`, `ui-refs` | `Card`, `Cards`, `Tally`, `Timeline`, `Path`, `Ref`, `Refs` |
+| `ui-date`, `ui-drop-zone`, `ui-surface` | `DateField`, `DropZone`, `Surface` |
+| `ui-editor`, `ui-prose`, `ui-tree` | `Editor`, `Prose` (with `readMentions`, `writeMentions`, `plainText`), `Tree` (a React Aria tree) |
+
+Common already had the controls (`Button`, `TextField`, `Select`, `Toggle`, `CheckboxGroup`, `Dialog`, `Menu`, `Heading`).
+
 The shell loads `@augur/app-kit/kit.css` once, after Common's.

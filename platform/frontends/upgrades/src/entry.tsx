@@ -1,5 +1,4 @@
 import { defineMicroFrontend, type MountContext } from '@augur/mfe-sdk';
-import '@augur/ui-kit';
 import { createRoot, type Root } from 'react-dom/client';
 import { App } from './app.js';
 import styles from './styles.css?inline';
