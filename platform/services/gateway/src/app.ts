@@ -20,7 +20,7 @@ import {
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
-import { Traffic, TRAFFIC_PATH } from './traffic.ts';
+import { Traffic, TRAFFIC_PATH, type TrafficPart } from './traffic.ts';
 import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
 import { Readable } from 'node:stream';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
@@ -61,6 +61,12 @@ export const defaultUpstreams = (env = process.env): Upstreams => {
 };
 
 /** The only routes anyone may reach without signing in. Everything else, including anything unmatched, needs a token. */
+/** An app's call is one under /api/<name> where the name isn't one of AUGUR's services; anything else is AUGUR's. */
+const trafficPart = (url: string): TrafficPart => {
+  const name = /^\/api\/([^/?#]+)/.exec(url)?.[1];
+  return name && !PLATFORM_SERVICES.includes(decodeURIComponent(name)) ? 'apps' : 'platform';
+};
+
 const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH]);
 
 declare module 'fastify' {
@@ -122,7 +128,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   // Only the deployment's own network reaches it: nginx forwards only /api/.
   app.addHook('onResponse', async (req, reply) => {
     if (req.routeOptions.url && PUBLIC_ROUTES.has(req.routeOptions.url)) return;
-    traffic.record(reply.statusCode);
+    traffic.record(reply.statusCode, trafficPart(req.url));
   });
   app.get<{ Querystring: { minutes?: number } }>(TRAFFIC_PATH, { schema: { querystring: { type: 'object', properties: { minutes: { type: 'integer', minimum: 1, maximum: 15 } } } } }, async (req) => traffic.snapshot(req.query.minutes));
   // The public key services check signed callers with. It is public, so anyone may fetch it.
