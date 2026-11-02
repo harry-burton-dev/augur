@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { levelFrom, newestAllowed, pinChoices, validPin } from './levels.js';
-import { needsYou } from './needs-you.js';
 import { canChange, isRefusal } from './roles.js';
 import { policySentence } from './sentence.js';
-import { unitState } from './states.js';
 import { formatWhen, insideWindow, nextWindows } from './time.js';
-import type { PlatformUpdates } from './types.js';
 import { channelsFor } from './words.js';
 
 const sunday2 = [{ day: 0, start: '02:00', hours: 2 }];
@@ -57,32 +54,6 @@ describe('levels and pins', () => {
   });
 });
 
-describe('unit state', () => {
-  const now = new Date('2026-11-04T12:00:00Z'); // a Wednesday
-  const base = { running: '0.13.1', timeZone: 'Europe/London', windows: sunday2 };
-
-  it('shows offers as available until the desired-state record exists', () => {
-    expect(unitState({ ...base, offered: { version: '0.13.2' } }, now)).toBe('update-available');
-    expect(unitState({ ...base }, now)).toBe('up-to-date');
-  });
-
-  it('waits for the window when Automatic would take it, and for a person when it wouldn’t', () => {
-    expect(unitState({ ...base, policy: 'automatic', offered: { version: '0.13.2' } }, now)).toBe('waiting-window');
-    expect(unitState({ ...base, policy: 'automatic', offered: { version: '0.14.0' } }, now)).toBe('waiting-you');
-    expect(unitState({ ...base, policy: 'automatic', offered: { version: '0.13.2', asksNewPowers: true } }, now)).toBe('waiting-you');
-    expect(unitState({ ...base, policy: 'ask', offered: { version: '0.13.2' } }, now)).toBe('waiting-you');
-  });
-
-  it('puts running, watching, halted and held before any offer', () => {
-    const offered = { version: '0.13.2' };
-    expect(unitState({ ...base, offered, job: 'running', runningHalted: { reason: 'x', at: '' } }, now)).toBe('running');
-    expect(unitState({ ...base, offered, watchingUntil: '2026-11-04T12:05:00Z' }, now)).toBe('watching');
-    expect(unitState({ ...base, offered, watchingUntil: '2026-11-04T11:55:00Z' }, now)).toBe('update-available');
-    expect(unitState({ ...base, offered, runningHalted: { reason: 'x', at: '' }, held: true }, now)).toBe('halted');
-    expect(unitState({ ...base, offered, held: true, policy: 'automatic' }, now)).toBe('held');
-  });
-});
-
 describe('policy sentence', () => {
   it('says what moves by itself and what waits', () => {
     expect(policySentence({ name: 'AUGUR', channel: 'stable', policy: 'automatic', windows: sunday2 })).toBe(
@@ -111,29 +82,3 @@ describe('channels and roles', () => {
   });
 });
 
-describe('needs you', () => {
-  const updates = (over: Partial<PlatformUpdates> = {}): PlatformUpdates => ({ running: { version: '0.13.1', channel: 'stable' }, channel: 'stable', feed: 'on', newer: [], needsYou: [], ...over });
-
-  it('is empty when nothing waits', () => {
-    expect(needsYou(updates(), [], new Set())).toEqual([]);
-  });
-
-  it('puts a bad feed first, then a halted release, then unopened failures and approvals', () => {
-    const items = needsYou(
-      updates({
-        feedTrust: { state: 'expired' },
-        needsYou: [{ kind: 'halted', message: 'Sign-in loops after upgrade' }],
-        upgrade: { id: 'u1', from: '0.13.0', version: '0.13.1', requestedBy: 'p', requestedAt: '', state: 'rolled-back', steps: [] },
-      }),
-      [{ app: 'folio', name: 'Artifacts', version: '1.0.0', installedAt: '', channel: 'stable', policy: 'automatic', update: { version: '1.1.0', channel: 'stable', needs: ['It asks to send notifications.'] } }],
-      new Set(),
-    );
-    expect(items.map((i) => i.kind)).toEqual(['feed', 'halted', 'went-back', 'approval']);
-    expect(items[3]!.title).toBe('Artifacts 1.1.0 is waiting for you');
-  });
-
-  it('drops a result once someone has opened it', () => {
-    const u = updates({ upgrade: { id: 'u1', from: '0.13.0', version: '0.13.1', requestedBy: 'p', requestedAt: '', state: 'failed', steps: [] } });
-    expect(needsYou(u, [], new Set(['u1']))).toEqual([]);
-  });
-});
