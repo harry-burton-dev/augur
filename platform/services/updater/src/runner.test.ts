@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { appSecretFor } from '@augur/service-kit';
-import { APP_WATCH_EVERY_MS, appRunner, appsProject, containerEnv, publishersFrom, READY_MS, RETIRE_MS, type AppHost, type AppJob, type JobReport, type PlatformCalls, type RunnerState } from './runner.ts';
+import { APP_WATCH_EVERY_MS, appReposFrom, appRunner, appsProject, containerEnv, publishersFrom, READY_MS, RETIRE_MS, type AppHost, type AppJob, type JobReport, type PlatformCalls, type RunnerState } from './runner.ts';
 import { releaseIdentity } from './signers.ts';
 
 const KEY = 'k'.repeat(64);
@@ -92,11 +92,11 @@ const fakeCalls = () => {
   return { calls, did, refuse: () => (refuseRegister = true) };
 };
 
-const setup = (env = ENV, network?: string) => {
+const setup = (env = ENV, network?: string, appRepos?: Record<string, string>) => {
   const h = fakeHost(env, network);
   const c = fakeCalls();
   let now = new Date('2026-10-27T12:00:00Z');
-  const runner = appRunner({ host: h.host, calls: c.calls, publishers: [PUBLISHER], now: () => now });
+  const runner = appRunner({ host: h.host, calls: c.calls, publishers: [PUBLISHER], appRepos, now: () => now });
   const reports: JobReport[] = [];
   const run = (job: AppJob) => runner.run(job, async (r) => void reports.push(r));
   h.versions.set(image('a'), '1.0.0');
@@ -210,6 +210,25 @@ describe('the app runner', () => {
     expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
     expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-blue:8080');
     expect(t.state().apps.notes.active?.version).toBe('1.0.0');
+  });
+
+  it('trusts an app in its own repository from there, and only for that app', async () => {
+    const own = { signer: { repository: 'o/notes', workflow: '.github/workflows/release.yml' } };
+    const t = setup(ENV, undefined, { notes: 'o/notes' });
+    expect(await t.run(install('1.0.0', 'a', own))).toBe('done');
+    // The platform's own release workflow no longer publishes it, nor does any other repository.
+    const moved = setup(ENV, undefined, { notes: 'o/notes' });
+    expect(await moved.run(install('1.0.0'))).toBe('failed');
+    expect(moved.reports.at(-1)?.message).toBe('notes is published from o/notes, so a release signed in o/r isn’t taken.');
+    // Another app's repository can't publish this one.
+    const other = setup(ENV, undefined, { other: 'o/notes' });
+    expect(await other.run(install('1.0.0', 'a', own))).toBe('failed');
+  });
+
+  it('reads which repository publishes each app, leaving out anything else', () => {
+    expect(appReposFrom({ apps: { notes: 'o/notes', Bad: 'o/x', ok: 'no-slash', 'team-notes': 'o/team.notes' } })).toEqual({ notes: 'o/notes', 'team-notes': 'o/team.notes' });
+    expect(appReposFrom(null)).toEqual({});
+    expect(appReposFrom({ apps: [] })).toEqual({});
   });
 
   it('runs only what a trusted publisher signed', async () => {

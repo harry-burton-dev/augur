@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { APP_RELEASES_KEPT, asListed, AUGUR_RELEASES_KEPT, buildFeed, chooseReleases, DEV_BUILDS_KEPT, FEED_VALID_DAYS, haltedOf } from './publish-feed.mjs';
+import { APP_RELEASES_KEPT, appRepos, asListed, AUGUR_RELEASES_KEPT, buildFeed, chooseReleases, DEV_BUILDS_KEPT, FEED_VALID_DAYS, haltedOf, ownReleases } from './publish-feed.mjs';
 
 const release = (tag, more = {}) => ({ tag_name: tag, draft: false, prerelease: false, html_url: `https://github.com/o/r/releases/tag/${tag}`, assets: [{ name: tag.startsWith('augur@') ? 'augur-release.json' : 'app-release.json', url: `asset:${tag}` }], ...more });
 
@@ -59,4 +59,25 @@ test('the feed says when it expires, and lists a halted release with why', async
   assert.deepEqual(feed.releases[0].halted, { reason: 'Sign-in fails after the upgrade', at: '2026-11-01T20:00:00Z', by: 'harry' });
   assert.equal(feed.apps[0].halted, undefined);
   assert.equal(haltedOf({ reason: '  ' }), undefined);
+});
+
+test('an app in its own repository is listed only from there, and only as signed there', async () => {
+  const signed = (repository) => ({ schema: 'augur.app-release/v1', id: 'notes', version: '1.3.0', channel: 'stable', signer: { repository, workflow: '.github/workflows/release.yml' } });
+  const files = { 'asset:app/notes@1.3.0': signed('o/notes'), 'asset:app/other@1.0.0': { id: 'other', version: '1.0.0', signer: { repository: 'o/notes' } } };
+  // Its repository's other apps' releases are left out before the feed is built.
+  const theirs = ownReleases([release('app/notes@1.3.0'), release('app/other@1.0.0')], 'notes', 'o/notes');
+  assert.deepEqual(theirs.map((r) => `${r.tag_name} ${r.repository}`), ['app/notes@1.3.0 o/notes']);
+  const own = { notes: 'o/notes' };
+  const feed = await buildFeed(theirs, async (url) => files[url], new Date(), own);
+  assert.deepEqual(feed.apps.map((a) => `${a.id} ${a.version}`), ['notes 1.3.0']);
+  // A release file that names another signer isn't listed, nor one that didn't come from its repository.
+  const forged = await buildFeed(theirs, async () => signed('o/r'), new Date(), own);
+  assert.deepEqual(forged.apps, []);
+  const here = await buildFeed([release('app/notes@1.3.0')], async (url) => files[url], new Date(), own);
+  assert.deepEqual(here.apps, []);
+});
+
+test('the app repositories file maps app ids to owner/repo and nothing else', () => {
+  assert.deepEqual(appRepos({ apps: { notes: 'o/notes', Bad: 'o/x', odd: 'nope' } }), { notes: 'o/notes' });
+  assert.deepEqual(appRepos(undefined), {});
 });

@@ -12,9 +12,12 @@
 // with `halted`, and no deployment is offered it.
 // The Release workflow runs it after every release, and again whenever a release is edited, so a
 // release promoted to stable on GitHub (pre-release unticked) is stable in the feed too.
-// Needs GITHUB_TOKEN (or GH_TOKEN) that can read the repository's releases.
+// Apps that live in their own repositories (release/app-repos.json, ADR 0047) are listed too: each
+// repository's releases of its own app, and nothing else from it.
+// Needs GITHUB_TOKEN (or GH_TOKEN) that can read the repository's releases, and APP_RELEASES_TOKEN that
+// can read the app repositories' releases once release/app-repos.json lists any.
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 import semver from 'semver';
 import { asMirrored } from './mirror-release.mjs';
@@ -88,7 +91,7 @@ export const haltedOf = (record) =>
   record && typeof record.reason === 'string' && record.reason.trim() ? { reason: record.reason.trim(), at: typeof record.at === 'string' ? record.at : undefined, ...(record.by ? { by: record.by } : {}) } : undefined;
 
 /** Builds the feed from the repository's releases, reading each chosen release's file with `download`. */
-export const buildFeed = async (releases, download, now = new Date()) => {
+export const buildFeed = async (releases, download, now = new Date(), own = {}) => {
   const { augur, apps } = chooseReleases(releases);
   const fileOf = async (release, name) => {
     const asset = release.assets?.find((a) => a.name === name);
@@ -105,12 +108,28 @@ export const buildFeed = async (releases, download, now = new Date()) => {
     issued: now.toISOString(),
     expires: new Date(now.getTime() + FEED_VALID_DAYS * 86_400_000).toISOString(),
     releases: await Promise.all(augurFiles.filter((x) => x.file?.version === x.version).map((x) => withHalt(asMirrored(x.file, x.release), x.release))),
-    apps: await Promise.all(appFiles.filter((x) => x.file?.id === x.app && x.file?.version === x.version).map((x) => withHalt(asListed(x.file, x.release), x.release))),
+    apps: await Promise.all(
+      appFiles
+        .filter((x) => x.file?.id === x.app && x.file?.version === x.version)
+        // An app in its own repository is listed only as signed there (ADR 0047).
+        .filter((x) => !own[x.app] || (x.release.repository === own[x.app] && x.file.signer?.repository === own[x.app]))
+        .map((x) => withHalt(asListed(x.file, x.release), x.release)),
+    ),
   };
 };
 
-const github = async (path, accept = 'application/vnd.github+json') => {
-  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+/**
+ * The releases an app's own repository may put in the feed: its app's `app/<id>@…` releases, marked with
+ * where they came from; buildFeed keeps only those signed in that repository, so none speaks for another app.
+ */
+export const ownReleases = (releases, app, repository) =>
+  releases.filter((r) => APP_TAG.exec(r.tag_name ?? '')?.[1] === app).map((r) => ({ ...r, repository }));
+
+/** release/app-repos.json's apps, as app id → owner/repo. */
+export const appRepos = (json) =>
+  Object.fromEntries(Object.entries(json?.apps ?? {}).filter(([id, repo]) => /^[a-z][a-z0-9-]{1,39}$/.test(id) && /^[\w.-]+\/[\w.-]+$/.test(String(repo))));
+
+const github = async (path, accept = 'application/vnd.github+json', token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN) => {
   const res = await fetch(path.startsWith('https:') ? path : `https://api.github.com/repos/${REPO}${path}`, {
     headers: { accept, 'user-agent': 'augur-feed', ...(token ? { authorization: `Bearer ${token}` } : {}) },
   });
@@ -120,13 +139,23 @@ const github = async (path, accept = 'application/vnd.github+json') => {
 
 const main = async (args) => {
   const out = args.includes('--out') ? args[args.indexOf('--out') + 1] : 'feed.json';
-  const releases = [];
-  for (let page = 1; page <= 5; page++) {
-    const batch = await github(`/releases?per_page=100&page=${page}`);
-    releases.push(...batch);
-    if (batch.length < 100) break;
-  }
-  const feed = await buildFeed(releases, (url) => github(url, 'application/octet-stream'));
+  const releasesOf = async (repo, token) => {
+    const all = [];
+    for (let page = 1; page <= 5; page++) {
+      const batch = await github(`https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}`, undefined, token);
+      all.push(...batch);
+      if (batch.length < 100) break;
+    }
+    return all;
+  };
+  const releases = await releasesOf(REPO);
+  const own = appRepos(JSON.parse(readFileSync(new URL('../release/app-repos.json', import.meta.url), 'utf8')));
+  const appToken = process.env.APP_RELEASES_TOKEN;
+  if (Object.keys(own).length && !appToken) throw new Error('release/app-repos.json lists apps in their own repositories, but APP_RELEASES_TOKEN isn’t set to read their releases (docs/ship-an-app.md, "An app in its own repository").');
+  // An app that moved out is listed from its own repository only; its older releases here are left out.
+  const here = releases.filter((r) => !(APP_TAG.exec(r.tag_name ?? '')?.[1] in own));
+  for (const [app, repo] of Object.entries(own)) here.push(...ownReleases(await releasesOf(repo, appToken), app, repo));
+  const feed = await buildFeed(here, (url) => github(url, 'application/octet-stream', url.includes(`/repos/${REPO}/`) ? undefined : appToken), new Date(), own);
   writeFileSync(out, `${JSON.stringify(feed, null, 2)}\n`);
   const halted = [...feed.releases, ...feed.apps].filter((r) => r.halted).length;
   console.log(`${out}: ${feed.releases.length} AUGUR releases, ${feed.apps.length} app releases${halted ? `, ${halted} halted` : ''}; expires ${feed.expires}.`);

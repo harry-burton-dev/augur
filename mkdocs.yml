@@ -76,3 +76,4 @@ nav:
       - "0044. One notifications contract: floor or global, sent by services, kept by events, shown by the shell": decisions/0044-notifications-contract.md
       - 0045. Promote to stable asks the portal for bake time over Tailscale: decisions/0045-promote-asks-portal-over-tailscale.md
       - 0046. The UI kit lives in its own repository, and the shell serves the version it pins: decisions/0046-ui-kit-in-its-own-repository.md
+      - 0047. Apps in their own repositories release there, and AUGUR's feed lists them: decisions/0047-app-repositories-in-augurs-feed.md

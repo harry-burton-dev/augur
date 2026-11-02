@@ -1,6 +1,6 @@
 # 0046. The UI kit lives in its own repository, and the shell serves the version it pins
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-02
 - **Decided by:** Harry
 - **Replaces:** none. Changes [0012](0012-apps-in-own-repositories.md), which kept the kit in the platform repository.
