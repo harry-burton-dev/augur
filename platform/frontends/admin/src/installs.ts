@@ -15,6 +15,7 @@ export const STEP_WORDS: Record<AppJobStepState['step'], string> = {
   start: 'Start the new version beside the old',
   health: 'Wait for it to answer',
   switch: 'Switch people over to it',
+  watch: 'Watch it for 5 minutes',
   retire: 'Stop the old version a little later',
   remove: 'Stop and remove its containers',
 };

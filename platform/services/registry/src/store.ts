@@ -171,7 +171,7 @@ export interface AppRelease {
 }
 
 /** The steps the app runner takes, in order: `remove` only for a removal. */
-export const APP_JOB_STEPS = ['verify', 'storage', 'sign-in', 'start', 'health', 'switch', 'retire', 'remove'] as const;
+export const APP_JOB_STEPS = ['verify', 'storage', 'sign-in', 'start', 'health', 'switch', 'watch', 'retire', 'remove'] as const;
 export type AppJobStep = (typeof APP_JOB_STEPS)[number];
 
 export interface AppJobStepState {

@@ -38,7 +38,7 @@ export interface AppJob {
   state: 'requested' | 'running';
 }
 
-export type JobStep = 'verify' | 'storage' | 'sign-in' | 'start' | 'health' | 'switch' | 'retire' | 'remove';
+export type JobStep = 'verify' | 'storage' | 'sign-in' | 'start' | 'health' | 'switch' | 'watch' | 'retire' | 'remove';
 export interface JobReport {
   step: JobStep;
   state: 'running' | 'done' | 'failed';
@@ -59,6 +59,8 @@ export interface RunningApp {
   storage: { database: boolean; bucket: boolean };
   /** The old version, stopped once this time has passed. */
   until?: string;
+  /** The manifest it was registered with, so the runner can go back to it. Absent for versions installed by an older runner. */
+  manifest?: AppRelease['manifest'];
 }
 /** A pull request's preview, as the runner keeps it. */
 export interface RunningPreview {
@@ -130,6 +132,14 @@ export const READY_MS = 180_000;
 /** How long the old version keeps running after the switch, for shells still holding the old manifest. */
 export const RETIRE_MS = 10 * 60_000;
 const POLL_MS = 3_000;
+/**
+ * How long a new version of an installed app is watched after the switch, and how often (ADR 0020):
+ * the old version is still running for RETIRE_MS, so going back is only a switch away. Two misses in
+ * a row and it goes back.
+ */
+export const APP_WATCH_MS = 5 * 60_000;
+export const APP_WATCH_EVERY_MS = 30_000;
+const APP_WATCH_MISSES = 2;
 
 export const serviceName = (app: string, slot: Slot) => `app-${app}-${slot}`;
 export const upstreamOf = (app: string, slot: Slot) => `http://${serviceName(app, slot)}:${APP_PORT}`;
@@ -318,6 +328,18 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
     }
   };
 
+  /** Why `url` stopped answering on `version` within APP_WATCH_MS (two misses in a row), or nothing when it kept answering. */
+  const stillAnswering = async (url: string, version: string) => {
+    let misses = 0;
+    for (let watched = APP_WATCH_EVERY_MS; watched <= APP_WATCH_MS; watched += APP_WATCH_EVERY_MS) {
+      await host.wait(APP_WATCH_EVERY_MS);
+      const seen = await host.health(url).catch(() => undefined);
+      misses = seen?.version === version ? 0 : misses + 1;
+      if (misses >= APP_WATCH_MISSES) return seen ? `answered on ${seen.version ?? 'an unknown version'} after the switch.` : 'stopped answering after the switch.';
+    }
+    return undefined;
+  };
+
   const install = async (job: AppJob, report: JobReporter) => {
     const app = job.app;
     const { release, env } = await verified(job, report);
@@ -343,7 +365,7 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
       delete current.retiring;
     }
     const slot: Slot = current.active?.slot === 'blue' ? 'green' : 'blue';
-    const candidate: RunningApp = { slot, version: release.version, image: release.service.image, storage };
+    const candidate: RunningApp = { slot, version: release.version, image: release.service.image, storage, manifest: release.manifest };
     const withCandidate: RunnerState = { apps: { ...state.apps, [app]: { ...current, retiring: candidate } } };
     // Written as retiring with no end, so a runner that restarts now still knows the container is there.
     await save(withCandidate, env);
@@ -382,6 +404,31 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
       throw new StepFailed(`The registry didn’t take ${release.version}: ${reason(err)}`);
     }
     await report({ step: 'switch', state: 'done' });
+
+    // An upgrade is watched while the old version still runs; a first install has nothing to go back to.
+    if (current.active) {
+      const old = current.active;
+      // Kept with an end past the watch, so a runner that restarts meanwhile stops it in time, as after any switch.
+      await save({ apps: { ...state.apps, [app]: { active: candidate, retiring: { ...old, until: new Date(now().getTime() + APP_WATCH_MS + RETIRE_MS).toISOString() } } } }, env);
+      await report({ step: 'watch', state: 'running', message: `Watching ${release.manifest.name} ${release.version} for ${APP_WATCH_MS / 60_000} minutes; ${old.version} is still running to go back to.` });
+      const problem = await stillAnswering(`${upstreamOf(app, slot)}/healthz`, release.version);
+      if (problem) {
+        const why = `${release.manifest.name} ${release.version} ${problem}`;
+        if (!old.manifest) {
+          throw new StepFailed(`${why} It didn’t go back by itself: ${old.version} was installed before the runner kept what it needs to go back. Install ${old.version} again from Admin → Apps.`);
+        }
+        try {
+          await calls.register(old.manifest, secrets.signIn);
+          await calls.setUpstream(app, upstreamOf(app, old.slot));
+        } catch (err) {
+          throw new StepFailed(`${why} Going back to ${old.version} didn’t work: ${reason(err)}`);
+        }
+        await host.stop([name]).catch(() => undefined);
+        await save({ apps: { ...state.apps, [app]: { active: old } } }, env);
+        throw new StepFailed(`${why} Back on ${old.version} by itself.`);
+      }
+      await report({ step: 'watch', state: 'done' });
+    }
 
     const until = new Date(now().getTime() + RETIRE_MS).toISOString();
     const next: RunnerState = { apps: { ...state.apps, [app]: { active: candidate, ...(current.active ? { retiring: { ...current.active, until } } : {}) } } };

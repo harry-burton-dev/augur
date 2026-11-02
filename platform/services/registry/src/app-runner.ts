@@ -10,6 +10,7 @@ import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsI
 import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
 import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore, type RunningPreview } from './store.ts';
 import { upstreamProblem } from './upstreams.ts';
+import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 
 /** What an app release file must say before the runner is asked to install it. Mirrors AppRelease in contracts/registry.openapi.yaml. */
 export const APP_RELEASE_SCHEMA = 'augur.app-release/v1';
@@ -304,8 +305,12 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        const caller = admin(req, reply);
+        // The same record as the desired state (ADR 0020), so the same gate (ADR 0022): a deployment admin who signed in just now.
+        const caller = deploymentAdmin(req, reply, 'change how an app takes new releases');
         if (!caller) return reply;
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+          return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how an app takes new releases. It’s asked for anything this drastic.' });
+        }
         if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
         const before = (await store.developers(req.params.id)).map((d) => d.person);
         const after = (await store.setDevelopers(req.params.id, req.body.people, caller.id)).map((d) => d.person);
@@ -397,8 +402,12 @@ export const appRunnerRoutes =
       '/app-runner/apps/:id/follow',
       { schema: { body: { type: 'object', additionalProperties: false, required: ['channel', 'policy'], properties: { channel: { enum: ['stable', 'beta', 'dev'] }, policy: { enum: ['automatic', 'ask', 'hold'] } } } } },
       async (req, reply) => {
-        const caller = admin(req, reply);
+        // The same record as the desired state (ADR 0020), so the same gate (ADR 0022): a deployment admin who signed in just now.
+        const caller = deploymentAdmin(req, reply, 'change how an app takes new releases');
         if (!caller) return reply;
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+          return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how an app takes new releases. It’s asked for anything this drastic.' });
+        }
         if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
         if (req.body.channel !== 'stable' && !takesPreview(ring)) return reply.code(409).send({ error: 'production_server', message: PRODUCTION_ONLY });
         await store.setFollow({ app: req.params.id, ...req.body, setBy: caller.id });
@@ -412,6 +421,14 @@ export const appRunnerRoutes =
       const caller = callerFromHeaders(req.headers);
       if (caller?.roles.includes('admin')) return caller;
       void reply.code(403).send({ error: 'forbidden', message: 'Only an admin can install or remove apps.' });
+      return undefined;
+    };
+
+    /** Changing what runs (a version, or how new ones are taken) is the deployment admin's (ADR 0022). */
+    const deploymentAdmin = (req: FastifyRequest, reply: FastifyReply, doing: string) => {
+      const caller = callerFromHeaders(req.headers);
+      if (caller?.roles.includes(DEPLOYMENT_ADMIN)) return caller;
+      void reply.code(403).send(needsDeploymentAdmin(doing));
       return undefined;
     };
 
@@ -454,7 +471,7 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        const caller = admin(req, reply);
+        const caller = deploymentAdmin(req, reply, req.body.action === 'remove' ? 'remove an app from the server' : 'install an app or change its version');
         if (!caller) return reply;
         if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install or remove an app. It’s asked for anything this drastic.' });

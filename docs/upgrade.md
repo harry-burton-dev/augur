@@ -91,7 +91,11 @@ An app's service calls (notifications, audit, models, people lookups) that name 
 
 ### Only a deployment admin can upgrade
 
-Upgrading AUGUR, going back to an earlier release, taking back a waiting upgrade, and changing how a unit takes updates (policy, pin, windows) now need the `deployment-admin` role, not just `admin` (ADR 0022). The first admin (`PLATFORM_ADMIN_USER`) has held it since the deployment-admin release, because identity gives it to them when nobody else has it. Anyone else who upgrades needs it in Admin, People. Someone without it sees the Upgrade Centre's buttons refused with the role named. Installing and removing apps still needs `admin`.
+Upgrading AUGUR, going back to an earlier release, taking back a waiting upgrade, and changing how a unit takes updates (policy, pin, windows) now need the `deployment-admin` role, not just `admin` (ADR 0022). The first admin (`PLATFORM_ADMIN_USER`) has held it since the deployment-admin release, because identity gives it to them when nobody else has it. Anyone else who upgrades needs it in Admin, People. Someone without it sees the Upgrade Centre's buttons refused with the role named.
+
+### Apps follow the same rule
+
+Installing, upgrading or removing an app, and changing how it takes new releases (Admin, Apps: "New releases" and "When one is out"), now need `deployment-admin` too, as AUGUR's own upgrades do (ADR 0022). Changing how any unit takes updates, AUGUR included, now asks for your password again if you last entered it more than 10 minutes ago, as an upgrade does. A plain `admin` still sees everything and can mark results looked at.
 
 ### Keycloak's admin leaves identity
 
@@ -231,7 +235,8 @@ An install (a first install, an upgrade or going back to an older version alike)
 4. **start**: the new version starts in the slot (blue or green) the app isn't using, beside the old one, on the platform's network. It can't add powers, gets no host folders and isn't privileged.
 5. **health**: it must answer `/healthz` on its new version within 3 minutes. If it doesn't, it's removed and the old version carries on as if nothing happened.
 6. **switch**: the runner registers the new version and points the gateway at it, in that order.
-7. **retire**: the old version keeps running 10 more minutes for shells still holding the old manifest, then stops.
+7. **watch**: when an older version was serving, the new one must keep answering `/healthz` on its version for 5 minutes, checked every half minute. If it misses twice in a row, the runner registers the old version again, points the gateway back at it and stops the new one, and Admin → Apps says why. A version installed before the runner kept its manifest can't be gone back to by itself: the result says so, and you install it again by hand. A first install has nothing to go back to, so it isn't watched.
+8. **retire**: the old version keeps running 10 more minutes for shells still holding the old manifest, then stops.
 
 Admin → Apps lists, under the catalogue, the apps this repository has released that aren't installed, with **Install**; it says what each one asks for, and asks for your password again before anything is installed or removed. The registry reads the releases every 15 minutes, or at once with **Check for releases**: the same GitHub releases Updates reads, with the same token (`APP_FEED_URL` points it elsewhere, and `off` turns it off; it's off by itself when `RELEASE_FEED_URL` is a mirror).
 
