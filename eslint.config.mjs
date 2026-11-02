@@ -7,7 +7,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/storybook-static/**', '**/.turbo/**', 'platform/contract/frozen/**', '**/*.d.ts', '**/coverage/**', 'site/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/storybook-static/**', '**/.turbo/**', 'platform/contract/frozen/**', '**/*.d.ts', '**/coverage/**', 'site/**', 'design-lab/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
