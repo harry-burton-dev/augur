@@ -217,6 +217,14 @@ describe('Upgrade Centre', () => {
     expect([...el.querySelectorAll('[data-history]')].map((e) => e.getAttribute('data-kind'))).toEqual(['app-job']);
   });
 
+  it('says when AUGUR was built from source, so an offered release isn’t a surprise', async () => {
+    const { el } = await mount(['admin'], (path) => (path.endsWith('/platform/updates') ? [200, updates({ running: { version: '0.13.1', channel: 'stable', build: 'source' } })] : registry(path)));
+    expect(el.textContent).toContain('Built from source, based on');
+    const rail = [...el.querySelectorAll('nav button')].find((b) => b.textContent === 'AUGUR') as HTMLButtonElement;
+    await act(async () => rail.click());
+    expect(el.textContent).toContain('This server runs AUGUR built from source');
+  });
+
   it('keeps what it last read when the registry stops answering, and says so', async () => {
     let fail = false;
     const { el } = await mount(['deployment-admin'], (path) => (fail ? [502, { message: 'The registry isn’t answering.' }] : registry(path)));

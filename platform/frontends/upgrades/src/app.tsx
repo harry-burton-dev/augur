@@ -282,7 +282,16 @@ const Overview = (p: {
               <Facts
                 rows={[
                   ['Server', RING_WORDS[o.ring]],
-                  ['AUGUR', <Version key="v" v={u.running.version} />],
+                  [
+                    'AUGUR',
+                    u.running.build === 'source' ? (
+                      <span key="v">
+                        Built from source, based on <Version v={u.running.version} />
+                      </span>
+                    ) : (
+                      <Version key="v" v={u.running.version} />
+                    ),
+                  ],
                   ['Following', `${CHANNEL_WORDS[u.channel]} releases`],
                   ['Next', <span key="n">{next}</span>],
                   ['Updater', u.updaterSeenAt ? <span key="s">Last asked for work <When at={u.updaterSeenAt} zone={p.zone} now={p.now} /></span> : 'Not set up yet, so upgrades from here wait. See docs/upgrade.md.'],
@@ -436,6 +445,12 @@ const Unit = (p: {
         <p className="m-0 flex gap-3 items-center">
           <Version v={p.row.running} /> <StateMark state={p.row.state} />
         </p>
+        {isAugur && u.running.build === 'source' && (
+          <Muted>
+            This server runs AUGUR built from source, so it carries the number of the last release it’s based on. Releases newer than that are offered below; upgrading replaces the build
+            with released images.
+          </Muted>
+        )}
       </header>
 
       {upgrade && (

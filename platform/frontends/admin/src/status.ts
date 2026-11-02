@@ -149,7 +149,7 @@ export class AdminStatus extends LitElement {
     const v = this.updates?.available?.version;
     if (!v) return nothing;
     return html`<div data-update style="padding:var(--space-4) var(--space-4) 0">
-      <ui-status status="needs" label=${`AUGUR ${v} is out. You’re on ${this.updates!.running.version}: see Admin, Upgrade Centre.`}></ui-status>
+      <ui-status status="needs" label=${`AUGUR ${v} is out. You’re on ${this.updates!.running.version}${this.updates!.running.build === 'source' ? ' (built from source)' : ''}: see Admin, Upgrade Centre.`}></ui-status>
     </div>`;
   }
 

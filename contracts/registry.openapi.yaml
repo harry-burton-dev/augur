@@ -1399,7 +1399,7 @@ components:
       type: object
       required: [running, channel, feed, newer, needsYou]
       properties:
-        running: { type: object, required: [version, channel], properties: { version: { type: string }, channel: { $ref: "#/components/schemas/ReleaseChannel" } } }
+        running: { type: object, required: [version, channel], properties: { version: { type: string }, channel: { $ref: "#/components/schemas/ReleaseChannel" }, build: { type: string, enum: [source], description: "Set when the server was built from a checkout (compose.build.yml): version is then the last release it's based on" } } }
         channel: { $ref: "#/components/schemas/ReleaseChannel" }
         ring: { $ref: "#/components/schemas/ServerRing" }
         channelNote: { type: string, description: Why the channel isn't the one RELEASE_CHANNEL asks for (a production server follows stable only) }
