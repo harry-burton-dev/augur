@@ -18,7 +18,7 @@ const setUp = async (grants = async (app: string) => (app === 'folio' ? (['peopl
   const payroll = await workspaces.createTeam('Payroll', finance.id);
   const legal = await workspaces.createTeam('Legal');
   const alex = await directory.createPerson({ username: 'alex', firstName: 'Alex', lastName: 'Rivera', email: 'alex@example.org', roles: [], departments: [] });
-  const sam = await directory.createPerson({ username: 'sam', firstName: 'Sam', lastName: 'Okafor', email: 'sam@example.org', roles: [], departments: [] });
+  const sam = await directory.createPerson({ username: 'sam', firstName: 'Sam', lastName: 'Okafor', email: 'sam@example.org', roles: ['deployment-admin'], departments: [] });
   const gone = await directory.createPerson({ username: 'gone', firstName: 'Ola', lastName: 'Gone', email: 'ola@example.org', roles: [], departments: [] });
   await directory.updatePerson(gone.id, { enabled: false });
   const app = await buildApp({ workspaces, directory, verifyService, grants });
@@ -74,6 +74,16 @@ describe('people for apps', () => {
     expect((await members('org')).json().people).toEqual([alex.id, sam.id].sort());
     expect((await members(`person:${sam.id},person:nobody`)).json().people).toEqual([sam.id]);
     expect((await members('org', 'Bearer other')).statusCode).toBe(403);
+  });
+
+  it('reaches people by role for the platform only', async () => {
+    const { app, sam } = await setUp();
+    const members = (principals: string, authorization: string) =>
+      app.inject({ method: 'GET', url: `/v1/members?principals=${encodeURIComponent(principals)}`, headers: { authorization } });
+    expect((await members('role:deployment-admin', 'Bearer registry')).json().people).toEqual([sam.id]);
+    expect((await members('role:nobody-holds-this', 'Bearer registry')).json().people).toEqual([]);
+    // An app tells people it knows, not every admin.
+    expect((await members('role:deployment-admin', 'Bearer folio')).statusCode).toBe(403);
   });
 
   it('refuses an app while its grants can’t be checked', async () => {

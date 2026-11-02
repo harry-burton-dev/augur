@@ -6,6 +6,7 @@ import {
   health,
   identifyService,
   packageVersion,
+  PeopleUnavailable,
   ServiceAuthUnavailable,
   serviceLogging,
   serviceName,
@@ -14,6 +15,7 @@ import {
   type FloorLookup,
   type GrantLookup,
   type MemberLookup,
+  type AudienceLookup,
   type NewAuditEntry,
   type NewNotification,
   type Scope,
@@ -38,6 +40,8 @@ export interface EventsOptions {
   floors?: FloorLookup;
   /** Who is on a team now, from identity, for team notices. */
   members?: MemberLookup;
+  /** Who an audience reaches now, from identity, for platform services' notifications (ADR 0044). */
+  audience?: AudienceLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
@@ -52,6 +56,8 @@ const notificationSchema = {
     app: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' },
     recipients: { type: 'array', maxItems: 500, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 100 } },
     toTeam: { type: 'boolean' },
+    audience: { type: 'array', minItems: 1, maxItems: 20, uniqueItems: true, items: { type: 'string', pattern: '^(org|(person|team|tree|role):[A-Za-z0-9_.:-]{1,100})$' } },
+    key: { type: 'string', minLength: 1, maxLength: 200 },
     level: { enum: ['needs', 'info', 'done', 'failed'] },
     title: { type: 'string', minLength: 1, maxLength: 200 },
     detail: { type: 'string', maxLength: 2000 },
@@ -159,14 +165,14 @@ const workspaceOf = (req: FastifyRequest) => {
 };
 
 /** What the Shell receives: a person never sees whom else a notification went to. */
-const forCaller = ({ recipient: _, ...n }: Notification) => n;
+const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
 
 /**
  * Notifications for the Shell's stream, and the platform's audit log. Services
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
@@ -246,10 +252,23 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         if (!service) return reply;
         const floor = await floorOf(req, reply);
         if (floor === undefined) return reply;
-        const { toTeam, ...notification } = req.body;
+        const { toTeam, audience: principals, ...notification } = req.body;
         const big = notification.actions?.find((a) => a.intent.payload !== undefined && Buffer.byteLength(JSON.stringify(a.intent.payload)) > ACTION_PAYLOAD_BYTES);
         if (big) return reply.code(400).send({ error: 'bad_request', message: `The payload of “${big.label}” is over ${ACTION_PAYLOAD_BYTES} bytes. Send an id and let the app look the rest up.` });
-        if (!toTeam && !notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Name the recipients, or send to the team.' });
+        if (!toTeam && !principals && !notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Name the recipients, or send to the team.' });
+        if (principals) {
+          // Reaching people by role or across the org is the platform's: an app names the people it means.
+          if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services send to an audience. Name the recipients.' });
+          if (toTeam || notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Send to an audience, the team or recipients: one of them.' });
+          try {
+            // Like a team, an audience is asked as it's sent: someone who has since lost the role isn't told.
+            if (!audience) throw new FloorsUnavailable('The events service has no way to reach identity.');
+            notification.recipients = await audience(principals);
+          } catch (err) {
+            if (!(err instanceof FloorsUnavailable) && !(err instanceof PeopleUnavailable)) throw err;
+            return reply.code(503).send({ error: 'unavailable', message: 'Who that audience reaches can’t be checked right now.' });
+          }
+        }
         if (toTeam) {
           if (notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Send to the team or to recipients, not both.' });
           if (floor?.kind !== 'team') return reply.code(400).send({ error: 'bad_request', message: 'Team notices go to the team the call’s floor names.' });
@@ -264,7 +283,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
           }
         }
         const added = notification.recipients.length ? await store.addNotifications(notification, floor ? { id: floor.id, path: floor.path } : undefined) : [];
-        req.log.info({ service: serviceName(service), app: req.body.app, count: added.length, workspace: floor?.id, team: !!toTeam }, 'notifications sent');
+        req.log.info({ service: serviceName(service), app: req.body.app, count: added.length, workspace: floor?.id, team: !!toTeam, audience: principals, key: notification.key }, 'notifications sent');
         return reply.code(202).send({ sent: added.length });
       });
 

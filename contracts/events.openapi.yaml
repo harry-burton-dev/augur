@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.6.0
+  version: 1.7.0
   description: >
     Notifications for the Shell's stream, and the platform's audit log.
     People reach it through the gateway, which passes the caller in x-user-*
@@ -41,11 +41,15 @@ paths:
         With toTeam and no recipients, to everyone on the team the call's floor
         names (its members and those of the teams below), asked of identity as
         it's sent. Only a team that has turned team notices on (403 otherwise).
+        With audience (platform services only, ADR 0044), to everyone the
+        principals reach now, asked of identity, such as role:deployment-admin.
+        With key, nobody who already has a notification from that app with that
+        key is told again, read or not.
       responses:
         "202": { description: "Sent, one notification per recipient: { sent: number }" }
         "400": { description: Invalid notification, an unknown floor, or toTeam not on a team }
         "403": { description: Not a signed-in service, not granted this, or team notices are off }
-        "503": { description: Floors or grants can't be checked right now }
+        "503": { description: Floors, grants or an audience can't be checked right now }
   /team-notices/{workspace}:
     parameters:
       - { name: workspace, in: path, required: true, schema: { type: string } }
@@ -204,8 +208,14 @@ components:
       required: [app, recipients, level, title]
       properties:
         app: { type: string, description: The app it is about; the Shell opens it }
-        recipients: { type: array, maxItems: 500, items: { type: string }, description: User ids; empty only with toTeam }
+        recipients: { type: array, maxItems: 500, items: { type: string }, description: User ids; empty only with toTeam or audience }
         toTeam: { type: boolean, description: To everyone on the team the call's floor names, instead of recipients }
+        audience:
+          type: array
+          maxItems: 20
+          items: { type: string, pattern: "^(org|(person|team|tree|role):[A-Za-z0-9_.:-]{1,100})$" }
+          description: Platform services only. Principals such as role:deployment-admin, worked out by identity as it's sent, instead of recipients
+        key: { type: string, maxLength: 200, description: "The sender's name for this news; each person is told an app's key once" }
         level: { enum: [needs, info, done, failed], description: '"needs" when the person has to act' }
         title: { type: string, maxLength: 200 }
         detail: { type: string, maxLength: 2000 }

@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
 
@@ -34,7 +34,9 @@ const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credent
 // Where floors sit, and who is on a team, come from identity, asked as events.
 const floors = credentials ? floorPlaces({ identityUrl: IDENTITY_URL, credentials }) : undefined;
 const members = credentials ? floorMembers({ identityUrl: IDENTITY_URL, credentials }) : undefined;
-const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members });
+// Who an audience such as role:deployment-admin reaches, for the platform's own notifications (ADR 0044).
+const audience = credentials ? identityAudience({ identityUrl: IDENTITY_URL, credentials }) : undefined;
+const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience });
 await app.listen({ port, host: '0.0.0.0' });
 
 // Domain events are for followers to catch up on, not a record: they're kept DOMAIN_EVENTS_KEEP_DAYS (30) days.

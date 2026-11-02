@@ -19,6 +19,18 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect(await store.unread('u-1', 50)).toMatchObject([{ recipient: 'u-1', link: '/doc/7' }]);
   });
 
+  it('adds a keyed notification once per person and app, read or not', async () => {
+    const news = { ...review, key: 'available:augur:0.15.0' };
+    expect(await store.addNotifications({ ...news, recipients: ['u-1'] })).toHaveLength(1);
+    const [first] = await store.unread('u-1', 50);
+    expect(first.key).toBe('available:augur:0.15.0');
+    await store.setRead('u-1', first.id, true);
+    expect((await store.addNotifications(news)).map((n) => n.recipient)).toEqual(['u-2']);
+    // Another app may use the same key; no key means no limit.
+    expect(await store.addNotifications({ ...news, app: 'other' })).toHaveLength(2);
+    expect(await store.addNotifications(review)).toHaveLength(2);
+  });
+
   it('keeps the floor and its path, and finds audit entries under a floor', async () => {
     const [n] = await store.addNotifications({ ...review, recipients: ['u-1'] }, { id: 'p', path: ['o', 'f', 'p'] });
     expect(n.workspace).toEqual({ id: 'p', path: ['o', 'f', 'p'] });

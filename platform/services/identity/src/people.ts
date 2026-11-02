@@ -25,7 +25,8 @@ export interface PeopleOptions {
  * The principals a person stands for, which apps match against who they let
  * see something: `person:<id>`; `team:<id>` for each team they're on;
  * `tree:<id>` for each of those teams and every team above it (shared with
- * someone on a team below); and `org`, which everyone is in.
+ * someone on a team below); and `org`, which everyone is in. Platform services
+ * may also name `role:<realm role>` (ADR 0044), such as the deployment's admins.
  */
 export const principalsOf = (person: string, teams: readonly Workspace[], memberOf: readonly string[]): string[] => {
   const live = new Map(teams.map((t) => [t.id, t]));
@@ -38,9 +39,14 @@ export const principalsOf = (person: string, teams: readonly Workspace[], member
  * Everyone who stands for at least one of `principals`, among `people`: so an
  * app can tell an audience ("Finance and the teams below it") something.
  */
-export const membersOf = (principals: readonly string[], people: readonly string[], teams: readonly Workspace[], memberships: readonly { workspace: string; person: string }[]): string[] => {
+export const membersOf = (
+  principals: readonly string[],
+  people: readonly Pick<Person, 'id' | 'roles'>[],
+  teams: readonly Workspace[],
+  memberships: readonly { workspace: string; person: string }[],
+): string[] => {
   const wanted = new Set(principals);
-  if (wanted.has('org')) return [...people].sort();
+  if (wanted.has('org')) return people.map((p) => p.id).sort();
   const live = new Map(teams.map((t) => [t.id, t]));
   const found = new Set<string>();
   for (const m of memberships) {
@@ -48,7 +54,8 @@ export const membersOf = (principals: readonly string[], people: readonly string
     if (team && (wanted.has(`team:${team.id}`) || team.path.some((id) => wanted.has(`tree:${id}`)))) found.add(m.person);
   }
   for (const p of principals) if (p.startsWith('person:')) found.add(p.slice('person:'.length));
-  const known = new Set(people);
+  for (const p of people) if (p.roles.some((r) => wanted.has(`role:${r}`))) found.add(p.id);
+  const known = new Set(people.map((p) => p.id));
   return [...found].filter((id) => known.has(id)).sort();
 };
 
@@ -73,13 +80,14 @@ export const peopleRoutes =
       return people.list;
     };
 
-    const allowed = async (req: FastifyRequest, reply: FastifyReply) => {
+    /** Which kind of service is asking, when it may; false once the reply has been sent. */
+    const allowed = async (req: FastifyRequest, reply: FastifyReply): Promise<'platform' | 'app' | false> => {
       try {
         const service = await identifyService(req.headers, verifyService);
-        if (service?.kind === 'platform') return true;
+        if (service?.kind === 'platform') return 'platform';
         if (service?.kind === 'app') {
           if (!grants) throw new GrantsUnavailable('Identity has no registry to check grants with.');
-          if ((await grants(service.app)).includes(PEOPLE_SCOPE)) return true;
+          if ((await grants(service.app)).includes(PEOPLE_SCOPE)) return 'app';
           void reply.code(403).send({ error: 'forbidden', message: `${service.app} isn’t granted ${PEOPLE_SCOPE}.` });
           return false;
         }
@@ -145,11 +153,16 @@ export const peopleRoutes =
         },
       },
       async (req, reply) => {
-        if (!(await allowed(req, reply))) return reply;
-        await teams?.ready();
+        const asker = await allowed(req, reply);
+        if (!asker) return reply;
         const principals = req.query.principals.split(',').map((s) => s.trim()).filter(Boolean);
+        // Who holds a role is the platform's business: an app tells people, not "every admin".
+        if (asker !== 'platform' && principals.some((p) => p.startsWith('role:'))) {
+          return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can reach people by role.' });
+        }
+        await teams?.ready();
         const [all, folks, members] = await Promise.all([workspaces.teams(), everyone(), workspaces.memberships()]);
-        return { people: membersOf(principals, folks.map((p) => p.id), all, members) };
+        return { people: membersOf(principals, folks, all, members) };
       },
     );
   };

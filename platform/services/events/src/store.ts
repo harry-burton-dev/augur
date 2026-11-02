@@ -19,6 +19,8 @@ export interface Notification {
   link?: string;
   /** Up to two buttons, each raising an intent in the person's browser. */
   actions?: NotificationAction[];
+  /** The sender's name for this news: a person has at most one per app and key. */
+  key?: string;
   createdAt: string;
   readAt?: string;
   /** The floor it's from; none for one about the platform as a whole. */
@@ -90,7 +92,10 @@ export const topicMatches = (topic: string, wanted: string[]) =>
   wanted.some((w) => (w.endsWith('.*') ? topic.startsWith(w.slice(0, -1)) : topic === w));
 
 export interface EventStore {
-  /** Adds one notification per recipient and tells every listener, on every instance. */
+  /**
+   * Adds one notification per recipient and tells every listener, on every instance.
+   * With a key, skips anyone who already has one from that app with that key.
+   */
   addNotifications(n: NewNotification, floor?: EventFloor): Promise<Notification[]>;
   /** A person's unread notifications, newest first. */
   unread(recipient: string, limit: number): Promise<Notification[]>;
@@ -120,6 +125,7 @@ const fromInput = (n: NewNotification, recipient: string, id: string, createdAt:
   ...(n.detail ? { detail: n.detail } : {}),
   ...(n.link ? { link: n.link } : {}),
   ...(n.actions?.length ? { actions: n.actions } : {}),
+  ...(n.key ? { key: n.key } : {}),
   createdAt,
   ...(floor ? { workspace: floor } : {}),
 });
@@ -136,7 +142,8 @@ export class MemoryEventStore implements EventStore {
 
   async addNotifications(n: NewNotification, floor?: EventFloor) {
     const now = new Date().toISOString();
-    const added = n.recipients.map((r) => fromInput(n, r, String(++this.seq), now, floor));
+    const told = (r: string) => n.key !== undefined && this.notifications.some((x) => x.recipient === r && x.app === n.app && x.key === n.key);
+    const added = n.recipients.filter((r) => !told(r)).map((r) => fromInput(n, r, String(++this.seq), now, floor));
     this.notifications.push(...added);
     for (const a of added) this.emitter.emit('notification', a);
     return added;
@@ -290,6 +297,13 @@ export const migrations: { id: string; sql: string }[] = [
       -- The service that wrote each entry, from its signed token, beside the actor it named.
       alter table events.audit add column recorded_by text;`,
   },
+  {
+    id: '006_notification_keys',
+    sql: `
+      -- The sender's name for a piece of news (ADR 0044): a person is told it once per app.
+      alter table events.notifications add column key text;
+      create unique index notifications_once on events.notifications (recipient, app, key) where key is not null;`,
+  },
 ];
 
 const CHANNEL = 'events_notification';
@@ -304,6 +318,7 @@ type NotificationRow = {
   detail: string | null;
   link: string | null;
   actions: NotificationAction[] | null;
+  key: string | null;
   created_at: Date;
   read_at: Date | null;
   workspace_id: string | null;
@@ -321,6 +336,7 @@ const fromRow = (r: NotificationRow): Notification => ({
   ...(r.detail ? { detail: r.detail } : {}),
   ...(r.link ? { link: r.link } : {}),
   ...(r.actions?.length ? { actions: r.actions } : {}),
+  ...(r.key ? { key: r.key } : {}),
   createdAt: r.created_at.toISOString(),
   ...(r.read_at ? { readAt: r.read_at.toISOString() } : {}),
   ...floorFrom(r.workspace_id, r.workspace_path),
@@ -435,10 +451,11 @@ export class PgEventStore implements EventStore {
     try {
       await client.query('begin');
       const { rows } = await client.query<NotificationRow>(
-        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions)
-         select r, $2, $3, $4, $5, $6, $7, $8, $9 from unnest($1::text[]) as r
+        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key)
+         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10 from unnest($1::text[]) as r
+         on conflict (recipient, app, key) where key is not null do nothing
          returning *`,
-        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null],
+        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null],
       );
       const added = rows.map(fromRow);
       // Delivered when the transaction commits. Postgres caps a payload at 8000 bytes; a bigger one goes by id.

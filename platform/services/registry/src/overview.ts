@@ -182,6 +182,24 @@ export const overviewOf = (input: OverviewInput): Overview => {
   };
 };
 
+/** The overview as the registry knows it now: for the route, and for the notices it sends (ADR 0044). */
+export const gatherOverview = async ({ store, updates, appUpdates, timeZone, now = () => new Date() }: Omit<OverviewRouteOptions, 'record'>): Promise<Overview> => {
+  const [records, upgrades, installed, jobs, states] = await Promise.all([store.records(), store.upgrades(), store.installedApps(), store.appJobs(), store.desiredStates()]);
+  return overviewOf({
+    ring: updates.ring,
+    timeZone,
+    now: now(),
+    augur: updatesView({ checker: updates, apps: records }),
+    augurHalt: updates.result.releases.find((r) => r.version === updates.running.version)?.halted,
+    upgrades,
+    installed,
+    jobs,
+    appReleases: appUpdates.result.releases,
+    names: Object.fromEntries(records.map((r) => [r.entry.id, r.entry.name])),
+    states,
+  });
+};
+
 export interface OverviewRouteOptions {
   store: AppStore;
   updates: UpdateChecker;
@@ -221,22 +239,7 @@ export const overviewRoutes =
       return caller?.roles.includes('admin') ? caller : undefined;
     };
 
-    const overview = async () => {
-      const [records, upgrades, installed, jobs, states] = await Promise.all([store.records(), store.upgrades(), store.installedApps(), store.appJobs(), store.desiredStates()]);
-      return overviewOf({
-        ring,
-        timeZone,
-        now: now(),
-        augur: updatesView({ checker: updates, apps: records }),
-        augurHalt: updates.result.releases.find((r) => r.version === updates.running.version)?.halted,
-        upgrades,
-        installed,
-        jobs,
-        appReleases: appUpdates.result.releases,
-        names: Object.fromEntries(records.map((r) => [r.entry.id, r.entry.name])),
-        states,
-      });
-    };
+    const overview = () => gatherOverview({ store, updates, appUpdates, timeZone, now });
 
     /** Every unit at once: what it runs, what it follows, what's next and what needs an admin. */
     app.get('/platform/overview', async (req, reply) => {

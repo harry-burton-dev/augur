@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.12.0
+  version: 1.13.0
   description: >
     Who people are. Reached through the gateway, which verifies the caller's
     sign-in token and passes the caller on in x-user-* headers.
@@ -224,7 +224,9 @@ paths:
         The ids of everyone who stands for at least one of the principals
         (person:, team:, tree: or org), so an app can tell an audience that
         something was published to it. People whose sign-in is turned off
-        aren't listed. Since 1.9.
+        aren't listed. Since 1.9. Platform services may also name
+        role:<realm role>, such as role:deployment-admin (1.13, ADR 0044); an
+        app that does is refused with 403.
       parameters:
         - { name: principals, in: query, required: true, description: Comma-separated principals, schema: { type: string, minLength: 1, maxLength: 4000 } }
       responses:

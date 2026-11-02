@@ -54,6 +54,38 @@ describe('events', () => {
     expect((await post(platform, { ...review, link: 'https://elsewhere.example' })).statusCode).toBe(400);
   });
 
+  it('lets a platform service tell an audience, such as everyone holding a role, worked out as it sends', async () => {
+    let holders = ['u-1'];
+    const app = await buildApp({ verifyService, audience: async (principals) => (principals.includes('role:deployment-admin') ? holders : []) });
+    const upgraded = { app: 'upgrades', recipients: [], audience: ['role:deployment-admin'], level: 'done', title: 'AUGUR 0.15.0 is installed', link: '/augur' };
+    expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: upgraded })).json()).toEqual({ sent: 1 });
+    holders = ['u-1', 'u-2'];
+    expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...upgraded, title: 'Folio 1.4.0 is installed' } })).json()).toEqual({ sent: 2 });
+    // One of recipients, team or audience; and an app names the people it means.
+    expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...upgraded, recipients: ['u-2'] } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...upgraded, audience: ['admins'] } })).statusCode).toBe(400);
+    const asApp = { authorization: 'Bearer app-upgrades' };
+    const app2 = await buildApp({ verifyService, grants: async () => ['notifications:send'], audience: async () => ['u-1'] });
+    expect((await app2.inject({ method: 'POST', url: '/v1/notifications', headers: asApp, payload: upgraded })).statusCode).toBe(403);
+    // Identity out of reach: nobody is told, and the sender hears why.
+    const app3 = await buildApp({ verifyService });
+    expect((await app3.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: upgraded })).statusCode).toBe(503);
+    await Promise.all([app2.close(), app3.close()]);
+  });
+
+  it('tells each person a keyed piece of news once, even after they read it', async () => {
+    const app = await buildApp({ verifyService });
+    const available = { ...review, app: 'upgrades', level: 'info', title: 'AUGUR 0.15.0 is ready', key: 'available:augur:0.15.0' };
+    const send = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
+    expect((await send({ ...available, recipients: ['u-1'] })).json()).toEqual({ sent: 1 });
+    const [mine] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: alex })).json();
+    expect(mine.key).toBeUndefined();
+    await app.inject({ method: 'POST', url: `/v1/notifications/${mine.id}/read`, headers: alex });
+    // Alex already had it; Sam is told for the first time.
+    expect((await send(available)).json()).toEqual({ sent: 1 });
+    expect((await send({ ...available, key: 'available:augur:0.15.1' })).json()).toEqual({ sent: 2 });
+  });
+
   it('carries up to two actions, each an intent with a small payload', async () => {
     const app = await buildApp({ verifyService });
     const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });

@@ -5,8 +5,20 @@ export type NotificationLevel = 'needs' | 'info' | 'done' | 'failed';
 export interface NewNotification {
   /** The app it is about; the Shell opens this app when the person opens the notification. */
   app: string;
-  /** User ids of the people to tell. Empty with `toTeam`. */
+  /** User ids of the people to tell. Empty with `toTeam` or `audience`. */
   recipients: string[];
+  /**
+   * Platform services only (ADR 0044): who to tell as principals, worked out
+   * by identity as it's sent, such as `role:deployment-admin`. Instead of
+   * `recipients`.
+   */
+  audience?: string[];
+  /**
+   * The sender's own name for this news, such as "available:augur:0.15.0".
+   * A person is told it once: a second notification with the same app and
+   * key is not added for anyone who already has one, read or not.
+   */
+  key?: string;
   /**
    * Tells everyone on the team the call's floor names, instead of
    * `recipients`. Only on a team that has turned team notices on; who is on
@@ -71,7 +83,7 @@ export async function notify({ eventsUrl, credentials, workspace, fetchImpl, not
     url: `${eventsUrl.replace(/\/$/, '')}/v1/notifications`,
     credentials,
     body: pr === undefined ? notification : { ...notification, title: `Preview #${pr}: ${notification.title}`.slice(0, 200) },
-    what: notification.toTeam ? 'notify the team' : `notify ${notification.recipients.length} people`,
+    what: notification.toTeam ? 'notify the team' : notification.audience?.length ? `notify ${notification.audience.join(', ')}` : `notify ${notification.recipients.length} people`,
     workspace,
     attempts: 3,
     fetchImpl,
