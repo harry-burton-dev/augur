@@ -91,7 +91,11 @@ An app's service calls (notifications, audit, models, people lookups) that name 
 
 ### Only a deployment admin can upgrade
 
-Upgrading AUGUR, going back to an earlier release, taking back a waiting upgrade, and changing how a unit takes updates (policy, pin, windows) now need the `deployment-admin` role, not just `admin` (ADR 0022). The first admin (`PLATFORM_ADMIN_USER`) has held it since the deployment-admin release, because identity gives it to them when nobody else has it. Anyone else who upgrades needs it in Admin, People. Someone without it sees the Upgrade Centre's buttons refused with the role named. Installing and removing apps still needs `admin`.
+Upgrading AUGUR, going back to an earlier release, taking back a waiting upgrade, and changing how a unit takes updates (policy, pin, windows) now need the `deployment-admin` role, not just `admin` (ADR 0022). The first admin (`PLATFORM_ADMIN_USER`) has held it since the deployment-admin release, because identity gives it to them when nobody else has it. Anyone else who upgrades needs it in Admin, People. Someone without it sees the Upgrade Centre's buttons refused with the role named.
+
+### Apps follow the same rule
+
+Installing, upgrading or removing an app, and changing how it takes new releases (Admin, Apps: "New releases" and "When one is out"), now need `deployment-admin` too, as AUGUR's own upgrades do (ADR 0022). Changing how any unit takes updates, AUGUR included, now asks for your password again if you last entered it more than 10 minutes ago, as an upgrade does. A plain `admin` still sees everything and can mark results looked at.
 
 ### Keycloak's admin leaves identity
 
