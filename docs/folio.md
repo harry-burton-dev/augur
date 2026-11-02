@@ -32,6 +32,21 @@ Esc never takes you out of Artifacts. To get back to the menu of every app, pres
 
 What Artifacts shows is always the floor you're on. The floor gauge at the right edge lights that floor and pins Artifacts beside it; point at it to see every floor you can go to, who sees what's on each, and which one Artifacts is showing. Going to another floor keeps you in Artifacts, at the start of that floor's collections.
 
+### The new layout and the classic one
+
+Artifacts opens in its **new layout**, built on Quill with depth and focus (PDR-010). What changes:
+
+- **The front page** is a title card with three reels: **Actions** (drafts waiting on you as a lead, and series issues that are late), **New** (put out to you since you last looked) and **Upcoming** (the next issue each series expects). Actions and New pull their cards in one at a time behind a light; press the light, or a card to bring it forward, and again to open it. The page is built from a config (`ARTIFACTS_FRONT` in `apps/folio/frontend/src/quill/front.ts`), the same one any app can use.
+- **The rail** keeps your collections, Shared libraries, Published to you and From below. Inside a collection, the tree opens only along the path you took and lights it; everything beside the path dims.
+- **Everything is a tile you walk into**, shaped by its kind: a collection is a block, a folder has a tab, a series is a stack, a document is a page. A document in review that's yours to move on has a ribbon.
+- **Every action is in its radial menu.** Right-click (or long-press, or the context-menu key, or Shift+F10) any tile, any row in the tree, a card on the front page, or the empty space between tiles. What you can't do stays in the ring, greyed, and says why. While the ring is open the rest of the app goes out of focus in place, with the thing you chose kept sharp.
+- **Find** with `/` from anywhere.
+- Dialogs rack the app out of focus behind them, rather than covering it with a dark scrim.
+
+Not everything is in the new layout yet: saved views, tags, level names, a series' own page, the details drawer and links open in the **classic layout**. Those places say so and offer a button, and **Classic layout** at the foot of the rail switches at the place you're on. In the classic layout, **Try the new layout** above it switches back. Each device remembers the choice (`augur-artifacts:layout` in the browser's storage).
+
+The alternatives PDR-010 proposes are one setting away in code: the plain front page look (`look: 'plain'`), quiet rather than blurred ambient cards (`ambience: 'quiet'`), all of Actions at once (`reveal: 'all'`), and the `lens` or `scrim` depth for desktops without a GPU.
+
 ### Libraries and their shape
 
 A library belongs to the floor it was made on: your own floor, a team's, or the org's. Everyone who can stand on that floor can read it and add to it, and the floor's leads manage it. Open Artifacts from its chapter in the menu of every app, or from its card on Home.
