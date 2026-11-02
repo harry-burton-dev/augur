@@ -292,6 +292,11 @@
       "$value": "3px",
       "$type": "dimension",
       "$description": "The gap between a control and its focus outline."
+    },
+    "letterbox-ratio": {
+      "$value": "2.39",
+      "$type": "number",
+      "$description": "Urgent is letterboxed (PDR-009): the width-to-height ratio of the frame urgent and important things are shown in, the cinema's 2.39:1. Everything outside it steps back behind the scrim."
     }
   },
   "tracking": {

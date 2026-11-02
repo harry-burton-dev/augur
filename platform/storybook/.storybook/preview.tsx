@@ -2,6 +2,8 @@ import type { Preview } from '@storybook/react-vite';
 import '@augur/kit-common/tokens.css';
 import '@augur/ui-kit/base.css';
 import '@augur/kit-common/kit.css';
+import '@augur/app-kit/kit.css';
+import '@augur/shell-kit/kit.css';
 
 const preview: Preview = {
   parameters: {

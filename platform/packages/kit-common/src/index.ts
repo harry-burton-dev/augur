@@ -26,3 +26,4 @@ export { Choice, Segmented, type ChoiceOption, type ChoiceProps, type SegmentOpt
 export { Person, People, initials, type PersonProps, type PeopleProps, type PersonTone } from './person.js';
 export { Tip, type TipProps } from './tip.js';
 export { Progress, Steps, type ProgressProps, type Step } from './progress.js';
+export { Letterbox, type LetterboxProps } from './letterbox.js';

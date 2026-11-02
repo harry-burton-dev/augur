@@ -116,6 +116,11 @@
       "$value": "2400ms",
       "$type": "duration",
       "$description": "How long an area title card stays: arriving on a floor or opening an app. Any key, press or scroll ends it sooner."
+    },
+    "motion-toast": {
+      "$value": "6000ms",
+      "$type": "duration",
+      "$description": "How long a toast stays before it goes by itself. Hovering or focusing it holds it; anything with an Undo stays this long at least."
     }
   }
 }
