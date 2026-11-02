@@ -1,0 +1,116 @@
+/* Quill's parts: the Tailwind utilities their markup uses, under AUGUR's theme only, and the
+   layout utilities can't say. Built into dist/kit.css; the shell loads it once, after Common's.
+   Every value is a token (var(--…)): no raw colours, durations or distances. */
+@import 'tailwindcss/utilities' layer(utilities) source(none);
+@import '@augur/kit-common/theme.css';
+@import '@augur/kit-common/theme-app.css';
+@source './';
+@source not './**/*.test.tsx';
+@source not './**/*.stories.tsx';
+
+@layer components {
+  /* The frame: rail, main column, drawer. */
+  .quill-frame {
+    --frame-rail: var(--measure-rail);
+    --frame-drawer: var(--measure-drawer);
+    --frame-strip: 56px;
+    display: grid; grid-template-columns: minmax(0, 1fr); min-height: 100%;
+    background: var(--slate); color: var(--ink); font-family: var(--font-sans); font-size: var(--type-body); line-height: var(--leading-body);
+    transition: grid-template-columns var(--motion-slow) var(--ease-out);
+  }
+  .quill-frame[data-rail='closed'] { --frame-rail: var(--frame-strip); }
+  .quill-frame[data-drawer='closed'] { --frame-drawer: var(--frame-strip); }
+  .quill-frame[data-rail] { grid-template-columns: var(--frame-rail) minmax(0, 1fr); }
+  .quill-frame[data-drawer] { grid-template-columns: minmax(0, 1fr) var(--frame-drawer); }
+  .quill-frame[data-rail][data-drawer] { grid-template-columns: var(--frame-rail) minmax(0, 1fr) var(--frame-drawer); }
+
+  .quill-rail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; padding: var(--space-4) var(--space-3) var(--space-6); border-right: 1px solid var(--hairline); overflow: hidden auto; }
+  .quill-rail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .quill-frame[data-rail='closed'] .quill-rail { padding-inline: 0; align-items: center; overflow: visible; z-index: 1; }
+  /* Folded, the rail's button names open to the right, over the main column, not off the screen's edge. */
+  .quill-rail .augur-name { left: 0; transform: translateY(-2px); }
+  .quill-rail .augur-control:hover > .augur-name, .quill-rail .augur-control:focus-within > .augur-name { transform: none; }
+  .quill-frame[data-rail='closed'] .quill-rail-head { flex-direction: column; }
+  .quill-app {
+    display: inline-flex; align-items: center; gap: var(--space-3); min-height: var(--target-sm); min-width: 0; padding: var(--space-1) var(--space-2);
+    border: 0; border-radius: var(--radius-key); background: transparent; color: var(--ink); font: inherit; font-size: var(--type-meta); font-weight: 600; cursor: pointer;
+  }
+  .quill-app span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quill-app:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .quill-app:focus-visible, .quill-rail-link:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+  .quill-rail-body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+  .quill-frame[data-rail='closed'] .quill-rail-body { align-items: center; }
+  .quill-rail-link {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: var(--target-sm); padding: var(--space-1) var(--space-3);
+    border: 0; border-radius: var(--radius-key); background: transparent; color: var(--ink-muted); font: inherit; font-size: var(--type-meta); line-height: var(--leading-meta);
+    text-align: left; cursor: pointer; transition: background var(--motion-instant) var(--ease-standard), color var(--motion-instant) var(--ease-standard);
+  }
+  .quill-frame[data-rail='closed'] .quill-rail-link { width: auto; justify-content: center; padding-inline: var(--space-2); position: relative; }
+  .quill-rail-link:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .quill-rail-link[aria-current='page'] { color: var(--ink); background: color-mix(in srgb, var(--ink) 9%, transparent); }
+  .quill-rail-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quill-rail-count { color: var(--green); font-variant-numeric: tabular-nums; }
+  .quill-frame[data-rail='closed'] .quill-rail-count { position: absolute; top: 0; right: 0; font-size: var(--type-label); }
+
+  .quill-main { min-width: 0; padding: var(--space-6) var(--edge) var(--space-8); }
+  .quill-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-7); align-items: start; max-width: var(--measure-wide); margin: 0 auto; transition: opacity var(--motion-slow) var(--ease-out); }
+  .quill-frame[data-rail] .quill-page { margin: 0; }
+  .quill-page-aside { grid-template-columns: minmax(0, 1.6fr) minmax(240px, 1fr); }
+  .quill-frame[data-measure='read'] .quill-page { max-width: var(--measure-read); }
+  .quill-frame[data-measure='full'] .quill-page { max-width: none; }
+  .quill-page[data-busy] { opacity: 0.7; }
+  .quill-frame[data-turning] .quill-page { opacity: 0; transition: none; }
+  .quill-column { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+  .quill-aside { gap: var(--space-6); }
+
+  .quill-drawer { position: relative; min-width: 0; overflow: hidden; border-left: 1px solid var(--hairline); }
+  .quill-drawer-head { display: flex; padding: var(--space-4) var(--space-3) 0; }
+  .quill-frame[data-drawer='closed'] .quill-drawer-head { justify-content: center; padding-inline: 0; }
+  .quill-drawer-inner {
+    position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: var(--space-4) var(--space-5) var(--space-8);
+    transition: opacity var(--motion-slow) var(--ease-out), transform var(--motion-slow) var(--ease-out);
+  }
+  .quill-frame[data-drawer='closed'] .quill-drawer-inner { opacity: 0; visibility: hidden; }
+  .quill-frame[data-turning] .quill-drawer-inner { opacity: 0; transform: translateX(var(--travel-near)); transition: none; }
+
+  @media (max-width: 960px) {
+    .quill-page-aside { grid-template-columns: minmax(0, 1fr); }
+    .quill-frame[data-drawer] { grid-template-columns: minmax(0, 1fr); }
+    .quill-frame[data-rail][data-drawer] { grid-template-columns: var(--frame-rail) minmax(0, 1fr); }
+    .quill-drawer { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--hairline); }
+    .quill-drawer-inner { position: static; max-height: none; }
+  }
+
+  /* The front page: what needs you, what's new, what's worth knowing. */
+  .quill-front { display: flex; flex-direction: column; gap: var(--space-7); }
+  .quill-front-section { display: flex; flex-direction: column; gap: var(--space-3); }
+  .quill-section-title {
+    display: flex; align-items: baseline; gap: var(--space-2); margin: 0;
+    font-size: var(--type-label); line-height: var(--leading-label); letter-spacing: var(--tracking-label); text-transform: uppercase; font-weight: 500; color: var(--ink-muted);
+  }
+  .quill-section-count { color: var(--green); font-variant-numeric: tabular-nums; }
+  .quill-empty { margin: 0; color: var(--ink-muted); font-size: var(--type-meta); line-height: var(--leading-meta); }
+
+  /* About: the right panel, in a fixed order. */
+  .quill-about { display: flex; flex-direction: column; gap: var(--space-5); }
+  .quill-about-what { margin: 0; color: var(--ink); }
+  .quill-about-rows { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3) var(--space-5); margin: 0; font-size: var(--type-meta); line-height: var(--leading-meta); }
+  .quill-about-rows dt { color: var(--ink-muted); font-size: var(--type-label); line-height: var(--leading-meta); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  .quill-about-rows dd { margin: 0; min-width: 0; color: var(--ink); }
+
+  /* More: how many of how many, and a button for more. */
+  .quill-more { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-top: 1px solid var(--hairline); }
+  .quill-more-count { color: var(--ink-muted); font-size: var(--type-meta); line-height: var(--leading-meta); font-variant-numeric: tabular-nums; }
+
+  /* The selection bar: rises at the bottom of the main column while anything is picked. */
+  .quill-selection {
+    position: sticky; bottom: var(--space-5); z-index: 2; display: flex; align-items: center; gap: var(--space-4); align-self: center;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5); border-radius: var(--radius-pill);
+    background: var(--surface-overlay); backdrop-filter: blur(var(--surface-blur)); border: 1px solid var(--hairline-strong); box-shadow: var(--shadow-overlay);
+    animation: quill-rise var(--motion-slow) var(--ease-out);
+  }
+  .quill-selection-count { font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .quill-selection-actions { display: flex; align-items: center; gap: var(--space-2); }
+}
+
+@keyframes quill-rise { from { opacity: 0; transform: translateY(var(--space-4)); } to { opacity: 1; transform: none; } }

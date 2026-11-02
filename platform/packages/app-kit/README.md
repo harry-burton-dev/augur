@@ -10,3 +10,14 @@ Its parts arrive as the Lit kit's groups move to React; until then apps keep `@a
 ```
 
 No preflight: apps draw inside the shell, which already sets the page's base.
+
+## Parts
+
+Quill re-exports all of Common, so an app imports everything from `@augur/app-kit`. Its own parts are the ones only apps need:
+
+- `AppFrame` lays out the three columns of docs/app-patterns.md. The rail holds `RailLink`s, the main column holds the screen, and the drawer holds `About`. The app's name and icon at the top of the rail open its `FrontPage`. The rail and the drawer fold to a strip, which the frame remembers on this device, and the frame tells the shell how much of the edge its drawer takes (`ui-drawer`).
+- `FrontPage` has three sections: what needs you, what's new, and what's worth knowing. An empty section still says something.
+- `About` is always in the same order: what it is, owner, floor, state, links and history. An empty row stays and says so.
+- `More` goes under a long list ("Showing 50 of 312 records"). `SelectionBar` holds what to do with several picked things.
+
+The shell loads `@augur/app-kit/kit.css` once, after Common's.

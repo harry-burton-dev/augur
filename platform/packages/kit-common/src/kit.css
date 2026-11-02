@@ -208,6 +208,8 @@
   .augur-select-value[data-placeholder] { color: color-mix(in srgb, var(--ink-muted) 75%, transparent); }
   .augur-chevron { flex: none; display: flex; color: var(--ink-muted); transition: transform var(--motion-base) var(--ease-standard); }
   .augur-field[data-open] .augur-chevron { transform: rotate(180deg); color: var(--ink); }
+  /* Lists, menus and tips open over the shell's band, and over a dialog they open from. */
+  .augur-popover, .augur-tip { z-index: calc(var(--layer-chrome) + 2); }
   .augur-popover {
     min-width: var(--trigger-width); max-height: 280px; overflow: auto; padding: var(--space-2) 0;
     background: color-mix(in srgb, var(--slate) 94%, transparent); backdrop-filter: blur(var(--surface-blur)) saturate(1.25);
@@ -289,7 +291,7 @@
 
   /* Dialogs: one decision or one small task, over everything, on the veil. */
   .augur-veil {
-    position: fixed; inset: 0; z-index: 50; display: flex; justify-content: center; align-items: flex-start; overflow: auto;
+    position: fixed; inset: 0; z-index: calc(var(--layer-chrome) + 1); display: flex; justify-content: center; align-items: flex-start; overflow: auto;
     background: radial-gradient(ellipse 60% 60% at 50% 46%, color-mix(in srgb, var(--slate-deep) 45%, transparent), var(--veil));
     backdrop-filter: blur(6px);
   }
@@ -436,12 +438,29 @@
   .augur-step[data-state='done'] .augur-step-mark { border-color: transparent; }
   .augur-step[data-state='now'] { color: var(--green); }
   .augur-step[data-state='now'] .augur-step-mark { background: color-mix(in srgb, var(--green) 25%, transparent); }
+
+  /* The letterbox: urgent things in a 2.39:1 frame; above and below step back behind the scrim. */
+  .augur-letterbox { position: fixed; inset: 0; z-index: calc(var(--layer-chrome) + 1); display: grid; align-content: center; }
+  .augur-letterbox::before, .augur-letterbox::after { content: ''; position: fixed; left: 0; right: 0; height: 50%; backdrop-filter: blur(6px); pointer-events: none; }
+  .augur-letterbox::before { top: 0; background: linear-gradient(to bottom, var(--slate-deep), var(--scrim)); }
+  .augur-letterbox::after { bottom: 0; background: linear-gradient(to top, var(--slate-deep), var(--scrim)); }
+  .augur-letterbox[data-entering] { animation: augur-fade var(--motion-slow) var(--ease-out); }
+  .augur-letterbox-frame {
+    position: relative; z-index: 1; width: 100%; aspect-ratio: var(--letterbox-ratio); max-height: 100dvh; display: grid; place-items: center;
+    padding: var(--space-6) var(--edge); background: var(--slate); border-block: 1px solid var(--hairline); overflow: auto;
+  }
+  .augur-letterbox-frame[data-entering] { animation: augur-open-frame var(--motion-slow) var(--ease-out); }
+  .augur-letterbox-body { display: flex; flex-direction: column; gap: var(--space-5); width: 100%; max-width: var(--measure-read); }
+  .augur-letterbox-text { display: flex; flex-direction: column; gap: var(--space-3); color: var(--ink-muted); }
+  .augur-letterbox-text p { margin: 0; }
+  .augur-letterbox-actions { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; }
 }
 
 @keyframes augur-spin { to { transform: rotate(1turn); } }
 @keyframes augur-count { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @keyframes augur-ping { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(var(--ping-scale, 1.14)); opacity: 0; } }
 @keyframes augur-run { 0% { left: 0; width: 0; } 50% { width: 30%; } 100% { left: 100%; width: 0; } }
+@keyframes augur-open-frame { from { clip-path: inset(50% 0); } to { clip-path: inset(0 0); } }
 @keyframes augur-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes augur-rise-far { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes augur-rise { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
