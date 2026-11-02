@@ -4,15 +4,13 @@ name: Pipeline feed
 # opens or closes, and after a workflow that makes, promotes or removes releases. Backstage and each
 # deployment's Upgrade Centre read it with the same read key as the release feed. See
 # docs/release-channels.md, "The pipeline feed".
+# Once per change to main or to what's released: Release runs on every push to main (and opens or
+# updates the Version packages PR), so the feed follows it rather than each push and pull request,
+# which ran it about 300 times a night for the same answer. A pull request that opens a promotion
+# shows on the next run. Run it by hand to refresh it sooner.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, reopened, closed]
-    branches: [main]
-  # After a workflow that makes or removes releases (dev builds, previews, releases) finishes.
   workflow_run:
-    workflows: [Release, Promote to stable, AUGUR dev builds, App dev builds, App previews]
+    workflows: [Release, Promote to stable, AUGUR dev builds, App dev builds]
     types: [completed]
   workflow_dispatch:
 concurrency:
