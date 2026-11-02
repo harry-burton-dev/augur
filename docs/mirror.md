@@ -1,6 +1,6 @@
 # Mirroring AUGUR releases
 
-For a server that can't reach GitHub: copy each release into your organisation's own image registry, and keep a feed of releases where the server can read it. Admin → Upgrade Centre, the updater and the steps in [upgrade.md](upgrade.md) then work as usual, from your mirror.
+For a server that can't reach GitHub: copy each release into your organisation's own image registry, and keep a feed of releases where the server can read it. the Upgrade Centre, the updater and the steps in [upgrade.md](upgrade.md) then work as usual, from your mirror.
 
 A mirror holds:
 
