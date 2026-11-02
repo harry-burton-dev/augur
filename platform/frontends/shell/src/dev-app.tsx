@@ -1,5 +1,6 @@
 import '@augur/kit-common/tokens.css';
 import '@augur/kit-common/kit.css';
+import '@augur/app-kit/kit.css';
 import '@augur/ui-kit/base.css';
 import '@augur/ui-kit';
 import './shell.css';
