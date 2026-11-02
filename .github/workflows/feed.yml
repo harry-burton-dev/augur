@@ -40,3 +40,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Reads the releases of apps in their own repositories (release/app-repos.json, ADR 0047).
           APP_RELEASES_TOKEN: ${{ secrets.APP_RELEASES_TOKEN }}
+      # The signature as deployments check it, with the registry's own code: a mismatch would make every
+      # deployment refuse the feed, so it shows here first.
+      - name: Check the signature as deployments do
+        run: node --experimental-strip-types scripts/check-feed-signature.mjs "$RUNNER_TEMP/feed.json" "$GITHUB_REPOSITORY"

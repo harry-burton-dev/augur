@@ -124,7 +124,7 @@ pushed: [deploy-test.md](deploy-test.md).
 
 ## Feeds
 
-- **Release feed (`feed.yml`)**: the signed list of releases deployments read (`feed:latest`).
+- **Release feed (`feed.yml`)**: the signed list of releases deployments read (`feed:latest`). After signing it checks the signature with the registry's own check and the signer identity deployments expect (`scripts/check-feed-signature.mjs`), so a mismatch fails here, not on every deployment.
   Called once at the end of each workflow that makes or removes releases, weekly to re-sign it
   before it expires, and by hand after changing a release in GitHub yourself.
 - **Pipeline feed (`pipeline.yml`)**: where each unit is between `main`, beta and stable, for
