@@ -28,7 +28,7 @@ Each runs as a pinned container image or action, not as a service we host.
 
 ## Consequences
 
-- Lint errors in code that was already there are fixed in the PR that adds lint; two React hook warnings in the shell are left for the React move.
+- Lint errors in code that was already there are fixed in the PR that adds lint. Warnings (React hook dependency advice) are shown but never fail a check, so one thread's new warning doesn't block another's PR.
 - A vulnerability published upstream can turn a PR red without that PR changing anything. The fix is a dependency update, or an entry in `.trivyignore` or `osv-scanner.toml` with its reason.
 - Renovate (proposed in the drift audit) would keep dependencies current so these scans stay green; it's a separate decision.
 

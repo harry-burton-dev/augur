@@ -25,7 +25,7 @@
     "check:reasons": "node scripts/check-reasons.mjs",
     "catalog": "node scripts/catalog.mjs",
     "check:catalog": "node scripts/catalog.mjs check",
-    "lint": "eslint . --max-warnings 2"
+    "lint": "eslint ."
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
