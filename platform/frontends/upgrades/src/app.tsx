@@ -1,4 +1,5 @@
-import type { MountContext } from '@augur/mfe-sdk';
+import { About, AppFrame, Button, FrontPage, Heading, iconNames, RailLink, type IconName } from '@augur/app-kit';
+import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { upgradesApi } from './api.js';
 import { useUpgrades, type UpgradesData } from './data.js';
@@ -65,63 +66,100 @@ const useNavigation = (ctx: Pick<MountContext, 'path'>) => {
   return { path, go, Link };
 };
 
+/** This app's id in the manifest, where its name and icon come from. */
+const APP_ID = 'upgrades';
+
+const iconOf = (name: string | undefined, fallback: IconName): IconName => (name && (iconNames as readonly string[]).includes(name) ? (name as IconName) : fallback);
+
 export const App = ({ ctx }: { ctx: Pick<MountContext, 'fetch' | 'path' | 'user'> }) => {
   const api = useMemo(() => upgradesApi(ctx), [ctx]);
   const { data, checkNow, took } = useUpgrades(api);
-  const { path, Link } = useNavigation(ctx);
+  const { path, go, Link } = useNavigation(ctx);
+  const [apps, setApps] = useState<AppManifestEntry[]>([]);
+  useEffect(() => {
+    api.manifest().then((m) => setApps(Array.isArray(m) ? m : []), () => setApps([]));
+  }, [api]);
   const route = routeFor(path);
   const now = data.readAt ?? new Date();
   const zone = deploymentZone(data.overview);
   const gate = canChange(ctx.user.roles);
   const watchingUntil = data.updates?.upgrade?.state === 'done' ? data.updates.upgrade.watch?.until : undefined;
   const rows = data.overview?.units.map((u) => rowOf(u, now, u.unit === AUGUR ? watchingUntil : undefined)) ?? [];
+  const me = apps.find((a) => a.id === APP_ID);
+  const unitIcon = (id: string): IconName => (id === AUGUR ? 'server' : iconOf(apps.find((a) => a.id === id)?.icon, 'apps'));
+  const shown = route.page === 'unit' ? rows.find((r) => r.id === route.unit) : undefined;
+  const shownUnit = shown && data.overview?.units.find((x) => x.unit === shown.id);
 
   return (
-    <div className="flex flex-wrap gap-7 p-edge text-body text-ink min-h-full" data-upgrades>
-      <nav aria-label="Upgrade Centre" className="flex flex-col gap-2 w-[var(--measure-rail)] shrink-0">
-        <Link to="/" current={route.page === 'overview'}>
-          Overview
-        </Link>
-        {rows.map((r) => (
-          <Link key={r.id} to={r.to} current={route.page === 'unit' && route.unit === r.id}>
-            {r.name}
-          </Link>
-        ))}
-        <Link to="/history" current={route.page === 'history'}>
-          History
-        </Link>
-      </nav>
-      <main className="flex flex-col gap-7 flex-1 max-w-wide" aria-live="polite">
-        {data.error && (
-          <p role="alert" className="m-0 text-danger">
-            {data.error} What you see below was read <When at={data.readAt} zone={zone} now={new Date()} />.
-          </p>
-        )}
-        {data.loading && !data.overview ? (
-          <Muted>Reading what this deployment runs…</Muted>
-        ) : !data.overview || !data.updates ? (
-          <Muted>The registry isn't answering, so nothing can be shown or changed here. Check it with `pc logs registry`.</Muted>
-        ) : route.page === 'overview' ? (
-          <Overview data={data} rows={rows} now={now} zone={zone} gate={gate} checkNow={checkNow} took={took} api={api} Link={Link} />
-        ) : route.page === 'history' ? (
-          <History data={data} now={now} zone={zone} />
-        ) : (
-          <Unit key={route.unit} data={data} row={rows.find((r) => r.id === route.unit)} unit={route.unit} now={now} zone={zone} gate={gate} api={api} took={took} />
-        )}
-      </main>
+    <div className="h-full text-body text-ink" data-upgrades>
+      <AppFrame
+        app={{ name: me?.name ?? APP_ID, icon: iconOf(me?.icon, 'download') }}
+        onFront={() => go('/')}
+        railLabel="What this deployment runs"
+        rail={
+          <>
+            {rows.map((r) => (
+              <RailLink key={r.id} icon={unitIcon(r.id)} label={r.name} current={route.page === 'unit' && route.unit === r.id} onPress={() => go(r.to)} />
+            ))}
+            <RailLink icon="history" label="History" current={route.page === 'history'} onPress={() => go('/history')} />
+          </>
+        }
+        drawerLabel="About this unit"
+        drawer={shown && shownUnit ? <UnitAbout row={shown} unit={shownUnit} zone={zone} now={now} portal={data.updates?.portalUrl} /> : undefined}
+        busy={data.loading && !data.overview}
+        screen={path}
+      >
+        <div className="flex flex-col gap-7" aria-live="polite">
+          {data.error && (
+            <p role="alert" className="m-0 text-danger">
+              {data.error} What you see below was read <When at={data.readAt} zone={zone} now={new Date()} />.
+            </p>
+          )}
+          {data.loading && !data.overview ? (
+            <Muted>Reading what this deployment runs…</Muted>
+          ) : !data.overview || !data.updates ? (
+            <Muted>The registry isn't answering, so nothing can be shown or changed here. Check it with `pc logs registry`.</Muted>
+          ) : route.page === 'overview' ? (
+            <Overview name={me?.name} data={data} rows={rows} now={now} zone={zone} checkNow={checkNow} took={took} api={api} Link={Link} />
+          ) : route.page === 'history' ? (
+            <History data={data} now={now} zone={zone} />
+          ) : (
+            <Unit key={route.unit} data={data} row={shown} unit={route.unit} now={now} zone={zone} gate={gate} api={api} took={took} />
+          )}
+        </div>
+      </AppFrame>
     </div>
   );
 };
+
+/** The drawer on a unit's page: what it is, its state, where to read more, and its last result. */
+const UnitAbout = (p: { row: UnitRow; unit: OverviewData['units'][number]; zone: string; now: Date; portal?: string }) => (
+  <About
+    what={`${p.row.name} ${p.row.running}, following ${CHANNEL_WORDS[p.unit.desired.channel]} releases.`}
+    floor="The same on every floor: it belongs to this deployment."
+    lifecycle={<StateMark state={p.row.state} />}
+    links={p.portal ? <a href={p.portal} className="text-ink underline">This deployment in Backstage</a> : undefined}
+    history={
+      p.unit.lastResult ? (
+        <span>
+          {OUTCOME[p.unit.lastResult.state] ?? p.unit.lastResult.state}
+          {p.unit.lastResult.version ? ` (${p.unit.lastResult.version})` : ''}, <When at={p.unit.lastResult.finishedAt} zone={p.zone} now={p.now} />
+        </span>
+      ) : undefined
+    }
+    words={{ noOwner: 'This deployment’s admins look after it.' }}
+  />
+);
 
 type LinkC = ReturnType<typeof useNavigation>['Link'];
 type Gate = ReturnType<typeof canChange>;
 
 const Overview = (p: {
+  name?: string;
   data: UpgradesData;
   rows: UnitRow[];
   now: Date;
   zone: string;
-  gate: Gate;
   checkNow: () => Promise<void>;
   took: (o: OverviewData) => void;
   api: ReturnType<typeof upgradesApi>;
@@ -135,154 +173,177 @@ const Overview = (p: {
   const items = needsYou(o, p.data.installs?.installed ?? []);
   const augur = o.units.find((x) => x.unit === AUGUR);
   const trust = o.feedTrust;
+  const offered = p.rows.filter((r) => r.offered && r.state !== 'up-to-date');
+
+  const next = augur?.window.open && augur.automatic?.takes ? (
+    <>A window is open now: {augur.automatic.takes}</>
+  ) : augur?.window.nextAt ? (
+    <>
+      Next maintenance window <When at={augur.window.nextAt} zone={p.zone} now={p.now} />. {augur.automatic?.takes ? augur.automatic.takes : 'Nothing will run in it by itself.'}
+    </>
+  ) : augur && augur.desired.windows.length === 0 && augur.desired.policy === 'automatic' ? (
+    'Automatic upgrades may start at any time on this server.'
+  ) : (
+    'Nothing scheduled.'
+  );
 
   return (
-    <>
-      <Section title="Needs you" id="needs-you">
-        {items.length === 0 ? (
-          <Muted>Nothing needs you.</Muted>
-        ) : (
-          <ul className="m-0 p-0 list-none flex flex-col gap-3">
-            {items.map((i) => (
-              <li key={i.key} className="flex flex-col gap-1 rounded-card bg-surface-raised p-4" data-need={i.kind}>
-                <strong>{i.title}</strong>
-                <span className="text-ink-muted">{i.why}</span>
-                <span className="flex gap-4 items-baseline">
-                  <p.Link to={i.action.to}>{i.action.verb}</p.Link>
-                  {i.result && (
-                    <ui-button
-                      kind="tertiary"
-                      size="small"
-                      onClick={async () => {
-                        setSeenError(undefined);
-                        await p.api
-                          .markSeen(i.result!.kind, i.result!.id)
-                          .then(p.took)
-                          .catch((e: unknown) => setSeenError(e instanceof Error ? e.message : String(e)));
-                      }}
-                    >
-                      I've looked at this
-                    </ui-button>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {seenError && (
-          <p role="alert" className="m-0 text-danger">
-            {seenError}
-          </p>
-        )}
-      </Section>
-
-      <Section title="This deployment" id="deployment">
-        <Facts
-          rows={[
-            ['Server', RING_WORDS[o.ring]],
-            ['AUGUR', <Version key="v" v={u.running.version} />],
-            ['Following', `${CHANNEL_WORDS[u.channel]} releases`],
-            ['Updater', u.updaterSeenAt ? <span key="s">Last asked for work <When at={u.updaterSeenAt} zone={p.zone} now={p.now} /></span> : 'Not set up yet, so upgrades from here wait. See docs/upgrade.md.'],
-            ...(u.portalUrl ? ([['Fleet', <a key="b" href={u.portalUrl} className="text-ink underline">Open Backstage</a>]] as [string, ReactNode][]) : []),
-          ]}
-        />
-      </Section>
-
-      <Section title="Units" id="units">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="text-left text-small text-ink-muted">
-              <th className="font-normal py-2">Unit</th>
-              <th className="font-normal py-2">Running</th>
-              <th className="font-normal py-2">Policy</th>
-              <th className="font-normal py-2">State</th>
-            </tr>
-          </thead>
-          <tbody>
-            {p.rows.map((r) => (
-              <tr key={r.id} className="border-t border-hairline" data-unit={r.id}>
-                <td className="py-3">
-                  <p.Link to={r.to}>{r.name}</p.Link>
-                </td>
-                <td className="py-3">
-                  <Version v={r.running} />
-                  {r.pin && <span className="text-ink-muted"> · pinned to {r.pin}</span>}
-                  {r.held && <span className="text-ink-muted"> · held</span>}
-                </td>
-                <td className="py-3">{POLICY_WORDS[r.policy]}</td>
-                <td className="py-3">
-                  <StateMark state={r.state} />
-                  {r.offered && r.state !== 'up-to-date' && (
-                    <span className="text-ink-muted">
-                      {' '}
-                      <Version v={r.offered} />
+    <FrontPage
+      eyebrow={RING_WORDS[o.ring]}
+      heading={p.name ?? APP_ID}
+      summary={items.length ? `${items.length} ${items.length === 1 ? 'thing needs' : 'things need'} you.` : offered.length ? `${offered.length} on offer.` : 'Everything is up to date.'}
+      sections={[
+        {
+          id: 'needs-you',
+          title: 'Needs you',
+          count: items.length || undefined,
+          empty: 'Nothing needs you.',
+          children: items.length ? (
+            <>
+              <ul className="m-0 p-0 list-none flex flex-col gap-3">
+                {items.map((i) => (
+                  <li key={i.key} className="flex flex-col gap-1 rounded-card bg-surface-raised p-4" data-need={i.kind}>
+                    <strong>{i.title}</strong>
+                    <span className="text-ink-muted">{i.why}</span>
+                    <span className="flex gap-4 items-center">
+                      <p.Link to={i.action.to}>{i.action.verb}</p.Link>
+                      {i.result && (
+                        <Button
+                          kind="tertiary"
+                          size="sm"
+                          onPress={async () => {
+                            setSeenError(undefined);
+                            await p.api
+                              .markSeen(i.result!.kind, i.result!.id)
+                              .then(p.took)
+                              .catch((e: unknown) => setSeenError(e instanceof Error ? e.message : String(e)));
+                          }}
+                        >
+                          I've looked at this
+                        </Button>
+                      )}
                     </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Section>
-
-      <Section title="Next" id="next">
-        {augur?.window.open && augur.automatic?.takes ? (
-          <Muted>A window is open now: {augur.automatic.takes}</Muted>
-        ) : augur?.window.nextAt ? (
-          <Muted>
-            Next maintenance window <When at={augur.window.nextAt} zone={p.zone} now={p.now} />.{' '}
-            {augur.automatic?.takes ? augur.automatic.takes : 'Nothing will run in it by itself.'}
-          </Muted>
-        ) : augur && augur.desired.windows.length === 0 && augur.desired.policy === 'automatic' ? (
-          <Muted>Automatic upgrades may start at any time on this server.</Muted>
-        ) : (
-          <Muted>Nothing scheduled.</Muted>
-        )}
-      </Section>
-
-      <Section title="Last checked" id="checked">
-        <Facts
-          rows={[
-            ['Release feed', o.feed === 'off' ? 'Off on this deployment (RELEASE_FEED_URL=off)' : <When key="c" at={o.checkedAt ?? u.checkedAt} zone={p.zone} now={p.now} />],
-            ...(trust
-              ? ([
-                  [
-                    'Signature',
-                    trust.state === 'verified'
-                      ? `Checked${trust.signer ? `, signed by ${trust.signer}` : ''}`
-                      : trust.state === 'mirror'
-                        ? `Read from your organisation's mirror${trust.note ? `: ${trust.note}` : ''}`
-                        : trust.note ?? 'Not checked: read from GitHub directly',
-                  ],
-                  ...(trust.expires ? ([['Expires', <When key="e" at={trust.expires} zone={p.zone} now={p.now} />]] as [string, ReactNode][]) : []),
-                ] as [string, ReactNode][])
-              : []),
-            ...(u.problem ? ([['Problem', <span key="p" className="text-danger">{u.problem}</span>]] as [string, ReactNode][]) : []),
-          ]}
-        />
-        <div>
-          <ui-button
-            kind="secondary"
-            busy={checking || undefined}
-            disabled={o.feed === 'off' || undefined}
-            reason={o.feed === 'off' ? 'The release feed is off on this deployment (RELEASE_FEED_URL=off).' : undefined}
-            onClick={async () => {
-              setChecking(true);
-              setCheckError(undefined);
-              await p.checkNow().catch((e: unknown) => setCheckError(e instanceof Error ? e.message : String(e)));
-              setChecking(false);
-            }}
-          >
-            Check now
-          </ui-button>
-          {checkError && (
-            <p role="alert" className="m-0 mt-2 text-danger">
-              {checkError}
-            </p>
-          )}
-        </div>
-      </Section>
-    </>
+                  </li>
+                ))}
+              </ul>
+              {seenError && (
+                <p role="alert" className="m-0 text-danger">
+                  {seenError}
+                </p>
+              )}
+            </>
+          ) : undefined,
+        },
+        {
+          id: 'offer',
+          title: 'On offer',
+          count: offered.length || undefined,
+          empty: 'Everything is up to date.',
+          children: offered.length ? (
+            <ul className="m-0 p-0 list-none flex flex-col gap-2">
+              {offered.map((r) => (
+                <li key={r.id} className="flex flex-wrap gap-3 items-center" data-offer={r.id}>
+                  <p.Link to={r.to}>{r.name}</p.Link>
+                  <span>
+                    <Version v={r.running} /> to <Version v={r.offered!} />
+                  </span>
+                  <StateMark state={r.state} />
+                </li>
+              ))}
+            </ul>
+          ) : undefined,
+        },
+        {
+          id: 'worth-knowing',
+          title: 'Worth knowing',
+          empty: '',
+          children: (
+            <div className="flex flex-col gap-6">
+              <Facts
+                rows={[
+                  ['Server', RING_WORDS[o.ring]],
+                  ['AUGUR', <Version key="v" v={u.running.version} />],
+                  ['Following', `${CHANNEL_WORDS[u.channel]} releases`],
+                  ['Next', <span key="n">{next}</span>],
+                  ['Updater', u.updaterSeenAt ? <span key="s">Last asked for work <When at={u.updaterSeenAt} zone={p.zone} now={p.now} /></span> : 'Not set up yet, so upgrades from here wait. See docs/upgrade.md.'],
+                  ...(u.portalUrl ? ([['Fleet', <a key="b" href={u.portalUrl} className="text-ink underline">Open Backstage</a>]] as [string, ReactNode][]) : []),
+                ]}
+              />
+              <table className="w-full border-collapse">
+                <caption className="text-left text-small text-ink-muted pb-2">Everything this deployment runs</caption>
+                <thead>
+                  <tr className="text-left text-small text-ink-muted">
+                    <th className="font-normal py-2">Unit</th>
+                    <th className="font-normal py-2">Running</th>
+                    <th className="font-normal py-2">Policy</th>
+                    <th className="font-normal py-2">State</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.rows.map((r) => (
+                    <tr key={r.id} className="border-t border-hairline" data-unit={r.id}>
+                      <td className="py-3">
+                        <p.Link to={r.to}>{r.name}</p.Link>
+                      </td>
+                      <td className="py-3">
+                        <Version v={r.running} />
+                        {r.pin && <span className="text-ink-muted"> · pinned to {r.pin}</span>}
+                        {r.held && <span className="text-ink-muted"> · held</span>}
+                      </td>
+                      <td className="py-3">{POLICY_WORDS[r.policy]}</td>
+                      <td className="py-3">
+                        <StateMark state={r.state} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <Facts
+                rows={[
+                  ['Release feed', o.feed === 'off' ? 'Off on this deployment (RELEASE_FEED_URL=off)' : <When key="c" at={o.checkedAt ?? u.checkedAt} zone={p.zone} now={p.now} />],
+                  ...(trust
+                    ? ([
+                        [
+                          'Signature',
+                          trust.state === 'verified'
+                            ? `Checked${trust.signer ? `, signed by ${trust.signer}` : ''}`
+                            : trust.state === 'mirror'
+                              ? `Read from your organisation's mirror${trust.note ? `: ${trust.note}` : ''}`
+                              : trust.note ?? 'Not checked: read from GitHub directly',
+                        ],
+                        ...(trust.expires ? ([['Expires', <When key="e" at={trust.expires} zone={p.zone} now={p.now} />]] as [string, ReactNode][]) : []),
+                      ] as [string, ReactNode][])
+                    : []),
+                  ...(u.problem ? ([['Problem', <span key="p" className="text-danger">{u.problem}</span>]] as [string, ReactNode][]) : []),
+                ]}
+              />
+              <div>
+                <Button
+                  kind="secondary"
+                  busy={checking}
+                  busyLabel="Checking"
+                  disabled={o.feed === 'off'}
+                  reason={o.feed === 'off' ? 'The release feed is off on this deployment (RELEASE_FEED_URL=off).' : undefined}
+                  onPress={async () => {
+                    setChecking(true);
+                    setCheckError(undefined);
+                    await p.checkNow().catch((e: unknown) => setCheckError(e instanceof Error ? e.message : String(e)));
+                    setChecking(false);
+                  }}
+                >
+                  Check now
+                </Button>
+                {checkError && (
+                  <p role="alert" className="m-0 mt-2 text-danger">
+                    {checkError}
+                  </p>
+                )}
+              </div>
+            </div>
+          ),
+        },
+      ]}
+    />
   );
 };
 
@@ -312,7 +373,7 @@ const Unit = (p: {
   return (
     <>
       <header className="flex flex-col gap-2">
-        <h1 className="text-title m-0">{p.row.name}</h1>
+        <Heading heading={p.row.name} size="l" level={1} />
         <p className="m-0 flex gap-3 items-center">
           <Version v={p.row.running} /> <StateMark state={p.row.state} />
         </p>
@@ -356,9 +417,9 @@ const Unit = (p: {
                   <span className="text-danger">Halted: {r.halted.reason}. It isn't offered.</span>
                 ) : (
                   <span>
-                    <ui-button kind="primary" size="small" disabled reason={actionReason}>
+                    <Button kind="primary" size="sm" disabled reason={actionReason}>
                       Upgrade {p.row!.name} to {r.version}
-                    </ui-button>
+                    </Button>
                   </span>
                 )}
                 {'needs' in r && r.needs.length > 0 && <span className="text-ink-muted">{r.needs.join(' ')}</span>}
@@ -425,9 +486,9 @@ const HowItMoves = (p: { unit: OverviewData['units'][number]; zone: string; now:
     </Muted>
     {p.saved && <p role="status" className="m-0">Saved. The updater follows the new settings from its next check.</p>}
     <span>
-      <ui-button kind="secondary" disabled={p.gate.allowed ? undefined : true} reason={p.gate.allowed ? undefined : p.gate.reason} onClick={() => p.gate.allowed && p.onChange()}>
+      <Button kind="secondary" disabled={!p.gate.allowed} reason={p.gate.allowed ? undefined : p.gate.reason} onPress={p.onChange}>
         Change settings
-      </ui-button>
+      </Button>
     </span>
   </>
 );
@@ -444,7 +505,8 @@ const OUTCOME: Record<string, string> = {
 const History = (p: { data: UpgradesData; now: Date; zone: string }) => {
   const entries = p.data.updates?.history ?? [];
   return (
-    <Section title="History" id="history">
+    <section className="flex flex-col gap-3" aria-labelledby="history">
+      <Heading id="history" heading="History" size="l" level={1} />
       {entries.length === 0 ? (
         <Muted>No upgrades yet on this deployment.</Muted>
       ) : (
@@ -463,6 +525,6 @@ const History = (p: { data: UpgradesData; now: Date; zone: string }) => {
           ))}
         </ul>
       )}
-    </Section>
+    </section>
   );
 };
