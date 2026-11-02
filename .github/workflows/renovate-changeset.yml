@@ -1,0 +1,51 @@
+name: Renovate changeset
+# A Renovate PR changes released units, so it needs a changeset (ADR 0033). This adds one: a patch
+# for every package whose files it changes, or an empty one when it only changes tooling.
+#
+# It pushes with a deploy key (secret RENOVATE_CHANGESET_KEY), because a push made with the
+# workflow's own token starts no CI, and the PR's checks must run on the commit that has the
+# changeset. That push stops the CI run on Renovate's commit, so only one run goes to the end.
+# Renovate keeps updating the branch: renovate.json lists this commit's author in gitIgnoredAuthors.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+concurrency:
+  group: renovate-changeset-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  changeset:
+    if: startsWith(github.head_ref, 'renovate/') && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Is the deploy key set?
+        id: key
+        run: |
+          if [ -n "$KEY" ]; then echo "set=true" >> "$GITHUB_OUTPUT"; else
+            echo "::warning title=No changeset added::The RENOVATE_CHANGESET_KEY secret isn't set, so this PR needs its changeset added by hand (pnpm changeset). A repository admin adds a deploy key with write access and puts its private key in that secret (docs/versioning.md, Dependency updates)."
+          fi
+        env:
+          KEY: ${{ secrets.RENOVATE_CHANGESET_KEY }}
+      - if: steps.key.outputs.set == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RENOVATE_CHANGESET_KEY }}
+      - if: steps.key.outputs.set == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.key.outputs.set == 'true'
+        name: Add the changeset
+        run: |
+          node scripts/renovate-changeset.mjs "origin/$BASE" "$BRANCH" "$TITLE"
+          git add .changeset
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "Add a changeset for this dependency update"
+          git push origin "HEAD:$BRANCH"
+        env:
+          BASE: ${{ github.base_ref }}
+          BRANCH: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
