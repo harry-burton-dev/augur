@@ -1,0 +1,43 @@
+@import 'tailwindcss/utilities' layer(utilities);
+@import '@augur/app-kit/theme.css';
+@source '.';
+
+/*
+ * Admin's own look, from the kit's tokens only. The frame, tables, dialogs and
+ * controls are Quill's; this is what's left: the lines of a list, a secret to
+ * copy, the filters over Activity and the grid of the line.
+ */
+.admin-app { height: 100%; color: var(--ink); font-family: var(--font-sans); }
+.admin-page, .admin-stack-wide { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.admin-page { gap: var(--space-6); }
+.admin-stack { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.admin-flat { margin: 0; }
+.admin-muted, .admin-quiet, .admin-line-end { color: var(--ink-muted); font-size: var(--type-small); line-height: var(--leading-small); }
+.admin-muted { font-size: var(--type-meta); line-height: var(--leading-meta); }
+.admin-problem { margin: 0; color: var(--danger); }
+.admin-notes { margin: 0; padding-inline-start: var(--space-5); }
+.admin-more { display: flex; justify-content: center; padding: var(--space-4); }
+
+/* One line of a list: what, and something about it on the right. */
+.admin-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: var(--space-7); border-bottom: 1px solid var(--hairline); }
+.admin-two-lines { display: flex; flex-direction: column; padding-block: var(--space-2); }
+
+/* A password or secret, shown once: large, set apart, selected whole. */
+.admin-secret { margin: 0; padding: var(--space-4); border-radius: var(--radius-inset); background: var(--surface-inset); font-size: var(--type-title-s); letter-spacing: var(--tracking-caps); text-align: center; word-break: break-all; user-select: all; }
+
+/* Activity's filters, side by side and wrapping. */
+.admin-filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--space-4); align-items: end; }
+
+/* A changelog. */
+.admin-changes { display: flex; flex-direction: column; }
+.admin-change { display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: var(--space-1) var(--space-3); padding-block: var(--space-3); border-bottom: 1px solid var(--hairline); }
+.admin-change > .admin-quiet { grid-column: 2; }
+.admin-change-kind { font-size: var(--type-small); color: var(--ink-muted); }
+.admin-change-kind[data-kind='major'] { color: var(--danger); }
+
+/* The line: a part per row, a branch per column, this server's place marked. */
+.admin-line-scroll { overflow-x: auto; }
+.admin-line-grid { display: grid; grid-template-columns: minmax(8rem, 1.2fr) repeat(4, minmax(6rem, 1fr)); gap: var(--space-1); align-items: start; border-bottom: 1px solid var(--hairline); }
+.admin-line-head > span { padding: var(--space-2); color: var(--ink-muted); font-size: var(--type-small); }
+.admin-line-cell { display: flex; flex-direction: column; padding: var(--space-2); border-radius: var(--radius-inset); }
+.admin-line-cell[data-here] { background: var(--surface-inset); font-weight: 600; }

@@ -1,7 +1,5 @@
-import { html, nothing } from 'lit';
-import type { SelectOption } from '@augur/ui-kit';
+import type { SelectOption } from '@augur/app-kit';
 import type { AppInstalls, AppJob, AppJobStepState, AppPolicy, AvailableApp, FeaturePreviewMode, FeaturePreviews, InstalledApp } from './api.js';
-import { line } from './parts.js';
 
 /** How often Apps asks again while the app runner has a job waiting or under way. */
 export const JOB_REFRESH_MS = 4_000;
@@ -84,17 +82,6 @@ export const jobWords = (job: AppJob): string => {
   if (job.state === 'cancelled') return `${what} was cancelled`;
   return job.message ?? (job.action === 'install' ? `Installed ${job.release?.version ?? ''}`.trim() : 'Removed');
 };
-
-/** A job's steps as the runner reported them. */
-export const jobSteps = (job: AppJob) =>
-  html`<div data-job-steps>
-    ${job.steps.map((s) =>
-      line(
-        html`<ui-status status=${s.state === 'done' ? 'done' : s.state === 'failed' ? 'failed' : 'running'} mark-only></ui-status> ${STEP_WORDS[s.step]}${s.message ? html`: ${s.message}` : nothing}`,
-        new Date(s.at).toLocaleTimeString(),
-      ),
-    )}
-  </div>`;
 
 /** Why an installed app's newer version is waiting for an admin; empty when it isn't. */
 export const waitingWhy = (app: InstalledApp): string[] => {
