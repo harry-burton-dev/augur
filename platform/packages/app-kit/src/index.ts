@@ -23,3 +23,4 @@ export { Card, Cards, Tally, Timeline, Path, Ref, Refs, floorMark, floorIcon, da
 export { DateField, DropZone, Surface, parseDay, dayName, dayDistance, isoDay, accepts, DEFAULT_QUICK, type DateQuick, type DateFieldProps, type DropZoneProps, type SurfaceKind, type SurfaceProps } from './date.js';
 export { Editor, Prose, readMentions, writeMentions, plainText, type Mention, type MentionResult, type MentionSource, type EditorProps, type ProseProps } from './editor.js';
 export { Tree, treePath, type TreeNode, type TreeProps } from './tree.js';
+export { TagPicker, tagChoices, type TagOption, type TagPickerProps } from './tag-picker.js';
