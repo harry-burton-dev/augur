@@ -474,6 +474,9 @@ importers:
       '@augur/kit-common':
         specifier: workspace:*
         version: link:../kit-common
+      react-aria-components:
+        specifier: 1.22.1
+        version: 1.22.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
     devDependencies:
       '@tailwindcss/cli':
         specifier: 4.3.3

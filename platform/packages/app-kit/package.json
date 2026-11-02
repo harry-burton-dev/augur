@@ -22,7 +22,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@augur/kit-common": "workspace:*"
+    "@augur/kit-common": "workspace:*",
+    "react-aria-components": "1.22.1"
   },
   "peerDependencies": {
     "react": "^19.3.1",

@@ -6,7 +6,13 @@
  */
 export * from '@augur/kit-common';
 export { AppFrame, RailLink, RailFolded, type AppFrameProps, type RailLinkProps } from './app-frame.js';
-export { FrontPage, type FrontPageProps, type FrontSection } from './front-page.js';
+export { FrontPage, frontSections, type FrontPageProps, type FrontPageConfig, type FrontSection, type FrontSectionConfig, type FrontLook } from './front-page.js';
 export { About, type AboutProps } from './about.js';
 export { More, type MoreProps } from './more.js';
 export { SelectionBar, type SelectionAction, type SelectionBarProps } from './selection-bar.js';
+export { FocusStage, FocusField, FocusItem, useRack, useDepth, type Depth, type Ambience, type Hole, type FocusStageProps, type FocusFieldProps, type FocusItemProps } from './focus.js';
+export { RadialMenu, RingProvider, useRingTarget, RING_MOST, type RingAction, type RingShape, type RingSubject, type RadialMenuProps, type RingProviderProps } from './radial-menu.js';
+export { PathTree, type PathNode, type PathLight, type PathTreeProps } from './path-tree.js';
+export { Reel, type ReelItem, type ReelTone, type Reveal, type ReelProps } from './reel.js';
+export { KindTile, AddTile, Tiles, type TileKind, type KindTileProps, type AddTileProps, type TilesProps } from './tiles.js';
+export { Palette, type PaletteItem, type PaletteProps } from './palette.js';
