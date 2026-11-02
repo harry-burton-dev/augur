@@ -1,7 +1,9 @@
 import { Button, Choice, Select, TextField } from '@augur/app-kit';
 import { useMemo, useState } from 'react';
 import { ApiError, type UpgradesApi } from './api.js';
+import { stepUp } from './change.js';
 import { Muted } from './look.js';
+import { keepDraft } from './model/flow.js';
 import { pinChoices } from './model/levels.js';
 import { DAY_NAMES, desiredProblems, MAX_WINDOWS, policySentence, timeZones } from './model/sentence.js';
 import { formatWhen, nextWindows } from './model/time.js';
@@ -9,7 +11,7 @@ import type { AutomaticLevel, Channel, DesiredStateInput, Overview, OverviewUnit
 import { CHANNEL_WORDS, channelsFor, POLICY_WORDS } from './model/words.js';
 import { AUGUR } from './units.js';
 
-type Draft = DesiredStateInput & { timeZone: string };
+export type Draft = DesiredStateInput & { timeZone: string };
 
 const POLICY_HINT: Record<Policy, string> = {
   automatic: 'Releases install by themselves, as far as you allow below.',
@@ -46,10 +48,15 @@ export const SettingsEditor = (p: {
   api: UpgradesApi;
   took: (o: Overview) => void;
   onDone: () => void;
+  /** Settings chosen before entering the password again, to carry on from. */
+  kept?: Draft;
 }) => {
   const start = useMemo(() => draftOf(p.unit), [p.unit]);
-  const [draft, setDraft] = useState<Draft>(start);
-  const [customPin, setCustomPin] = useState(() => (start.pin && !pinChoices(p.unit.running).some((c) => c.range === start.pin) ? start.pin : ''));
+  const [draft, setDraft] = useState<Draft>(() => p.kept ?? start);
+  const [customPin, setCustomPin] = useState(() => {
+    const pin = p.kept?.pin ?? start.pin;
+    return pin && !pinChoices(p.unit.running).some((c) => c.range === pin) ? pin : '';
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const isAugur = p.unit.unit === AUGUR;
@@ -75,6 +82,11 @@ export const SettingsEditor = (p: {
       p.took(await p.api.setDesired(p.unit.unit, pin ? { ...rest, pin } : rest));
       p.onDone();
     } catch (e) {
+      if (e instanceof ApiError && e.code === 'sign_in_again') {
+        keepDraft(p.unit.unit, draft);
+        stepUp({ kind: 'settings', unit: p.unit.unit });
+        return;
+      }
       setError(e instanceof ApiError || e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
@@ -258,7 +270,7 @@ export const SettingsEditor = (p: {
           Cancel
         </Button>
       </div>
-      {!unchanged && <Muted>Saving is kept in this unit’s history with your name.</Muted>}
+      {!unchanged && <Muted>Saving asks for your password again if you last entered it more than 10 minutes ago, and is kept in this unit’s history with your name.</Muted>}
     </form>
   );
 };

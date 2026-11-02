@@ -3,16 +3,15 @@ import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { upgradesApi } from './api.js';
 import { useUpgrades, type UpgradesData } from './data.js';
-import { SettingsEditor } from './editor.js';
+import { AppJobLine, Following, GoBackDialog, InstallDialog, UpgradeDialog } from './change.js';
+import { SettingsEditor, type Draft } from './editor.js';
+import { resumeFrom, takeDraft, takeEntered, type Resume } from './model/flow.js';
 import { Facts, Muted, Section, StateMark, Version, When } from './look.js';
 import { needsYou } from './model/needs-you.js';
 import { canChange } from './model/roles.js';
-import type { GoBackTarget, Overview as OverviewData } from './model/types.js';
+import type { GoBackTarget, Overview as OverviewData, PlatformUpdates } from './model/types.js';
 import { CHANNEL_WORDS, POLICY_WORDS, RING_WORDS } from './model/words.js';
 import { AUGUR, levelWord, rowOf, type UnitRow } from './units.js';
-
-/** Where Admin's own Upgrade Centre page is, which still makes the changes until this app's flow ships. */
-const ADMIN_UPGRADES = '/admin/updates';
 
 export type Route = { page: 'overview' } | { page: 'unit'; unit: string } | { page: 'history' };
 
@@ -73,12 +72,17 @@ const iconOf = (name: string | undefined, fallback: IconName): IconName => (name
 
 export const App = ({ ctx }: { ctx: Pick<MountContext, 'fetch' | 'path' | 'user'> }) => {
   const api = useMemo(() => upgradesApi(ctx), [ctx]);
-  const { data, checkNow, took } = useUpgrades(api);
+  const { data, checkNow, took, tookUpdates, reload } = useUpgrades(api);
   const { path, go, Link } = useNavigation(ctx);
   const [apps, setApps] = useState<AppManifestEntry[]>([]);
   useEffect(() => {
     api.manifest().then((m) => setApps(Array.isArray(m) ? m : []), () => setApps([]));
   }, [api]);
+  const [resume, setResume] = useState<Resume | undefined>(() => {
+    const { resume: r, rest } = resumeFrom(window.location.search);
+    if (r) window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest}`);
+    return r;
+  });
   const route = routeFor(path);
   const now = data.readAt ?? new Date();
   const zone = deploymentZone(data.overview);
@@ -124,7 +128,21 @@ export const App = ({ ctx }: { ctx: Pick<MountContext, 'fetch' | 'path' | 'user'
           ) : route.page === 'history' ? (
             <History data={data} now={now} zone={zone} />
           ) : (
-            <Unit key={route.unit} data={data} row={shown} unit={route.unit} now={now} zone={zone} gate={gate} api={api} took={took} />
+            <Unit
+              key={route.unit}
+              data={data}
+              row={shown}
+              unit={route.unit}
+              now={now}
+              zone={zone}
+              gate={gate}
+              api={api}
+              took={took}
+              tookUpdates={tookUpdates}
+              reload={reload}
+              resume={resume}
+              resumed={() => setResume(undefined)}
+            />
           )}
         </div>
       </AppFrame>
@@ -347,8 +365,6 @@ const Overview = (p: {
   );
 };
 
-const flowNotHere = 'Upgrading from this page arrives in the next release of the Upgrade Centre. Until then, use Admin, Upgrade Centre.';
-
 const Unit = (p: {
   data: UpgradesData;
   row?: UnitRow;
@@ -358,9 +374,21 @@ const Unit = (p: {
   gate: Gate;
   api: ReturnType<typeof upgradesApi>;
   took: (o: OverviewData) => void;
+  tookUpdates: (u: PlatformUpdates) => void;
+  reload: () => Promise<void>;
+  resume?: Resume;
+  resumed: () => void;
 }) => {
-  const [editing, setEditing] = useState(false);
+  const back = p.resume?.kind === 'settings' && p.resume.unit === p.unit ? p.resume : undefined;
+  const [editing, setEditing] = useState(Boolean(back));
+  const [kept] = useState(() => (back ? takeDraft<Draft>(p.unit) : undefined));
   const [saved, setSaved] = useState(false);
+  /** The dialog open now, if any: back from entering the password, it opens again by itself. */
+  const [asking, setAsking] = useState<Resume | undefined>(() => (p.resume && p.resume.kind !== 'settings' && (p.resume.kind === 'install' ? p.resume.app === p.unit : p.unit === AUGUR) ? p.resume : undefined));
+  const [entered] = useState(() => (asking?.kind === 'upgrade' ? takeEntered() : {}));
+  useEffect(() => {
+    if ((asking && asking === p.resume) || back) p.resumed();
+  }, []);
   if (!p.row) return <Muted>Nothing called “{p.unit}” is installed on this deployment.</Muted>;
   const unit = p.data.overview!.units.find((x) => x.unit === p.unit)!;
   const isAugur = p.unit === AUGUR;
@@ -368,7 +396,35 @@ const Unit = (p: {
   const app = p.data.installs?.installed.find((a) => a.app === p.unit);
   const releases = isAugur ? [...(u.available ? [u.available] : []), ...u.newer.filter((r) => r.version !== u.available?.version)] : app?.update ? [app.update] : [];
   const goBack: GoBackTarget[] = isAugur ? (u.goBack ?? []) : (app?.older ?? []);
-  const actionReason = p.gate.allowed ? flowNotHere : p.gate.reason;
+  const upgrade = isAugur ? u.upgrade : undefined;
+  const augurBusy = upgrade?.state === 'requested' || upgrade?.state === 'running';
+  const jobBusy = app?.job?.state === 'requested' || app?.job?.state === 'running';
+  /** Why a release can't be taken from here now, or nothing when it can. */
+  const whyNot = (version: string): string | undefined => {
+    if (!p.gate.allowed) return p.gate.reason;
+    if (isAugur) {
+      if (augurBusy) return 'Wait for the upgrade under way to finish.';
+      if (!u.next) return 'Nothing can be upgraded to right now: check for new releases first.';
+      if (version !== u.next) return `Upgrade to ${u.next} first: AUGUR moves one release at a time.`;
+      return undefined;
+    }
+    return jobBusy ? 'Wait for the server to finish its current job with this app.' : undefined;
+  };
+  const goBackWhyNot = (g: GoBackTarget): string | undefined =>
+    !p.gate.allowed
+      ? p.gate.reason
+      : !isAugur
+        ? 'Going back an app is done from Admin, Apps, for now.'
+        : g.halted
+          ? `Halted: ${g.halted.reason}`
+          : g.problem
+            ? g.problem
+            : g.breakingAfter
+              ? `${g.breakingAfter} is breaking in between, so going back needs the backup (docs/upgrade.md).`
+              : augurBusy
+                ? 'Wait for the upgrade under way to finish.'
+                : undefined;
+  const ask = (version: string) => setAsking(isAugur ? { kind: 'upgrade', version } : { kind: 'install', app: p.unit, version });
 
   return (
     <>
@@ -378,6 +434,20 @@ const Unit = (p: {
           <Version v={p.row.running} /> <StateMark state={p.row.state} />
         </p>
       </header>
+
+      {upgrade && (
+        <Following
+          upgrade={upgrade}
+          running={u.running.version}
+          updaterSeenAt={u.updaterSeenAt}
+          zone={p.zone}
+          now={p.now}
+          canCancel={p.gate.allowed}
+          cancelReason={p.gate.allowed ? undefined : p.gate.reason}
+          onCancel={async () => p.tookUpdates(await p.api.cancel())}
+        />
+      )}
+      {app?.job && <AppJobLine job={app.job} zone={p.zone} now={p.now} />}
 
       <Section title="How it moves" id="policy">
         {editing ? (
@@ -392,6 +462,7 @@ const Unit = (p: {
               setSaved(true);
             }}
             onDone={() => setEditing(false)}
+            kept={kept}
           />
         ) : (
           <HowItMoves unit={unit} zone={p.zone} now={p.now} gate={p.gate} saved={saved} onChange={() => (setSaved(false), setEditing(true))} />
@@ -417,7 +488,7 @@ const Unit = (p: {
                   <span className="text-danger">Halted: {r.halted.reason}. It isn't offered.</span>
                 ) : (
                   <span>
-                    <Button kind="primary" size="sm" disabled reason={actionReason}>
+                    <Button kind="primary" size="sm" disabled={Boolean(whyNot(r.version))} reason={whyNot(r.version)} onPress={() => ask(r.version)}>
                       Upgrade {p.row!.name} to {r.version}
                     </Button>
                   </span>
@@ -436,11 +507,6 @@ const Unit = (p: {
               ))}
           </ul>
         )}
-        {p.gate.allowed && releases.length > 0 && (
-          <Muted>
-            For now, upgrade from <a href={ADMIN_UPGRADES} className="text-ink underline">Admin, Upgrade Centre</a>.
-          </Muted>
-        )}
       </Section>
 
       <Section title="Go back" id="go-back">
@@ -449,7 +515,7 @@ const Unit = (p: {
         ) : (
           <ul className="m-0 p-0 list-none flex flex-col gap-2">
             {goBack.slice(0, 5).map((g) => (
-              <li key={g.version} className="flex gap-3 items-baseline" data-go-back={g.version}>
+              <li key={g.version} className="flex flex-wrap gap-3 items-center" data-go-back={g.version}>
                 <Version v={g.version} />
                 <span className="text-ink-muted">
                   {g.halted
@@ -460,11 +526,22 @@ const Unit = (p: {
                         ? `Blocked: ${g.breakingAfter} is breaking in between`
                         : 'Can go back straight away'}
                 </span>
+                <Button kind="tertiary" size="sm" disabled={Boolean(goBackWhyNot(g))} reason={goBackWhyNot(g)} onPress={() => setAsking({ kind: 'go-back', version: g.version })}>
+                  Go back to {g.version}
+                </Button>
               </li>
             ))}
           </ul>
         )}
       </Section>
+
+      {asking?.kind === 'upgrade' && u.next === asking.version && (
+        <UpgradeDialog updates={u} api={p.api} entered={entered} took={p.tookUpdates} onClose={() => setAsking(undefined)} />
+      )}
+      {asking?.kind === 'go-back' && <GoBackDialog updates={u} version={asking.version} api={p.api} took={p.tookUpdates} onClose={() => setAsking(undefined)} />}
+      {asking?.kind === 'install' && app && (
+        <InstallDialog app={app} version={asking.version} api={p.api} done={() => void p.reload()} onClose={() => setAsking(undefined)} />
+      )}
     </>
   );
 };
