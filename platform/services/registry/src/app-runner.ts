@@ -11,6 +11,7 @@ import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from 
 import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore, type RunningPreview } from './store.ts';
 import { upstreamProblem } from './upstreams.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
+import { sameRepository } from './feed-trust.ts';
 
 /** What an app release file must say before the runner is asked to install it. Mirrors AppRelease in contracts/registry.openapi.yaml. */
 export const APP_RELEASE_SCHEMA = 'augur.app-release/v1';
@@ -93,7 +94,7 @@ export const releaseProblem = (release: AppRelease, pillars: string[]): string |
 export const previewProblem = (preview: AppRelease, installed: AppRelease, pillars: string[]): string | undefined => {
   if (previewPr(preview.version) === undefined) return `${preview.version} isn’t a pull request’s build.`;
   // Only the workflow trusted with the app's releases: a preview runs with the app's own sign-in.
-  if (preview.signer.repository !== installed.signer.repository) return `It’s built by ${preview.signer.repository}, not ${installed.signer.repository}.`;
+  if (!sameRepository(preview.signer.repository, installed.signer.repository)) return `It’s built by ${preview.signer.repository}, not ${installed.signer.repository}.`;
   return releaseProblem(preview, pillars);
 };
 

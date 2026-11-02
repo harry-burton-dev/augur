@@ -18,6 +18,10 @@ permissions:
   packages: write
   # Signed keyless, as refs/pull/<number>/merge: the app runner takes a build only as the pull request it says it is.
   id-token: write
+env:
+  # Where AUGUR's images and release feed go. They stay at ghcr.io/<owner>/im-platform, the repository's
+  # first name, where servers pull them from; the IMAGE_REPO variable moves them (docs/upgrade.md).
+  IMAGE_REPO: ${{ vars.IMAGE_REPO || format('ghcr.io/{0}/im-platform', github.repository_owner) }}
 jobs:
   preview:
     # A fork's pull request gets no token to push or sign with, so it has no preview.

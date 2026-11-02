@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { verifyArgs } from './server.ts';
-import { augurDevIdentity, isDevBuild, releaseIdentity } from './signers.ts';
+import { AUGUR_REPOSITORIES, augurDevIdentity, isDevBuild, releaseIdentity } from './signers.ts';
 
 describe('release signers', () => {
   const identity = releaseIdentity('o/r/.github/workflows/release.yml');
@@ -36,5 +36,18 @@ describe('release signers', () => {
     expect(dev.test('https://github.com/o/r/.github/workflows/augur-dev.yml@refs/heads/dev')).toBe(true);
     expect(dev.test('https://github.com/o/r/.github/workflows/augur-dev.yml@refs/heads/release/augur-0.14')).toBe(false);
     expect(dev.test('https://github.com/o/r/.github/workflows/release.yml@refs/heads/main')).toBe(false);
+  });
+
+  it('take AUGUR’s releases and dev builds under its repository’s name now or before, and no other', () => {
+    const release = new RegExp(releaseIdentity(AUGUR_REPOSITORIES.map((r) => `${r}/.github/workflows/release.yml`)));
+    const dev = new RegExp(augurDevIdentity(AUGUR_REPOSITORIES));
+    for (const repository of AUGUR_REPOSITORIES) {
+      expect(release.test(`https://github.com/${repository}/.github/workflows/release.yml@refs/heads/main`)).toBe(true);
+      expect(dev.test(`https://github.com/${repository}/.github/workflows/augur-dev.yml@refs/heads/main`)).toBe(true);
+    }
+    expect(release.test('https://github.com/harry-burton-dev/augur-mandate/.github/workflows/release.yml@refs/heads/main')).toBe(false);
+    expect(release.test('https://github.com/harry-burton-dev/augurx/.github/workflows/release.yml@refs/heads/main')).toBe(false);
+    expect(release.test('https://github.com/harry-burton-dev/augur/.github/workflows/augur-dev.yml@refs/heads/main')).toBe(false);
+    expect(dev.test('https://github.com/harry-burton-dev/im-platform/.github/workflows/augur-dev.yml@refs/pull/1/merge')).toBe(false);
   });
 });

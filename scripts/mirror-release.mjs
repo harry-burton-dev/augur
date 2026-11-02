@@ -26,8 +26,14 @@ const REPO = process.env.AUGUR_REPO ?? 'harry-burton-dev/im-platform';
 export const RELEASE_BRANCHES = ['main', 'preview', 'production', 'release/[a-z][a-z0-9-]*-[0-9]+\\.[0-9]+'];
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** A workflow's certificate identity on any branch releases are made from, as a pattern for --certificate-identity-regexp. */
-export const releaseIdentity = (workflow) => `^${escape(`https://github.com/${workflow}`)}@refs/heads/(${RELEASE_BRANCHES.join('|')})$`;
-export const SIGNER = releaseIdentity(`${REPO}/.github/workflows/release.yml`);
+export const releaseIdentity = (workflow) => {
+  const urls = [workflow].flat().map((w) => escape(`https://github.com/${w}`));
+  return `^${urls.length === 1 ? urls[0] : `(?:${urls.join('|')})`}@refs/heads/(${RELEASE_BRANCHES.join('|')})$`;
+};
+/** AUGUR's repository under its name now and before: a release made before the rename is signed with the old one. */
+export const AUGUR_REPOSITORIES = ['harry-burton-dev/augur', 'harry-burton-dev/im-platform'];
+const signers = AUGUR_REPOSITORIES.includes(REPO.toLowerCase()) ? AUGUR_REPOSITORIES : [REPO];
+export const SIGNER = releaseIdentity(signers.map((r) => `${r}/.github/workflows/release.yml`));
 const ISSUER = 'https://token.actions.githubusercontent.com';
 
 /** A release file as the mirror's feed holds it: its channel and notes as GitHub has them now (a dev build stays one, by version). */
