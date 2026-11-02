@@ -39,6 +39,7 @@ const stepWords: Record<UpgradeStepState['step'], string> = {
   pull: 'Fetch the new images',
   'roll-forward': 'Start each part on the new version',
   verify: 'Check everything is running',
+  watch: 'Watch it for 10 minutes',
   'roll-back': 'Go back to the old version',
 };
 

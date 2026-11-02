@@ -804,6 +804,10 @@ paths:
                   required: { type: array, items: { type: string }, description: The settings the release won't start without }
                   deploy: { type: object, additionalProperties: { type: string }, description: "The release's files in infra/deploy, by path inside it, as sha256" }
                   settings: { type: object, additionalProperties: { type: string }, description: "Settings the admin entered when asking, for the updater to write to .env" }
+                  watch:
+                    type: object
+                    description: "Present for an upgrade to a newer release: watch it for 10 minutes before it's done, going back by itself if sign-in or the gateway's calls fail (ADR 0020)"
+                    properties: { breakingSince: { type: string, description: "A breaking release between, so a problem is reported for a person rather than gone back from" } }
         "204": { description: Nothing to do }
         "403": { description: Not the updater }
   /platform/upgrade/progress:
@@ -1309,7 +1313,7 @@ components:
               message: { type: string }
         message: { type: string }
         finishedAt: { type: string, format: date-time }
-    UpgradeStep: { type: string, enum: [preflight, backup, pull, roll-forward, verify, roll-back] }
+    UpgradeStep: { type: string, enum: [preflight, backup, pull, roll-forward, verify, watch, roll-back], description: "watch: the new release is watched for 10 minutes before the upgrade is done (ADR 0020)" }
     PipelineBranch: { type: string, enum: [dev, preview, production] }
     PipelinePull:
       type: object

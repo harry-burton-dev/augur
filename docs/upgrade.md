@@ -54,6 +54,12 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Each upgrade is watched for 10 minutes
+
+An upgrade to a newer release isn't done once every part answers: the updater watches it for 10 more minutes ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)). Every half minute it checks that the sign-in realm answers, and how the gateway's calls went (`GET /traffic`, which only the deployment's own network reaches). If sign-in fails twice in a row, or more than 5% of at least 20 calls fail, it goes back to the release it came from by itself, as it does when a part doesn't come up, and the Upgrade Centre says what it saw. If a breaking release lies between, it doesn't go back by itself: it says what it saw, and the release keeps running for you to decide (Going back, below). Going back to an earlier release isn't watched.
+
+The updater does nothing else in those 10 minutes, so an app install asked for meanwhile starts after. Both sides need this release: an older updater ignores the watch, and an older gateway has no `/traffic`, so only sign-in is watched.
+
 ### Upgrades follow each unit's policy and window
 
 AUGUR and every installed app now have one record each saying how they take new releases ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)): **Automatic**, **Ask first** or **Hold**; how far Automatic goes (patch releases only, or minor ones too); an optional pin, a version range such as `0.13.x`; and the weekly windows an automatic upgrade may start in. A major release, one that needs a setting only a person can give, or one an earlier try didn't finish always waits for an admin. An upgrade an admin asks for starts at once, whatever the window.
@@ -70,6 +76,10 @@ Identity, the registry, events, models and Keycloak stop connecting as Postgres'
 ### A call that names no floor is checked on the organisation's
 
 An app's service calls (notifications, audit, models, people lookups) that name no floor used to get the app's scopes wherever it was on at all. Now they're checked on the organisation's floor, as the gateway already checked people's calls. Nothing changes for an app that is on for the whole organisation, which is every app AUGUR ships with unless you turned one off. If you turned an app off for the organisation and on for some teams, its service must now name the team's floor to send there. A refused call shows in that app's service log (`pc logs <app>`) as a 403 saying it isn't granted the scope.
+
+### Only a deployment admin can upgrade
+
+Upgrading AUGUR, going back to an earlier release, taking back a waiting upgrade, and changing how a unit takes updates (policy, pin, windows) now need the `deployment-admin` role, not just `admin` (ADR 0022). The first admin (`PLATFORM_ADMIN_USER`) has held it since the deployment-admin release, because identity gives it to them when nobody else has it. Anyone else who upgrades needs it in Admin, People. Someone without it sees the Upgrade Centre's buttons refused with the role named. Installing and removing apps still needs `admin`.
 
 ### Keycloak's admin leaves identity
 

@@ -18,6 +18,7 @@ import {
   type StoredDesiredState,
 } from './desired-state.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
+import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import type { AppJob, AppStore, InstalledApp, Upgrade } from './store.ts';
 import { updatesView, type Halt, type UpdateChecker, type UpdatesView } from './updates.ts';
 
@@ -251,8 +252,9 @@ export const overviewRoutes =
       '/platform/units/:unit/desired-state',
       { schema: { body: desiredStateSchema } },
       async (req, reply) => {
-        const caller = adminOf(req);
-        if (!caller) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change how updates are taken.' });
+        const caller = callerFromHeaders(req.headers);
+        // Policies, pins and windows decide what the server runs, so they need the deployment's own role (ADR 0022).
+        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('change how updates are taken'));
         const { unit } = req.params;
         if (!(await knownUnit(unit))) return reply.code(404).send({ error: 'not_found', message: `This server runs no ${unit}.` });
         const body = req.body;
