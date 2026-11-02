@@ -32,6 +32,8 @@ The parts apps used from the Lit kit, on React with the same words, looks and li
 | `ui-date`, `ui-drop-zone`, `ui-surface` | `DateField`, `DropZone`, `Surface` |
 | `ui-editor`, `ui-prose`, `ui-tree` | `Editor`, `Prose` (with `readMentions`, `writeMentions`, `plainText`), `Tree` (a React Aria tree) |
 | `ui-tag-picker` | `TagPicker` (a React Aria combo box; `onCreate` for a word that isn't a tag yet) |
+| `ui-lifecycle`, `ui-people-picker` | `Lifecycle` (`onMove`), `PeoplePicker` (`onPick`, and `onChange` with `multiple`) |
+| `ui-reader`, `ui-contents` | `Reader` (a ref gives `goTo`, `headingFor`, `marked`; `onOutline`, `onPosition`), `Contents` (`onSelect`) |
 
 Common already had the controls (`Button`, `TextField`, `Select`, `Toggle`, `CheckboxGroup`, `Dialog`, `Menu`, `Heading`).
 
