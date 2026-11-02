@@ -56,7 +56,7 @@ export interface UnitOverview {
 }
 
 export interface OverviewNeed {
-  kind: 'halted' | 'failed' | 'went-back' | 'first-upgrade';
+  kind: 'halted' | 'failed' | 'went-back' | 'first-upgrade' | 'after-watch';
   unit: string;
   message: string;
   /** The result to mark looked at, for failed and went-back. */
@@ -171,6 +171,11 @@ export const overviewOf = (input: OverviewInput): Overview => {
   const needsYou: OverviewNeed[] = [];
   for (const u of units) {
     if (u.unit === AUGUR_UNIT && halt) needsYou.push({ kind: 'halted', unit: u.unit, message: halt.message });
+    // The light watch found a problem after the 10 minutes: AUGUR stays on it, so an admin decides (ADR 0020, amended 2 Nov).
+    const late = u.unit === AUGUR_UNIT ? input.upgrades[0] : undefined;
+    if (late?.state === 'done' && late.afterWatch?.state === 'failed' && !late.seenBy) {
+      needsYou.push({ kind: 'after-watch', unit: u.unit, message: late.afterWatch.message ?? `AUGUR ${late.version} stopped working well after its watch.`, result: { kind: 'upgrade', id: late.id } });
+    }
     if (u.unit === AUGUR_UNIT && firstUpgrade && augur.next && !u.open) needsYou.push({ kind: 'first-upgrade', unit: u.unit, message: `AUGUR ${augur.next} is ready. ${firstUpgrade}` });
     else if (u.halted) needsYou.push({ kind: 'halted', unit: u.unit, message: `${u.name} ${u.running}, which this server runs, was halted by its publisher: ${u.halted.reason}` });
     const need = resultNeed(u);

@@ -46,7 +46,12 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(done).toMatchObject({ id: 'up-1', state: 'done', message: 'Running 0.3.0', images: { web: 'web@sha256:aa' } });
     expect(done?.steps.map((s) => `${s.step} ${s.state}`)).toEqual(['preflight done', 'verify done']);
     expect(done?.finishedAt).toBeDefined();
+    // A finished upgrade keeps its light watch (ADR 0020, amended 2 Nov); an open one has none.
+    const watching = { state: 'watching' as const, since: '2026-11-01T02:20:00.000Z', until: '2026-11-02T02:20:00.000Z', calls: 3, serverErrors: 0, signInMisses: 0 };
+    expect(await store.setAfterWatch('up-1', watching)).toBe(true);
+    expect((await store.upgrade())?.afterWatch).toEqual(watching);
     expect(await ask('up-3')).toBe(true);
+    expect(await store.setAfterWatch('up-3', watching)).toBe(false);
     expect(await store.cancelUpgrade('up-3')).toBe(true);
     expect((await store.upgrade())?.state).toBe('cancelled');
     // The history keeps every one, newest first, with who asked.

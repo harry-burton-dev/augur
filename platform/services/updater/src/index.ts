@@ -13,7 +13,7 @@ import { appRunnerClient, registryClient } from './registry.ts';
 import { appReposFrom, appRunner } from './runner.ts';
 import { composeAppHost, composeServer } from './server.ts';
 import { augurDevIdentity, releaseIdentity } from './signers.ts';
-import { runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
+import { lookAfterWatch, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
 
 // Every setting the updater reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('updater', [
@@ -117,6 +117,13 @@ const once = async () => {
   if (outcome === 'done' && target.images[UPDATER]) await server.replaceSelf();
 };
 
+/** The light watch after a quiet watch: one look when the registry says one is due (ADR 0020, amended 2 Nov). */
+const afterWatchOnce = async () => {
+  const look = await registry.afterWatch();
+  if (!look) return;
+  await registry.afterLook(await lookAfterWatch(look, server));
+};
+
 /** One turn of the app runner: stops old versions whose time is up, then does the next job, if any. Off without APP_SECRETS_KEY. */
 const appsOnce = async () => {
   if (!envValue(await server.readEnv(), 'APP_SECRETS_KEY')) return;
@@ -135,6 +142,11 @@ for (;;) {
     await once();
   } catch (err) {
     log(err instanceof Withdrawn ? 'the upgrade was withdrawn' : 'upgrade check failed', { error: (err as Error).message });
+  }
+  try {
+    await afterWatchOnce();
+  } catch (err) {
+    log('light watch check failed', { error: (err as Error).message });
   }
   try {
     await appsOnce();

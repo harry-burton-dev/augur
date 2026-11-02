@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { runUpgrade, Withdrawn, type Report, type Server, type Target } from './upgrade.ts';
+import { lookAfterWatch, runUpgrade, Withdrawn, type Report, type Server, type Target } from './upgrade.ts';
 
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const image = (service: string, digest: string) => `ghcr.io/o/r/${service}@sha256:${digest}`;
@@ -292,7 +292,22 @@ describe('the watch after an upgrade (ADR 0020)', () => {
   it('says when it was too quiet to judge errors, rather than passing in silence', async () => {
     const { outcome, last } = await run(target({ watch: {} }), fakeServer({ quiet: true }).server);
     expect(outcome).toBe('done');
-    expect(last.message).toBe('AUGUR 0.3.0 ran for 10 minutes with sign-in working and every part ready. Too quiet to judge errors: 3 calls to AUGUR’s services, and it takes 20.');
+    expect(last.message).toBe(
+      'AUGUR 0.3.0 ran for 10 minutes with sign-in working and every part ready. Too quiet to judge errors: 3 calls to AUGUR’s services, and it takes 20, so a light watch goes on until there are, for up to a day.',
+    );
+    // The registry starts the light watch from the count (ADR 0020, amended 2 Nov).
+    expect(last.calls).toBe(3);
+  });
+
+  it('looks once for the light watch: AUGUR’s calls since the last look, and whether sign-in works', async () => {
+    const traffic = async (minutes: number) => ({ minutes, requests: minutes * 2, serverErrors: 1 });
+    expect(await lookAfterWatch({ id: 'up-1', version: '0.3.0', minutes: 5 }, { traffic, signInProblem: async () => undefined })).toEqual({ id: 'up-1', calls: 10, serverErrors: 1 });
+    expect(await lookAfterWatch({ id: 'up-1', version: '0.3.0', minutes: 5 }, { traffic: async () => Promise.reject(new Error('down')), signInProblem: async () => 'Keycloak answered 503.' })).toEqual({
+      id: 'up-1',
+      calls: 0,
+      serverErrors: 0,
+      signInProblem: 'Keycloak answered 503.',
+    });
   });
 
   it('goes back when a part stops answering during the watch, not only at its end', async () => {

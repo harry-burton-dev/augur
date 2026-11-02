@@ -1,6 +1,6 @@
 import { appClientId, clientCredentials, registerApp, serviceHeaders, type ServiceCredentials } from '@augur/service-kit';
 import type { AppJob, JobReporter, PlatformCalls } from './runner.ts';
-import { Withdrawn, type Report, type Reporter, type Target } from './upgrade.ts';
+import { Withdrawn, type AfterWatchLook, type Report, type Reporter, type Target } from './upgrade.ts';
 
 export interface RegistryOptions {
   registryUrl: string;
@@ -50,7 +50,22 @@ export const registryClient = ({ registryUrl, credentials, retryForMs = 5 * 60_0
       throw new Error(`Couldn’t tell the registry how ${report.step} went: ${problem}.`);
     };
 
-  return { target, reporter };
+  /** The light watch's next look, or undefined when none is due. */
+  const afterWatch = async (): Promise<AfterWatchLook | undefined> => {
+    const res = await fetchImpl(url('/after-watch'), { headers: await serviceHeaders(credentials) });
+    if (res.status === 204 || res.status === 404) return undefined;
+    if (!res.ok) throw new Error(`The registry answered ${res.status} when asked about the light watch.`);
+    return (await res.json()) as AfterWatchLook;
+  };
+
+  /** Tells the registry what one look of the light watch saw. */
+  const afterLook = async (look: { id: string; calls: number; serverErrors: number; signInProblem?: string }) => {
+    const res = await fetchImpl(url('/after-watch'), { method: 'POST', headers: { 'content-type': 'application/json', ...(await serviceHeaders(credentials)) }, body: JSON.stringify(look) });
+    // 404: an upgrade since ended it.
+    if (!res.ok && res.status !== 404) throw new Error(`The registry answered ${res.status} to the light watch’s look.`);
+  };
+
+  return { target, reporter, afterWatch, afterLook };
 };
 
 /**

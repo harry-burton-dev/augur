@@ -113,6 +113,8 @@ describe('needs you', () => {
       [],
     );
     expect(items.map((i) => i.kind)).toEqual(['halted', 'first-upgrade']);
+    const late = needsYou(overview({ needsYou: [{ kind: 'after-watch', unit: 'augur', message: '5 of the first 25 calls failed.', result: { kind: 'upgrade', id: 'u2' } }] }), []);
+    expect(late[0]).toMatchObject({ title: 'AUGUR stopped working well after its watch', action: { verb: 'Open the log', to: '/history#u2' } });
     expect(items[1]).toMatchObject({ title: 'AUGUR’s first upgrade here is yours to run', action: { verb: 'Upgrade', to: '/augur' } });
   });
 });

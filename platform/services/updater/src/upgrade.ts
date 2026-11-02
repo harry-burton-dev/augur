@@ -47,6 +47,8 @@ export interface Report {
   state: 'running' | 'done' | 'failed';
   message?: string;
   outcome?: Outcome;
+  /** How many of AUGUR's calls the watch judged by, so the registry knows when it was too quiet. */
+  calls?: number;
 }
 
 /** Tells the registry how a step went. Throws Withdrawn when the upgrade isn't open any more. */
@@ -219,8 +221,25 @@ const watch = async (server: Server, services: readonly string[], versionOf: (se
 export const watchedSentence = (version: string, { calls }: { calls?: number }) => {
   const held = `AUGUR ${version} ran for ${WATCH_MS / 60_000} minutes with sign-in working and every part ready`;
   if (calls === undefined) return `${held}. The gateway doesn’t count calls yet, so errors weren’t judged.`;
-  if (calls < MIN_CALLS) return `${held}. Too quiet to judge errors: ${calls} call${calls === 1 ? '' : 's'} to AUGUR’s services, and it takes ${MIN_CALLS}.`;
+  if (calls < MIN_CALLS) return `${held}. Too quiet to judge errors: ${calls} call${calls === 1 ? '' : 's'} to AUGUR’s services, and it takes ${MIN_CALLS}, so a light watch goes on until there are, for up to a day.`;
   return `${held}, and AUGUR’s services answered ${calls} calls with few errors.`;
+};
+
+/** The light watch's next look, from the registry (registry.ts, afterWatch). */
+export interface AfterWatchLook {
+  id: string;
+  version: string;
+  minutes: number;
+}
+
+/**
+ * One look of the light watch after a quiet watch (ADR 0020, amended 2 Nov): AUGUR's own calls since
+ * the last look, and whether sign-in works. The registry keeps the count and decides when it ends.
+ */
+export const lookAfterWatch = async (look: AfterWatchLook, server: Pick<Server, 'traffic' | 'signInProblem'>) => {
+  const calls = await server.traffic(look.minutes).catch(() => undefined);
+  const signInProblem = await server.signInProblem().catch((err) => reason(err));
+  return { id: look.id, calls: calls?.requests ?? 0, serverErrors: calls?.serverErrors ?? 0, ...(signInProblem ? { signInProblem } : {}) };
 };
 
 /** What went wrong, for the page: a message we wrote, or the first line of anything else. */
@@ -386,7 +405,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     step = 'watch';
     await report({ step, state: 'running', message: `Watching sign-in, every part and AUGUR’s calls for ${WATCH_MS / 60_000} minutes.` });
     const watched = await watch(server, services, versionOf);
-    await report({ step, state: 'done', message: watchedSentence(target.version, watched), outcome: 'done' });
+    await report({ step, state: 'done', message: watchedSentence(target.version, watched), outcome: 'done', ...(watched.calls !== undefined ? { calls: watched.calls } : {}) });
     return 'done';
   } catch (err) {
     if (err instanceof Withdrawn) throw err;
