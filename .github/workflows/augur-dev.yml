@@ -15,6 +15,10 @@ on:
       - 'apps/atlas/**'
       - 'infra/**'
       - 'release/**'
+      # Nothing that goes into an image: notes, the contract tests and the Storybook.
+      - '!**/*.md'
+      - '!platform/contract/**'
+      - '!platform/storybook/**'
   workflow_dispatch:
 concurrency:
   group: augur-dev
