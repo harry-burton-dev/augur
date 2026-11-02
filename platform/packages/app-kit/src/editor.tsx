@@ -67,6 +67,8 @@ const measure = (text: string, unit: 'sentence' | 'word' | 'character') => {
 export interface EditorProps extends FieldProps {
   /** Markdown, with mentions as `[@Name](kind:id)` links. */
   value?: string;
+  /** Where it starts when the part keeps its own value (no `value`). */
+  defaultValue?: string;
   /** Every change, as Markdown. */
   onChange?: (value: string) => void;
   /** On leaving the field. */
@@ -88,8 +90,8 @@ export interface EditorProps extends FieldProps {
  * reference and shows as a chip under it. A `guide` counts and says when
  * you've gone past it, but never stops you.
  */
-export function Editor({ label, hint, required, optional, disabled, state, message, className, value: given, onChange, onCommit, name, placeholder, rows = 3, guide: guideWords = '', mentionSource, autoFocus }: EditorProps) {
-  const [own, setOwn] = useState('');
+export function Editor({ label, hint, required, optional, disabled, state, message, className, value: given, defaultValue, onChange, onCommit, name, placeholder, rows = 3, guide: guideWords = '', mentionSource, autoFocus }: EditorProps) {
+  const [own, setOwn] = useState(defaultValue ?? '');
   const value = given ?? own;
   const [text, setText] = useState(() => readMentions(value).text);
   const [mentions, setMentions] = useState(() => readMentions(value).mentions);
