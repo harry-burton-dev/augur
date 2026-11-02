@@ -2,7 +2,8 @@ name: Release feed
 # Keeps ghcr.io/<repo>/feed:latest, the list of AUGUR's and apps' releases that deployments read with
 # their read key (scripts/publish-feed.mjs, docs/upgrade.md "The read key"), in step with GitHub's
 # releases. Each workflow that makes or removes releases (Release, the dev builds, App previews) calls
-# it once when it's done, so it runs once per release run, not once per release event. Run it by hand
+# it once when it's done, so it runs once per release run, not once per release event. An app in its own
+# repository (release/app-repos.json) starts it from its release workflow. Run it by hand
 # after changing a release in GitHub yourself. It signs the feed with cosign keyless, as this workflow
 # on main (or a hotfix's release branch), and the feed expires after two weeks, so it also runs weekly
 # to issue it again (ADR 0017).
@@ -37,3 +38,5 @@ jobs:
         run: node scripts/publish-feed.mjs --out "$RUNNER_TEMP/feed.json" --sign --push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Reads the releases of apps in their own repositories (release/app-repos.json, ADR 0047).
+          APP_RELEASES_TOKEN: ${{ secrets.APP_RELEASES_TOKEN }}

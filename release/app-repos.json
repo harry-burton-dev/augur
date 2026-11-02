@@ -1,0 +1,4 @@
+{
+  "$comment": "Apps that live in their own repositories (ADR 0047): app id -> owner/repo. AUGUR's release feed lists each one's app/<id>@<version> releases from that repository, and the updater trusts that repository's release workflows to sign that app, and no other. Add an app here in the pull request that moves it out.",
+  "apps": {}
+}

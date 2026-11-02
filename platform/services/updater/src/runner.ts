@@ -118,6 +118,11 @@ export interface RunnerOptions {
   calls: PlatformCalls;
   /** The workflows trusted to sign apps, as `owner/repo/.github/workflows/<file>`, besides those in APP_PUBLISHERS. */
   publishers: string[];
+  /**
+   * Apps that live in their own repositories, as release/app-repos.json lists them: app id → `owner/repo`.
+   * That repository is trusted to sign that app, and only that app (ADR 0047).
+   */
+  appRepos?: Record<string, string>;
   /** The OIDC issuer that vouches for each signature. */
   issuer?: string;
   now?: () => Date;
@@ -163,6 +168,20 @@ export const DEV_WORKFLOW = '.github/workflows/app-dev.yml';
 export { isDevBuild };
 /** A dev build's certificate identity: the dev workflow, on main. */
 export const devIdentity = (repository: string) => devBuildIdentity(`${repository}/${DEV_WORKFLOW}`);
+
+/**
+ * release/app-repos.json, as this release ships it: which repository publishes each app that lives in
+ * its own (ADR 0047). Anything that isn't an app id mapped to `owner/repo` is left out.
+ */
+export const appReposFrom = (json: unknown): Record<string, string> => {
+  const apps = (json as { apps?: unknown } | null)?.apps;
+  if (!apps || typeof apps !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(apps as Record<string, unknown>).filter(
+      (e): e is [string, string] => /^[a-z][a-z0-9-]{1,39}$/.test(e[0]) && typeof e[1] === 'string' && /^[\w.-]+\/[\w.-]+$/.test(e[1]),
+    ),
+  );
+};
 
 /** APP_PUBLISHERS in .env: `owner/repo` (its release.yml) or `owner/repo/.github/workflows/<file>`, space or comma separated. */
 export const publishersFrom = (setting = '') =>
@@ -266,7 +285,7 @@ const notReady = (release: AppRelease, seen?: { version?: string }) =>
     : `${release.manifest.name} ${release.version} didn’t answer within ${READY_MS / 1000} s; its logs say why.`;
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 500);
 
-export const appRunner = ({ host, calls, publishers, now = () => new Date() }: RunnerOptions) => {
+export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => new Date() }: RunnerOptions) => {
   // APPS_NETWORK wins; otherwise the network the updater itself is on, asked once, since a project run under
   // another name (COMPOSE_PROJECT_NAME, -p) doesn't make platform_default.
   let found: Promise<string | undefined> | undefined;
@@ -293,7 +312,10 @@ export const appRunner = ({ host, calls, publishers, now = () => new Date() }: R
 
     await report({ step: 'verify', state: 'running' });
     const publisher = `${release.signer.repository}/${release.signer.workflow}`;
-    const trusted = [...publishers, ...publishersFrom(envValue(env, 'APP_PUBLISHERS'))];
+    const home = appRepos[job.app];
+    // An app with its own repository is published by that repository, and no other (ADR 0047).
+    if (home && release.signer.repository !== home) throw new StepFailed(`${job.app} is published from ${home}, so a release signed in ${release.signer.repository} isn’t taken.`);
+    const trusted = [...publishers, ...(home ? publishersFrom(home) : []), ...publishersFrom(envValue(env, 'APP_PUBLISHERS'))];
     const dev = job.pr === undefined && isDevBuild(release.version);
     // Only a dev or preview server takes dev builds, whatever the registry asked.
     if (dev && !['dev', 'preview'].includes(envValue(env, 'SERVER_RING') ?? '')) throw new StepFailed(`${release.version} is a dev build, and only a dev or preview server (SERVER_RING=dev or preview in .env) installs dev builds.`);
