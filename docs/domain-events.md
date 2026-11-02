@@ -1,6 +1,6 @@
 # Domain events
 
-Services tell each other what happened through **domain events**: "folio.document.published", "platform.team.member-added". A notification is for a person; a domain event is for other services, so they can keep up without calling each other. The events service keeps them and hands them out in one order to whoever follows their topics.
+Services tell each other what happened through **domain events**: "folio.document.published", "platform.team.member-added". A notification is for a person ([Notifications](notifications.md)); a domain event is for other services, so they can keep up without calling each other. The events service keeps them and hands them out in one order to whoever follows their topics.
 
 ## Topics
 

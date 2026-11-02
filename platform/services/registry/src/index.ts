@@ -11,6 +11,7 @@ import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEn
 import { reportingFrom } from './report.ts';
 import { ringFrom, takesPreview } from './ring.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
+import { updateNotices } from './notices.ts';
 
 // Every setting the registry reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('registry', [
@@ -111,3 +112,8 @@ if (!frontendFiles) console.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fr
 // this deployment ships with, which register themselves like any other.
 const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, reporting, tailnet, timeZone });
 await app.listen({ port, host: '0.0.0.0' });
+
+// Deployment admins hear when a release is available and how each update ended, in the shell (ADR 0044).
+if (EVENTS_URL && credentials) {
+  updateNotices({ eventsUrl: EVENTS_URL, credentials, store, updates, appUpdates, timeZone, onError: (err) => console.error(`An update notice wasn’t sent: ${err.message}`) }).start();
+} else console.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: nobody is told about new releases or how updates ended.');
