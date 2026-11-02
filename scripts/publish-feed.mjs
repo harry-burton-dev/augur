@@ -23,6 +23,8 @@ import semver from 'semver';
 import { asMirrored } from './mirror-release.mjs';
 
 const REPO = process.env.AUGUR_REPO ?? process.env.GITHUB_REPOSITORY ?? 'harry-burton-dev/im-platform';
+/** Where the images, and so the feed, are: IMAGE_REPO, or the repository's own path. */
+const IMAGES = (process.env.IMAGE_REPO || `ghcr.io/${REPO}`).toLowerCase();
 /** The feed's media type in the registry. */
 export const FEED_MEDIA_TYPE = 'application/vnd.augur.feed.v1+json';
 /** How many of AUGUR's newest releases the feed holds: the registry reads at most ten newer than the running one. */
@@ -165,7 +167,7 @@ const main = async (args) => {
     execFileSync('cosign', ['sign-blob', '--yes', '--bundle', bundle, out], { stdio: 'inherit' });
   }
   if (args.includes('--push')) {
-    const ref = `ghcr.io/${REPO.toLowerCase()}/feed:latest`;
+    const ref = `${IMAGES}/feed:latest`;
     const files = [`${basename(out)}:${FEED_MEDIA_TYPE}`, ...(args.includes('--sign') ? [`${basename(bundle)}:${BUNDLE_MEDIA_TYPE}`] : [])];
     // ORAS takes a file by its path relative to where it runs, which also names the layer.
     execFileSync(

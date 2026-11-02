@@ -49,7 +49,9 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   its output: Artifacts, Mandate, Data Atlas). Code names stay out of what people read.
 - Old ids kept on purpose so live servers keep working: Keycloak realm
   `platform` and clients `platform-*`, Postgres db/user `platform`, Compose
-  project `platform`, `PLATFORM_*` env keys. Don't rename them without an
+  project `platform`, `PLATFORM_*` env keys, and the image and feed path
+  `ghcr.io/harry-burton-dev/im-platform` (it stays when the repository is
+  renamed). Don't rename them without an
   upgrade note in docs/upgrade.md.
 
 ## Structure (ADR 0002)

@@ -1,6 +1,7 @@
 import semver from 'semver';
 import { isZeroMinor } from './desired-state.ts';
 import type { AppRelease } from './store.ts';
+import { sameRepository } from './feed-trust.ts';
 import { FeedProblem, feedReader, feedSource, haltOf, type FeedChecking, type GitHubRelease, type Halt, type ReadKey } from './updates.ts';
 
 /** Which of an app's releases a deployment takes: stable ones only, betas too, or dev builds too (a preview server only). */
@@ -196,6 +197,6 @@ export const updateNeeds = (from: AppRelease, to: AppRelease, sdkVersion: string
   if (floors(b).some((f) => !floors(a).includes(f))) needs.push('It asks to work on more kinds of floor.');
   if ((b.maxUpload ?? 10) > (a.maxUpload ?? 10)) needs.push(`It asks for uploads up to ${b.maxUpload} MB.`);
   if (!semver.satisfies(sdkVersion, b.sdk, { includePrerelease: true })) needs.push(`It needs SDK ${b.sdk}, and this AUGUR has ${sdkVersion}.`);
-  if (to.signer.repository !== from.signer.repository || to.signer.workflow !== from.signer.workflow) needs.push(`It’s signed by ${to.signer.repository}, not ${from.signer.repository}.`);
+  if (!sameRepository(to.signer.repository, from.signer.repository) || to.signer.workflow !== from.signer.workflow) needs.push(`It’s signed by ${to.signer.repository}, not ${from.signer.repository}.`);
   return needs;
 };
