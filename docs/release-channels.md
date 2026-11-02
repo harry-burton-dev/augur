@@ -22,6 +22,18 @@ The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A producti
 
 In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`augur`, or an app's id such as `mandate`) and, if you like, the version (by default, that unit's newest beta). It attaches `promotion.json` (who made it stable, from which run, when), takes off the pre-release mark and, for AUGUR's newest stable, marks it the repository's latest release. Production servers see it at their next check. Only the repository's owner may run it: anyone else's run fails before it changes anything.
 
+### Bake time
+
+A release goes stable only once it has run on a preview deployment (`SERVER_RING=preview`) for 72 hours, with no deployment going back from it ([ADR 0018](decisions/0018-rollout-gates.md)). The workflow asks the portal, which works it out from the records deployments send ([ADR 0019](decisions/0019-deployment-reporting.md)). If it hasn't baked, the run fails and says how long it ran and where. Tick **Skip the bake time** to make it stable anyway: `promotion.json` records the override and why it was needed.
+
+The portal is only on the tailnet, so the workflow joins it to ask ([ADR 0045](decisions/0045-promote-asks-portal-over-tailscale.md)). To set that up, once:
+
+1. In Tailscale, add the tag `tag:ci` to the ACL's `tagOwners`, and let `tag:ci` reach the portal on port 443.
+2. Make an OAuth client (Settings → OAuth clients) with the `auth_keys` write scope and the tag `tag:ci`.
+3. In the repository, add the secrets `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET`, and the variable `PORTAL_URL` (the portal's address, such as `https://backstage.<your tailnet>.ts.net`).
+
+Until then, a promotion goes ahead, and both the run and `promotion.json` say that bake time wasn't checked.
+
 Units move independently: Mandate can become stable while AUGUR stays where it is, and the other way round.
 
 ## Halting a release

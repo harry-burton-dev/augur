@@ -74,8 +74,48 @@ export const promotionTarget = (unit, wanted, releases) => {
   return of.filter((r) => r.isPrerelease).sort((a, b) => semver.rcompare(a.version, b.version))[0];
 };
 
-/** The record a stable release carries: who made it stable, from which release, when. */
-export const promotionRecord = ({ unit, version, actor, at, run }) => ({ schema: 'augur.promotion/v2', unit, version, channel: 'stable', from: 'beta', promotedBy: actor, run, at });
+/** The record a stable release carries: who made it stable, from which release, when, and how long it had baked. */
+export const promotionRecord = ({ unit, version, actor, at, run, bake }) => ({ schema: 'augur.promotion/v2', unit, version, channel: 'stable', from: 'beta', promotedBy: actor, run, at, ...(bake ? { bake } : {}) });
+
+/** ADR 0018: how long a release must have run on a preview deployment, with no going back, before it's made stable. */
+export const BAKE_HOURS = 72;
+export const BAKE_RING = 'preview';
+
+/**
+ * Whether a release has baked (ADR 0018), from the portal's answer (GET /api/augur/bake): each
+ * deployment that ran it, its ring, hours and whether it went back. Undefined `evidence` means the
+ * workflow can't ask the portal yet, which is said in the record rather than taken for a pass.
+ * `skip` is the owner's override, recorded too. Returns the problem when it may not go stable.
+ */
+export const bakeVerdict = ({ evidence, hours = BAKE_HOURS, skip = false, notAsked }) => {
+  if (!evidence) return { record: { checked: false, why: notAsked ?? 'The portal wasn’t asked.' } };
+  const deployments = evidence.deployments ?? [];
+  const back = deployments.filter((d) => d.wentBack);
+  const preview = deployments.filter((d) => d.ring === BAKE_RING && !d.wentBack).sort((a, b) => b.hours - a.hours);
+  const best = preview[0];
+  let problem;
+  if (back.length) problem = `${back.map((d) => d.deployment).join(', ')} went back from it.`;
+  else if (!best) problem = `No ${BAKE_RING} deployment has reported running it.`;
+  else if (best.hours < hours) problem = `It has run on ${best.deployment} for ${best.hours} hour${best.hours === 1 ? '' : 's'}, and it takes ${hours}.`;
+  const facts = { checked: true, needs: hours, ...(best ? { deployment: best.deployment, hours: best.hours } : {}), ...(back.length ? { wentBack: back.map((d) => d.deployment) } : {}) };
+  if (!problem) return { record: facts };
+  if (skip) return { record: { ...facts, overridden: true, problem } };
+  return { problem: `${problem} Bake time is ${hours} hours on a ${BAKE_RING} deployment with no going back (ADR 0018). To make it stable anyway, run again with "Skip the bake time" ticked; that is recorded in promotion.json.`, record: facts };
+};
+
+/** Asks the portal how long the release has baked, or says why it can't be asked. */
+const askPortal = async (unit, version, portalUrl = process.env.PORTAL_URL) => {
+  if (!portalUrl) return { notAsked: 'PORTAL_URL isn’t set for the Promote workflow (a repository variable), so bake time wasn’t checked. docs/release-channels.md says how to set it up.' };
+  const url = `${portalUrl.replace(/\/$/, '')}/api/augur/bake?unit=${encodeURIComponent(unit)}&version=${encodeURIComponent(version)}`;
+  let res;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  } catch (err) {
+    return { unreachable: `The portal at ${portalUrl} didn’t answer (${err.message}). Is the workflow on the tailnet (TS_OAUTH_CLIENT_ID and TS_OAUTH_SECRET)?` };
+  }
+  if (!res.ok) return { unreachable: `The portal answered ${res.status} for ${url}.` };
+  return { evidence: await res.json() };
+};
 
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const gh = (...args) => execFileSync('gh', args, { cwd: root, encoding: 'utf8' }).trim();
@@ -88,7 +128,7 @@ const tryOr = (fn, fallback) => {
 };
 const readAt = (ref) => (path) => tryOr(() => git('show', `${ref}:${path}`), undefined);
 
-const main = () => {
+const main = async () => {
   const [mode, ...args] = process.argv.slice(2);
   const appIds = readApps().map((a) => a.id);
 
@@ -115,9 +155,17 @@ const main = () => {
     if (!target) throw new Error(wanted ? `${tagOf(unit, wanted)} isn't released.` : `${unit} has no beta release to promote.`);
     const tag = tagOf(unit, target.version);
     if (!target.isPrerelease) return console.log(`${tag} is stable already.`);
+    const skip = process.env.SKIP_BAKE === 'true';
+    const asked = await askPortal(unit, target.version);
+    if (asked.unreachable && !skip) throw new Error(`${asked.unreachable} Bake time couldn’t be checked; run again with "Skip the bake time" ticked to make it stable anyway.`);
+    const verdict = bakeVerdict({ evidence: asked.evidence, hours: Number(process.env.BAKE_HOURS || BAKE_HOURS), skip, notAsked: asked.notAsked ?? asked.unreachable });
+    if (verdict.problem) throw new Error(`${tag} isn’t made stable: ${verdict.problem}`);
+    if (!verdict.record.checked) console.log(`::warning::${verdict.record.why}`);
+    else if (verdict.record.overridden) console.log(`::warning::Bake time skipped by ${actor}: ${verdict.record.problem}`);
+    else console.log(`${tag} baked ${verdict.record.hours} hours on ${verdict.record.deployment}.`);
     const dir = mkdtempSync(join(tmpdir(), 'promote-'));
     const file = join(dir, 'promotion.json');
-    writeFileSync(file, `${JSON.stringify(promotionRecord({ unit, version: target.version, actor, at: new Date().toISOString(), run: process.env.GITHUB_RUN_ID }), null, 2)}\n`);
+    writeFileSync(file, `${JSON.stringify(promotionRecord({ unit, version: target.version, actor, at: new Date().toISOString(), run: process.env.GITHUB_RUN_ID, bake: verdict.record }), null, 2)}\n`);
     gh('release', 'upload', tag, file, '--clobber');
     // AUGUR's newest stable release is the repository's latest; an app's never is.
     const newest = unit === AUGUR && !releases.some((r) => r.tagName.startsWith('augur@') && !r.isPrerelease && semver.valid(r.tagName.slice(6)) && semver.gt(r.tagName.slice(6), target.version));
@@ -130,4 +178,8 @@ const main = () => {
   }
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (import.meta.url === `file://${process.argv[1]}`)
+  main().catch((err) => {
+    console.error(err.message);
+    process.exit(1);
+  });

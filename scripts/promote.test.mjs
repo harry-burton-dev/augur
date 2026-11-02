@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { AUGUR, prProblems, promotionRecord, promotionTarget, releaseLineOf, tagOf, unitOf, versionsFrom } from './promote.mjs';
+import { AUGUR, bakeVerdict, prProblems, promotionRecord, promotionTarget, releaseLineOf, tagOf, unitOf, versionsFrom } from './promote.mjs';
 
 const apps = ['mandate'];
 
@@ -65,5 +65,26 @@ describe('making a release stable', () => {
 
   it('records who made it stable, from beta', () => {
     assert.deepEqual(promotionRecord({ unit: AUGUR, version: '0.14.0', actor: 'owner', at: 't', run: '1' }), { schema: 'augur.promotion/v2', unit: AUGUR, version: '0.14.0', channel: 'stable', from: 'beta', promotedBy: 'owner', run: '1', at: 't' });
+  });
+});
+
+describe('bake time (ADR 0018)', () => {
+  const d = (deployment, ring, hours, wentBack = false) => ({ deployment, ring, hours, wentBack });
+
+  it('lets a release go stable once a preview deployment has run it for the bake time with no going back', () => {
+    assert.deepEqual(bakeVerdict({ evidence: { deployments: [d('augur-preview', 'preview', 80), d('augur-workbench', 'dev', 100)] } }), {
+      record: { checked: true, needs: 72, deployment: 'augur-preview', hours: 80 },
+    });
+  });
+
+  it('refuses one that baked too short, only off preview, or went back anywhere, saying how to override', () => {
+    assert.match(bakeVerdict({ evidence: { deployments: [d('augur-preview', 'preview', 30)] } }).problem, /^It has run on augur-preview for 30 hours, and it takes 72\. .*Skip the bake time/);
+    assert.match(bakeVerdict({ evidence: { deployments: [d('augur-workbench', 'dev', 200)] } }).problem, /^No preview deployment has reported running it\./);
+    assert.match(bakeVerdict({ evidence: { deployments: [d('augur-preview', 'preview', 90), d('augur-workbench', 'dev', 5, true)] } }).problem, /^augur-workbench went back from it\./);
+  });
+
+  it('records an override, and says so when the portal wasn’t asked rather than passing quietly', () => {
+    assert.deepEqual(bakeVerdict({ evidence: { deployments: [] }, skip: true }).record, { checked: true, needs: 72, overridden: true, problem: 'No preview deployment has reported running it.' });
+    assert.deepEqual(bakeVerdict({ notAsked: 'PORTAL_URL isn’t set.' }), { record: { checked: false, why: 'PORTAL_URL isn’t set.' } });
   });
 });
