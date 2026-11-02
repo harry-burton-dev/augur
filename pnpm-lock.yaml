@@ -470,9 +470,6 @@ importers:
       '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
-      '@augur/ui-kit':
-        specifier: workspace:*
-        version: link:../../packages/ui-kit
       react:
         specifier: ^19.3.1
         version: 19.3.1
