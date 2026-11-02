@@ -1,0 +1,24 @@
+{
+  "name": "@augur/app-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The release steps every AUGUR app shares: dev builds, previews, signed bundles and the app-release.json a deployment installs from, as the augur-app command for an app in its own repository.",
+  "exports": {
+    ".": "./src/release.mjs"
+  },
+  "bin": {
+    "augur-app": "./bin/augur-app.mjs"
+  },
+  "files": [
+    "src/release.mjs",
+    "bin"
+  ],
+  "scripts": {
+    "test": "node --test src/*.test.mjs"
+  },
+  "dependencies": {
+    "@augur/service-kit": "workspace:*",
+    "semver": "^7.8.5"
+  }
+}
