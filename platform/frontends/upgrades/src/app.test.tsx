@@ -191,3 +191,70 @@ describe('marking a result looked at', () => {
     expect(el.textContent).toContain('Nothing needs you.');
   });
 });
+
+describe('changing a unit’s settings', () => {
+  const open = async (roles: string[], path = '/augur') => {
+    window.history.replaceState(null, '', `/@me/upgrades${path}`);
+    const el = document.createElement('div');
+    document.body.append(el);
+    let current = overview();
+    const sent: { path: string; body: unknown }[] = [];
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        const body = JSON.parse(String(init.body));
+        sent.push({ path: url, body });
+        if (body.channel !== 'stable') return new Response(JSON.stringify({ error: 'conflict', message: 'AUGUR follows stable releases, set by RELEASE_CHANNEL.' }), { status: 409 });
+        current = overview({ units: [unit({ desired: { ...unit().desired, ...body, setBy: 'p1', isDefault: false }, policy: 'On hold: nothing new is offered.' }), ...overview().units.slice(1)] });
+      }
+      const body = url.includes('/platform/overview') || url.includes('/desired-state') ? current : url.endsWith('/platform/updates') ? updates() : installs;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    await act(async () => {
+      createRoot(el).render(<App ctx={{ fetch, path, user: { id: 'p1', name: 'Alex', departments: [], roles } }} />);
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    return { el, sent };
+  };
+  const button = (el: HTMLElement, words: string) => [...el.querySelectorAll('ui-button')].find((b) => b.textContent === words) as HTMLElement;
+
+  it('keeps Change settings visible without the role, saying which role it needs', async () => {
+    const { el } = await open([]);
+    expect(button(el, 'Change settings').getAttribute('reason')).toContain('deployment-admin');
+  });
+
+  it('shows the sentence before and after, the next windows, and saves what the person chose', async () => {
+    const { el, sent } = await open(['deployment-admin']);
+    await act(async () => button(el, 'Change settings').click());
+    const form = el.querySelector('form')!;
+    expect(button(el, 'Save settings').getAttribute('reason')).toBe('Nothing has changed yet.');
+    const automatic = [...form.querySelectorAll('input[name="policy"]')][0] as HTMLInputElement;
+    await act(async () => automatic.click());
+    expect(form.querySelector('[data-after]')?.textContent).toContain('Automatic: patch releases install by themselves in Sunday 02:00 for 2 hours (Europe/London)');
+    expect(form.textContent).toContain('The next windows');
+    expect([...form.querySelectorAll('input[name="channel"]')].filter((c) => (c as HTMLInputElement).disabled)).toHaveLength(2);
+    const hold = [...form.querySelectorAll('input[name="policy"]')][2] as HTMLInputElement;
+    await act(async () => hold.click());
+    await act(async () => button(el, 'Save settings').click());
+    expect(sent).toEqual([
+      { path: '/api/registry/v1/platform/units/augur/desired-state', body: { channel: 'stable', policy: 'hold', automaticUpTo: 'patch', windows: [{ day: 0, start: '02:00', hours: 2 }], timeZone: 'Europe/London' } },
+    ]);
+    expect(el.querySelector('form')).toBeNull();
+    expect(el.textContent).toContain('On hold: nothing new is offered.');
+    expect(el.querySelector('[role="status"]')?.textContent).toContain('Saved.');
+  });
+
+  it('won’t save a range that isn’t one, and says why in place', async () => {
+    const { el, sent } = await open(['deployment-admin']);
+    await act(async () => button(el, 'Change settings').click());
+    const range = el.querySelector('input[aria-label="Version range"]') as HTMLInputElement;
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      set.call(range, 'banana');
+      range.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(button(el, 'Save settings').getAttribute('reason')).toContain('isn’t a version range');
+    expect(sent).toEqual([]);
+  });
+});

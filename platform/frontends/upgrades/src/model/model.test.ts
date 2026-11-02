@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { levelFrom, newestAllowed, pinChoices, validPin } from './levels.js';
 import { canChange, isRefusal } from './roles.js';
-import { policySentence } from './sentence.js';
+import { desiredProblems, policySentence } from './sentence.js';
 import { formatWhen, insideWindow, nextWindows } from './time.js';
 import { channelsFor } from './words.js';
 
@@ -54,15 +54,23 @@ describe('levels and pins', () => {
   });
 });
 
-describe('policy sentence', () => {
-  it('says what moves by itself and what waits', () => {
-    expect(policySentence({ name: 'AUGUR', channel: 'stable', policy: 'automatic', windows: sunday2 })).toBe(
-      'AUGUR takes patch releases from Production by itself on Sundays 02:00–04:00. Minors and majors wait for you.',
+describe('policy sentence and checks', () => {
+  it('words the record as the registry does', () => {
+    expect(policySentence({ policy: 'automatic', automaticUpTo: 'patch', windows: sunday2, timeZone: 'Europe/London' })).toBe(
+      'Automatic: patch releases install by themselves in Sunday 02:00 for 2 hours (Europe/London). Anything bigger waits for an admin.',
     );
-    expect(policySentence({ name: 'Artifacts', channel: 'beta', policy: 'automatic', automaticUpTo: 'minor', windows: 'any', pin: '0.x' })).toBe(
-      'Artifacts takes patch and minor releases from Preview within 0.x by itself at any time. Majors wait for you.',
+    expect(policySentence({ policy: 'automatic', automaticUpTo: 'minor', windows: [], pin: '0.x', timeZone: 'UTC' })).toBe(
+      'Automatic: patch and minor releases install by themselves at any time, within 0.x. Anything bigger waits for an admin.',
     );
-    expect(policySentence({ name: 'AUGUR', channel: 'stable', policy: 'hold', windows: 'any' })).toContain('is held');
+    expect(policySentence({ policy: 'hold', automaticUpTo: 'patch', windows: [], timeZone: 'UTC' })).toBe('On hold: nothing new is offered.');
+  });
+
+  it('catches what the registry would refuse before saving', () => {
+    const ok = { channel: 'stable' as const, policy: 'automatic' as const, automaticUpTo: 'patch' as const, windows: sunday2, timeZone: 'Europe/London' };
+    expect(desiredProblems(ok)).toEqual([]);
+    expect(desiredProblems({ ...ok, pin: 'banana' })[0]).toContain('isn’t a version range');
+    expect(desiredProblems({ ...ok, timeZone: 'Mars/Base' })[0]).toContain('isn’t a time zone');
+    expect(desiredProblems({ ...ok, windows: [{ day: 0, start: '25:00', hours: 2 }] })).toHaveLength(1);
   });
 });
 
