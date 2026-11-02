@@ -664,6 +664,34 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Overview" }
         "403": { description: Not an admin }
+  /platform/reporting:
+    get:
+      summary: Whether this server reports what it runs to Backstage, its public key and the last send (admins only)
+      description: >
+        ADR 0019. mode is send (DEPLOYMENT_ID and PORTAL_URL set), file (DEPLOYMENT_ID only: export and carry
+        the record) or off (DEPLOYMENT_REPORTING=off, or no DEPLOYMENT_ID), with why in a sentence. publicKey is
+        the deployment's Ed25519 key as base64 SPKI, for the augur.dev/report-key annotation in Backstage.
+      responses:
+        "200":
+          description: How this server reports
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reporting" }
+        "403": { description: Not an admin }
+  /platform/reporting/export:
+    get:
+      summary: The signed record of what this server runs, as a file to carry to Backstage (admins only)
+      description: >
+        The same body the registry sends Backstage: the record as signed (payload, a JSON string in the format
+        augur.deployment-report/1) and its Ed25519 signature. It holds no personal data.
+      responses:
+        "200":
+          description: The signed record, as an attachment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignedReport" }
+        "403": { description: Not an admin }
+        "409": { description: "Reporting is off, with why" }
   /platform/units/{unit}/desired-state:
     put:
       summary: Set how a unit takes new releases (admins only)
@@ -1472,10 +1500,27 @@ components:
             unit: { type: string }
             setBy: { type: string, description: "Who set it; default for a unit nobody has set" }
             setAt: { type: string, format: date-time }
+    Reporting:
+      type: object
+      required: [mode, why]
+      properties:
+        mode: { type: string, enum: [send, file, "off"] }
+        why: { type: string }
+        deployment: { type: string, description: DEPLOYMENT_ID, the deployment's name in Backstage's catalog }
+        publicKey: { type: string, description: Base64 SPKI Ed25519 public key }
+        last: { type: object, required: [at, reason, ok], properties: { at: { type: string, format: date-time }, reason: { type: string, enum: [started, changed, daily] }, ok: { type: boolean }, problem: { type: string } } }
+    SignedReport:
+      type: object
+      required: [deployment, payload, signature]
+      properties:
+        deployment: { type: string }
+        payload: { type: string, description: "The record as signed: JSON in the format augur.deployment-report/1, with OpAMP's agentDescription, health and packageStatuses" }
+        signature: { type: string, description: Base64 Ed25519 signature over the payload's UTF-8 bytes }
     Overview:
       type: object
       required: [ring, timeZone, feed, units, needsYou]
       properties:
+        reporting: { type: object, required: [mode, why], description: Whether Backstage sees what this server runs (ADR 0019), properties: { mode: { type: string, enum: [send, file, "off"] }, why: { type: string } } }
         ring: { $ref: "#/components/schemas/ServerRing" }
         timeZone: { type: string, description: The deployment's (DEPLOYMENT_TIME_ZONE) }
         feed: { type: string, enum: ["on", "off"] }

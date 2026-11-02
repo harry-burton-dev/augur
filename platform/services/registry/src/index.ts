@@ -8,6 +8,7 @@ import { tailnetOf } from './live.ts';
 import { PipelineReader, pipelineUrlFor } from './pipeline.ts';
 import { cosignFeedCheck, feedSigner, repoOfFeed, TRUSTED_ROOT_IN_REGISTRY } from './feed-trust.ts';
 import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
+import { reportingFrom } from './report.ts';
 import { ringFrom, takesPreview } from './ring.ts';
 import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
 
@@ -25,7 +26,9 @@ loadConfigOrExit('registry', [
   { name: 'RELEASE_FEED_URL', about: 'where new AUGUR releases are listed, or off.' },
   { name: 'RELEASE_CHANNEL', about: 'stable, beta or dev (default: dev on the workbench, beta on a preview server, stable on a production one, which takes nothing else; only the workbench takes dev).' },
   { name: 'PIPELINE_FEED_URL', about: 'where the pipeline feed is (default: feed:pipeline beside the release feed on GitHub’s container registry, else off).' },
-  { name: 'PORTAL_URL', about: 'the company’s Backstage, which the Upgrade Centre links to (optional).' },
+  { name: 'PORTAL_URL', about: 'the company’s Backstage, which the Upgrade Centre links to and this deployment reports what it runs to (optional).' },
+  { name: 'DEPLOYMENT_ID', about: 'this deployment’s name in Backstage’s catalog (org/deployments.yaml), such as augur-workbench; without it nothing is reported.' },
+  { name: 'DEPLOYMENT_REPORTING', about: 'off: don’t report what this server runs to Backstage, or export it (default on).' },
   { name: 'PLATFORM_URL', about: 'where AUGUR is; on the workbench, Live on the workbench loads apps only from machines on its tailnet (https://<machine>.<tailnet>.ts.net).' },
   { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
   { name: 'ALLOW_PR_PREVIEWS', about: 'on: run pull requests’ builds for apps’ developers on a production server too.' },
@@ -87,6 +90,8 @@ if (!knownTimeZone(timeZone)) throw new Error(`DEPLOYMENT_TIME_ZONE is a time zo
 const portalUrl = process.env.PORTAL_URL?.replace(/\/+$/, '') || undefined;
 if (portalUrl && !/^https?:\/\//.test(portalUrl)) throw new Error('PORTAL_URL is an http(s) address.');
 updates.start();
+// What this deployment runs, signed and sent to Backstage after each change and once a day (ADR 0019).
+const reporting = reportingFrom(process.env);
 
 // Live on the workbench loads apps only from machines on the workbench's own tailnet, the one in PLATFORM_URL.
 const tailnet = tailnetOf(process.env.PLATFORM_URL);
@@ -104,5 +109,5 @@ if (!frontendFiles) console.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fr
 
 // Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
 // this deployment ships with, which register themselves like any other.
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, tailnet, timeZone });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, reporting, tailnet, timeZone });
 await app.listen({ port, host: '0.0.0.0' });
