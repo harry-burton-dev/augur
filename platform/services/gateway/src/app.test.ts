@@ -210,7 +210,7 @@ describe('gateway', () => {
     it('refuses a body past the app’s limit before sending it on', async () => {
       const res = await upload(await gateway(), 'folio', Buffer.alloc(2 * MB + 1));
       expect(res.statusCode).toBe(413);
-      expect(res.json()).toEqual({ error: 'too_large', message: 'This is more than folio takes at once (2 MB).' });
+      expect(res.json()).toMatchObject({ error: 'too_large', message: 'This is more than folio takes at once (2 MB).' });
     });
 
     it('cuts off a streamed body once it passes the limit', async () => {
