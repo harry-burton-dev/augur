@@ -17,6 +17,8 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
+  # Reads AUGUR's kit packages from GitHub Packages (.npmrc): a classic token with read:packages, else this run's own.
+  NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
   # Turbo's cache outside the checkout, which checkout cleans, so a task whose inputs haven't
   # changed since an earlier run replays instead of running, kept in GitHub's cache (build-test and
   # contract). A push to main replays what its base already had, and saves the cache every new pull
@@ -359,33 +361,19 @@ jobs:
           docker compose -f infra/deploy/compose.yml --env-file /tmp/ci.env config -q
           docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
           COMPOSE_PROFILES=updater docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
-      - run: docker build -f infra/web.Dockerfile --target web -t platform-web .
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity --target service -t platform-identity .
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage --target service -t platform-storage .
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater -t platform-updater .
-      # Folio ships with AUGUR: its service is in every release (its worker is built in folio-worker).
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend --target service -t platform-folio .
-      - name: Folio's image carries its manifest, to register itself with
-        run: docker run --rm --entrypoint node platform-folio -e "const m = require('/app/dist/manifest.json'); if (m.id !== 'folio') process.exit(1); console.log(m.id, m.version)"
-      - name: Folio's image carries its frontend, to give the registry by version
-        run: docker run --rm --entrypoint test platform-folio -f /app/frontend/entry.js
-      # Auspex ships with AUGUR too.
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/auspex --build-arg FRONTEND=@apps/auspex-frontend --target service -t platform-auspex .
-      - name: Auspex's image carries its manifest and frontend
-        run: |
-          docker run --rm --entrypoint node platform-auspex -e "const m = require('/app/dist/manifest.json'); if (m.id !== 'auspex') process.exit(1); console.log(m.id, m.version)"
-          docker run --rm --entrypoint test platform-auspex -f /app/frontend/entry.js
-      # And Data Atlas.
-      - run: docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/atlas --build-arg FRONTEND=@apps/atlas-frontend --target service -t platform-atlas .
-      - name: Data Atlas's image carries its manifest and frontend
-        run: |
-          docker run --rm --entrypoint node platform-atlas -e "const m = require('/app/dist/manifest.json'); if (m.id !== 'atlas') process.exit(1); console.log(m.id, m.version)"
-          docker run --rm --entrypoint test platform-atlas -f /app/frontend/entry.js
+      # The apps that ship with AUGUR come from their own repositories' releases (ADR 0049), which the
+      # release puts in .shipped/frontends; one made up here shows the web image serves what's put there.
+      - run: |
+          mkdir -p .shipped/frontends/shipped-probe && echo 'export {};' > .shipped/frontends/shipped-probe/entry.js
+          docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/web.Dockerfile --target web -t platform-web .
+      - run: docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity --target service -t platform-identity .
+      - run: docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage --target service -t platform-storage .
+      - run: docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater -t platform-updater .
       - name: The updater has the tools it drives
         run: docker run --rm --entrypoint sh platform-updater -c 'docker --version && docker compose version && cosign version'
       - name: The images don't run as root
         run: |
-          for image in platform-web platform-identity platform-storage platform-updater platform-folio platform-auspex platform-atlas; do
+          for image in platform-web platform-identity platform-storage platform-updater; do
             uid=$(docker run --rm --entrypoint id "$image" -u)
             echo "$image runs as $uid"
             test "$uid" != 0
@@ -401,10 +389,8 @@ jobs:
           grep -iE "^content-security-policy: default-src 'self'; script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https://apps.example.org ?;" /tmp/headers
           # Anywhere but the workbench, nothing on the tailnet may run in the shell.
           ! grep -i "ts.net" /tmp/headers
-          # Folio ships with AUGUR, so the front door serves its frontend too.
-          curl -fsI http://localhost:8088/apps/folio/entry.js
-          curl -fsI http://localhost:8088/apps/auspex/entry.js
-          curl -fsI http://localhost:8088/apps/atlas/entry.js
+          # The apps that ship with AUGUR: the front door serves their frontends too.
+          curl -fsI http://localhost:8088/apps/shipped-probe/entry.js
           docker rm -f web
       - name: On the workbench, the shell may load an app from a machine on its own tailnet
         run: |

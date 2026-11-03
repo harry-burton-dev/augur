@@ -97,7 +97,7 @@ pre-releases (`augur@x.y.z`, `app/<id>@x.y.z`), then calls the Release feed and,
 the Deploy test. On any other push it does nothing else and takes about a minute.
 
 **AUGUR dev builds (`augur-dev.yml`)**, on each merge into `main` that changes the platform, a pillar
-app, `infra` or `release/` (notes, the contract tests and the Storybook aside): every image, built,
+app's pin, `infra` or `release/` (notes, the contract tests and the Storybook aside): every image, built,
 pushed and signed as a release is, released as the pre-release `augur@<next patch>-dev.<run>`. Only
 the workbench (`SERVER_RING=dev`) takes it. Merges that land while one is building wait, and only the
 newest waiting one runs.
@@ -107,17 +107,21 @@ in `apps/` that are released on their own (not Folio, Explorer or Data Atlas, wh
 AUGUR): a dev build per merge, and a preview per pull request that deployments can switch to
 ([app-previews.md](app-previews.md)). Closing the pull request deletes its previews.
 
-**How the images are built.** `infra/release-images.sh` builds a dozen images with one Buildx builder,
-each with provenance and an SBOM, pushes them to `ghcr.io/<repo>/<name>`, and signs each by digest
-with cosign keyless. Two things keep it short:
+**How the images are built.** `infra/release-images.sh` builds the platform's images with one Buildx
+builder, each with provenance and an SBOM, pushes them to `ghcr.io/<repo>/<name>`, and signs each by
+digest with cosign keyless. The pillar apps aren't built here ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)):
+for each release `release/shipped-apps.json` pins, it checks the app repository's `release.yml` signed
+it, copies its service image under AUGUR's images by digest and signs it again, and puts the frontend
+that image carries into the web image (`.shipped/frontends/<id>`). Reading the app repositories takes
+the `APP_RELEASES_TOKEN` and `PACKAGES_READ_TOKEN` secrets. Two things keep it short:
 
 - `infra/service.Dockerfile` and `infra/web.Dockerfile` start with the same five lines (copy the
   repository, `pnpm install`), before any build argument, so the workspace is installed once and every
   later image reuses that layer. Keep those lines identical.
-- Folio's worker (Torch and Docling's models, about six minutes) is also tagged
-  `src-<git tree of apps/folio/worker>`. A dev build whose worker folder is unchanged reuses that
-  image, tags it for the new build and signs it again; a beta or stable release always builds it
-  afresh, with the current base image and Python packages.
+- Artifacts' worker (Torch and Docling's models, about six minutes) isn't in its app release, so it's
+  built from augur-folio at the pinned release's tag, and also tagged `src-<git tree of worker/>`. A
+  dev build whose worker folder is unchanged reuses that image, tags it for the new build and signs it
+  again; a beta or stable release always builds it afresh, with the current base image and Python packages.
 
 **Deploy test (`deploy-test.yml`)**, once per AUGUR release, called by Release with the images it just
 pushed: [deploy-test.md](deploy-test.md).
@@ -148,12 +152,23 @@ Every job runs on GitHub's hosted Linux runners unless repository variables say 
 | `CI_RUNNER` | variable | JSON runner labels for every job, such as `["self-hosted","augur-ci"]` or a runner provider's label |
 | `RELEASE_RUNNER` | variable | x86-64 labels for the jobs that build images, if `CI_RUNNER` names Arm runners |
 | `CHROMATIC_PROJECT_TOKEN` | secret | publishes the Storybook; without it the job says so and publishes nothing |
+| `PACKAGES_READ_TOKEN` | secret | a classic token with `read:packages`, for installing the kit's packages from GitHub Packages (`.npmrc`, ADR 0046), in every workflow and image build; without it each run uses its own `GITHUB_TOKEN`, which reads only packages that grant this repository access |
+| `RELEASE_TOKEN` | secret | pushes the Version packages pull request and the Lockfile workflow's commit, so CI runs on them |
 | `RENOVATE_CHANGESET_KEY` | secret | the deploy key Renovate changeset pushes with, so CI runs on its commit |
 | `GITHUB_TOKEN` | built in | pushes images and releases; signing uses the workflow's OIDC token, no keys |
 
 Who may sign what is checked on the server side by the updater and the registry: images and feeds
 must be signed by this repository's workflows on `main` or a release branch
 ([release-channels.md](release-channels.md#signatures)).
+
+Image builds get the package token as a BuildKit secret (`--secret id=node_auth_token,env=NODE_AUTH_TOKEN`),
+so it never lands in a layer.
+
+### Lockfile
+
+`lockfile.yml` brings `pnpm-lock.yaml` up to date on a branch (Actions → Lockfile → Run workflow). Use it
+for a change that adds or bumps a kit package, made where no package token is set, such as a cloud
+session: pnpm can't resolve those packages there.
 
 ## Adding or changing a job
 

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       unit:
-        description: 'What to make stable: augur, or an app id (such as mandate)'
+        description: 'What to make stable: augur, or the id of an app released from this repository'
         required: true
         default: augur
       version:
@@ -23,6 +23,9 @@ permissions:
   packages: write
   # For the Release feed workflow, which signs the feed.
   id-token: write
+env:
+  # Reads AUGUR's kit packages from GitHub Packages (.npmrc): a classic token with read:packages, else this run's own.
+  NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 jobs:
   promote:
     runs-on: ubuntu-latest

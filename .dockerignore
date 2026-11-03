@@ -12,3 +12,4 @@ infra/deploy/secrets
 infra/deploy/apps
 infra/deploy/releases
 infra/deploy/backups
+.shipped/src

@@ -22,7 +22,7 @@ The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A producti
 
 ## Promote to stable
 
-In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`augur`, or an app's id such as `mandate`) and, if you like, the version (by default, that unit's newest beta). It attaches `promotion.json` (who made it stable, from which run, when), takes off the pre-release mark and, for AUGUR's newest stable, marks it the repository's latest release. Production servers see it at their next check. Only the repository's owner may run it: anyone else's run fails before it changes anything.
+In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`augur`, or the id of an app released from this repository) and, if you like, the version (by default, that unit's newest beta). It attaches `promotion.json` (who made it stable, from which run, when), takes off the pre-release mark and, for AUGUR's newest stable, marks it the repository's latest release. Production servers see it at their next check. Only the repository's owner may run it: anyone else's run fails before it changes anything.
 
 ### Bake time
 
