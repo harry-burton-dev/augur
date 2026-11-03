@@ -10,3 +10,5 @@ The light or sound that calls you is the thing you press to stop it, so attentio
 First found in: [`2026-11-03-room-tone`](../runs/2026-11-03-room-tone/) (urgent V1, combined V2).
 
 Could steer: Diegetic (G), radial menu.
+
+Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): the Letterbox bars carry the escalation schedule (escalation V6).

@@ -20,22 +20,22 @@ then write the prompt with "what to take from each".
 | Sound and listening | earcon, auditory icon, sonification, room tone, worldizing, aural alert | Brewster earcon guidelines; Apple Audio Graphs; Murch | alerts, ambient, a11y | room tone (run 3) |
 | Typography and editorial | standfirst, kicker, measure, baseline grid, optical size, grade axis | Bringhurst; Müller-Brockmann; Kinneir and Calvert | hierarchy, tables | batch 1 (C, queued); batch 6 (Y, partly) |
 | Cartography | hillshade, hypsometric tint, contour, plan oblique, soundings, unsurveyed, generalisation | Imhof; nautical charts; Beck | Explorer, Data Atlas | batch 1 (D, queued) |
-| Paper tools for high-stakes work | flight progress strip, cocked strip, SBAR handover, T-card board, double entry | NATS EFPS; Sellen and Harper | handover, approvals | batch 1 (W1, queued); the apprentice (SBAR, partly) |
+| Paper tools for high-stakes work | flight progress strip, cocked strip, SBAR handover, T-card board, double entry | NATS EFPS; Sellen and Harper | handover, approvals | batch 1 (W1, queued); the apprentice (SBAR, partly); the switchboard (strips, SBAR) |
 | Process control rooms | high-performance HMI, ISA-101, grey-scale HMI, alarm rationalisation, alarm flood, shelving, EEMUA 191, situation awareness levels | ISA-101; EEMUA 191; Endsley | notices, Admin, Upgrade Centre | batch 2 (E); batch 6 (AB, partly) |
 | Music notation and scores | graphic score, Treatise, part and full score, conductor's score, cue, rehearsal mark, tacet | Cardew's *Treatise*; Feldman; orchestral scores | Mandate, team work, rollouts | batch 2 (F) |
 | Movement notation | Labanotation, Benesh, Eshkol-Wachman, staff, motif, phrasing | Laban; *Designing Gestural Interfaces* ch. 5 | gestures, radial menu, flows | batch 2 (F, partly) |
 | Game interfaces | diegetic, spatial, meta, non-diegetic, HUD-less, wayfinding in world, Dead Space health spine | Game UI Database; Fagerholt and Lorentzon taxonomy | floors, objects, letterbox | batch 2 (G) |
 | Weaving and textiles | warp and weft, draft, threading, treadling, Jacquard card, selvedge, floats | Anni Albers *On Weaving*; Jacquard; handweaving drafts | structure, floors, brand | batch 2 (W2) |
 | Kitchen brigade | mise en place, the pass, expediting, ticket rail, "heard", fire and hold | Escoffier brigade; restaurant expo practice | urgency, handover, queues | batch 3 (J) |
-| Transit operations | train graph (Marey), headway, dwell, block signalling, dispatcher board | railway timetabling; signalling manuals | scheduling, capacity | |
-| Hospital and ward | early warning score (NEWS2), observation chart, track-and-trigger, whiteboard | NHS NEWS2 chart; ward boards | escalation, thresholds | |
+| Transit operations | train graph (Marey), headway, dwell, block signalling, dispatcher board | railway timetabling; signalling manuals | scheduling, capacity | the switchboard (train graph) |
+| Hospital and ward | early warning score (NEWS2), observation chart, track-and-trigger, whiteboard | NHS NEWS2 chart; ward boards | escalation, thresholds | the switchboard (bleep, whiteboard, partly) |
 | Museum and exhibition | object label, didactic panel, sightline, vitrine, wayfinding, interpretation hierarchy | V&A label guidelines; Serrell *Exhibit Labels* | Artifacts, explain in place | |
 | Gardening and cultivation | succession planting, pruning, dormancy, seasonal calendar, companion planting | RHS guides; Japanese garden *ma* | care cycles, attention as wear | batch 3 (K) |
 | Ritual and ceremony | threshold, procession, liturgy, rite of passage, call and response | van Gennep; Victor Turner | onboarding, approvals, floors | |
 | Architecture and space | prospect-refuge, *A Pattern Language*, threshold, enfilade, light from two sides | Alexander; Kahn; Pallasmaa | floors, layout, focus | |
 | Weather forecasting | synoptic chart, ensemble, cone of uncertainty, nowcast, warnings matrix | Met Office warnings impact matrix | forecasts, risk, Upgrade Centre | |
 | Libraries and archives | finding aid, provenance (respect des fonds), shelf list, accession register | archival description standards (ISAD(G)) | Artifacts, provenance | batch 3 (H, partly) |
-| Telecoms and switchboards | patch panel, busy lamp field, line status, operator console | historic switchboard manuals | presence, routing | batch 4 (O) |
+| Telecoms and switchboards | patch panel, busy lamp field, line status, operator console | historic switchboard manuals | presence, routing | batch 4 (O); the switchboard (run) |
 | Theatre stagecraft | prompt book, cue sheet, standby/go, blocking, lighting state | stage management handbooks | sequenced actions, approvals | the apprentice (standby) |
 | Library classification | faceted classification, PMEST, Colon Classification, UDC, catalogue card, authority file, controlled vocabulary | Ranganathan; Wikidata item pages | Data Atlas structure, finding | batch 3 (H) |
 | Reference librarianship | reference interview, neutral questioning, sense-making, question negotiation | Dervin and Dewdney (1986) | search, asking data | batch 3 (I) |
@@ -50,7 +50,7 @@ then write the prompt with "what to take from each".
 | Apprenticeship and automation | apprentice, journeyman, masterpiece, clinical delegation, levels of automation, mode confusion, flight mode annunciator, armed and engaged modes, automation surprise | Sheridan and Verplank; SAE J3016 | agents, model gateway | batch 4 (Q); the apprentice (run) |
 | Law and rules | constitution, bylaw, point-in-time, prospective change, motion, cascade, precedence | legislation.gov.uk; Robert's Rules | settings, policy, flags | batch 4 (R) |
 | Utility metering | smart meter, in-home display, allowance, tariff, bill, social comparison nudge | UK SMETS; Opower | usage, limits, cost | batch 4 (W4) |
-| Publishing and standards | edition, imprint, colophon, erratum, amendment, superseded, withdrawn, retraction | BSI and ISO lifecycle; Retraction Watch | Artifacts publishing | batch 5 (S) |
+| Publishing and standards | edition, imprint, colophon, erratum, amendment, superseded, withdrawn, retraction | BSI and ISO lifecycle; Retraction Watch | Artifacts publishing | batch 5 (S); the switchboard (edition, partly) |
 | Minutes and the record | resolution, minute, action log, Hansard, ratio decidendi, RAID log | company secretary practice; Hansard | decisions, Mandate | batch 5 (T) |
 | Bundles and case files | court bundle, exhibit, continuity, data room, discharge summary | UK practice directions; due diligence practice | reports, handover | batch 5 (U) |
 | Commissioning and procurement | brief, Plan of Work, purchase order, goods received note, change order, acceptance criteria | RIBA; procurement practice | Mandate asks, sign-off | batch 5 (V) |
@@ -67,6 +67,10 @@ then write the prompt with "what to take from each".
 | Supervision in care | five rights of delegation, scope of practice, competency sign-off, preceptorship, SBAR, I-PASS, just culture | NCSBN/ANA delegation guidance; RCN accountability; Reason; Dekker | agents, approvals, handover, incident review | the apprentice |
 | Lean production | andon cord, jidoka, stop the line, poka-yoke, gemba walk | Ohno, Toyota Production System; Liker | pausing automation, mistakes, alerts | the apprentice |
 | Seafaring watchkeeping | night order book, deck log, standing orders, handover of the watch, bridge resource management | STCW; masters' night orders | diary, handover, agents while away | the apprentice |
+| Postal services | classes of post, recorded delivery, redirection, franking, dead letter office, "while you were out" card | Royal Mail service guides; UPU | notices, receipts, away | the switchboard |
+| On-call and incident response | escalation policy, rota, acknowledge vs resolve, follow-the-sun, SBAR, I-PASS | PagerDuty incident response docs; NHS SBAR; Google SRE on-call | escalation, Inbox | the switchboard |
+| Air traffic control | sector handoff, transfer of control, flight progress strip, cocked strip, readback | NATS; ICAO Doc 4444 | handover, ownership | the switchboard |
+| Newspaper editions | edition times, stop press, front page, late final, fixed running order | newspaper production; shipping forecast | digests, Home | the switchboard |
 
 ## Techniques worth a search on their own
 consequence preview · small multiples · sparkline · micro/macro reading ·

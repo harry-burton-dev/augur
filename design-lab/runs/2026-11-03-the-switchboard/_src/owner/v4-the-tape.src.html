@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>App owner · V4 The week's tape</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-3);height:100%}
+.meters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4)}
+.meter{padding:var(--space-3) var(--space-4)}
+.meter .row{display:flex;align-items:baseline;gap:var(--space-2);margin-top:var(--space-1)}
+.meter b{font:300 var(--type-title-s)/1 var(--font-mono);color:var(--light)}
+.meter .of{font-size:var(--type-meta);color:var(--ink-muted)}
+.meter .cells{display:flex;gap:2px;margin-top:var(--space-2)}
+.meter .cells i{flex:1;height:var(--space-2);background:var(--surface-raised);border-radius:1px}
+.meter .cells i.on{background:var(--danger)}
+.meter .cells i.ok{background:var(--x-proposed-lit)}
+.meter p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:var(--space-2)}
+.tape{display:grid;grid-template-columns:12rem minmax(0,1fr);row-gap:var(--space-2);align-content:start;position:relative}
+.lab{font-size:var(--type-meta);line-height:var(--leading-meta);display:flex;align-items:center}
+.lane{position:relative;height:var(--target-md);border-radius:var(--radius-key);overflow:hidden;background:color-mix(in srgb,var(--slate-deep) 50%,transparent)}
+.lane .nt{position:absolute;top:0;bottom:0;background:var(--x-proposed-night)}
+.mk{position:absolute;top:var(--space-2);bottom:var(--space-2);width:var(--space-2);margin-left:calc(var(--space-2) / -2);border-radius:1px;background:var(--ink);opacity:0;transition:opacity var(--motion-base)}
+.mk.in{opacity:1}
+.mk.stop{background:var(--x-proposed-blocked)}
+.mk.held{background:var(--x-proposed-held),var(--surface-raised);outline:1px solid var(--ink-muted);outline-offset:-1px}
+.mk.urgent{background:var(--danger)}
+.mk.mixed{background:linear-gradient(var(--ink) 50%,var(--x-proposed-held) 50%)}
+.axis{grid-column:2;position:relative;height:var(--space-4);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.axis span{position:absolute;transform:translateX(0)}
+.leg{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.leg span{display:inline-flex;align-items:center;gap:var(--space-1)}
+.leg i{display:inline-block;width:var(--space-2);height:var(--space-4);border-radius:1px}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <div><p class="eyebrow">Admin · Apps · Notices</p><h1 class="heading" id="h"></h1></div>
+    <div class="meters" id="meters"></div>
+    <div class="tape" id="tape"></div>
+    <div class="leg" id="leg"></div>
+  </div></main>
+</div>
+<div class="x-cap"><b>App owner · V4</b> the week’s tape: every send on one time line, with the urgency budget and the hourly rate · ticker tape, train graphs, alarm rate limits (EEMUA 191)</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const APP = 'repairs', app = A(APP), rs = ALL().filter(r => r.n.app === APP);
+$('#top').innerHTML = topHTML(['Admin', 'Apps', app.name, 'Tape'], [['R', 'replay'], ['T', 'technical words', 'h-t']], 'department');
+$('#h').textContent = `${app.name}: the week as it was sent`;
+const kinds = [...new Set(rs.map(r => kindOf(r.n)))];
+const pct = t => (t / WEEK_END * 100).toFixed(3) + '%';
+const urg = rs.filter(r => r.cls === 'urgent');
+const perHour = {}; rs.forEach(r => { const h = Math.floor(r.t / 60); perHour[h] = (perHour[h] || 0) + 1; });
+const peak = Math.max(...Object.values(perHour));
+const keyless = rs.filter(r => !r.n.key).length;
+$('#meters').innerHTML = `<div class="pane meter"><p class="eyebrow">Urgency budget</p><div class="row"><b>${urg.length}</b><span class="of">of ${app.urgent.perWeek} this week</span></div><div class="cells">${Array.from({ length: app.urgent.perWeek }, (_, i) => `<i class="${i < urg.length ? 'on' : ''}"></i>`).join('')}</div><p>Granted by ${P(app.urgent.grantedBy).name} for “${app.urgent.for.toLowerCase()}”. Used ${urg.map(r => at(r.t)).join(', ')}. A third this week would go as needs you, and say why.</p></div>
+  <div class="pane meter"><p class="eyebrow">Busiest hour</p><div class="row"><b>${peak}</b><span class="of">sends in one hour</span></div><div class="cells">${Array.from({ length: DATA.limits.perAppPerHour }, (_, i) => `<i class="${i < peak ? 'ok' : ''}"></i>`).join('')}</div><p>A proposed limit of ${DATA.limits.perAppPerHour} an hour per app per floor. ${app.name} ${peak < DATA.limits.perAppPerHour / 2 ? "never came near it" : "came close"}.</p></div>
+  <div class="pane meter"><p class="eyebrow">Never told</p><div class="row"><b>${rs.filter(r => r.blocked).length}</b><span class="of">of ${rs.length} sends reached nobody</span></div><div class="cells">${rs.map(r => `<i class="${r.blocked ? 'on' : 'ok'}" style="${r.blocked ? 'background:var(--x-proposed-blocked)' : ''}"></i>`).join('')}</div><p>${keyless} sent without a key. See Returned for who can change each.</p></div>`;
+let html = '';
+kinds.forEach(k => {
+  const g = rs.filter(r => kindOf(r.n) === k);
+  html += `<div class="lab">${kindWord(g[0].n)}</div><div class="lane">`;
+  for (let d = 0; d < 7; d++) { const h = TEAMH; if (!h.days.includes(d)) html += `<span class="nt" style="left:${pct(d * DAY)};width:${pct(DAY)}"></span>`; else { html += `<span class="nt" style="left:${pct(d * DAY)};width:${pct(h.from)}"></span><span class="nt" style="left:${pct(d * DAY + h.to)};width:${pct(DAY - h.to)}"></span>`; } }
+  g.forEach(r => { const held = r.deliveries.filter(d => d.held).length, all = r.deliveries.length; const c = r.blocked ? 'stop' : r.cls === 'urgent' ? 'urgent' : held && held === all ? 'held' : held ? 'mixed' : ''; html += `<span class="mk ${c}" style="left:${pct(r.t)}" title="${at(r.t)} · ${r.n.title}${r.blocked ? ' · ' + RULES[r.blocked.rule].word : ` · ${all} told, ${held} held`}"></span>`; });
+  html += `</div>`;
+});
+html += `<div class="axis">${DATA.week.days.map((d, i) => `<span style="left:${pct(i * DAY)}">${d}</span>`).join('')}</div>`;
+$('#tape').innerHTML = html;
+$('#leg').innerHTML = `<span><i style="background:var(--ink)"></i>told live</span><span><i style="background:var(--x-proposed-held);outline:1px solid var(--ink-muted)"></i>held for everyone</span><span><i style="background:linear-gradient(var(--ink) 50%,var(--x-proposed-held) 50%)"></i>held for some</span><span><i style="background:var(--x-proposed-blocked)"></i>reached nobody</span><span><i style="background:var(--danger)"></i>urgent</span><span><i style="background:var(--x-proposed-night);width:var(--space-5)"></i>outside the team’s hours</span>`;
+function play() { clearLater(); document.body.classList.add('pre'); $$('.mk').forEach(m => m.classList.remove('in')); later(() => document.body.classList.remove('pre'), 60); [...$$('.mk')].sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left)).forEach((m, i) => later(() => m.classList.add('in'), 1200 + i * 70)); }
+document.addEventListener('keydown', e => commonKeys(e, play));
+Icons.hydrate(document.body); play();
+</script></body></html>

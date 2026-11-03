@@ -51,7 +51,7 @@ app pattern took it), **dropped** (say why in the file).
 | [Trust lapses](trust-lapses.md) | explored | 2026-11-03-the-apprentice |
 | [Mistakes have siblings](mistakes-have-siblings.md) | explored | 2026-11-03-the-apprentice |
 | [Stop the line](stop-the-line.md) | explored | 2026-11-03-the-apprentice |
-| [Answer, don't announce](answer-not-announce.md) | to explore | 2026-11-03-room-tone |
+| [Answer, don't announce](answer-not-announce.md) | explored | 2026-11-03-room-tone |
 | [Attention as wear](attention-as-wear.md) | to explore | 2026-11-02-wear-and-time |
 | [Care is scheduled](care-is-scheduled.md) | to explore | batch 3 research |
 | [Changes before they bite](changes-before-they-bite.md) | to explore | 2026-11-02-wear-and-time |
@@ -65,13 +65,20 @@ app pattern took it), **dropped** (say why in the file).
 | [Question and answer](question-and-answer.md) | explored | 2026-11-03-room-tone |
 | [The recipe is the record](the-recipe-is-the-record.md) | to explore | batch 3 research |
 | [The record has edges](the-record-has-edges.md) | to explore | 2026-11-02-wear-and-time |
-| [The shell owns loudness](shell-owns-loudness.md) | to explore | 2026-11-03-room-tone |
+| [The shell owns loudness](shell-owns-loudness.md) | explored | 2026-11-03-room-tone |
 | [The signal is the control](the-signal-is-the-control.md) | to explore | 2026-11-03-room-tone |
 | [Subtraction as cue](subtraction-as-cue.md) | to explore | 2026-11-03-room-tone |
 | [Time as an address](time-as-address.md) | to explore | 2026-11-02-wear-and-time |
 | [Time is matter, light is need](time-is-matter.md) | to explore | 2026-11-02-wear-and-time |
 | [Turn-taking](turn-taking.md) | to explore | 2026-11-03-room-tone |
 | [Visible repair](visible-repair.md) | explored | 2026-11-02-wear-and-time |
+| [The route is a trace](the-route-is-a-trace.md) | explored | 2026-11-03-the-switchboard |
+| [Returned to sender](returned-to-sender.md) | explored | 2026-11-03-the-switchboard |
+| [No gap between owners](no-gap-handover.md) | explored | 2026-11-03-the-switchboard |
+| [The next step is shown](the-next-step-is-shown.md) | explored | 2026-11-03-the-switchboard |
+| [News waits for the edition](news-waits-for-the-edition.md) | explored | 2026-11-03-the-switchboard |
+| [Quiet has named keys](quiet-has-named-keys.md) | explored | 2026-11-03-the-switchboard |
+| [Rehearse on last week](rehearse-on-last-week.md) | explored | 2026-11-03-the-switchboard |
 | [Context is a working set](context-is-a-working-set.md) | to explore | batch 6 research |
 | [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
 | [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |
