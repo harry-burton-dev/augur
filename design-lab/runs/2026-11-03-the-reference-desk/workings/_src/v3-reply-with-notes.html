@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workings · V3 · The reply with notes</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+/* ---- V3: the answer as a reference librarian's written reply, the workings as numbered side notes ---- */
+.body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,var(--measure-read)) minmax(0,1fr);gap:var(--space-6);margin-top:var(--space-4);overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+@media (max-width:1400px){.body{gap:var(--space-5)}}
+.reply{font:300 var(--type-lead)/calc(var(--leading-lead) * 1.12) var(--font-sans);color:var(--ink)}
+.reply p{margin:0 0 var(--space-4);transition:opacity var(--motion-base) var(--ease-standard),filter var(--motion-base) var(--ease-standard)}
+.reply b{font-weight:400;color:var(--light)}
+.reply .w{font:inherit;color:var(--light);border-bottom:1px dashed var(--hairline-strong);padding:0 2px;border-radius:var(--radius-key) var(--radius-key) 0 0}
+.reply .w:hover,.reply .w[aria-expanded="true"]{background:var(--surface-raised)}
+.reply .w.guess{border-bottom:0}
+.reply .g{background:var(--x-proposed-guess-dots);padding-bottom:3px}
+.reply .lead{font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);color:var(--light);letter-spacing:var(--tracking-tight)}
+.reply .lead .n{color:var(--x-proposed-lit)}
+.reply .nm{color:var(--light);font-weight:400}
+.reply .nm.less{text-decoration:underline wavy color-mix(in srgb,var(--warning) 60%,transparent);text-underline-offset:5px;text-decoration-thickness:1px}
+.reply .nm.j{background:var(--x-proposed-lit-wash);box-shadow:0 2px 0 var(--x-proposed-lit)}
+sup{font:400 var(--x-proposed-type-micro)/0 var(--font-mono);vertical-align:super}
+sup button{color:var(--x-proposed-here);padding:0 2px;border-radius:2px;min-width:1.4em}
+sup button:hover,sup button.on{background:var(--x-proposed-here-soft);color:var(--light)}
+.dimming p:not(.focus){opacity:.38;filter:saturate(.4)}
+.dimming .note:not(.focus){opacity:.38;filter:saturate(.4)}
+.how{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center;margin:0 0 var(--space-4);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.notes{list-style:none;margin:0;padding:0 0 var(--space-6);display:flex;flex-direction:column;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.note{position:relative;display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) var(--space-3) var(--space-2) var(--space-2);border-left:1px solid var(--hairline);transition:opacity var(--motion-base) var(--ease-standard),filter var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard);animation:popin var(--motion-base) var(--ease-out) both}
+.note.focus{border-left-color:var(--x-proposed-here);background:linear-gradient(90deg,var(--x-proposed-here-soft),transparent 80%)}
+.note .k{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--x-proposed-here)}
+.note b{color:var(--ink);font-weight:400}
+.note .row{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;margin-top:var(--space-1)}
+.note .src{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;padding:2px 0}
+.note .src .d{font:400 var(--x-proposed-type-micro)/1 var(--font-mono)}
+.note.model{border-left-style:dotted;border-left-color:var(--x-proposed-guess-ink)}
+.note.model.focus{border-left-color:var(--x-proposed-guess-ink)}
+.note .acts{display:flex;gap:var(--space-2);margin-top:var(--space-2)}
+.note .acts .btn{height:calc(var(--target-sm) - var(--space-2));font-size:var(--type-small)}
+.note .tk{margin-top:var(--space-1)}
+.techq{display:none;margin:0 0 var(--space-4);padding:var(--space-2) var(--space-3);background:var(--surface-inset);border-radius:var(--radius-key);font:400 var(--x-proposed-type-micro)/1.55 var(--font-mono);color:var(--ink-muted);white-space:pre}
+.tech .techq{display:block}
+@media (max-height:840px){.said{font-size:var(--type-lead);line-height:var(--leading-lead)}.reply{font-size:var(--type-body);line-height:var(--leading-body)}.reply .lead{font-size:var(--type-heading);line-height:var(--leading-heading)}.reply p{margin-bottom:var(--space-3)}}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Workings · V3</b> the reply with notes: a librarian's written answer, every claim footnoted · reference replies, Tufte's side notes</div>
+<script>
+/*@JS*/
+/* ================= V3 ================= */
+let P = E.defaults(), open = null, focus = null, shownNotes = 99, joined = new Set();
+const app = document.getElementById("app");
+app.innerHTML = UI.rail([["R", "replay"], ["1–7", "focus a note"], ["↑ ↓", "next note"], ["G", "model gateway on/off"], ["T", "technical words"], ["Esc", "unfocus"]]) + '<main class="main" id="main"></main>';
+const main = document.getElementById("main"), I = UI.I;
+const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+const word = n => WORDS[n] || String(n);
+const sup = n => '<sup><button data-note="' + n + '" class="' + (focus === n ? "on" : "") + '" aria-label="Note ' + n + '">' + n + '</button></sup>';
+const nm = (r, extra) => '<span class="nm' + (r.sure === "less" ? " less" : "") + (joined.has(r.s.id) ? " j" : "") + (extra || "") + '">' + E.esc(r.s.name) + '</span>';
+function render() {
+  const R = E.run(P), n = R.answer.length;
+  const ks = DATA.kinds.filter(k => P.kinds.has(k.id));
+  const less = R.answer.filter(r => r.sure === "less");
+  const callSrc = DATA.sources.calls;
+  let h = '<div class="head"><div><p class="eyebrow">' + E.esc(DATA.app) + ' · Ask · the reply</p><div class="asked">' + I("quote", 14) + '<q>' + E.esc(DATA.asked.words) + '</q></div><div class="said">' + E.sentence(P) + '</div></div>' +
+    '<div class="toolbar"><button class="btn" id="gw" aria-pressed="' + P.gateway + '">' + I(P.gateway ? "bot" : "power-off") + (P.gateway ? "Model on" : "Model off") + '</button><button class="btn" id="tb">' + I("code") + 'Technical</button><button class="btn">' + I("bookmark-plus") + 'Save question</button></div></div>';
+  /* the reply: put together from the steps by a template; no model writes these sentences */
+  const p = [];
+  p.push([1, '<span class="lead"><span class="n">' + word(n) + '</span> ' + (n === 1 ? DATA.kind.one : DATA.kind.many) + '</span> with a <button class="w" data-step="status">' + E.esc(E.list(DATA.statuses.filter(s => P.status.has(s.id)).map(s => s.label), "or")) + ' contract</button> and no <button class="w guess" data-step="kinds">' + E.esc(E.list(ks.map(k => k.label), "or")) + '</button> from them since <button class="w" data-step="since">' + E.dayY(P.since) + '</button>' + sup(1) + ': ' + E.list(R.answer.map(r => nm(r))) + '.' + sup(2)]);
+  if (less.length) p.push([3, E.list(less.map(r => nm(r))) + ' ' + (less.length === 1 ? 'is' : 'are') + ' the least certain: they usually phone, and the call log kept nothing from ' + E.day(callSrc.gap[0]) + ' to ' + E.day(callSrc.gap[1]) + '.' + sup(3)]);
+  if (R.maybe.length) p.push([4, '<span class="g">' + word(R.maybe.length) + ' more would be on the list if a model’s matching is wrong: ' + E.list(R.maybe.map(r => nm(r))) + '. ' + (R.maybe.length === 1 ? 'It was' : 'Each was') + ' linked to an email by meaning only, not by name or number.</span>' + sup(4)]);
+  else if (!P.gateway) p.push([4, 'Nothing was matched by meaning: the model gateway is off, so every link here is by number, name or spelling.' + sup(4)]);
+  if (R.unknown.length) p.push([5, 'There’s no telling for ' + E.list(R.unknown.map(r => nm(r))) + ': no contact of any kind is recorded for them. ' + E.esc(DATA.gapKeeper.name) + ' at the ' + E.esc(DATA.gapKeeper.desk) + ' could add one.' + sup(5)]);
+  p.push([6, 'Left out: ' + E.list(R.outStatus.map(r => nm(r) + ' (' + E.esc(E.ST[r.s.status].label) + ')')) + '. ' + E.cap(DATA.hidden.count) + ' ' + DATA.kind.many + ' kept on ' + E.esc(DATA.hidden.floor) + ' may fit too; that floor isn’t yours to see, and ' + E.esc(DATA.hidden.ask) + ' can ask there.' + sup(6) + sup(7)]);
+  h += '<div class="body' + (focus ? ' dimming' : '') + '"><div><div class="how">' + I("info", 14) + '<span>This reply is put together from the steps on the right, the same way every time. No model writes its sentences.' + (P.gateway ? ' Dotted words are where a model helped.' : '') + '</span></div><div class="techq">' + E.esc(E.tech(P)) + '</div><div class="reply">' + p.map(x => '<p data-p="' + x[0] + '" class="' + (focus && (focus === x[0] || (x[0] === 1 && focus === 2) || (x[0] === 6 && focus === 7)) ? "focus" : "") + '">' + x[1] + '</p>').join("") + '</div></div>';
+  /* the notes */
+  const N = [];
+  N.push({ n: 1, tx: '<b>Two words were asked back.</b> “Since spring” could be ' + E.esc(E.list(DATA.since.options.map(o => o.label), "or")) + '; <b>you chose ' + E.esc(E.sinceLabel(P.since)) + '</b>' + '. “' + E.esc(DATA.heard.said) + '” was read as ' + E.esc(E.list(ks.map(k => k.many), "or")) + ' by ' + '<span class="guess">a model</span>, and you confirmed it.<div class="row"><button class="w" data-step="since" style="color:var(--ink);text-decoration:underline dotted;text-underline-offset:3px">change the date</button><button data-step="kinds" style="color:var(--ink);text-decoration:underline dotted;text-underline-offset:3px">change what counts</button></div>' });
+  const srcs = ks.map(k => DATA.sources[k.src]);
+  N.push({ n: 2, tx: '<b>Records read.</b> ' + R.inScope + ' suppliers, every contact in:' + ks.map(k => { const s = DATA.sources[k.src]; return '<div class="src">' + I(k.icon, 14) + '<span>' + E.esc(s.name) + '</span><span class="d">since ' + E.dayShortY(s.from) + '</span></div>'; }).join("") + 'Linked by ' + E.esc(E.list(DATA.matches.filter(m => P.match.has(m.id) && (!m.model || P.gateway)).map(m => m.label), "or")) + '.<span class="tk">' + E.esc(DATA.matches.map(m => m.tech).join("\n")) + '</span>' });
+  if (less.length) N.push({ n: 3, tx: '<b>A gap in a source.</b> <span class="mk mk-norec"></span> ' + E.esc(callSrc.name) + ': no record from ' + E.dayShortY(callSrc.gap[0]) + ' to ' + E.dayShortY(callSrc.gap[1]) + ' (kept by ' + E.esc(callSrc.keeper) + '). Calls in that time can’t be found, so “not heard from” is less sure for ' + E.esc(E.list(less.map(r => r.s.name))) + '.' });
+  N.push({ n: 4, model: true, tx: P.gateway && R.maybe.length ? '<b>' + I("bot", 12) + ' A model’s guess.</b> ' + R.maybe.map(r => '<div class="src">' + I(E.K[r.by.kind].icon, 14) + '<span>' + E.esc(r.s.name) + ': ' + E.esc(r.by.text) + '</span><span class="d">' + E.day(r.by.date) + '</span></div>').join("") + 'Nothing in the record says so yet. Confirming a match sends it to Triage as a proposal; it becomes a fact only once accepted.<div class="acts"><button class="btn">' + I("check", 14) + 'Confirm…</button><button class="btn">' + I("x", 14) + 'Not them</button></div><span class="tk">pgvector cosine ≥ 0.86 · model gateway · 2 calls today</span>' : '<b>' + I("power-off", 12) + ' Matching by meaning is off.</b> The model gateway is off for this deployment; an admin turns it on in Admin. Everything else in this reply works without it.' });
+  if (R.unknown.length) N.push({ n: 5, tx: '<b>Not known yet.</b> <span class="mk mk-gap"></span> ' + E.esc(E.list(R.unknown.map(r => r.s.name))) + ' became a supplier in ' + E.dayShortY(R.unknown[0].s.since).replace(/^\d+ /, "") + '; no source has a contact for them. ' + E.esc(DATA.gapKeeper.name) + ' (' + E.esc(DATA.gapKeeper.desk) + ') could add one.<div class="acts"><button class="btn">' + I("user-round-plus", 14) + 'Ask ' + E.esc(DATA.gapKeeper.name.split(" ")[0]) + '</button></div>' });
+  N.push({ n: 6, tx: '<b>Left out by your choice.</b> Only ' + E.esc(E.list(DATA.statuses.filter(s => P.status.has(s.id)).map(s => s.label), "or")) + ' contracts count. ' + R.outStatus.map(r => E.esc(r.s.name) + ': ' + E.esc(r.why.toLowerCase())).join("; ") + '.<div class="row"><button data-step="status" style="color:var(--ink);text-decoration:underline dotted;text-underline-offset:3px">change which contracts count</button></div>' });
+  N.push({ n: 7, tx: '<b>Not yours to see.</b> <span class="mk mk-unseen"></span> ' + E.cap(DATA.hidden.count) + ' on ' + E.esc(DATA.hidden.floor) + ', a Team floor below. The count isn’t shown, so it can’t tell you what’s there. ' + E.esc(DATA.hidden.ask) + ' can rerun this question there.' });
+  h += '<ol class="notes" aria-label="Notes">' + N.slice(0, shownNotes).map(x => '<li class="note' + (x.model ? " model" : "") + (focus === x.n ? " focus" : "") + '" data-n="' + x.n + '"><span class="k">' + x.n + '</span><div>' + x.tx + '</div></li>').join("") + '</ol></div>';
+  main.innerHTML = h;
+  if (open) pop();
+  E.hydrate(main);
+}
+function pop() {
+  const a = main.querySelector('.reply [data-step="' + open + '"]') || main.querySelector('[data-step="' + open + '"]'); if (!a) return;
+  a.setAttribute("aria-expanded", "true");
+  const el = document.createElement("div"); el.className = "pop"; el.setAttribute("role", "menu"); el.innerHTML = UI.popHTML(open, P, E.run(P).answer.length);
+  main.appendChild(el); UI.place(el, a, main); E.hydrate(el);
+}
+function change(fn) { const b = E.run(P); fn(); const a = E.run(P); joined = new Set(E.diff(b, a).joined.map(x => x.s.id)); render(); }
+main.addEventListener("click", e => {
+  const o = e.target.closest(".opt"); if (o) { if (!o.disabled) { const st = o.dataset.step; if (st === "since") open = null; change(() => UI.apply(P, st, o.dataset.v)); } return; }
+  const w = e.target.closest("[data-step]"); if (w) { open = open === w.dataset.step ? null : w.dataset.step; render(); return; }
+  const s = e.target.closest("[data-note]"); if (s) { const n = +s.dataset.note; focus = focus === n ? null : n; render(); return; }
+  const nt = e.target.closest(".note"); if (nt && !e.target.closest("button")) { const n = +nt.dataset.n; focus = focus === n ? null : n; render(); return; }
+  if (e.target.closest("#gw")) { change(() => P.gateway = !P.gateway); return; }
+  if (e.target.closest("#tb")) { document.body.classList.toggle("tech"); return; }
+  if (!e.target.closest(".pop") && open) { open = null; render(); }
+});
+let runId = 0;
+async function demo() {
+  const me = ++runId; P = E.defaults(); open = null; focus = null; joined = new Set(); shownNotes = 0; render();
+  await E.wait(E.ms("--motion-run")); if (me !== runId) return;
+  for (let i = 1; i <= 7; i++) { shownNotes = i; render(); await E.wait(E.ms("--motion-instant")); if (me !== runId) return; }
+  shownNotes = 99;
+  await E.wait(E.ms("--motion-base")); if (me !== runId) return;
+  focus = 4; render();
+}
+const order = () => [...main.querySelectorAll(".note")].map(n => +n.dataset.n);
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === "r") demo();
+  else if (k === "g") change(() => P.gateway = !P.gateway);
+  else if (k === "t") document.body.classList.toggle("tech");
+  else if (/^[1-7]$/.test(k)) { focus = +k; render(); }
+  else if (k === "arrowdown" || k === "arrowup") { const o = order(); let i = o.indexOf(focus); i = k === "arrowdown" ? Math.min(o.length - 1, i + 1) : Math.max(0, i - 1); focus = o[i]; render(); e.preventDefault(); }
+  else if (k === "escape") { focus = null; open = null; render(); }
+});
+demo();
+</script>
+</body>
+</html>

@@ -27,6 +27,13 @@ app pattern took it), **dropped** (say why in the file).
 | [The structure predicts its gaps](the-structure-predicts-its-gaps.md) | explored | 2026-11-03-the-catalogue |
 | [Two registers](two-registers.md) | explored | 2026-11-03-the-catalogue |
 | [Waiting is a place](waiting-is-a-place.md) | explored | 2026-11-03-the-catalogue |
+| [Ask only what changes](ask-only-what-changes.md) | explored | 2026-11-03-the-reference-desk |
+| [Five reasons an answer moves](five-reasons-an-answer-moves.md) | explored | 2026-11-03-the-reference-desk |
+| [Pencil and ink](pencil-and-ink.md) | explored | 2026-11-03-the-reference-desk |
+| [The answer has a base](the-answer-has-a-base.md) | explored | 2026-11-03-the-reference-desk |
+| [The empty knows its errand](the-empty-knows-its-errand.md) | explored | 2026-11-03-the-reference-desk |
+| [The question is the record](the-question-is-the-record.md) | explored | 2026-11-03-the-reference-desk |
+| [The workings show](the-workings-show.md) | explored | batch 3 research |
 | [Answer, don't announce](answer-not-announce.md) | to explore | 2026-11-03-room-tone |
 | [Attention as wear](attention-as-wear.md) | to explore | 2026-11-02-wear-and-time |
 | [Care is scheduled](care-is-scheduled.md) | to explore | batch 3 research |
@@ -49,4 +56,3 @@ app pattern took it), **dropped** (say why in the file).
 | [Time is matter, light is need](time-is-matter.md) | to explore | 2026-11-02-wear-and-time |
 | [Turn-taking](turn-taking.md) | to explore | 2026-11-03-room-tone |
 | [Visible repair](visible-repair.md) | to explore | 2026-11-02-wear-and-time |
-| [The workings show](the-workings-show.md) | to explore | batch 3 research |

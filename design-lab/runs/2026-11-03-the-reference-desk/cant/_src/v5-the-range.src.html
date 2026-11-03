@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Reference desk · Can't answer V5 · The answer is a range</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@COMMON_CSS@*/
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4);min-height:0}
+.range{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;margin:0}
+.range .w{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.range .n{font-weight:200;font-size:var(--type-display);line-height:var(--leading-display);color:var(--light)}
+.range .dash{font-weight:200;font-size:var(--type-display);line-height:var(--leading-display);color:var(--ink-muted)}
+.range-sub{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink);margin-top:var(--space-1)}
+.range-sub b{font-weight:400;color:var(--light)}
+/* the line: one slot per supplier the question applies to, ordered certain, possible, ruled out */
+.line{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr)) calc(var(--space-7) + var(--space-4));grid-template-rows:auto auto auto auto;column-gap:3px;row-gap:var(--space-2);padding:0 var(--space-2)}
+.lane-l{grid-column:1/-1;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.ptick{grid-row:1;position:relative;height:var(--space-6);border-left:1px dashed var(--x-proposed-pencil);transition:opacity var(--motion-slow) var(--ease-out)}
+.ptick > span{position:absolute;left:var(--space-2);top:0;white-space:nowrap;display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--x-proposed-pencil)}
+.gwoff .ptick{opacity:0}
+.brk{grid-row:2;height:var(--space-4);border:1px solid var(--ink-muted);border-bottom:0;border-radius:2px 2px 0 0;position:relative;transition:transform var(--motion-calm) var(--ease-out)}
+.brk.cert{border-color:var(--light)}
+.brk.poss{border-style:dashed}
+.brk b{position:absolute;left:0;right:0;top:calc(var(--space-4) * -1 - var(--space-1));text-align:center;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink);font-weight:400;white-space:nowrap}
+.pre .brk{transform:scaleX(0)}
+.brk{transform-origin:left center}
+.slot{grid-row:3;height:var(--space-6);display:grid;place-items:center;border-radius:2px;transition:opacity var(--motion-quick) var(--ease-out),box-shadow var(--motion-base) var(--ease-out)}
+.pre .slot{opacity:0}
+.slot.cert{background:var(--light)}
+.slot.cert.nn{box-shadow:inset 0 calc(var(--space-1) * -1) 0 var(--ink-muted)}
+.slot.gap{background:var(--x-proposed-gap);--x-proposed-gap-tick:var(--space-1)}
+.slot.stale{background:var(--x-proposed-stale)}
+.slot.norecord svg{width:100%;height:100%}
+.slot.norecord path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.slot.out{background:color-mix(in srgb,var(--ink) 18%,transparent);height:var(--space-4);align-self:center}
+.slot.hl{box-shadow:0 0 0 var(--focus-ring) var(--x-proposed-here),0 0 var(--glow-blur) color-mix(in srgb,var(--x-proposed-here) 40%,transparent)}
+.tail{grid-row:3;height:var(--space-6);background:var(--x-proposed-unseen);-webkit-mask:linear-gradient(90deg,var(--shade),transparent);mask:linear-gradient(90deg,var(--shade),transparent);border-radius:2px;display:flex;align-items:center;padding-left:var(--space-2);color:var(--ink-muted)}
+.axis{grid-row:4;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);border-top:1px solid var(--hairline-strong);padding-top:var(--space-1);white-space:nowrap}
+.axis b{font-weight:400;color:var(--light)}
+.tl{grid-row:4;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+
+.below{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:var(--space-5);min-height:0}
+.narrow{min-height:0;overflow:auto}
+.narrow h3,.side h3{margin:0 0 var(--space-2)}
+.nr{display:grid;grid-template-columns:minmax(0,1fr) calc(var(--space-8) + var(--space-6)) auto;gap:var(--space-3);align-items:center;width:100%;padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:left}
+.nr:hover{background:var(--surface-inset)}
+.nr.sel{background:var(--surface-raised);box-shadow:inset 2px 0 0 var(--x-proposed-here);color:var(--ink)}
+.nr b{display:block;font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.shr{position:relative;height:var(--space-3);border:1px dashed var(--ink-muted);border-radius:2px}
+.shr i{position:absolute;top:-1px;bottom:-1px;right:-1px;background:var(--x-proposed-here-wash);border:1px solid var(--x-proposed-here);border-radius:2px}
+.nr .by{font:400 var(--type-meta)/1 var(--font-mono);color:var(--light);white-space:nowrap}
+.nr.fixed{cursor:default}
+.nr.fixed .shr{border-style:solid;border-color:var(--hairline)}
+.nr.fixed .shr i{display:none}
+.side{min-height:0;display:grid;gap:var(--space-3);align-content:start}
+.card{border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:grid;gap:var(--space-1)}
+.card b{font-weight:400;color:var(--ink)}
+.card .ichip,.card .pchip{justify-self:start}
+.card.pbox{border-radius:var(--radius-inset)}
+.gwoff .card.pbox{border-style:solid;border-color:var(--hairline);background:none}
+</style>
+</head>
+<body class="pre">
+<div class="app">
+  <div id="chrome"></div>
+  <main class="main">
+    <div class="wrap">
+      <div class="dep" style="--i:0">
+        <p class="eyebrow">The answer is a range</p>
+        <p class="range" id="range"></p>
+        <p class="range-sub" id="rsub"></p>
+      </div>
+      <div class="line" id="line"></div>
+      <div class="below">
+        <section class="narrow"><h3 class="eyebrow">What would narrow it most</h3><div id="narrow"></div></section>
+        <aside class="side" id="side"></aside>
+      </div>
+    </div>
+  </main>
+  <footer class="foot" id="foot"></footer>
+</div>
+<div class="x-cap"><b>Can't answer · V5</b> the answer is a range, guesses in their own lane · election-night ranges, error bars, interval reporting</div>
+<script>
+/*@DATA@*/
+/*@COMMON_JS@*/
+const Q = DATA.q1;
+$('#chrome').outerHTML = chrome(Q, `<span class="ichip">${ic('calendar', 11)}since spring = ${esc(Q.since.pick)}</span>`);
+let sel = null;
+
+const cert = () => silentKnown();
+const poss = () => applies().filter(s => ['gap', 'stale', 'norecord'].includes(s.st));
+const out = () => applies().filter(s => s.st === 'ok' && !s.silent);
+/* ways to narrow, by who could answer; no record can't be narrowed */
+function ways() {
+  const by = {};
+  poss().filter(s => s.st !== 'norecord').forEach(s => (by[s.keeper] = by[s.keeper] || []).push(s));
+  const W = Object.keys(by).map(k => ({ id: k, t: `Ask ${P(k).n}`, s: `${P(k).role}. ${by[k].filter(x => x.st === 'gap').length} not known yet, ${by[k].filter(x => x.st === 'stale').length} out of date.`, L: by[k] }))
+    .sort((a, b) => b.L.length - a.L.length);
+  W.push({ id: 'norecord', t: 'The lost inbox', s: 'January to April. Nobody can close these, so the range never gets narrower than this.', L: byState('norecord'), fixed: true });
+  return W;
+}
+function render() {
+  const c = cert().length, p = poss().length, o = out().length, n = c + p + o;
+  const g = SUP().filter(s => s.guess).length;
+  $('#range').innerHTML = `<span class="n">${c}</span><span class="dash">to</span><span class="n">${c + p}</span><span class="w">suppliers we haven’t heard from since ${esc(Q.since.pick)}</span>`;
+  $('#rsub').innerHTML = `<b>At least ${c}</b>, from the record. <b>Up to ${p} more</b> I can’t rule in or out. And <b>some</b> I can’t see, which could lift the top end.`;
+  const L = $('#line'); L.style.setProperty('--n', n);
+  const order = [...cert().map(s => ['cert', s]), ...poss().map(s => ['poss', s]), ...out().map(s => ['out', s])];
+  const hl = sel ? (ways().find(w => w.id === sel) || { L: [] }).L : [];
+  const slots = order.map(([k, s], i) => {
+    const cls = k === 'cert' ? `cert${s.st === 'none' ? ' nn' : ''}` : k === 'out' ? 'out' : s.st;
+    const inner = s.st === 'norecord' ? '<svg viewBox="0 0 10 40" preserveAspectRatio="none" aria-hidden="true"><path d="M5 0 L9 8 L1 16 L9 24 L1 32 L5 40"/></svg>' : '';
+    return `<span class="slot ${cls}${hl.includes(s) ? ' hl' : ''}" style="grid-column:${i + 1};transition-delay:calc(${i} * var(--motion-instant) / 3)" title="${esc(s.n)}: ${esc(whyLine(s))}">${inner}</span>`;
+  }).join('');
+  // the model's guess, in its own lane above, never on the line of facts
+  const gx = c + p - g;
+  L.innerHTML = `
+    <span class="ptick pencil-only" style="grid-column:${gx + 1} / span ${Math.min(10, n - gx)}"><span><span class="pchip">${ic('pencil-line', 10)}guess · model</span>about ${gx}: it thinks ${g} of the ${p} were heard from</span></span>
+    <span class="brk cert" style="grid-column:1 / span ${c}"><b>certain ${c}</b></span>
+    <span class="brk poss" style="grid-column:${c + 1} / span ${p};transition-delay:var(--motion-base)"><b>can’t say ${p}</b></span>
+    ${slots}
+    <span class="tail" style="grid-column:${n + 1}" title="some kept on the Finance team floor">${ic('lock', 12)}</span>
+    <span class="axis" style="grid-column:1 / span ${c}"><b>0</b> to <b>${c}</b> · from the record</span>
+    <span class="axis" style="grid-column:${c + 1} / span ${p}"><b>${c + p}</b> at most, as far as I can see</span>
+    <span class="axis" style="grid-column:${c + p + 1} / span ${o}">${o} heard from: ruled out</span>
+    <span class="axis" style="grid-column:${n + 1}"><span class="some">some</span> hidden</span>`;
+  $('#narrow').innerHTML = ways().map((w, i) => {
+    const k = w.L.length;
+    return `<button class="nr${sel === w.id ? ' sel' : ''}${w.fixed ? ' fixed' : ''}" data-w="${w.id}"><span><b>${esc(w.t)}</b>${esc(w.s)}</span><span class="shr" role="img" aria-label="narrows by ${w.fixed ? 0 : k}"><i style="width:${w.fixed ? 0 : 100 * k / p}%"></i></span><span class="by">${w.fixed ? 'never' : '−' + k} <span class="kbd">${i + 1}</span></span></button>`;
+  }).join('');
+  $$('#narrow [data-w]').forEach(b => b.addEventListener('click', () => pick(b.dataset.w)));
+  side();
+}
+function side() {
+  const g = SUP().filter(s => s.guess);
+  $('#side').innerHTML = `<h3 class="eyebrow">Ink and pencil</h3>
+    <div class="card"><span class="ichip">${ic('file-text', 10)}from the record</span><span><b>The line is ink.</b> Every slot on it is a supplier, and its mark says why it sits where it does: answered, not known yet, out of date or no record. Counted without the model.</span></div>
+    ${GW ? `<div class="card pbox"><span class="pchip">${ic('pencil-line', 10)}guess · model</span><span><b>The tick above the line is pencil.</b> The model read minutes, plans and a payments export, and thinks ${g.map(s => esc(s.n)).join(', ')} were heard from. It never moves the line; confirming one does.</span></div>`
+         : `<div class="card"><span class="ichip">${ic('circle-slash', 10)}model gateway off</span><span><b>No pencil lane.</b> The range is the same without the model: ${cert().length} to ${cert().length + poss().length}. ${esc(DATA.gateway.offWhy)}</span></div>`}`;
+}
+function pick(id) { const w = ways().find(x => x.id === id); if (w && w.fixed) { sel = sel === id ? null : id; } else sel = sel === id ? null : id; render(); }
+function play() {
+  clearTimers(); sel = null;
+  document.body.classList.add('pre'); render();
+  later(() => document.body.classList.remove('pre'), 1200);
+  later(() => pick(ways()[0].id), 2700);
+}
+$('#foot').innerHTML = hints([['1–' + ways().length, 'pick a way to narrow it'], ['G', 'model gateway'], ['T', 'technical words'], ['R', 'replay']]);
+wireCommon(play);
+gwHooks.push(() => side());
+addEventListener('keydown', e => { const n = +e.key; const W = ways(); if (n >= 1 && n <= W.length) pick(W[n - 1].id); });
+play();
+</script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The ask · V1 · The interview</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+/* ---- V1: one neutral question at a time, the sentence sharpens beside it ---- */
+.askbox{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-3) var(--space-3) var(--space-4);background:var(--surface-pane);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);backdrop-filter:blur(var(--surface-blur))}
+.askbox input{background:none;border:0;outline:0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light);min-width:0}
+.askbox input::placeholder{color:var(--ink-muted)}
+.askmeta{display:flex;justify-content:space-between;gap:var(--space-4);margin:var(--space-2) var(--space-1) var(--space-5);font-size:var(--type-small);color:var(--ink-muted)}
+.desk{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,min(calc(var(--measure-glance) - var(--space-4)),40%));gap:var(--space-6)}
+.turns{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.turn{border-left:1px solid var(--hairline-strong);padding:0 0 0 var(--space-4);position:relative}
+.turn::before{content:"";position:absolute;left:calc(var(--space-1) * -1 - .5px);top:var(--space-2);width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--surface-bar);border:1px solid var(--ink-muted)}
+.turn.done::before{background:var(--x-proposed-here);border-color:var(--x-proposed-here)}
+.turn.now{padding-bottom:var(--space-2)}
+.turn.now::before{border-color:var(--light);box-shadow:0 0 var(--glow-blur) var(--x-proposed-here)}
+.turn .ask{margin:0;font-size:var(--type-body);line-height:var(--leading-body);color:var(--light);display:flex;align-items:center;gap:var(--space-2)}
+.turn .why{margin:0 0 var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);max-width:var(--measure-read)}
+.turn.done .ask{color:var(--ink-muted);font-size:var(--type-meta)}
+.turn .ans{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);color:var(--ink);margin:var(--space-1) 0 var(--space-2)}
+.turn .ans .ch{margin-left:auto;font-size:var(--type-small);color:var(--ink-muted)}
+.opts{display:grid;gap:2px;max-width:var(--measure-read)}
+.neutral{display:flex;align-items:center;gap:var(--space-2);margin:var(--space-2) 0 0;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-soft)}
+.far{margin:var(--space-2) 0 0;font-size:var(--type-small);color:var(--ink-muted)}
+.far button{text-decoration:underline;text-decoration-color:var(--hairline-strong);text-underline-offset:var(--focus-gap)}
+.turnnav{display:flex;gap:var(--space-2);margin-top:var(--space-3)}
+.left{font-size:var(--type-small);color:var(--ink-muted);padding-left:var(--space-4)}
+.sheet{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4) var(--space-5);background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-card)}
+.said{margin:0;font-size:var(--type-small);color:var(--ink-muted)}
+.said q{color:var(--ink)}
+.sharp{margin:0;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--ink-muted)}
+.num{display:flex;align-items:baseline;gap:var(--space-3);border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.num b{font:200 var(--type-display)/1 var(--font-sans);color:var(--light);font-variant-numeric:tabular-nums}
+.num span{font-size:var(--type-meta);color:var(--ink)}
+.num small{display:block;font-size:var(--type-small);color:var(--ink-muted)}
+.edges{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.edges li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);align-items:start}
+.edges b{font-weight:400;color:var(--ink)}
+.steps{list-style:none;margin:0;padding:var(--space-3) 0 0;border-top:1px solid var(--hairline);display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.steps li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:start}
+.sheet .acts{margin-top:auto;display:flex;gap:var(--space-2)}
+@media (max-height:840px){.askmeta{margin-bottom:var(--space-4)}.num b{font-size:var(--type-title)}.sharp{font-size:var(--type-lead);line-height:var(--leading-lead)}.turn .why{display:none}.turn.now .why{display:block}}
+</style>
+</head>
+<body>
+<div class="app"><div id="rail"></div><main class="main" id="main"></main></div>
+<div id="keys"></div>
+<div class="x-cap"><b>The ask · V1</b> the interview: one neutral question at a time, the sentence sharpens beside it · Dervin and Dewdney</div>
+<script>
+/*@DATA*/
+/*@ENGINE*/
+const st = { text: '', asked: false, c: {}, turn: 0, gw: DATA.gateway.on, showFar: false, fresh: null };
+const W = Q.WORDS, ic = Shell.ic;
+document.getElementById('rail').outerHTML = Shell.rail();
+document.getElementById('keys').innerHTML = Shell.keys([['1–4', 'pick a choice'], ['Enter', 'next question'], ['⌫', 'take back one'], ['S', 'skip: keep it loose'], ['G', 'model gateway on/off'], ['T', 'technical words'], ['R', 'replay']]);
+const skipped = new Set();
+
+function optsFor(w) { return W[w].opts.filter(o => !(st.gw && o.far && !st.showFar)); }
+function turnHtml(w, i) {
+  const word = W[w], cur = i === st.turn, done = i < st.turn;
+  if (!cur && !done) return '';
+  if (done) {
+    const ans = skipped.has(w) ? 'Kept loose: the answer shows each reading' : Q.phrase(st.c, w);
+    return `<div class="turn done"><p class="ask">${Q.esc(word.ask)}</p><p class="ans">${Shell.via('you', 'you')}${Q.esc(ans)}<button class="ch" data-back="${i}">change</button></p></div>`;
+  }
+  const opts = optsFor(w);
+  const far = W[w].opts.filter(o => o.far);
+  return `<div class="turn now"><p class="ask">${ic('message-square', 16)}${Q.esc(word.ask)}</p><p class="why">${Q.esc(word.why)}</p>
+    <div class="opts" role="group" aria-label="${Q.esc(word.ask)}">${opts.map((o, k) => {
+      const on = w === 'via' ? !!(st.c.via && st.c.via.has(o.id)) : st.c[w] === o.id;
+      return `<button class="opt" data-w="${w}" data-id="${o.id}" aria-pressed="${on}"><span class="k">${k + 1}</span><span class="l">${Q.esc(o.label)}${o.sub ? `<small>${Q.esc(o.sub)}</small>` : ''}</span><span class="c">${Q.countIf(st.c, w, o.id)} would be left</span></button>`;
+    }).join('')}</div>
+    ${w === 'via' && st.gw && far.length && !st.showFar ? `<p class="far">${Shell.via('model', 'model gateway')} left out ${far.length} dated things that don't sound like hearing from someone (${far.map(f => Q.esc(f.short)).join(', ')}). <button data-far>Show them</button></p>` : ''}
+    <p class="neutral">${ic('scale', 12)}Asked open · ${w === 'since' ? 'in date order' : 'in the record’s order'} · nothing chosen for you</p>
+    <div class="turnnav"><button class="btn primary" data-next ${Q.isSet(st.c, w) ? '' : 'disabled'}>${ic('corner-down-left')}Next</button><button class="btn" data-skip>Keep it loose</button></div></div>`;
+}
+function stepsHtml() {
+  const s = [];
+  s.push([`Found the words in your question that could mean more than one thing: <b>${Q.ORDER.map(w => W[w].word).join(', ')}</b>`, st.gw ? Shell.via('model') : Shell.via('rule', 'any word not matched to the record')]);
+  s.push([`Read “suppliers” as the kind Supplier, and “spring” from this deployment’s calendar`, Shell.via('rule')]);
+  s.push([`Found “${Q.D.named[0].label}” by its name`, Shell.via('record')]);
+  if (st.c.via) s.push([`You chose what counts as hearing from them`, Shell.via('you', 'you')]);
+  s.push([`Counted every choice before you made it`, Shell.via('record', 'from the record')]);
+  return s.map(([t, v]) => `<li><span>${t}</span>${v}</li>`).join('');
+}
+function render() {
+  const r = Q.run(st.c);
+  const m = document.getElementById('main');
+  const turns = st.asked ? Q.ORDER.map(turnHtml).join('') : '';
+  const left = st.asked && st.turn < Q.ORDER.length ? `<p class="left">${Q.ORDER.length - st.turn - 1 ? `${Q.ORDER.length - st.turn - 1} more at most. Each can be kept loose.` : 'Last question.'}</p>` : '';
+  m.innerHTML = `<div class="top"><div><p class="eyebrow">${Q.esc(DATA.floor.name)} · front page</p><h1>Ask</h1></div>${contentsHtml()}</div>
+    <div class="askbox"><input id="q" aria-label="Your question, in your own words" placeholder="Ask in your own words" value="${Q.esc(st.text)}"><button class="btn primary" data-ask>${ic('search')}Ask</button></div>
+    <div class="askmeta"><span>It asks back before it answers. Nothing is filtered until you say so.</span>${Shell.gatewayLine(st.gw)}</div>
+    ${st.asked ? `<div class="desk"><div class="turns scroll">${turns}${left}</div>
+      <aside class="sheet scroll" aria-live="polite">
+        <p class="eyebrow">Your question, as it stands</p>
+        <p class="said">You asked <q>${Q.esc(DATA.question)}</q></p>
+        <p class="sharp">${Q.sentenceHtml(st.c)}</p>
+        <p class="tk">${Q.esc(Q.tech(st.c))}</p>
+        <div class="num"><b>${r.quiet.length}</b><span>suppliers so far<small>of ${r.pool} it looked at · ${r.heard} were heard from</small></span></div>
+        <ul class="edges">
+          ${r.never.length ? `<li>${Shell.never()}<span><b>${r.never.length} have no contact recorded at all</b> (${r.never.map(x => Q.esc(x.s.name)).join(', ')}). They are in the count, marked. ${Q.esc(DATA.filler.who)} ${Q.esc(DATA.filler.role)} and could check.</span></li>` : ''}
+          ${r.unseen ? `<li>${ic('lock', 14)}<span><b>Some are not yours to see</b>, kept on ${Q.esc(r.unseenAsk)}.</span></li>` : ''}
+          <li>${Shell.brk()}<span><b>${DATA.notRecorded.map((n, i) => i ? n.what.toLowerCase() : n.what).join(' and ')} are not recorded.</b> ${Q.esc(DATA.notRecorded[0].who)} ${Q.esc(DATA.notRecorded[0].how)}.</span></li>
+        </ul>
+        <ul class="steps">${stepsHtml()}</ul>
+        <div class="acts"><button class="btn primary">${ic('arrow-right')}Show the ${r.quiet.length}</button><button class="btn">${ic('bookmark')}Save question</button></div>
+      </aside></div>` : ''}`;
+  if (st.fresh) m.querySelectorAll(`.ph[data-w="${st.fresh}"]`).forEach(e => e.classList.add('fresh'));
+  st.fresh = null;
+  document.body.classList.toggle('tech', !!st.tech);
+}
+function pick(w, id) {
+  if (w === 'via') { const v = new Set(st.c.via || []); v.has(id) ? v.delete(id) : v.add(id); st.c.via = v; } else st.c[w] = id;
+  st.fresh = w; render();
+}
+function next() { const w = Q.ORDER[st.turn]; if (w && (Q.isSet(st.c, w) || skipped.has(w))) { st.turn++; render(); } }
+function skip() { const w = Q.ORDER[st.turn]; if (!w) return; skipped.add(w); delete st.c[w]; st.turn++; render(); }
+function back(to) { const i = to == null ? Math.max(0, st.turn - 1) : to; Q.ORDER.slice(i).forEach(w => { delete st.c[w]; skipped.delete(w); }); st.turn = i; render(); }
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; Demo.stop();
+  if (b.dataset.w) pick(b.dataset.w, b.dataset.id);
+  else if (b.hasAttribute('data-next')) next();
+  else if (b.hasAttribute('data-skip')) skip();
+  else if (b.dataset.back) back(+b.dataset.back);
+  else if (b.hasAttribute('data-far')) { st.showFar = true; render(); }
+  else if (b.hasAttribute('data-ask')) { st.text = document.getElementById('q').value; st.asked = true; render(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'q') { if (e.key === 'Enter') { st.text = e.target.value; st.asked = true; render(); } return; }
+  const k = e.key.toLowerCase();
+  if (k === 'r') { replay(); return; }
+  Demo.stop();
+  if (k === 'g') { st.gw = !st.gw; render(); }
+  else if (k === 't') { st.tech = !st.tech; render(); }
+  else if (k === 's') skip();
+  else if (k === 'enter') next();
+  else if (k === 'backspace') back();
+  else if (/^[1-9]$/.test(k)) { const w = Q.ORDER[st.turn]; const o = w && optsFor(w)[+k - 1]; if (o) pick(w, o.id); }
+});
+function replay() {
+  Object.assign(st, { text: '', asked: false, c: {}, turn: 0, showFar: false }); skipped.clear(); render();
+  const beat = Tok.ms('--motion-base');
+  Demo.play([
+    [Tok.ms('--motion-run'), () => typeInto(document.getElementById('q'), DATA.question, Tok.ms('--motion-calm'), () => { st.text = DATA.question; })],
+    [Tok.ms('--motion-calm') + Tok.ms('--motion-instant'), () => { st.asked = true; render(); }],
+    [beat, () => pick('since', Q.WORDS.since.opts[1].id)], [beat, next],
+    [beat, () => { pick('via', 'invoice'); pick('via', 'delivery'); pick('via', 'letter'); }], [beat, next],
+    [beat, () => pick('kind', 'live')], [beat, next]
+  ]);
+}
+replay();
+</script>
+</body>
+</html>

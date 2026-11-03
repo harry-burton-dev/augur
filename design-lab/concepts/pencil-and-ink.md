@@ -1,0 +1,12 @@
+---
+name: pencil-and-ink
+status: explored
+---
+
+# Pencil and ink
+
+Anything a model proposes is drawn in pencil (dotted edge, italic, its own lane); facts and counts are always ink. A guess never enters a count, so turning the model gateway off changes the route to an answer, never its numbers. A guess becomes a fact only when a person accepts it through Triage, and keeps a mark of who proposed it. The sentences of an answer are built from its steps by template, never written by the model, so the plain-words query can't drift from the real one.
+
+First found in: [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-reference-desk/) (ask V5, example V2 and V6, workings V6, cant V5, grammar V3 and V6, combined).
+
+Could steer: The apprentice (Q), the briefing (M), Mandate drafting, every place the model gateway writes.
