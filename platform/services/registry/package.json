@@ -14,9 +14,12 @@
     "@augur/mfe-sdk": "workspace:*",
     "@augur/service-kit": "workspace:*",
     "@aws-sdk/client-s3": "^3.1156.0",
+    "@fastify/swagger": "^9.9.0",
+    "@fastify/type-provider-typebox": "^6.3.0",
     "fastify": "^5.6.0",
     "pg": "^8.23.1",
-    "semver": "^7.8.5"
+    "semver": "^7.8.5",
+    "typebox": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

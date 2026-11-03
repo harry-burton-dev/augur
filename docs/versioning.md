@@ -5,7 +5,7 @@ Every package, service and app in the monorepo has its own [semver](https://semv
 | Version | Where it lives | Answers |
 | --- | --- | --- |
 | Release | each `package.json`, bumped by [Changesets](https://github.com/changesets/changesets) | Which build of this service, package or app is deployed? |
-| API | each `contracts/<service>.openapi.yaml` `info.version`; its major is the path prefix (`/v1`) and the service's `API_VERSION` | Can a caller keep calling this service the way it does? |
+| API | each `contracts/<service>.openapi.yaml` `info.version`, set in the service's `src/contract.ts` ([api-contracts.md](api-contracts.md)); its major is the path prefix (`/v1`) and the service's `API_VERSION` | Can a caller keep calling this service the way it does? |
 | SDK range | each app's `manifest.json` `sdk`, a range over `@augur/mfe-sdk` releases | Can this shell open this app? |
 
 ## Releases

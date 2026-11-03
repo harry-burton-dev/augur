@@ -27,11 +27,14 @@
     "check:catalog": "node scripts/catalog.mjs check",
     "lint": "eslint .",
     "check:kit": "node scripts/kit.mjs check",
-    "kit:pin": "node scripts/kit.mjs pin"
+    "kit:pin": "node scripts/kit.mjs pin",
+    "contracts": "node scripts/check-contracts.mjs write",
+    "check:contracts": "node scripts/check-contracts.mjs check"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
     "@eslint/js": "^10.0.1",
+    "@stoplight/spectral-cli": "^6.17.0",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",
