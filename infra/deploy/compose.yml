@@ -184,9 +184,11 @@ services:
       postgres: { condition: service_healthy }
       garage: { condition: service_started }
 
-  # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it.
+  # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it. Moving to a
+  # new minor migrates Keycloak's database on its first start, which can't be undone: take a backup
+  # first (docs/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0.8
+    image: quay.io/keycloak/keycloak:26.8.1
     restart: unless-stopped
     command: ["start", "--import-realm"]
     environment:
@@ -206,7 +208,7 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       # Read by the realm file on first start: who you sign in as.
       PLATFORM_URL: ${PLATFORM_URL}
-      # And identity's own sign-in, which manages the realm, so identity never needs Keycloak's admin.
+      # And identity's own sign-in, so identity never needs Keycloak's admin.
       IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:?set PLATFORM_ADMIN_USER in .env}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?set PLATFORM_ADMIN_PASSWORD in .env}
@@ -216,7 +218,37 @@ services:
       PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Platform}
     volumes:
       - ./keycloak/platform-realm.json:/opt/keycloak/data/import/platform-realm.json:ro
+      # The breached-password list the realm's password policy checks against (ADR 0038).
+      - ./keycloak/password-blacklists:/opt/keycloak/data/password-blacklists:ro
     depends_on: *own-login
+
+  # The realm as code (ADR 0057): brings Keycloak's realm to what this release declares (password
+  # policy, two-step sign-in for admin roles, passkeys, sessions, events, profile, roles, the services'
+  # sign-ins and identity's rights), then stops. Runs on every `up`, so on every upgrade, before
+  # identity starts. It is the only part of AUGUR that signs in as Keycloak's master admin.
+  keycloak-config:
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/identity:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    restart: on-failure:3
+    command: ["node", "dist/realm-job.js"]
+    environment:
+      NODE_ENV: production
+      KEYCLOAK_URL: http://keycloak:8080/sso
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
+      IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
+      # Each platform service's sign-in in Keycloak, made or set to these secrets.
+      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env},app-atlas=${ATLAS_CLIENT_SECRET:?set ATLAS_CLIENT_SECRET in .env}
+      # Given the deployment-admin role if nobody has it yet.
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
+      # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
+      REALM_PASSWORD_MIN_LENGTH: ${REALM_PASSWORD_MIN_LENGTH:-}
+      REALM_PASSWORD_DENYLIST: ${REALM_PASSWORD_DENYLIST:-}
+      REALM_SESSION_IDLE_HOURS: ${REALM_SESSION_IDLE_HOURS:-}
+      REALM_SESSION_MAX_HOURS: ${REALM_SESSION_MAX_HOURS:-}
+      REALM_SIGN_IN_EVENT_DAYS: ${REALM_SIGN_IN_EVENT_DAYS:-}
+      REALM_ADMIN_EVENT_DAYS: ${REALM_ADMIN_EVENT_DAYS:-}
+    depends_on: [keycloak]
 
   gateway:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/gateway:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
@@ -265,18 +297,16 @@ services:
       # Its own login, owning only the identity schema.
       DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # Admin's People screen: identity manages people in Keycloak as its own client, whose rights in
-      # the realm come from the realm file. Keycloak's master admin is not in identity's settings; see
-      # docs/deploy.md, "Keycloak's admin", to repair a lost sign-in. Departments are identity's own
-      # teams, copied in once from Keycloak's groups.
+      # the realm (people, departments and apps' sign-ins, not the realm's settings) are given by
+      # keycloak-config. Keycloak's master admin is never in identity's settings. Departments are
+      # identity's own teams, copied in once from Keycloak's groups.
       KEYCLOAK_URL: http://keycloak:8080/sso
-      # Given the deployment-admin role if nobody has it yet.
-      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # What the top floor, the whole organisation, is called.
       ORG_NAME: ${ORG_NAME:-Organisation}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
-      # Identity makes each platform service's sign-in in Keycloak with these secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env},app-atlas=${ATLAS_CLIENT_SECRET:?set ATLAS_CLIENT_SECRET in .env}
-    depends_on: *own-login
+    depends_on:
+      <<: *own-login
+      keycloak-config: { condition: service_completed_successfully }
 
   registry:
     <<: *service

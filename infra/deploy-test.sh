@@ -139,8 +139,19 @@ on_version() {
 # A container that keeps restarting is a failure even when its neighbours look fine.
 no_restarts() {
   local bad
-  bad=$(pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]')
+  bad=$(pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and (.Service != "keycloak-config") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]')
   if [ -n "$bad" ]; then echo "$bad" >&2; return 1; fi
+}
+
+# Keycloak's image in the deploy files in use. Moving Keycloak to a new minor migrates its database,
+# which can't be undone, so going back across one is a restore of Keycloak's database (docs/upgrade.md).
+keycloak_image() { pc config --format json | jq -r '.services.keycloak.image'; }
+save_keycloak() { pc exec -T postgres pg_dump -U platform -d keycloak -Fc > "$work/keycloak.dump"; }
+restore_keycloak() {
+  echo "Keycloak moved from $1 to $2: going back restores its database from before the upgrade." >&2
+  pc stop keycloak >&2
+  pc exec -T postgres psql -U platform -d platform -v ON_ERROR_STOP=1 -c 'drop database keycloak with (force)' -c 'create database keycloak owner keycloak' >&2
+  pc exec -T postgres pg_restore -U platform -d keycloak --no-owner --role=keycloak < "$work/keycloak.dump"
 }
 
 # What's in the database: every table with its exact row count. Keycloak's own database isn't AUGUR's, so it's left out.
@@ -183,8 +194,11 @@ case "$mode" in
     no_restarts
     on_version "$from"
     tables > "$work/before"
+    keycloak_from=$(keycloak_image)
+    save_keycloak
 
     use "$local_tag"
+    keycloak_to=$(keycloak_image)
     up
     new=$(wait_ready "Upgrade from augur@$from to this checkout")
     no_restarts
@@ -196,6 +210,7 @@ case "$mode" in
 
     # A server can always go back to the release it came from, so its tables must still work for it.
     use "$from"
+    if [ "$keycloak_from" != "$keycloak_to" ]; then restore_keycloak "$keycloak_from" "$keycloak_to"; fi
     up
     wait_ready "Back to augur@$from" >/dev/null
     no_restarts

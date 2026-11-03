@@ -68,7 +68,7 @@ services:
 
   # Sign-in. The platform realm, its shell client and test users are imported from ./keycloak.
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    image: quay.io/keycloak/keycloak:26.8.1
     command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -76,7 +76,26 @@ services:
       # Browsers and the gateway reach Keycloak at different addresses; tokens name this one.
       KC_HOSTNAME: http://localhost:8180
     ports: ["8180:8080"]
-    volumes: ["./keycloak:/opt/keycloak/data/import:ro"]
+    volumes:
+      - ./keycloak/platform-realm.json:/opt/keycloak/data/import/platform-realm.json:ro
+      # The server's breached-password list, so local passwords follow the same policy.
+      - ./deploy/keycloak/password-blacklists:/opt/keycloak/data/password-blacklists:ro
+
+  # The realm as code (ADR 0057): sets the realm up as a server's is, then stops. Run it again with
+  # `docker compose -f infra/docker-compose.yml up keycloak-config` after changing realm.ts.
+  keycloak-config:
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/identity" } }
+    command: ["node", "dist/realm-job.js"]
+    restart: on-failure:3
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      IDENTITY_CLIENT_SECRET: platform-local-only-identity
+      # The clients for the platform's services and the sample apps, with their secrets.
+      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio,app-auspex=platform-local-only-auspex,app-atlas=platform-local-only-atlas
+      PLATFORM_ADMIN_USER: alex
+    depends_on: [keycloak]
 
   # ---- the platform ----
   gateway:
@@ -102,15 +121,14 @@ services:
     environment:
       PORT: 8081
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
-      # Admin's people and departments: identity manages them in Keycloak's platform realm.
+      # Admin's people and departments: identity manages them in Keycloak's platform realm as its own
+      # client, which keycloak-config makes and gives its rights.
       KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
       SERVICE_CLIENT_SECRET: platform-local-only-identity
-      # The clients identity makes for the platform's services and the sample app, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=platform-local-only-identity,platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio,app-auspex=platform-local-only-auspex,app-atlas=platform-local-only-atlas
       <<: *internal
-    depends_on: [postgres, keycloak]
+    depends_on:
+      postgres: { condition: service_started }
+      keycloak-config: { condition: service_completed_successfully }
 
   registry:
     <<: *service

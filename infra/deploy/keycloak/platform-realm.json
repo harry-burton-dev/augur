@@ -74,7 +74,6 @@
       "clientRoles": {
         "realm-management": [
           "view-realm",
-          "manage-realm",
           "view-users",
           "query-users",
           "manage-users",
