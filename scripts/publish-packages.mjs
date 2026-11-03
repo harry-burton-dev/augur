@@ -7,9 +7,13 @@
 //   "@augur/mfe-sdk": "npm:@<owner>/augur-mfe-sdk@^1.9.0"
 // The scope comes from PACKAGE_SCOPE, or else the repository's owner; the registry from PACKAGE_REGISTRY.
 //
-// node scripts/publish-packages.mjs [--dry-run]
+// node scripts/publish-packages.mjs [--dry-run | --check]
 // Run by the Release workflow once the Version packages PR has merged, after the packages are built.
 // A version that's already in the registry is skipped, so running it again does nothing.
+// Every package is checked as packed, before anything is published: publint (its package.json, exports and
+// files) and Are the Types Wrong (its types resolve the way its JavaScript does) (ADR 0052). --check packs
+// and checks every package, publishing nothing and needing no token: CI runs it on pull requests that
+// touch the packages, so a broken package is found before it merges, not at release.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -83,10 +87,30 @@ function isPublished(name, version, npmrc, registry) {
   }
 }
 
+/**
+ * Checks one packed package directory, throwing with what's wrong. ESM only: our packages have no
+ * CommonJS build, so Are the Types Wrong leaves out the CommonJS resolutions (its esm-only profile).
+ */
+export function checkPacked(dir, bin = join(process.cwd(), 'node_modules', '.bin')) {
+  const problems = [];
+  for (const [tool, args] of [
+    ['publint', ['run', dir, '--strict', '--level', 'warning']],
+    ['attw', ['--pack', dir, '--profile', 'esm-only', '--no-color', '--format', 'ascii']],
+  ]) {
+    try {
+      run(join(bin, tool), args, { cwd: dir });
+    } catch (err) {
+      problems.push(`${tool}:\n${err.stdout ?? ''}${err.stderr ?? ''}`.trim());
+    }
+  }
+  if (problems.length) throw new Error(`${dir} isn't ready to publish:\n${problems.join('\n')}`);
+}
+
 function main() {
-  const dryRun = process.argv.includes('--dry-run');
+  const check = process.argv.includes('--check');
+  const dryRun = check || process.argv.includes('--dry-run');
   const repository = process.env.GITHUB_REPOSITORY;
-  const scope = process.env.PACKAGE_SCOPE || process.env.GITHUB_REPOSITORY_OWNER || repository?.split('/')[0];
+  const scope = process.env.PACKAGE_SCOPE || process.env.GITHUB_REPOSITORY_OWNER || repository?.split('/')[0] || (check ? 'augur' : undefined);
   const registry = process.env.PACKAGE_REGISTRY || DEFAULT_REGISTRY;
   if (!scope) throw new Error('Set PACKAGE_SCOPE (or run in GitHub Actions) to name the scope to publish under.');
   const token = process.env.NODE_AUTH_TOKEN;
@@ -98,6 +122,7 @@ function main() {
   const tag = distTag(process.env.GITHUB_REF_NAME);
 
   const done = [];
+  const failed = [];
   for (const { directory, pkg } of libraries()) {
     const name = publishedName(pkg.name, scope);
     if (!dryRun && isPublished(name, pkg.version, npmrc, registry)) {
@@ -112,12 +137,27 @@ function main() {
     const manifestPath = join(out, 'package', 'package.json');
     const packed = JSON.parse(readFileSync(manifestPath, 'utf8'));
     writeFileSync(manifestPath, `${JSON.stringify(publishedManifest({ ...packed, __directory: directory }, { scope, registry, repository }), null, 2)}\n`);
+    try {
+      checkPacked(join(out, 'package'));
+    } catch (err) {
+      failed.push(`${pkg.name}: ${err.message}`);
+      continue;
+    }
+    if (check) {
+      done.push(`${pkg.name}@${pkg.version}`);
+      continue;
+    }
     const args = ['publish', join(out, 'package'), '--tag', tag, '--registry', registry, '--userconfig', npmrc];
     if (dryRun) args.push('--dry-run');
     run('npm', args, { stdio: 'inherit' });
     done.push(`${name}@${pkg.version}`);
   }
-  console.log(done.length ? `Published (${tag}): ${done.join(', ')}` : 'Nothing new to publish');
+  if (failed.length) {
+    console.error(failed.join('\n\n'));
+    process.exit(1);
+  }
+  if (check) console.log(`Ready to publish: ${done.join(', ')}`);
+  else console.log(done.length ? `Published (${tag}): ${done.join(', ')}` : 'Nothing new to publish');
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();

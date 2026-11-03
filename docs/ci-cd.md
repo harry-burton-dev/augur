@@ -65,7 +65,7 @@ everything.
 
 | Job | Pull request runs it when it changes | On a push | What it does |
 |---|---|---|---|
-| `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, script tests, the hotfix rule, a changeset, build, manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
+| `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, script tests, the hotfix rule, a changeset, build, the API reports and (when `platform/packages` changed) publint and Are the Types Wrong on the packed packages (ADR 0052), manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
 | `scan` | always | never | gitleaks on the pull request's commits; OSV-Scanner, failing only on vulnerabilities the pull request brings in (ADR 0043) |
 | `contract` | `platform/frontends` (not Admin or the Upgrade Centre), `platform/packages`, `platform/contract`, the Folio pin (`release/shipped-apps.json`, `infra/shipped-app.sh`), the root `package.json` or the lockfile | never | the reference app, today's build and frozen ones from earlier SDK releases, mounted by the real shell in Chromium, with Folio (from the release AUGUR ships) on and off |
 | `app-scaffold` | the app template, `create-app`, the shared packages, the registry, or the scripts that check apps | never | `pnpm create-app` still makes an app that builds, passes its tests and is accepted |
