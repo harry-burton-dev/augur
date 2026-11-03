@@ -80,7 +80,9 @@ EOF
 # the project, so both see the same data, as on a server.
 pc() {
   local files=(-f "$dir/compose.yml")
-  [ -e "$dir/compose.build.yml" ] && files+=(-f "$dir/compose.build.yml")
+  # Only a build from this checkout uses the build file: a release under test runs its published
+  # images, as a server does, including the apps that ship with it (ADR 0049).
+  if [ "${BUILD:-}" = 1 ] && [ "$dir" = "$deploy" ] && [ -e "$dir/compose.build.yml" ]; then files+=(-f "$dir/compose.build.yml"); fi
   docker compose -p "$project" "${files[@]}" -f "$work/compose.test.yml" --env-file "$dir/.env" "$@"
 }
 # Which release's deploy files and images to run: this checkout's, or the one it upgrades from.
@@ -132,7 +134,10 @@ wait_ready() {
 # Every AUGUR container runs the image it was meant to (the old ones aren't left running).
 on_version() {
   local want=$1 wrong
-  wrong=$(pc ps --format json | jq -rs --arg want ":$want" 'flatten | map(select(.Image | startswith("ghcr.io/")) | select(.Image | endswith($want) | not)) | map("\(.Service) runs \(.Image)") | .[]')
+  # A build from this checkout runs the shipped apps' images of a release, not ones built here.
+  local skip='[]'
+  if [ "${BUILD:-}" = 1 ] && [ "$want" = "$local_tag" ]; then skip='["folio","folio-worker","auspex","atlas"]'; fi
+  wrong=$(pc ps --format json | jq -rs --arg want ":$want" --argjson skip "$skip" 'flatten | map(select(.Image | startswith("ghcr.io/")) | select(.Service as $s | $skip | index($s) | not) | select(.Image | endswith($want) | not)) | map("\(.Service) runs \(.Image)") | .[]')
   if [ -n "$wrong" ]; then echo "Not on $want:"$'\n'"$wrong" >&2; return 1; fi
 }
 

@@ -21,6 +21,8 @@ BUILD=1 infra/deploy-test.sh upgrade 0.13.1            # this checkout, built he
 BUILD=1 infra/deploy-test.sh fresh
 ```
 
+A release under test runs only its published images, the shipped apps' included (ADR 0049), so every AUGUR container must carry the release's version. With `BUILD=1`, `infra/deploy/compose.build.yml` builds the platform's images here, and Artifacts, Explorer and Data Atlas run AUGUR's images of the newest beta release (or `SHIPPED_APPS_VERSION`'s), so the version check leaves those four out.
+
 Building every image takes ten minutes or more, so try a change to the compose file or a migration this way on your own machine before its release, rather than in CI.
 
 It runs in its own compose project (`augur-deploy-test`) and removes it, volumes too, when it ends. A real `infra/deploy/.env` in the checkout is put aside while it runs and put back after. `WEB_PORT`, `READY_TIMEOUT` and `LOCAL_TAG` change the port, how long it waits for each start (300 s) and the tag of the local images (`ci`, for images built here).
