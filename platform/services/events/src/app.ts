@@ -8,7 +8,8 @@ import {
   packageVersion,
   PeopleUnavailable,
   ServiceAuthUnavailable,
-  serviceLogging,
+  problemDetails,
+  serviceFastifyOptions,
   serviceName,
   WORKSPACE_HEADERS,
   type Caller,
@@ -173,7 +174,8 @@ const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
  * live, and admins read the audit log.
  */
 export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
-  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  const app = Fastify(serviceFastifyOptions());
+  await app.register(problemDetails());
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', async () => health('events', version, API_VERSION));
