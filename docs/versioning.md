@@ -41,7 +41,9 @@ Merging that pull request is the release. Packages get no tag or GitHub release 
 
 ### The AUGUR release
 
-A deployment runs many parts at once, so it is on one **AUGUR version**, such as `augur@0.2.0`, that names them all. `release/augur-release.json` holds it, and nobody edits it by hand: the Version packages PR writes it with the parts' new versions (`node scripts/augur-release.mjs version`, part of `pnpm version-packages`), and CI fails when it is out of step (`pnpm check:release`). Parts are the packages under `platform/`; apps under `apps/` release on their own.
+A deployment runs many parts at once, so it is on one **AUGUR version**, such as `augur@0.2.0`, that names them all. `release/augur-release.json` holds it, and nobody edits it by hand: the Version packages PR writes it with the parts' new versions (`node scripts/augur-release.mjs version`, part of `pnpm version-packages`), and CI fails when it is out of step (`pnpm check:release`). Parts are the packages under `platform/`, and the packages of the apps that ship with AUGUR at the releases `release/shipped-apps.json` pins; other apps release on their own.
+
+The apps that ship with AUGUR (Artifacts, Explorer, Data Atlas) release in their own repositories, and AUGUR ships the release each one's pin names ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)). To ship a newer one, run `node scripts/shipped-apps.mjs pin <id> <version>` (it checks the release `app/<id>@<version>` is there and signed in that app's repository, writes its packages' versions, and adds a changeset), and open a pull request with the result. The next Version packages PR then moves AUGUR's version.
 
 | Field | Meaning |
 | --- | --- |
@@ -68,7 +70,7 @@ To do the same by hand: `pnpm version-packages`, review, commit, merge, then let
 
 ### App releases
 
-An app in `apps/` that doesn't ship with AUGUR (every app but Folio, for now) is released on its own, whenever its version moves. Its version is its manifest's, which the Version packages PR keeps in step with its packages. A version with a prerelease part, such as `1.3.0-beta.1`, is on the **beta** channel; any other is **stable**.
+An app in `apps/` that doesn't ship with AUGUR (Mandate, until it moves to its own repository) is released on its own, whenever its version moves. Its version is its manifest's, which the Version packages PR keeps in step with its packages. A version with a prerelease part, such as `1.3.0-beta.1`, is on the **beta** channel; any other is **stable**.
 
 Once the Version packages PR merges, the Release workflow asks `node scripts/app-release.mjs pending` which apps have a version with no release yet, and for each one:
 

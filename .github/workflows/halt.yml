@@ -13,7 +13,7 @@ on:
         type: choice
         options: [halt, resume]
       unit:
-        description: 'augur, or an app id (such as mandate)'
+        description: 'augur, or the id of an app released from this repository'
         required: true
         default: augur
       version:

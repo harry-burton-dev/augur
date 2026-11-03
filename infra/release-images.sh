@@ -4,19 +4,28 @@
 #   infra/release-images.sh <version> <channel> > images.json
 # Each image is tagged with the version and the channel (beta or stable), and signed with
 # cosign keyless, so a deployment can check it came from this repository's Release workflow.
+#
+# The apps that ship with AUGUR live in their own repositories and release there (ADR 0049): this takes
+# the release release/shipped-apps.json pins for each, checks its app repository's release workflow signed
+# it, copies its service image here and signs it again as AUGUR's, and puts the frontend the image carries
+# into the web image. Images an app's release doesn't carry (Artifacts' rendition worker) are built from the
+# app's source at its release tag. Reading the app repositories needs APP_RELEASES_TOKEN (their releases
+# and source) and PACKAGES_READ_TOKEN (their images; read:packages), as their own workflows have.
 set -euo pipefail
 version=$1
 channel=$2
 repo=${IMAGE_REPO:-ghcr.io/${GITHUB_REPOSITORY,,}}
 out=$(mktemp -d)
 
+# Builds an image from this checkout, or from another folder: build <name> [--context <dir>] <docker args>...
 build() {
-  local name=$1
+  local name=$1 context=.
   shift
+  if [ "${1:-}" = --context ]; then context=$2; shift 2; fi
   docker buildx build --push --provenance=true --sbom=true --secret id=node_auth_token,env=NODE_AUTH_TOKEN \
     --label "org.opencontainers.image.version=$version" \
     -t "$repo/$name:$version" -t "$repo/$name:$channel" \
-    --metadata-file "$out/$name.json" "$@" . >&2
+    --metadata-file "$out/$name.json" "$@" "$context" >&2
   local digest
   digest=$(jq -r '."containerimage.digest"' "$out/$name.json")
   cosign sign --yes "$repo/$name@$digest" >&2
@@ -34,26 +43,62 @@ reuse() {
   jq -n --arg name "$name" --arg ref "$repo/$name@$digest" '{($name): $ref}' > "$out/$name.ref.json"
 }
 
+# The shipped apps' releases: checked, and each frontend taken out of its service image for the web image.
+shipped=$(node scripts/shipped-apps.mjs resolve)
+command -v skopeo > /dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq skopeo; } >&2
+read_config=$(mktemp -d)
+if [ -n "${PACKAGES_READ_TOKEN:-}" ]; then
+  printf %s "$PACKAGES_READ_TOKEN" | tr -d '\r\n' | DOCKER_CONFIG=$read_config docker login ghcr.io -u augur --password-stdin >&2
+else
+  cp "${DOCKER_CONFIG:-$HOME/.docker}/config.json" "$read_config/config.json"
+fi
+rm -rf .shipped && mkdir -p .shipped/frontends .shipped/src
+for app in $(jq -r 'keys[]' <<< "$shipped"); do
+  service=$(jq -r --arg a "$app" '.[$a].service' <<< "$shipped")
+  identity=$(jq -r --arg a "$app" '.[$a].identity' <<< "$shipped")
+  echo "$app: $(jq -r --arg a "$app" '.[$a].tag' <<< "$shipped") from $(jq -r --arg a "$app" '.[$a].repo' <<< "$shipped")" >&2
+  unreadable="::error::Couldn't read or check $service. Its repository's images need the PACKAGES_READ_TOKEN secret here (a classic token with read:packages; docs/ship-an-app.md, \"An app in its own repository\")."
+  DOCKER_CONFIG=$read_config cosign verify --certificate-identity "$identity" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com "$service" > /dev/null || { echo "$unreadable" >&2; exit 1; }
+  container=$(DOCKER_CONFIG=$read_config docker create "$service") || { echo "$unreadable" >&2; exit 1; }
+  docker cp "$container:/app/frontend" ".shipped/frontends/$app"
+  docker rm "$container" > /dev/null
+done
+
 build web -f infra/web.Dockerfile --target web
 for service in gateway identity events models storage; do
   build "$service" -f infra/service.Dockerfile --build-arg "PACKAGE=@augur/$service" --target service
 done
 build registry -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry --target registry
 build updater -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater
-# The apps that ship with AUGUR: Folio's service and its rendition worker, Auspex and Data Atlas.
-build folio -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend --target service
-# Folio's worker is built only from apps/folio/worker, and takes about six minutes (Torch and Docling's
-# models), so each build is also tagged with that folder's git tree. A dev build whose worker is
-# unchanged reuses the last one built from the same tree; a beta or stable release always builds it
-# afresh, with today's base image and Python packages.
-worker_src="$repo/folio-worker:src-$(git rev-parse HEAD:apps/folio/worker)"
-if [ "$channel" = dev ] && docker buildx imagetools inspect "$worker_src" >/dev/null 2>&1; then
-  echo "folio-worker: unchanged since $worker_src, reused" >&2
-  reuse folio-worker "$worker_src"
-else
-  build folio-worker -f apps/folio/worker/Dockerfile -t "$worker_src"
-fi
-build auspex -f infra/service.Dockerfile --build-arg PACKAGE=@apps/auspex --build-arg FRONTEND=@apps/auspex-frontend --target service
-build atlas -f infra/service.Dockerfile --build-arg PACKAGE=@apps/atlas --build-arg FRONTEND=@apps/atlas-frontend --target service
+
+for app in $(jq -r 'keys[]' <<< "$shipped"); do
+  service=$(jq -r --arg a "$app" '.[$a].service' <<< "$shipped")
+  # Copied as it is (same digest) under AUGUR's images, then tagged for this release and signed as AUGUR's.
+  skopeo copy --all --preserve-digests --src-authfile "$read_config/config.json" \
+    --dest-authfile "${DOCKER_CONFIG:-$HOME/.docker}/config.json" \
+    "docker://$service" "docker://$repo/$app:src-${service##*@sha256:}" >&2
+  reuse "$app" "$repo/$app@${service##*@}"
+  # Images built from the app's source at its release tag, such as Artifacts' rendition worker.
+  if [ "$(jq -r --arg a "$app" '.[$a].build | length' <<< "$shipped")" != 0 ]; then
+    src=.shipped/src/$app
+    tag=$(jq -r --arg a "$app" '.[$a].tag' <<< "$shipped")
+    git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$(printf %s "${APP_RELEASES_TOKEN:-}" | tr -d '\r\n')" | base64 -w0)" \
+      clone --quiet --depth 1 --branch "$tag" "https://github.com/$(jq -r --arg a "$app" '.[$a].repo' <<< "$shipped").git" "$src" >&2
+    for image in $(jq -r --arg a "$app" '.[$a].build | keys[]' <<< "$shipped"); do
+      dockerfile=$(jq -r --arg a "$app" --arg i "$image" '.[$a].build[$i]' <<< "$shipped")
+      # Some take minutes (Artifacts' worker installs Torch and Docling's models), so each build is also tagged
+      # with its folder's git tree. A dev build reuses the last one built from the same tree; a beta or stable
+      # release always builds afresh, with today's base image and packages.
+      from=$(git -C "$src" rev-parse "HEAD:$(dirname "$dockerfile")")
+      if [ "$channel" = dev ] && docker buildx imagetools inspect "$repo/$image:src-$from" >/dev/null 2>&1; then
+        echo "$image: unchanged since $repo/$image:src-$from, reused" >&2
+        reuse "$image" "$repo/$image:src-$from"
+      else
+        build "$image" --context "$src" -f "$src/$dockerfile" -t "$repo/$image:src-$from"
+      fi
+    done
+  fi
+done
 
 jq -s 'add' "$out"/*.ref.json
