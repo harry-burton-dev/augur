@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facets · V3 · A sentence of facets</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+/* ---- V3: the question is a sentence; each blank is a facet ---- */
+.q{position:relative;max-width:calc(var(--measure-wide) + var(--space-8) * 2);margin:var(--space-5) 0 var(--space-4);font:200 var(--type-title-s)/calc(var(--leading-title-s) * 1.35) var(--font-sans);color:var(--ink-muted);letter-spacing:var(--tracking-tight)}
+.q .w{color:var(--ink-muted)}
+.slot{position:relative;display:inline;font:inherit;line-height:inherit;color:var(--ink-muted);border-bottom:1px dashed var(--hairline-strong);padding:0 2px;border-radius:var(--radius-key) var(--radius-key) 0 0;transition:color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.slot:hover,.slot[aria-expanded="true"]{background:var(--surface-raised);color:var(--ink)}
+.slot.set{color:var(--light);border-bottom:2px solid var(--x-proposed-floor);font-weight:300}
+.slot.na{border-bottom:0;background:var(--x-proposed-na);color:var(--ink-muted);font-size:var(--type-lead);cursor:help}
+.slot.fresh{animation:fresh var(--motion-calm) var(--ease-out)}
+@keyframes fresh{from{color:var(--x-proposed-floor);text-shadow:0 0 var(--glow-blur) var(--x-proposed-floor)}}
+.answer{display:flex;align-items:baseline;gap:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid var(--hairline-strong)}
+.answer .n{font:200 var(--type-display)/1 var(--font-sans);color:var(--light);font-variant-numeric:tabular-nums;min-width:calc(var(--space-7) + var(--space-2))}
+.answer .t{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.answer .t small{display:block;font-size:var(--type-meta);color:var(--ink-muted)}
+.trail{margin-left:auto;display:flex;align-items:center;gap:var(--space-2);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.trail b{color:var(--ink);font-weight:400}
+.res-wrap{flex:1;min-height:0;overflow:auto;margin-top:var(--space-2);scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.res-wrap .list{display:grid;grid-template-columns:1fr 1fr;column-gap:var(--space-6)}
+/* the word list under a blank */
+.pop{position:absolute;z-index:var(--layer-overlay);width:calc(var(--measure-decision) + var(--space-5));padding:var(--space-2);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);box-shadow:var(--shadow-overlay);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);letter-spacing:0;animation:resin var(--motion-base) var(--ease-out) both}
+.pop .ph{display:flex;justify-content:space-between;padding:var(--space-1) var(--space-2) var(--space-2);color:var(--ink-muted);font-size:var(--type-small)}
+.opt{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:center;min-height:var(--target-sm);padding:0 var(--space-2);border-radius:var(--radius-key)}
+.opt:hover,.opt:focus-visible{background:var(--surface-raised)}
+.opt .c{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.opt[aria-checked="true"]{color:var(--light)}
+.opt[aria-checked="true"] .c{color:var(--x-proposed-floor)}
+.opt.zero{color:var(--ink-muted)}
+.opt.gap{background-image:var(--x-proposed-gap)}
+.zr{padding:0 var(--space-2) var(--space-2) var(--space-4);border-left:1px solid var(--hairline);margin-left:var(--space-2)}
+.zr .why span{color:color-mix(in srgb,var(--ink) 80%,transparent)}
+.zr .why{font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-1) 0}
+.adds{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-4)}
+.empty{padding:var(--space-4) 0;max-width:var(--measure-read)}
+@media (max-height:840px){.q{font-size:var(--type-title);line-height:calc(var(--leading-title) * 1.2);margin-top:var(--space-3)}.answer .n{font-size:var(--type-title)}}
+</style>
+</head>
+<body class="admin-off">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Facets · V3</b> the question is a sentence, each blank a facet with counts · OpenRefine facets, Isotype captions, library subject headings</div>
+<script>
+/*@DATA*/
+/*@ENGINE*/
+const app = document.getElementById('app');
+let sel = {}, open = null, fresh = null, shown = 0;
+const total = F.results({}).length;
+app.innerHTML = frame() + '<main class="main"><div class="head"><div><div class="eyebrow">' + DATA.app + ' · ' + DATA.floor.name + '</div><h1>Ask</h1><div class="sub">Fill any blank. Every word you could put there shows <b>how many it would leave</b>; words that leave none say why.</div></div><button class="btn" id="tbtn">' + Icons.svg('code', { size: 16 }) + 'Technical names <span class="kbd">T</span></button></div><div class="q" id="q"></div><div class="answer" id="ans"></div><div class="res-wrap"><ul class="list" id="list"></ul></div></main>' +
+  keys([['1-5', 'open a blank'], ['↑ ↓ ↵', 'choose'], ['⌫', 'empty a blank'], ['esc', 'close'], ['T', 'technical names'], ['R', 'replay']]);
+const ORDER = ['kind', 'service', 'region', 'state', 'when'];
+const ANY = { kind: 'everything', service: 'about any service', region: 'anywhere', state: 'in any state', when: 'at any time' };
+function words(fid, vid, s) { // how this choice reads in the sentence
+  if (fid === 'kind') return F.KIND[vid].many;
+  return F.phrase(F.pick(s || sel, fid, vid, 'only'), fid);
+}
+function single() { return sel.kind && sel.kind.size === 1 ? F.KIND[[...sel.kind][0]] : null; }
+function render() {
+  const Q = document.getElementById('q'); const K = single();
+  let h = '<span class="w">Show me </span>';
+  ORDER.forEach((fid, i) => {
+    const s = sel[fid], f = F.FACET[fid];
+    if (fid === 'when' && K && !K.date) { h += ' <span class="slot na" title="' + F.cap(K.many) + ' have no key date in this deployment. Contracts, sites and incidents do.">(' + K.many + ' have no key date)</span>'; return; }
+    const txt = s && s.size ? (fid === 'kind' ? F.join([...s].map(v => F.KIND[v].many)) : F.phrase(sel, fid)) : ANY[fid];
+    h += (i ? ' ' : '') + '<button class="slot' + (s && s.size ? ' set' : '') + (fresh === fid ? ' fresh' : '') + '" data-f="' + fid + '" aria-expanded="' + (open === fid) + '" aria-label="' + f.plain + ': ' + txt + '">' + F.esc(txt) + '</button>';
+  });
+  Q.innerHTML = h + '<span class="w">.</span>';
+  const res = F.results(sel);
+  const A = document.getElementById('ans');
+  const filled = ORDER.filter(f => sel[f] && sel[f].size);
+  A.innerHTML = '<span class="n" id="num">' + shown + '</span><span class="t">' + F.things(sel, res.length) + (res.length === 1 ? ' matches' : ' match') + '<small>of ' + total + ' kept here' + (F.elsewhereTotal() ? ', plus ' + F.elsewhereTotal() + ' kept on floors below' : '') + '</small></span><span class="trail">' + (filled.length ? 'Empty a blank to get back: ' + filled.map(f => { const d = F.results(dropped(f)).length - res.length; return F.FACET[f].plain.toLowerCase() + ' <b>+' + d + '</b>'; }).join(' \u00b7 ') : '') + '</span>';
+  tick(res.length);
+  const L = document.getElementById('list');
+  if (res.length) L.innerHTML = res.slice(0, 40).map(F.row).join('');
+  else { const b = F.recover(sel); L.innerHTML = '<li class="empty">' + F.reasons([{ type: 'none', icon: 'search-x', head: 'Nothing fits the whole sentence', text: b ? 'Take out “' + words(b.fid, b.vid) + '” and ' + b.n + ' come back.' : '' }]) + '</li>'; }
+  if (open) pop(); else document.querySelectorAll('.pop').forEach(p => p.remove());
+}
+function dropped(fid) { const o = F.clone(sel); delete o[fid]; return o; }
+let tk = 0;
+function tick(n) { // the count rolls to its new value
+  const me = ++tk, from = shown, t0 = performance.now(), d = F.reduced ? 1 : F.ms('--motion-calm');
+  (function f(t) { if (me !== tk) return; const p = Math.min(1, (t - t0) / d); shown = Math.round(from + (n - from) * (1 - Math.pow(1 - p, 3))); const el = document.getElementById('num'); if (el) el.textContent = shown; if (p < 1) requestAnimationFrame(f); })(t0);
+}
+function pop() {
+  document.querySelectorAll('.pop').forEach(p => p.remove());
+  const slot = document.querySelector('.slot[data-f="' + open + '"]'); if (!slot) return;
+  const f = F.FACET[open], c = F.counts(open, sel), cur = sel[open] || new Set();
+  const vals = f.values.concat(c[F.GAP] ? [{ id: F.GAP, label: 'Not recorded' }] : []);
+  let h = '<div class="ph"><span>' + f.q + '?</span><span class="tech">' + f.pm + ' · ' + f.tech + '</span></div>';
+  h += '<button class="opt" data-v="" aria-checked="' + !cur.size + '"><span>' + ANY[open] + '</span><span class="c">' + F.results(dropped(open)).length + '</span></button>';
+  vals.forEach(v => {
+    const n = c[v.id], on = cur.has(v.id);
+    const w = v.id === F.GAP ? 'with no ' + f.plain.toLowerCase() + ' recorded' : words(open, v.id);
+    h += '<button class="opt' + (!n ? ' zero' : '') + (v.id === F.GAP ? ' gap' : '') + '" data-v="' + v.id + '" aria-checked="' + on + '"><span>' + F.esc(w) + '</span><span class="c">' + (n ? n : 'none') + '</span></button>';
+    if (!n) h += '<div class="zr">' + F.reasons(F.why(sel, open, v.id).slice(0, 2)) + '</div>';
+    else if (v.id === F.GAP) h += '<div class="zr"><div class="why w-gap"><span class="wi">' + Icons.svg('circle-dashed', { size: 16 }) + '</span><div><span>' + F.join(F.recs.filter(r => F.visible(r) && F.matches(r, sel, open) && F.val(r, open) === F.GAP).map(r => F.KIND[r.kind].keeper).filter((x, i, a) => a.indexOf(x) === i)) + ' can fill these in.</span></div></div></div>';
+  });
+  const P = document.createElement('div'); P.className = 'pop'; P.setAttribute('role', 'dialog'); P.innerHTML = h;
+  const q = document.getElementById('q'); q.appendChild(P);
+  const sr = slot.getBoundingClientRect(), qr = q.getBoundingClientRect();
+  let left = sr.left - qr.left; const max = innerWidth - qr.left - P.offsetWidth - parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--edge'));
+  P.style.left = Math.max(0, Math.min(left, max)) + 'px'; P.style.top = (sr.bottom - qr.top + 4) + 'px';
+  const room = innerHeight - sr.bottom - 24; if (P.offsetHeight > room) { P.style.maxHeight = room + 'px'; P.style.overflow = 'auto'; }
+}
+function choose(fid, vid) { if (!vid) delete sel[fid]; else sel = F.pick(sel, fid, vid, 'only'); if (fid === 'kind' && single() && !single().date) delete sel.when; fresh = fid; open = null; render(); }
+app.addEventListener('click', e => {
+  const s = e.target.closest('.slot[data-f]'); if (s) { open = open === s.dataset.f ? null : s.dataset.f; fresh = null; render(); return; }
+  const o = e.target.closest('.opt'); if (o) { choose(open, o.dataset.v); return; }
+  if (!e.target.closest('.pop') && open) { open = null; render(); }
+});
+document.getElementById('tbtn').onclick = () => document.body.classList.toggle('admin-off');
+let run = 0;
+async function demo() {
+  const me = ++run; sel = {}; open = null; fresh = null; render();
+  await F.wait(F.ms('--motion-run'));
+  const step = F.ms('--motion-calm') * .6;
+  for (const [f, v] of [['kind', 'contract'], ['service', 'waste'], ['region', 'north'], ['when', 'this']]) { if (me !== run) return; choose(f, v); await F.wait(step); }
+  if (me !== run) return; open = 'region'; fresh = null; render();
+}
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') demo();
+  else if (e.key === 't' || e.key === 'T') document.body.classList.toggle('admin-off');
+  else if (/^[1-5]$/.test(e.key)) { open = ORDER[+e.key - 1]; render(); const o = document.querySelector('.pop .opt'); if (o) o.focus(); }
+  else if (e.key === 'Escape') { open = null; render(); }
+  else if (e.key === 'Backspace' && open) { choose(open, ''); }
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && open) { const os = [...document.querySelectorAll('.pop .opt')]; let i = os.indexOf(document.activeElement); i = e.key === 'ArrowDown' ? Math.min(os.length - 1, i + 1) : Math.max(0, i - 1); os[i].focus(); e.preventDefault(); }
+});
+demo();
+</script>
+</body>
+</html>

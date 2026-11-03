@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Record card · V4 · Specimen label</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---- shared by every record card variant (proposed tokens first, all listed in notes.md) ---- */
+:root{
+  --x-type-micro:.6875rem;                                                     /* --type-micro: mono eyebrows and numerals inside data (also proposed by wear-and-time) */
+  --x-gap-ink:color-mix(in srgb,var(--ink-muted) 70%,transparent);             /* --mark-gap: the edge of a detail nobody has filled (dashed, never hatched) */
+  --x-gap-fill:color-mix(in srgb,var(--ink-muted) 6%,transparent);             /* --mark-gap-fill: the inside of the empty box */
+  --x-disagree:color-mix(in srgb,var(--warning) 70%,var(--ink));               /* --mark-disagree: two sources, side by side */
+  --x-withdrawn:color-mix(in srgb,var(--danger) 45%,var(--ink-muted));         /* --mark-withdrawn: read from a withdrawn document */
+  --x-kept:var(--floor-department-high);                                       /* the floor the record is kept on (set from data) */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.micro{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);letter-spacing:0}
+.keys{position:fixed;right:var(--edge-tight);bottom:var(--edge-tight);z-index:var(--layer-chrome);display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-1) var(--space-3);max-width:calc(var(--measure-wide) * .7);font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:lowercase;color:var(--ink-muted);background:var(--scrim);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key)}
+.x-cap{max-width:calc(var(--measure-wide) * .8)}
+@media (max-width:1400px){.x-cap{max-width:var(--measure-glance)}.keys{max-width:calc(var(--measure-read) - var(--space-6))}}
+svg{flex:none}
+/* the app frame: a slim rail so the card sits inside Data Atlas */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:color-mix(in srgb,var(--slate-deep) 70%,transparent);border-right:1px solid var(--hairline);padding:var(--edge) var(--edge-tight);display:flex;flex-direction:column;gap:var(--space-1)}
+.rail .an{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);padding:var(--space-2);margin-bottom:var(--space-4)}
+.nav{display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav.on{background:var(--surface-raised);color:var(--ink)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail .foot{margin-top:auto;margin-bottom:var(--space-6);padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rail .foot b{font-weight:400;color:var(--ink)}
+.main{position:relative;overflow:hidden;min-height:0}
+/* marks shared by all six: gap (dashed, empty, owned), disagree (two side by side), withdrawn (struck, marked), reach (lock, says who) */
+.gapbox{border:1px dashed var(--x-gap-ink);background:var(--x-gap-fill);border-radius:var(--radius-key);color:var(--ink-muted)}
+.tag{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;padding:calc(var(--space-1) / 2) var(--space-1);border-radius:var(--radius-key);white-space:nowrap}
+.tag.disagree{color:var(--x-disagree);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--x-disagree) 40%,transparent)}
+.tag.withdrawn{color:var(--x-withdrawn);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--x-withdrawn) 40%,transparent)}
+.tag.gap{color:var(--ink-muted);box-shadow:inset 0 0 0 1px var(--x-gap-ink)}
+.tag.reach{color:var(--ink-muted);box-shadow:inset 0 0 0 1px var(--hairline-strong)}
+.struck{text-decoration:line-through;text-decoration-color:var(--x-withdrawn);text-decoration-thickness:1px}
+.fdot{display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);flex:none}
+.lit{box-shadow:0 0 0 var(--focus-ring) var(--light),0 0 var(--glow-blur) color-mix(in srgb,var(--green) 45%,transparent)!important}
+@media (prefers-reduced-motion: reduce){ .lit{box-shadow:0 0 0 var(--focus-ring) var(--light)!important} }
+
+:root{
+  --x-tilt:-1.2deg;                                                            /* --slip-tilt: a pinned determination slip sits slightly off true, so it reads as added */
+}
+.main{padding:var(--edge) var(--space-6) var(--space-7);display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);column-gap:var(--space-6)}
+@media (max-width:1400px){.main{padding-left:var(--space-5);padding-right:var(--space-5);column-gap:var(--space-5)}}
+.tray{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.tray .top{display:flex;justify-content:space-between;align-items:flex-end}
+.tray .top h1{margin:var(--space-1) 0 0;font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);color:var(--light);letter-spacing:var(--tracking-soft)}
+/* the label: fixed boxes every record of this kind shares */
+.label{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-flow:dense;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:color-mix(in srgb,var(--slate) 85%,var(--ink) 4%);box-shadow:var(--shadow-raised);position:relative}
+.label::before{content:"";position:absolute;inset:var(--space-1);border:1px solid var(--hairline);border-radius:2px;pointer-events:none}
+.bx{position:relative;padding:var(--space-2) var(--space-3);border-right:1px solid var(--hairline);border-bottom:1px solid var(--hairline);min-height:calc(var(--space-7) - var(--space-2));min-width:0}
+.bx.w2{grid-column:span 2}.bx.w4{grid-column:span 4}.bx.w3{grid-column:span 3}
+.bx .c{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);display:flex;justify-content:space-between;gap:var(--space-2)}
+.bx .c{flex-wrap:wrap}
+.bx .c .t{display:none;text-transform:none;letter-spacing:0;color:var(--ink)}
+.tech .bx .c .t{display:inline}
+.bx .v{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink)}
+.bx .v small{color:var(--ink-muted);font-size:var(--type-small)}
+.bx.big .v{font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.bx.no{font-family:var(--font-mono)}
+.bx.gap .v{white-space:normal;margin-top:var(--space-1);padding:0 var(--space-2);font-size:var(--type-small);line-height:calc(var(--leading-body) - var(--space-1));font-style:italic}
+.bx.reach .v{color:var(--ink-muted);font-size:var(--type-small)}
+.bx.disagree{background:color-mix(in srgb,var(--x-disagree) 5%,transparent)}
+.bx.disagree .v{color:var(--x-disagree)}
+.bx.withdrawn .v{color:var(--ink-muted)}
+.bx button{all:unset}
+/* determination slips: never removed, only added beneath, newest on top */
+.slips{position:relative;display:flex;flex-direction:column;gap:0;padding-left:var(--space-6)}
+.slips .hd{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.slip{position:relative;width:min(100%,calc(var(--measure-glance) + var(--space-5)));display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-2) var(--space-3);margin-top:calc(var(--space-1) * -1);background:var(--surface-raised);border:1px solid var(--hairline-strong);border-radius:2px;box-shadow:var(--shadow-raised);font-size:var(--type-meta);line-height:var(--leading-meta);transition:transform var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+.slip:nth-child(odd){transform:rotate(var(--x-tilt))}
+.slip:nth-child(even){transform:rotate(calc(var(--x-tilt) * -0.6)) translateX(var(--space-3))}
+.slip.pre{opacity:0;transform:translateY(calc(var(--travel-near) * -1)) rotate(0)}
+.slip .pin{color:var(--ink-muted)}
+.slip b{font-weight:400;color:var(--light)}
+.slip .m{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.slip .det{font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-disagree)}
+.slip.wd{opacity:.75}
+.slip.wd b{text-decoration:line-through;text-decoration-color:var(--x-withdrawn)}
+.slip.wd .det{color:var(--x-withdrawn)}
+.decide{margin-top:var(--space-3);font-size:var(--type-small);color:var(--ink-muted);max-width:var(--measure-read)}
+/* the object record: museum documentation sections, in plain words */
+.recd{min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:var(--space-1)}
+.sec{border-top:1px solid var(--hairline);padding:var(--space-2) 0}
+.sec h2{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 var(--space-1);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.sec h2 i{font-style:normal;text-transform:none;letter-spacing:0;font-family:var(--font-sans)}
+.row{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2);padding:calc(var(--space-1) / 2) 0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.row b{font-weight:400;color:var(--ink)}
+.row.gap b{font-style:italic;color:var(--ink-muted);border-bottom:1px dashed var(--x-gap-ink)}
+.row .w{color:var(--x-disagree)}
+.row.wd b{color:var(--x-withdrawn)}
+.cond{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-meta)}
+.cond .bar{flex:1;display:flex;height:var(--space-2);border-radius:var(--radius-pill);overflow:hidden;background:var(--surface-inset)}
+.cond .bar span{display:block;height:100%}
+.chain{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.chain b{font-weight:400;color:var(--ink)}
+@media (max-height:840px){.bx{min-height:calc(var(--space-6) + var(--space-2));padding:var(--space-1) var(--space-3)}.bx.big .v{font-size:var(--type-lead);line-height:var(--leading-lead)}.row{font-size:var(--type-small);line-height:var(--leading-small)}}
+@media (prefers-reduced-motion: reduce){.slip.pre{transform:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" id="rail" aria-label="Data Atlas"></nav>
+  <main class="main" id="main">
+    <section class="tray" id="tray" aria-label="Label"></section>
+    <aside class="recd" id="recd" aria-label="Object record"></aside>
+  </main>
+</div>
+<div class="keys" id="keys"></div>
+<div class="x-cap"><b>Record card · V4</b> specimen label: fixed boxes on the label, determination slips added beneath and never removed, the object record's provenance, condition and loans · herbarium sheets, museum object records (SPECTRUM)</div>
+<script>
+/* ======================================================================
+   Sample data: every name, label, count, date and word on this page comes
+   from here. In AUGUR it comes from Data Atlas: the ontology (kinds of thing,
+   their details and kinds of link, each with the pack term it stands for),
+   what's known (observations from sources, facts a floor's leads accepted,
+   disputes), Used by (Mandate bindings, the documents read) and the floors.
+   Nothing below is drawn for one deployment: swap this object and the page
+   redraws for any org. Press K to switch to a record of another kind.
+   ====================================================================== */
+const DATA = {
+  app: 'Data Atlas',
+  org: 'Vale Regional Services',
+  now: '2026-11-03',
+  viewer: { name: 'Sam Okafor', floor: 'department', admin: false },
+  admin: { name: 'Jo Reyes', role: 'Data Atlas admin' },
+  floors: {
+    you: { word: 'You' },
+    team: { word: 'Depot operations' },
+    department: { word: 'Facilities' },
+    org: { word: 'Vale Regional Services' }
+  },
+  words: {                     /* plain word first, technical word one step down */
+    kind: ['Kind of thing', 'class'],
+    detail: ['Detail', 'datatype property'],
+    link: ['Link', 'object property'],
+    gap: ['Not known yet', 'expected, no assertion'],
+    source: ['Where it came from', 'observation · prov:wasDerivedFrom'],
+    disagree: ['Sources disagree', 'conflicting observations'],
+    fact: ['Accepted', 'fact (accepted by floor leads)'],
+    usedBy: ['Used by', 'Mandate bindings · source documents'],
+    kept: ['Kept on', 'owning workspace']
+  },
+  /* sources: a document in Artifacts or a person. A withdrawn document's readings stay, marked, and stop counting. */
+  sources: {
+    register: { type: 'document', word: 'Asset register, Q3 2026', where: 'Estates records', floor: 'org', on: '2026-10-01' },
+    lease:    { type: 'document', word: 'Lease agreement, Halden Road', where: 'Estates records', floor: 'department', on: '2019-04-02' },
+    survey:   { type: 'document', word: 'Facilities survey 2025', where: 'Facilities library', floor: 'department', on: '2025-06-18' },
+    fmdoc:    { type: 'document', word: 'Contract FM-2024-017', where: 'Contracts', floor: 'department', on: '2024-02-20' },
+    handbook: { type: 'document', word: 'Depot handbook 2019', where: 'Facilities library', floor: 'department', on: '2019-05-01',
+                withdrawn: { on: '2026-02-10', by: 'Facilities leads', why: 'Replaced by the 2026 handbook, which has not been read yet.' } },
+    ir2291:   { type: 'document', word: 'Incident report IR-2291', where: 'Depot logs', floor: 'team', on: '2026-08-14' },
+    priya:    { type: 'person', word: 'Priya Natarajan', role: 'Site manager', floor: 'department', on: '2026-09-30' },
+    gmdoc:    { type: 'document', word: 'Grounds maintenance contract', where: 'Contracts', floor: 'department', on: '2023-03-10' },
+    tender:   { type: 'document', word: 'Tender evaluation 2023', where: 'Procurement', floor: 'department', on: '2023-02-02' },
+    tomasz:   { type: 'person', word: 'Tomasz Wilk', role: 'Contract manager', floor: 'department', on: '2026-07-11' }
+  },
+  /* the ontology: kinds of thing (only the two shown in full here, plus the kinds links point at) */
+  kinds: {
+    site: {
+      word: 'Site', plural: 'Sites', icon: 'warehouse', count: 46,
+      tech: { name: 'cco:Facility', pack: 'Common Core Ontologies 2.0', iri: 'http://www.ontologyrepository.com/CommonCoreOntologies/Facility' },
+      says: 'A place the org runs or uses: a depot, office, yard or store.',
+      groups: [
+        { word: 'What it is', items: ['name', 'alias', 'purpose'] },
+        { word: 'Where it is', items: ['address', 'inRegion'] },
+        { word: 'Size and use', items: ['floorArea', 'spaces', 'opened'] },
+        { word: 'Care and safety', items: ['fireCheck', 'hours', 'energy', 'security'] },
+        { word: 'Who and what', items: ['runBy', 'managedBy', 'coveredBy', 'insuredBy', 'houses', 'incidents'] }
+      ],
+      details: {
+        name:      { word: 'Name', say: 'Its name is {v}.', tech: 'rdfs:label', type: 'text', key: true },
+        alias:     { word: 'Also called', say: 'It is also called {v}.', tech: 'skos:altLabel', type: 'text', many: true },
+        purpose:   { word: 'Used for', say: 'It serves as {v}.', tech: 'vrs:site_use', type: 'text' },
+        address:   { word: 'Address', say: 'It is at {v}.', tech: 'cco:has_address', type: 'text' },
+        floorArea: { word: 'Floor area', say: 'It has a floor area of {v}.', tech: 'vrs:floor_area', type: 'measure', unit: 'm²' },
+        spaces:    { word: 'Vehicle spaces', say: 'It has room for {v} vehicles.', tech: 'vrs:vehicle_capacity', type: 'count' },
+        opened:    { word: 'Opened', say: 'It opened on {v}.', tech: 'vrs:opened_on', type: 'date' },
+        fireCheck: { word: 'Last fire risk check', say: 'Its fire risk was last checked on {v}.', tech: 'vrs:fire_risk_assessed_on', type: 'date',
+                     fill: { who: 'Health and safety team', floor: 'department', hint: 'usually in a fire risk assessment' } },
+        hours:     { word: 'Opening hours', say: 'It is open {v}.', tech: 'vrs:opening_hours', type: 'text',
+                     fill: { who: 'Priya Natarajan, site manager', floor: 'department', hint: 'she can say it herself' } },
+        energy:    { word: 'Energy rating', say: 'Its energy rating is {v}.', tech: 'vrs:epc_band', type: 'band' },
+        security:  { word: 'Security grading', say: 'Its security grading is {v}.', tech: 'vrs:security_grade', type: 'band',
+                     reach: { floor: 'team', ask: 'Depot security leads', why: 'Kept on the Depot operations floor, below yours. Floors see their own and the floors above.' } }
+      },
+      links: {
+        inRegion:  { word: 'In', say: 'It is in {v}.', back: 'has site', to: 'region', tech: 'cco:located_in' },
+        runBy:     { word: 'Run by', say: 'It is run by {v}.', back: 'runs', to: 'organisation', tech: 'vrs:operated_by' },
+        managedBy: { word: 'Managed by', say: 'It is managed by {v}.', back: 'manages', to: 'person', tech: 'vrs:managed_by' },
+        coveredBy: { word: 'Covered by', say: 'It is covered by {v}.', back: 'covers', to: 'contract', tech: 'vrs:subject_of_contract' },
+        insuredBy: { word: 'Insured by', say: 'It is insured by {v}.', back: 'insures', to: 'organisation', tech: 'vrs:insured_by',
+                     fill: { who: 'Finance, insurance desk', floor: 'org', hint: 'from the property schedule' } },
+        houses:    { word: 'Home to', say: 'It is home to {v}.', back: 'based at', to: 'vehicle', tech: 'vrs:base_of', many: true },
+        incidents: { word: 'Incidents here', say: 'It was the scene of {v}.', back: 'happened at', to: 'incident', tech: 'cco:is_site_of', many: true }
+      }
+    },
+    contract: {
+      word: 'Contract', plural: 'Contracts', icon: 'file-signature', count: 132,
+      tech: { name: 'cco:Contract', pack: 'Common Core Ontologies 2.0', iri: 'http://www.ontologyrepository.com/CommonCoreOntologies/Contract' },
+      says: 'An agreement with a supplier: what they do, for how long, for how much.',
+      groups: [
+        { word: 'What it is', items: ['name', 'ref', 'scope'] },
+        { word: 'Money and time', items: ['value', 'starts', 'ends', 'notice'] },
+        { word: 'Decisions', items: ['renewal', 'risk'] },
+        { word: 'Who and what', items: ['withSupplier', 'managedBy', 'covers'] }
+      ],
+      details: {
+        name:    { word: 'Name', say: 'Its name is {v}.', tech: 'rdfs:label', type: 'text', key: true },
+        ref:     { word: 'Reference', say: 'Its reference is {v}.', tech: 'vrs:contract_ref', type: 'text', key: true },
+        scope:   { word: 'What it covers', say: 'It covers {v}.', tech: 'vrs:scope', type: 'text' },
+        value:   { word: 'Value a year', say: 'It is worth {v} a year.', tech: 'vrs:annual_value', type: 'money', unit: '£' },
+        starts:  { word: 'Starts', say: 'It starts on {v}.', tech: 'cco:has_start_date', type: 'date' },
+        ends:    { word: 'Ends', say: 'It ends on {v}.', tech: 'cco:has_end_date', type: 'date' },
+        notice:  { word: 'Notice to end', say: 'Either side can end it with {v} notice.', tech: 'vrs:notice_period', type: 'text',
+                   fill: { who: 'Procurement', floor: 'department', hint: 'clause 14 of the signed contract' } },
+        renewal: { word: 'Renewal decision by', say: 'A renewal decision is due by {v}.', tech: 'vrs:renewal_decision_due', type: 'date',
+                   fill: { who: 'Tomasz Wilk, contract manager', floor: 'department', hint: 'he set the timetable' } },
+        risk:    { word: 'Supplier risk', say: 'Its supplier risk is {v}.', tech: 'vrs:supplier_risk', type: 'band',
+                   reach: { floor: 'org', restricted: true, ask: 'Commercial risk office', why: 'Kept on the Org floor in a restricted list. You can see that it exists, not its value.' } }
+      },
+      links: {
+        withSupplier: { word: 'With', say: 'It is with {v}.', back: 'holds', to: 'organisation', tech: 'cco:has_party' },
+        managedBy:    { word: 'Managed by', say: 'It is managed by {v}.', back: 'manages', to: 'person', tech: 'vrs:managed_by' },
+        covers:       { word: 'Covers', say: 'It applies at {v}.', back: 'covered by', to: 'site', tech: 'vrs:covers_site', many: true }
+      }
+    },
+    region: { word: 'Region', plural: 'Regions', icon: 'map', count: 6 },
+    organisation: { word: 'Organisation', plural: 'Organisations', icon: 'building-2', count: 318 },
+    person: { word: 'Person', plural: 'People', icon: 'user-round', count: 1240 },
+    vehicle: { word: 'Vehicle', plural: 'Vehicles', icon: 'truck', count: 410 },
+    incident: { word: 'Incident', plural: 'Incidents', icon: 'siren', count: 922 }
+  },
+  /* records. Each detail holds observations: { v, src, on, note?, grade?, accepted? }.
+     Two observations that differ with none accepted = sources disagree. None at all = a gap. */
+  records: [
+    {
+      id: 'ent_01J8R4T', kind: 'site', name: 'Halden Road Depot', floor: 'department',
+      since: '2019-05-13', changed: '2026-10-01',
+      known: {
+        name:      [{ v: 'Halden Road Depot', src: 'register', on: '2026-10-01', accepted: true }],
+        alias:     [{ v: 'Depot 4', src: 'register', on: '2026-10-01', accepted: true }, { v: 'HRD', src: 'priya', on: '2026-09-30', accepted: true }],
+        purpose:   [{ v: 'a vehicle depot and stores', src: 'register', on: '2026-10-01', accepted: true }],
+        address:   [{ v: 'Unit 2, Halden Road, Marrow Bridge MB4 7QT', src: 'lease', on: '2019-04-02', note: 'page 1', accepted: true }],
+        floorArea: [{ v: '2,400', src: 'lease', on: '2019-04-02', note: 'schedule 2' }, { v: '2,650', src: 'survey', on: '2025-06-18', note: 'counts the 2023 extension' }],
+        spaces:    [{ v: '38', src: 'survey', on: '2025-06-18', accepted: true }],
+        opened:    [{ v: '13 May 2019', src: 'handbook', on: '2019-05-01', note: 'foreword' }],
+        energy:    [{ v: 'C', src: 'survey', on: '2025-06-18', accepted: true, grade: 'B2' }],
+        inRegion:  [{ to: 'North Vale', src: 'register', on: '2026-10-01', accepted: true }],
+        runBy:     [{ to: 'Corvane Facilities Ltd', src: 'fmdoc', on: '2024-02-20', note: 'since 1 April 2024', accepted: true }],
+        managedBy: [{ to: 'Priya Natarajan', src: 'register', on: '2026-10-01', accepted: true }],
+        coveredBy: [{ to: 'FM-2024-017 · Facilities management', src: 'fmdoc', on: '2024-02-20', accepted: true }],
+        houses:    [{ to: '31 vehicles', count: 31, sample: ['VN-23 electric van', 'GR-07 gritter', 'TK-12 tipper'], src: 'register', on: '2026-10-01', accepted: true }],
+        incidents: [{ to: '3 incidents this year', count: 3, sample: ['IR-2291 roller door fault', 'IR-2240 forklift near miss', 'IR-2177 flooding, bay 3'], src: 'ir2291', on: '2026-08-14', accepted: true }]
+      },
+      usedBy: {
+        intents: [
+          { word: 'Cut depot energy use by 15% by 2027', owner: 'Estates', floor: 'org', uses: ['energy', 'floorArea'] },
+          { word: 'Fleet electrification, phase 2', owner: 'Fleet', floor: 'department', uses: ['spaces', 'houses'] },
+          { word: 'Close open fire safety actions by March', owner: 'Health and safety', floor: 'department', uses: ['fireCheck'], waits: true }
+        ],
+        documents: ['register', 'lease', 'survey', 'fmdoc', 'ir2291', 'handbook']
+      },
+      also: [ { name: 'Halden Rd depot', floor: 'team', why: 'Same address, spelt differently. In Triage as a possible match.' } ]
+    },
+    {
+      id: 'ent_01J9C2M', kind: 'contract', name: 'Grounds maintenance, North Vale', floor: 'department',
+      since: '2023-04-01', changed: '2026-07-11',
+      known: {
+        name:    [{ v: 'Grounds maintenance, North Vale', src: 'gmdoc', on: '2023-03-10', accepted: true }],
+        ref:     [{ v: 'GM-2023-004', src: 'gmdoc', on: '2023-03-10', accepted: true }],
+        scope:   [{ v: 'mowing, hedges and winter gritting at 12 sites', src: 'gmdoc', on: '2023-03-10', note: 'schedule A', accepted: true }],
+        value:   [{ v: '184,000', src: 'gmdoc', on: '2023-03-10', note: 'clause 6' }, { v: '196,500', src: 'tomasz', on: '2026-07-11', note: 'after the 2025 uplift' }],
+        starts:  [{ v: '1 April 2023', src: 'gmdoc', on: '2023-03-10', accepted: true }],
+        ends:    [{ v: '31 March 2027', src: 'gmdoc', on: '2023-03-10', accepted: true }],
+        withSupplier: [{ to: 'Greenline Services', src: 'tender', on: '2023-02-02', accepted: true }],
+        managedBy:    [{ to: 'Tomasz Wilk', src: 'tomasz', on: '2026-07-11', accepted: true }],
+        covers:       [{ to: '12 sites', count: 12, sample: ['Halden Road Depot', 'Marrow Bridge offices', 'Fenwick salt store'], src: 'gmdoc', on: '2023-03-10', accepted: true }]
+      },
+      usedBy: {
+        intents: [
+          { word: 'Re-tender grounds maintenance before it ends', owner: 'Procurement', floor: 'department', uses: ['ends', 'renewal', 'notice'], waits: true },
+          { word: 'Hold grounds spend flat in 2027', owner: 'Finance', floor: 'org', uses: ['value'] }
+        ],
+        documents: ['gmdoc', 'tender', 'tomasz']
+      },
+      also: []
+    }
+  ],
+  demo: { detail: 'fireCheck', dispute: 'floorArea' }
+};
+
+/* ====================================================================== shared helpers */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ms = t => { const v = getComputedStyle(document.documentElement).getPropertyValue(t).trim(); return RM ? 0 : (parseFloat(v) || 0); };
+const ic = (n, s = 16) => Icons.svg(n, { size: s, stroke: 1.5 });
+const FV = { org: '--floor-org-high', department: '--floor-department-high', team: '--floor-team-high', you: '--floor-you-high' };
+const floorC = f => `var(${FV[f] || '--ink-muted'})`;
+const floorW = f => DATA.floors[f]?.word || f;
+const W = k => DATA.words[k][0];
+const T = k => DATA.words[k][1];
+const fmtDate = s => { const d = new Date(s + 'T00:00:00Z'); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); };
+const ORDER = { org: 3, department: 2, team: 1, you: 0 };
+const seesFloor = f => ORDER[f] >= ORDER[DATA.viewer.floor];
+
+let REC = 0;
+const rec = () => DATA.records[REC];
+const kindOf = r => DATA.kinds[r.kind];
+const defOf = (r, k) => kindOf(r).details[k] || kindOf(r).links[k];
+const isLink = (r, k) => !!kindOf(r).links[k];
+const src = id => DATA.sources[id];
+const srcIcon = id => src(id)?.type === 'person' ? 'user-round' : 'file-text';
+const srcWhere = id => { const s = src(id); return s.type === 'person' ? `${s.role}, said ${fmtDate(s.on)}` : `Artifacts · ${s.where}`; };
+
+/* the state of one detail on one record: filled, disagree, gap, reach (kept out of view), withdrawn (known only from a withdrawn source) */
+function stateOf(r, k) {
+  const d = defOf(r, k), obs = r.known[k] || [];
+  if (d.reach && (d.reach.restricted || !seesFloor(d.reach.floor))) return { s: 'reach', obs: [], d };
+  if (!obs.length) return { s: 'gap', obs, d };
+  const live = obs.filter(o => !src(o.src).withdrawn);
+  if (!live.length) return { s: 'withdrawn', obs, d };
+  const vals = new Set(live.map(o => o.v ?? o.to));
+  if (vals.size > 1 && !live.some(o => o.accepted)) return { s: 'disagree', obs: live, d };
+  return { s: 'filled', obs, d };
+}
+const valOf = (o, d) => esc(o.v ?? o.to) + (d.unit && d.type !== 'money' ? ` <small>${esc(d.unit)}</small>` : '');
+const moneyOf = (o, d) => d.type === 'money' ? `${esc(d.unit)}${esc(o.v)}` : null;
+const show = (o, d) => moneyOf(o, d) ?? valOf(o, d);
+const allKeys = r => kindOf(r).groups.flatMap(g => g.items);
+function tally(r) {
+  const t = { filled: 0, disagree: 0, gap: 0, reach: 0, withdrawn: 0 };
+  allKeys(r).forEach(k => t[stateOf(r, k).s]++);
+  t.total = allKeys(r).length; return t;
+}
+/* who could fill a gap: the kind's own hint, or the floor's leads */
+const filler = (r, d) => d.fill || { who: `${floorW(r.floor)} leads`, floor: r.floor, hint: 'anyone with access can propose a value' };
+const usedFor = (r, k) => r.usedBy.intents.filter(i => i.uses.includes(k));
+
+/* the Data Atlas rail: kinds come from the ontology, counts from Data Atlas */
+function rail(active) {
+  const ks = ['site', 'contract', 'organisation', 'person', 'vehicle', 'incident'];
+  $('#rail').innerHTML = `<div class="an">${esc(DATA.app)}</div>
+    <div class="nav"><span>${ic('library')}</span>What we keep</div>
+    ${ks.map(k => { const K = DATA.kinds[k]; return `<div class="nav ${k === active ? 'on' : ''}"><span>${ic(K.icon)}</span>${esc(K.plural)}<span class="n">${K.count.toLocaleString('en-GB')}</span></div>`; }).join('')}
+    <div class="nav"><span>${ic('inbox')}</span>Triage<span class="n">7</span></div>
+    <div class="foot">You are on the <b>${esc(floorW(DATA.viewer.floor))}</b> floor. You see what is kept here and on the floors above: <b>${esc(floorW('org'))}</b>.</div>`;
+}
+
+/* keys bar + tip */
+function keys(list) {
+  $('#keys').innerHTML = list.map(([a, b]) => `<span>${a.split(' ').map(x => `<span class="kbd">${esc(x)}</span>`).join(' ')} ${esc(b)}</span>`).join('');
+}
+const timers = []; const later = (f, t) => timers.push(setTimeout(f, t));
+const clearTimers = () => { while (timers.length) clearTimeout(timers.pop()); };
+
+
+/* ====================================================================== V4: label and slips */
+let tech = false;
+/* box widths come from the detail's type, never from its name: the record's name spans the label, other text takes two boxes */
+const wide = (r, k) => k === allKeys(r)[0] ? 'w4 big' : (defOf(r, k).type === 'text' ? 'w2' : '');
+function box(r, k) {
+  const st = stateOf(r, k), d = st.d;
+  let v;
+  if (st.s === 'filled') v = st.obs.map(o => show(o, d)).join(', ');
+  if (st.s === 'disagree') v = `${ic('git-compare', 14)} see ${st.obs.length} slips`;
+  if (st.s === 'withdrawn') v = `<span class="struck">${show(st.obs[0], d)}</span>`;
+  if (st.s === 'gap') v = `<span class="gapbox" style="display:block">wanted from ${esc(filler(r, d).who.split(',')[0])}</span>`;
+  if (st.s === 'reach') v = `${ic('lock', 12)} kept on ${esc(floorW(d.reach.floor))}`;
+  return `<div class="bx ${wide(r, k)} ${st.s}"><div class="c"><span>${esc(d.word)}</span><span class="t">${esc(d.tech)}</span></div><div class="v">${v}</div></div>`;
+}
+function render() {
+  const r = rec(), K = kindOf(r), t = tally(r);
+  rail(r.kind);
+  const det = allKeys(r).filter(k => !isLink(r, k));
+  const fill4 = det.reduce((n, k) => n + ({ 'w4 big': 4, w2: 2 }[wide(r, k)] || 1), 0);
+  const pad = (4 - (fill4 + 1) % 4) % 4;
+  /* slips: every disagreement and every withdrawn reading, as determinations, oldest first so the newest lies on top */
+  const slips = [];
+  det.forEach(k => { const st = stateOf(r, k); if (st.s === 'disagree' || st.s === 'withdrawn') st.obs.slice().sort((a, b) => a.on.localeCompare(b.on)).forEach(o => slips.push({ k, o, s: st.s })); });
+  $('#tray').innerHTML = `<div class="top"><div><div class="eyebrow">${esc(DATA.app)} · ${esc(K.plural)} · label</div><h1>A ${esc(K.word.toLowerCase())}</h1></div><div class="micro"><span class="kbd">T</span> ${tech ? 'plain words' : 'technical names on the label'}</div></div>
+    <div class="label ${tech ? 'tech' : ''}">${det.map(k => box(r, k)).join('')}<div class="bx no" style="grid-column:span ${pad + 1}"><div class="c"><span>Record number</span><span class="t">@id</span></div><div class="v mono">${esc(r.id)}</div></div></div>
+    <div class="slips"><div class="hd micro">${ic('pin', 14)} Determination slips · added, never removed</div>${slips.map(({ k, o, s }) => { const S = src(o.src), d = defOf(r, k); return `<div class="slip pre ${S.withdrawn ? 'wd' : ''}"><span class="pin">${ic(srcIcon(o.src), 18)}</span><div><b>${esc(d.word)}: ${show(o, d)}</b><span class="m">det. ${esc(S.word)}, ${fmtDate(o.on)}${o.note ? ' · ' + esc(o.note) : ''}${S.withdrawn ? ` · withdrawn ${fmtDate(S.withdrawn.on)}, no longer counts` : ''}</span></div><span class="det">${S.withdrawn ? 'withdrawn' : s === 'disagree' ? 'disagrees' : ''}</span></div>`; }).join('')}
+    <div class="decide">${slips.some(x => x.s === 'disagree') ? `Where slips disagree, both stay on the label until ${esc(floorW(r.floor))} leads accept one. A new reading goes on top; the old one is never taken off.` : ''}</div></div>`;
+  /* the object record */
+  const lk = allKeys(r).filter(k => isLink(r, k));
+  const seg = (n, c) => `<span style="width:${n / t.total * 100}%;background:${c}"></span>`;
+  $('#recd').innerHTML = `
+    <div class="sec"><h2>Provenance <i>${esc(W('kept'))} ${esc(floorW(r.floor))}</i></h2>
+      <div class="chain">${ic('arrow-down-to-line', 14)} Added on <b>${esc(floorW(r.floor))}</b> ${fmtDate(r.since)} ${ic('arrow-right', 12)} last changed <b>${fmtDate(r.changed)}</b> </div>
+      ${r.also.map(a => `<div class="row">${ic('copy', 14)}<span>Possibly the same as <b>${esc(a.name)}</b> on ${esc(floorW(a.floor))}. ${esc(a.why)}</span></div>`).join('')}</div>
+    <div class="sec"><h2>Condition <i>${t.filled} of ${t.total} known</i></h2>
+      <div class="cond"><div class="bar">${seg(t.filled, 'var(--ink-muted)')}${seg(t.disagree, 'var(--x-disagree)')}${seg(t.withdrawn, 'var(--x-withdrawn)')}${seg(t.reach, 'var(--hairline-strong)')}${seg(t.gap, 'transparent')}</div></div>
+      <div class="row" style="grid-template-columns:1fr"><span>${t.disagree} disagree · ${t.withdrawn} withdrawn · ${t.reach} out of view · <b style="color:var(--ink-muted)">${t.gap} wanted</b></span></div>
+      ${allKeys(r).filter(k => stateOf(r, k).s === 'gap').map(k => { const f = filler(r, defOf(r, k)); return `<div class="row gap">${ic('circle-dashed', 14)}<span><b>${esc(defOf(r, k).word)}</b> wanted from ${esc(f.who)}, ${esc(f.hint)}.</span></div>`; }).join('')}</div>
+    <div class="sec"><h2>Associations <i>its links</i></h2>${lk.map(k => { const st = stateOf(r, k), d = st.d; return st.s === 'gap' ? `<div class="row gap">${ic('link-2-off', 14)}<span>${esc(tech ? d.tech : d.word)} <b>not recorded</b></span></div>` : `<div class="row">${ic(DATA.kinds[d.to]?.icon || 'link-2', 14)}<span>${esc(tech ? d.tech : d.word)} <b>${st.obs.map(o => esc(o.to)).join(', ')}</b></span></div>`; }).join('')}</div>
+    <div class="sec"><h2>On loan to <i>${esc(W('usedBy'))}</i></h2>${r.usedBy.intents.map(i => `<div class="row">${ic('target', 14)}<span><b>${esc(i.word)}</b> · ${esc(i.owner)}, reads ${i.uses.map(k => esc(defOf(r, k).word.toLowerCase())).join(', ')}${i.waits ? ` <span class="w">· waits on a wanted detail</span>` : ''}</span></div>`).join('')}</div>
+    <div class="sec"><h2>References <i>what it was read from</i></h2>${r.usedBy.documents.map(id => `<div class="row ${src(id).withdrawn ? 'wd' : ''}">${ic(srcIcon(id), 14)}<span><b>${esc(src(id).word)}</b> · ${esc(srcWhere(id))}${src(id).withdrawn ? ' · withdrawn' : ''}</span></div>`).join('')}</div>`;
+  keys([['T', 'technical names'], ['K', 'another kind'], ['R', 'replay']]);
+}
+function demo() {
+  clearTimers(); render();
+  const s = $$('.slip');
+  s.forEach((x, i) => later(() => x.classList.remove('pre'), ms('--motion-run') + i * ms('--motion-slow')));
+}
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') return demo();
+  if (e.key === 'k' || e.key === 'K') { REC = (REC + 1) % DATA.records.length; return demo(); }
+  if (e.key === 't' || e.key === 'T') { tech = !tech; render(); $$('.slip').forEach(x => x.classList.remove('pre')); }
+});
+document.fonts.ready.then(demo);
+</script>
+</body>
+</html>

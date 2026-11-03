@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Record card · V2 · Statements in plain words</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@COMMON_CSS*/
+:root{
+  --x-side:calc(var(--measure-drawer) + var(--space-3));                       /* 332: the Used by column */
+  --x-blank:calc(var(--space-8) + var(--space-4));                            /* 132: the drawn blank in a sentence nobody finished */
+}
+.main{padding:var(--edge) var(--space-6) var(--space-7);display:grid;grid-template-columns:minmax(0,1fr) var(--x-side);grid-template-rows:auto minmax(0,1fr);column-gap:var(--space-6)}
+@media (max-width:1400px){.main{padding-left:var(--space-5);padding-right:var(--space-5);column-gap:var(--space-5)}:root{--x-side:calc(var(--measure-rail) + var(--space-5))}}
+header{grid-column:1 / -1;display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:var(--space-3);margin-bottom:var(--space-3);border-bottom:1px solid var(--hairline)}
+header h1{margin:var(--space-1) 0 0;font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-soft);color:var(--light)}
+header .is{font-size:var(--type-meta);color:var(--ink-muted)}
+header .is b{font-weight:400;color:var(--ink)}
+header .tally span{white-space:nowrap}
+header .tally{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-4);font-size:var(--type-small);color:var(--ink-muted);align-items:center}
+header .tally b{font:400 var(--type-meta)/1 var(--font-mono);color:var(--ink);margin-right:var(--space-1)}
+.stmts{display:grid;grid-template-columns:1fr 1fr;align-items:start;column-gap:var(--space-6);min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 var(--space-2);margin:0 calc(var(--space-2) * -1);scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+@media (max-width:1400px){.stmts{column-gap:var(--space-4)}}
+.grp{break-inside:avoid;margin-bottom:var(--space-3)}
+.grp h2{margin:0 0 var(--space-1);font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.st{display:block;width:100%;padding:var(--space-1) var(--space-2);margin-left:calc(var(--space-2) * -1);border-radius:var(--radius-key);break-inside:avoid;transition:background var(--motion-quick) var(--ease-standard),opacity var(--motion-base) var(--ease-out)}
+.st:hover{background:color-mix(in srgb,var(--surface-raised) 60%,transparent)}
+.st.on{background:var(--surface-raised)}
+.st .s{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink-muted)}
+.st .s b{font-weight:400;color:var(--light)}
+.st .s b small{color:var(--ink-muted);font-size:var(--type-small)}
+.st .q{display:flex;flex-wrap:wrap;gap:0 var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.st .q span{display:inline-flex;align-items:center;gap:var(--space-1)}
+.st .tr{display:none;font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted);letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tech .st .tr{display:block}
+/* the blank: a sentence with its missing word drawn as a box, and who could finish it */
+.blank{display:inline-block;width:var(--x-blank);height:calc(var(--leading-body) - var(--space-1));vertical-align:bottom;margin:0 var(--space-1);transition:width var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out)}
+.blank.pre{width:var(--space-3)}
+.st.gap .q{color:var(--ink)}
+.st.gap .q .who{color:var(--ink)}
+/* two sources, two answers: the sentence forks, side by side */
+.fork{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-1);transition:grid-template-columns var(--motion-calm) var(--ease-out)}
+.fork.pre{grid-template-columns:1fr 0fr}
+.fork > div{overflow:hidden;padding:var(--space-1) var(--space-2);border-left:2px solid var(--x-disagree);background:color-mix(in srgb,var(--x-disagree) 6%,transparent);border-radius:0 var(--radius-key) var(--radius-key) 0;min-width:0}
+.fork b{display:block;font:400 var(--type-body)/var(--leading-body) var(--font-sans);color:var(--light);white-space:nowrap}
+.fork span{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st.withdrawn .s b{color:var(--ink-muted)}
+/* side: what uses this record, also in sentences */
+.side{min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:var(--space-2)}
+.side h2{margin:0;font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.use{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);padding-bottom:var(--space-2);border-bottom:1px solid var(--hairline)}
+.use b{font-weight:400;color:var(--ink)}
+.use .w{color:var(--x-disagree)}
+.use.wd b{color:var(--ink-muted)}
+.use.wd .x{color:var(--x-withdrawn)}
+.panel{padding:var(--space-3) var(--space-4);background:var(--surface-overlay);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);box-shadow:var(--shadow-overlay);font-size:var(--type-meta);line-height:var(--leading-meta);transition:opacity var(--motion-base) var(--ease-out)}
+.panel[hidden]{display:block;opacity:0;pointer-events:none;height:0;padding:0;border:0;overflow:hidden}
+.panel h3{margin:var(--space-1) 0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.panel p{margin:0 0 var(--space-2)}
+.panel p.m{color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);margin:var(--space-1) var(--space-2) 0 0}
+.btn.go{border-color:color-mix(in srgb,var(--green) 50%,transparent);color:var(--green)}
+@media (prefers-reduced-motion: reduce){.fork{transition:none}.blank{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" id="rail" aria-label="Data Atlas"></nav>
+  <main class="main" id="main">
+    <header>
+      <div><div class="eyebrow" id="crumb"></div><h1 id="title"></h1><div class="is" id="is"></div></div>
+      <div class="tally" id="tally"></div>
+    </header>
+    <section class="stmts" id="stmts" aria-label="What is known"></section>
+    <aside class="side" id="side" aria-label="Used by"></aside>
+  </main>
+</div>
+<div class="keys" id="keys"></div>
+<div class="x-cap"><b>Record card · V2</b> statements in plain words: every detail is a sentence, gaps are blanks in the sentence, sources are references under it · Wikidata item pages, cloze tests</div>
+<script>
+/*@COMMON_JS*/
+
+/* ====================================================================== V2: statements */
+let cur = -1, tech = false, order = [];
+const fill = (d, v) => esc(d.say).replace('\\{v\\}', '{v}').replace('{v}', v);
+const lower = (o, d) => (d.type === 'text' && !d.key && /^[a-z]/.test(o.v || '')) ? esc(o.v) : show(o, d);
+function q(o) {
+  const s = src(o.src);
+  return `<span>${ic(srcIcon(o.src), 12)} ${esc(s.word)}${o.note ? ', ' + esc(o.note) : ''}</span>${o.grade ? `<span>graded ${esc(o.grade)}</span>` : ''}${o.accepted ? `<span>${ic('check', 12)} accepted</span>` : ''}`;
+}
+function triple(r, k, d, o) {
+  const v = o ? (o.to ? `ent:${o.to.replace(/\W+/g, '_').slice(0, 18)}` : `"${o.v}"`) : '[]';
+  return `${r.id}  ${d.tech}  ${v}`;
+}
+function statement(r, k) {
+  const st = stateOf(r, k), d = st.d;
+  if (st.s === 'filled') {
+    const v = st.obs.map(o => `<b>${o.to ? esc(o.to) : lower(o, d)}</b>`).join(' and ');
+    return `<div class="s">${fill(d, v)}</div><div class="q">${st.obs.map(q).join('')}</div><div class="tr">${esc(triple(r, k, d, st.obs[0]))}</div>`;
+  }
+  if (st.s === 'disagree') {
+    return `<div class="s">${fill(d, '<b>…</b>')} <span class="tag disagree">${ic('git-compare', 12)} ${esc(W('disagree'))}</span></div>
+      <div class="fork pre">${st.obs.map(o => `<div><b>${show(o, d)}</b><span>${ic(srcIcon(o.src), 12)} ${esc(src(o.src).word)}, ${fmtDate(o.on)}</span>${o.note ? `<span>${esc(o.note)}</span>` : ''}</div>`).join('')}</div>
+      <div class="q"><span>Neither is accepted. ${esc(floorW(r.floor))} leads decide; both stay until then.</span></div><div class="tr">${esc(triple(r, k, d, st.obs[0]))}  ⟂  ${esc(triple(r, k, d, st.obs[1]).split('  ').pop())}</div>`;
+  }
+  if (st.s === 'withdrawn') {
+    const o = st.obs[0];
+    return `<div class="s">${fill(d, `<b class="struck">${show(o, d)}</b>`)} <span class="tag withdrawn">${ic('file-x', 12)} source withdrawn</span></div>
+      <div class="q"><span>Only ${esc(src(o.src).word)} said so, and it was withdrawn ${fmtDate(src(o.src).withdrawn.on)}. It no longer counts.</span></div><div class="tr">${esc(triple(r, k, d, o))}  (retracted)</div>`;
+  }
+  if (st.s === 'gap') {
+    const f = filler(r, d), u = usedFor(r, k);
+    return `<div class="s">${fill(d, '<span class="blank gapbox pre" aria-label="not known yet"></span>')}</div>
+      <div class="q"><span>${ic('circle-dashed', 12)} Nobody has said yet.</span><span class="who">${ic('user-round', 12)} ${esc(f.who)} could, ${esc(f.hint)}.</span>${u.length ? `<span style="color:var(--x-disagree)">${ic('target', 12)} ${esc(u[0].word)} waits on it.</span>` : ''}</div><div class="tr">${esc(triple(r, k, d))}  expected, no assertion</div>`;
+  }
+  return `<div class="s">${fill(d, `<b>${ic('lock', 14)}</b>`)}</div><div class="q"><span>Kept on the ${esc(floorW(d.reach.floor))} floor, out of view from here. Ask ${esc(d.reach.ask)}.</span></div><div class="tr">${esc(d.tech)}  (kept: ${esc(d.reach.floor)})</div>`;
+}
+function render() {
+  const r = rec(), K = kindOf(r), t = tally(r);
+  rail(r.kind);
+  $('#crumb').textContent = `${DATA.app} · ${K.plural}`;
+  $('#title').textContent = r.name;
+  $('#is').innerHTML = `A <b>${esc(K.word.toLowerCase())}</b>${tech ? ` <span class="mono">(${esc(K.tech.name)})</span>` : ''}, kept on <b>${esc(floorW(r.floor))}</b> since ${fmtDate(r.since)}. ${esc(K.says)}`;
+  $('#tally').innerHTML = `<span><b>${t.filled}</b>said</span><span><b>${t.disagree}</b>disputed</span><span><b>${t.gap}</b>not known yet</span><span><b>${t.withdrawn + t.reach}</b>other</span><span class="micro"><span class="kbd">T</span> ${tech ? 'plain' : 'statements as triples'}</span>`;
+  order = [];
+  const grps = K.groups.map(g => `<div class="grp"><h2>${esc(g.word)}</h2>${g.items.map(k => { order.push(k); const s = stateOf(r, k).s; return `<button class="st ${s}" data-k="${k}">${statement(r, k)}</button>`; }).join('')}</div>`);
+  /* two columns, split where half the statements are */
+  let acc = 0, cut = 1, best = 1e9;
+  for (let i = 0; i < K.groups.length - 1; i++) { acc += K.groups[i].items.length; if (Math.abs(acc - order.length / 2) < best) { best = Math.abs(acc - order.length / 2); cut = i + 1; } }
+  $('#stmts').innerHTML = `<div>${grps.slice(0, cut).join('')}</div><div>${grps.slice(cut).join('')}</div>`;
+  $('#stmts').classList.toggle('tech', tech);
+  $('#side').innerHTML = `<div class="panel" id="panel" hidden></div><h2>${esc(W('usedBy'))}</h2>${r.usedBy.intents.map(i => `<div class="use">${ic('target', 14)}<div><b>${esc(i.word)}</b> reads its ${i.uses.map(k => esc(defOf(r, k).word.toLowerCase())).join(' and ')}. <span>${esc(i.owner)}, ${esc(floorW(i.floor))}.</span>${i.waits ? ` <span class="w">It is waiting on something not known yet.</span>` : ''}</div></div>`).join('')}
+    <h2 style="margin-top:var(--space-2)">What this was read from</h2>${r.usedBy.documents.map(id => `<div class="use ${src(id).withdrawn ? 'wd' : ''}">${ic(srcIcon(id), 14)}<div><b>${esc(src(id).word)}</b> <span>${esc(srcWhere(id))}</span>${src(id).withdrawn ? ` <span class="x">Withdrawn; what it said no longer counts.</span>` : ''}</div></div>`).join('')}`;
+  $$('.st').forEach(b => b.addEventListener('click', () => sel(order.indexOf(b.dataset.k))));
+  keys([['↑ ↓', 'statement'], ['Enter', 'act on it'], ['Esc', 'close'], ['T', 'as triples'], ['K', 'another kind'], ['R', 'replay']]);
+}
+function sel(i) {
+  cur = i; const r = rec();
+  $$('.st').forEach((b, j) => b.classList.toggle('on', j === i));
+  const p = $('#panel');
+  if (i < 0) { p.hidden = true; return; }
+  const k = order[i], st = stateOf(r, k), d = st.d; $$('.st')[i].focus({ preventScroll: true }); $$('.st')[i].scrollIntoView({ block: 'nearest', behavior: RM ? 'auto' : 'smooth' });
+  if (st.s === 'gap') { const f = filler(r, d); p.innerHTML = `<div class="micro">${esc(d.word)}</div><h3>Finish this sentence</h3><p>${fill(d, '<span class="blank gapbox" style="width:var(--space-7)"></span>')}</p><p class="m">${esc(f.who)} could. What you write goes to Triage on ${esc(floorW(r.floor))} with you as the source; a lead accepts it.</p><button class="btn go">${ic('pencil-line', 14)} Propose</button><button class="btn">${ic('send', 14)} Ask</button>`; }
+  else if (st.s === 'disagree') p.innerHTML = `<div class="micro">${esc(d.word)}</div><h3>Two answers</h3><p class="m">Leads on ${esc(floorW(r.floor))} pick one or keep both. You can add a third source.</p><button class="btn">${ic('file-plus', 14)} Add a source</button><button class="btn">${ic('flag', 14)} Say which is wrong</button>`;
+  else p.innerHTML = `<div class="micro">${esc(d.word)}</div><h3>${st.s === 'reach' ? 'Out of view' : 'Rests on'} </h3><p class="m">${st.s === 'reach' ? esc(d.reach.why) : st.obs.map(o => esc(src(o.src).word) + ', ' + fmtDate(o.on)).join('; ')}</p><button class="btn">${ic('flag', 14)} Say it's wrong</button>`;
+  p.hidden = false;
+}
+function demo() {
+  clearTimers(); cur = -1; render();
+  $$('.st').forEach(s => s.style.opacity = 0);
+  later(() => $$('.st').forEach((s, i) => later(() => s.style.opacity = 1, i * ms('--motion-instant') / 2)), ms('--motion-instant'));
+  later(() => { $$('.fork').forEach(f => f.classList.remove('pre')); $$('.blank').forEach(b => b.classList.remove('pre')); }, ms('--motion-run'));
+  later(() => { const i = order.indexOf(DATA.demo.detail); if (i >= 0) sel(i); }, ms('--motion-run') + ms('--motion-calm') * 2);
+}
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') return demo();
+  if (e.key === 'k' || e.key === 'K') { REC = (REC + 1) % DATA.records.length; return demo(); }
+  if (e.key === 't' || e.key === 'T') { tech = !tech; const c = cur; render(); $$('.fork,.blank').forEach(f => f.classList.remove('pre')); return sel(c); }
+  if (e.key === 'Escape') return sel(-1);
+  if (e.key === 'ArrowDown') { e.preventDefault(); sel(Math.min(order.length - 1, cur + 1)); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); sel(Math.max(0, cur - 1)); }
+});
+document.fonts.ready.then(demo);
+</script>
+</body>
+</html>

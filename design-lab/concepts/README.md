@@ -19,6 +19,14 @@ app pattern took it), **dropped** (say why in the file).
 | [Light as signal](light-as-signal.md) | explored | 2026-11-02-cinematic |
 | [The object explains itself](the-object-explains-itself.md) | explored | 2026-11-02-wear-and-time |
 | [The periphery channel](periphery-channel.md) | explored | 2026-11-03-room-tone |
+| [Change arrives as work](change-arrives-as-work.md) | explored | 2026-11-03-the-catalogue |
+| [Hierarchy without containers](hierarchy-without-containers.md) | explored | batch 1 research |
+| [Plain words first](plain-words-first.md) | explored | batch 3 research |
+| [Said in a sentence](said-in-a-sentence.md) | explored | 2026-11-03-the-catalogue |
+| [Six ways to be empty](six-ways-to-be-empty.md) | explored | 2026-11-03-the-catalogue |
+| [The structure predicts its gaps](the-structure-predicts-its-gaps.md) | explored | 2026-11-03-the-catalogue |
+| [Two registers](two-registers.md) | explored | 2026-11-03-the-catalogue |
+| [Waiting is a place](waiting-is-a-place.md) | explored | 2026-11-03-the-catalogue |
 | [Answer, don't announce](answer-not-announce.md) | to explore | 2026-11-03-room-tone |
 | [Attention as wear](attention-as-wear.md) | to explore | 2026-11-02-wear-and-time |
 | [Care is scheduled](care-is-scheduled.md) | to explore | batch 3 research |
@@ -27,12 +35,10 @@ app pattern took it), **dropped** (say why in the file).
 | [Earned sound](earned-sound.md) | to explore | 2026-11-03-room-tone |
 | [Feel as a setting](feel-as-a-setting.md) | to explore | 2026-11-03-room-tone |
 | [Hear the reach](hear-the-reach.md) | to explore | 2026-11-03-room-tone |
-| [Hierarchy without containers](hierarchy-without-containers.md) | to explore | batch 1 research |
 | [Mine versus ours](mine-versus-ours.md) | to explore | 2026-11-02-wear-and-time |
 | [One now](one-now.md) | to explore | 2026-11-02-wear-and-time |
 | [The overview rung](overview-rung.md) | to explore | 2026-11-02-wear-and-time |
 | [The past under water](past-under-water.md) | to explore | 2026-11-02-wear-and-time |
-| [Plain words first](plain-words-first.md) | to explore | batch 3 research |
 | [Question and answer](question-and-answer.md) | to explore | 2026-11-03-room-tone |
 | [The recipe is the record](the-recipe-is-the-record.md) | to explore | batch 3 research |
 | [The record has edges](the-record-has-edges.md) | to explore | 2026-11-02-wear-and-time |

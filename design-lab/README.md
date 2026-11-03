@@ -61,4 +61,4 @@ turns up a strong concept, the next batch steers on it like any other.
 | [2026-11-02 cinematic](runs/2026-11-02-cinematic/) | cinematic and instrument-panel UI | 42 prototypes; shortlist led by the light language, focal planes, radial menu, urgent path |
 | [2026-11-02 wear and time](runs/2026-11-02-wear-and-time/) | history as a material | 42 prototypes; shortlist led by one time scale and now line, visible repairs (seams), "why, and since when?" in place, back after two weeks |
 | [2026-11-03 room tone](runs/2026-11-03-room-tone/) | sound as a calm second channel | 39 prototypes; silent by default, answer rather than announce: 33 sounds in a 76-event day, urgent as an open question, hear the reach before you publish |
-| [2026-11-03 the catalogue](runs/2026-11-03-the-catalogue/) | data structure people can read | in progress |
+| [2026-11-03 the catalogue](runs/2026-11-03-the-catalogue/) | data structure people can read | 40 prototypes; six ways to be empty, statements for one record, a sentence of facets over a table of one kind |

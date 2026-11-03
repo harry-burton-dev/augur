@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When the structure changes · V6 · A round of small jobs</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@BASE_CSS*/
+/* ---- V6: the new detail arrives as a round of small jobs, one question each ---- */
+.split{display:grid;grid-template-columns:minmax(0,var(--measure-read)) minmax(0,1fr);gap:var(--space-6);align-items:start}
+.dots{display:flex;align-items:center;gap:var(--space-1);margin-bottom:var(--space-3)}
+.dots i{width:var(--space-3);height:var(--space-3);border-radius:var(--radius-pill);border:1px dashed var(--x-gap-ink);transition:background var(--motion-base) var(--ease-out),border-color var(--motion-base)}
+.dots i.done{background:var(--ink-muted);border:1px solid var(--ink-muted)}
+.dots i.cur{border:1px solid var(--light);box-shadow:0 0 0 var(--focus-gap) color-mix(in srgb,var(--light) 12%,transparent)}
+.dots span{margin-left:var(--space-3)}
+.pile{position:relative;min-height:calc(var(--space-8) * 3 + var(--space-3))}
+.job{position:absolute;left:0;right:0;top:0;border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);-webkit-backdrop-filter:blur(var(--surface-blur));backdrop-filter:blur(var(--surface-blur));padding:var(--space-4) var(--space-5);box-shadow:var(--shadow-raised);transition:transform var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+.job.next{transform:translateY(calc(var(--k) * var(--space-4))) scale(calc(1 - var(--k) * .03));opacity:calc(.7 - var(--k) * .25);z-index:calc(5 - var(--k));pointer-events:none}
+.job.next > *{visibility:hidden}
+.job.cur{z-index:6}
+.job.gone{transform:translateX(calc(var(--travel-near) * 4));opacity:0;pointer-events:none}
+.job.pre{transform:translateY(var(--travel-near));opacity:0}
+.job h2{margin:var(--space-1) 0 var(--space-3);font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.quote{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);padding:var(--space-3) var(--space-4);border-left:2px solid var(--hairline-strong);background:var(--surface-inset);border-radius:0 var(--radius-key) var(--radius-key) 0;margin-bottom:var(--space-3)}
+.quote svg{color:var(--ink-muted);margin-top:2px}
+.quote .q{font:400 var(--type-body)/var(--leading-body) var(--font-mono);color:var(--ink)}
+.quote .s{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.quote .s b{font-weight:400;color:var(--ink)}
+.ask{margin:0 0 var(--space-3);font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.ask b{font-weight:400;color:var(--light);font-family:var(--font-mono)}
+.acts{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.acts .btn .kbd{opacity:.7}
+.btn.press{background:color-mix(in srgb,var(--green) 18%,transparent)}
+.datein{display:none;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3)}
+.datein.on{display:flex}
+.datein input{height:var(--target-sm);padding:0 var(--space-3);border:1px dashed var(--x-gap-ink);border-radius:var(--radius-key);background:var(--x-gap-fill);color:var(--ink);font:400 var(--type-meta) var(--font-mono)}
+.upnext{margin-top:var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.upnext ol{list-style:none;margin:var(--space-2) 0 0;padding:0;display:grid;gap:var(--space-1)}
+.upnext li{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr) auto;gap:var(--space-2);padding:var(--space-1) 0;border-bottom:1px solid var(--hairline)}
+.upnext li b{font-weight:400;color:var(--ink)}
+.foot2{margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+/* right: what the answer does to the record, and everyone else's rounds */
+.side{display:flex;flex-direction:column;gap:var(--space-5)}
+.mini{border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4)}
+.mini .r{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-3)) minmax(0,1fr);gap:var(--space-3);padding:var(--space-1) 0;border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);align-items:center;min-height:var(--target-sm)}
+.mini .r .w{color:var(--ink-muted)}
+.mini .r.isnew{transition:background var(--motion-calm) var(--ease-out)}
+.mini .r.flash{background:linear-gradient(90deg,var(--x-new-wash),transparent 80%)}
+.mini h3{margin:var(--space-1) 0 var(--space-2);font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.val{display:flex;flex-direction:column}
+.val small{color:var(--ink-muted)}
+.lnk{box-shadow:inset 0 -1px 0 var(--hairline-strong)}
+.who{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.who li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:baseline;padding:var(--space-1) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.who li b{font-weight:400;color:var(--ink)} .who li small{display:block;color:var(--ink-muted)}
+.who li .mono{color:var(--ink)}
+.who li.me b{color:var(--light)}
+.who li.lead b{color:var(--warning)}
+.kbar{display:flex;height:var(--space-2);gap:1px;border-radius:var(--radius-pill);overflow:hidden;margin:var(--space-2) 0 var(--space-1)}
+.kbar i{display:block;transition:flex-grow var(--motion-calm) var(--ease-out)}
+.s-filled{background:var(--ink)} .s-doc{background:color-mix(in srgb,var(--info) 70%,var(--ink-muted))} .s-keep{background:var(--ink-muted);opacity:.5} .s-nobody{background:var(--warning)}
+@media (max-width:1400px){ .split{grid-template-columns:minmax(0,calc(var(--measure-read) - var(--space-7))) minmax(0,1fr);gap:var(--space-5)} }
+@media (max-height:840px){ .main{padding-top:var(--space-4)} .head{margin-bottom:var(--space-2)} .job{padding:var(--space-3) var(--space-4)} .job h2{margin-bottom:var(--space-2)} .side{gap:var(--space-3)} .mini .r{min-height:calc(var(--target-sm) - var(--space-2))} .pile{min-height:calc(var(--space-8) * 3)} }
+@media (prefers-reduced-motion: reduce){ .job{transition:opacity var(--motion-base) linear!important;transform:none!important} }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Data Atlas"><div class="an" id="appname"></div><div id="navs"></div><div class="foot" id="railfoot"></div></nav>
+  <main class="main" id="main">
+    <div class="head"><div><div class="eyebrow" id="crumb"></div><h1 id="ename"></h1><div class="sub" id="esub"></div></div></div>
+    <div class="split">
+      <section aria-label="Your round"><div class="dots micro" id="dots"></div><div class="pile" id="pile"></div><div class="upnext" id="upnext"></div></section>
+      <aside class="side"><div class="mini" id="mini" aria-live="polite"></div><div id="others"></div></aside>
+    </div>
+  </main>
+</div>
+<div class="tip" id="tip" role="tooltip"></div>
+<div class="keys" id="keys"></div>
+<div class="x-cap"><b>Structure changes · V6</b> a round of small jobs for keepers · postal rounds, field survey cards</div>
+<script>
+/*@DATA*/
+/*@BASE_JS*/
+const C = DATA.changes[0], RD = C.round, K = kindOf(C.kind);
+let at = 0, done = RD.done, answered = {};
+const recFor = site => DATA.records.find(r => r.name === site) || { name: site, addr: '', manager: null, floor: 'department' };
+function jobHTML(j, i, cls, k) {
+  const n = RD.done + i + 1;
+  const quote = `<div class="quote">${ic('file-search', 16)}<span class="q">“${esc(j.seen)}”</span><span class="s"><b>${esc(j.src)}</b>, ${esc(j.where)} · in Artifacts</span></div>`;
+  const ask = j.value ? `<p class="ask">Is the next fire-safety check due <b>${esc(j.value)}</b>?</p>` : `<p class="ask">The date can’t be read. Do you know it?</p>`;
+  const acts = j.value ? `<button class="btn go" data-a="yes">${ic('check', 16)} Yes, that’s right <span class="kbd">Enter</span></button><button class="btn" data-a="fix">No, it’s… <span class="kbd">C</span></button>`
+    : `<button class="btn go" data-a="fix">${ic('square-pen', 16)} I know it <span class="kbd">C</span></button>`;
+  return `<article class="job ${cls}" style="--k:${k}" data-i="${i}"><div class="micro">Job ${n} of ${RD.mine} · ${esc(C.detail.word)}</div><h2>${esc(j.site)}</h2>${quote}${ask}
+    <div class="datein"><input type="text" aria-label="${esc(C.detail.word)}" placeholder="dd mmm yyyy"><button class="btn go" data-a="save">Save <span class="kbd">Enter</span></button></div>
+    <div class="acts">${acts}<button class="btn quiet" data-a="cant" data-tip="cant">Can’t tell <span class="kbd">N</span></button><button class="btn quiet" data-a="notmine" data-tip="notmine">Not mine <span class="kbd">X</span></button></div>
+    <div class="foot2">One question, about 20 seconds. Your answer is shown on the record as yours, with this document as its source.</div></article>`;
+}
+TIPS.cant = () => `<div class="micro">Can’t tell</div><div class="t">The job goes to ${esc(RD.lead.who)}</div><p>With your note. The gap stays on the record, now saying it was looked at and why it’s still open.</p>`;
+TIPS.notmine = () => `<div class="micro">Not mine</div><div class="t">Back to the pool</div><p>${esc(RD.lead.who)} finds the right keeper. Nothing is lost.</p>`;
+function renderPile() {
+  $('#pile').innerHTML = RD.jobs.map((j, i) => i < at ? '' : jobHTML(j, i, i === at ? 'cur' : 'next', i - at)).join('');
+  $$('#pile .job.cur [data-a]').forEach(b => b.onclick = () => act(b.dataset.a));
+  Icons.hydrate($('#pile'));
+}
+function renderNext() {
+  const rest = RD.jobs.slice(at + 1), more = RD.mine - RD.done - RD.jobs.length;
+  $('#upnext').innerHTML = `<div class="micro">Next in your round</div><ol>${rest.map((j, i) => `<li><span class="mono">${RD.done + at + i + 2}</span><b>${esc(j.site)}</b><span>${j.value ? 'a document suggests a date' : 'date unreadable'}</span></li>`).join('')}${more > 0 ? `<li><span></span><span>and ${more} more, from the same documents</span><span></span></li>` : ''}</ol>`;
+}
+function renderDots() {
+  $('#dots').innerHTML = Array.from({ length: RD.mine }, (_, i) => `<i class="${i < done ? 'done' : i === done ? 'cur' : ''}"></i>`).join('') + `<span>${done} of ${RD.mine} done · yours</span>`;
+}
+function renderMini(flash) {
+  const j = RD.jobs[Math.min(at, RD.jobs.length - 1)], r = recFor(j.site), a = answered[j.site];
+  const val = a ? `<span class="val"><span class="mono">${esc(a.value)}</span><small>${esc(RD.me.name)}, just now · from ${esc(j.src)}</small></span>`
+    : j.value ? `<span class="gap doc">${ic('file-search', 14)}<span><b>${esc(j.value)}?</b> waiting for you</span></span>` : `<span class="gap">${ic('user-check', 14)}<span>Not filled · <b>you</b> can fill</span></span>`;
+  $('#mini').innerHTML = `<div class="micro">On the record · what your answer changes</div><h3>${esc(j.site)}</h3>
+    ${r.addr ? `<div class="r"><span class="w">Address</span><span>${esc(r.addr)}</span></div>` : ''}
+    <div class="r"><span class="w">Manager</span><span>${r.manager ? `<span class="lnk">${esc(r.manager)}</span>` : `<span class="gap nobody" data-tip="nomgr">${ic('circle-help', 14)}<span><b>nobody yet</b></span></span>`}</span></div>
+    <div class="r isnew${flash ? ' flash' : ''}"><span class="w">${esc(C.detail.word)}<span class="newtag" style="display:flex">${ic('sparkle', 12)} new</span></span>${val}</div>`;
+  Icons.hydrate($('#mini'));
+}
+function renderOthers() {
+  const g = C.gaps, filled = g.filled + done - RD.done;
+  const bar = [['filled', filled], ['doc', g.fromDocs - (done - RD.done)], ['keep', g.keepers], ['nobody', g.nobody]];
+  $('#others').innerHTML = `<div class="micro">Everyone’s rounds · ${esc(K.plural.toLowerCase())}</div><div class="kbar">${bar.map(([c, n]) => `<i class="s-${c}" style="flex-grow:${n}"></i>`).join('')}</div>
+    <div class="micro" style="margin-bottom:var(--space-2)">${filled} of ${g.total} filled</div>
+    <ul class="who"><li class="me"><span><b>You, ${esc(RD.me.name)}</b><small>${esc(RD.me.team)}: confirming what documents say</small></span><span class="mono">${RD.mine - done} left</span></li>
+    ${RD.others.map(o => `<li><span><b>${esc(o.who)}</b><small>${esc(o.role)}</small></span><span class="mono">${o.n}</span></li>`).join('')}
+    <li class="lead"><span><b>${esc(RD.lead.who)}</b><small>${esc(RD.lead.role)}: ${esc(RD.lead.task)}</small></span><span class="mono">${RD.lead.n}</span></li></ul>`;
+}
+function render(flash) { renderDots(); renderPile(); renderNext(); renderMini(flash); renderOthers(); }
+function act(a) {
+  const card = $('#pile .job.cur'); if (!card) return; const j = RD.jobs[at];
+  if (a === 'fix') { $('.datein', card).classList.add('on'); $('.datein input', card).focus(); return; }
+  if (a === 'save') { const v = $('.datein input', card).value.trim(); if (!v) return; return advance(j, v); }
+  if (a === 'yes' && j.value) return advance(j, j.value);
+  if (a === 'cant' || a === 'notmine') return advance(j, null);
+}
+function advance(j, value) {
+  if (value) answered[j.site] = { value };
+  done++; renderMini(true); renderDots(); renderOthers();
+  const card = $('#pile .job.cur'); card.classList.add('gone');
+  later(() => { at = Math.min(at + 1, RD.jobs.length - 1); renderPile(); const c = $('#pile .job.cur'); c.classList.add('pre'); requestAnimationFrame(() => requestAnimationFrame(() => c.classList.remove('pre'))); renderNext(); }, ms('--motion-calm'));
+}
+/* the record pane stays on your last answer until you turn to the next card */
+['mouseover', 'focusin'].forEach(ev => $('#pile').addEventListener(ev, e => { if (e.target.closest('.job.cur') && $('#mini h3')?.textContent !== RD.jobs[at].site) renderMini(false); }));
+function demo() {
+  clearLater(); at = 0; done = RD.done; answered = {}; render(false);
+  const c = $('#pile .job.cur'); c.classList.add('pre');
+  later(() => c.classList.remove('pre'), reduced ? 0 : ms('--motion-run'));
+  later(() => { const b = $('#pile .job.cur [data-a="yes"]'); b.focus({ preventScroll: true }); b.classList.add('press'); }, ms('--motion-run') + ms('--motion-run'));
+  later(() => act('yes'), ms('--motion-run') * 2 + ms('--motion-calm'));
+}
+$('#crumb').textContent = `${DATA.app} · Your round`;
+$('#ename').textContent = 'A round of small jobs';
+$('#esub').innerHTML = `${esc(K.plural)} gained “${esc(C.detail.word)}” on ${esc(fmtWhen(C.when).split(' ·')[0])}. <b>Each job asks one question about one site.</b> Nothing is filled until someone answers.`;
+rail(`A change to the kinds of thing doesn’t become a backlog. It becomes rounds: <b>small, named, shared</b>, and anyone can see who holds which.`);
+keys([['Enter', 'yes'], ['C', 'correct'], ['N', 'can’t tell'], ['X', 'not mine'], ['R', 'replay']]);
+boot(demo, e => {
+  if (e.target.tagName === 'INPUT') { if (e.key === 'Enter') act('save'); return; }
+  if (e.key === 'Enter') { e.preventDefault(); act(RD.jobs[at].value ? 'yes' : 'fix'); }
+  if (e.key === 'c' || e.key === 'C') { e.preventDefault(); act('fix'); }
+  if (e.key === 'n' || e.key === 'N') act('cant');
+  if (e.key === 'x' || e.key === 'X') act('notmine');
+});
+</script>
+</body>
+</html>

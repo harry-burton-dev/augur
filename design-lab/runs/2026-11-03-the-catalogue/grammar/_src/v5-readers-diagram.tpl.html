@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grammar · V5 · A diagram for readers</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+:root{
+  /* --mark-complete: node fill lightness from how many should-haves are known. Value, never hue. */
+  --x-fill-lo: 6%;
+  --x-fill-hi: 30%;
+}
+.wrap{padding-top:var(--space-4)}
+.top{margin-bottom:var(--space-3)}
+.main{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:var(--space-5);align-items:start}
+.dia{position:relative;border-radius:var(--radius-inset);background:var(--slate-deep);border:1px solid var(--hairline)}
+.dia svg{display:block;width:100%;height:auto}
+.dia text{font-family:var(--font-sans)}
+.nd circle.f{transition:fill var(--motion-calm) var(--ease-out)}
+.nd .nm{font-size:var(--type-body);fill:var(--ink)}
+.nd .ct{font:400 var(--type-small) var(--font-mono);fill:var(--ink-muted)}
+.lk line{stroke:var(--x-link);stroke-width:1;transition:stroke var(--motion-base),opacity var(--motion-base),stroke-dashoffset var(--motion-calm) var(--ease-out)}
+.lk .dm{fill:var(--slate-deep);stroke:var(--x-link);transition:stroke var(--motion-base)}
+.lk .vb{font-size:var(--type-meta);fill:var(--ink-muted);transition:fill var(--motion-base)}
+.lk .ah{fill:var(--x-link);transition:fill var(--motion-base)}
+.lk:focus{outline:none}
+.lk:focus-visible .dm{stroke:var(--focus);stroke-width:2}
+.dia.focus .lk:not(.on), .dia.focus .nd:not(.on), .dia.focus .ex{opacity:.35}
+.lk.on line{stroke:var(--ink)} .lk.on .dm{stroke:var(--ink)} .lk.on .vb{fill:var(--light)} .lk.on .ah{fill:var(--ink)}
+.ex line{stroke:var(--hairline-strong);stroke-dasharray:3 4}
+.ex .nm{font-size:var(--type-meta);fill:var(--ink-muted)}
+.read{margin-top:var(--space-3);padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);background:var(--surface-pane);border:1px solid var(--hairline);min-height:calc(var(--space-7) + var(--space-3))}
+.read .s{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.read .s2{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.read .t{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);opacity:var(--x-quiet);margin-top:var(--space-1)}
+.bh{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin:0 0 var(--space-2)}
+.bt{width:100%;border-collapse:collapse}
+.bt td{padding:var(--space-2) var(--space-2) var(--space-2) 0;border-top:1px solid var(--hairline);vertical-align:top;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.bt td:first-child{width:var(--space-7)}
+.bt .vv{font-size:var(--type-meta);color:var(--ink)}
+.bt .vv small{display:block;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);margin-top:2px}
+.bt .job b{font-weight:400;color:var(--ink)}
+.bt .sw{display:block;width:var(--space-6);height:var(--space-5);position:relative}
+.terms{margin-top:var(--space-3);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2) var(--space-4)}
+.terms div{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.terms b{font-weight:400;color:var(--ink)}
+.terms code{font-family:var(--font-mono);opacity:var(--x-quiet)}
+.famh{display:flex;align-items:baseline;gap:var(--space-3);margin:var(--space-4) 0 var(--space-2)}
+.famh h2{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.fam .tk{display:none}
+@media (max-width:1400px){.terms{display:none}.main{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="top"><span class="eyebrow" id="eyebrow"></span><h1 id="h1"></h1><p class="lede" id="lede"></p></div>
+  <div class="main">
+    <div><div class="dia dep" style="--i:0" id="dia"></div><div class="read" id="read" aria-live="polite"></div></div>
+    <div><p class="bh" id="bh"></p><table class="bt" id="bt"></table><div class="terms" id="terms"></div></div>
+  </div>
+  <div class="famh"><h2 id="famh"></h2><span class="sm muted" id="famd"></span></div>
+  <div class="fam" id="fam"></div>
+</div>
+<div class="hints"><span><span class="kbd">←</span><span class="kbd">→</span> read a link</span><span><span class="kbd">Esc</span> all</span><span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Grammar · V5</b> a diagram for readers: kinds and links, one visual variable per job · Chen 1976 drawn without crow’s feet, Bertin’s Semiology of Graphics</div>
+<script>
+/*DATA*/
+const SHEET = {
+  eyebrow: 'The catalogue · grammar · relationship diagram',
+  title: 'A diagram for readers',
+  lede: 'Chen drew kinds and links for modellers. For readers, every link says its verb both ways in words, and each visual variable does one job.',
+  /* layout only (0..1 of the drawing); position carries no meaning */
+  pos: { site: [.5, .46], contract: [.25, .2], supplier: [.1, .52], vehicle: [.78, .2], incident: [.76, .7], person: [.3, .72], document: [.9, .46], intent: [.06, .12] },
+  elsewhereTo: { document: ['site', 'vehicle', 'incident'], intent: ['contract', 'supplier'] },
+  demoLink: 2,
+  bertinHead: 'One visual variable, one job (Bertin)',
+  bertin: [
+    { v: 'Size', tech: 'size', sw: 'size', job: '<b>How many cards</b> of a kind', never: 'importance or priority' },
+    { v: 'Lightness', tech: 'value', sw: 'value', job: '<b>How complete</b>: share of should-haves known', never: 'quality or trust' },
+    { v: 'Hue', tech: 'colour', sw: 'hue', job: '<b>Kept on</b>: the floor, and nothing else', never: 'a kind or a state' },
+    { v: 'Icon', tech: 'shape', sw: 'shape', job: '<b>Kind of thing</b>, always with its name', never: 'a status or an app' },
+    { v: 'Texture', tech: 'grain', sw: 'texture', job: '<b>The empty-looking six</b>: corners, hatch 45°, hatch 135°, wavy break', never: 'decoration' },
+    { v: 'Arrow', tech: 'orientation', sw: 'orient', job: '<b>Which way a link reads</b>; the other way is said in words', never: 'flow, rank or ownership' },
+    { v: 'Position', tech: 'planar', sw: 'pos', job: '<b>Nothing.</b> Layout only, so it can change', never: 'hierarchy: up is not senior' }
+  ],
+  famTitle: 'Texture is the honest blank',
+  famLede: 'Six empty-looking states, each its own texture and words. Only corner ticks mean a gap.'
+};
+/*COMMON_JS*/
+const W = 1000, H = 470;
+const nodes = [...DATA.kinds, ...DATA.elsewhere];
+const rad = k => 18 + 34 * Math.sqrt(k.count / Math.max(...DATA.kinds.map(x => x.count)));
+const P = id => [SHEET.pos[id][0] * W, SHEET.pos[id][1] * H];
+const complete = k => { const e = k.details.filter(d => d.exp); const known = e.reduce((a, d) => a + d.known, 0), all = e.length * k.count; return { pc: known / all, gaps: all - known }; };
+function edge(a, b, ra, rb) { const [x1, y1] = P(a), [x2, y2] = P(b), d = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / d, uy = (y2 - y1) / d; return [x1 + ux * (ra + 6), y1 + uy * (ra + 6), x2 - ux * (rb + 6), y2 - uy * (rb + 6), ux, uy]; }
+function draw() {
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Kinds of thing and the links between them">`;
+  Object.entries(SHEET.elsewhereTo).forEach(([e, tos]) => tos.forEach(t => { const [x1, y1, x2, y2] = edge(e, t, 26, rad(K(t))); s += `<g class="ex"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/></g>`; }));
+  DATA.links.forEach((l, i) => { const a = K(l.from), b = K(l.to), [x1, y1, x2, y2, ux, uy] = edge(l.from, l.to, rad(a), rad(b)), mx = (x1 + x2) / 2, my = (y1 + y2) / 2, len = Math.hypot(x2 - x1, y2 - y1);
+    const ang = Math.atan2(uy, ux) * 180 / Math.PI, ax = x2 - ux * 2, ay = y2 - uy * 2; let nx = -uy, ny = ux; if (ny > 0 || (ny === 0 && nx < 0)) { nx = -nx; ny = -ny; }
+    s += `<g class="lk" data-i="${i}" tabindex="0" role="button" aria-label="${a.name} ${l.verb} ${b.name}"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke-dasharray:${len};stroke-dashoffset:${len}" data-len="${len}"/>
+      <polygon class="ah" points="0,0 -9,-4 -9,4" transform="translate(${ax},${ay}) rotate(${ang})"/>
+      <rect class="dm" x="-6" y="-6" width="12" height="12" transform="translate(${mx},${my}) rotate(45)"/>
+      <text class="vb" x="${mx + nx * 16}" y="${my + ny * 16 + 4}" text-anchor="${Math.abs(nx) < .3 ? 'middle' : nx > 0 ? 'start' : 'end'}">${l.verb}</text></g>`; });
+  nodes.forEach(k => { const [x, y] = P(k.id), ex = !k.details, r = ex ? 26 : rad(k), c = ex ? null : complete(k), fl = ex ? null : FL(k.floor);
+    const fill = ex ? 'transparent' : `color-mix(in srgb, var(--ink) calc(var(--x-fill-lo) + (var(--x-fill-hi) - var(--x-fill-lo)) * ${c.pc.toFixed(3)}), transparent)`;
+    s += `<g class="${ex ? 'ex' : 'nd'}" data-k="${k.id}" ${fl ? `data-tier="${fl.tier}"` : ''}><circle class="f" cx="${x}" cy="${y}" r="${r}" style="fill:${fill};stroke:${ex ? 'var(--hairline-strong)' : 'var(--fc)'};stroke-width:${ex ? 1 : 2};${ex ? 'stroke-dasharray:3 3' : ''}"/>
+      <g transform="translate(${x - 10},${y - 10})" style="color:var(--ink)">${Icons.svg(k.icon, { size: 20, stroke: 1.5 })}</g>
+      <text class="nm" x="${x}" y="${y + r + 18}" text-anchor="middle">${k.plural}</text>
+      <text class="ct" x="${x}" y="${y + r + 34}" text-anchor="middle">${fmt(k.count)}${ex ? ' · ' + DATA.apps[k.app] : ` · ${Math.round(c.pc * 100)}% known`}</text></g>`; });
+  $('#dia').innerHTML = s + '</svg>';
+  $$('.lk').forEach(g => { g.addEventListener('mouseenter', () => focusLink(+g.dataset.i)); g.addEventListener('focus', () => focusLink(+g.dataset.i)); g.addEventListener('click', () => focusLink(+g.dataset.i)); });
+}
+function swatch(t) {
+  const df = FL('ops').tier;
+  if (t === 'size') return `<svg class="sw" viewBox="0 0 44 28"><circle cx="9" cy="14" r="5" style="fill:none;stroke:var(--ink-muted)"/><circle cx="30" cy="14" r="11" style="fill:none;stroke:var(--ink-muted)"/></svg>`;
+  if (t === 'value') return `<svg class="sw" viewBox="0 0 44 28"><circle cx="11" cy="14" r="9" style="fill:color-mix(in srgb, var(--ink) var(--x-fill-lo), transparent);stroke:var(--hairline-strong)"/><circle cx="33" cy="14" r="9" style="fill:color-mix(in srgb, var(--ink) var(--x-fill-hi), transparent);stroke:var(--hairline-strong)"/></svg>`;
+  if (t === 'hue') return `<svg class="sw" viewBox="0 0 44 28"><circle cx="8" cy="14" r="6" style="fill:none;stroke:var(--floor-department-high);stroke-width:2"/><circle cx="22" cy="14" r="6" style="fill:none;stroke:var(--floor-team-high);stroke-width:2"/><circle cx="36" cy="14" r="6" style="fill:none;stroke:var(--floor-org-high);stroke-width:2"/></svg>`;
+  if (t === 'shape') return `<span class="sw" style="display:flex;gap:4px;align-items:center;color:var(--ink)">${ic('building-2', 14)}${ic('truck', 14)}${ic('siren', 14)}</span>`;
+  if (t === 'texture') return `<span class="sw" style="display:grid;grid-template-columns:1fr 1fr;gap:2px"><i style="background:var(--x-gap);--x-gap-tick:4px"></i><i style="background:var(--x-stale)"></i><i style="background:var(--x-shadow)"></i><i style="border-bottom:1px dashed var(--ink-muted)"></i></span>`;
+  if (t === 'orient') return `<svg class="sw" viewBox="0 0 44 28"><line x1="2" y1="14" x2="36" y2="14" style="stroke:var(--ink-muted)"/><polygon points="42,14 33,10 33,18" style="fill:var(--ink-muted)"/></svg>`;
+  return `<svg class="sw" viewBox="0 0 44 28"><circle cx="8" cy="20" r="3" style="fill:var(--ink-muted)"/><circle cx="22" cy="8" r="3" style="fill:var(--ink-muted)"/><circle cx="36" cy="16" r="3" style="fill:var(--ink-muted)"/></svg>`;
+}
+let cur = null;
+function focusLink(i) { cur = i; $('#dia').classList.toggle('focus', i != null);
+  $$('.lk').forEach(g => g.classList.toggle('on', +g.dataset.i === i));
+  const l = i != null && DATA.links[i];
+  $$('.nd').forEach(n => n.classList.toggle('on', !!l && (n.dataset.k === l.from || n.dataset.k === l.to)));
+  if (!l) { $('#read').innerHTML = `<div class="s">Read a link</div><div class="s2">Every line is a verb. Pick one: it reads both ways, and says how many on each side in words, never as crow’s feet.</div>`; return; }
+  const a = K(l.from), b = K(l.to), c = complete(a);
+  const each = n => n === 'one' ? 'one' : 'any number of';
+  $('#read').innerHTML = `<div class="s">Each ${a.name.toLowerCase()} ${l.verb} ${each(l.fromN) === 'one' ? 'one ' + b.name.toLowerCase() : 'any number of ' + b.plural.toLowerCase()}.</div>
+    <div class="s">A ${b.name.toLowerCase()} ${l.back} ${l.toN === 'one' ? 'one ' + a.name.toLowerCase() : 'any number of ' + a.plural.toLowerCase()}.</div>
+    <div class="s2">${a.plural}: ${Math.round(c.pc * 100)}% of what they should hold is known; ${fmt(c.gaps)} details show as not known yet, each with who could fill it.</div>
+    <div class="t">One step down: ${l.tech} · domain ${a.name}, range ${b.name} · ${l.fromN === 'one' ? 'max 1' : 'many'} to ${l.toN === 'one' ? 'max 1' : 'many'}</div>`; }
+function render() {
+  $('#eyebrow').textContent = SHEET.eyebrow; $('#h1').textContent = SHEET.title; $('#lede').textContent = SHEET.lede; $('#bh').textContent = SHEET.bertinHead;
+  $('#bt').innerHTML = SHEET.bertin.map((b, i) => `<tr class="dep" style="--i:${i + 1}"><td>${swatch(b.sw)}</td><td class="vv">${b.v}<small>${b.tech}</small></td><td class="job">${b.job}<br>Never ${b.never}.</td></tr>`).join('');
+  $('#terms').innerHTML = DATA.terms.map(t => `<div><b>${t.plain}</b> <code>${t.tech.split(' · ')[0]}</code></div>`).join('');
+  $('#famh').textContent = SHEET.famTitle; $('#famd').textContent = SHEET.famLede;
+  renderFamily($('#fam'));
+  draw(); focusLink(null); Icons.hydrate(document.body);
+}
+document.addEventListener('keydown', e => { const n = DATA.links.length;
+  if (e.key === 'ArrowRight') focusLink(cur == null ? 0 : (cur + 1) % n); if (e.key === 'ArrowLeft') focusLink(cur == null ? n - 1 : (cur + n - 1) % n); if (e.key === 'Escape') focusLink(null); });
+render();
+boot(() => { focusLink(null); $$('.lk line').forEach(l => l.style.strokeDashoffset = l.dataset.len); },
+  () => { requestAnimationFrame(() => $$('.lk line').forEach((l, i) => later(() => l.style.strokeDashoffset = 0, RM ? 0 : i * ms('--motion-quick'))));
+    later(() => focusLink(SHEET.demoLink), ms('--motion-run') + ms('--motion-slow')); });
+</script>
+</body>
+</html>

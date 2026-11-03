@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grammar · V3 · Anatomy of a catalogue card</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+:root{
+  /* card proportions: a 5 × 3 inch library card */
+  --x-card-ratio: 5 / 3;
+  /* ruled lines on the card, one per reading line */
+  --x-rule: repeating-linear-gradient(to bottom, transparent 0 calc(var(--leading-body) - 1px), var(--hairline) calc(var(--leading-body) - 1px) var(--leading-body));
+}
+.wrap{padding-top:var(--space-4)}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5);margin-bottom:var(--space-4)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:var(--space-5);align-items:start}
+.lc{position:relative;aspect-ratio:var(--x-card-ratio);border-radius:var(--radius-key);background:var(--slate-deep);border:1px solid var(--hairline-strong);box-shadow:var(--shadow-raised);padding:var(--space-4) var(--space-5) var(--space-5) calc(var(--space-8) + var(--space-2));overflow:hidden}
+.lc::before{content:"";position:absolute;left:0;right:0;top:calc(var(--space-6) + var(--space-3));height:3px;border-top:1px solid var(--hairline-strong);border-bottom:1px solid var(--hairline-strong)}
+.lc::after{content:"";position:absolute;left:50%;bottom:var(--space-3);width:var(--space-4);height:var(--space-4);margin-left:calc(var(--space-2) * -1);border-radius:var(--radius-pill);background:radial-gradient(var(--slate), var(--slate-deep));border:1px solid var(--hairline-strong)}
+.lc .ruled{position:absolute;left:0;right:0;top:calc(var(--space-7) - var(--space-2));bottom:var(--space-6);background:var(--x-rule);opacity:.5;pointer-events:none}
+.z{position:relative;transition:background var(--motion-base) var(--ease-standard),opacity var(--motion-base) var(--ease-standard),filter var(--motion-base)}
+.z .zn{position:absolute;left:calc((var(--space-8) - var(--space-3)) * -1);top:0;font:400 var(--type-small)/var(--leading-body) var(--font-mono);color:var(--ink-muted)}
+.callno{position:absolute;left:var(--space-4);top:var(--space-4);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink);display:flex;flex-direction:column;gap:2px}
+.callno .k{display:flex;align-items:center;gap:var(--space-1);text-transform:uppercase;letter-spacing:var(--tracking-caps)}
+
+.heading{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);margin:0 0 var(--space-6)}
+.body{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink);text-indent:var(--space-5)}
+.body .dn{color:var(--ink-muted)}
+.body .sep{color:var(--ink-muted)}
+.gapin{display:inline-block;text-indent:0;background:var(--x-gap);--x-gap-tick:var(--space-1);padding:0 var(--space-2);line-height:var(--leading-body);color:var(--ink-muted);font-size:var(--type-small)}
+.gapin b{font-weight:400;color:var(--ink)}
+.notes{margin-top:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-body);color:var(--ink-muted);text-indent:var(--space-5)}
+.notes b{font-weight:400;color:var(--ink)}
+.tracings{margin-top:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-body);color:var(--ink-muted);text-indent:var(--space-5)}
+.tracings b{font-weight:400;color:var(--ink)}
+.stamp{position:absolute;right:var(--space-5);top:var(--space-4);padding:var(--space-1) var(--space-2);border:1px solid var(--fc);color:var(--fc);font:400 var(--type-small)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;border-radius:var(--radius-key);transform:rotate(-4deg)}
+.heading .zn{position:static;font-size:var(--type-small);margin-right:var(--space-2);vertical-align:middle}
+.lc .body .exptick{display:none;height:var(--space-2);margin:0 var(--space-1) 0 0}
+.lc.req .body .exptick{display:inline-block}
+.stamp .zn{left:calc(var(--space-5) * -1);top:var(--space-1);line-height:1}
+.lcid{position:absolute;left:var(--space-4);bottom:var(--space-3);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);opacity:var(--x-quiet)}
+.lc.focus .z:not(.on):not(:has(.on)){opacity:var(--x-quiet);filter:saturate(.4)}
+.lc .z.on{background:color-mix(in srgb, var(--light) 5%, transparent)}
+.lc .gapin.on{background:var(--x-gap),var(--surface-raised);color:var(--ink)}
+.switch{display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap;align-items:center}
+.switch .lb{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-right:var(--space-2)}
+.tab{display:inline-flex;align-items:center;gap:var(--space-1);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-pill);border:1px solid var(--hairline);font-size:var(--type-small);color:var(--ink-muted)}
+.tab[aria-pressed="true"]{background:var(--surface-raised);border-color:var(--hairline-strong);color:var(--ink)}
+.rules{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3) var(--space-5)}
+.rules li{border-top:1px solid var(--hairline);padding-top:var(--space-2);transition:opacity var(--motion-base) var(--ease-standard)}
+.rules li.on{border-top-color:var(--ink)}
+.rules.focus li:not(.on){opacity:var(--x-quiet)}
+.rules .lib{float:right;margin-top:var(--space-2);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;display:flex;gap:var(--space-2)}
+.rules .pl{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.rules .tc{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.rules .nv{margin-top:var(--space-1)}
+.rhead{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin:0 0 var(--space-3)}
+.famh{display:flex;align-items:baseline;gap:var(--space-3);margin:var(--space-5) 0 var(--space-2)}
+.famh h2{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+@media (max-width:1400px){.lc{aspect-ratio:auto;min-height:calc(var(--measure-card) + var(--space-5))}.main{grid-template-columns:minmax(0,1fr) minmax(0,.9fr)}.rules .nv{display:none}.rules li.on .nv{display:block}.lc{padding-left:var(--space-8)}}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="top"><div><span class="eyebrow" id="eyebrow"></span><h1 id="h1"></h1><p class="lede" id="lede"></p></div></div>
+  <div class="main">
+    <div>
+      <div class="lc dep" style="--i:0" id="lc" aria-live="polite"></div>
+      <div class="switch" id="switch"></div>
+    </div>
+    <div><p class="rhead" id="rhead"></p><ol class="rules" id="rules"></ol></div>
+  </div>
+  <div class="famh"><h2 id="famh"></h2><span class="sm muted" id="famd"></span></div>
+  <div class="fam" id="fam"></div>
+</div>
+<div class="hints"><span><span class="kbd">T</span> another kind, same card</span><span><span class="kbd">1</span>–<span class="kbd">9</span> one rule</span><span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Grammar · V3</b> anatomy of a catalogue card: one fixed shape for every kind · Library of Congress printed cards, ISBD areas, Dewey call numbers</div>
+<script>
+/*DATA*/
+const SHEET = {
+  eyebrow: 'The catalogue · grammar · card anatomy',
+  title: 'Anatomy of a card',
+  lede: 'A library card has the same zones whatever the book; ours does too, whatever the kind. Press T: the kind changes, the shape does not.',
+  rulesHead: 'Rules of entry: the library word, then ours',
+  /* zone order on the card = rule order; lib = what a cataloguer calls the zone */
+  rules: [
+    { z: 'callno', lib: 'Call number', term: 'kind' },
+    { z: 'heading', lib: 'Main entry', term: 'card' },
+    { z: 'body', lib: 'Body of the entry', term: 'detail' },
+    { z: 'body', lib: 'Required elements', term: 'expected' },
+    { z: 'gap', lib: '[ ] to be supplied', term: 'gap' },
+    { z: 'notes', lib: 'Notes', term: 'source' },
+    { z: 'subjects', lib: 'Subject tracings 1, 2, 3', term: 'facet' },
+    { z: 'added', lib: 'Added entries I, II, III', term: 'link' },
+    { z: 'stamp', lib: 'Location stamp', term: 'floor' }
+  ],
+  demoRule: 5,
+  /* more sample cards, same shape as DATA.record */
+  more: [
+    { kind: 'vehicle', name: 'Gritter 07', key: { n: 'Registration', v: 'HN19 GRT' }, floor: 'fleet', id: 'ent_01JB8C2M7X…',
+      details: [{ n: 'Based at', v: 'Kestrel Road Depot', state: 'known', ref: 1 }, { n: 'Next service', state: 'gap', who: 'Fleet leads can add it' }, { n: 'Fuel', v: 'Diesel', state: 'known', ref: 2 }],
+      subjects: ['Vehicles', 'Diesel', 'Hallam North'], links: [{ verb: 'involved in', n: 2, kind: 'Incidents' }], sources: ['Fleet list, Sep 2026', 'Dev Patel'] },
+    { kind: 'supplier', name: 'Northmoor Aggregates', key: { n: 'Company number', v: '08812245' }, floor: 'org', id: 'ent_01J9ZK0P4D…',
+      details: [{ n: 'Registered address', v: 'Unit 4, Mill Lane, Ashby', state: 'known', ref: 1 }, { n: 'Contact person', state: 'gap', who: 'Procurement leads can add it' }, { n: 'Insurance certificate', v: 'to 30 Apr 2026', state: 'stale', age: '6 months', ref: 2 }],
+      subjects: ['Suppliers', 'Ashby'], links: [{ verb: 'holds', n: 5, kind: 'Contracts' }], sources: ['Supplier register', 'Insurance letter'] },
+    { kind: 'incident', name: 'Skid on Kestrel Road', key: { n: 'Reference', v: 'INC-2291' }, floor: 'ops', id: 'ent_01JC1T9R2H…',
+      details: [{ n: 'Happened at', v: 'Kestrel Road Depot', state: 'known', ref: 1 }, { n: 'When', v: '2 Nov 2026, 06:40', state: 'known', ref: 1 }, { n: 'Severity', state: 'gap', who: 'Operations leads can add it' }],
+      subjects: ['Incidents', 'Hallam North', 'November 2026'], links: [{ verb: 'involved', n: 1, kind: 'Vehicles' }], sources: ['Incident form 2291'] }
+  ],
+  famTitle: 'Six things that look empty',
+  famLede: 'Only the bracket “to be supplied” is a gap. The rest say something else, and say it in words.'
+};
+/*COMMON_JS*/
+/* the specimen in the same shape as the other sample cards */
+const CARDS = [{ kind: REC.kind, name: REC.name, key: REC.key, floor: REC.floor, id: REC.id.slice(0, 14) + '…', details: REC.details,
+  subjects: [K(REC.kind).plural, 'Hallam North', FL(REC.floor).name], links: REC.links, sources: REC.sources.map(s => s.what), hidden: REC.hidden }, ...SHEET.more];
+let ci = 0, focusRule = null;
+const rn = z => SHEET.rules.findIndex(r => r.z === z) + 1;
+function cardHTML(c) {
+  const k = K(c.kind), fl = FL(c.floor), kd = k.details;
+  const val = d => d.state === 'gap' ? `<span class="gapin z" data-z="gap">${d.n.toLowerCase()} to be supplied · <b>${d.who}</b></span>`
+    : `<span class="dn">${kd.find(x => x.n === d.n && x.exp) ? '<span class="exptick"></span>' : ''}${d.n}:</span> ${d.v}${d.ref ? `<span class="ref">${d.ref}</span>` : ''}${d.state === 'stale' ? ` <span class="staleage">${d.age} old</span>` : ''}`;
+  const roman = ['I', 'II', 'III', 'IV'];
+  return `<div class="ruled"></div>
+    <div class="callno z dep" style="--i:1" data-z="callno"><span class="k"><span class="muted">${rn('callno')}</span>${ic(k.icon, 12)}${k.name}</span><span>${c.key.v}</span></div>
+    <div class="stamp z dep" style="--i:6" data-z="stamp" data-tier="${fl.tier}"><span class="zn">${rn('stamp')}</span>Kept on ${fl.name}</div>
+    <h2 class="heading z dep" style="--i:2" data-z="heading"><span class="zn">${rn('heading')}</span>${c.name}</h2>
+    <p class="body z dep" style="--i:3;margin:0" data-z="body"><span class="zn">${rn('body')}</span>${c.key.n} ${c.key.v}<span class="sep"> — </span>${c.details.map(val).join('<span class="sep"> — </span>')}.</p>
+    <p class="notes z dep" style="--i:4;margin-bottom:0" data-z="notes"><span class="zn">${rn('notes')}</span>Sources: ${c.sources.map((s, i) => `${i + 1}. <b>${s}</b>`).join('; ')}.${c.hidden ? ` Also ${c.hidden.what} kept on ${FL(c.hidden.floor).name}, ${ic('lock', 12)} not shown here: ${c.hidden.who.toLowerCase()}.` : ''}</p>
+    <p class="tracings z dep" style="--i:5;margin-bottom:0" data-z="subjects"><span class="zn">${rn('subjects')}</span>${c.subjects.map((s, i) => `${i + 1}. <b>${s}</b>`).join('  ')}.</p>
+    <p class="tracings z dep" style="--i:5;margin-top:0" data-z="added"><span class="zn">${rn('added')}</span>${c.links.map((l, i) => `${roman[i]}. ${l.verb} <b>${l.n} ${l.kind}</b>`).join('  ')}.</p>
+    <span class="lcid dep" style="--i:7">${c.id}</span>`;
+}
+function render() {
+  $('#eyebrow').textContent = SHEET.eyebrow; $('#h1').textContent = SHEET.title; $('#lede').textContent = SHEET.lede; $('#rhead').textContent = SHEET.rulesHead;
+  $('#rules').innerHTML = SHEET.rules.map((r, i) => { const t = T(r.term);
+    return `<li class="dep" style="--i:${i + 2}" data-n="${i + 1}"><div class="pl"><span class="lib"><span>${String(i + 1).padStart(2, '0')}</span>${r.lib}</span>${t.plain}</div><div class="tc">${t.tech}</div><p class="never nv" style="margin-bottom:0"><b>Never means</b> ${t.never}</p></li>`; }).join('');
+  $('#switch').innerHTML = `<span class="lb">Same card, any kind</span>` + CARDS.map((c, i) => `<button class="tab" aria-pressed="${i === ci}" data-i="${i}">${ic(K(c.kind).icon, 14)}${K(c.kind).name}</button>`).join('');
+  $$('#switch .tab').forEach(b => b.addEventListener('click', () => show(+b.dataset.i)));
+  $('#famh').textContent = SHEET.famTitle; $('#famd').textContent = SHEET.famLede;
+  renderFamily($('#fam'));
+  show(ci, true);
+}
+function show(i, quiet) { ci = i; $('#lc').innerHTML = cardHTML(CARDS[i]); $('#lc').setAttribute('aria-label', `Card for ${CARDS[i].name}`);
+  $$('#switch .tab').forEach(b => b.setAttribute('aria-pressed', +b.dataset.i === i)); Icons.hydrate(document.body); setRule(focusRule); }
+function setRule(n) { focusRule = n; const r = n && SHEET.rules[n - 1];
+  $('#lc').classList.toggle('focus', !!r); $('#lc').classList.toggle('req', !!r && r.term === 'expected'); $('#rules').classList.toggle('focus', !!r);
+  $$('#lc .z').forEach(z => z.classList.toggle('on', !!r && z.dataset.z === r.z));
+  $$('#rules li').forEach(l => l.classList.toggle('on', +l.dataset.n === n));
+  $$('#fam .st').forEach(s => s.classList.toggle('on', !!r && r.term === 'gap' && s.dataset.state === 'gap')); }
+render();
+$$('#rules li').forEach(l => { l.tabIndex = 0; l.addEventListener('mouseenter', () => setRule(+l.dataset.n)); l.addEventListener('focus', () => setRule(+l.dataset.n)); l.addEventListener('mouseleave', () => setRule(null)); });
+document.addEventListener('keydown', e => { if (e.key === 't' || e.key === 'T') show((ci + 1) % CARDS.length);
+  const n = +e.key; if (n >= 1 && n <= SHEET.rules.length) setRule(n); if (e.key === 'Escape') setRule(null); });
+boot(() => { setRule(null); show(0); }, () => later(() => setRule(SHEET.demoRule), ms('--motion-run') + ms('--motion-base')));
+</script>
+</body>
+</html>

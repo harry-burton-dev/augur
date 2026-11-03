@@ -1,0 +1,344 @@
+/*@meta {"n":4,"title":"When the structure changes","cap":"a new detail, previewed, then worked off as rounds and met once on the record · proof prints, postal rounds, library notice slips"}*/
+/*@css*/
+/* the kind's fill bar: one strip, the same in every view */
+.work{display:flex;flex-direction:column}
+.fill{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-5);align-items:center;padding:var(--space-2) var(--space-4);margin-bottom:var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);flex:none}
+.fill .lab{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);white-space:nowrap}
+.fill .lab .kind svg{color:var(--ink-muted)}
+.fill .lab small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.fbar{display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.fbar .track{flex:1;display:flex;gap:2px;height:var(--space-3);min-width:0}
+.fbar .track i{display:block;min-width:0;border-radius:2px;transition:flex-grow var(--motion-calm) var(--ease-out)}
+.fbar .s-known{background:color-mix(in srgb,var(--ink) 72%,transparent)}
+.fbar .s-doc{background:color-mix(in srgb,var(--ink) 30%,transparent)}
+.fbar .s-keeper{background:var(--x-proposed-gap),linear-gradient(var(--hairline),var(--hairline))}
+.fbar .s-nobody{border:1px dashed var(--x-proposed-wait)}
+.fbar .stub{flex:none;width:var(--space-6);height:var(--space-3);border-radius:2px;background:var(--x-proposed-unseen);border:1px solid var(--hairline)}
+.fill.draft .track{opacity:.55}
+.fill.draft .track i{background-image:none;border:1px dotted var(--x-proposed-predicted);background-color:transparent}
+.fleg{grid-column:1 / -1;display:flex;flex-wrap:wrap;justify-content:flex-start;gap:var(--space-1) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.fleg span{display:inline-flex;align-items:center;gap:var(--space-1);white-space:nowrap}
+.fleg i{display:inline-block;width:var(--space-3);height:var(--space-2);border-radius:2px}
+.fleg b{font-family:var(--font-mono);color:var(--ink)}
+.fill .bump{color:var(--x-proposed-new)}
+
+.vw{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.25fr);gap:var(--space-5);min-height:0}
+.pane{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-4) var(--space-5);min-height:0;overflow:auto;scrollbar-width:thin}
+.pane h2{margin:0 0 var(--space-2);font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.pane .eyebrow{display:flex;justify-content:space-between;gap:var(--space-3);margin-bottom:var(--space-1)}
+/* admin: the draft */
+.draft-c .rec > .k{font-size:var(--type-small)}
+.draft-c .rec .v2{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.saved{display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px dashed var(--x-proposed-seam);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.saved svg{width:var(--space-3);height:var(--space-3);color:var(--x-proposed-new)}
+/* admin: the consequence */
+.cq{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-3)) minmax(0,1fr);gap:0 var(--space-4)}
+.cq > dt,.cq > dd{padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);margin:0}
+.cq > dt{font:400 var(--x-proposed-type-micro)/var(--leading-meta) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.cq > dd{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.cq .flr{display:grid;grid-template-columns:max-content minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);align-items:center}
+.cq .flr .b{height:var(--space-1);border-radius:var(--radius-pill);background:var(--hairline)}
+.cq .flr .b i{display:block;height:100%;border-radius:var(--radius-pill);background:var(--fc)}
+.cq .flr .n{font-family:var(--font-mono);color:var(--ink)}
+.cq .apps{display:grid;grid-template-columns:var(--space-4) minmax(0,.9fr) minmax(0,1.4fr);gap:var(--space-2) var(--space-3)}
+.cq .apps svg{width:var(--space-4);height:var(--space-4);color:var(--ink-muted)}
+.cq .apps .w{color:var(--ink-muted)}
+.cq ul{margin:0;padding-left:var(--space-4)}
+.cq .beyond{color:var(--ink-muted)}
+.cq .beyond b{color:var(--ink)}
+.dev{transition:opacity var(--motion-calm) var(--ease-out),filter var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i,0) * var(--motion-quick))}
+.developing .dev{opacity:0;filter:blur(2px)}
+@media (prefers-reduced-motion: reduce){.developing .dev{filter:none}}
+.cfoot{position:sticky;bottom:calc(var(--space-3) * -1);display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);margin:var(--space-3) calc(var(--space-2) * -1) 0;padding:var(--space-2);border-radius:var(--radius-key);background:color-mix(in srgb,var(--slate-deep) 94%,transparent)}
+.cfoot .m{font-size:var(--type-small);color:var(--ink-muted)}
+/* admin after save: rounds */
+.rounds{display:flex;flex-direction:column}
+.rd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.rd .nm{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.rd .who{color:var(--ink-muted)}
+.rd .ct{font-family:var(--font-mono);color:var(--ink);text-align:right}
+.dots{display:flex;gap:var(--space-1);grid-column:1 / -1;flex-wrap:wrap}
+.dots i{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);border:1px dashed var(--x-proposed-gap-ink);transition:background var(--motion-base) var(--ease-out),border-color var(--motion-base)}
+.dots i.on{background:var(--ink);border:1px solid var(--ink)}
+.rd.lead .nm{color:var(--x-proposed-wait)}
+.rd.fresh{background:var(--x-proposed-new-wash)}
+/* keeper: one question per site */
+.qc .site{font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.qc .ask{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);margin:var(--space-1) 0 var(--space-3)}
+.qt{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.2fr);gap:0 var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.qt > *{padding:var(--space-1) 0;border-bottom:1px solid var(--hairline);min-width:0;display:flex;align-items:center}
+.qt .h{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.qt .it{color:var(--ink)}
+.qt .rec-hl{color:var(--light)}
+.qt .sug{font-family:var(--font-mono);color:var(--ink-muted)}
+.qt .sug.ok{color:var(--light)}
+.qt .sug.ok::before{content:"✓";margin-right:var(--space-1);color:var(--success)}
+.qt .src{color:var(--ink-muted)}
+.qt .src svg{width:var(--space-3);height:var(--space-3);margin-right:var(--space-1);flex:none}
+.comb{display:inline-flex;gap:2px;font-family:var(--font-mono)}
+.comb b{display:inline-flex;justify-content:center;align-items:center;width:var(--space-4);height:calc(var(--space-4) + var(--space-1));border-bottom:1px solid var(--x-proposed-gap-ink);color:var(--light);font-weight:400}
+.comb .sp{width:var(--space-1)}
+.qt .e.gap{width:100%}
+.qa{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-3)}
+.qc .note{margin-top:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.next{margin-top:var(--space-3);display:flex;flex-direction:column}
+.next .r{display:flex;justify-content:space-between;padding:var(--space-1) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);color:var(--ink-muted)}
+.next .r b{color:var(--ink)}
+.mini .rec{font-size:var(--type-small);line-height:var(--leading-small)}
+.mini .rec > .k,.mini .rec > .v{padding:var(--space-1) 0}
+.isnew{background:var(--x-proposed-new-wash)}
+.newtag{display:block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-new);margin-top:2px}
+/* operator: the record, the slip, the seam */
+.vw.op{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr)}
+.recp{position:relative}
+.recp .rec > .k.isnew,.recp .rec > .v.isnew{padding-left:var(--space-2);margin-left:calc(var(--space-2) * -1)}
+.seam{grid-column:1 / -1;display:flex;align-items:center;gap:var(--space-2);padding:var(--space-1) 0 0;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);position:relative;opacity:0;transition:opacity var(--motion-calm) var(--ease-out)}
+.seam.on{opacity:1}
+.seam::before{content:"";flex:1;border-top:1px dashed var(--x-proposed-seam)}
+.seam span{flex:none}
+.seam:not(.on){display:none}
+.vw.op.slipped .side{opacity:var(--x-proposed-far);filter:saturate(.6);transition:opacity var(--motion-calm) var(--ease-out)}
+.hist{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-4);align-items:center;margin-top:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.hist .band{display:flex;align-items:center;gap:var(--space-1);height:var(--space-4)}
+.hist .band i{display:block;height:var(--space-2);border-radius:2px;background:color-mix(in srgb,var(--floor-team-high) 30%,transparent)}
+.hist .band svg{height:var(--space-4)}
+.slip{position:absolute;z-index:3;width:calc(var(--measure-card) - var(--space-4));padding:var(--space-3) var(--space-4);border-radius:var(--radius-key);background:var(--x-proposed-paper);color:var(--x-proposed-paper-ink);box-shadow:var(--shadow-overlay);font-size:var(--type-small);line-height:var(--leading-small);transform-origin:left center;transition:opacity var(--motion-slow) var(--ease-in),transform var(--motion-slow) var(--ease-in)}
+.slip.pre{opacity:0;transform:translateX(var(--space-4))}
+.slip.fold{opacity:0;transform:scaleX(.02) scaleY(.08)}
+.slip .h{display:flex;justify-content:space-between;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;padding-bottom:var(--space-2);border-bottom:1px solid color-mix(in srgb,var(--slate-deep) 30%,transparent)}
+.slip .t{font-size:var(--type-meta);line-height:var(--leading-meta);margin:var(--space-2) 0}
+.slip .t b{color:inherit;font-weight:500}
+.slip dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);margin:var(--space-2) 0;padding:var(--space-2) 0;border-top:1px dashed color-mix(in srgb,var(--slate-deep) 35%,transparent);border-bottom:1px dashed color-mix(in srgb,var(--slate-deep) 35%,transparent)}
+.slip dt{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;opacity:.75}
+.slip dd{margin:0}
+.slip dd b{color:inherit;font-weight:500}
+.slip .acts{display:flex;gap:var(--space-2);align-items:center}
+.slip .btn{color:var(--light);background:var(--slate-deep);border-color:var(--slate-deep);height:calc(var(--space-5) + var(--space-1));font-size:var(--type-small)}
+.slip .btn.ghost{background:transparent;color:var(--x-proposed-paper-ink);border-color:color-mix(in srgb,var(--slate-deep) 40%,transparent)}
+.slip .btn .kbd{color:inherit;border-color:currentColor}
+.slip .once{font-size:var(--x-proposed-type-micro);opacity:.75}
+.side{display:flex;flex-direction:column;gap:var(--space-4);min-height:0;overflow:auto;scrollbar-width:thin}
+.side .card{border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.side .card b{color:var(--ink)}
+@media (max-width:1400px){.vw{grid-template-columns:minmax(0,.85fr) minmax(0,1.2fr);gap:var(--space-4)}.cq{grid-template-columns:calc(var(--space-7) + var(--space-5)) minmax(0,1fr)}.pane{padding:var(--space-3) var(--space-4)}.slip{width:calc(var(--measure-card) - var(--space-6))}}
+@media (max-height:840px){.fill{margin-bottom:var(--space-3);padding:var(--space-1) var(--space-3)}.cq > dt,.cq > dd{padding:var(--space-1) 0}.pane h2{font-size:var(--type-lead);line-height:var(--leading-lead)}}
+/*@html*/
+<div class="fill" id="fill" aria-live="polite"></div>
+<div id="stage" style="position:relative;flex:1;min-height:0"></div>
+/*@js*/
+const C = DATA.change, KD = K(C.kind), DT = C.detail;
+const S = { view: 'admin', saved: false, fill: null, rounds: null, samQ: 0, samRows: {}, slipRead: false, samDone: false };
+const sum = o => o.known + o.doc + o.keeper + o.nobody;
+const accent = v => document.documentElement.style.setProperty('--x-accent', v === 'admin' ? 'var(--floor-org-high)' : 'var(--floor-team-high)');
+const PEOPLE = { admin: DATA.people.admin, keeper: DATA.people.keeper, op: DATA.people.operator };
+function fresh() {
+  S.saved = false; S.samQ = 0; S.samRows = {}; S.slipRead = false; S.samDone = false;
+  S.fill = { known: C.split.known, doc: C.split.doc, keeper: C.split.keeper, nobody: C.split.nobody };
+  S.rounds = C.rounds.map(r => ({ ...r, done: 0 }));
+}
+/* ---------- frame ---------- */
+function rail() {
+  const v = S.view, p = PEOPLE[v];
+  const nav = v === 'admin' ? [['Kinds of thing', 'shapes', 7, 1], ['Kinds of link', 'waypoints', 12], ['Changes', 'history', 42], ['Waiting for a kind', 'hourglass', 7]]
+    : v === 'keeper' ? [['Your round', 'list-checks', S.rounds[0].q - S.samQ, 1], ['Things we keep', 'boxes', 4597], ['Triage', 'inbox', 7]]
+    : [['Things we keep', 'boxes', 4597, 1], ['Kinds of thing', 'shapes', 7], ['Triage', 'inbox', 7]];
+  $('#rail').innerHTML = `<div class="an">${DATA.app}${v === 'admin' ? ' · Studio' : ''}</div>
+    <div class="who-am" data-tier="${FL(p.floor).tier}"><span class="dot"></span><span><b>${p.name}</b><br>${p.role}${p.tech ? tk(p.tech) : ''}<br>${FL(p.floor).kind} · ${FL(p.floor).name}</span></div>
+    ${nav.map(([l, i, n, on]) => `<div class="nav${on ? ' on' : ''}">${ic(i)}<span>${l}</span>${n != null ? `<span class="n">${fmt(n)}</span>` : ''}</div>`).join('')}
+    <div class="foot" id="railfoot"></div>`;
+  techFoot();
+}
+function head() {
+  const v = S.view, r = C.record;
+  const H = {
+    admin: [`${DATA.app} · Studio · ${KD.plural}`, S.saved ? 'The change, as rounds' : 'A change, previewed', S.saved ? `Saved. The new detail became <b>${C.questions} small questions</b>, one per site per keeper. Nothing is filled until a person answers.` : `Everything on the right is counted from today’s records <b>before</b> you commit. Nothing changes until you press Make the change.`],
+    keeper: [`${DATA.floors.team.name} · ${DATA.app} · Your round`, S.rounds[0].name, `${KD.plural} gained “${DT.word}” on ${C.when}. <b>One question per site you keep.</b> Your answer shows on each record as yours, with its source.`],
+    op: [`${DATA.floors.team.name} · ${DATA.app} · ${KD.word}`, r.name, `${KD.word} kept on ${flChip(r.floor)} · added ${r.added}`]
+  }[v];
+  $('#crumb').textContent = H[0]; $('#h1').textContent = H[1]; $('#sub').innerHTML = H[2];
+  $('#headR').innerHTML = `<div class="viewers" role="group" aria-label="Who is looking">${[['admin', 'org', 'admin', 'A'], ['keeper', 'team', 'keeper', 'K'], ['op', 'team', 'operator', 'O']].map(([id, t, w, k]) =>
+    `<button data-v="${id}" class="${v === id ? 'on' : ''}" data-tier="${t}"><span class="dot"></span>${PEOPLE[id].name.split(' ')[0]}, ${w} <span class="kbd">${k}</span></button>`).join('')}</div>`;
+}
+/* ---------- the fill bar: the kind's gaps, closing as answers arrive ---------- */
+function drawFill(bump) {
+  const f = S.fill, op = S.view === 'op', hid = C.byFloor.find(b => b.floor === 'sibling').n;
+  const seg = op ? { ...f, keeper: f.keeper - hid } : f, tot = sum(seg);
+  const L = [['known', 'Known', 'var(--ink)'], ['doc', S.saved ? 'A document says; waiting for a yes' : 'A document could say', 'color-mix(in srgb,var(--ink) 30%,transparent)'], ['keeper', 'Not known yet · a keeper could fill', null], ['nobody', 'Not known yet · nobody named', null]];
+  $('#fill').className = `fill${S.saved ? '' : ' draft'}`;
+  $('#fill').innerHTML = `<div class="lab"><span class="kind">${ic(KD.icon)}${KD.plural} · ${DT.word}</span>${tk(DT.tech)}<small>${S.saved ? `<b class="mono">${fmt(f.known)}</b> of ${fmt(tot)} ${op ? 'you can see' : ''} known${bump ? ` <span class="bump">+${bump} just now</span>` : ''}` : `if you save: <b class="mono">0</b> of ${fmt(tot)} known`}</small></div>
+    <div class="fbar"><div class="track" role="img" aria-label="${f.known} known, ${seg.doc} from documents, ${seg.keeper} a keeper could fill, ${seg.nobody} nobody named">${L.map(([k]) => `<i class="s-${k}" style="flex-grow:${seg[k]}"></i>`).join('')}</div>
+      ${op ? `<span class="stub" title="Not yours to see"></span>` : ''}</div>
+    <div class="fleg">${L.map(([k, w, c]) => `<span><i class="s-${k}" style="${c ? `background:${c}` : k === 'keeper' ? 'background:var(--x-proposed-gap)' : 'border:1px dashed var(--x-proposed-wait)'}"></i>${w} <b>${fmt(seg[k])}</b></span>`).join('')}
+      ${op ? `<span>${E.unseen('sibling', `and some on ${FL('sibling').name}`)}</span>` : ''}</div>`;
+  Icons.hydrate($('#fill'));
+}
+/* ---------- admin ---------- */
+function adminHTML() {
+  const tot = C.byFloor.reduce((a, b) => a + b.n, 0), mx = Math.max(...C.byFloor.map(b => b.n));
+  const draft = `<section class="pane draft-c"><div class="eyebrow"><span>Add a detail</span><span>${S.saved ? 'saved' : 'draft · not saved'}</span></div><h2>${DT.word}</h2>
+    <div class="rec">
+      <div class="k">To</div><div class="v"><span class="kind">${ic(KD.icon)}${KD.plural}</span> <span class="mono muted" style="font-size:var(--type-small)">${fmt(KD.n)}</span>${tk(KD.tech)}</div>
+      <div class="k">Holds</div><div class="v">${DT.type}<span class="v2">Empty ones are drawn as a date to fill: <span class="comb"><b></b><b></b><span class="sp"></span><b></b><b></b><span class="sp"></span><b></b><b></b><b></b><b></b></span></span>${tk(DT.tech)}</div>
+      <div class="k">Should have</div><div class="v">${DT.expected}${tk(W('expected')[1])}</div>
+      <div class="k">Why</div><div class="v">${C.why}<span class="v2">Asked for by the Mandate intent “${C.intent}”.</span></div>
+      <div class="k">Changed by</div><div class="v">${DATA.people.admin.name}<span class="v2">who ${DATA.people.admin.role}</span></div></div>
+    ${S.saved ? `<div class="saved">${ic('check')}Saved ${C.when} by ${DATA.people.admin.name}. You can take it back from Changes; values people gave stay.</div>` : ''}</section>`;
+  const cons = `<section class="pane"><div class="eyebrow"><span>What this will do · before anything changes</span><span>${fmt(tot)} records</span></div>
+    <h2>Gaps on ${fmt(tot - C.split.known)} of ${fmt(tot)} ${KD.plural.toLowerCase()} records</h2>
+    <dl class="cq">
+      <dt class="dev" style="--i:0">On which floors</dt><dd class="dev" style="--i:0"><div class="flr">${C.byFloor.map(b => `${flName(b.floor)}<span class="b" data-tier="${FL(b.floor).tier}"><i style="width:${b.n / mx * 100}%"></i></span><span class="n">${fmt(b.n)}</span>`).join('')}</div></dd>
+      <dt class="dev" style="--i:1">Gaps it creates</dt><dd class="dev" style="--i:1">Every record gains the row as <b>Not known yet</b>, named with who could fill it. ${fmt(C.split.doc)} can be read from a document, ${fmt(C.split.keeper)} need a keeper, ${fmt(C.split.nobody)} have nobody named. ${tk('missing value · sh:minCount 1 (advisory)')}</dd>
+      <dt class="dev" style="--i:2">Who will be asked</dt><dd class="dev" style="--i:2"><b>${C.keepers} keepers</b> get <b>${C.questions} questions</b>: one per site per keeper, not one per record. Documents’ dates sit inside those questions as suggestions. <b>${DATA.people.steward.name}</b> is asked to name keepers for ${C.split.nobody} items on 2 sites.${tk(W('round')[1])}</dd>
+      <dt class="dev" style="--i:3">Which apps’ views</dt><dd class="dev" style="--i:3"><div class="apps">${C.apps.map(a => `${ic(a.icon)}<span>${a.app}<br><span class="w">${a.what}</span></span><span>${a.change}</span>`).join('')}</div></dd>
+      <dt class="dev" style="--i:4">What won’t change</dt><dd class="dev" style="--i:4"><ul>${C.wont.map(w => `<li>${w}</li>`).join('')}</ul></dd>
+      <dt class="dev" style="--i:5">Also worth a look</dt><dd class="dev beyond" style="--i:5">${C.similar.map(s => `${s[0]} keep <b>${s[1]}</b>`).join('; ')}: the same kind of date. Name them alike, so one filter finds all three.</dd>
+    </dl>
+    <div class="cfoot"><span class="m">Nothing needs its owner’s attention before you save.</span><span style="display:flex;gap:var(--space-2)"><button class="btn quiet">Save draft</button><button class="btn go" data-save>${ic('git-commit-horizontal')}Make the change <span class="kbd">Enter</span></button></span></div></section>`;
+  const rounds = `<section class="pane"><div class="eyebrow"><span>Rounds of small jobs</span><span>${C.questions} questions · ${C.keepers} keepers</span></div>
+    <h2>Who holds which part</h2>
+    <div class="rounds">${S.rounds.map((r, i) => `<div class="rd${r.lead ? ' lead' : ''}" data-r="${i}"><div><span class="nm">${r.name}</span> <span class="who">· ${r.who}</span> ${flName(r.floor)}</div>
+      <span class="ct">${r.done} of ${r.q}${r.items ? ` · ${fmt(r.items)} items` : ''}</span><div class="dots">${Array.from({ length: r.q }, (_, j) => `<i class="${j < r.done ? 'on' : ''}"></i>`).join('')}</div></div>`).join('')}</div>
+    <p class="muted" style="font-size:var(--type-small);line-height:var(--leading-small);margin:var(--space-3) 0 0">Each round is a person-shaped view of Triage: a “yes” to a document’s date is a proposal accepted by the person who knows. “Can’t tell” and “Not mine” keep the gap and pass it on, so no gap is closed by a guess.${tk(W('round')[1])}</p></section>`;
+  return `<div class="vw">${draft}${S.saved ? rounds : cons}</div>`;
+}
+/* ---------- keeper ---------- */
+function samRowHTML(r) {
+  const st = S.samRows[r.item];
+  let ans, src;
+  if (r.sug) { ans = `<span class="sug${st ? ' ok' : ''}">${r.sug}</span>`; src = `<span class="src">${ic('file-text', 12)}${r.src}</span>`; }
+  else if (r.type) { const t = st ? r.type : ''; ans = st ? `<span class="sug ok">${t}</span>` : `<span class="comb" aria-label="a date to fill">${'<b></b><b></b><span class="sp"></span><b></b><b></b><span class="sp"></span><b></b><b></b><b></b><b></b>'}</span>`; src = `<span class="src">${st ? 'you, just now' : 'no document · you’d know'}</span>`; }
+  else { ans = st ? `<span class="e gap" style="padding:0 var(--space-2)"><span class="w">Not known yet</span></span>` : `<span class="comb" aria-label="a date to fill"><b></b><b></b><span class="sp"></span><b></b><b></b><span class="sp"></span><b></b><b></b><b></b><b></b></span>`; src = `<span class="src">${st ? `You can’t tell: ${r.cant.toLowerCase()}. Passed to ${DATA.people.steward.name}.` : 'no document · you’d know'}</span>`; }
+  return `<span class="it${r.rec ? ' rec-hl' : ''}">${r.item}</span>${ans}${src}`;
+}
+function keeperHTML() {
+  const R = C.myRound, q = R[Math.min(S.samQ, R.length - 1)], done = S.samDone, rec = C.record, k = DATA.people.keeper;
+  const rows = q.rows || [];
+  const card = done ? `<div class="qc"><div class="micro">Question 2 of ${R.length} · ${DT.word}</div><div class="site">${R[1].site}</div><div class="ask">${R[1].n} pieces of equipment you keep here. When is each next inspected?</div><p class="note">Ashby depot is answered: ${Object.keys(S.samRows).length - 1} dates given, 1 passed on, and the fill bar above moved by ${rows.length - 1}. Here 2 dates come from documents and 2 you’d know.</p>
+      <div class="qa"><button class="btn go" data-k="yes">Yes to the 2 from documents <span class="kbd">Enter</span></button><button class="btn" data-k="c">Correct one <span class="kbd">C</span></button><button class="btn quiet" data-k="n">Can’t tell <span class="kbd">N</span></button><button class="btn quiet" data-k="x">Not mine <span class="kbd">X</span></button><button class="btn quiet">Later</button></div></div>`
+    : `<div class="qc"><div class="micro">Question ${S.samQ + 1} of ${R.length} · ${DT.word}</div><div class="site">${q.site}</div>
+      <div class="ask">${q.n} pieces of ${KD.plural.toLowerCase()} you keep here. When is each next inspected? Dates from documents are filled in; say yes, or correct one.</div>
+      <div class="qt"><span class="h">Item</span><span class="h">Next inspection</span><span class="h">From</span>${rows.map(samRowHTML).join('')}</div>
+      <div class="qa"><button class="btn go" data-k="yes">Yes to the ${rows.filter(r => r.sug).length} from documents <span class="kbd">Enter</span></button><button class="btn" data-k="c">Correct one <span class="kbd">C</span></button><button class="btn quiet" data-k="n">Can’t tell <span class="kbd">N</span></button><button class="btn quiet" data-k="x">Not mine <span class="kbd">X</span></button></div>
+      <p class="note">One question for the whole site, about a minute. Nothing is filled until you answer. ${tk('accepting proposals; abstain; reassign')}</p></div>`;
+  const recFilled = S.samRows[rows[0] && rows[0].item] || done;
+  const mini = `<section class="pane mini"><div class="eyebrow"><span>On the record · what your answer changes</span></div><h2 style="font-size:var(--type-lead);line-height:var(--leading-lead)">${rec.name}</h2>
+    <div class="rec"><div class="k">Kept at</div><div class="v">Ashby depot</div><div class="k">Last inspected</div><div class="v">2 Apr 2026</div>
+    <div class="k isnew">${DT.word}<span class="newtag">new · ${C.when}</span></div><div class="v isnew">${recFilled ? `<span class="mono" style="color:var(--light)">${C.myRound[0].rows[0].sug}</span><span class="src">${k.name}, just now · from ${C.myRound[0].rows[0].src}</span>` : E.gap(`${k.name}`, 'in this question')}</div></div></section>`;
+  const others = `<section class="pane"><div class="eyebrow"><span>Everyone’s rounds · ${KD.plural}</span></div>
+    <div class="rounds">${S.rounds.map(r => r.hidden ? `<div class="rd">${E.unseen(r.floor, `${r.name}: some questions, kept on ${FL(r.floor).name}`)}</div>`
+      : `<div class="rd${r.mine ? ' fresh' : ''}${r.lead ? ' lead' : ''}"><div><span class="nm" style="font-size:var(--type-small)">${r.mine ? 'You, ' : ''}${r.who}</span> <span class="who">· ${r.name}</span></div><span class="ct">${r.done} of ${r.q}</span></div>`).join('')}</div>
+    <p class="muted" style="font-size:var(--type-small);margin:var(--space-2) 0 0">Counts for rounds on floors you can’t see show as “some”, never a number. That rule is a decision for Harry.</p></section>`;
+  return `<div class="vw" style="grid-template-columns:minmax(0,1.3fr) minmax(0,.9fr)"><section class="pane">${card}
+    <div class="next">${R.slice(S.samDone ? 2 : 1).map((s, i) => `<div class="r"><span><b>${s.site}</b> · ${s.n} items</span><span>question ${S.samDone ? i + 3 : i + 2}</span></div>`).join('')}</div></section>
+    <div class="side">${mini}${others}</div></div>`;
+}
+/* ---------- operator ---------- */
+function opHTML() {
+  const r = C.record, k = DATA.people.keeper, samAns = S.samDone || Object.keys(S.samRows).length, row0 = C.myRound[0].rows[0];
+  const cell = x => x.v ? `<span class="${x.link ? 'lk' : ''}">${x.v}</span>${x.age ? `<span class="age">${x.age}</span><span class="src">Stale: ${x.stale}</span>` : ''}`
+    : x.isNew ? (samAns ? `<span class="mono" style="color:var(--light)">${row0.sug}</span><span class="src">${k.name}, ${C.when} · from ${row0.src}</span>` : E.gap(k.name, `asked in his ${C.rounds[0].name}`))
+    : x.gap ? E.gap(x.gap) : x.none ? E.none(...x.none) : x.na ? E.na(x.na) : x.unseen ? E.unseen(x.unseen, `kept on ${FL(x.unseen).name}`) : '';
+  const rows = r.rows.map(x => `${x.isNew ? `<div class="seam${S.slipRead ? ' on' : ''}" id="seam"><span>detail added ${C.when} · ${DATA.people.admin.name}</span></div>` : ''}<div class="k${x.isNew && !S.slipRead ? ' isnew' : ''}" ${x.isNew ? 'id="newrow"' : ''}>${x.d}${x.isNew && !S.slipRead ? `<span class="newtag">new detail · ${C.when}</span>` : ''}</div><div class="v${x.isNew && !S.slipRead ? ' isnew' : ''}">${cell(x)}</div>`).join('');
+  const rec = `<section class="pane recp" id="recp"><div class="eyebrow"><span>${KD.word} record · every detail it could hold</span><span>${r.rows.length} details</span></div>
+    <div class="rec">${rows}</div>
+    <div class="hist"><span class="micro">History</span><span class="band"><i style="flex:3"></i>${E.wave(r.history.from, r.history.to, '', 60).replace('class="wave"', 'class="wave" style="flex:1.2;width:auto"')}<i style="flex:2"></i></span>
+      <span></span><span>No record ${r.history.from} to ${r.history.to}: ${r.history.why}. Nobody can fill it.${tk('declared record gap')}</span></div></section>`;
+  const side = `<div class="side"><div>${emptyKey(['gap', 'none', 'na', 'stale', 'norec', 'unseen'], true)}</div>
+    <div class="card">${S.slipRead ? `<b>Read.</b> The slip folded into a seam above the row. It stays, quiet, as this record’s shape history; you won’t see the slip again.` : `A notice appears <b>once per person</b>, on the record, beside the row it changed. Reading it folds it into a seam.`}${tk(W('seam')[1])}</div></div>`;
+  return `<div class="vw op">${rec}${side}</div>`;
+}
+function placeSlip() {
+  if (S.slipRead || S.view !== 'op') return;
+  const row = $('#newrow'), pane = $('#stage'); if (!row || !pane) return;
+  const k = DATA.people.keeper, a = DATA.people.admin, samAns = S.samDone || Object.keys(S.samRows).length;
+  const el = document.createElement('div'); el.className = 'slip pre'; el.id = 'slip'; el.setAttribute('role', 'note');
+  el.innerHTML = `<div class="h"><span>Notice · ${KD.plural}</span><span>${C.when}</span></div>
+    <div class="t">Every ${KD.word.toLowerCase()} record now keeps one more detail: <b>${DT.word}</b>.</div>
+    <div>${C.why}</div>
+    <dl><dt>This one</dt><dd>${samAns ? `Already filled by <b>${k.name}</b>, from the hire pack.` : `<b>${k.name}</b> is asked, in his ${C.rounds[0].name}.`}</dd>
+      <dt>Asked for by</dt><dd>Mandate: “${C.intent}”</dd><dt>Changed by</dt><dd>${a.name}, who ${a.role}</dd><dt>Lost</dt><dd>Nothing on this record.</dd></dl>
+    <div class="acts"><button class="btn" data-got>Got it <span class="kbd">Enter</span></button><span class="once">You see this once.</span></div>`;
+  pane.appendChild(el);
+  const pr = pane.getBoundingClientRect(), rr = row.getBoundingClientRect(), sw = el.offsetWidth;
+  const rp = $('#recp').getBoundingClientRect();
+  el.style.left = `${Math.min(pr.width - sw, rp.right - pr.left - sw * .45)}px`; el.style.top = `${Math.max(0, Math.min(pr.height - el.offsetHeight, rr.top - pr.top - el.offsetHeight / 2))}px`;
+  $('#stage .vw.op').classList.add('slipped');
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('pre')));
+}
+function readSlip() {
+  const el = $('#slip'); if (!el || S.slipRead) return;
+  el.classList.add('fold'); S.slipRead = true; $('#stage .vw.op').classList.remove('slipped');
+  later(() => { draw(); }, ms('--motion-slow'));
+}
+/* ---------- actions ---------- */
+function save() {
+  if (S.saved || S.view !== 'admin') return; S.saved = true; head(); draw();
+  const g = ms('--motion-run');
+  C.arrivals.forEach((a, i) => later(() => arrive(a), g * (i + 1.5)));
+}
+function arrive(a) {
+  const f = S.fill, r = S.rounds[a.r]; let b = 0;
+  if (a.doc) { f.doc -= a.doc; f.known += a.doc; b += a.doc; }
+  if (a.keeper) { f.keeper -= a.keeper; f.known += a.keeper; b += a.keeper; }
+  if (a.named) { f.nobody -= a.named; f.keeper += a.named; }
+  r.done = Math.min(r.q, r.done + a.q);
+  drawFill(b || null);
+  if (S.view === 'admin') { draw(true); const el = $(`.rd[data-r="${a.r}"]`); if (el) { el.classList.add('fresh'); } }
+}
+function samAct(kind) {
+  if (S.view !== 'keeper' || S.samDone) return;
+  const rows = C.myRound[0].rows, f = S.fill;
+  if (kind === 'yes') { let n = 0; rows.filter(r => r.sug && !S.samRows[r.item]).forEach(r => { S.samRows[r.item] = 1; n++; }); f.doc -= n; f.known += n; draw(true); drawFill(n);
+    later(() => samAct('type'), ms('--motion-run')); return; }
+  if (kind === 'type' || kind === 'c') { let n = 0; rows.filter(r => r.type && !S.samRows[r.item]).forEach(r => { S.samRows[r.item] = 1; n++; }); f.keeper -= n; f.known += n; draw(true); if (n) drawFill(n);
+    later(() => samAct('n'), ms('--motion-run')); return; }
+  if (kind === 'n' || kind === 'x') { rows.filter(r => r.cant).forEach(r => { S.samRows[r.item] = 1; }); draw(true);
+    later(() => { S.samDone = true; S.rounds[0].done = 1; draw(); }, ms('--motion-run') + ms('--motion-calm')); }
+}
+/* ---------- render ---------- */
+function draw(quiet) {
+  rail(); head(); if (!quiet) drawFill();
+  const st = $('#stage');
+  st.innerHTML = S.view === 'admin' ? adminHTML() : S.view === 'keeper' ? keeperHTML() : opHTML();
+  Icons.hydrate(st);
+  if (S.view === 'op') requestAnimationFrame(placeSlip);
+}
+function setView(v) {
+  S.view = v; accent(v); draw(); reveal($('#stage').firstElementChild);
+  keys(v === 'admin' ? [['Enter', 'make the change'], ['K', 'keeper'], ['O', 'operator'], ['T', 'technical words'], ['R', 'replay']]
+    : v === 'keeper' ? [['Enter', 'yes'], ['C', 'correct'], ['N', 'can’t tell'], ['X', 'not mine'], ['A', 'admin'], ['O', 'operator'], ['T', 'technical'], ['R', 'replay']]
+    : [['Enter', 'got it'], ['A', 'admin'], ['K', 'keeper'], ['T', 'technical words'], ['R', 'replay']]);
+  if (v === 'keeper' && !Object.keys(S.samRows).length) later(() => { const b = $('[data-k="yes"]'); if (b) b.classList.add('press'); later(() => samAct('yes'), ms('--motion-calm')); }, ms('--motion-run'));
+}
+const V = {
+  reset() {
+    fresh(); const h = location.hash;
+    if (h.includes('saved') || h.includes('keeper') || h.includes('op')) { S.saved = true; }
+    if (h.includes('keeper')) { setView('keeper'); return; }
+    if (h.includes('op')) { if (h.includes('read')) S.slipRead = true; setView('op'); return; }
+    S.view = 'admin'; accent('admin'); draw();
+    if (!S.saved) $('#stage .vw > .pane:last-child').classList.add('developing');
+  },
+  demo() {
+    if (S.view === 'admin' && !S.saved) { const p = $('#stage .vw > .pane:last-child'); if (p) p.classList.remove('developing'); }
+    if (S.view === 'admin' && S.saved && location.hash.includes('saved')) C.arrivals.forEach((a, i) => later(() => arrive(a), ms('--motion-run') * i));
+  },
+  onTech() { draw(true); },
+  key(e) {
+    const k = e.key.toLowerCase();
+    if (k === 'a') { setView('admin'); return true; }
+    if (k === 'k') { if (!S.saved) { S.saved = true; } setView('keeper'); return true; }
+    if (k === 'o') { if (!S.saved) S.saved = true; setView('op'); return true; }
+    if (e.key === 'Enter') { if (S.view === 'admin') save(); else if (S.view === 'keeper') { clearLater(); samAct('yes'); } else readSlip(); return true; }
+    if (S.view === 'keeper' && ['c', 'n', 'x'].includes(k)) { clearLater(); samAct(k); return true; }
+  }
+};
+document.addEventListener('click', e => {
+  const v = e.target.closest('[data-v]'), kb = e.target.closest('[data-k]');
+  if (v) { if (v.dataset.v !== 'admin') S.saved = true; setView(v.dataset.v); }
+  if (e.target.closest('[data-save]')) save();
+  if (kb) { clearLater(); samAct(kb.dataset.k); }
+  if (e.target.closest('[data-got]')) readSlip();
+});
+addEventListener('resize', () => { if (S.view === 'op' && !S.slipRead) { const s = $('#slip'); if (s) s.remove(); placeSlip(); } });
+boot(V);
