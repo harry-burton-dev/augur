@@ -35,6 +35,8 @@ describe('entering the password again', () => {
     expect(signInAgainUrl(back)).toBe('/auth/again?return=%2Fupgrades%2Faugur%3Fupgrade%3D0.13.2');
     expect(resumeFrom('?upgrade=0.13.2&tab=x')).toEqual({ resume: { kind: 'upgrade', version: '0.13.2' }, rest: '?tab=x' });
     expect(resumeFrom('?install=folio@1.1.0').resume).toEqual({ kind: 'install', app: 'folio', version: '1.1.0' });
+    expect(returnTo('/upgrades/augur', { kind: 'halted', version: '0.14.0' })).toBe('/upgrades/augur?halted=0.14.0');
+    expect(resumeFrom('?halted=0.14.0').resume).toEqual({ kind: 'halted', version: '0.14.0' });
     expect(resumeFrom('')).toEqual({ rest: '' });
   });
 });
