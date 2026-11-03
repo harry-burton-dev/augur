@@ -1,8 +1,8 @@
 # 0054. App frontends load data with TanStack Query, route with TanStack Router and call APIs with openapi-fetch, all wrapped by the app kit
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
-- **Decided by:** Harry (the library report's default D2, taken on 2026-11-03 with "integrate all the defaults"; this record waits for his acceptance)
+- **Decided by:** Harry (the library report's default D2, taken on 2026-11-03; record accepted the same day)
 - **Replaces:** none
 
 ## Context
