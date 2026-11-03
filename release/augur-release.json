@@ -1,18 +1,13 @@
 {
-  "version": "0.15.0",
-  "name": "Bittern",
+  "version": "0.16.0",
+  "name": "Curlew",
   "channel": "beta",
   "released": "2026-11-03",
   "upgradeFrom": ">=0.1.0",
   "changed": [
-    "@augur/app-kit",
-    "@augur/admin",
-    "@augur/home",
+    "@augur/shell-kit",
     "@augur/shell",
-    "@augur/upgrades",
-    "@apps/folio-frontend",
-    "@apps/auspex-frontend",
-    "@apps/atlas-frontend"
+    "@apps/folio-frontend"
   ],
   "breaking": [],
   "settings": {
@@ -145,7 +140,7 @@
       "version": "0.11.0"
     },
     "@augur/shell-kit": {
-      "version": "0.2.0"
+      "version": "0.3.0"
     },
     "@augur/ui-kit": {
       "version": "1.9.0"
@@ -178,13 +173,13 @@
       "version": "0.3.1"
     },
     "@augur/shell": {
-      "version": "0.12.1"
+      "version": "0.13.0"
     },
     "@augur/upgrades": {
       "version": "0.1.1"
     },
     "@apps/folio-frontend": {
-      "version": "0.6.1"
+      "version": "0.7.0"
     },
     "@apps/folio": {
       "version": "0.3.2"
