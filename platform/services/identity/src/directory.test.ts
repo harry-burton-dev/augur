@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BRUTE_FORCE_POLICY, KeycloakDirectory, REALM_ADMIN_ROLES } from './directory.ts';
+import { KeycloakDirectory } from './directory.ts';
+import { IDENTITY_RIGHTS } from './realm.ts';
 
 type Call = { method: string; url: string; body?: string };
 
@@ -27,46 +28,18 @@ describe('identity’s sign-in to Keycloak', () => {
     expect(Object.fromEntries(new URLSearchParams(calls[0]!.body))).toEqual({ grant_type: 'client_credentials', client_id: 'platform-identity', client_secret: 's3cret' });
   });
 
-  it('gives its own client only the realm-management roles it lacks', async () => {
-    const { calls, fetchImpl } = keycloak((method, path) => {
-      if (path === '/clients?clientId=platform-identity') return [{ id: 'c-1', clientId: 'platform-identity' }];
-      if (path === '/clients/c-1/service-account-user') return { id: 'sa-1' };
-      if (path === '/clients?clientId=realm-management') return [{ id: 'rm-1', clientId: 'realm-management' }];
-      if (path === '/users/sa-1/role-mappings/clients/rm-1' && method === 'GET') return [{ id: 'r-view', name: 'view-users' }];
-      if (path === '/clients/rm-1/roles') return ['view-users', 'manage-users', 'realm-admin', 'manage-realm'].map((name) => ({ id: `r-${name}`, name }));
-      return undefined;
-    });
-    const directory = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn: { admin: { user: 'kc-admin', password: 'pw' } }, fetchImpl });
-    expect(await directory.grantRealmAdmin('platform-identity')).toEqual(['manage-users', 'manage-realm']);
-    expect(calls[0]!.url).toBe('http://kc/realms/master/protocol/openid-connect/token');
-    const grant = calls.find((c) => c.method === 'POST' && c.url.endsWith('/role-mappings/clients/rm-1'))!;
-    expect(JSON.parse(grant.body!).map((r: { name: string }) => r.name)).toEqual(['manage-users', 'manage-realm']);
-    expect(REALM_ADMIN_ROLES).not.toContain('realm-admin');
-  });
-
-  it('reads from its own token whether it already holds every realm-management role it needs', async () => {
+  it('reads from its own token whether it holds every right it needs', async () => {
     const tokenWith = (roles: string[]) => `h.${Buffer.from(JSON.stringify({ resource_access: { 'realm-management': { roles } } })).toString('base64url')}.s`;
     const signIn = { client: { id: 'platform-identity', secret: 's' } };
     const answering = (res: () => Response) => (async () => res()) as typeof fetch;
-    const full = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: answering(() => Response.json({ access_token: tokenWith([...REALM_ADMIN_ROLES]), expires_in: 300 })) });
-    expect(await full.hasRealmAdmin()).toBe(true);
+    const full = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: answering(() => Response.json({ access_token: tokenWith([...IDENTITY_RIGHTS]), expires_in: 300 })) });
+    expect(await full.hasRights(IDENTITY_RIGHTS)).toBe(true);
     const partial = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: answering(() => Response.json({ access_token: tokenWith(['view-users']), expires_in: 300 })) });
-    expect(await partial.hasRealmAdmin()).toBe(false);
+    expect(await partial.hasRights(IDENTITY_RIGHTS)).toBe(false);
     const refused = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: answering(() => new Response('{"error":"unauthorized_client"}', { status: 401 })) });
-    expect(await refused.hasRealmAdmin()).toBe(false);
+    expect(await refused.hasRights(IDENTITY_RIGHTS)).toBe(false);
     const down = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl: (async () => { throw new TypeError('fetch failed'); }) as typeof fetch });
-    await expect(down.hasRealmAdmin()).rejects.toThrow('can’t be reached');
-  });
-
-  it('turns on the brute-force policy once, and leaves a realm that has it alone', async () => {
-    let protectedNow = false;
-    const { calls, fetchImpl } = keycloak((method, path) => (method === 'GET' && path === '' ? { realm: 'platform', bruteForceProtected: protectedNow } : undefined));
-    const directory = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn: { client: { id: 'platform-identity', secret: 's' } }, fetchImpl });
-    expect(await directory.ensureSignInPolicy()).toBe(true);
-    expect(JSON.parse(calls.find((c) => c.method === 'PUT')!.body!)).toEqual(BRUTE_FORCE_POLICY);
-    protectedNow = true;
-    expect(await directory.ensureSignInPolicy()).toBe(false);
-    expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+    await expect(down.hasRights(IDENTITY_RIGHTS)).rejects.toThrow('can’t be reached');
   });
 
   it('gives a role to the first admin only while nobody holds it', async () => {
