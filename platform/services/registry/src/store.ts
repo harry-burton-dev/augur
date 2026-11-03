@@ -1,6 +1,5 @@
 import pg from 'pg';
-import type { Scope } from '@augur/service-kit';
-import { steadyPool } from '@augur/service-kit';
+import { runMigrations, steadyPool, type Migration, type Scope } from '@augur/service-kit';
 import type { AppEntry } from './manifest.ts';
 import type { AfterWatch } from './after-watch.ts';
 import { AUGUR_UNIT, defaultDesiredState, type StoredDesiredState } from './desired-state.ts';
@@ -735,7 +734,7 @@ const trim = (versions: AppVersion[], pinned?: string) =>
  * Schema changes, applied in order and recorded so each runs once. The registry
  * owns the `registry` schema; no other service reads or writes it.
  */
-export const migrations: { id: string; sql: string }[] = [
+export const migrations: Migration[] = [
   {
     id: '001_apps',
     sql: `
@@ -1043,27 +1042,7 @@ export class PgAppStore implements AppStore {
 
   /** Brings the schema up to date. Safe to run from several instances at once. */
   async migrate() {
-    const client = await this.pool.connect();
-    try {
-      await client.query('begin');
-      await client.query("select pg_advisory_xact_lock(hashtext('registry.migrate'))");
-      // On a server the storage job makes the schema for registry's own login, which may not create schemas.
-      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'registry'");
-      if (!hasSchema) await client.query('create schema registry');
-      await client.query('create table if not exists registry.migrations (id text primary key, applied_at timestamptz not null default now())');
-      const { rows } = await client.query<{ id: string }>('select id from registry.migrations');
-      const applied = new Set(rows.map((r) => r.id));
-      for (const m of migrations.filter((m) => !applied.has(m.id))) {
-        await client.query(m.sql);
-        await client.query('insert into registry.migrations (id) values ($1)', [m.id]);
-      }
-      await client.query('commit');
-    } catch (err) {
-      await client.query('rollback');
-      throw err;
-    } finally {
-      client.release();
-    }
+    await runMigrations(this.pool, { schema: 'registry', migrations });
   }
 
   async origins() {

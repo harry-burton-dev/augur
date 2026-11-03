@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
-import { steadyPool, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
+import { runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
 export interface EventFloor {
@@ -220,7 +220,7 @@ export class MemoryEventStore implements EventStore {
 }
 
 /** Schema changes, applied in order and recorded so each runs once. The events service owns the `events` schema. */
-export const migrations: { id: string; sql: string }[] = [
+export const migrations: Migration[] = [
   {
     id: '001_notifications_and_audit',
     sql: `
@@ -387,27 +387,7 @@ export class PgEventStore implements EventStore {
   }
 
   async migrate() {
-    const client = await this.pool.connect();
-    try {
-      await client.query('begin');
-      await client.query("select pg_advisory_xact_lock(hashtext('events.migrate'))");
-      // On a server the storage job makes the schema for events's own login, which may not create schemas.
-      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'events'");
-      if (!hasSchema) await client.query('create schema events');
-      await client.query('create table if not exists events.migrations (id text primary key, applied_at timestamptz not null default now())');
-      const { rows } = await client.query<{ id: string }>('select id from events.migrations');
-      const applied = new Set(rows.map((r) => r.id));
-      for (const m of migrations.filter((m) => !applied.has(m.id))) {
-        await client.query(m.sql);
-        await client.query('insert into events.migrations (id) values ($1)', [m.id]);
-      }
-      await client.query('commit');
-    } catch (err) {
-      await client.query('rollback');
-      throw err;
-    } finally {
-      client.release();
-    }
+    await runMigrations(this.pool, { schema: 'events', migrations });
   }
 
   /**

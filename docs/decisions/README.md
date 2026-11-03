@@ -57,5 +57,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0049](0049-pillar-apps-shipped-from-their-releases.md) | AUGUR ships the pinned releases of its pillar apps, made in their own repositories | Accepted | 2026-11-03 |
 | [0050](0050-alpha-proving-run.md) | Alpha is proved by a build gate and a 48-hour run on staging | Accepted | 2026-11-03 |
 | [0051](0051-install-a-halted-release-on-request.md) | A deployment admin can install a halted release on request, on dev and preview servers only | Accepted | 2026-11-03 |
+| [0053](0053-squawk-lints-migrations.md) | Squawk lints every new migration, and one runner in the service kit applies them | Proposed | 2026-11-03 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.
