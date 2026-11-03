@@ -5,15 +5,26 @@
 # when it starts (service kit's publishFrontend):
 #   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/<id> --build-arg FRONTEND=@apps/<id>-frontend .
 #
-# The first five lines are the same in infra/web.Dockerfile, and come before any build argument, so
-# one builder installs the workspace once and every other image reuses that layer: a release builds a
-# dozen images, and each used to install everything again. Keep them identical.
-FROM node:22-alpine AS build
-RUN corepack enable
+# Everything up to the build stage's `COPY . .` is the same in infra/web.Dockerfile and comes before any
+# build argument, so one builder installs the workspace once and every other image reuses that layer: a
+# release builds a dozen images, and each used to install everything again. Keep it identical. The
+# install (the deps stage) reads only the workspace's manifests, so it is also kept between runs
+# (BUILDX_CACHE in infra/release-images.sh) and reinstalled only when the dependencies change.
+FROM node:22-alpine AS manifests
 WORKDIR /repo
 COPY . .
+# Only what pnpm install reads: every package.json, the lockfile, the workspace and .npmrc. The install
+# below starts from these alone, so it is cached until the dependencies change, not on every change.
+RUN rm -rf .shipped && find . -type f ! -name package.json ! -name pnpm-lock.yaml ! -name pnpm-workspace.yaml ! -name .npmrc -delete \
+ && find . -mindepth 1 -type d -empty -delete
+FROM node:22-alpine AS deps
+RUN corepack enable
+WORKDIR /repo
+COPY --from=manifests /repo .
 # AUGUR's kit packages come from GitHub Packages (.npmrc): a build secret, so the token stays out of the image.
 RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN pnpm install --frozen-lockfile
+FROM deps AS build
+COPY . .
 ARG PACKAGE
 ARG FRONTEND=""
 # pnpm deploy reads the lockfile's packages again, the kit's among them, so it needs the token too.
@@ -29,6 +40,7 @@ RUN if [ -n "$FRONTEND" ]; then \
 FROM node:22-alpine AS updater
 RUN apk add --no-cache docker-cli docker-cli-compose cosign
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 WORKDIR /app
 COPY --from=build /out .
 # This release's deploy files: the updater of the release before writes them onto the server when it
@@ -45,6 +57,7 @@ CMD ["node", "dist/index.js"]
 FROM node:22-alpine AS registry
 RUN apk add --no-cache cosign
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 WORKDIR /app
 COPY --from=build /out .
 ENV NODE_ENV=production
@@ -53,6 +66,7 @@ CMD ["node", "dist/index.js"]
 
 FROM node:22-alpine AS service
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 WORKDIR /app
 COPY --from=build /out .
 ENV NODE_ENV=production

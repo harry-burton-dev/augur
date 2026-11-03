@@ -1,0 +1,78 @@
+{
+  "$comment": "The sample cast pnpm seed makes (docs/seed.md). Everything here is made up. Change it, or pass --data with your own file of the same shape; nothing in the code names any of it.",
+  "synthetic": {
+    "emailDomain": "sample.augur.invalid",
+    "usernamePrefix": "sample-",
+    "note": "Sample data: made up by pnpm seed, not about real people or things."
+  },
+  "floors": [
+    {
+      "key": "operations",
+      "name": "Operations",
+      "teams": [
+        { "key": "port-services", "name": "Port Services" },
+        { "key": "fleet", "name": "Fleet" }
+      ]
+    },
+    { "key": "finance", "name": "Finance", "teams": [{ "key": "payroll", "name": "Payroll" }] },
+    { "key": "compliance", "name": "Legal and Compliance" }
+  ],
+  "people": [
+    { "key": "amara-okafor", "firstName": "Amara", "lastName": "Okafor", "floors": ["operations"], "roles": ["editor", "publisher"] },
+    { "key": "tomas-lindqvist", "firstName": "Tomas", "lastName": "Lindqvist", "floors": ["port-services"], "roles": ["editor"] },
+    { "key": "priya-raman", "firstName": "Priya", "lastName": "Raman", "floors": ["port-services"], "roles": ["editor"] },
+    { "key": "jonah-mercer", "firstName": "Jonah", "lastName": "Mercer", "floors": ["fleet"], "roles": ["editor"] },
+    { "key": "lucia-ferreira", "firstName": "Lucia", "lastName": "Ferreira", "floors": ["fleet"] },
+    { "key": "hamid-sadeghi", "firstName": "Hamid", "lastName": "Sadeghi", "floors": ["finance"], "roles": ["editor", "publisher"] },
+    { "key": "grace-whitfield", "firstName": "Grace", "lastName": "Whitfield", "floors": ["payroll"] },
+    { "key": "mei-tanaka", "firstName": "Mei", "lastName": "Tanaka", "floors": ["compliance"], "roles": ["editor", "publisher"] },
+    { "key": "owen-pryce", "firstName": "Owen", "lastName": "Pryce", "floors": ["compliance", "operations"] },
+    { "key": "sofia-brandt", "firstName": "Sofia", "lastName": "Brandt", "floors": [], "roles": ["admin"] }
+  ],
+  "documents": [
+    {
+      "floor": "org",
+      "items": [
+        {
+          "title": "How we work: a short guide for new starters",
+          "filename": "how-we-work.md",
+          "text": "# How we work\n\nWe move goods between ports for our customers, safely and on time.\n\n## Your first week\n\n- Meet your team lead and read your floor's library.\n- Book the safety briefing with Operations.\n- Ask Legal and Compliance before you sign anything on the company's behalf.\n"
+        },
+        {
+          "title": "Quarterly update: summer",
+          "filename": "quarterly-update-summer.md",
+          "text": "# Quarterly update: summer\n\nVolumes rose through the season. Two new berths opened, and the fleet's on-time rate held above target.\n\n## Next quarter\n\n- Finish the crane replacement at the north terminal.\n- Review the fuel contracts before renewal.\n"
+        }
+      ]
+    },
+    {
+      "floor": "operations",
+      "items": [
+        {
+          "title": "Berth allocation procedure",
+          "filename": "berth-allocation.md",
+          "text": "# Berth allocation\n\n1. Confirm the vessel's arrival window with the agent.\n2. Check draught against the berth's limit.\n3. Book pilots and tugs.\n4. Record the allocation and tell the terminal.\n"
+        }
+      ]
+    },
+    {
+      "floor": "compliance",
+      "items": [
+        {
+          "title": "Sanctions screening checklist",
+          "filename": "sanctions-screening.md",
+          "text": "# Sanctions screening\n\nScreen every new customer, vessel and counterparty before the first booking, and again on any change of owner or flag.\n"
+        }
+      ]
+    }
+  ],
+  "entities": [
+    { "type": "organization", "label": "Northgate Shipping Agency", "description": "Agent for most vessels calling at the north terminal." },
+    { "type": "port", "label": "Port of Calderhaven", "aliases": ["Calderhaven"], "description": "The home port: two terminals and eight berths." },
+    { "type": "port", "label": "Port of Westmere", "description": "A partner port on the western route." },
+    { "type": "vessel", "label": "MV Silver Heron", "description": "A feeder container ship on the western route." },
+    { "type": "vessel", "label": "MV Northern Lark", "description": "A general cargo ship chartered each winter." },
+    { "type": "facility", "label": "North Terminal", "description": "The container terminal at Calderhaven." },
+    { "type": "place", "label": "Western Route", "description": "The weekly loop between Calderhaven and Westmere." }
+  ]
+}
