@@ -36,7 +36,7 @@ export const augurDevIdentity = (repository: string | readonly string[]) =>
  * (`^https://github\\.com/acme/augur/...`). Undefined for a pattern of several, or one that names none.
  */
 export const repositoryOfIdentity = (identity: string): string | undefined =>
-  /^\^?https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\//.exec(identity.replace(/\\(?=[.\/-])/g, ''))?.[1];
+  /^\^?https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\//.exec(identity.replace(/\\(?=[./-])/g, ''))?.[1];
 /** An AUGUR or app version that's a dev build: <next patch>-dev.<run>. */
 export const isDevBuild = (version: string) => /-dev\.\d+$/.test(version);
 export const releaseIdentity = (workflow: string | readonly string[]) => `^${anyOf(workflow)}@refs/heads/(${[...RELEASE_BRANCHES, HOTFIX_BRANCH].join('|')})$`;
