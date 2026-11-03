@@ -1,5 +1,12 @@
 # @augur/upgrades
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [9e021dd]
+  - @augur/app-kit@0.3.0
+
 ## 0.1.0
 
 ### Minor Changes

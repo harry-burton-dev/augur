@@ -1,5 +1,11 @@
 # @augur/app-kit
 
+## 0.3.0
+
+### Minor Changes
+
+- 9e021dd: Quill gains `FilterBar` (and `filterValue`), the React part for the Lit kit's `ui-filter-bar`: a menu per filter, a sort, the count, and what's on as tags with Clear all.
+
 ## 0.2.0
 
 ### Minor Changes

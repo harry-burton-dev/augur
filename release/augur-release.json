@@ -1,34 +1,18 @@
 {
-  "version": "0.14.0",
-  "name": "Avocet",
+  "version": "0.15.0",
+  "name": "Bittern",
   "channel": "beta",
-  "released": "2026-11-02",
+  "released": "2026-11-03",
   "upgradeFrom": ">=0.1.0",
   "changed": [
     "@augur/app-kit",
-    "@augur/app-tools",
-    "@augur/kit-common",
-    "@augur/mfe-sdk",
-    "@augur/service-kit",
-    "@augur/shell-kit",
-    "@augur/ui-kit",
-    "@augur/events",
-    "@augur/gateway",
-    "@augur/identity",
-    "@augur/models",
-    "@augur/registry",
-    "@augur/storage",
-    "@augur/updater",
     "@augur/admin",
     "@augur/home",
     "@augur/shell",
     "@augur/upgrades",
     "@apps/folio-frontend",
-    "@apps/folio",
     "@apps/auspex-frontend",
-    "@apps/auspex",
-    "@apps/atlas-frontend",
-    "@apps/atlas"
+    "@apps/atlas-frontend"
   ],
   "breaking": [],
   "settings": {
@@ -138,23 +122,12 @@
       "PLATFORM_ADMIN_DEPARTMENT",
       "SERVER_RING"
     ],
-    "added": [
-      "IDENTITY_DATABASE_PASSWORD",
-      "REGISTRY_DATABASE_PASSWORD",
-      "EVENTS_DATABASE_PASSWORD",
-      "MODELS_DATABASE_PASSWORD",
-      "KEYCLOAK_DATABASE_PASSWORD",
-      "DEPLOYMENT_TIME_ZONE",
-      "DEPLOYMENT_ID",
-      "DEPLOYMENT_REPORTING",
-      "OTEL_EXPORTER_OTLP_ENDPOINT",
-      "GRAFANA_ADMIN_PASSWORD"
-    ],
+    "added": [],
     "removed": []
   },
   "parts": {
     "@augur/app-kit": {
-      "version": "0.2.0"
+      "version": "0.3.0"
     },
     "@augur/app-tools": {
       "version": "0.2.0"
@@ -199,31 +172,31 @@
       "version": "0.8.0"
     },
     "@augur/admin": {
-      "version": "0.12.0"
+      "version": "0.12.1"
     },
     "@augur/home": {
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     "@augur/shell": {
-      "version": "0.12.0"
+      "version": "0.12.1"
     },
     "@augur/upgrades": {
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     "@apps/folio-frontend": {
-      "version": "0.6.0"
+      "version": "0.6.1"
     },
     "@apps/folio": {
       "version": "0.3.2"
     },
     "@apps/auspex-frontend": {
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     "@apps/auspex": {
       "version": "0.1.2"
     },
     "@apps/atlas-frontend": {
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     "@apps/atlas": {
       "version": "0.1.2"

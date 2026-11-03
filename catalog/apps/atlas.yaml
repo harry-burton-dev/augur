@@ -9,7 +9,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/apps/atlas/
     augur.dev/release-unit: augur
-    augur.dev/version: 0.2.0
+    augur.dev/version: 0.2.1
     augur.dev/app-id: atlas
     augur.dev/route: /atlas
     augur.dev/sdk-range: ^1.4.0
@@ -32,7 +32,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/apps/atlas/frontend/
     augur.dev/package: "@apps/atlas-frontend"
-    augur.dev/version: 0.2.0
+    augur.dev/version: 0.2.1
     augur.dev/release-unit: augur
     augur.dev/app-id: atlas
 spec:
