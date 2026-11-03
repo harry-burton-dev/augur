@@ -15,7 +15,8 @@ import {
   recordAudit,
   SCOPES,
   ServiceAuthUnavailable,
-  serviceLogging,
+  problemDetails,
+  serviceFastifyOptions,
   signedInRecently,
   type FloorLookup,
   type FloorPlace,
@@ -74,6 +75,7 @@ import { automaticDevUpgrade, automaticUpgrade, goBackTargets, historyEntry, Upd
 import { afterLook, lookDue, MIN_CALLS as AFTER_MIN_CALLS, startAfterWatch } from './after-watch.ts';
 import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
+import { HALTED_PRODUCTION_ONLY, takesHaltedOnRequest } from './ring.ts';
 import semver from 'semver';
 import { randomUUID } from 'node:crypto';
 import {
@@ -223,7 +225,8 @@ export const buildApp = async ({
   const live = new LiveOverrides(updates.ring, tailnet);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
-  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } }).withTypeProvider<TypeBoxTypeProvider>();
+  const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
+  await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
@@ -1265,6 +1268,8 @@ export const buildApp = async ({
           history: history.map(historyEntry),
           line,
           ...(portalUrl ? { portalUrl } : {}),
+          // Whether a deployment admin may install a halted release here, to test going back (ADR 0051).
+          haltedInstall: takesHaltedOnRequest(updates.ring) ? { allowed: true } : { allowed: false, why: HALTED_PRODUCTION_ONLY },
         };
       };
 
@@ -1341,6 +1346,65 @@ export const buildApp = async ({
             target: view.next,
             detail: { from: view.running.version, ...(Object.keys(settings).length ? { settings: Object.keys(settings) } : {}) },
           });
+          return reply.code(202).send(await updatesPage());
+        },
+      );
+
+      /**
+       * Installs a release its publisher halted, on request, to prove AUGUR goes back by itself from a
+       * broken release (ADR 0051). Only on a dev or preview server, for a deployment admin who entered
+       * their password in the last few minutes, naming the exact version and why. Every request, allowed
+       * or refused, is audited. The watch then judges it like any other upgrade.
+       */
+      app.put<{ Body: { version: string; reason: string } }>(
+        '/platform/upgrade/halted',
+        {
+          schema: {
+            body: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['version', 'reason'],
+              properties: {
+                version: { type: 'string', minLength: 1, maxLength: 64 },
+                reason: { type: 'string', minLength: 10, maxLength: 500, pattern: '^[^\\r\\n]*$' },
+              },
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          const { version, reason } = req.body;
+          const from = updates.running.version;
+          const refuse = async (code: number, body: { error: string; message: string; requiredRole?: string }) => {
+            await record(req, { actor: { id: caller?.id ?? 'unknown', kind: 'user' }, app: 'registry', action: 'platform.halted-install-refused', target: version, detail: { from, reason, why: body.message } });
+            return reply.code(code).send(body);
+          };
+          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return refuse(403, needsDeploymentAdmin('install a halted release'));
+          if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
+            return refuse(401, { error: 'sign_in_again', message: 'Enter your password again to install a halted release. It’s asked for anything this drastic.' });
+          }
+          if (!takesHaltedOnRequest(updates.ring)) return refuse(403, { error: 'forbidden', message: HALTED_PRODUCTION_ONLY });
+          const target = updates.result.releases.find((r) => r.version === version);
+          if (!target?.halted) return refuse(409, { error: 'conflict', message: `AUGUR ${version} isn’t a release its publisher halted. Upgrade to a release that wasn’t halted the usual way.` });
+          if (!semver.valid(version) || !semver.valid(from) || !semver.gt(version, from)) {
+            return refuse(409, { error: 'conflict', message: `AUGUR ${version} isn’t newer than ${from}, which this server runs, so the watch wouldn’t judge it.` });
+          }
+          const manifest = target.manifest;
+          const images = manifest?.images ?? {};
+          if (!manifest || !Object.keys(images).length) return refuse(409, { error: 'conflict', message: `AUGUR ${version}’s release file names no images, so it can’t be applied.` });
+          if (!semver.satisfies(from, manifest.upgradeFrom, { includePrerelease: true })) {
+            return refuse(409, { error: 'conflict', message: `AUGUR ${version} upgrades only from ${manifest.upgradeFrom}, and this server runs ${from}.` });
+          }
+          // Going back by itself is the point, and it's unsafe past a breaking release.
+          const breaking = updates.result.releases.find((r) => semver.valid(r.version) && semver.gt(r.version, from) && semver.lte(r.version, version) && r.manifest?.breaking.length);
+          if (breaking) return refuse(409, { error: 'conflict', message: `AUGUR ${breaking.version} is breaking, so AUGUR couldn’t go back from ${version} by itself. Test going back with a release that isn’t.` });
+          const id = randomUUID();
+          if (!(await store.requestUpgrade({ id, from, version, images, requestedBy: caller.id, requestedByName: caller.name }))) {
+            return refuse(409, { error: 'conflict', message: 'An upgrade is already waiting or under way.' });
+          }
+          upgradeSettings = undefined;
+          req.log.info({ by: caller.id, from, to: version, reason }, 'halted release requested');
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.halted-install-requested', target: version, detail: { from, reason, halted: target.halted.reason } });
           return reply.code(202).send(await updatesPage());
         },
       );
