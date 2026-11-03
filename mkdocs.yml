@@ -79,3 +79,4 @@ nav:
       - 0046. The UI kit lives in its own repository, and the shell serves the version it pins: decisions/0046-ui-kit-in-its-own-repository.md
       - 0047. Apps in their own repositories release there, and AUGUR's feed lists them: decisions/0047-app-repositories-in-augurs-feed.md
       - 0048. Apps load the UI kit from a kit URL that the deployment serves: decisions/0048-kit-served-from-a-kit-url.md
+      - 0049. AUGUR ships the pinned releases of its pillar apps, made in their own repositories: decisions/0049-pillar-apps-shipped-from-their-releases.md
