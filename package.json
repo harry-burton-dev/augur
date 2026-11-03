@@ -25,7 +25,9 @@
     "check:reasons": "node scripts/check-reasons.mjs",
     "catalog": "node scripts/catalog.mjs",
     "check:catalog": "node scripts/catalog.mjs check",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check:kit": "node scripts/kit.mjs check",
+    "kit:pin": "node scripts/kit.mjs pin"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",

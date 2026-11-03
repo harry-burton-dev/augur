@@ -1,6 +1,4 @@
-import '@augur/kit-common/tokens.css';
-import '@augur/kit-common/kit.css';
-import '@augur/app-kit/kit.css';
+// The kit's own CSS (tokens, Common, Quill) is linked from the kit bundle, before this (vite.config.ts).
 import '@augur/shell-kit/kit.css';
 import '@augur/ui-kit/base.css';
 import './shell.css';

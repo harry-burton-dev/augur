@@ -94,6 +94,8 @@ services:
     environment:
       # Other sites apps may load from, space separated (also allow each in Admin, Apps).
       APP_ORIGINS: ${APP_ORIGINS:-}
+      # Where the UI kit is loaded from: this server's /kit/ unless set (docs/deploy.md, "The UI kit").
+      KIT_URL: ${KIT_URL:-/kit/}
       # The front door's limits (docs/deploy.md, "Limits at the front door"); the image's defaults when unset.
       API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
       API_RATE_BURST: ${API_RATE_BURST:-200}

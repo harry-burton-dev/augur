@@ -63,13 +63,18 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 - Shared hot spots: `platform/packages/mfe-sdk`, `platform/packages/ui-kit`
   (including `src/components/icon.ts`), `platform/services/gateway`. Keep
   changes there in their own small PR and merge it first.
+- The React kits (Common, Quill, Aerie) and their tokens live in the
+  `augur-kit` repository (ADR 0046) and arrive here as packages from GitHub
+  Packages (`.npmrc`, `NODE_AUTH_TOKEN`). A kit change is a kit release, then
+  a PR here that bumps it. A cloud session can't read those packages: after
+  changing a kit version, run the Lockfile workflow on the branch.
 
 ## Design rules (ADR 0015)
 - Shell behaviour is a rule driven by manifests and floors, never a special
   case for one app or screen.
 - Colours, durations and distances come only from
-  the token files in `platform/packages/kit-common/tokens/` (`common`, `shell`,
-  `app`; ADR 0015). New `floor-*` tokens must
+  the token files in `augur-kit`'s `packages/kit-common/tokens/` (`common`,
+  `shell`, `app`; ADR 0015). New `floor-*` tokens must
   also be copied into the design tool Wave is made in (tell Harry).
 - Icons come from Lucide through `icon.ts`. Never hand-write SVG.
 - App layout and interaction rules agreed with Harry live in

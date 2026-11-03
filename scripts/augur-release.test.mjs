@@ -112,3 +112,13 @@ test('a new minor or major takes the next release name, and a patch keeps its re
   assert.equal(titleOf({ version: '0.13.0' }), '0.13.0');
   assert.equal(after(first, { '@augur/registry': '0.3.1', '@augur/mfe-sdk': '1.1.0' }).name, undefined, 'no names given, no name');
 });
+
+test('the kit, taken as packages from augur-kit, is a part at the version installed', async () => {
+  const { readParts } = await import('./augur-release.mjs');
+  const parts = readParts();
+  for (const name of ['@augur/kit-common', '@augur/app-kit', '@augur/shell-kit']) {
+    assert.ok(parts[name], `${name} is a part`);
+    assert.equal(parts[name].external, true, `${name} comes from another repository`);
+  }
+  assert.equal(parts['@augur/mfe-sdk'].external, undefined);
+});

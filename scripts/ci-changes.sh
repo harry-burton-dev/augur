@@ -27,14 +27,6 @@ touches() { [ "$all" = true ] || ! git diff --quiet "$range" -- "$@"; }
 say() { echo "$1=$2" >> "$out"; echo "$1: $2"; }
 pr_only() { if [ "${EVENT:-}" = push ]; then say "$1" false; elif touches "${@:2}"; then say "$1" true; else say "$1" false; fi; }
 
-# The kits' code, tokens or stories (ADR 0016).
-if touches platform/packages/ui-kit/src platform/packages/ui-kit/.storybook \
-    platform/packages/kit-common/src platform/packages/kit-common/tokens \
-    platform/packages/app-kit/src platform/packages/shell-kit/src platform/storybook; then
-  say storybook true
-else
-  say storybook false
-fi
 # What the shell, Home and the shared packages are built from, and the Folio release the tests mount.
 pr_only contract platform/frontends platform/packages platform/contract release/shipped-apps.json infra/shipped-app.sh \
   ':!platform/frontends/admin' ':!platform/frontends/upgrades' ':!**/*.md' package.json pnpm-lock.yaml

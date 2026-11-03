@@ -16,7 +16,9 @@ COPY . .
 RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN pnpm install --frozen-lockfile
 ARG PACKAGE
 ARG FRONTEND=""
-RUN pnpm --filter "${PACKAGE}..." build && pnpm --filter ${PACKAGE} deploy --prod --legacy /out
+# pnpm deploy reads the lockfile's packages again, the kit's among them, so it needs the token too.
+RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN \
+    pnpm --filter "${PACKAGE}..." build && pnpm --filter ${PACKAGE} deploy --prod --legacy /out
 RUN if [ -n "$FRONTEND" ]; then \
       pnpm --filter "${FRONTEND}..." build \
       && cp -r "$(pnpm --filter "${FRONTEND}" exec pwd)/dist" /out/frontend; \

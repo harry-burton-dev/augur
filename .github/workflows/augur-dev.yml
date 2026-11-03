@@ -12,10 +12,9 @@ on:
       - 'platform/**'
       - 'infra/**'
       - 'release/**'
-      # Nothing that goes into an image: notes, the contract tests and the Storybook.
+      # Nothing that goes into an image: notes and the contract tests.
       - '!**/*.md'
       - '!platform/contract/**'
-      - '!platform/storybook/**'
   workflow_dispatch:
 concurrency:
   group: augur-dev

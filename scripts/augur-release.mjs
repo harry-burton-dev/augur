@@ -12,8 +12,9 @@
 //   node scripts/augur-release.mjs devs-clean [<tag>...]
 //                                            deletes AUGUR's older dev builds, keeping the newest DEV_BUILDS_KEPT and those named
 //
-// Parts are the packages under platform/ (services, frontends, packages) and those of the apps that ship
-// with AUGUR (PILLAR_APPS), at the releases release/shipped-apps.json pins. Each keeps its own version and changelog; the AUGUR version moves when any of them does:
+// Parts are the packages under platform/ (services, frontends, packages), those of the apps that ship
+// with AUGUR (PILLAR_APPS), at the releases release/shipped-apps.json pins, and the @augur packages they
+// take from other repositories (the kit). Each keeps its own version and changelog; the AUGUR version moves when any of them does:
 //   - a part's major bump (or a part removed) is breaking: deployments must be on the previous AUGUR
 //     release before taking this one (`upgradeFrom`), and the release lists why under `breaking`
 //   - any other new feature (a minor bump, or a new part) is a feature
@@ -59,7 +60,29 @@ export const readParts = () => {
       parts[name] = { version, path };
     }
   }
-  return { ...parts, ...shippedParts(shipped) };
+  return { ...readExternalParts(parts), ...parts, ...shippedParts(shipped) };
+};
+
+/**
+ * The parts AUGUR takes as packages from other repositories (the kit, ADR 0046): every @augur dependency
+ * of a part that comes from a registry (an `npm:` alias), at the version installed, or else the lowest its
+ * range allows.
+ */
+export const readExternalParts = (parts) => {
+  const external = {};
+  for (const { path } of Object.values(parts)) {
+    const pkg = readJson(`${path}/package.json`);
+    for (const [name, spec] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
+      const alias = /^npm:(@[^@/]+\/[^@]+)@(.+)$/.exec(String(spec));
+      if (!name.startsWith('@augur/') || !alias) continue;
+      // Where it is installed: its published CHANGELOG.md is there too, for the release notes.
+      const dir = `${path}/node_modules/${name}`;
+      const installed = existsSync(join(root, dir, 'package.json'));
+      const version = installed ? readJson(`${dir}/package.json`).version : semver.minVersion(alias[2])?.version;
+      if (version && !(external[name] && semver.gt(external[name].version, version))) external[name] = { version, path: installed ? dir : `npm:${alias[1]}`, external: true };
+    }
+  }
+  return external;
 };
 
 /** The deployment's settings: every key in .env.example, and the ones it must set (not commented out). */
@@ -306,8 +329,9 @@ const main = () => {
       // A part added or removed since the last release is fine: the next release takes it in or out.
       // A part's version changing outside the Version packages PR isn't.
       // A shipped app's parts move with its pin (scripts/shipped-apps.mjs pin), which adds the changeset that moves AUGUR.
-      for (const [name, { version, app }] of Object.entries(parts)) {
-        if (app) continue;
+      // A package from another repository (the kit) moves with a pull request here that bumps it.
+      for (const [name, { version, app, external }] of Object.entries(parts)) {
+        if (app || external) continue;
         const released = previous.parts[name]?.version;
         if (released && released !== version) problems.push(`${name} is ${version}, but ${RELEASE_FILE} says ${released}`);
       }

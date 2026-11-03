@@ -118,7 +118,7 @@ Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feat
 
 Vite and Storybook already change what you see as you save. `pnpm dev:app <id>` runs the real shell and kit with your app's frontend from source (hot reload) and its service beside it. Three switches make more of it live:
 
-- `--kit` also rebuilds the UI kit, its tokens (`tokens/*.tokens.json`) and the shared modules the shell serves as you change them, and reloads the page, so a change to a kit part shows in your app in a few seconds.
+- `--kit` also rebuilds the Lit kit and the shared modules the shell serves as you change them, and reloads the page. The React kits are in the `augur-kit` repository: work on a part there, in its Storybook.
 - `DEV_PREVIEWS=all` (or ids, comma separated) turns the app's feature previews on for the stand-in person.
 - `DEV_HOST=0.0.0.0` opens the dev server to other machines on the tailnet (any `*.ts.net` name, plus `DEV_ALLOWED_HOSTS`), such as your phone.
 
@@ -132,7 +132,7 @@ Vite and Storybook already change what you see as you save. `pnpm dev:app <id>` 
 
 Only the app's developers (Admin → Apps) can, only on the workbench, and only from a machine on the workbench's own tailnet: the registry refuses it unless `SERVER_RING=dev`, and only there does the front door's Content Security Policy let the shell load scripts from `https://*.<tailnet>.ts.net` (and its reload socket from `wss://*.<tailnet>.ts.net`), where `<tailnet>` comes from `PLATFORM_URL`. Never all of `*.ts.net`: every Tailscale user's machines are under it. A workbench whose `PLATFORM_URL` isn't `https://<machine>.<tailnet>.ts.net` loads from no machine. Anywhere else Previews still shows it, saying why. The address must be https on a name on that tailnet and end in `.js` or `.ts`. It's kept in memory, so a registry restart puts you back on the app. The app's service is the installed one: to try service changes, open a pull request and use its preview. The kit and shared modules your entry imports come from your machine too, so a kit change shows as you make it.
 
-For the kits on their own, `pnpm --filter @augur/storybook storybook` shows the React kits, and `pnpm --filter @augur/ui-kit storybook` the frozen Lit kit. The published Storybook holds both, with the Lit kit inside it. Chromatic snapshots only the React kits' stories, because a composed Storybook isn't snapshotted. CI publishes the Storybook to Chromatic (ADR 0016) only when a kit's code, tokens or stories change, on the pull request and on the push to `main` that brings it in: the pull request links its build, and shows what looks different there, to accept or deny in Chromatic.
+For the kits on their own: the React kits' Storybook is in the `augur-kit` repository (`pnpm storybook` there), which publishes it to Chromatic (ADR 0016, ADR 0046) when a part, a token or a story changes. `pnpm --filter @augur/ui-kit storybook` here shows the frozen Lit kit.
 
 ## What's left to build
 

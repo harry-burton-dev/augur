@@ -76,6 +76,7 @@ import {
   type ServerNotification,
   type Session,
 } from './host/index.js';
+import { pageKit, versionLine } from './host/kit.js';
 
 export interface HostProps {
   session: Session;
@@ -703,7 +704,7 @@ export function Host({
     shell.floor = floor?.id ?? '';
     shell.functions = previewApps.length || featureApps.some((a) => a.previews.some(choosable)) ? [...alphaFunctions, PREVIEWS_FUNCTION] : alphaFunctions;
     shell.canSwitchWorkspace = false;
-    shell.version = `${__SHELL_VERSION__} · SDK ${SDK_VERSION}`;
+    shell.version = versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit());
   }, [catalogue, session, floor, previewApps, featureApps]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.
