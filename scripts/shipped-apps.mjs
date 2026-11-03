@@ -120,8 +120,10 @@ export const composeProblems = (json, file, text, kind, platform) => {
     if (upstreams[id] !== `http://${id}:${pin.port}`) problems.push(`${file}: the gateway's APP_UPSTREAMS has ${id}=${upstreams[id] ?? '(nothing)'}, not ${id}=http://${id}:${pin.port}.`);
   }
   for (const id of Object.keys(upstreams)) if (!ids.includes(id)) problems.push(`${file}: the gateway's APP_UPSTREAMS names ${id}, which isn't in release/shipped-apps.json.`);
-  const clients = words(envOf(services.identity).SERVICE_CLIENT_SECRETS).map((c) => c.split('=')[0]);
-  for (const id of ids) if (!clients.includes(`app-${id}`)) problems.push(`${file}: identity's SERVICE_CLIENT_SECRETS has no app-${id}, so ${id} can't sign in.`);
+  // The service that gives Keycloak its clients' secrets (identity's realm job, keycloak-config, since ADR 0057).
+  const [secretsBy, secrets] = Object.entries(services).map(([name, s]) => [name, envOf(s).SERVICE_CLIENT_SECRETS]).find(([, v]) => v) ?? ['identity', ''];
+  const clients = words(secrets).map((c) => c.split('=')[0]);
+  for (const id of ids) if (!clients.includes(`app-${id}`)) problems.push(`${file}: ${secretsBy}'s SERVICE_CLIENT_SECRETS has no app-${id}, so ${id} can't sign in.`);
   for (const id of words(envOf(services.storage).APP_STORAGE)) if (!ids.includes(id)) problems.push(`${file}: storage's APP_STORAGE names ${id}, which isn't in release/shipped-apps.json; other apps' storage goes in .env.`);
   return problems;
 };
