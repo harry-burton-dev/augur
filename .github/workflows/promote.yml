@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       unit:
-        description: 'What to make stable: augur, or an app id (such as mandate)'
+        description: 'What to make stable: augur, or the id of an app released from this repository'
         required: true
         default: augur
       version:
