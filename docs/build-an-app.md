@@ -112,19 +112,33 @@ Apps show more than the shell does, but each thing in them still says little: **
 
 ## 4. The service
 
-`service/src/app.ts` serves `/healthz` for operators, and the app's API under `/v1`. The gateway checks the sign-in token and passes on who is calling, signed for your service alone. The scaffold's `signedCallers` hook checks that signature, so `callerFromHeaders` only ever reads the person the gateway signed (see [Signed caller](signed-caller.md)):
+`service/src/index.ts` starts the service with the service kit's `startAppService`, the one way every app starts: it builds the app, listens on `PORT`, launches its jobs, gives the registry its frontend and puts the app in the catalogue, and stops cleanly on `SIGTERM`. Everything it names (the app's id, its name in messages) comes from `manifest.json`:
 
 ```ts
-import { callerCheckFromEnv, callerFromHeaders, signedCallers } from '@augur/service-kit';
+import { readManifest, startAppService } from '@augur/service-kit';
+import { buildApp } from './app.ts';
 
-app.addHook('onRequest', signedCallers(callerCheckFromEnv('expenses')));
+const manifest = readManifest(import.meta.url);
+await startAppService({ manifest, buildApp: ({ jobs }) => buildApp({ manifest, jobs }) });
+```
 
-app.get('/claims', async (req, reply) => {
-  const caller = callerFromHeaders(req.headers);
-  if (!caller) return reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to see claims.' });
-  // caller.id, caller.name, caller.roles, caller.departments
+`service/src/app.ts` registers `appServer` first. It serves `/healthz` for operators, answers every error as problem details (below), and believes only the caller the gateway signed for your service (see [Signed caller](signed-caller.md)). The app's API goes under `/v1`. `floorCaller(manifest)` gives the caller and the floor they're on, or answers 401 or 400 for you; `signedInCaller(manifest)` only needs someone signed in:
+
+```ts
+import Fastify from 'fastify';
+import { appServer, floorCaller, serviceFastifyOptions } from '@augur/service-kit';
+
+const app = Fastify(serviceFastifyOptions());
+await appServer(app, { manifest });
+const onFloor = floorCaller(manifest);
+
+app.get('/v1/claims', async (req) => {
+  const caller = onFloor(req); // caller.id, caller.name, caller.roles, caller.workspace
+  return claims.on(caller.workspace.id);
 });
 ```
+
+`auditFor(appId, log)`, `notifyFor(appId, log)` and `peopleFor(appId)` reach the audit log, people's streams and identity's directory as the app, and fall back to the log and stand-ins under `pnpm dev:app`. `startAppService` gives `buildApp` the first two ready made.
 
 From the service kit, `notify` puts a notification on someone's stream (see [Notifications](notifications.md)) and `recordAudit` writes to the platform's audit log (each entry also keeps which service wrote it, from its signed token, so an entry that names someone as the actor still shows it came from your app); see [apps/README](../apps/README.md). A breaking API change goes under `/v2` beside `/v1`, as in [Versioning](versioning.md#http-apis).
 

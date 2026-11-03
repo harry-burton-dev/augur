@@ -17,3 +17,4 @@ export * from './config.js';
 export * from './pools.js';
 export * from './jobs.js';
 export * from './problems.js';
+export * from './app-service.js';
