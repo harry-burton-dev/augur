@@ -63,3 +63,7 @@ app pattern took it), **dropped** (say why in the file).
 | [Time is matter, light is need](time-is-matter.md) | to explore | 2026-11-02-wear-and-time |
 | [Turn-taking](turn-taking.md) | to explore | 2026-11-03-room-tone |
 | [Visible repair](visible-repair.md) | to explore | 2026-11-02-wear-and-time |
+| [Context is a working set](context-is-a-working-set.md) | to explore | batch 6 research |
+| [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
+| [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |
+| [The warrant shows](the-warrant-shows.md) | to explore | batch 6 research |

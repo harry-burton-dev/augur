@@ -2,8 +2,9 @@ import { Button, Choice, Dialog, TextField } from '@augur/app-kit';
 import { useState } from 'react';
 import { ApiError, type UpgradesApi } from './api.js';
 import { Muted, Section, When } from './look.js';
-import { endingOf, flowSteps, keepEntered, returnTo, signInAgainUrl, type Resume } from './model/flow.js';
-import type { AppJob, InstalledApp, PlatformUpdates, Upgrade } from './model/types.js';
+import { endingOf, flowSteps, keepEntered, keepReason, returnTo, signInAgainUrl, type Resume } from './model/flow.js';
+import { REASON_MAX, reasonProblem } from './model/halted.js';
+import type { AppJob, Halted, InstalledApp, PlatformUpdates, Upgrade } from './model/types.js';
 
 /** Where the person is now, for the address to come back to after entering the password. */
 const here = () => window.location.pathname;
@@ -131,6 +132,64 @@ export const GoBackDialog = (p: { updates: PlatformUpdates; version: string; api
     </div>
   </Dialog>
 );
+
+/**
+ * "Install AUGUR … for a test?": a release its publisher halted, installed on request on a dev or
+ * preview server only to prove AUGUR goes back by itself (ADR 0051). It asks why, for the audit log,
+ * and may send the person to enter their password again, then back here with the reason kept.
+ */
+export const HaltedInstallDialog = (p: { updates: PlatformUpdates; version: string; halted: Halted; api: UpgradesApi; reason: string; took: (u: PlatformUpdates) => void; onClose: () => void }) => {
+  const [reason, setReason] = useState(p.reason);
+  return (
+    <Dialog
+      open
+      danger
+      eyebrow="AUGUR"
+      heading={`Install AUGUR ${p.version} for a test?`}
+      summary={`Its publisher halted this release: ${p.halted.reason}. Install it only to test that AUGUR goes back by itself.`}
+      actionLabel="Install for a test"
+      busyLabel="Asking"
+      cancelLabel="Not now"
+      onClose={p.onClose}
+      onSubmit={async () => {
+        const problem = reasonProblem(reason);
+        if (problem) throw new Error(problem);
+        try {
+          p.took(await p.api.installHalted(p.version, reason.trim()));
+        } catch (e) {
+          if (e instanceof ApiError && e.code === 'sign_in_again') {
+            keepReason(p.version, reason);
+            return stepUp({ kind: 'halted', version: p.version });
+          }
+          throw e;
+        }
+      }}
+      fields={
+        <TextField
+          label="Why you’re installing it"
+          hint="One line. It goes to the audit log with your name and the version."
+          required
+          maxLength={REASON_MAX}
+          value={reason}
+          onChange={setReason}
+          validate={(v) => {
+            const problem = reasonProblem(v);
+            return problem ? { state: 'error', message: problem } : null;
+          }}
+        />
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <p className="m-0">
+          It upgrades as any release does: it backs up first and checks the backup restores, then restarts each part on {p.version} and watches it for 10 minutes. The watch judges it
+          as it judges any release. If it fails, AUGUR goes back to {p.updates.running.version} by itself.
+        </p>
+        <p className="m-0">If it passes the watch, it stays on {p.version} until someone goes back.</p>
+        <Muted>You may be asked for your password again.</Muted>
+      </div>
+    </Dialog>
+  );
+};
 
 /** "Install … ?" for an app's newer release: what it waits on, and that the server does the work. */
 export const InstallDialog = (p: { app: InstalledApp; version: string; api: UpgradesApi; done: (job: AppJob) => void; onClose: () => void }) => (
