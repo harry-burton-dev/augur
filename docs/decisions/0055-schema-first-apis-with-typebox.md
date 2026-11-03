@@ -48,7 +48,8 @@ Option 2.
 - The handlers' request types come from the schemas, so a handler can't read a field the schema doesn't
   allow.
 - New dependencies: `typebox`, `@fastify/type-provider-typebox`, `@fastify/swagger` in the services;
-  `@stoplight/spectral-cli` at the root.
+  Spectral runs through `pnpm dlx` at a version pinned in `scripts/check-contracts.mjs`, so its
+  dependencies stay out of the lockfile and the dependency scan.
 - Until the service starter lands (PER-266), each service keeps its own small `describeApi` in
   `src/contract.ts`; it moves into `@augur/service-kit` then.
 - Bumping `info.version` is still by hand, as [versioning.md](../versioning.md) says.
