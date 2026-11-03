@@ -64,6 +64,13 @@ describe('memoryJobs', () => {
     expect(ticks).toEqual([at]);
   });
 
+  it('leaves a job another process runs waiting, and says so', async () => {
+    const jobs = memoryJobs({ app: 'notes', log: quiet });
+    const render = jobs.elsewhere<string>('render');
+    const id = await jobs.start(render, 'v1');
+    expect(await jobs.status(id)).toMatchObject({ state: 'queued' });
+  });
+
   it('refuses two jobs with one name', () => {
     const jobs = memoryJobs({ app: 'notes', log: quiet });
     jobs.define('a', async () => {});
@@ -99,6 +106,7 @@ describe.runIf(process.env.DATABASE_URL)('jobs on Postgres', () => {
     await opened;
     await step('after', async () => {});
   });
+  const render = jobs.elsewhere<{ version: string }>('render');
   jobs.schedule('every-second', '* * * * * *', async () => {
     calls.ticks++;
   });
@@ -146,6 +154,14 @@ describe.runIf(process.env.DATABASE_URL)('jobs on Postgres', () => {
 
   it('runs a scheduled job on its schedule', async () => {
     await until(async () => calls.ticks >= 2, 10_000);
+  });
+
+  it('queues a job another process runs, and leaves it for that process', async () => {
+    const id = await jobs.start(render, { version: 'v1' }, { id: `${app}-render-v1` });
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(await jobs.status(id)).toMatchObject({ job: 'render', state: 'queued' });
+    const { rows } = await admin.query(`select queue_name from ${schema}.workflow_status where workflow_uuid = $1`, [id]);
+    expect(rows).toEqual([{ queue_name: `${app}.render` }]);
   });
 
   it('keeps its runs in the app’s own jobs schema', async () => {
