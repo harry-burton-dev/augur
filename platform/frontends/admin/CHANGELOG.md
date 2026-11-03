@@ -1,5 +1,11 @@
 # @augur/admin
 
+## 0.12.2
+
+### Patch Changes
+
+- 35547f6: The React kits (Common, Quill and Aerie) now come from the augur-kit repository as packages (ADR 0046), and are AUGUR release parts at the versions installed. Their Storybook and Chromatic run there.
+
 ## 0.12.1
 
 ### Patch Changes

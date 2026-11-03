@@ -1,5 +1,12 @@
 # @augur/contract-tests
 
+## 0.1.13
+
+### Patch Changes
+
+- Updated dependencies [35547f6]
+  - @augur/ui-kit@1.9.1
+
 ## 0.1.12
 
 ### Patch Changes
