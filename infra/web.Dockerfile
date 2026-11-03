@@ -22,7 +22,7 @@ RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/a
  && node infra/deploy/csp.mjs /site/index.html infra/deploy/nginx.conf > /default.conf.template
 
 # nginx as an unprivileged user, listening on 8080 rather than 80.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS web
+FROM nginxinc/nginx-unprivileged:1.30-alpine AS web
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 # Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
 ENV APP_ORIGINS=""
