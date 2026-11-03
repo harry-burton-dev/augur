@@ -12,6 +12,7 @@ import {
   health,
   packageVersion,
   REQUEST_ID_HEADER,
+  problemDetails,
   serviceLogging,
   signedCallerHeaders,
   withoutCallerHeaders,
@@ -123,6 +124,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
   const app = Fastify(serviceLogging()).withTypeProvider<TypeBoxTypeProvider>();
+  await app.register(problemDetails());
   await describeApi(app, `/api/gateway/${API_VERSION}`, `/${API_VERSION}`);
   // Someone reporting a problem can quote it, and it finds the request in every service's logs.
   app.addHook('onSend', async (req, reply) => {

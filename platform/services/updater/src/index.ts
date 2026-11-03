@@ -5,6 +5,8 @@
  * it's the `updater` profile in infra/deploy/compose.yml, and docs/upgrade.md says what it needs.
  *   node dist/index.js           watch for upgrades
  *   node dist/index.js replace   replace the updater's own container (see server.ts)
+ *   node dist/index.js check     one look of the watch after an upgrade, now: prints what it found
+ *                                as one JSON line and exits 1 when anything is wrong (upgrade.ts, checkOnce)
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, platformCredentialsFromEnv, serviceAuthFromEnv } from '@augur/service-kit';
@@ -13,7 +15,7 @@ import { appRunnerClient, registryClient } from './registry.ts';
 import { appReposFrom, appRunner } from './runner.ts';
 import { composeAppHost, composeServer } from './server.ts';
 import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity } from './signers.ts';
-import { lookAfterWatch, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
+import { checkOnce, lookAfterWatch, ROLL_ORDER, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
 
 // Every setting the updater reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('updater', [
@@ -68,6 +70,14 @@ if (process.argv[2] === 'replace') {
   await server.up([UPDATER]);
   log('replaced the updater');
   process.exit(0);
+}
+
+if (process.argv[2] === 'check') {
+  // The parts this deployment runs, as its compose.yml names them; every part AUGUR has, if that can't be read.
+  const named = await server.services().catch(() => [...ROLL_ORDER]);
+  const result = await checkOnce(server, ROLL_ORDER.filter((service) => named.includes(service)));
+  console.log(JSON.stringify(result));
+  process.exit(result.ok ? 0 : 1);
 }
 
 const credentials = platformCredentialsFromEnv('updater');
