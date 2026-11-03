@@ -40,6 +40,7 @@ RUN if [ -n "$FRONTEND" ]; then \
 FROM node:22-alpine AS updater
 RUN apk add --no-cache docker-cli docker-cli-compose cosign
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 WORKDIR /app
 COPY --from=build /out .
 # This release's deploy files: the updater of the release before writes them onto the server when it
@@ -56,6 +57,7 @@ CMD ["node", "dist/index.js"]
 FROM node:22-alpine AS registry
 RUN apk add --no-cache cosign
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 WORKDIR /app
 COPY --from=build /out .
 ENV NODE_ENV=production
@@ -64,6 +66,7 @@ CMD ["node", "dist/index.js"]
 
 FROM node:22-alpine AS service
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 WORKDIR /app
 COPY --from=build /out .
 ENV NODE_ENV=production
