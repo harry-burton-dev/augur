@@ -127,14 +127,30 @@ export const DomainEvent = Type.Object(
 );
 
 
-/** What every refusal carries: a short code, and a sentence a person can read. */
-export const Refusal = Type.Object(
-  { error: Type.String({ examples: ['forbidden'] }), message: Type.String({ description: 'Says why, and what would change it' }) },
-  { $id: 'Refusal' },
+/**
+ * What every refusal carries: an RFC 9457 problem (`application/problem+json`, @augur/service-kit's
+ * problemDetails), with AUGUR's `reason` and `whoCanChange`, and `error` and `message` for SDK 1.x clients.
+ * A handler may send just `{ error, message }`: problemDetails adds the rest.
+ */
+export const Refusal = Type.Unsafe<{ error: string; message: string; [extension: string]: unknown }>(
+  Type.Object(
+    {
+      type: Type.String({ description: 'about:blank unless the problem names its own type' }),
+      title: Type.String({ description: "The status's own phrase" }),
+      status: Type.Integer(),
+      detail: Type.String({ description: 'Says why, and what would change it' }),
+      instance: Type.Optional(Type.String()),
+      reason: Type.String({ description: 'A stable code a client can switch on', examples: ['forbidden'] }),
+      whoCanChange: Type.Optional(Type.String({ description: 'Who can fix it, in plain words, when someone can' })),
+      error: Type.String({ description: 'The same as reason, for SDK 1.x clients' }),
+      message: Type.String({ description: 'The same as detail, for SDK 1.x clients' }),
+    },
+    { $id: 'Refusal' },
+  ),
 );
 
 /** A refusal, and when it happens. */
-export const refused = (description: string) => ({ ...ref(Refusal), description });
+export const refused = (description: string) => ({ description, content: { 'application/problem+json': { schema: ref(Refusal) } } });
 
 /** A reply with no body. */
 export const empty = (description: string) => Type.Null({ description });

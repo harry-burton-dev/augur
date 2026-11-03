@@ -10,6 +10,7 @@ import {
   health,
   packageVersion,
   REQUEST_ID_HEADER,
+  problemDetails,
   serviceLogging,
   signedCallerHeaders,
   withoutCallerHeaders,
@@ -119,6 +120,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
   const app = Fastify(serviceLogging());
+  await app.register(problemDetails());
   // Someone reporting a problem can quote it, and it finds the request in every service's logs.
   app.addHook('onSend', async (req, reply) => {
     reply.header(REQUEST_ID_HEADER, req.id);

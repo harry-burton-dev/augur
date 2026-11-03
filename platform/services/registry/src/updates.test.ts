@@ -315,6 +315,54 @@ describe('upgrading', () => {
     expect(entries.map((e) => `${e.action} ${e.target}`)).toEqual(['platform.go-back-requested 0.3.0', 'platform.went-back 0.3.0']);
   });
 
+  it('installs a halted release on request, on dev and preview only, auditing every ask (ADR 0051)', async () => {
+    const halted = { reason: 'Broken on purpose, to test going back.' };
+    const feed = [
+      { ...release('0.4.0', 'beta', { images, breaking: ['x'] }), halted },
+      { ...release('0.3.0', 'beta', { images }), halted },
+      release('0.2.5', 'beta', { images }),
+      release('0.2.0', 'beta', { images }),
+    ];
+    const serverOn = async (ring: 'dev' | 'preview' | 'production') => {
+      const entries: { action: string; target?: string; detail?: Record<string, unknown> }[] = [];
+      const checker = new UpdateChecker({ feed: async () => feed, running: { version: '0.2.0', channel: 'beta' }, channel: 'beta', ring });
+      await checker.check();
+      return { server: await buildApp({ verifyService, updates: checker, audit: async (e) => void entries.push(e) }), entries };
+    };
+    const reason = 'Proving the watch goes back on staging.';
+    const ask = (server: Awaited<ReturnType<typeof buildApp>>, headers: Record<string, string>, version: string, why = reason) =>
+      server.inject({ method: 'PUT', url: '/v1/platform/upgrade/halted', headers, payload: { version, reason: why } });
+
+    const production = await serverOn('production');
+    expect((await production.server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json().haltedInstall).toMatchObject({ allowed: false, why: expect.stringContaining('production server') });
+    expect((await ask(production.server, fresh(), '0.3.0')).statusCode).toBe(403);
+    expect(production.entries.map((e) => e.action)).toEqual(['platform.halted-install-refused']);
+
+    const { server, entries } = await serverOn('preview');
+    expect((await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json().haltedInstall).toEqual({ allowed: true });
+    expect((await ask(server, orgAdmin, '0.3.0')).statusCode).toBe(403);
+    expect((await ask(server, deployer, '0.3.0')).json()).toMatchObject({ error: 'sign_in_again' });
+    expect((await ask(server, fresh(), '0.3.0', 'too short')).statusCode).toBe(400);
+    expect((await ask(server, fresh(), '0.2.5')).json().message).toContain('isn’t a release its publisher halted');
+    expect((await ask(server, fresh(), '0.4.0')).json().message).toContain('0.4.0 is breaking');
+    const asked = await ask(server, fresh(), '0.3.0');
+    expect(asked.statusCode).toBe(202);
+    expect(asked.json().upgrade).toMatchObject({ from: '0.2.0', version: '0.3.0', state: 'requested' });
+    // The updater gets it like any upgrade forward, so the watch judges it and goes back by itself.
+    const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
+    expect(target).toMatchObject({ version: '0.3.0', images, watch: {} });
+    expect((await ask(server, fresh(), '0.3.0')).json().message).toBe('An upgrade is already waiting or under way.');
+    expect(entries.map((e) => `${e.action} ${e.target}`)).toEqual([
+      'platform.halted-install-refused 0.3.0',
+      'platform.halted-install-refused 0.3.0',
+      'platform.halted-install-refused 0.2.5',
+      'platform.halted-install-refused 0.4.0',
+      'platform.halted-install-requested 0.3.0',
+      'platform.halted-install-refused 0.3.0',
+    ]);
+    expect(entries.find((e) => e.action === 'platform.halted-install-requested')?.detail).toMatchObject({ from: '0.2.0', reason });
+  });
+
   it('needs an admin who has just entered their password, and only the next release', async () => {
     const { server } = await setup();
     const ask = (headers: Record<string, string>, version = '0.3.0') => server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers, payload: { version } });
