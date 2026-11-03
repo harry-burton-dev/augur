@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import Type from 'typebox';
 import { callerFromHeaders, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
 import type { FeaturePreview } from './manifest.ts';
+import { empty, FeaturePreview as FeaturePreviewSchema, FeaturePreviewMode as FeaturePreviewModeSchema, FeaturePreviewsAdmin, params, ref, refused } from './schemas.ts';
 import type { Ring } from './ring.ts';
 import type { AppRecord, AppStore, FeatureOptIn, FeaturePreviewMode } from './store.ts';
 
@@ -44,11 +47,44 @@ export interface FeaturePreviewRouteOptions {
  */
 export const featurePreviewRoutes =
   ({ store, ring, now = () => new Date(), serviceOf, record }: FeaturePreviewRouteOptions) =>
-  async (app: FastifyInstance) => {
+  async (plain: FastifyInstance) => {
+    const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const findApp = async (id: string) => (await store.records()).find((r) => r.entry.id === id);
 
     /** The feature previews of every app the caller can open, and whether each is on for them. */
-    app.get('/feature-previews', async (req, reply) => {
+    app.get(
+      '/feature-previews',
+      {
+        schema: {
+          summary: "Apps' feature previews, and whether each is on for the caller (SDK 1.7)",
+          description: [
+            'Every app the caller can open that lists `previews` in its manifest. A preview is on for',
+            'everyone, for those who turned it on (opt-in), or off; one past its `until` day is ended',
+            'and off. On a preview server one nobody chose for is opt-in, on a production server off.',
+          ].join(' '),
+          response: {
+            200: Type.Object(
+              {
+                apps: Type.Array(
+                  Type.Object({
+                    app: Type.String(),
+                    name: Type.String(),
+                    previews: Type.Array(
+                      Type.Intersect([
+                        ref(FeaturePreviewSchema),
+                        Type.Object({ mode: ref(FeaturePreviewModeSchema), ended: Type.Optional(Type.Boolean()), on: Type.Boolean() }),
+                      ]),
+                    ),
+                  }),
+                ),
+              },
+              { description: 'The apps with feature previews' },
+            ),
+            401: refused('Not signed in'),
+          },
+        },
+      },
+      async (req, reply) => {
       const caller = callerFromHeaders(req.headers);
       if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to see previews.' });
       const [records, optIns] = await Promise.all([store.records(), store.featureOptIns({ person: caller.id })]);
@@ -68,12 +104,25 @@ export const featurePreviewRoutes =
             };
           }),
       };
-    });
+      },
+    );
 
     /** Turns one of an app's opt-in feature previews on or off for the caller alone. */
-    app.put<{ Params: { app: string; preview: string }; Body: { on: boolean } }>(
+    app.put(
       '/feature-previews/:app/:preview',
-      { schema: { body: { type: 'object', additionalProperties: false, required: ['on'], properties: { on: { type: 'boolean' } } } } },
+      {
+        schema: {
+          summary: "Turn one of an app's opt-in feature previews on or off for the caller alone",
+          params: params('app', 'preview'),
+          body: Type.Object({ on: Type.Boolean() }, { additionalProperties: false }),
+          response: {
+            204: empty('Chosen'),
+            401: refused('Not signed in'),
+            404: refused("No such app or preview, or the caller can't open the app"),
+            409: refused("It isn't opt-in (error not_opt_in), or it has ended (ended)"),
+          },
+        },
+      },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to try a preview.' });
@@ -107,17 +156,43 @@ export const featurePreviewRoutes =
       };
     };
 
-    app.get<{ Params: { id: string } }>('/apps/:id/feature-previews', async (req, reply) => {
-      if (!callerFromHeaders(req.headers)?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see who gets an app’s previews.' });
-      const found = await findApp(req.params.id);
-      if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-      return adminView(found);
-    });
+    app.get(
+      '/apps/:id/feature-previews',
+      {
+        schema: {
+          summary: "Who gets each of an app's feature previews (admins)",
+          params: params('id'),
+          response: {
+            200: { ...ref(FeaturePreviewsAdmin), description: 'Its feature previews' },
+            403: refused('Not an admin'),
+            404: refused('No such app is registered'),
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!callerFromHeaders(req.headers)?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see who gets an app’s previews.' });
+        const found = await findApp(req.params.id);
+        if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+        return adminView(found);
+      },
+    );
 
     /** Sets who gets one of an app's feature previews, or with `null` goes back to the server's default. Admins only; audited. */
-    app.put<{ Params: { id: string; preview: string }; Body: { mode: FeaturePreviewMode | null } }>(
+    app.put(
       '/apps/:id/feature-previews/:preview',
-      { schema: { body: { type: 'object', additionalProperties: false, required: ['mode'], properties: { mode: { enum: ['off', 'opt-in', 'everyone', null] } } } } },
+      {
+        schema: {
+          summary: "Set who gets one of an app's feature previews (admins)",
+          description: "`null` goes back to the server's default. Kept when the app registers new versions. Audited as app.preview-set.",
+          params: params('id', 'preview'),
+          body: Type.Object({ mode: Type.Union([ref(FeaturePreviewModeSchema), Type.Null()]) }, { additionalProperties: false }),
+          response: {
+            200: { ...ref(FeaturePreviewsAdmin), description: 'Its feature previews as they now are' },
+            403: refused('Not an admin'),
+            404: refused('No such app, or it offers no such preview'),
+          },
+        },
+      },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose who gets an app’s previews.' });
@@ -137,13 +212,28 @@ export const featurePreviewRoutes =
     );
 
     /** For the app's own service: which of its feature previews are on for one person, so the service can do as the frontend does. */
-    app.get<{ Params: { id: string; person: string } }>('/apps/:id/feature-previews/people/:person', async (req, reply) => {
-      const service = await serviceOf(req, reply);
-      if (service === undefined) return reply;
-      const own = service?.kind === 'app' && service.app === req.params.id;
-      if (!own && !callerFromHeaders(req.headers)?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only the app itself or an admin can ask whose previews are on.' });
-      const found = await findApp(req.params.id);
-      if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-      return { on: previewsOnFor(found, await store.featureOptIns({ person: req.params.person, app: found.entry.id }), ring, now()) };
-    });
+    app.get(
+      '/apps/:id/feature-previews/people/:person',
+      {
+        schema: {
+          summary: "Which of an app's feature previews are on for one person (the app's own service, or admins)",
+          params: params('id', 'person'),
+          response: {
+            200: Type.Object({ on: Type.Array(Type.String()) }, { description: 'The ids on for them' }),
+            403: refused("Neither the app's own service nor an admin"),
+            404: refused('No such app is registered'),
+            503: refused("The sign-in service can't be reached to check the caller's token"),
+          },
+        },
+      },
+      async (req, reply) => {
+        const service = await serviceOf(req, reply);
+        if (service === undefined) return reply;
+        const own = service?.kind === 'app' && service.app === req.params.id;
+        if (!own && !callerFromHeaders(req.headers)?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only the app itself or an admin can ask whose previews are on.' });
+        const found = await findApp(req.params.id);
+        if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+        return { on: previewsOnFor(found, await store.featureOptIns({ person: req.params.person, app: found.entry.id }), ring, now()) };
+      },
+    );
   };

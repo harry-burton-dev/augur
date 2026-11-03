@@ -1,4 +1,6 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import Type from 'typebox';
 import {
   callerFromHeaders,
   frontendDigest,
@@ -18,7 +20,6 @@ import {
   type FloorLookup,
   type FloorPlace,
   type NewAuditEntry,
-  type Scope,
   type ServiceCredentials,
   type ServiceIdentity,
   type ServiceVerifier,
@@ -27,6 +28,25 @@ import {
 } from '@augur/service-kit';
 import { SDK_VERSION } from '@augur/mfe-sdk';
 import { appRunnerRoutes } from './app-runner.ts';
+import { describeApi } from './contract.ts';
+import {
+  AllowedOrigin,
+  AppManifestEntry,
+  AppSettings,
+  CatalogueEntry,
+  empty,
+  FloorRule as FloorRuleSchema,
+  floorStateOf,
+  orNull,
+  params,
+  ref,
+  refused,
+  Scope as ScopeSchema,
+  ServedEntry,
+  StoredFrontend as StoredFrontendSchema,
+  UploadLimitBody,
+} from './schemas.ts';
+import { AfterWatch, PlatformUpdates, strings, Upgrade as UpgradeSchema, UpgradeStep } from './update-schemas.ts';
 import { AUGUR_UNIT, resolvedState } from './desired-state.ts';
 import { overviewBuilder, overviewRoutes } from './overview.ts';
 import { reportRoutes, ReportSender, type Reporting } from './report.ts';
@@ -34,7 +54,6 @@ import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import {
-  appEntrySchema,
   conflictFor,
   DEFAULT_UPLOAD_MB,
   entryOriginProblem,
@@ -47,7 +66,6 @@ import {
   floorKindsOf,
   unbuiltApps,
   versionProblem,
-  type AppEntry,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { LiveOverrides } from './live.ts';
@@ -62,14 +80,12 @@ import {
   MemoryAppStore,
   RouteTakenError,
   UnknownVersionError,
-  UPGRADE_STEPS,
   type AppRecord,
   type AppStore,
   type FloorRule,
   type StoredFrontend,
   type Upgrade,
   type UpgradeOutcome,
-  type UpgradeStepState,
 } from './store.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 
@@ -207,14 +223,16 @@ export const buildApp = async ({
   const live = new LiveOverrides(updates.ring, tailnet);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
-  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } }).withTypeProvider<TypeBoxTypeProvider>();
+  await describeApi(app, `/${API_VERSION}`);
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
-  app.get('/healthz', async () => health('registry', version, API_VERSION));
+  app.get('/healthz', { schema: { hide: true } }, async () => health('registry', version, API_VERSION));
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
   await app.register(
-    async (app) => {
+    async (plain) => {
+      const app = plain.withTypeProvider<TypeBoxTypeProvider>();
       const allowedOrigins = async () => (await store.origins()).map((o) => o.origin);
 
       /** Where a floor sits; undefined (and the reply sent) when it can't be said. */
@@ -235,9 +253,30 @@ export const buildApp = async ({
       };
 
       // The gateway verified who is calling, and the floor they're on, and passed both on.
-      app.get<{ Querystring: { workspace?: string } }>(
+      app.get(
         '/manifest',
-        { schema: { querystring: { type: 'object', properties: { workspace: { type: 'string', maxLength: 100 } } } } },
+        {
+          schema: {
+            summary: 'Apps the caller may open',
+            description: [
+              'With `workspace`, the apps on for that floor: the caller must be on it,',
+              'so the request also carries it as X-Workspace-Id, which the gateway',
+              'checks. An app is on a floor when it is turned on, works on that kind',
+              "of floor (its manifest's `floors`), isn't blocked on the floor or any",
+              'floor above, and the nearest install from the floor upwards says on (or',
+              'there is none). A personal floor follows the org.',
+            ].join(' '),
+            querystring: Type.Object({ workspace: Type.Optional(Type.String({ maxLength: 100, description: 'The floor to list apps for' })) }),
+            response: {
+              200: Type.Array(ServedEntry, {
+                description: "Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there",
+              }),
+              403: refused("The workspace isn't the floor the gateway checked"),
+              404: refused('No such floor'),
+              503: refused("Floors can't be looked up right now"),
+            },
+          },
+        },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           const roles = caller?.roles ?? [];
@@ -277,9 +316,54 @@ export const buildApp = async ({
        * caller are listed too, saying which role; only an app whose origin an admin has stopped allowing is left out,
        * since it isn't offered to anyone.
        */
-      app.get<{ Querystring: { workspace: string } }>(
+      app.get(
         '/me/apps',
-        { schema: { querystring: { type: 'object', required: ['workspace'], properties: { workspace: { type: 'string', maxLength: 100 } } } } },
+        {
+          schema: {
+            summary: 'Every app, and whether the caller can use it on their floor, and why',
+            description: [
+              'For Auspex, which never hides an app for being out of reach. Each app',
+              "says whether it's on for the floor the caller is on and why (platform,",
+              'approved, set-here, set-above, blocked, not-for-this-kind,',
+              'turned-off), the floor whose rule decides it (`by`) and who set that',
+              'rule and when. An app a role keeps from the caller is listed with',
+              '`requiredRole` and `hasRole: false`. Only the floor the gateway',
+              'checked can be asked about.',
+            ].join(' '),
+            querystring: Type.Object({ workspace: Type.String({ maxLength: 100 }) }),
+            response: {
+              200: Type.Object(
+                {
+                  workspace: Type.String(),
+                  apps: Type.Array(
+                    Type.Object({
+                      id: Type.String(),
+                      name: Type.String(),
+                      icon: Type.Optional(Type.String()),
+                      description: Type.Optional(Type.String()),
+                      floors: Type.Optional(Type.Array(Type.Enum(['personal', 'team', 'org']))),
+                      pillar: Type.Optional(Type.Boolean()),
+                      requiredRole: Type.Optional(Type.String()),
+                      hasRole: Type.Optional(Type.Boolean()),
+                      state: Type.Object({
+                        on: Type.Boolean(),
+                        why: Type.Enum(['platform', 'approved', 'set-here', 'set-above', 'blocked', 'not-for-this-kind', 'turned-off']),
+                        by: Type.Optional(Type.String({ description: 'The floor whose rule decides it' })),
+                        setBy: Type.Optional(Type.String({ description: 'Who set that rule' })),
+                        setAt: Type.Optional(Type.String({ format: 'date-time' })),
+                      }),
+                    }),
+                  ),
+                },
+                { description: "The caller's apps on that floor" },
+              ),
+              401: refused('No signed-in caller'),
+              403: refused('Not the floor the gateway checked'),
+              404: refused('No such floor'),
+              503: refused("Floors can't be looked up right now"),
+            },
+          },
+        },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           if (!caller) return reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to see your apps.' });
@@ -301,7 +385,7 @@ export const buildApp = async ({
               const rule = 'by' in state ? rules.find((x) => x.app === r.entry.id && x.workspace === state.by) : undefined;
               return {
                 id: r.entry.id, name: r.entry.name, icon: r.entry.icon, description: r.entry.description, requiredRole: r.entry.requiredRole,
-                floors: floorKindsOf(r.entry), pillar: isPillar(r.entry.id) || undefined,
+                floors: [...floorKindsOf(r.entry)], pillar: isPillar(r.entry.id) || undefined,
                 state: rule ? { ...state, setBy: rule.setBy, setAt: rule.setAt } : state,
               };
             });
@@ -330,54 +414,127 @@ export const buildApp = async ({
       const previewsChosenBy = async (person?: string) => new Map(person ? (await chosenPreviews(person)).map(({ preview }) => [preview.app, preview]) : []);
 
       /** The whole catalogue for admins: every app, on or off, with who registered it and when. */
-      app.get('/apps', async (req, reply) => {
-        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see the whole catalogue.' });
-        const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
-        const allowed = await allowedOrigins();
-        const kept = await store.frontends();
-        return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed, kept))];
-      });
+      app.get(
+        '/apps',
+        {
+          schema: {
+            summary: 'The whole catalogue, for admins',
+            description: "Every app, the platform's own first, whether or not it is turned on.",
+            response: {
+              200: Type.Array(ref(CatalogueEntry), { description: 'Catalogue entries' }),
+              403: refused('Not an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see the whole catalogue.' });
+          const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
+          const allowed = await allowedOrigins();
+          const kept = await store.frontends();
+          return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed, kept))];
+        },
+      );
 
       /** An app's kept versions, newest first, and which one the shell is given. */
-      app.get<{ Params: { id: string } }>('/apps/:id/versions', async (req, reply) => {
-        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see an app’s versions.' });
-        const record = (await store.records()).find((r) => r.entry.id === req.params.id);
-        if (!record) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-        const kept = await store.frontends(req.params.id);
-        return (await store.versions(req.params.id)).map((v) => ({ ...v, entry: servedEntry(v.entry, kept), serving: v.version === record.entry.version }));
-      });
+      app.get(
+        '/apps/:id/versions',
+        {
+          schema: {
+            summary: "An app's kept versions, newest first (admins only)",
+            params: params('id'),
+            response: {
+              200: Type.Array(
+                Type.Object({
+                  version: Type.String(),
+                  entry: ref(AppManifestEntry),
+                  registeredBy: Type.String(),
+                  registeredAt: Type.String({ format: 'date-time' }),
+                  serving: Type.Boolean(),
+                }),
+                { description: 'Kept versions; `serving` marks the one the shell is given' },
+              ),
+              403: refused('Not an admin'),
+              404: refused('No such app'),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see an app’s versions.' });
+          const record = (await store.records()).find((r) => r.entry.id === req.params.id);
+          if (!record) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          const kept = await store.frontends(req.params.id);
+          return (await store.versions(req.params.id)).map((v) => ({ ...v, entry: servedEntry(v.entry, kept), serving: v.version === record.entry.version }));
+        },
+      );
 
       /** Serve one kept version and hold the app there, whatever registers next; or let go and serve the newest. */
-      const pin = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply, version: string | null) => {
+      const pin = async (req: FastifyRequest, reply: FastifyReply, id: string, version: string | null) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose an app’s version.' });
-        if (platformApps.some((a) => a.id === req.params.id) || isPillar(req.params.id)) {
+        if (platformApps.some((a) => a.id === id) || isPillar(id)) {
           return reply.code(409).send({ error: 'conflict', message: 'Apps that ship with AUGUR change with AUGUR’s own release.' });
         }
         try {
-          const changed = await store.pin(req.params.id, version);
-          if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-          req.log.info({ app: req.params.id, version: changed.entry.version, pinned: version !== null, by: caller.id }, version === null ? 'app unpinned' : 'app pinned');
+          const changed = await store.pin(id, version);
+          if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${id}" is registered.` });
+          req.log.info({ app: id, version: changed.entry.version, pinned: version !== null, by: caller.id }, version === null ? 'app unpinned' : 'app pinned');
           await record(req, {
             actor: { id: caller.id, kind: 'user' },
             app: 'registry',
             action: version === null ? 'app.unpinned' : 'app.pinned',
-            target: req.params.id,
+            target: id,
             detail: { version: changed.entry.version },
           });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(id));
         } catch (err) {
           if (err instanceof UnknownVersionError) return reply.code(404).send({ error: 'not_found', message: err.message });
           if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
           throw err;
         }
       };
-      app.put<{ Params: { id: string }; Body: { version: string } }>(
+      const pinned = { ...ref(CatalogueEntry), description: 'The app as it now is' };
+      app.put(
         '/apps/:id/pin',
-        { schema: { body: { type: 'object', additionalProperties: false, required: ['version'], properties: { version: { type: 'string', minLength: 1, maxLength: 64 } } } } },
-        (req, reply) => pin(req, reply, req.body.version),
+        {
+          schema: {
+            summary: 'Serve one kept version and hold the app there (admins only)',
+            description: [
+              'Rolls an app back, or holds it at its current version. Registrations',
+              'after this are kept in its history but not served until it is',
+              'unpinned. When the version\'s frontend is kept (PUT',
+              '/apps/{id}/versions/{version}/frontend), its code is held too, since',
+              'the manifest then points at that version\'s own copy; otherwise only',
+              'the manifest changes. Audited as app.pinned.',
+            ].join(' '),
+            params: params('id'),
+            body: Type.Object({ version: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
+            response: {
+              200: pinned,
+              403: refused('Not an admin'),
+              404: refused('No such app, or no such version kept'),
+              409: refused('A platform app or one that ships with AUGUR, or another app now has that version\'s route'),
+            },
+          },
+        },
+        (req, reply) => pin(req, reply, req.params.id, req.body.version),
       );
-      app.delete<{ Params: { id: string } }>('/apps/:id/pin', (req, reply) => pin(req, reply, null));
+      app.delete(
+        '/apps/:id/pin',
+        {
+          schema: {
+            summary: 'Let go of a pin and serve the newest version (admins only)',
+            description: 'Audited as app.unpinned.',
+            params: params('id'),
+            response: {
+              200: pinned,
+              403: refused('Not an admin'),
+              404: refused('No such app'),
+              409: refused('A platform app or one that ships with AUGUR'),
+            },
+          },
+        },
+        (req, reply) => pin(req, reply, req.params.id, null),
+      );
 
       /** Which app or platform service sent this call, if any; undefined when the sign-in service can't say right now. */
       const serviceOf = async (req: FastifyRequest, reply: FastifyReply): Promise<ServiceIdentity | null | undefined> => {
@@ -391,12 +548,12 @@ export const buildApp = async ({
       };
 
       /** Who may change an app's entry: that app's own service, a platform service, or an admin. */
-      const changedBy = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply): Promise<NewAuditEntry['actor'] | undefined> => {
+      const changedBy = async (req: FastifyRequest, reply: FastifyReply, id: string): Promise<NewAuditEntry['actor'] | undefined> => {
         const service = await serviceOf(req, reply);
         if (service === undefined) return undefined;
         if (service?.kind === 'app') {
-          if (service.app === req.params.id) return { id: service.app, kind: 'service' };
-          void reply.code(403).send({ error: 'forbidden', message: `${service.app} can only register itself, not "${req.params.id}".` });
+          if (service.app === id) return { id: service.app, kind: 'service' };
+          void reply.code(403).send({ error: 'forbidden', message: `${service.app} can only register itself, not "${id}".` });
           return undefined;
         }
         if (service) return { id: service.name, kind: 'service' };
@@ -414,9 +571,32 @@ export const buildApp = async ({
        * on the organisation's, as the gateway does, so an app that is off for
        * the organisation can't act everywhere by naming none (ADR 0007).
        */
-      app.get<{ Params: { id: string }; Querystring: { workspace?: string } }>(
+      app.get(
         '/apps/:id/grants',
-        { schema: { querystring: { type: 'object', properties: { workspace: { type: 'string', maxLength: 100 } } } } },
+        {
+          schema: {
+            summary: 'What an app may do on a floor (platform services only)',
+            description: [
+              "The platform's services check an app's calls against this, and keep",
+              'each answer for up to 30 seconds. An app is granted the scopes it asks',
+              'for that an admin has granted, on floors where it is on (see',
+              "/manifest); nothing where it is off, on a floor that doesn't exist, or",
+              "anywhere while it is turned off. Without a workspace, on the organisation's",
+              'floor, as the gateway checks a call that names none (ADR 0007).',
+            ].join(' '),
+            params: params('id'),
+            querystring: Type.Object({ workspace: Type.Optional(Type.String({ maxLength: 100, description: 'The floor the call is for' })) }),
+            response: {
+              200: Type.Object(
+                { app: Type.String(), workspace: Type.Optional(Type.String()), scopes: Type.Array(ref(ScopeSchema)) },
+                { description: "The app's grants" },
+              ),
+              403: refused('Not a platform service'),
+              404: refused('No such app is registered'),
+              503: refused("Floors, or the sign-in service that checks the caller's token, can't be reached right now"),
+            },
+          },
+        },
         async (req, reply) => {
           const service = await serviceOf(req, reply);
           if (service === undefined) return reply;
@@ -451,11 +631,38 @@ export const buildApp = async ({
       sender.start();
       app.addHook('onClose', async () => sender.stop());
 
-      app.put<{ Params: { id: string }; Body: AppEntry }>(
+      app.put(
         '/apps/:id',
-        { schema: { body: appEntrySchema } },
+        {
+          schema: {
+            summary: 'Register an app, or update it',
+            description: [
+              "Called by an app's own service on the internal network, signed in as",
+              'itself (a bearer token for its Keycloak client app-<id>, audience',
+              'platform-services), which may register only its own id; by a platform',
+              'service signed in as its own client (platform-<name>); or by an admin',
+              'through the gateway.',
+              "Unknown fields are refused. The platform's own apps (home, admin) and",
+              'routes another app already has cannot be taken. Every version is kept',
+              '(the last 5, plus a pinned one); an app an admin has pinned keeps',
+              'serving its pinned version. An entry that is a full address must be on',
+              'an origin an admin has allowed (see /origins); a path is served by the',
+              'platform itself and always may.',
+            ].join(' '),
+            params: params('id'),
+            body: ref(AppManifestEntry),
+            response: {
+              200: { ...ref(AppManifestEntry), description: 'Updated' },
+              201: { ...ref(AppManifestEntry), description: 'Registered' },
+              400: refused("The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed"),
+              403: refused('Neither the app itself, a platform service nor an admin'),
+              409: refused('The id belongs to a platform app, or the route is taken'),
+              503: refused("The sign-in service can't be reached to check the app's token"),
+            },
+          },
+        },
         async (req, reply) => {
-          const by = await changedBy(req, reply);
+          const by = await changedBy(req, reply, req.params.id);
           if (!by) return reply;
           const entry = req.body;
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
@@ -503,8 +710,39 @@ export const buildApp = async ({
        * build of it (a dev build, or a pillar app rebuilt with a newer kit): they take the old build's
        * place, in a folder of their own, so no browser goes on running the build it kept.
        */
-      app.put<{ Params: { id: string; version: string }; Body: Buffer }>('/apps/:id/versions/:version/frontend', async (req, reply) => {
-        const by = await changedBy(req, reply);
+      app.put(
+        '/apps/:id/versions/:version/frontend',
+        {
+          schema: {
+            summary: "Keep one version of an app's frontend, served at /apps/{id}/{version}_{digest}/",
+            description: [
+              "The app's own service (or a platform service, or an admin) gives the",
+              'built frontend as one gzipped tarball, before registering that version.',
+              "From then on the manifest the shell is given points `entry` at that",
+              "version's own copy whenever the entry is a file under /apps/{id}/ and",
+              'the tarball holds it. The same tarball again answers 200 and changes',
+              'nothing. A different one for the same version is a new build of it: it',
+              "takes the old build's place, in a folder of its own, so no browser goes",
+              'on running the build it kept. At most 2000 files and 50 MB. Audited as',
+              'app.frontend-published.',
+            ].join(' '),
+            params: Type.Object({ id: Type.String(), version: Type.String({ description: "The release the frontend belongs to, its manifest's version" }) }),
+            consumes: ['application/gzip'],
+            body: Type.Unsafe<Buffer>({ description: 'The built frontend, one gzipped tarball', contentMediaType: 'application/gzip' }),
+            response: {
+              200: { ...ref(StoredFrontendSchema), description: 'This version already had exactly this frontend' },
+              201: { ...ref(StoredFrontendSchema), description: 'Kept' },
+              400: refused('Not a semver version, or not a usable tarball (links, odd paths, too big)'),
+              403: refused('Another app, or not an admin'),
+              409: refused("One of the platform's own apps"),
+              415: refused('Not sent as application/gzip'),
+              501: refused("This deployment doesn't keep frontends by version (FRONTENDS_BUCKET_SECRET isn't set)"),
+              503: refused("The sign-in service can't be reached to check the app's token"),
+            },
+          },
+        },
+        async (req, reply) => {
+        const by = await changedBy(req, reply, req.params.id);
         if (!by) return reply;
         const { id, version } = req.params;
         if (!frontendFiles) return reply.code(501).send({ error: 'not_implemented', message: 'This deployment doesn’t keep apps’ frontends by version (FRONTENDS_BUCKET_SECRET isn’t set).' });
@@ -533,24 +771,75 @@ export const buildApp = async ({
        * Where the gateway sends each app's calls: the upstreams set for apps (by whatever runs them,
        * or an admin), for the gateway itself and admins. Apps without one are wherever APP_UPSTREAMS says.
        */
-      app.get('/upstreams', async (req, reply) => {
-        const caller = callerFromHeaders(req.headers);
-        if (!isGatewayCaller(caller ?? undefined) && !caller?.roles.includes('admin')) {
-          return reply.code(403).send({ error: 'forbidden', message: 'Only the gateway and admins can see where apps’ services are.' });
-        }
-        const records = (await store.records()).filter((r) => r.upstream);
-        // Developers trying a pull request's build of an app the gateway sends to the app.
-        const previews: Record<string, Record<string, string>> = {};
-        for (const { person, preview } of await chosenPreviews()) {
-          if (records.some((r) => r.entry.id === preview.app)) (previews[preview.app] ??= {})[person] = preview.upstream;
-        }
-        return { apps: Object.fromEntries(records.map((r) => [r.entry.id, r.upstream])), previews };
-      });
+      app.get(
+        '/upstreams',
+        {
+          schema: {
+            summary: "Where each app's service is, for the gateway (and admins)",
+            description: [
+              'The upstreams set for apps by what runs them, or by an admin. The',
+              'gateway asks as itself (its signed caller augur:gateway) and sends',
+              '/api/{id}/… there for any app not in its APP_UPSTREAMS. `previews`',
+              'names, for each app, the developers who chose one of its pull',
+              "requests' previews and where that preview is: the gateway sends",
+              'their calls there instead.',
+            ].join(' '),
+            response: {
+              200: Type.Object(
+                {
+                  apps: strings(),
+                  previews: Type.Optional(
+                    Type.Unsafe<Record<string, Record<string, string>>>({
+                      type: 'object',
+                      description: 'App id → person id → upstream',
+                      additionalProperties: { type: 'object', additionalProperties: { type: 'string' } },
+                    }),
+                  ),
+                },
+                { description: 'Upstreams by app id' },
+              ),
+              403: refused('Neither the gateway nor an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!isGatewayCaller(caller ?? undefined) && !caller?.roles.includes('admin')) {
+            return reply.code(403).send({ error: 'forbidden', message: 'Only the gateway and admins can see where apps’ services are.' });
+          }
+          const records = (await store.records()).filter((r) => r.upstream);
+          // Developers trying a pull request's build of an app the gateway sends to the app.
+          const previews: Record<string, Record<string, string>> = {};
+          for (const { person, preview } of await chosenPreviews()) {
+            if (records.some((r) => r.entry.id === preview.app)) (previews[preview.app] ??= {})[person] = preview.upstream;
+          }
+          return { apps: Object.fromEntries(records.map((r) => [r.entry.id, r.upstream!])), previews };
+        },
+      );
 
       /** Sets where the gateway reaches an app's service: a platform service that runs it, or an admin. Never the app itself. */
-      app.put<{ Params: { id: string }; Body: { url: string | null } }>(
+      app.put(
         '/apps/:id/upstream',
-        { schema: { body: { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: ['string', 'null'], maxLength: 300 } } } } },
+        {
+          schema: {
+            summary: "Say where the gateway reaches an app's service (a platform service or an admin, never the app)",
+            description: [
+              "http or https, a host and port only, never one of the platform's own",
+              'parts. null forgets it. Kept when the app registers new versions.',
+              'Audited as app.upstream-set or app.upstream-cleared.',
+            ].join(' '),
+            params: params('id'),
+            body: Type.Object({ url: orNull(Type.String({ maxLength: 300 })) }, { additionalProperties: false }),
+            response: {
+              200: { ...ref(CatalogueEntry), description: 'The app as it now is' },
+              400: refused("Not an address an app's service can be at"),
+              403: refused('Not a platform service or an admin'),
+              404: refused('No such app'),
+              409: refused("One of the platform's own apps"),
+              503: refused("The sign-in service can't be reached to check the caller's token"),
+            },
+          },
+        },
         async (req, reply) => {
           const service = await serviceOf(req, reply);
           if (service === undefined) return reply;
@@ -570,9 +859,26 @@ export const buildApp = async ({
         },
       );
 
-      app.patch<{ Params: { id: string }; Body: { enabled: boolean } }>(
+      app.patch(
         '/apps/:id',
-        { schema: { body: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' } } } } },
+        {
+          schema: {
+            summary: 'Turn an app on or off (admins only)',
+            description: [
+              'An app that is off stays registered, keeps its id and route, and stays off',
+              'when its service registers it again; nobody is offered it in the manifest.',
+              'Audited as app.enabled or app.disabled.',
+            ].join(' '),
+            params: params('id'),
+            body: Type.Object({ enabled: Type.Boolean() }, { additionalProperties: false }),
+            response: {
+              200: { ...ref(CatalogueEntry), description: 'The app as it now is' },
+              403: refused('Not an admin'),
+              404: refused('No such app'),
+              409: refused('A platform app, which is always on'),
+            },
+          },
+        },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can turn apps on or off.' });
@@ -591,26 +897,62 @@ export const buildApp = async ({
       );
 
       /** What each floor says about an app, and whether it's on there, for admins to set it floor by floor. */
-      app.get<{ Params: { id: string } }>('/apps/:id/floors', async (req, reply) => {
-        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where an app is on.' });
-        if (!(await store.records()).some((r) => r.entry.id === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-        return store.rules(req.params.id);
-      });
+      app.get(
+        '/apps/:id/floors',
+        {
+          schema: {
+            summary: 'What each floor says about an app (admins)',
+            params: params('id'),
+            response: {
+              200: Type.Array(ref(FloorRuleSchema), { description: "The app's floor rules" }),
+              403: refused('Not an admin'),
+              404: refused('No such app is registered'),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where an app is on.' });
+          if (!(await store.records()).some((r) => r.entry.id === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          return store.rules(req.params.id);
+        },
+      );
 
       /**
        * Sets what one floor says about an app: on, off, blocked (for it and
        * every floor below), or `inherit` to take its rule away. The org and
        * teams only: nobody, admins included, sets anything on someone's own floor.
        */
-      app.put<{ Params: { id: string; workspace: string }; Body: { state: FloorRule['state'] | 'inherit'; carriesOn?: boolean } }>(
+      app.put(
         '/apps/:id/floors/:workspace',
         {
           schema: {
-            body: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['state'],
-              properties: { state: { enum: ['on', 'off', 'blocked', 'inherit'] }, carriesOn: { type: 'boolean' } },
+            summary: 'Set what one floor says about an app (admins)',
+            description: [
+              'on or off installs the app there or takes it away, carrying on to the',
+              'teams below unless carriesOn is false or one of them says otherwise.',
+              'blocked is a guardrail: off there and on every floor below, whatever',
+              "they say. inherit takes the floor's rule away. Someone's own floor",
+              "can't be set; it follows the org. Audited as app.enabled, app.disabled,",
+              'app.blocked or app.inherited, with the floor.',
+            ].join(' '),
+            params: Type.Object({ id: Type.String(), workspace: Type.String({ description: 'The org or a team' }) }),
+            body: Type.Object(
+              { state: Type.Enum(['on', 'off', 'blocked', 'inherit']), carriesOn: Type.Optional(Type.Boolean({ description: 'true when left out' })) },
+              { additionalProperties: false },
+            ),
+            response: {
+              200: Type.Object(
+                {
+                  rules: Type.Array(ref(FloorRuleSchema)),
+                  state: floorStateOf(['turned-off', 'not-for-this-kind', 'blocked', 'set-here', 'set-above', 'approved'], 'The floor whose rule decided it'),
+                },
+                { description: "The app's rules now, and whether it is on for this floor" },
+              ),
+              400: refused("Someone's own floor"),
+              403: refused('Not an admin'),
+              404: refused('No such app or floor'),
+              409: refused('A platform app, which is on everywhere'),
+              503: refused("Floors can't be looked up right now"),
             },
           },
         },
@@ -640,15 +982,22 @@ export const buildApp = async ({
       );
 
       /** Lets an app use scopes it asks for. An admin grants them once they've seen what a new version wants. */
-      app.put<{ Params: { id: string }; Body: { scopes: Scope[] } }>(
+      app.put(
         '/apps/:id/scopes',
         {
           schema: {
-            body: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['scopes'],
-              properties: { scopes: { type: 'array', uniqueItems: true, maxItems: SCOPES.length, items: { enum: [...SCOPES] } } },
+            summary: 'Let an app use these scopes (admins)',
+            description: [
+              "An app's first registration is granted what it asks for. A later",
+              'version that asks for more is served, but gets the extra only once an',
+              'admin grants it here. Audited as app.scopes-granted.',
+            ].join(' '),
+            params: params('id'),
+            body: Type.Object({ scopes: Type.Array(ref(ScopeSchema), { uniqueItems: true, maxItems: SCOPES.length }) }, { additionalProperties: false }),
+            response: {
+              200: { ...ref(CatalogueEntry), description: 'The app as the catalogue now has it' },
+              403: refused('Not an admin'),
+              404: refused('No such app is registered'),
             },
           },
         },
@@ -664,15 +1013,25 @@ export const buildApp = async ({
       );
 
       /** Lowers how much an app may be sent in one request, or with `null` gives it what its manifest asks again. */
-      app.put<{ Params: { id: string }; Body: { mb: number | null } }>(
+      app.put(
         '/apps/:id/upload-limit',
         {
           schema: {
-            body: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['mb'],
-              properties: { mb: { anyOf: [{ type: 'integer', minimum: 1, maximum: MAX_UPLOAD_MB }, { type: 'null' }] } },
+            summary: 'Lower how much an app may be sent in one request (admins)',
+            description: [
+              "The gateway holds every request to the app's service to its limit:",
+              "its manifest's maxUpload (10 MB without one), or the lower number an",
+              'admin sets here. `null` goes back to what the manifest asks. An admin',
+              'can only lower it. Kept when the app registers new versions. Audited',
+              'as app.upload-limit-set.',
+            ].join(' '),
+            params: params('id'),
+            body: UploadLimitBody,
+            response: {
+              200: { ...ref(CatalogueEntry), description: 'The app as the catalogue now has it' },
+              400: refused("More than the app's manifest asks for"),
+              403: refused('Not an admin'),
+              404: refused('No such app is registered'),
             },
           },
         },
@@ -692,22 +1051,51 @@ export const buildApp = async ({
       );
 
       /** The app's own settings and what each is set to: for admins, and for the app's service to work by. */
-      app.get<{ Params: { id: string } }>('/apps/:id/settings', async (req, reply) => {
-        const service = await serviceOf(req, reply);
-        if (service === undefined) return reply;
-        const own = service?.kind === 'app' && service.app === req.params.id;
-        if (!own && !isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the app itself can see its settings.' });
-        const found = (await store.records()).find((r) => r.entry.id === req.params.id);
-        if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-        return settingsOf(found);
-      });
+      app.get(
+        '/apps/:id/settings',
+        {
+          schema: {
+            summary: "The app's own settings and the value of each (admins, and the app's own service)",
+            description: [
+              "Each setting the app's manifest offers, with the value in force: an",
+              "admin's, or the setting's default. A value set before the app narrowed",
+              "a setting's range is used only while it still fits.",
+            ].join(' '),
+            params: params('id'),
+            response: {
+              200: { ...ref(AppSettings), description: 'Its settings' },
+              403: refused("Neither an admin nor the app's own service"),
+              404: refused('No such app is registered'),
+              503: refused("The sign-in service can't be reached to check the caller's token"),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          const own = service?.kind === 'app' && service.app === req.params.id;
+          if (!own && !isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the app itself can see its settings.' });
+          const found = (await store.records()).find((r) => r.entry.id === req.params.id);
+          if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          return settingsOf(found);
+        },
+      );
 
       /** Sets one of an app's settings, or with `null` puts it back to its default. Admins only; audited. */
-      app.put<{ Params: { id: string; setting: string }; Body: { value: number | null } }>(
+      app.put(
         '/apps/:id/settings/:setting',
         {
           schema: {
-            body: { type: 'object', additionalProperties: false, required: ['value'], properties: { value: { type: ['integer', 'null'] } } },
+            summary: "Set one of an app's settings (admins)",
+            description: '`null` puts it back to its default. Kept when the app registers new versions. Audited as app.setting-changed.',
+            params: params('id', 'setting'),
+            body: Type.Object({ value: orNull(Type.Integer()) }, { additionalProperties: false }),
+            response: {
+              200: { ...ref(AppSettings), description: 'Its settings as they now are' },
+              400: refused("Outside the setting's min and max"),
+              403: refused('Not an admin'),
+              404: refused('No such app, or it offers no such setting'),
+            },
           },
         },
         async (req, reply) => {
@@ -729,14 +1117,37 @@ export const buildApp = async ({
       );
 
       /** Where apps may load from besides the platform itself. Admins choose; every registration is checked against it. */
-      app.get('/origins', async (req, reply) => {
-        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where apps may load from.' });
-        return store.origins();
-      });
-
-      app.post<{ Body: { origin: string } }>(
+      app.get(
         '/origins',
-        { schema: { body: { type: 'object', additionalProperties: false, required: ['origin'], properties: { origin: { type: 'string', minLength: 1, maxLength: 200 } } } } },
+        {
+          schema: {
+            summary: 'Where apps may load from besides the platform itself (admins only)',
+            response: {
+              200: Type.Array(ref(AllowedOrigin), { description: 'Allowed origins' }),
+              403: refused('Not an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where apps may load from.' });
+          return store.origins();
+        },
+      );
+
+      app.post(
+        '/origins',
+        {
+          schema: {
+            summary: 'Allow apps to load from an origin (admins only)',
+            description: 'HTTPS only, except http://localhost for development. Audited as origin.allowed.',
+            body: Type.Object({ origin: Type.String({ minLength: 1, maxLength: 200, examples: ['https://apps.example.org'] }) }, { additionalProperties: false }),
+            response: {
+              201: { ...ref(AllowedOrigin), description: 'Allowed (also when it already was)' },
+              400: refused('Not an HTTPS origin, or has a path'),
+              403: refused('Not an admin'),
+            },
+          },
+        },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where apps may load from.' });
@@ -746,44 +1157,92 @@ export const buildApp = async ({
             req.log.info({ origin: parsed.origin, by: caller.id }, 'origin allowed');
             await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'origin.allowed', target: parsed.origin });
           }
-          return reply.code(201).send((await store.origins()).find((o) => o.origin === parsed.origin));
+          return reply.code(201).send((await store.origins()).find((o) => o.origin === parsed.origin)!);
         },
       );
 
-      app.delete<{ Params: { origin: string } }>('/origins/:origin', async (req, reply) => {
-        const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where apps may load from.' });
-        if (!(await store.removeOrigin(req.params.origin))) return reply.code(404).send({ error: 'not_found', message: `${req.params.origin} isn't allowed.` });
-        req.log.info({ origin: req.params.origin, by: caller.id }, 'origin removed');
-        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'origin.removed', target: req.params.origin });
-        return reply.code(204).send();
-      });
+      app.delete(
+        '/origins/:origin',
+        {
+          schema: {
+            summary: 'Stop allowing an origin (admins only)',
+            description: [
+              'Apps already registered from it stay in the catalogue, marked blocked,',
+              'and are left out of the manifest until it is allowed again. Audited as origin.removed.',
+            ].join(' '),
+            params: Type.Object({ origin: Type.String({ description: 'The origin, URL-encoded' }) }),
+            response: {
+              204: empty('Removed'),
+              403: refused('Not an admin'),
+              404: refused('Not an allowed origin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where apps may load from.' });
+          if (!(await store.removeOrigin(req.params.origin))) return reply.code(404).send({ error: 'not_found', message: `${req.params.origin} isn't allowed.` });
+          req.log.info({ origin: req.params.origin, by: caller.id }, 'origin removed');
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'origin.removed', target: req.params.origin });
+          return reply.code(204).send();
+        },
+      );
 
       /**
        * Whether a newer AUGUR release is out, and what upgrading to it needs first. Read-only: the
        * registry never restarts anything; the deployment's updater (or a person) does.
        */
-      app.get('/platform/updates', async (req, reply) => {
-        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what updates are out.' });
-        return updatesPage();
-      });
+      app.get(
+        '/platform/updates',
+        {
+          schema: {
+            summary: 'Whether a newer AUGUR release is out, and what upgrading to it needs first (admins only)',
+            description: [
+              "From the registry's last check of the release feed: this repository's GitHub releases",
+              "(augur@<version>, pre-releases are beta) or RELEASE_FEED_URL, a mirror's list of release files.",
+              'The registry checks once a day. Read-only: nothing is restarted or changed.',
+            ].join(' '),
+            response: {
+              200: { ...ref(PlatformUpdates), description: 'The running release against the feed' },
+              403: refused('Not an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what updates are out.' });
+          return updatesPage();
+        },
+      );
 
       /** Checks the release feed now rather than waiting for the daily check. */
-      app.post('/platform/updates/check', async (req, reply) => {
-        const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can check for updates.' });
-        await updates.check();
-        const view = await updatesPage();
-        req.log.info({ by: caller.id, available: view.available?.version, problem: view.problem }, 'updates checked');
-        await record(req, {
-          actor: { id: caller.id, kind: 'user' },
-          app: 'registry',
-          action: 'platform.updates-checked',
-          target: view.running.version,
-          detail: { ...(view.available ? { available: view.available.version } : {}), ...(view.problem ? { problem: view.problem } : {}) },
-        });
-        return view;
-      });
+      app.post(
+        '/platform/updates/check',
+        {
+          schema: {
+            summary: 'Check the release feed now (admins only)',
+            description: 'A check within 30 seconds of the last good one answers from it. Audited as platform.updates-checked.',
+            response: {
+              200: { ...ref(PlatformUpdates), description: "The running release against the feed, as just checked. A feed that can't be read is a `problem`, not an error." },
+              403: refused('Not an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can check for updates.' });
+          await updates.check();
+          const view = await updatesPage();
+          req.log.info({ by: caller.id, available: view.available?.version, problem: view.problem }, 'updates checked');
+          await record(req, {
+            actor: { id: caller.id, kind: 'user' },
+            app: 'registry',
+            action: 'platform.updates-checked',
+            target: view.running.version,
+            detail: { ...(view.available ? { available: view.available.version } : {}), ...(view.problem ? { problem: view.problem } : {}) },
+          });
+          return view;
+        },
+      );
 
       /** When the deployment's updater last asked what to do; it lives only as long as this process. */
       let updaterSeenAt: string | undefined;
@@ -814,19 +1273,41 @@ export const buildApp = async ({
        * is next. Needs an admin who entered their password in the last few minutes. Nothing
        * restarts here: the updater picks it up and reports each step.
        */
-      app.put<{ Body: { version: string; settings?: Record<string, string> } }>(
+      app.put(
         '/platform/upgrade',
         {
           schema: {
-            body: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['version'],
-              properties: {
-                version: { type: 'string', minLength: 1, maxLength: 64 },
+            summary: "Ask the deployment's updater to upgrade AUGUR (deployment admins only)",
+            description: [
+              '`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their',
+              'password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again.',
+              'Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as',
+              'platform.upgrade-requested. `settings` are new settings for `.env`, each one the release',
+              "has: they're kept in memory for the updater until the upgrade ends, never stored, and only",
+              'their names are audited. An empty value is left out.',
+            ].join(' '),
+            body: Type.Object(
+              {
+                version: Type.String({ minLength: 1, maxLength: 64 }),
                 // New settings for .env, entered on the Updates page: one line each.
-                settings: { type: 'object', maxProperties: 50, propertyNames: { pattern: '^[A-Z][A-Z0-9_]{0,63}$' }, additionalProperties: { type: 'string', maxLength: 4096, pattern: '^[^\\r\\n]*$' } },
+                settings: Type.Optional(
+                  Type.Unsafe<Record<string, string>>({
+                    type: 'object',
+                    maxProperties: 50,
+                    propertyNames: { pattern: '^[A-Z][A-Z0-9_]{0,63}$' },
+                    additionalProperties: { type: 'string', maxLength: 4096, pattern: '^[^\\r\\n]*$' },
+                    description: 'Setting name to value, one line each',
+                  }),
+                ),
               },
+              { additionalProperties: false },
+            ),
+            response: {
+              202: { ...ref(PlatformUpdates), description: 'Waiting for the updater' },
+              400: refused("A setting the release doesn't have, or a value over more than one line"),
+              401: refused('sign_in_again: enter the password again first'),
+              403: refused('Not a deployment admin (the refusal names the requiredRole)'),
+              409: refused('Not the next release, its release file names no images, or an upgrade is already waiting or under way'),
             },
           },
         },
@@ -869,9 +1350,25 @@ export const buildApp = async ({
        * to a release Updates offers (no breaking release between, so the data stays as it is). Needs an
        * admin who entered their password in the last few minutes.
        */
-      app.put<{ Body: { version: string } }>(
+      app.put(
         '/platform/go-back',
-        { schema: { body: { type: 'object', additionalProperties: false, required: ['version'], properties: { version: { type: 'string', minLength: 1, maxLength: 64 } } } } },
+        {
+          schema: {
+            summary: 'Go back to an earlier AUGUR release (deployment admins who just entered their password)',
+            description: [
+              'The same steps as an upgrade, a backup first, to one of the releases the Updates page lists',
+              'under goBack with no problem: no release between is breaking, so the data stays as it is.',
+              "Audited as platform.go-back-requested, and platform.went-back when it's done.",
+            ].join(' '),
+            body: Type.Object({ version: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
+            response: {
+              202: { ...ref(PlatformUpdates), description: 'Asked; the Updates page as it now stands' },
+              401: refused('Enter your password again (error sign_in_again)'),
+              403: refused('Not a deployment admin (the refusal names the requiredRole)'),
+              409: refused('Not a release it can go back to, with why; or an upgrade is already open'),
+            },
+          },
+        },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('take AUGUR back to an earlier release'));
@@ -894,16 +1391,31 @@ export const buildApp = async ({
       );
 
       /** Takes back an upgrade the updater hasn't started. One under way can't be stopped halfway. */
-      app.delete('/platform/upgrade', async (req, reply) => {
-        const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('take back an upgrade'));
-        const upgrade = await store.upgrade();
-        if (upgrade?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes or rolls back by itself.' });
-        if (!upgrade || !(await store.cancelUpgrade(upgrade.id))) return reply.code(404).send({ error: 'not_found', message: 'No upgrade is waiting.' });
-        upgradeSettings = undefined;
-        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.upgrade-cancelled', target: upgrade.version });
-        return updatesPage();
-      });
+      app.delete(
+        '/platform/upgrade',
+        {
+          schema: {
+            summary: "Take back an upgrade the updater hasn't started (deployment admins only)",
+            description: 'Audited as platform.upgrade-cancelled.',
+            response: {
+              200: { ...ref(PlatformUpdates), description: 'Cancelled' },
+              403: refused('Not a deployment admin (the refusal names the requiredRole)'),
+              404: refused('No upgrade is waiting'),
+              409: refused('It has started; it finishes or rolls back by itself'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('take back an upgrade'));
+          const upgrade = await store.upgrade();
+          if (upgrade?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes or rolls back by itself.' });
+          if (!upgrade || !(await store.cancelUpgrade(upgrade.id))) return reply.code(404).send({ error: 'not_found', message: 'No upgrade is waiting.' });
+          upgradeSettings = undefined;
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.upgrade-cancelled', target: upgrade.version });
+          return updatesPage();
+        },
+      );
 
       /** Only the deployment's own updater may read the target and report on it. */
       const isUpdater = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -919,8 +1431,52 @@ export const buildApp = async ({
        * release file says the updater checks against: each part's version, the settings it needs
        * and its deploy files. Those come from the feed, so they're missing when it can't be read.
        */
-      app.get('/platform/upgrade/target', async (req, reply) => {
-        if (!(await isUpdater(req, reply))) return reply;
+      app.get(
+        '/platform/upgrade/target',
+        {
+          schema: {
+            summary: "The upgrade to run (the deployment's updater only)",
+            description: [
+              'Signed in as the platform-updater client. Each call counts as the updater being seen. On the',
+              "workbench, and where AUGUR's desired state is Automatic, it first asks for the upgrade Automatic",
+              'reaches by itself (ADR 0020), audited as platform.upgrade-requested.',
+            ].join(' '),
+            response: {
+              200: Type.Object(
+                {
+                  id: Type.String(),
+                  from: Type.String(),
+                  version: Type.String(),
+                  images: strings(),
+                  state: Type.Enum(['requested', 'running']),
+                  parts: Type.Optional(strings("Each part's version in the release, by package name. Missing when the release file can't be read.")),
+                  required: Type.Optional(Type.Array(Type.String(), { description: "The settings the release won't start without" })),
+                  deploy: Type.Optional(strings("The release's files in infra/deploy, by path inside it, as sha256")),
+                  settings: Type.Optional(strings('Settings the admin entered when asking, for the updater to write to .env')),
+                  watch: Type.Optional(
+                    Type.Object(
+                      {
+                        breakingSince: Type.Optional(
+                          Type.String({ description: 'A breaking release between, so a problem is reported for a person rather than gone back from' }),
+                        ),
+                      },
+                      {
+                        description:
+                          "Present for an upgrade to a newer release: watch it for 10 minutes before it's done, going back by itself if sign-in or the gateway's calls fail (ADR 0020)",
+                      },
+                    ),
+                  ),
+                },
+                { description: "The open upgrade, with each part's image by digest" },
+              ),
+              204: empty('Nothing to do'),
+              403: refused('Not the updater'),
+              503: refused("The sign-in service can't be reached to check the updater's token"),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!(await isUpdater(req, reply))) return reply;
         updaterSeenAt = new Date().toISOString();
         let upgrade = await store.upgrade();
         // The workbench takes AUGUR's dev builds by itself, as it would after an admin asked, backup first.
@@ -966,26 +1522,39 @@ export const buildApp = async ({
               }
             : {}),
         };
-      });
+        },
+      );
 
       /** One step of the open upgrade, from the updater; with `outcome`, how it ended. */
-      app.post<{ Body: Omit<UpgradeStepState, 'at'> & { id: string; outcome?: UpgradeOutcome; calls?: number } }>(
+      app.post(
         '/platform/upgrade/progress',
         {
           schema: {
-            body: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['id', 'step', 'state'],
-              properties: {
-                id: { type: 'string', maxLength: 64 },
-                step: { enum: [...UPGRADE_STEPS] },
-                state: { enum: ['running', 'done', 'failed'] },
-                message: { type: 'string', maxLength: 2000 },
-                outcome: { enum: ['done', 'rolled-back', 'failed'] },
+            summary: "Report a step of the open upgrade (the deployment's updater only)",
+            description: [
+              'The first report starts it. With `outcome` it ends, audited as platform.upgraded,',
+              'platform.upgrade-rolled-back or platform.upgrade-failed; platform.went-back when it ends',
+              'done on an older release than it started from.',
+            ].join(' '),
+            body: Type.Object(
+              {
+                id: Type.String({ maxLength: 64 }),
+                step: ref(UpgradeStep),
+                state: Type.Enum(['running', 'done', 'failed']),
+                message: Type.Optional(Type.String({ maxLength: 2000 })),
+                outcome: Type.Optional(Type.Enum(['done', 'rolled-back', 'failed'])),
                 // How many of AUGUR's calls the watch judged by: too few starts the light watch after it.
-                calls: { type: 'integer', minimum: 0 },
+                calls: Type.Optional(
+                  Type.Integer({ minimum: 0, description: `How many of AUGUR's calls the watch judged by. Fewer than ${AFTER_MIN_CALLS} starts the light watch (ADR 0020, amended).` }),
+                ),
               },
+              { additionalProperties: false },
+            ),
+            response: {
+              200: { ...ref(UpgradeSchema), description: 'The upgrade as it stands' },
+              403: refused('Not the updater'),
+              404: refused('Not the open upgrade'),
+              503: refused("The sign-in service can't be reached to check the updater's token"),
             },
           },
         },
@@ -1016,29 +1585,60 @@ export const buildApp = async ({
       );
 
       /** The light watch's next look, for the updater: the upgrade it watches and how many minutes to read, or nothing (204). */
-      app.get('/platform/upgrade/after-watch', async (req, reply) => {
-        if (!(await isUpdater(req, reply))) return reply;
-        const latest = await store.upgrade();
-        const due = latest?.state === 'done' && latest.afterWatch ? lookDue(latest.afterWatch, now()) : undefined;
-        if (!latest || !due) return reply.code(204).send();
-        return { id: latest.id, version: latest.version, minutes: due.minutes };
-      });
-
-      /** One look of the light watch, from the updater: AUGUR's calls since the last look and whether sign-in worked. */
-      app.post<{ Body: { id: string; calls: number; serverErrors: number; signInProblem?: string } }>(
+      app.get(
         '/platform/upgrade/after-watch',
         {
           schema: {
-            body: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['id', 'calls', 'serverErrors'],
-              properties: {
-                id: { type: 'string', maxLength: 64 },
-                calls: { type: 'integer', minimum: 0 },
-                serverErrors: { type: 'integer', minimum: 0 },
-                signInProblem: { type: 'string', maxLength: 500 },
+            summary: "The light watch's next look (the deployment's updater only)",
+            description: [
+              "After a watch too quiet to judge errors by, the updater looks every 5 minutes until AUGUR's",
+              'services have had 20 calls, for at most a day (ADR 0020, amended). 204 when no look is due.',
+            ].join(' '),
+            response: {
+              200: Type.Object(
+                { id: Type.String(), version: Type.String(), minutes: Type.Integer({ minimum: 1, maximum: 15 }) },
+                { description: "The upgrade being watched, and how many minutes of the gateway's counts to read" },
+              ),
+              204: empty('No look is due'),
+              403: refused('Not the updater'),
+              503: refused("The sign-in service can't be reached to check the updater's token"),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!(await isUpdater(req, reply))) return reply;
+          const latest = await store.upgrade();
+          const due = latest?.state === 'done' && latest.afterWatch ? lookDue(latest.afterWatch, now()) : undefined;
+          if (!latest || !due) return reply.code(204).send();
+          return { id: latest.id, version: latest.version, minutes: due.minutes };
+        },
+      );
+
+      /** One look of the light watch, from the updater: AUGUR's calls since the last look and whether sign-in worked. */
+      app.post(
+        '/platform/upgrade/after-watch',
+        {
+          schema: {
+            summary: "Report one look of the light watch (the deployment's updater only)",
+            description: [
+              "Adds AUGUR's calls since the last look. The watch ends held, failed (more than 5% of 20 calls, or",
+              "sign-in failing twice in a row; it doesn't go back by itself and shows in Needs you) or quiet",
+              'after a day, audited as platform.after-watch-failed or platform.after-watch-ended.',
+            ].join(' '),
+            body: Type.Object(
+              {
+                id: Type.String({ maxLength: 64 }),
+                calls: Type.Integer({ minimum: 0 }),
+                serverErrors: Type.Integer({ minimum: 0 }),
+                signInProblem: Type.Optional(Type.String({ maxLength: 500 })),
               },
+              { additionalProperties: false },
+            ),
+            response: {
+              200: { ...AfterWatch, description: 'The light watch as it stands' },
+              403: refused('Not the updater'),
+              404: refused("That upgrade isn't being watched"),
+              503: refused("The sign-in service can't be reached to check the updater's token"),
             },
           },
         },
@@ -1066,16 +1666,32 @@ export const buildApp = async ({
         },
       );
 
-      app.delete<{ Params: { id: string } }>('/apps/:id', async (req, reply) => {
-        const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can remove apps.' });
-        const pillar = (await store.records()).find((r) => r.entry.id === req.params.id && isPillar(r.entry.id));
-        if (pillar) return reply.code(409).send({ error: 'conflict', message: `${pillar.entry.name} ships with AUGUR and can’t be removed. Turn it off instead.` });
-        if (!(await store.remove(req.params.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-        req.log.info({ app: req.params.id, by: caller.id }, 'app removed');
-        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.removed', target: req.params.id });
-        return reply.code(204).send();
-      });
+      app.delete(
+        '/apps/:id',
+        {
+          schema: {
+            summary: 'Remove an app (admins only)',
+            description: 'Audited as app.removed.',
+            params: params('id'),
+            response: {
+              204: empty('Removed'),
+              403: refused('Not an admin'),
+              404: refused('No such app'),
+              409: refused('An app that ships with AUGUR (pillar), which is turned off instead'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = callerFromHeaders(req.headers);
+          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can remove apps.' });
+          const pillar = (await store.records()).find((r) => r.entry.id === req.params.id && isPillar(r.entry.id));
+          if (pillar) return reply.code(409).send({ error: 'conflict', message: `${pillar.entry.name} ships with AUGUR and can’t be removed. Turn it off instead.` });
+          if (!(await store.remove(req.params.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          req.log.info({ app: req.params.id, by: caller.id }, 'app removed');
+          await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.removed', target: req.params.id });
+          return reply.code(204).send();
+        },
+      );
     },
     { prefix: `/${API_VERSION}` },
   );
