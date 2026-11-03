@@ -200,6 +200,25 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
 
 `pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
 
+### Checking a manifest
+
+The manifest has a published JSON Schema, `contracts/manifest.schema.json`. It is generated from the registry's own schema (`appEntrySchema` in `platform/services/registry/src/manifest.ts`, TypeBox) by `pnpm manifest-schema`, so it has exactly the fields and limits the registry accepts ([ADR 0055](decisions/0055-schema-first-apis-with-typebox.md)). Point your manifest's `"$schema"` at it and your editor completes and checks the fields as you type:
+
+```json
+{ "$schema": "../../contracts/manifest.schema.json", "id": "expenses", … }
+```
+
+The path is relative to the manifest; in an app's own repository, point it at the file in an AUGUR checkout or a copy of it. The registry accepts `$schema` and doesn't use it. A registry from before the schema was published refuses it as an unknown field, so leave it out of an app that may register with a deployment that hasn't upgraded.
+
+To check manifests, build AUGUR, then name them, or name none to check every `apps/<id>/manifest.json`:
+
+```sh
+pnpm build
+node scripts/check-manifests.mjs path/to/manifest.json
+```
+
+Each manifest is checked against the schema first, and each problem names where it is in plain words (`menu[0].items[2].path doesn't have the form it needs`). One that passes is then put to the registry in memory, for the rules a schema can't say: a semver version and range, surfaces on the app's floors, a route of its own. The check also fails when `contracts/manifest.schema.json` is out of step with the registry; `pnpm build && pnpm manifest-schema` writes it again.
+
 ### Find
 
 With `"search": true` in the manifest, the shell's Find asks your service `GET /v1/search?q=<what they typed>` (through the gateway, so `/api/<id>/v1/search`, with the person and their floor attached) as they type, and lists what you answer under your app's name:
