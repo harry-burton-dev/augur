@@ -10,3 +10,5 @@ The 2.39:1 letterbox for urgent and important things (PDR-009). The bars carry i
 First found in: [`2026-11-02-cinematic`](../runs/2026-11-02-cinematic/).
 
 Could steer: Type (C): the urgent sentence as a headline inside the frame.
+
+Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): a standby whose go-by falls before the supervisor's next look opens the Letterbox, by the shell's rule, never the agent's choice (standby V2, combined V3).

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A proposal waiting · V4 · Read twice</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: dual keying. Every detail is read twice, by the model and by a pattern, and set against the record. The verdict is worked out by rule ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+table{width:100%;border-collapse:separate;border-spacing:0 var(--space-1)}
+th{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);text-align:left;padding:0 var(--space-4) var(--space-2)}
+th small{display:block;font:400 var(--type-small)/var(--leading-small) var(--font-sans);letter-spacing:0;text-transform:none}
+td{padding:var(--space-3) var(--space-4);background:var(--surface-inset);font-size:var(--type-lead);line-height:var(--leading-lead);vertical-align:middle;transition:opacity var(--motion-calm) var(--ease-out)}
+td:first-child{border-radius:var(--radius-key) 0 0 var(--radius-key);font-size:var(--type-meta);color:var(--ink-muted)}
+td:last-child{border-radius:0 var(--radius-key) var(--radius-key) 0}
+td.m{font-style:italic;border-left:1px dotted var(--x-proposed-pencil)}
+td.none{color:var(--ink-muted);font-size:var(--type-small)}
+td.wait{opacity:0}
+.same{color:var(--x-proposed-lit)}
+.vd{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.vd .w{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.vd.check{color:var(--light)}
+.rules{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+.rules div{padding:var(--space-2) var(--space-3);border-top:2px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rules b{display:block;font-weight:400;color:var(--ink);font-size:var(--type-meta)}
+.rules div.on{border-top-color:var(--x-proposed-lit)}
+@media (max-width:1400px){td{font-size:var(--type-body);padding:var(--space-2) var(--space-3)}.vd .w{display:none}.rules div{font-size:var(--x-proposed-type-micro)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A proposal waiting · V4</b> read twice: model, pattern, record, and a verdict by rule · dual keying, the four-eyes principle</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PR = DATA.proposal, AG = PR.agent, a = A(AG);
+const S = { col: 0 };
+/* the verdict, by rule: never chosen by the model */
+const norm = v => v == null ? null : String(v).replace(/[\s,.]/g, '').toLowerCase();
+function verdict(l, g) {
+  const model = g ? l.v : null, pat = l.rule === '—' ? null : l.rule;
+  if (!model && !pat) return { w: 'Not read', d: 'Nothing to propose without the model.', ic: 'minus', r: 0 };
+  if (l.disagrees) return { w: 'A person chooses', d: `Two answers: the record has ${l.disagrees}. Never in a batch.`, ic: 'split', r: 3, check: true };
+  if (model && pat && norm(model) === norm(pat)) return { w: 'Read the same twice', d: 'Can go in a batch; may be sampled.', ic: 'check-check', r: 1 };
+  if (!model && pat) return { w: 'Pattern only', d: 'Can go in a batch; may be sampled.', ic: 'check', r: 1 };
+  if (model && !pat) return { w: 'Model only: always checked', d: 'One reading is not enough to go in on trust. Always in the sample.', ic: 'eye', r: 2, check: true };
+  return { w: 'The readings differ', d: 'Always checked, one by one.', ic: 'split', r: 3, check: true };
+}
+const RULES = [
+  { b: 'Read the same twice', d: 'The model and the pattern give the same value, and the record has nothing else. Goes in the batch.' },
+  { b: 'Model only', d: 'Only the model found it. Always in the sample, whatever the batch size.' },
+  { b: 'A person chooses', d: 'The readings, or the record, disagree. Never in a batch; the agent may not choose.' },
+  { b: 'Not read', d: 'With the gateway off, only what a pattern finds is proposed. Nothing is guessed.' }
+];
+function render() {
+  const g = STATE.gateway;
+  const vs = PR.lines.map(l => verdict(l, g));
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Triage', PR.entity.name, 'Read twice'], [...STD]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">${mm(AG)} ${a.name} · ${PR.doc.title}</p><h1 class="title">Read twice</h1></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Detail</th><th>The model read<small>${g ? DATA.gateway.model + ', audited before the call' : 'gateway off'}</small></th><th>A pattern read<small>labels and formats, no model</small></th><th>Data Atlas has<small>ink, on the record</small></th><th>So, by rule<small>worked out, never chosen</small></th></tr></thead>
+      <tbody>${PR.lines.map((l, i) => { const v = vs[i], pat = l.rule === '—' ? null : l.rule, rec = l.disagrees || null; return `<tr>
+        <td>${l.k}</td>
+        <td class="m ${S.col < 1 ? 'wait' : ''} ${g ? '' : 'none'}">${g ? l.v : 'not asked'}</td>
+        <td class="${S.col < 2 ? 'wait' : ''} ${pat ? '' : 'none'}">${pat ? `${pat}${g && norm(pat) === norm(l.v) ? ' <span class="same small">same</span>' : ''}` : 'no pattern for this'}</td>
+        <td class="${S.col < 3 ? 'wait' : ''} ${rec ? '' : 'none'}">${rec ? `${rec} <span class="mk-disagree"></span>` : 'nothing yet'}</td>
+        <td class="${S.col < 4 ? 'wait' : ''}"><span class="vd ${v.check ? 'check' : ''}">${I(v.ic, 16)}<span>${v.w}<span class="w">${v.d}</span></span></span></td></tr>`; }).join('')}</tbody>
+    </table></div>
+    <div class="rules">${RULES.map((r, i) => `<div class="${vs.some(v => v.w.startsWith(r.b.split(':')[0])) ? 'on' : ''}"><b>${r.b}</b>${r.d}</div>`).join('')}</div>
+    <p class="tk">confidence by rule (see the briefing run): readings agree · single reader · disputed · unread → batch eligibility and sample inclusion</p>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() {
+  clearLater(); S.col = 0; settle(); render();
+  /* the moment: the columns are read one after another, then the verdicts */
+  [1, 2, 3, 4].forEach(c => later(() => { S.col = c; render(); }, MOMENT() * .5 + c * ms('--motion-slow')));
+}
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

@@ -10,3 +10,5 @@ Confidence words come from a fixed yardstick, worked out from source grades and 
 First found in: [`2026-11-03-the-briefing`](../runs/2026-11-03-the-briefing/) (confidence V4 and V1, grammar V2, combined).
 
 Could steer: The label (L), Data Atlas grades, the minute (T).
+
+Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): "read the same twice / model only / a person chooses" is a verdict made by rule, and it decides whether a detail may go in a batch (proposal V4).
