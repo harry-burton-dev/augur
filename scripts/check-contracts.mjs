@@ -9,6 +9,9 @@ import { join } from 'node:path';
 import { stringify } from 'yaml';
 
 const root = new URL('..', import.meta.url).pathname;
+// Spectral runs through pnpm dlx at a pinned version: it lints, it never ships, and its own dependencies
+// stay out of pnpm-lock.yaml and the dependency scan (ADR 0055). Renovate doesn't move it: bump it here.
+const SPECTRAL = '@stoplight/spectral-cli@6.17.0';
 const mode = process.argv[2] ?? 'check';
 if (!['write', 'check'].includes(mode)) {
   console.error('Usage: node scripts/check-contracts.mjs write|check');
@@ -52,7 +55,7 @@ for (const service of services) {
 // Only the generated ones: a hand-written contract is linted once its service generates it.
 if (mode === 'check' && !problems.length && generated.length) {
   try {
-    execFileSync(join(root, 'node_modules/.bin/spectral'), ['lint', '--fail-severity', 'error', '--ruleset', join(root, '.spectral.yaml'), ...generated], { cwd: root, stdio: 'inherit' });
+    execFileSync('pnpm', ['dlx', SPECTRAL, 'lint', '--fail-severity', 'error', '--ruleset', join(root, '.spectral.yaml'), ...generated], { cwd: root, stdio: 'inherit' });
   } catch {
     problems.push('Spectral found errors in contracts/ (above).');
   }
