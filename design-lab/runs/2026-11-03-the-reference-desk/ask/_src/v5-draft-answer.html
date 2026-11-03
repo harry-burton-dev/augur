@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The ask · V5 · The draft answer</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+/* ---- V5: answer first, as a draft. Only the rows a loose word would change are asked about; the answer moves while you shape it ---- */
+.askline{display:flex;align-items:center;gap:var(--space-3);border-bottom:1px solid var(--hairline-strong);padding:0 0 var(--space-2);margin-bottom:var(--space-3)}
+.askline input{flex:1;background:none;border:0;outline:0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light);min-width:0}
+.cols{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) min(calc(var(--measure-card) - var(--space-4)),27%);gap:var(--space-5)}
+.chart{min-height:0;display:flex;flex-direction:column}
+.legend{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);align-items:center;margin-bottom:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.legend .lb{margin-right:var(--space-1)}
+.chk{display:inline-flex;align-items:center;gap:var(--space-1);padding:2px var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-pill);color:var(--ink-muted)}
+.chk[aria-pressed="true"]{color:var(--light);border-color:var(--hairline-strong);background:var(--surface-raised)}
+.chk .bx{width:var(--space-3);height:var(--space-3);border:1px solid var(--ink-muted);border-radius:2px;display:grid;place-items:center}
+.chk[aria-pressed="true"] .bx{background:var(--x-proposed-here);border-color:var(--x-proposed-here);color:var(--slate-deep)}
+.chk.far{border-style:dashed}
+.note{margin:0 0 var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.grid{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:calc(var(--measure-rail) - var(--space-5)) minmax(0,1fr) calc(var(--space-8));grid-auto-rows:minmax(calc(var(--space-5) - 2px),auto);align-content:start}
+.axis{display:contents}
+.axis .ticks{position:relative;height:var(--space-5);border-bottom:1px solid var(--hairline)}
+.axis .ticks span{position:absolute;bottom:var(--space-1);transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.axis .h{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);align-self:end;padding-bottom:var(--space-1);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.r{display:contents}
+.r > *{border-bottom:1px solid var(--hairline);display:flex;align-items:center;min-width:0}
+.r .nm{font-size:var(--type-small);color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:var(--space-2);gap:var(--space-1)}
+.r .tl{position:relative}
+.r .st{justify-content:flex-end;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);gap:var(--space-1)}
+.r.quiet .nm{color:var(--light)}
+.r.quiet > *{background:color-mix(in srgb,var(--floor-department-high) 6%,transparent)}
+.r.quiet .nm{box-shadow:inset 2px 0 0 var(--x-proposed-here);padding-left:var(--space-2)}
+.r .nm{padding-left:var(--space-2)}
+.r.out{opacity:.4}
+.r.dep .st{color:var(--x-proposed-loose)}
+.r.unseenrow > *{background:var(--x-proposed-unseen)}
+.mark{position:absolute;top:50%;transform:translate(-50%,-50%);display:flex;color:var(--ink-muted);opacity:.45;transition:opacity var(--motion-base) var(--ease-standard),color var(--motion-base) var(--ease-standard)}
+.mark.on{color:var(--light);opacity:1}
+.mark.last{filter:drop-shadow(0 0 var(--space-1) var(--x-proposed-here))}
+/* spring: a band of readings; the cut line falls where you say */
+.band{position:absolute;top:var(--space-5);bottom:0;background:color-mix(in srgb,var(--warning) 7%,transparent);border-left:1px dashed color-mix(in srgb,var(--warning) 40%,transparent);border-right:1px dashed color-mix(in srgb,var(--warning) 40%,transparent);pointer-events:none}
+.cut{position:absolute;top:var(--space-4);bottom:0;width:0;border-left:1px solid var(--x-proposed-here);box-shadow:0 0 var(--glow-blur) var(--x-proposed-here);pointer-events:none;transition:left var(--motion-calm) var(--ease-out)}
+.handles{position:relative;height:var(--space-5);margin-left:calc(var(--measure-rail) - var(--space-5));margin-right:calc(var(--space-8))}
+.handle{position:absolute;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--x-proposed-loose);white-space:nowrap;padding:0 var(--space-1);border-radius:var(--radius-key)}
+.readings{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;margin:0 0 var(--space-1);font-size:var(--type-small);color:var(--ink-muted)}
+.readings button{display:inline-flex;align-items:center;gap:var(--space-2);padding:2px var(--space-2);border-radius:var(--radius-key);color:var(--x-proposed-loose)}
+.readings button small{font-size:var(--type-small);color:var(--ink-muted)}
+.readings button[aria-pressed="true"]{color:var(--light);background:var(--surface-raised)}
+.handle[aria-pressed="true"]{color:var(--light);background:var(--surface-raised)}
+.handle::after{content:"";width:1px;height:var(--space-2);background:currentColor;margin-top:2px}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);border-left:1px solid var(--hairline);padding-left:var(--space-5)}
+.side .s{margin:0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--ink-muted)}
+.side .n{display:flex;align-items:baseline;gap:var(--space-3)}
+.side .n b{font:200 var(--type-display)/1 var(--font-sans);color:var(--light)}
+.side .n span{font-size:var(--type-meta);color:var(--ink-muted)}
+.dep-list{list-style:none;margin:0;padding:var(--space-3) 0 0;border-top:1px solid var(--hairline);display:grid;gap:var(--space-2)}
+.dep-list li{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.dep-list li b{font-weight:400;color:var(--ink)}
+.dep-list li q{color:var(--x-proposed-loose)}
+.dep-list li.ok q{color:var(--ink-muted)}
+.dep-list button{margin-top:var(--space-1);text-decoration:underline;text-decoration-color:var(--hairline-strong);text-underline-offset:var(--focus-gap);color:var(--ink)}
+.side .acts{margin-top:auto;display:flex;gap:var(--space-2);flex-wrap:wrap}
+@media (max-height:840px){.grid{grid-auto-rows:minmax(calc(var(--space-5) - var(--space-1) - 2px),auto)}.side .n b{font-size:var(--type-title)}.legend .src{display:none}}
+</style>
+</head>
+<body>
+<div class="app"><div id="rail"></div><main class="main" id="main"></main></div>
+<div id="keys"></div>
+<div class="x-cap"><b>The ask · V5</b> the draft answer: asks only about rows a loose word would change · Shneiderman's dynamic queries</div>
+<script>
+/*@DATA*/
+/*@ENGINE*/
+const ic = Shell.ic, W = Q.WORDS;
+const ICON = { invoice: 'receipt', delivery: 'truck', letter: 'mail', incident: 'siren', contract: 'file-pen-line', visit: 'map-pin' };
+const t0 = new Date('2025-11-01'), t1 = new Date(DATA.today);
+const X = d => ((new Date(d) - t0) / (t1 - t0) * 100).toFixed(2) + '%';
+const st = { c: { via: new Set(DATA.contacts.map(c => c.id)) }, viaTouched: false, gw: DATA.gateway.on };
+document.getElementById('rail').outerHTML = Shell.rail();
+document.getElementById('keys').innerHTML = Shell.keys([['1–3', 'where spring starts'], ['Q–Y', 'tick what counts'], ['L', 'live contracts only'], ['F', 'this floor only'], ['G', 'model gateway on/off'], ['T', 'technical words'], ['R', 'replay']]);
+const VIS = Q.S.filter(s => !Q.unseen(s));
+/* would this row change if the loose word were read another way? worked out from the record */
+function variants(w) {
+  if (w === 'since') return W.since.opts.map(o => ({ since: o.id }));
+  if (w === 'via') return [{ via: new Set(['invoice', 'delivery', 'letter']) }, { via: new Set(DATA.contacts.map(c => c.id)) }];
+  if (w === 'kind') return [{ kind: 'live' }, { kind: 'all' }];
+  return [{ who: 'here' }, { who: 'all' }];
+}
+const o0via = () => W.since.opts[2].via === 'record' ? `<span class="src">${Shell.via('record', 'review found by name')}</span>` : '';
+const quietSet = c => new Set(Q.run(c).quiet.map(x => x.s.id));
+function depends(w) {
+  if (w === 'via' ? st.viaTouched : Q.isSet(st.c, w)) return new Set();
+  const sets = variants(w).map(v => quietSet(Object.assign({}, st.c, v)));
+  const all = new Set(sets.flatMap(s => [...s]));
+  return new Set([...all].filter(id => !sets.every(s => s.has(id))));
+}
+function render() {
+  const r = Q.run(st.c), quiet = new Set(r.quiet.map(x => x.s.id));
+  const pool = quietSet(Object.assign({}, st.c, { since: '9999-12-31' }));
+  const dep = Object.fromEntries(Q.ORDER.map(w => [w, depends(w)]));
+  const since = st.c.since;
+  const rows = VIS.map(s => {
+    const lastOn = s.contacts.filter(([k]) => st.c.via.has(k)).map(([, d]) => d).sort().pop();
+    const ds = Q.ORDER.filter(w => dep[w].has(s.id));
+    const status = !pool.has(s.id) ? (s.contract.startsWith('ended') || s.contract === 'none' ? 'no live contract' : 'not on this floor') : quiet.has(s.id) ? (s.contacts.length ? 'quiet' : 'nothing recorded') : 'heard from';
+    return { s, lastOn, ds, status, cls: `${quiet.has(s.id) ? 'quiet' : ''} ${pool.has(s.id) ? '' : 'out'} ${ds.length ? 'dep' : ''}` };
+  }).sort((a, b) => (a.lastOn || '') < (b.lastOn || '') ? -1 : 1);
+  const months = []; for (let m = 0; m <= 12; m += 2) { const d = new Date(t0); d.setMonth(d.getMonth() + m); months.push(d); }
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const opts = W.since.opts;
+  const handles = opts.map((o, k) => `<button class="handle" data-since="${o.id}" aria-pressed="${since === o.id}" style="left:${X(o.id)}" aria-label="${Q.esc(Q.fmt(o.id) + ', ' + o.sub)}">${k + 1}</button>`).join('');
+  const readings = `<p class="readings"><span class="lb">“since spring” could start</span>${opts.map((o, k) => `<button data-since="${o.id}" aria-pressed="${since === o.id}"><span class="kbd">${k + 1}</span>${Q.esc(Q.fmt(o.id, true))} <small>${Q.esc(o.sub.split(',')[0])}</small></button>`).join('')}${o0via()}</p>`;
+  const contacts = DATA.contacts.filter(c => !(st.gw && c.far) || true);
+  document.getElementById('main').innerHTML = `<div class="top"><div><p class="eyebrow">${Q.esc(DATA.floor.name)} · front page</p><h1>Ask</h1></div>${contentsHtml()}</div>
+    <div class="askline">${ic('search', 18)}<input aria-label="Ask in your own words" value="${Q.esc(DATA.question)}">${Shell.gatewayLine(st.gw)}</div>
+    <div class="cols"><section class="chart">
+      <div class="legend"><span class="lb">What counts as hearing from them:</span>${contacts.map((c, k) => `<button class="chk ${c.far ? 'far' : ''}" data-via="${c.id}" aria-pressed="${st.c.via.has(c.id)}" title="${Q.esc(c.src)}"><span class="bx">${st.c.via.has(c.id) ? ic('check', 10) : ''}</span>${ic(ICON[c.id], 12)}${Q.esc(c.short)}</button>`).join('')}</div>
+      ${st.gw ? `<p class="note">Dashed: the ${Shell.via('model', 'model gateway')} thinks these don’t sound like hearing from someone. They stay ticked until you say.</p>` : `<p class="note">Model gateway off: every dated thing that names a supplier is listed the same way.</p>`}
+      ${readings}<div class="handles">${handles}</div>
+      <div class="grid scroll" role="table" aria-label="Suppliers and when each was last heard from">
+        <div class="axis"><span class="h">Supplier</span><div class="ticks">${months.map(d => `<span style="left:${X(d.toISOString().slice(0, 10))}">${MON[d.getMonth()]}</span>`).join('')}</div><span class="h" style="justify-self:end">In it?</span></div>
+        ${rows.map(x => `<div class="r ${x.cls}" role="row"><span class="nm">${Q.esc(x.s.name)}${x.s.floor === 'org' ? `<span class="micro">· Org</span>` : x.s.floor.startsWith('team:') ? `<span class="micro">· team</span>` : ''}</span><span class="tl">${x.s.contacts.map(([k, d]) => `<span class="mark ${st.c.via.has(k) ? 'on' : ''} ${d === x.lastOn ? 'last' : ''}" style="left:${X(d < '2025-11-01' ? '2025-11-01' : d)}" title="${Q.esc(DATA.contacts.find(c => c.id === k).label)}, ${Q.fmt(d)}">${ic(ICON[k], 12)}</span>`).join('')}${x.s.contacts.length ? '' : `<span class="mark" style="left:2%">${Shell.never()}</span>`}</span><span class="st">${x.ds.length ? `${ic('split', 11)}depends` : Q.esc(x.status)}</span></div>`).join('')}
+        <div class="r unseenrow"><span class="nm">${ic('lock', 12)} Some kept on ${Q.esc(DATA.elsewhere[0].name)}</span><span class="tl"></span><span class="st">ask ${Q.esc(DATA.elsewhere[0].ask)}</span></div>
+        ${since ? `<div class="cut" style="left:calc(var(--measure-rail) - var(--space-5) + (100% - var(--measure-rail) + var(--space-5) - var(--space-8)) * ${parseFloat(X(since)) / 100})"></div>` : `<div class="band" style="left:calc(var(--measure-rail) - var(--space-5) + (100% - var(--measure-rail) + var(--space-5) - var(--space-8)) * ${parseFloat(X(opts[0].id)) / 100});width:calc((100% - var(--measure-rail) + var(--space-5) - var(--space-8)) * ${(parseFloat(X(opts[2].id)) - parseFloat(X(opts[0].id))) / 100})"></div>`}
+      </div></section>
+    <aside class="side" aria-live="polite"><p class="eyebrow">Draft answer</p><p class="s">${Q.sentenceHtml(st.viaTouched ? st.c : Object.assign({}, st.c, { via: null }))}</p><p class="tk">${Q.esc(Q.tech(st.c))}</p>
+      <div class="n"><b>${r.quiet.length}</b><span>suppliers now</span></div>
+      <ul class="dep-list">${Q.ORDER.map(w => { const n = dep[w].size; const set = w === 'via' ? st.viaTouched : Q.isSet(st.c, w);
+        return `<li class="${n ? '' : 'ok'}"><q>${Q.esc(W[w].word)}</q>: ${set ? `<b>settled by you</b>` : n ? `<b>${n} row${n > 1 ? 's' : ''} would change</b> depending on what you mean. ${w === 'since' ? 'Pick a day above.' : w === 'kind' ? '<br><button data-k="kind">Live contracts only</button> · <button data-k="kindall">every supplier</button>' : w === 'who' ? `<br><button data-k="here">${Q.esc(DATA.floor.name)} only</button> · <button data-k="all">everything you can see</button>` : 'Untick what doesn’t count.'}` : 'makes no difference to this answer, so it isn’t asked.'}</li>`; }).join('')}</ul>
+      <p class="micro">${Shell.via('record', 'rows and counts from the record')}</p>
+      <div class="acts"><button class="btn primary">${ic('arrow-right')}Open the ${r.quiet.length}</button><button class="btn">${ic('bookmark')}Save</button></div></aside></div>`;
+  document.body.classList.toggle('tech', !!st.tech);
+}
+function setVia(id) { const v = new Set(st.c.via); v.has(id) ? v.delete(id) : v.add(id); if (!v.size) return; st.c.via = v; st.viaTouched = true; render(); }
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; Demo.stop();
+  if (b.dataset.since) { st.c.since = b.dataset.since; render(); }
+  else if (b.dataset.via) setVia(b.dataset.via);
+  else if (b.dataset.k) { const k = b.dataset.k; if (k === 'kind') st.c.kind = 'live'; else if (k === 'kindall') st.c.kind = 'all'; else st.c.who = k; render(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const k = e.key.toLowerCase();
+  if (k === 'r') { replay(); return; }
+  Demo.stop();
+  if (k === 'g') { st.gw = !st.gw; render(); }
+  else if (k === 't') { st.tech = !st.tech; render(); }
+  else if (/^[1-3]$/.test(k)) { st.c.since = W.since.opts[+k - 1].id; render(); }
+  else if ('qwerty'.includes(k) && k) { const c = DATA.contacts['qwerty'.indexOf(k)]; c && setVia(c.id); }
+  else if (k === 'l') { st.c.kind = st.c.kind === 'live' ? 'all' : 'live'; render(); }
+  else if (k === 'f') { st.c.who = st.c.who === 'here' ? 'all' : 'here'; render(); }
+});
+function replay() {
+  Object.assign(st, { c: { via: new Set(DATA.contacts.map(c => c.id)) }, viaTouched: false }); render();
+  const beat = Tok.ms('--motion-slow');
+  Demo.play([
+    [Tok.ms('--motion-run'), () => { st.c.since = W.since.opts[1].id; render(); }],
+    [beat, () => setVia('visit')], [beat, () => setVia('contract')], [beat, () => setVia('incident')]
+  ]);
+}
+replay();
+</script>
+</body>
+</html>

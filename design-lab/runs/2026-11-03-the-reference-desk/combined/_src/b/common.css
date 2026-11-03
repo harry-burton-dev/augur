@@ -1,0 +1,124 @@
+/* ---------------------------------------------------------------
+   Proposed tokens (all mixes of kit tokens; listed under "needs token" in notes)
+   --------------------------------------------------------------- */
+:root{
+  /* pencil: anything the model gateway proposes. Graphite with a little info-blue; dotted, italic, its own lane. */
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 70%, var(--info));
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--info) 6%, transparent);
+  /* six ways to be empty (from the catalogue run) */
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 80%, transparent);
+  --x-proposed-gap-tick: var(--space-2);
+  --x-proposed-hatch: color-mix(in srgb, var(--ink-muted) 40%, transparent);
+  --x-proposed-stale: repeating-linear-gradient(45deg, transparent 0 calc(var(--space-1) - 1px), var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-quiet: .62;
+  /* the floor you are on (Department here) */
+  --x-proposed-here: var(--floor-department-high);
+  --x-proposed-here-wash: color-mix(in srgb, var(--floor-department-high) 10%, transparent);
+  /* lit: what just changed, or what is kept */
+  --x-proposed-lit: var(--green);
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 12%, transparent);
+  /* the example record: the light language's beacon */
+  --x-proposed-beacon: var(--light);
+  --x-proposed-beacon-glow: color-mix(in srgb, var(--light) 30%, transparent);
+  /* sepia: "as it was" (from the saved surface) */
+  --x-proposed-then: color-mix(in srgb, var(--warning) 55%, var(--ink-muted));
+  --x-proposed-then-wash: color-mix(in srgb, var(--warning) 7%, transparent);
+  --x-proposed-type-micro: .6875rem;
+}
+:root, .mk-gap, .gapbox, .c-gap{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+p{margin:0}
+h1,h2,h3{margin:0;font-weight:400}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.lt{color:var(--light)}
+.small{font-size:var(--type-small);line-height:var(--leading-small)}
+.meta{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+
+/* ---------- chrome ---------- */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:0 var(--edge)}
+.top{display:flex;align-items:center;gap:var(--space-3);height:var(--target-md);border-bottom:1px solid var(--hairline)}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.floorchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.floorchip .fl{display:inline-block;width:var(--space-4);height:2px;background:var(--x-proposed-here)}
+.floorchip b{font-weight:400;color:var(--ink)}
+.crumb{font-size:var(--type-small);color:var(--ink-muted)}
+.crumb b{font-weight:400;color:var(--ink)}
+.top .sp{flex:1}
+.chipbtn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink-muted)}
+.chipbtn[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+.gwchip{border-style:dotted;border-color:var(--x-proposed-pencil);color:var(--x-proposed-pencil);font-style:italic}
+.gwchip.off{border-style:solid;border-color:var(--hairline-strong);color:var(--ink-muted);background:var(--surface-inset);font-style:normal}
+
+.qhead{padding:var(--space-3) 0;border-bottom:1px solid var(--hairline);display:grid;gap:var(--space-1)}
+.qwords{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);margin:0;letter-spacing:var(--tracking-tight)}
+.qwords::before{content:"\201C";color:var(--ink-muted)}
+.qwords::after{content:"\201D";color:var(--ink-muted)}
+.readas{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-1) var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.readas b{font-weight:400;color:var(--ink)}
+.main{min-height:0;padding:var(--space-4) 0 var(--space-2)}
+.foot{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-4);min-height:calc(var(--space-6) + var(--space-3));padding-left:calc(var(--measure-glance) + var(--space-5))}
+.hints{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+
+/* two registers: the technical word one step down */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:.8}
+.tech .tk{display:block}
+.tech span.tk{display:inline;margin-left:var(--space-2)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.btn:hover{border-color:var(--ink-muted);color:var(--light)}
+.btn.primary{border-color:color-mix(in srgb,var(--x-proposed-here) 60%,transparent);background:var(--x-proposed-here-wash);color:var(--light)}
+.btn[disabled]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+
+/* ---------- ink and pencil ---------- */
+/* ink: from the record, upright, solid. pencil: the model gateway's, dotted and italic, never counted. */
+.pencil{color:var(--x-proposed-pencil);font-style:italic;text-decoration:underline dotted var(--x-proposed-pencil);text-underline-offset:var(--focus-gap);text-decoration-thickness:1px}
+.pchip{display:inline-flex;align-items:center;gap:var(--space-1);font:italic 400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--x-proposed-pencil);border:1px dotted var(--x-proposed-pencil);border-radius:2px;padding:0 var(--space-1);white-space:nowrap}
+.ichip{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink-muted);border:1px solid var(--hairline-strong);border-radius:2px;padding:0 var(--space-1);white-space:nowrap}
+.pbox{border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key)}
+.plane{border-left:1px dotted var(--x-proposed-pencil);padding-left:var(--space-3)}
+/* provenance never washes out: an agreed guess keeps a dotted top edge and says who proposed it */
+.prov{font:italic 400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--x-proposed-pencil)}
+/* G off: pencil goes; nothing else moves */
+.gwoff .pencil-only{display:none!important}
+.gw-off-only{display:none}
+.gwoff .gw-off-only{display:revert}
+
+/* ---------- six ways to be empty ---------- */
+.mk{display:inline-block;vertical-align:middle;flex:none}
+.mk-gap{background:var(--x-proposed-gap);width:var(--space-4);height:var(--space-3);--x-proposed-gap-tick:var(--space-1)}
+.gapbox{background:var(--x-proposed-gap)}
+.mk-none{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);border-bottom:1px solid var(--ink-muted);padding:0 1px}
+.mk-na{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.mk-stale{background:var(--x-proposed-stale);width:var(--space-4);height:var(--space-3);border-radius:2px}
+.mk-break{width:var(--space-4);height:var(--space-3)}
+.mk-break path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.mk-unseen{display:inline-flex;align-items:center;justify-content:center;width:var(--space-4);height:var(--space-3);background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:2px;color:var(--ink-muted)}
+.mk-ok{width:var(--space-4);height:var(--space-3);background:var(--ink);border-radius:2px;opacity:.8}
+.mk-noplace{width:var(--space-4);height:var(--space-3);background:var(--x-proposed-gap);--x-proposed-gap-tick:var(--space-1);border:1px dashed var(--hairline-strong);border-radius:2px}
+.unseen{display:inline-flex;align-items:center;gap:var(--space-2);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-key);padding:var(--space-1) var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.unseen b{font-weight:400;color:var(--ink)}
+.some{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink-muted)}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+.x-cap{max-width:calc(var(--measure-glance) + var(--space-4))}

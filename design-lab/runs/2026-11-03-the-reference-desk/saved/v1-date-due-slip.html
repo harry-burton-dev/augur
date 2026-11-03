@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saved · V1 · The date-due slip</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens: all mixes of kit tokens; listed as "needs token"
+   in notes.md. Shared by the six saved-question variants.
+   --------------------------------------------------------------- */
+:root{
+  --x-proposed-type-micro:.6875rem;                       /* --type-micro: mono numerals in data (catalogue and wear-and-time asked too) */
+  --x-proposed-quiet:.62;                                 /* --time-past-dim: quiet lines, doesn't-apply text */
+  /* a model's guess: an info-tinted DASHED edge and italic words; a fact is never dashed */
+  --x-proposed-guess:color-mix(in srgb,var(--info) 72%,var(--ink));
+  --x-proposed-guess-wash:color-mix(in srgb,var(--info) 7%,transparent);
+  /* "as it was then": a sepia cast, like an old print; "now" stays plain light */
+  --x-proposed-then:color-mix(in srgb,var(--warning) 42%,var(--ink-muted));
+  --x-proposed-then-wash:color-mix(in srgb,var(--warning) 6%,transparent);
+  /* rows that joined or left an answer since the run before */
+  --x-proposed-join:color-mix(in srgb,var(--success) 70%,var(--ink));
+  --x-proposed-join-wash:color-mix(in srgb,var(--success) 7%,transparent);
+  --x-proposed-leave:var(--ink-muted);
+  /* the lit next step (light language) */
+  --x-proposed-lit:color-mix(in srgb,var(--green) 80%,var(--light));
+  --x-proposed-lit-wash:color-mix(in srgb,var(--green) 9%,transparent);
+  /* the floor you are on (Facilities, a Department) */
+  --x-proposed-here:var(--floor-department-high);
+  /* six ways to be empty (catalogue): hatches and the corner-tick gap */
+  --x-proposed-hatch:color-mix(in srgb,var(--ink-muted) 34%,transparent);
+  --x-proposed-unseen:repeating-linear-gradient(135deg,transparent 0 calc(var(--space-1) - 1px),var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-gap-ink:color-mix(in srgb,var(--ink-muted) 78%,transparent);
+  --x-proposed-gap-tick:var(--space-1);
+}
+:root,.mk-gap{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-muted)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.micro{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+h1,h2,h3{margin:0}
+.ttl{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.h3{font-weight:300;font-size:var(--type-body);line-height:var(--leading-body);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.lede{margin:0;color:var(--ink-muted);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.lede b{font-weight:400;color:var(--ink)}
+.small{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.small b{font-weight:400;color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);white-space:nowrap}
+.btn:hover{background:var(--surface-raised)}
+.btn[aria-pressed="true"]{background:var(--surface-raised);color:var(--light);border-color:var(--ink-muted)}
+.btn.primary{border-color:var(--x-proposed-lit);color:var(--light)}
+.btn[disabled]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+
+/* two registers: the technical line sits one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:block}
+
+/* floor edges */
+[data-tier="department"]{--fc:var(--floor-department-high)}
+[data-tier="team"]{--fc:var(--floor-team-high)}
+[data-tier="org"]{--fc:var(--floor-org-high)}
+[data-tier="you"]{--fc:var(--floor-you-high)}
+.fl{display:inline-flex;align-items:center;gap:var(--space-1);white-space:nowrap}
+.fl::before{content:"";width:var(--space-3);height:2px;border-radius:1px;background:var(--fc)}
+
+/* top band, shared */
+.band{display:flex;align-items:center;gap:var(--space-4);height:calc(var(--target-md) + var(--space-3));padding:0 var(--edge);border-bottom:1px solid var(--hairline);background:var(--surface-bar)}
+.band .brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.band .crumb{font-size:var(--type-meta);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center;white-space:nowrap;min-width:0}
+.band .crumb b{font-weight:400;color:var(--ink)}
+.band .where{margin-left:auto;display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted);white-space:nowrap}
+.band .where b{font-weight:400;color:var(--ink)}
+.band .hints{justify-content:flex-end}
+
+/* the question said in a sentence */
+.sent{margin:0;font-weight:300;font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-2));color:var(--ink-muted)}
+.sent .b{white-space:nowrap;color:var(--light);border-bottom:2px solid var(--x-proposed-here);padding:0 2px;border-radius:2px}
+.sent .b.model{border-bottom-style:dashed;border-bottom-color:var(--x-proposed-guess)}
+.said{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.said q{color:var(--ink);font-style:italic}
+
+/* how a step was worked out */
+.how{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-1);white-space:nowrap}
+.how.model{color:var(--x-proposed-guess);border-style:dashed;border-color:var(--x-proposed-guess);background:var(--x-proposed-guess-wash)}
+.how.you{color:var(--ink)}
+
+/* a model's guess, never drawn like a fact */
+.guess{font-style:italic;color:var(--x-proposed-guess);border:1px dashed var(--x-proposed-guess);background:var(--x-proposed-guess-wash);border-radius:2px;padding:0 var(--space-1)}
+.gtag{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--x-proposed-guess);border:1px dashed var(--x-proposed-guess);border-radius:2px;padding:0 var(--space-1);white-space:nowrap}
+
+/* six ways to be empty: the two used here */
+.mk{display:inline-block;vertical-align:middle;flex:none}
+.mk-gap{background:var(--x-proposed-gap);width:calc(var(--space-5) - var(--space-1));height:var(--space-4);vertical-align:-1px}
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.unseenbox{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-2);align-items:start;padding:var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--x-proposed-unseen),var(--surface-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.unseenbox b{font-weight:400;color:var(--ink)}
+.unseenbox svg{margin-top:2px}
+
+/* time: then and now */
+.then{color:var(--x-proposed-then)}
+.tag-then{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--x-proposed-then);border:1px solid color-mix(in srgb,var(--warning) 30%,transparent);background:var(--x-proposed-then-wash);border-radius:2px;padding:0 var(--space-1);white-space:nowrap}
+.tag-now{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--light);border:1px solid var(--hairline-strong);border-radius:2px;padding:0 var(--space-1);white-space:nowrap}
+
+/* answer rows, shared */
+.rows{list-style:none;margin:0;padding:0}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 var(--space-3);align-items:baseline;padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.row .nm{color:var(--light);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .lc{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.row .sub{grid-column:1 / -1;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.row.join{background:var(--x-proposed-join-wash);box-shadow:inset 2px 0 0 var(--x-proposed-join)}
+.row.leave .nm{color:var(--x-proposed-leave);text-decoration:line-through;text-decoration-color:var(--ink-muted)}
+.row.leave{opacity:.8}
+.row.dep-guess .nm::after{content:"";}
+
+/* deposit once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i,0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+
+/* toast, shared */
+.toast{position:fixed;right:var(--edge);bottom:var(--edge);z-index:var(--layer-toast);max-width:var(--measure-card);display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-2);padding:var(--space-3);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);box-shadow:var(--shadow-overlay);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);opacity:0;transform:translateY(var(--space-2));transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out);pointer-events:none}
+.toast.on{opacity:1;transform:none}
+.toast b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+@media (prefers-reduced-motion: reduce){.toast{transform:none}}
+
+/* ================= v1: date-due-slip ================= */
+.app{height:100vh;display:flex;flex-direction:column}
+.desk{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(calc(var(--measure-rail) + var(--space-5)),.62fr) minmax(0,1fr);gap:var(--space-5);padding:var(--space-5) var(--edge) calc(var(--space-7) + var(--space-2))}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.colhead{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+
+/* the catalogue card */
+.card{position:relative;flex:1;min-height:0;overflow:auto;background:
+  repeating-linear-gradient(to bottom,transparent 0 calc(var(--leading-meta) + var(--space-2) - 1px),color-mix(in srgb,var(--ink) 5%,transparent) calc(var(--leading-meta) + var(--space-2) - 1px) calc(var(--leading-meta) + var(--space-2))),
+  var(--surface-pane);border:1px solid var(--hairline-strong);border-top:2px solid var(--x-proposed-here);border-radius:var(--radius-key);padding:var(--space-4) var(--space-5) var(--space-6);scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.card .hole{margin:var(--space-5) auto 0}
+.callno{display:flex;justify-content:space-between;align-items:baseline;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.words{margin:var(--space-3) 0 var(--space-1);font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink);font-style:italic}
+.card .sent{margin:var(--space-2) 0 var(--space-3);font-size:var(--type-lead);line-height:calc(var(--leading-lead) + var(--space-2))}
+.pencil{list-style:none;margin:0 0 var(--space-3);padding:0;display:grid;gap:var(--space-1)}
+.pencil li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding-left:var(--space-3);border-left:1px solid var(--hairline-strong)}
+.pencil li b{font-weight:400;color:var(--ink)}
+.pencil li .fx{grid-column:1 / -1;opacity:.9}
+.card h4{margin:var(--space-3) 0 var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.steps{margin:0;padding-left:var(--space-4);display:grid;gap:2px;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.steps li{padding-left:var(--space-1)}
+.steps li::marker{font-family:var(--font-mono);color:var(--ink-muted)}
+.steps .how{margin-left:var(--space-1)}
+.steps .aside{display:block;color:var(--ink-muted)}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0}
+.facts dt{color:var(--ink-muted)}
+.facts dd{margin:0;color:var(--ink)}
+
+/* the date-due slip */
+.slip{flex:1;min-height:0;overflow:auto;background:color-mix(in srgb,var(--ink) 3%,var(--surface-inset));border:1px solid var(--hairline);border-radius:2px;padding:var(--space-3);scrollbar-width:thin}
+.sliphead{display:grid;grid-template-columns:minmax(0,1fr) auto;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);border-bottom:1px solid var(--hairline-strong);padding-bottom:var(--space-1);margin-bottom:var(--space-2)}
+.stamps{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.stamp{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 var(--space-2);align-items:center;width:100%;padding:var(--space-1) var(--space-2);border:1px solid color-mix(in srgb,var(--ink-muted) 60%,transparent);border-radius:2px;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink-muted);transform:rotate(var(--rot,0deg));text-align:left}
+.stamp:nth-child(odd){--rot:-.6deg}
+.stamp:nth-child(even){--rot:.5deg}
+.stamp .d{color:var(--ink)}
+.stamp .n{grid-row:span 2;font:200 var(--type-heading)/1 var(--font-sans);color:var(--light);letter-spacing:0;min-width:2ch;text-align:right}
+.stamp .st{display:inline-flex;gap:var(--space-1);align-items:center}
+.stamp.changed{border-color:var(--x-proposed-join);color:var(--x-proposed-join)}
+.stamp.changed .st{color:var(--x-proposed-join)}
+.stamp.then{border-color:var(--x-proposed-then);color:var(--x-proposed-then);background:var(--x-proposed-then-wash)}
+.stamp.then .d{color:var(--x-proposed-then)}
+.stamp.theirs{border-style:dashed;border-color:var(--hairline-strong);background:var(--x-proposed-unseen)}
+.stamp.theirs .n{font:400 var(--type-small)/1.2 var(--font-sans);text-transform:none;color:var(--ink-muted);max-width:14ch;text-align:right}
+.stamp[aria-pressed="true"]{box-shadow:0 0 0 1px var(--light);background-color:var(--surface-raised)}
+.stamp.press{animation:press var(--motion-slow) var(--ease-spring) both}
+@keyframes press{from{opacity:0;transform:scale(1.18) rotate(var(--rot,0deg))}to{opacity:1;transform:scale(1) rotate(var(--rot,0deg))}}
+@media (prefers-reduced-motion: reduce){.stamp.press{animation:fade var(--motion-base) both}@keyframes fade{from{opacity:0}}}
+.lastchg{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0}
+.lastchg b{font-weight:400;color:var(--light)}
+
+/* the answer at the selected address */
+.ans{flex:1;min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.addr{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.addr b{font-weight:400;color:var(--ink)}
+.seg{display:inline-flex;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);overflow:hidden}
+.seg button{height:var(--target-sm);padding:0 var(--space-3);font-size:var(--type-small);color:var(--ink-muted);display:inline-flex;gap:var(--space-1);align-items:center}
+.seg button[aria-pressed="true"]{background:var(--surface-raised);color:var(--light)}
+.seg button.thenbtn[aria-pressed="true"]{background:var(--x-proposed-then-wash);color:var(--x-proposed-then)}
+.count{display:flex;align-items:baseline;gap:var(--space-3);margin:0}
+.count b{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--light)}
+.count.then b{color:var(--x-proposed-then)}
+.ansbody{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
+.ansbody.then .row .nm{color:var(--x-proposed-then)}
+.ansbody .grp{margin:var(--space-3) 0 var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.ansbody .why{grid-column:1 / -1;display:flex;gap:var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ansbody .neverrow{display:grid;grid-template-columns:auto auto minmax(0,1fr);white-space:nowrap;gap:var(--space-2);align-items:center;padding:var(--space-1) var(--space-2);font-size:var(--type-meta);color:var(--ink)}
+.ansbody .neverrow small{color:var(--ink-muted);font-size:var(--type-small)}
+.theirsbox{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.theirsbox b{font-weight:400;color:var(--ink)}
+.actions{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.viewer{display:inline-flex;align-items:center;gap:var(--space-2)}
+.row.leave-then{box-shadow:inset 2px 0 0 var(--x-proposed-then)}
+
+.card .hole{width:var(--space-4);height:var(--space-4);border-radius:var(--radius-pill);background:var(--slate-deep);border:1px solid var(--hairline-strong)}
+.tech .pencil .tk,.tech .steps .tk{display:block}
+.ansbody .neverrow small{white-space:normal}
+
+</style>
+</head>
+<body>
+<div class="app pre" id="wrap">
+  <header class="band">
+    <span class="brand" id="brand"></span>
+    <span class="crumb" id="crumb"></span>
+    <span class="where" id="where"></span>
+    <div class="hints">
+      <span><span class="kbd">enter</span> rerun now</span>
+      <span><span class="kbd">A</span> as asked</span>
+      <span><span class="kbd">N</span> now</span>
+      <span><span class="kbd">&uarr;</span><span class="kbd">&darr;</span> stamps</span>
+      <span><span class="kbd">P</span> be Priya</span>
+      <span><span class="kbd">T</span> technical</span>
+      <span><span class="kbd">R</span> replay</span>
+    </div>
+  </header>
+  <main class="desk">
+    <section class="col" aria-label="The question card">
+      <div class="colhead"><h2 class="h3">The card</h2><span class="small">kept like a book: same card for everyone</span></div>
+      <article class="card dep" id="card"></article>
+    </section>
+    <section class="col" aria-label="The date-due slip">
+      <div class="colhead"><h2 class="h3">The slip</h2><span class="small" id="slipwho"></span></div>
+      <p class="lastchg dep" id="lastchg" style="--i:2"></p>
+      <div class="slip dep" style="--i:3"><div class="sliphead"><span>run · who · data as of</span><span>found</span></div><ol class="stamps" id="stamps"></ol></div>
+    </section>
+    <section class="col" aria-label="The answer at this address">
+      <div class="colhead"><h2 class="h3">The answer</h2><div class="seg" role="group" aria-label="Which data"><button class="thenbtn" id="bthen"></button><button id="bnow"></button></div></div>
+      <div class="ans dep" id="ans" style="--i:4"></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="x-cap"><b>Saved questions · V1</b> the question as a library card; each rerun stamps its slip · date-due slips, catalogue cards</div>
+<script>
+/* ======================================================================
+   Sample data for one deployment (Vale Regional Services). Every name,
+   label, date, count, sentence and reason on the page comes from here or
+   is computed from it by answer() below. In AUGUR it would come from
+   Data Atlas (suppliers, contracts, contact events and the floor each is
+   kept on), Artifacts (meeting notes), identity (who sees which floor)
+   and the saved question itself. Swap this object and the page redraws.
+   ====================================================================== */
+const DATA = {
+  app: 'Data Atlas',
+  org: 'Vale Regional Services',
+  today: '2026-11-03',
+  /* Records on floors you can't open: say "some", never a number (catalogue decision, still Harry's call). */
+  hiddenCount: 'some',
+  floors: {
+    you:        { name: 'Your own floor', tier: 'you', word: 'You' },
+    depot:      { name: 'Depot operations', tier: 'team', word: 'Team floor', lead: 'Marta Kowal', people: 16, above: 'facilities' },
+    facilities: { name: 'Facilities', tier: 'department', word: 'Department floor', lead: 'Ade Bello', people: 38, above: 'org' },
+    finance:    { name: 'Finance', tier: 'department', word: 'Department floor', lead: 'Priya Nair', people: 22, above: 'org' },
+    org:        { name: 'Vale Regional Services', tier: 'org', word: 'Org floor', people: 412 }
+  },
+  /* Who sees what: a floor shows what's kept on it and on the floors above, never below or beside. */
+  people: {
+    sam:   { name: 'Sam Okafor', first: 'Sam', role: 'Operator', floor: 'facilities', sees: ['you', 'facilities', 'org'] },
+    priya: { name: 'Priya Nair', first: 'Priya', role: 'Finance lead', floor: 'finance', sees: ['you', 'finance', 'org'] },
+    marta: { name: 'Marta Kowal', first: 'Marta', role: 'Depot lead', floor: 'depot', sees: ['you', 'depot', 'facilities', 'org'] },
+    orgmember: { name: 'Someone on the Org floor only', first: 'they', role: 'any member', floor: 'org', sees: ['you', 'org'] },
+    watch: { name: 'The watch', first: 'Watch', role: 'reruns it for Sam', floor: 'facilities', sees: ['you', 'facilities', 'org'], as: 'sam' }
+  },
+  /* Where "last contact" can be read from, and the floor each is kept on. */
+  sources: {
+    log:      { plain: 'Supplier contact log', what: 'emails and calls', floor: 'org', app: 'Data Atlas', tech: 'atlas · ContactEvent · kept on org' },
+    notes:    { plain: 'Meeting notes', what: 'meetings', floor: 'facilities', app: 'Artifacts', tech: 'artifacts · Facilities library · names read from text' },
+    invoices: { plain: 'Invoice queries', what: 'invoice queries', floor: 'finance', app: 'Data Atlas', tech: 'atlas · InvoiceQuery · kept on finance' }
+  },
+  /* How each step was worked out. Only "model" touches the model gateway. */
+  how: {
+    rule:  { plain: 'Worked out by a rule', short: 'rule', icon: 'list-checks', tech: 'Data Atlas query · no model' },
+    match: { plain: 'Matched by key and spelling', short: 'key + spelling', icon: 'search-check', tech: 'company number, then pg_trgm similarity · no model' },
+    model: { plain: 'Suggested by the model', short: 'model', icon: 'cpu', tech: 'model gateway · askModel · stored, never asked again on rerun' },
+    you:   { plain: 'Chosen by a person', short: 'chosen', icon: 'user-round-check', tech: 'clarification · confirmed by asker' }
+  },
+  question: {
+    id: 'Q-118',
+    words: 'which suppliers have we not heard from since spring?',
+    /* The sharpened question, said in a sentence. Each part is a blank someone filled. */
+    sentence: [
+      { t: 'Suppliers' },
+      { t: 'with a contract running on the day', b: 'suppliers' },
+      { t: 'whose last' },
+      { t: 'email, call, meeting or invoice query', b: 'heard' },
+      { t: 'was before' },
+      { t: '1 March 2026', b: 'spring' }
+    ],
+    clar: {
+      spring:    { said: 'since spring', asked: 'Spring from when?', chose: '1 March 2026', others: ['20 March (the equinox)', '1 April (our financial year)'], how: 'rule', by: 'sam',
+                   fixed: 'A fixed date. Next spring it still means 1 March 2026.', tech: 'calendar word "spring" from this deployment’s word list · date literal' },
+      heard:     { said: 'heard from', asked: 'What counts as hearing from them?', chose: 'email, call, meeting or invoice query', others: ['… or a delivery note'], how: 'model', by: 'sam',
+                   fixed: 'The model suggested the kinds of contact. Sam chose them, so a rerun never asks it again.', tech: 'model gateway proposed 4 event kinds · confirmed' },
+      suppliers: { said: 'suppliers', asked: 'All of them, or only those with a contract running?', chose: 'with a contract running on the day', others: ['all suppliers'], how: 'rule', by: 'sam',
+                   fixed: '“On the day” is the day of the run, so it moves with each rerun.', tech: 'supplier -holds-> contract, start ≤ run date ≤ end' }
+    },
+    steps: [
+      { plain: 'Start with every supplier', how: 'rule', tech: 'match (s:Supplier)' },
+      { plain: 'Keep those with a contract running on the day', how: 'rule', tech: 's -holds-> c where c.start ≤ day ≤ c.end' },
+      { plain: 'Find each one’s last contact in the contact log, meeting notes and invoice queries', how: 'match',
+        aside: 'Names in meeting notes are matched by company number and spelling. One match by meaning is a guess: it is shown, and not counted, until someone confirms it.', tech: 'max(contact.on) over sources the reader can open' },
+      { plain: 'Keep those whose last contact was before 1 March 2026', how: 'rule', tech: 'last_contact < 2026-03-01' },
+      { plain: 'List apart those with no contact logged at all', how: 'rule', tech: 'last_contact is null → not known yet' }
+    ],
+    cutoff: '2026-03-01',
+    asker: 'sam', asked: '2026-10-12', askedTime: '09:14',
+    sharedTo: 'org', sharedOn: '2026-10-27',
+    /* What a rerun needs to be honest. */
+    keeps: [
+      ['The words asked', 'which suppliers have we not heard from since spring?'],
+      ['Each choice that sharpened them', 'who chose, when, and which used the model'],
+      ['The steps', 'as a rule Data Atlas runs; no model on rerun'],
+      ['The moment it was asked', '12 Oct 2026, 09:14, for “as it was then”'],
+      ['The words’ meaning then', 'Data Atlas words as of 12 Oct (kinds, details)'],
+      ['Whose access each run used', 'never the rows themselves, when shared']
+    ],
+    watch: { when: 'the suppliers in it change', other: ['only the count changes', 'anything in its workings changes'], cadence: 'every morning at 07:00', tell: 'one quiet line on Home, nothing else' }
+  },
+  /* The suppliers it reads. Dates are ISO; logged = the day the record arrived. */
+  suppliers: [
+    { id: 'ashby', name: 'Ashby Grounds Ltd', contract: ['2024-04-01', '2027-03-31'], contacts: [{ on: '2026-02-14', src: 'log', via: 'email' }] },
+    { id: 'bright', name: 'Brightwater Cleaning', contract: ['2025-01-01', '2027-12-31'], contacts: [
+      { on: '2026-01-11', src: 'log', via: 'call' },
+      { on: '2026-04-04', src: 'notes', via: 'meeting', guess: { said: '“Brightwater team”', why: 'matched by meaning, not by name or number' } }] },
+    { id: 'carrow', name: 'Carrow Electrical', contract: ['2023-01-01', '2026-12-31'], contacts: [{ on: '2026-01-28', src: 'log', via: 'call' }] },
+    { id: 'dunmore', name: 'Dunmore Waste', contract: ['2025-06-01', '2028-05-31'], contacts: [{ on: '2026-02-20', src: 'notes', via: 'meeting' }] },
+    { id: 'fenwick', name: 'Fenwick Lifts', contract: ['2024-09-01', '2027-08-31'], contacts: [{ on: '2025-12-03', src: 'log', via: 'email' }] },
+    { id: 'halden', name: 'Halden Fleet Services', contract: ['2025-04-01', '2027-03-31'], contacts: [
+      { on: '2026-02-02', src: 'log', via: 'email' },
+      { on: '2026-09-09', src: 'notes', via: 'meeting', logged: '2026-10-22', by: 'Tom Reed' }] },
+    { id: 'kestrel', name: 'Kestrel Security', contract: ['2025-02-01', '2027-01-31'], contacts: [{ on: '2026-02-26', src: 'log', via: 'call' }] },
+    { id: 'north', name: 'Northgate Skips', contract: ['2026-10-27', '2028-10-26'], contractLogged: '2026-10-27', contacts: [{ on: '2026-02-10', src: 'log', via: 'email' }] },
+    { id: 'orchard', name: 'Orchard Catering', contract: ['2025-09-01', '2027-08-31'], contacts: [
+      { on: '2026-02-18', src: 'notes', via: 'meeting' },
+      { on: '2026-06-03', src: 'invoices', via: 'invoice query' }] },
+    { id: 'pell', name: 'Pell & Rowe Surveyors', contract: ['2025-01-01', '2027-12-31'], contacts: [{ on: '2026-05-12', src: 'log', via: 'email' }, { on: '2026-10-20', src: 'log', via: 'call' }] },
+    { id: 'quarry', name: 'Quarry Lane Plant Hire', contract: ['2024-01-01', '2026-12-31'], contacts: [{ on: '2026-07-30', src: 'log', via: 'call' }] },
+    { id: 'redfern', name: 'Redfern Signs', contract: ['2025-11-01', '2027-10-31'], contacts: [] },
+    { id: 'sefton', name: 'Sefton Print', contract: ['2023-07-01', '2026-06-30'], contacts: [{ on: '2026-01-05', src: 'log', via: 'email' }] },
+    { id: 'tarn', name: 'Tarn Water Testing', contract: ['2025-03-01', '2027-02-28'], contacts: [{ on: '2026-09-15', src: 'invoices', via: 'invoice query' }] },
+    { id: 'upton', name: 'Upton Hygiene', contract: ['2024-05-01', '2027-04-30'], contacts: [{ on: '2026-08-19', src: 'log', via: 'email' }] }
+  ],
+  /* Every run of the question. The count and rows are computed, never typed. */
+  runs: [
+    { at: '2026-10-12', time: '09:14', by: 'sam', asOf: '2026-10-12', kind: 'asked' },
+    { at: '2026-10-15', time: '11:02', by: 'sam', asOf: '2026-10-15', kind: 'rerun' },
+    { at: '2026-10-21', time: '07:00', by: 'watch', asOf: '2026-10-21', kind: 'watch' },
+    { at: '2026-10-23', time: '07:00', by: 'watch', asOf: '2026-10-23', kind: 'watch' },
+    { at: '2026-10-28', time: '07:00', by: 'watch', asOf: '2026-10-28', kind: 'watch' },
+    { at: '2026-11-03', time: '07:00', by: 'watch', asOf: '2026-11-03', kind: 'watch' },
+    { at: '2026-11-03', time: '08:40', by: 'priya', asOf: '2026-11-03', kind: 'rerun' }
+  ],
+  /* Why an answer can change. Plain word on top, technical one step down. */
+  reasons: {
+    world:   { plain: 'Something happened', line: 'The world changed: a contract started or ended.', icon: 'calendar-plus', tech: 'valid time moved: new fact in the period' },
+    learned: { plain: 'We learned about the past', line: 'A record of an earlier contact arrived late.', icon: 'history', tech: 'transaction time moved: backdated fact' },
+    access:  { plain: 'Different access', line: 'The person rerunning it can open different floors.', icon: 'lock', tech: 'reader’s floors differ · same question, same moment' },
+    guess:   { plain: 'A guess was settled', line: 'Someone confirmed or turned down a match the model made.', icon: 'cpu', tech: 'model match confirmed / rejected' },
+    words:   { plain: 'A word changed meaning', line: 'Data Atlas changed what a kind or detail means.', icon: 'book-open-text', tech: 'ontology version differs' }
+  },
+  /* Other saved questions on Sam's shelf (V6). */
+  lastLooked: '2026-10-15',
+  floorShelf: [
+    { id: 'Q-131', words: 'vans off the road this week', by: 'Ade Bello', floor: 'facilities', count: 4, changed: '2026-11-02' },
+    { id: 'Q-118', words: 'which suppliers have we not heard from since spring?', by: 'Sam Okafor', floor: 'org', live: true },
+    { id: 'Q-077', words: 'sites where the fire officer is not named', by: 'Estates desk', floor: 'org', count: 0, changed: '2026-07-14' }
+  ],
+  shelf: [
+    { id: 'Q-118', words: 'which suppliers have we not heard from since spring?', live: true },
+    { id: 'Q-104', words: 'vans due a service before Christmas', count: 12, changed: '2026-10-30', reason: 'world', floor: 'facilities' },
+    { id: 'Q-097', words: 'sites with no fire check this year', count: 3, changed: '2026-09-18', reason: 'learned', floor: 'facilities' },
+    { id: 'Q-090', words: 'contracts ending before April with no renewal decision', count: 5, changed: '2026-08-02', reason: 'world', floor: 'you' }
+  ]
+};
+
+/* ---------- helpers shared by the six variants ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ic = (n, size = 14) => Icons.svg(n, { size, stroke: 1.5 });
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const tok = name => { const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return parseFloat(v) * (v.endsWith('ms') ? 1 : 1000); };
+let TIMERS = [];
+const later = (fn, t) => { TIMERS.push(setTimeout(fn, RM ? 0 : t)); };
+const clearTimers = () => { TIMERS.forEach(clearTimeout); TIMERS = []; };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmt = d => { const [y, m, dd] = d.split('-'); return `${+dd} ${MON[+m - 1]} ${y}`; };
+const fmtS = d => { const [, m, dd] = d.split('-'); return `${+dd} ${MON[+m - 1]}`; };
+const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
+const P = k => DATA.people[k];
+const F = k => DATA.floors[k];
+const SRC = k => DATA.sources[k];
+const SUP = id => DATA.suppliers.find(s => s.id === id);
+const Q = DATA.question;
+const setTech = on => { document.body.classList.toggle('tech', on); $$('[data-tech]').forEach(b => b.setAttribute('aria-pressed', on)); };
+const fl = k => `<span class="fl" data-tier="${F(k).tier}">${esc(F(k).name)}</span>`;
+const howTag = k => `<span class="how ${k}">${ic(DATA.how[k].icon, 11)}${esc(DATA.how[k].short)}</span>`;
+
+/* ---------- the answer, computed: (who reruns it, the data as it was on asOf) ---------- */
+function answer(who, asOf, opts = {}) {
+  const sees = P(who).sees;
+  const can = src => sees.includes(SRC(src).floor);
+  const out = { who, asOf, rows: [], never: [], heard: [], ended: [], hidden: Object.keys(DATA.sources).filter(k => !can(k)) };
+  DATA.suppliers.forEach(s => {
+    const known = (s.contractLogged || s.contract[0]) <= asOf;
+    const running = known && s.contract[0] <= asOf && asOf <= s.contract[1];
+    if (!running) { out.ended.push({ s, why: s.contract[0] > asOf ? 'its contract had not started' : 'its contract ended ' + fmt(s.contract[1]) }); return; }
+    const vis = s.contacts.filter(c => can(c.src) && (c.logged || c.on) <= asOf);
+    const facts = vis.filter(c => !c.guess || opts.guesses);
+    const guesses = vis.filter(c => c.guess && !opts.guesses);
+    const last = facts.sort((a, b) => a.on < b.on ? 1 : -1)[0];
+    if (!last) { out.never.push({ s }); return; }
+    const g = guesses.find(c => c.on >= Q.cutoff);
+    if (last.on < Q.cutoff) out.rows.push({ s, last, guess: g || null });
+    else out.heard.push({ s, last });
+  });
+  return out;
+}
+const ids = a => a.rows.map(r => r.s.id);
+function diff(a, b) {
+  const A = ids(a), B = ids(b);
+  return { joined: B.filter(x => !A.includes(x)), left: A.filter(x => !B.includes(x)), same: B.filter(x => A.includes(x)) };
+}
+/* Why did one supplier's place differ between run a and run b? */
+function why(id, a, b) {
+  const s = SUP(id);
+  const startA = s.contract[0] <= a.asOf && (s.contractLogged || s.contract[0]) <= a.asOf;
+  const startB = s.contract[0] <= b.asOf && (s.contractLogged || s.contract[0]) <= b.asOf;
+  if (startA !== startB) return { r: 'world', text: `Its contract started on ${fmt(s.contract[0])}.` };
+  const seesA = P(a.who).sees, seesB = P(b.who).sees;
+  const late = s.contacts.find(c => c.logged && c.logged > a.asOf && c.logged <= b.asOf && seesB.includes(SRC(c.src).floor));
+  if (late && seesA.join() === seesB.join()) return { r: 'learned', text: `A ${c2(late)} on ${fmt(late.on)} was logged on ${fmt(late.logged)}${late.by ? ' by ' + late.by : ''}.`, c: late };
+  const only = s.contacts.find(c => seesA.includes(SRC(c.src).floor) !== seesB.includes(SRC(c.src).floor) && c.on >= Q.cutoff);
+  if (only) {
+    const holder = seesA.includes(SRC(only.src).floor) ? a.who : b.who;
+    return { r: 'access', text: `${SRC(only.src).plain} are kept on ${F(SRC(only.src).floor).name}. ${P(holder).first} can open them; ${P(holder === a.who ? b.who : a.who).first} can’t.`, c: only, holder };
+  }
+  const onlyAny = s.contacts.find(c => seesA.includes(SRC(c.src).floor) !== seesB.includes(SRC(c.src).floor));
+  if (onlyAny) {
+    const holder = seesA.includes(SRC(onlyAny.src).floor) ? a.who : b.who;
+    return { r: 'access', text: `Its only contact is in ${SRC(onlyAny.src).plain.toLowerCase()}, kept on ${F(SRC(onlyAny.src).floor).name}, which ${P(holder === a.who ? b.who : a.who).first} can’t open.`, c: onlyAny, holder };
+  }
+  return { r: 'world', text: 'Something in the record changed.' };
+}
+const c2 = c => c.via;
+const reasonTag = r => `<span class="how">${ic(DATA.reasons[r].icon, 11)}${esc(DATA.reasons[r].plain)}</span>`;
+
+/* the question said in a sentence; blanks show who filled them and how */
+function sentenceHtml() {
+  return Q.sentence.map(p => p.b
+    ? `<span class="b ${Q.clar[p.b].how === 'model' ? 'model' : ''}" data-b="${p.b}" title="${esc(Q.clar[p.b].said)} → ${esc(Q.clar[p.b].chose)}">${esc(p.t)}</span>`
+    : esc(p.t)).join(' ') + '.';
+}
+/* "not yours to see", said once, never per row: no count, no names */
+function unseenHtml(who) {
+  const a = answer(who, DATA.today);
+  return a.hidden.map(k => {
+    const f = F(SRC(k).floor);
+    return `<div class="unseenbox">${ic('lock', 13)}<span><b>${esc(SRC(k).plain)}</b> are kept on ${esc(f.name)}, a floor ${who === 'sam' ? 'you' : esc(P(who).first)} can’t open. ${esc(DATA.hiddenCount[0].toUpperCase() + DATA.hiddenCount.slice(1))} suppliers here may have been heard from there. Ask ${esc(f.lead)}, ${esc(f.name.toLowerCase())} lead.<span class="tk">${esc(SRC(k).tech)} · 403 on read · count withheld</span></span></div>`;
+  }).join('');
+}
+function rowHtml(r, extra = '') {
+  const lc = r.last ? `${fmtS(r.last.on)} ${r.last.on.slice(0, 4)} · ${r.last.via}` : '';
+  const g = r.guess ? `<span class="sub"><span class="gtag">${ic('cpu', 10)}guess</span> <span class="guess">${esc(r.guess.via)} ${fmtS(r.guess.on)}?</span> a meeting note says ${esc(r.guess.guess.said)}, ${esc(r.guess.guess.why)}. Not counted until someone confirms it.</span>` : '';
+  return `<li class="row ${extra}" data-id="${r.s.id}"><span class="nm">${esc(r.s.name)}</span><span class="lc">${lc}</span>${g}</li>`;
+}
+
+/* ---------- keyboard: R replays, T technical words; each variant adds its own ---------- */
+let onKey = () => false;
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (onKey(k, e)) { e.preventDefault(); return; }
+  if (k === 'r') boot();
+  else if (k === 't') setTech(!document.body.classList.contains('tech'));
+});
+let toastT;
+function toast(html) {
+  const t = $('#toast'); if (!t) return;
+  t.innerHTML = html; Icons.hydrate(t); t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), tok('--motion-toast'));
+}
+
+/* ================= v1: date-due-slip ================= */
+/* V1: the card stays the same for every reader; each reader's slip shows only their own counts. */
+const S = { viewer: 'sam', runs: [], sel: 0, mode: 'now', pressed: -1 };
+const owner = r => P(r.by).as || r.by;
+const mine = r => owner(r) === S.viewer;
+
+function header() {
+  $('#brand').textContent = DATA.app;
+  $('#crumb').innerHTML = `${ic('chevron-right', 14)}<span>Questions</span>${ic('chevron-right', 14)}<b>${esc(Q.id)}</b>`;
+  const p = P(S.viewer);
+  $('#where').innerHTML = `<span class="viewer">${ic('user-round', 13)}<b>${esc(p.name)}</b></span> on ${fl(p.floor)}`;
+  $('#bthen').innerHTML = `${ic('history', 12)}as it was when asked`;
+  $('#bnow').innerHTML = `${ic('clock', 12)}as it is now`;
+  $('#bthen').setAttribute('aria-pressed', S.mode === 'then'); $('#bnow').setAttribute('aria-pressed', S.mode === 'now');
+  $('#bthen').onclick = () => { S.mode = 'then'; drawAns(); header(); };
+  $('#bnow').onclick = () => { S.mode = 'now'; drawAns(); header(); };
+  Icons.hydrate($('.band')); Icons.hydrate($('#bthen').parentNode);
+}
+
+function drawCard() {
+  const c = Q.clar;
+  const pencil = Object.keys(c).map(k => `<li><span><q>${esc(c[k].said)}</q> → <b>${esc(c[k].chose)}</b></span>${howTag(c[k].how)}<span class="fx">${esc(c[k].fixed)}<span class="tk">${esc(c[k].tech)}</span></span></li>`).join('');
+  const steps = Q.steps.map(s => `<li>${esc(s.plain)} ${howTag(s.how)}${s.aside ? `<span class="aside">${esc(s.aside)}</span>` : ''}<span class="tk">${esc(s.tech)}</span></li>`).join('');
+  $('#card').innerHTML = `
+    <div class="callno"><span>${esc(Q.id)} · question</span><span>kept on ${fl(Q.sharedTo)}</span></div>
+    <p class="words">“${esc(Q.words)}”</p>
+    <p class="small">asked by <b>${esc(P(Q.asker).name)}</b> on ${fmt(Q.asked)}, ${Q.askedTime} · shared to the Org floor ${fmt(Q.sharedOn)}</p>
+    <h4>Said in a sentence</h4>
+    <p class="sent">${sentenceHtml()}</p>
+    <h4>How the words were sharpened</h4>
+    <ul class="pencil">${pencil}</ul>
+    <h4>The steps it reruns</h4>
+    <ol class="steps">${steps}</ol>
+    <h4>Watching</h4>
+    <dl class="facts"><dt>Tells ${esc(P(Q.asker).first)} when</dt><dd>${esc(Q.watch.when)}</dd><dt>Checks</dt><dd>${esc(Q.watch.cadence)}, with ${esc(P(Q.asker).first)}’s access</dd><dt>Says so with</dt><dd>${esc(Q.watch.tell)}</dd></dl><div class="hole" aria-hidden="true"></div>`;
+  Icons.hydrate($('#card'));
+}
+
+/* each run's answer, computed */
+function withAnswers(runs) { return runs.map(r => ({ ...r, a: answer(r.by, r.asOf) })); }
+function prevMine(i) { for (let j = i - 1; j >= 0; j--) if (owner(S.runs[j]) === owner(S.runs[i]) && S.runs[j].kind !== 'then') return S.runs[j]; return null; }
+function lastChanged() {
+  let last = null;
+  S.runs.forEach((r, i) => { if (!mine(r) || r.kind === 'then') return; const p = prevMine(i); if (p && (diff(p.a, r.a).joined.length || diff(p.a, r.a).left.length)) last = r; });
+  return last;
+}
+function drawSlip() {
+  const shown = S.runs;
+  $('#slipwho').textContent = `${P(S.viewer).first}’s slip`;
+  $('#stamps').innerHTML = shown.map((r, i) => {
+    const p = prevMine(i);
+    const d = p ? diff(p.a, r.a) : null;
+    const ch = d && (d.joined.length || d.left.length);
+    const who = r.by === 'watch' ? 'the watch' : P(r.by).first;
+    if (!mine(r)) {
+      return `<li><button class="stamp theirs ${i === S.pressed ? 'press' : ''}" data-i="${i}" aria-pressed="${i === S.sel}"><span class="d">${fmtS(r.at)} ${r.time}</span><span class="n">their answer is theirs</span><span class="st">${ic('lock', 10)}${esc(who)} · ${esc(F(P(r.by).floor).name)}</span></button></li>`;
+    }
+    const cls = r.kind === 'then' ? 'then' : ch ? 'changed' : '';
+    const st = r.kind === 'then' ? `${ic('history', 10)}data as of ${fmtS(r.asOf)}` : r.kind === 'asked' ? `${ic('pen-line', 10)}asked · ${esc(who)}` : !p ? `${ic('play', 10)}first run · ${esc(who)}` : ch ? `${ic('git-compare', 10)}changed · ${esc(who)}` : `${ic('equal', 10)}same · ${esc(who)}`;
+    return `<li><button class="stamp ${cls} ${i === S.pressed ? 'press' : ''}" data-i="${i}" aria-pressed="${i === S.sel}"><span class="d">${fmtS(r.at)} ${r.time}</span><span class="n">${r.a.rows.length}</span><span class="st">${st}</span></button></li>`;
+  }).join('');
+  $$('#stamps .stamp').forEach(b => b.onclick = () => { S.sel = +b.dataset.i; S.mode = S.runs[S.sel].kind === 'then' ? 'then' : 'now'; S.pressed = -1; drawSlip(); drawAns(); header(); });
+  const lc = lastChanged();
+  $('#lastchg').innerHTML = lc ? `${ic('git-compare', 13)} Its answer last changed on <b>${fmt(lc.at)}</b>, ${daysBetween(lc.at, DATA.today)} days ago. ${esc(Q.watch.cadence[0].toUpperCase() + Q.watch.cadence.slice(1))} it checks again; a stamp that says <i>same</i> means nothing moved.` : '';
+  Icons.hydrate($('#stamps')); Icons.hydrate($('#lastchg'));
+  const sel = $('#stamps [aria-pressed="true"]'); if (sel) sel.scrollIntoView({ block: 'nearest' });
+}
+
+function drawAns() {
+  const r = S.runs[S.sel];
+  const el = $('#ans');
+  if (!mine(r)) {
+    const them = P(r.by);
+    el.innerHTML = `<p class="addr">${ic('lock', 13)} <b>${esc(them.name)}</b> reran it on ${fmt(r.at)}, ${r.time}, from ${fl(them.floor)}</p>
+      <div class="theirsbox"><span>Each person reruns it with their own access, so <b>${esc(them.first)}’s answer is ${esc(them.first)}’s</b>. You see that ${esc(them.first)} reran it, not what ${esc(them.first)} got: ${esc(them.first)} can open floors you can’t, and the other way round.</span>
+      <span>Want to compare? Ask ${esc(them.first)} to send you the rows ${esc(them.first)} is allowed to share, or press <span class="kbd">P</span> to see this prototype as ${esc(them.first)}.</span></div>
+      ${unseenHtml(S.viewer)}`;
+    Icons.hydrate(el); return;
+  }
+  /* the address: who, and the data as of when */
+  const asked = S.runs.find(x => x.kind === 'asked');
+  const askedA = answer(S.viewer === Q.asker ? Q.asker : S.viewer, Q.asked);
+  const nowA = r.kind === 'then' ? answer(S.viewer, DATA.today) : r.a;
+  const showThen = S.mode === 'then';
+  const a = showThen ? askedA : nowA;
+  const other = showThen ? nowA : askedA;
+  const d = diff(askedA, nowA);
+  const join = showThen ? [] : d.joined, left = showThen ? d.left : [];
+  const label = showThen ? `<span class="tag-then">${ic('history', 10)}as it was</span> <span>the data as Data Atlas knew it on <b>${fmt(Q.asked)}</b>, ${Q.askedTime}</span>` : `<span class="tag-now">${ic('clock', 10)}as it is now</span> <span>the data as Data Atlas knows it on <b>${fmt(r.asOf)}</b></span>`;
+  const rows = a.rows.map(x => rowHtml(x, (showThen ? left : join).includes(x.s.id) ? (showThen ? 'leave-then' : 'join') : '')).join('');
+  const goneNow = showThen ? '' : d.left.map(id => { const w = why(id, askedA, nowA); return `<li class="row leave" data-id="${id}"><span class="nm">${esc(SUP(id).name)}</span><span class="lc">left</span><span class="why">${reasonTag(w.r)} ${esc(w.text)}</span></li>`; }).join('');
+  const joinWhy = showThen ? '' : d.joined.map(id => { const w = why(id, askedA, nowA); return [id, w]; });
+  el.innerHTML = `<p class="addr">${label}</p>
+    <p class="count ${showThen ? 'then' : ''}"><b>${a.rows.length}</b><span class="small">suppliers not heard from since ${fmt(Q.cutoff)}, with ${esc(P(S.viewer).first)}’s access${showThen ? '' : `. When it was asked: ${askedA.rows.length}. ${askedA.rows.length === a.rows.length ? 'Same number, ' + (d.joined.length + d.left.length ? 'not the same suppliers.' : 'same suppliers.') : (d.joined.length + d.left.length) + ' changed places.'}`}</span></p>
+    <div class="ansbody ${showThen ? 'then' : ''}">
+      <ul class="rows">${rows}${goneNow}</ul>
+      ${a.never.length ? `<p class="grp">Listed apart: no contact logged at all</p>${a.never.map(n => `<div class="neverrow"><span class="mk mk-gap"></span>${esc(n.s.name)} <small>not known yet · anyone who has dealt with them could add it</small></div>`).join('')}` : ''}
+      <p class="grp">Can’t be checked from here</p>
+      ${unseenHtml(S.viewer)}
+    </div>
+    <div class="actions"><button class="btn primary" id="rerun">${ic('refresh-cw', 13)}Rerun now</button><button class="btn" id="rethen">${ic('history', 13)}Rerun as it was on ${fmtS(Q.asked)}</button></div>`;
+  /* annotate joined rows with why */
+  if (!showThen) joinWhy.forEach(([id, w]) => { const li = $(`.row[data-id="${id}"]`, el); if (li) li.insertAdjacentHTML('beforeend', `<span class="why">${reasonTag(w.r)} ${esc(w.text)}</span>`); });
+  if (showThen) d.left.forEach(id => { const li = $(`.row[data-id="${id}"]`, el); const w = why(id, askedA, nowA); if (li) li.insertAdjacentHTML('beforeend', `<span class="why">${ic('history', 11)} In this answer then. Since: ${esc(w.text)}</span>`); });
+  if (showThen) el.insertAdjacentHTML('beforeend', '');
+  $('#rerun').onclick = () => rerun('now');
+  $('#rethen').onclick = () => rerun('then');
+  Icons.hydrate(el);
+}
+
+function rerun(kind) {
+  const r = kind === 'then'
+    ? { at: DATA.today, time: '09:31', by: S.viewer, asOf: Q.asked, kind: 'then' }
+    : { at: DATA.today, time: '09:30', by: S.viewer, asOf: DATA.today, kind: 'rerun' };
+  S.runs.push({ ...r, a: answer(r.by, r.asOf) });
+  S.sel = S.pressed = S.runs.length - 1; S.mode = kind === 'then' ? 'then' : 'now';
+  header(); drawSlip(); drawAns();
+  toast(`${ic(kind === 'then' ? 'history' : 'refresh-cw', 14)}<span><b>${kind === 'then' ? 'Rerun with the data as it was on ' + fmt(Q.asked) : 'Rerun with the data as it is now'}</b><br>No model was asked: the steps are kept as rules. One meeting-note match is still a guess and stays uncounted.</span>`);
+}
+
+function setViewer(v) {
+  S.viewer = v; S.mode = 'now';
+  const idx = S.runs.map((r, i) => [r, i]).filter(([r]) => mine(r) && r.kind !== 'then').pop();
+  S.sel = idx ? idx[1] : 0; S.pressed = -1;
+  header(); drawSlip(); drawAns();
+}
+
+onKey = k => {
+  if (k === 'enter' && document.activeElement === document.body) { rerun('now'); return true; }
+  if (k === 'a') { S.mode = 'then'; header(); drawAns(); return true; }
+  if (k === 'n') { S.mode = 'now'; header(); drawAns(); return true; }
+  if (k === 'p') { setViewer(S.viewer === 'sam' ? 'priya' : 'sam'); return true; }
+  if (k === 'arrowdown' || k === 'arrowup') {
+    S.sel = Math.max(0, Math.min(S.runs.length - 1, S.sel + (k === 'arrowdown' ? 1 : -1)));
+    S.mode = S.runs[S.sel].kind === 'then' ? 'then' : 'now'; S.pressed = -1; header(); drawSlip(); drawAns(); return true;
+  }
+  return false;
+};
+
+function boot() {
+  clearTimers(); setTech(false);
+  S.viewer = 'sam'; S.mode = 'now';
+  S.runs = withAnswers(DATA.runs.slice(0, -2)); /* before this morning */
+  S.sel = S.runs.length - 1; S.pressed = -1;
+  const w = $('#wrap'); w.classList.add('pre');
+  header(); drawCard(); drawSlip(); drawAns();
+  requestAnimationFrame(() => requestAnimationFrame(() => w.classList.remove('pre')));
+  /* the moment: this morning's watch stamps the slip, then Priya's rerun lands as a stamp Sam can't read */
+  later(() => { S.runs.push({ ...DATA.runs.at(-2), a: answer(DATA.runs.at(-2).by, DATA.runs.at(-2).asOf) }); S.sel = S.pressed = S.runs.length - 1; drawSlip(); drawAns(); }, tok('--motion-run'));
+  later(() => { S.runs.push({ ...DATA.runs.at(-1), a: answer(DATA.runs.at(-1).by, DATA.runs.at(-1).asOf) }); S.pressed = S.runs.length - 1; drawSlip(); }, tok('--motion-run') + tok('--motion-spin'));
+  later(() => { S.mode = 'now'; header(); drawAns(); }, tok('--motion-run') + tok('--motion-spin') + tok('--motion-slow'));
+}
+Icons.hydrate();
+boot();
+
+</script>
+</body>
+</html>

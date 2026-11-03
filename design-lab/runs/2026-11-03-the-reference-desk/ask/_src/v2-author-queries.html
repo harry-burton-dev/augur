@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The ask · V2 · Author queries</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+/* ---- V2: the question as a proof; loose words get numbered queries in the margin, answered in any order ---- */
+.proof{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) min(calc(var(--measure-decision) + var(--space-5)),40%);gap:var(--space-6)}
+.page{display:flex;flex-direction:column;min-height:0;padding-top:var(--space-4)}
+.inbox{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3);border-bottom:1px solid var(--hairline-strong);padding-bottom:var(--space-2);margin-bottom:var(--space-6)}
+.inbox input{flex:1 1 calc(var(--measure-card) - var(--space-6));background:none;border:0;outline:0;font:300 var(--type-meta)/1 var(--font-sans);color:var(--ink);min-width:0}
+.as{margin:0 0 var(--space-2)}
+.q{margin:0;font:200 var(--type-display)/calc(var(--leading-display) * 1.5) var(--font-sans);color:var(--ink);letter-spacing:var(--tracking-tight);max-width:var(--measure-wide)}
+.q .lw{position:relative;color:var(--x-proposed-loose);text-decoration:underline wavy color-mix(in srgb,var(--warning) 45%,transparent);text-decoration-thickness:1px;text-underline-offset:.2em;border-radius:2px;cursor:pointer}
+.q .lw.hot{background:color-mix(in srgb,var(--warning) 10%,transparent)}
+.q sup{font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-loose);margin-left:2px;vertical-align:super}
+.q ruby{ruby-position:over}
+.q .lw.done{color:var(--light);text-decoration:underline solid var(--x-proposed-here);text-decoration-thickness:1px;text-underline-offset:.2em}
+.q .lw.done sup{color:var(--x-proposed-here)}
+.q .lw.kept{text-decoration-style:dotted;text-decoration-line:underline}
+.q rt{font:300 var(--type-meta)/1.2 var(--font-sans);color:var(--light);letter-spacing:0;padding-bottom:var(--space-1)}
+.q rt.fresh{animation:fresh var(--motion-calm) var(--ease-out)}
+.marks{margin:var(--space-4) 0 0;display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);align-items:center;font-size:var(--type-small);color:var(--ink-muted);max-width:var(--measure-wide)}
+.marks span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.marks b{font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-loose)}
+.setas{margin-top:var(--space-6);border-top:1px solid var(--hairline-strong);padding-top:var(--space-4);display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-5);align-items:start}
+.setas .n{font:200 var(--type-display)/1 var(--font-sans);color:var(--light);font-variant-numeric:tabular-nums}
+.setas .s{font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--ink-muted);margin:var(--space-1) 0 var(--space-2)}
+.setas .e{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);align-items:center}
+.setas .e span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.setas .acts{display:flex;flex-direction:column;gap:var(--space-2)}
+.margin{min-height:0;border-left:1px solid var(--hairline);padding-left:var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.mh{display:flex;justify-content:space-between;align-items:baseline}
+.qs{display:flex;flex-direction:column;gap:var(--space-2)}
+.slip{border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-2) var(--space-3) var(--space-3);background:var(--surface-inset);transition:border-color var(--motion-base) var(--ease-standard)}
+.slip.hot{border-color:var(--hairline-strong);background:var(--surface-raised)}
+.slip .h{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-2);align-items:baseline}
+.slip .no{font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-loose)}
+.slip .t{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.slip .t small{display:block;color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.slip.done{padding-bottom:var(--space-2)}
+.slip.done .no{color:var(--x-proposed-here)}
+.slip.done .t{color:var(--ink-muted)}
+.slip.done .t b{font-weight:400;color:var(--ink)}
+.slip .opts{margin-top:var(--space-2);display:grid;gap:2px}
+.slip .opt{min-height:calc(var(--target-sm) - var(--space-1));grid-template-columns:var(--space-5) minmax(0,1fr) auto}
+.slip .foot{display:flex;justify-content:space-between;align-items:center;margin-top:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.slip .foot button{text-decoration:underline;text-decoration-color:var(--hairline-strong);text-underline-offset:var(--focus-gap)}
+.raised{display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-1)}
+@media (max-height:840px){.q{font-size:var(--type-title-s);line-height:calc(var(--leading-title-s) * 1.5)}.setas{margin-top:var(--space-4)}.marks{margin-top:var(--space-2)}.inbox{margin-bottom:var(--space-4)}.setas .n{font-size:var(--type-title)}.slip .opt small{display:none}}
+</style>
+</head>
+<body>
+<div class="app"><div id="rail"></div><main class="main" id="main"></main></div>
+<div id="keys"></div>
+<div class="x-cap"><b>The ask · V2</b> author queries: your question as a proof, numbered queries in the margin · copy-editors, proof marks</div>
+<script>
+/*@DATA*/
+/*@ENGINE*/
+const W = Q.WORDS, ic = Shell.ic;
+/* margin order follows the question's own word order */
+const ORDER = Q.ORDER.slice().sort((a, b) => DATA.question.indexOf(W[a].word) - DATA.question.indexOf(W[b].word));
+const st = { c: {}, kept: new Set(), hot: null, gw: DATA.gateway.on, fresh: null };
+document.getElementById('rail').outerHTML = Shell.rail();
+document.getElementById('keys').innerHTML = Shell.keys([['1–4', 'go to a query'], ['a–f', 'answer the open one'], ['K', 'keep it loose'], ['⌫', 'reopen the query'], ['G', 'model gateway on/off'], ['T', 'technical words'], ['R', 'replay']]);
+const settled = w => Q.isSet(st.c, w) || st.kept.has(w);
+const openW = () => st.hot && !settled(st.hot) ? st.hot : ORDER.find(w => !settled(w));
+
+function questionHtml() {
+  let html = '', at = 0; const qq = DATA.question;
+  ORDER.forEach((w, i) => {
+    const word = W[w].word, k = qq.indexOf(word);
+    html += Q.esc(qq.slice(at, k));
+    const set = Q.isSet(st.c, w), kept = st.kept.has(w);
+    const span = `<span class="lw ${set ? 'done' : ''} ${kept ? 'kept' : ''} ${st.hot === w ? 'hot' : ''}" data-go="${w}">${Q.esc(word)}<sup>${i + 1}${set ? ' ✓' : ''}</sup></span>`;
+    html += span;
+    at = k + word.length;
+  });
+  return html + Q.esc(qq.slice(at));
+}
+function slipHtml(w, i) {
+  const word = W[w], set = Q.isSet(st.c, w), kept = st.kept.has(w), open = openW() === w;
+  const raisedBy = w === 'kind' || w === 'since' ? Shell.via('rule', 'raised by name') : st.gw ? Shell.via('model', 'raised by the model') : Shell.via('rule', 'not matched, so asked');
+  if (!open) return `<div class="slip done ${st.hot === w ? 'hot' : ''}"><div class="h"><span class="no">${i + 1}</span><button class="t" data-go="${w}">${Q.esc(word.word)} · <b>${set ? Q.esc(Q.phrase(st.c, w)) : kept ? 'kept loose: each reading is shown' : 'waiting'}</b></button>${set ? Shell.via('you', 'you') : ''}</div></div>`;
+  const opts = word.opts.filter(o => !(st.gw && o.far));
+  const far = word.opts.filter(o => o.far);
+  return `<div class="slip hot"><div class="h"><span class="no">${i + 1}</span><span class="t">${Q.esc(word.ask)}<small>${Q.esc(word.why)}</small></span></div>
+    <div class="raised">${raisedBy}</div>
+    <div class="opts">${opts.map((o, k) => { const on = w === 'via' ? !!(st.c.via && st.c.via.has(o.id)) : st.c[w] === o.id;
+      return `<button class="opt" data-w="${w}" data-id="${o.id}" aria-pressed="${on}"><span class="k">${'abcdef'[k]}</span><span class="l">${Q.esc(o.label)}${o.sub ? `<small>${Q.esc(o.sub)}</small>` : ''}</span><span class="c">→ ${Q.countIf(st.c, w, o.id)}</span></button>`; }).join('')}</div>
+    <div class="foot"><button data-keep="${w}">Keep it loose</button>${w === 'via' && st.gw ? `<span>${far.length} more the model set aside</span>` : `<span>${ic('scale', 12)} nothing chosen for you</span>`}</div></div>`;
+}
+function render() {
+  const r = Q.run(st.c), left = ORDER.filter(w => !settled(w)).length;
+  document.getElementById('main').innerHTML = `<div class="top"><div><p class="eyebrow">${Q.esc(DATA.floor.name)} · front page</p><h1>Ask</h1></div>${contentsHtml()}</div>
+   <div class="proof"><section class="page">
+     <div class="inbox">${ic('search', 16)}<input aria-label="Ask in your own words" value="${Q.esc(DATA.question)}">${Shell.gatewayLine(st.gw)}</div>
+     <p class="eyebrow as">As you asked it · ${left ? `${left} ${left > 1 ? 'queries' : 'query'} open` : 'every query answered'}</p>
+     <p class="q">${questionHtml()}</p>
+     <p class="marks">Each mark is a word that could mean more than one thing. ${ORDER.map((w, i) => `<span><b>${i + 1}</b> ${w === 'kind' || w === 'since' ? Shell.via('rule', 'by name') : st.gw ? Shell.via('model', 'model gateway') : Shell.via('rule', 'not matched')}</span>`).join('')}<span>Counts come from the record, never the model ${Shell.via('record', 'from the record')}</span></p>
+     <div class="setas" aria-live="polite"><span class="n">${r.quiet.length}</span>
+       <div><p class="eyebrow">Set as</p><p class="s">${Q.sentenceHtml(st.c)}</p><p class="tk">${Q.esc(Q.tech(st.c))}</p>
+         <p class="e"><span>${Shell.via('record', 'counted from the record')}</span>
+           ${r.never.length ? `<span>${Shell.never()}${r.never.length} with no contact recorded at all, included</span>` : ''}
+           ${r.unseen ? `<span>${ic('lock', 13)}some not yours to see (${Q.esc(r.unseenAsk)})</span>` : ''}
+           <span>${Shell.brk()}${Q.esc(DATA.notRecorded[0].what)} not recorded</span></p></div>
+       <div class="acts"><button class="btn primary" ${left ? '' : ''}>${ic('arrow-right')}Show the ${r.quiet.length}</button><button class="btn">${ic('bookmark')}Save</button></div></div>
+   </section>
+   <aside class="margin scroll"><div class="mh"><p class="eyebrow">Queries</p><span class="micro">answer in any order</span></div>
+     <div class="qs">${ORDER.map(slipHtml).join('')}</div></aside></div>`;
+  st.fresh = null;
+  document.body.classList.toggle('tech', !!st.tech);
+}
+function pick(w, id) { if (w === 'via') { const v = new Set(st.c.via || []); v.has(id) ? v.delete(id) : v.add(id); st.c.via = v; } else st.c[w] = id; st.kept.delete(w); st.hot = w; st.fresh = w; render(); }
+function done() { st.hot = null; render(); }
+function go(w) { delete st.c[w]; st.kept.delete(w); st.hot = w; render(); }
+document.addEventListener('click', e => {
+  const b = e.target.closest('button,[data-go]'); if (!b) return; Demo.stop();
+  if (b.dataset.w) { pick(b.dataset.w, b.dataset.id); if (b.dataset.w !== 'via') done(); }
+  else if (b.dataset.keep) { st.kept.add(b.dataset.keep); delete st.c[b.dataset.keep]; done(); }
+  else if (b.dataset.go) { st.hot = b.dataset.go; if (settled(b.dataset.go)) go(b.dataset.go); else render(); }
+});
+document.addEventListener('mouseover', e => { const g = e.target.closest('[data-go]'); document.querySelectorAll('.lw').forEach(x => x.classList.toggle('hot', !!g && x.dataset.go === g.dataset.go)); });
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const k = e.key.toLowerCase();
+  if (k === 'r') { replay(); return; }
+  Demo.stop();
+  if (k === 'g') { st.gw = !st.gw; render(); }
+  else if (k === 't') { st.tech = !st.tech; render(); }
+  else if (/^[1-4]$/.test(k)) { st.hot = ORDER[+k - 1]; render(); }
+  else if (k === 'k') { const w = openW(); if (w) { st.kept.add(w); done(); } }
+  else if (k === 'backspace') { const w = st.hot || ORDER.slice().reverse().find(settled); if (w) go(w); }
+  else if (k === 'enter') done();
+  else if (/^[a-f]$/.test(k)) { const w = openW(); const o = w && W[w].opts.filter(x => !(st.gw && x.far))['abcdef'.indexOf(k)]; if (o) { pick(w, o.id); if (w !== 'via') done(); } }
+});
+function replay() {
+  Object.assign(st, { c: {}, kept: new Set(), hot: null }); render();
+  const beat = Tok.ms('--motion-base');
+  Demo.play([
+    [Tok.ms('--motion-run'), () => { st.hot = 'since'; render(); }],
+    [beat, () => { pick('since', W.since.opts[1].id); done(); }],
+    [beat, () => { st.hot = 'who'; render(); }],
+    [beat, () => { pick('who', 'here'); done(); }],
+    [beat, () => { st.hot = 'via'; render(); }],
+    [beat, () => { pick('via', 'invoice'); pick('via', 'delivery'); pick('via', 'letter'); }],
+    [beat, () => { done(); st.hot = 'kind'; render(); }]
+  ]);
+}
+replay();
+</script>
+</body>
+</html>

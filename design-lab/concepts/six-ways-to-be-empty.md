@@ -9,4 +9,6 @@ An empty-looking slot always says which kind of empty it is, with one mark and o
 
 First found in: [`2026-11-03-the-catalogue`](../runs/2026-11-03-the-catalogue/) (grammar V6, card V2 and V5, facets V5, change notes, combined).
 
+Extended by [the empty knows its errand](the-empty-knows-its-errand.md) in [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-reference-desk/).
+
 Could steer: Kit (one empty mark set for Quill and Aerie), Data Atlas, Artifacts metadata, the label (L), the groundskeeper (K).

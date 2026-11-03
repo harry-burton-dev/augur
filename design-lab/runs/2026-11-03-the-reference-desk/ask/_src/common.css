@@ -1,0 +1,120 @@
+/* ======================================================================
+   Proposed tokens (all mixes of kit tokens; listed as "needs token" in notes.md)
+   ====================================================================== */
+:root{
+  --x-proposed-type-micro:.6875rem;                                              /* mono numerals in data; wear-and-time and the catalogue asked too */
+  --x-proposed-here:var(--floor-department-high);                                 /* the floor this page sits on (Department) */
+  --x-proposed-here-soft:color-mix(in srgb,var(--floor-department-high) 14%,transparent);
+  --x-proposed-quiet:.62;                                                         /* quiet lines (catalogue) */
+  /* a model's guess: pencil, not ink. Dotted edge in a cool tint, never the floor colour, never solid */
+  --x-proposed-guess:color-mix(in srgb,var(--info) 62%,var(--ink));
+  --x-proposed-guess-wash:color-mix(in srgb,var(--info) 8%,transparent);
+  /* a loose word: still the person's own words, waiting to be sharpened */
+  --x-proposed-loose:color-mix(in srgb,var(--warning) 55%,var(--ink));
+  /* the six ways to be empty (from the catalogue) */
+  --x-proposed-gap-ink:color-mix(in srgb,var(--ink-muted) 78%,transparent);
+  --x-proposed-gap-tick:var(--space-1);
+  --x-proposed-hatch:color-mix(in srgb,var(--ink-muted) 34%,transparent);
+  --x-proposed-unseen:repeating-linear-gradient(135deg,transparent 0 calc(var(--space-1) - 1px),var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-lit:color-mix(in srgb,var(--green) 80%,var(--light));             /* the lit path (light language) */
+  --x-proposed-lit-wash:color-mix(in srgb,var(--green) 9%,transparent);
+}
+:root,.mk-gap{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+button,input,textarea{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.micro{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.muted{color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);padding:2px var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);min-width:1.6em;text-align:center;letter-spacing:0}
+
+/* ---- app frame ---- */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:var(--surface-bar);border-right:1px solid var(--hairline);padding:var(--space-5) var(--space-4);display:flex;flex-direction:column;gap:var(--space-1);min-height:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0 0 var(--space-4) var(--space-2)}
+.nav{text-decoration:none;display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav.on{background:var(--surface-raised);color:var(--ink)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail .foot{margin-top:auto;margin-bottom:calc(var(--space-8) + var(--space-6));padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rail .foot b{font-weight:400;color:var(--ink)}
+.rail .foot .fl{display:block;width:var(--space-5);height:2px;border-radius:1px;background:var(--x-proposed-here);margin-bottom:var(--space-2);box-shadow:0 0 var(--glow-blur) var(--x-proposed-here)}
+.main{position:relative;padding:var(--space-5) var(--space-6) var(--space-6);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4)}
+.top h1{margin:var(--space-1) 0 0;font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.contents{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);font-size:var(--type-small);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.contents b{font-weight:400;margin-left:var(--space-1);color:var(--ink)}
+
+/* keys, bottom left over the rail */
+.keys{position:fixed;left:var(--edge-tight);bottom:calc(var(--space-6) + var(--space-1));width:calc(var(--measure-rail) - var(--edge-tight) * 2);z-index:var(--layer-chrome);display:flex;flex-direction:column;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.keys > span{display:flex;align-items:center;gap:var(--space-2)}
+
+/* the gateway line: which steps used a model, said in words */
+.gw{display:inline-flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-soft)}
+.gw.on svg{color:var(--x-proposed-guess)}
+.gw.off{opacity:.9}
+.gw.off svg{opacity:.5}
+/* where a step came from */
+.via{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);white-space:nowrap;padding:0 var(--space-1);border-radius:2px;border:1px solid var(--hairline)}
+.via.v-model{color:var(--x-proposed-guess);border-style:dashed;border-color:color-mix(in srgb,var(--info) 40%,transparent);background:var(--x-proposed-guess-wash)}
+.via.v-rule{color:var(--ink)}
+.via.v-you{color:var(--x-proposed-here);border-color:color-mix(in srgb,var(--floor-department-high) 30%,transparent)}
+
+/* the question's words: loose (yours, waiting), guess (the model's pencil), set (ink) */
+.ph{border-radius:2px;transition:color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.ph.loose{color:var(--x-proposed-loose);text-decoration:underline wavy color-mix(in srgb,var(--warning) 45%,transparent);text-decoration-thickness:1px;text-underline-offset:.22em}
+.ph.guess{color:var(--x-proposed-guess);background:var(--x-proposed-guess-wash);outline:1px dashed color-mix(in srgb,var(--info) 45%,transparent);outline-offset:1px;font-style:italic}
+.ph.set{color:var(--light);border-bottom:1px solid var(--x-proposed-here)}
+.ph.fresh{animation:fresh var(--motion-calm) var(--ease-out)}
+@keyframes fresh{from{color:var(--x-proposed-here);text-shadow:0 0 var(--glow-blur) var(--x-proposed-here)}}
+/* a model guess block: always labelled, always needs a yes */
+.guessbox{border:1px dashed color-mix(in srgb,var(--info) 45%,transparent);background:var(--x-proposed-guess-wash);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--x-proposed-guess);font-style:italic}
+.guessbox b{font-style:normal;font-weight:400;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-right:var(--space-2)}
+
+/* a choice with the count it would leave */
+.opt{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;align-items:center;gap:var(--space-2);width:100%;min-height:var(--target-sm);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);border:1px solid transparent;color:var(--ink)}
+.opt:hover{background:var(--surface-raised)}
+.opt .k{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);width:calc(var(--space-4) + var(--space-1));height:calc(var(--space-4) + var(--space-1));display:grid;place-items:center}
+.opt .l{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.opt .l small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.opt .c{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.opt[aria-pressed="true"]{border-color:var(--hairline-strong);background:var(--surface-raised)}
+.opt[aria-pressed="true"] .k{background:var(--x-proposed-here);border-color:var(--x-proposed-here);color:var(--slate-deep)}
+.opt[aria-pressed="true"] .c{color:var(--light)}
+.opt.guessed{border:1px dashed color-mix(in srgb,var(--info) 40%,transparent);background:var(--x-proposed-guess-wash)}
+
+/* ---- the six ways to be empty, as used here ---- */
+.mk{display:inline-block;vertical-align:middle;flex:none}
+.mk-gap{background:var(--x-proposed-gap);width:calc(var(--space-6) + var(--space-4));height:calc(var(--space-4) + var(--space-1))}
+.mk-gap.mk-sm{width:calc(var(--space-5) - var(--space-1));height:var(--space-4);vertical-align:-2px}
+.mk-break{width:var(--space-5);height:var(--space-3);vertical-align:-1px}
+.mk-break path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);vertical-align:1px}
+
+/* answer rows */
+.rows{list-style:none;margin:0;padding:0}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:center;min-height:var(--target-sm);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);padding:0 var(--space-1)}
+.row .d{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap;display:flex;gap:var(--space-2);align-items:center}
+.row.never .d{color:var(--ink)}
+
+/* two registers: T shows the technical line one step down */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:var(--space-1) 0 0;overflow-wrap:anywhere}
+body.tech .tk{display:block}
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);background:var(--surface-inset);white-space:nowrap;color:var(--ink)}
+.btn:hover{background:var(--surface-raised)}
+.btn.primary{border-color:var(--x-proposed-here);color:var(--light)}
+.btn[disabled]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.pre{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre{transform:none}.ph.fresh{animation:none}}
