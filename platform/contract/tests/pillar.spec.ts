@@ -6,8 +6,8 @@ import { folioOn, since } from './builds';
  * Either way the shell, Home, Find and other apps keep working: run.mjs runs every check with
  * Folio in the catalogue (its built frontend and its service) and without it, as when it's off.
  */
-/** Artifacts on screen, in either of its layouts: the new one on Quill or the classic `<folio-app>`. */
-const artifacts = (page: Page) => page.locator('[data-app="folio"]').locator('folio-app, .quill-frame');
+/** Artifacts on screen, in its layout on Quill. */
+const artifacts = (page: Page) => page.locator('[data-app="folio"]').locator('.quill-frame');
 const reference = (page: Page) => page.locator('[data-app="reference"]').first();
 const check = (page: Page, name: string) => reference(page).locator(`[data-check="${name}"]`);
 const press = (page: Page, action: string) => reference(page).locator(`[data-action="${action}"]`).click();
