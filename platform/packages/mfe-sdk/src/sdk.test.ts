@@ -84,6 +84,36 @@ describe('floorFetch', () => {
     expect(new Headers(sent[1].headers).get('x-workspace-id')).toBe('w-org');
   });
 
+  it('adds them for an absolute URL on the same origin', async () => {
+    const fetchImpl = vi.fn(async () => new Response('ok'));
+    vi.stubGlobal('location', { origin: 'https://augur.example' });
+    try {
+      await floorFetch(async () => 'tok', () => finance, fetchImpl as unknown as typeof fetch)('https://augur.example/api/library/v1/docs');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const headers = new Headers((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].headers);
+    expect([headers.get('authorization'), headers.get('x-workspace-id')]).toEqual(['Bearer tok', 'w-fin']);
+  });
+
+  it('sends a request to another origin without the token or the floor', async () => {
+    const fetchImpl = vi.fn(async () => new Response('ok'));
+    const getToken = vi.fn(async () => 'tok');
+    vi.stubGlobal('location', { origin: 'https://augur.example' });
+    try {
+      await floorFetch(getToken, () => finance, fetchImpl as unknown as typeof fetch)('https://tiles.example.org/map.json', { headers: { accept: 'application/json' } });
+      await floorFetch(getToken, () => finance, fetchImpl as unknown as typeof fetch)('//augur.example.evil/x');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    for (const call of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
+      const headers = new Headers(call[1]?.headers);
+      expect([headers.get('authorization'), headers.get('x-workspace-id')]).toEqual([null, null]);
+    }
+    expect(new Headers((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].headers).get('accept')).toBe('application/json');
+    expect(getToken).not.toHaveBeenCalled();
+  });
+
   it('leaves headers the app set itself', async () => {
     const fetchImpl = vi.fn(async () => new Response('ok'));
     await floorFetch(async () => 'tok', () => finance, fetchImpl as unknown as typeof fetch)('/x', { headers: { 'X-Workspace-Id': 'w-other', Authorization: 'Bearer mine' } });

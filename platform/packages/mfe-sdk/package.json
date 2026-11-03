@@ -13,6 +13,10 @@
     "./build": {
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
     }
   },
   "files": [
@@ -24,7 +28,17 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "msw": "2.15.0",
     "typescript": "^5.6.0",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "yaml": "^2.9.1"
+  },
+  "peerDependencies": {
+    "msw": "^2.0.0 || ^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "msw": {
+      "optional": true
+    }
   }
 }

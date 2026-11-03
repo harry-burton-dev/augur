@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A mistake · V4 · What the undo touches</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: undoing an accepted fact is not free once it was used. Before the repair goes in, see where the wrong numbers went and who is told ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-6)}
+.flow{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.src{padding:var(--space-3) var(--space-4);border:1px solid var(--x-proposed-seam);border-radius:var(--radius-inset);background:var(--x-proposed-seam-wash)}
+.src b{font-weight:400;color:var(--light)}
+.use{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-3);align-items:start;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);margin-left:var(--space-6);position:relative}
+.use::before{content:"";position:absolute;left:calc(var(--space-6) * -1 + var(--space-4));top:calc(var(--space-3) * -1 - 1px);bottom:50%;border-left:1px solid var(--hairline-strong);border-bottom:1px solid var(--hairline-strong);width:calc(var(--space-6) - var(--space-4));border-bottom-left-radius:var(--radius-key)}
+.use b{display:block;font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.use .s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.use .r{text-align:right;font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink)}
+.use.hot{border-color:var(--light)}
+.note{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.cor{padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);display:grid;gap:var(--space-2)}
+.cor h3{margin:0;font-weight:400;font-size:var(--type-lead);color:var(--light)}
+.cor p{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.cor .to{font-size:var(--type-small);color:var(--ink-muted)}
+.tot{display:flex;gap:var(--space-4);align-items:center;flex-wrap:wrap;font-size:var(--type-meta);color:var(--ink)}
+.tot b{font-weight:400;font-family:var(--font-mono);color:var(--light)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A mistake · V4</b> what the undo touches: where the wrong numbers went, and who is told before the repair goes in · newspaper corrections, recall notices</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const MK = DATA.mistake, f = MK.fact, AG = 'a1', a = A(AG), wrong = MK.siblings.filter(s => s.proposed !== s.right);
+const S = { hot: 0, sent: false };
+const places = () => { const by = {}; MK.used.forEach(u => { const k = u.app + u.what; (by[k] = by[k] || { ...u, effects: [] }).effects.push(u); }); return Object.values(by); };
+function render() {
+  const ps = places(), reach = sum(ps, p => p.reach), owners = [...new Set(ps.map(p => p.owner))];
+  const p = ps[S.hot];
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Triage', a.name, 'Repair'], [['↑ ↓', 'place'], ['Enter', 'repair and tell'], ['R', 'replay'], ['T', 'ADR words']]) +
+  `<main class="main"><div class="wrap">
+    <section class="flow scroll"><div><p class="eyebrow">${mm(AG)} Before the repair goes in</p><h1 class="title">What the undo touches</h1></div>
+      <div class="src"><b>${wrong.length} tonnages</b> made by ${a.name}, accepted in batches, are about to be repaired. <span class="small muted">${wrong.filter(w => w.used).length} were used elsewhere.</span></div>
+      ${ps.map((u, i) => `<div class="use dep ${S.hot === i ? 'hot' : ''}" style="--i:${i}" data-i="${i}" data-tier="${u.floor}">${I(u.app === 'Mandate' ? 'target' : 'file-text', 18)}<span><b>${u.what}</b><span class="s">${u.app} ${u.kindWord} · ${P(u.owner).name} · <span class="fword">${F(u.floor).name}</span></span>${u.effects.map(e => `<span class="s" style="display:block;color:var(--ink)">${e.effect.includes(e.vessel) ? e.effect[0].toUpperCase() + e.effect.slice(1) : e.vessel + ': ' + e.effect}</span>`).join('')}</span><span class="r">${fmt(u.reach)} ${u.app === 'Mandate' ? 'following' : 'readers'}</span></div>`).join('')}
+      <div class="tot"><span><b>${ps.length}</b> places</span><span><b>${owners.length}</b> owners told directly</span><span><b>${fmt(reach)}</b> people see a correction where they read it</span></div>
+      <p class="tk">downstream = Mandate bindings and Artifacts briefings citing the details (events from Data Atlas) · correction = notification level info to owners + a seam where the number is shown</p>
+    </section>
+    <section class="note"><p class="eyebrow">The correction, as ${P(p.owner).name} will get it</p>
+      <div class="cor"><h3>${p.what}: ${p.effects.length > 1 ? `${p.effects.length} numbers` : 'a number'} corrected</h3>
+        ${p.effects.map(e => `<p>${e.vessel}’s gross tonnage was ${MK.siblings.find(s => s.v === e.vessel).proposed}; it is ${MK.siblings.find(s => s.v === e.vessel).right}. ${e.effect[0].toUpperCase() + e.effect.slice(1)}.</p>`).join('')}
+        <p class="small muted">Read by ${a.name} from Nordhavn Class certificates, accepted in a batch, found by ${P(MK.found.who).name}, repaired by ${P(a.supervisor).name}. Your ${p.kindWord} isn’t changed: you decide what to do with it.</p>
+        <p class="to">To ${P(p.owner).name} · from ${P(a.supervisor).name}, not from ${a.name}</p></div>
+      ${S.sent ? `<p class="lite">${I('check', 16)} Repaired and told, ${MK.repairedAt}. Each place shows a seam until its owner looks.</p>` : `<button class="btn go" data-go style="align-self:flex-start">${I('send', 14)} Repair the ${wrong.length} and tell ${owners.length} owners</button>`}
+      <p class="small muted">${a.name} can’t send this: telling people is on its ceiling. ${P(a.supervisor).name} sends it, and AUGUR writes it from the records.</p>
+    </section></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.use').forEach(u => u.onclick = () => { S.hot = +u.dataset.i; render(); });
+  $('[data-go]') && ($('[data-go]').onclick = () => { S.sent = true; render(); });
+}
+function replay() { clearLater(); S.hot = 0; S.sent = false; settle(); render(); later(() => { S.hot = 1; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  const n = places().length;
+  if (e.key === 'ArrowDown') { S.hot = (S.hot + 1) % n; render(); }
+  if (e.key === 'ArrowUp') { S.hot = (S.hot - 1 + n) % n; render(); }
+  if (e.key === 'Enter') { S.sent = true; render(); }
+});
+replay();
+</script>
+</body>
+</html>
