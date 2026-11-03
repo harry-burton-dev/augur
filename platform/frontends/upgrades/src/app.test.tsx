@@ -442,3 +442,112 @@ describe('upgrading from the Upgrade Centre', () => {
     expect(el).toBeTruthy();
   });
 });
+
+describe('installing a halted release for a test', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    window.history.replaceState(null, '', '/');
+  });
+
+  const halted = { reason: 'Breaks on purpose, to prove the go-back', at: '2026-11-03T09:00:00Z' };
+  const withHalted = (over: Partial<PlatformUpdates> = {}) =>
+    updates({ ring: 'preview', newer: [{ version: '0.13.2', channel: 'stable', breaking: [], halted }], available: undefined, haltedInstall: { allowed: true }, ...over });
+
+  const open = async (respond: (url: string, init?: RequestInit) => [number, unknown] | undefined, current: { updates: PlatformUpdates }, search = '') => {
+    window.history.replaceState(null, '', `/@me/upgrades/augur${search}`);
+    const el = document.createElement('div');
+    document.body.append(el);
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const [status, body] = respond(url, init) ?? [200, url.includes('/platform/overview') ? overview() : url.endsWith('/platform/updates') ? current.updates : url.endsWith('/manifest') ? manifest : installs];
+      return new Response(JSON.stringify(body), { status });
+    });
+    await act(async () => {
+      createRoot(el).render(<App ctx={{ fetch, path: '/augur', user: { id: 'p1', name: 'Alex', departments: [], roles: ['deployment-admin'] } }} />);
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    return { el, fetch };
+  };
+  const type = async (input: HTMLInputElement, text: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+  it('keeps the action visible on a production server, saying why it can’t be used', async () => {
+    const { el } = await open(() => undefined, { updates: withHalted({ ring: 'production', haltedInstall: { allowed: false, why: 'This is a production server.' } }) });
+    const button = buttonIn(el, 'Install 0.13.2 for a test');
+    expect(button.hasAttribute('data-unavailable')).toBe(true);
+    expect(reasonOf(button)).toBe('This is a production server.');
+    await act(async () => button.click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('says the server’s AUGUR is too old when the registry doesn’t answer', async () => {
+    const { el } = await open(() => undefined, { updates: withHalted({ haltedInstall: undefined }) });
+    expect(reasonOf(buttonIn(el, 'Install 0.13.2 for a test'))).toContain('too old');
+  });
+
+  it('says why it was halted, asks why, and follows it step by step like any upgrade', async () => {
+    const current = { updates: withHalted() };
+    const { el, fetch } = await open((url, init) => {
+      if (url.endsWith('/platform/upgrade/halted') && init?.method === 'PUT') {
+        current.updates = withHalted({ upgrade: { id: 'u3', from: '0.13.1', version: '0.13.2', requestedBy: 'p1', requestedByName: 'Alex', requestedAt: '2026-11-03T10:00:00Z', state: 'requested', steps: [] }, updaterSeenAt: '2026-11-03T09:59:00Z' });
+        return [202, current.updates];
+      }
+      return undefined;
+    }, current);
+    await act(async () => buttonIn(el, 'Install 0.13.2 for a test').click());
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain('Install AUGUR 0.13.2 for a test?');
+    expect(dialog.textContent).toContain(halted.reason);
+    expect(dialog.textContent).toContain('goes back to 0.13.1 by itself');
+    await type(dialog.querySelector('input') as HTMLInputElement, 'Proving the go-back on staging');
+    await act(async () => buttonIn(dialog, 'Install for a test').click());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/registry/v1/platform/upgrade/halted',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ version: '0.13.2', reason: 'Proving the go-back on staging' }) }),
+    );
+    expect(el.querySelector('[data-step="watch"]')?.textContent).toContain('Watch it for 10 minutes');
+  });
+
+  it('won’t ask without a reason long enough', async () => {
+    const { el, fetch } = await open(() => undefined, { updates: withHalted() });
+    await act(async () => buttonIn(el, 'Install 0.13.2 for a test').click());
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    await type(dialog.querySelector('input') as HTMLInputElement, 'test');
+    await act(async () => buttonIn(dialog, 'Install for a test').click());
+    expect(fetch).not.toHaveBeenCalledWith('/api/registry/v1/platform/upgrade/halted', expect.anything());
+    expect(dialog.textContent).toContain('at least 10 characters');
+  });
+
+  it('keeps the reason while the person enters the password again, and asks once more on the way back', async () => {
+    const current = { updates: withHalted() };
+    const { el } = await open((url, init) => (url.endsWith('/platform/upgrade/halted') && init?.method === 'PUT' ? [401, { error: 'sign_in_again', message: 'Enter your password again.' }] : undefined), current);
+    const assign = vi.fn();
+    const real = window.location;
+    Object.defineProperty(window, 'location', { configurable: true, value: { pathname: real.pathname, search: real.search, assign } });
+    try {
+      await act(async () => buttonIn(el, 'Install 0.13.2 for a test').click());
+      const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+      await type(dialog.querySelector('input') as HTMLInputElement, 'Proving the go-back on staging');
+      await act(async () => buttonIn(dialog, 'Install for a test').click());
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/@me/upgrades/augur?halted=0.13.2')}`);
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: real });
+    }
+    document.body.innerHTML = '';
+    await open(() => undefined, current, '?halted=0.13.2');
+    const again = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(again.textContent).toContain('Install AUGUR 0.13.2 for a test?');
+    expect((again.querySelector('input') as HTMLInputElement).value).toBe('Proving the go-back on staging');
+    expect(window.location.search).toBe('');
+  });
+});
