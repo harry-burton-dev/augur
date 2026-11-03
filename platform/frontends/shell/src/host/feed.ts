@@ -1,5 +1,5 @@
 import type { NotificationAction } from '@augur/mfe-sdk';
-import type { ShellNotification } from '@augur/ui-kit';
+import type { ShellNotification } from '@augur/shell-kit';
 import { usableActions } from './notifications.js';
 
 /** A notification as the events service sends it. */

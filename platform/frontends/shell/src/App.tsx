@@ -1,7 +1,25 @@
 import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
-import { defaultFunctions, finishMotion, type FloorDirection, liftGhost, moving, type Ghost, type MenuCategory, type MenuItem, type ShellApp, type ShellFindResult, type UiCentreMenu, type UiDialog, type UiShell } from '@augur/ui-kit';
-import { Toasts } from '@augur/shell-kit';
-import type { ShellNotification } from '@augur/ui-kit';
+import {
+  Button,
+  CentreMenu,
+  CentreMenuModel,
+  defaultFunctions,
+  Dialog,
+  finishMotion,
+  Heading,
+  liftGhost,
+  moving,
+  Shell,
+  ShellModel,
+  Toasts,
+  type FloorDirection,
+  type Ghost,
+  type MenuCategory,
+  type MenuItem,
+  type ShellApp,
+  type ShellFindResult,
+  type ShellNotification,
+} from '@augur/shell-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppMounter,
@@ -115,9 +133,10 @@ export function Host({
   fetchImpl = fetch,
   importEntry,
 }: HostProps) {
-  const shellRef = useRef<UiShell>(null);
+  const [shellModel] = useState(() => new ShellModel());
+  const shellRef = useRef<ShellModel>(shellModel);
   const stageRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<UiCentreMenu>(null);
+  const menuRef = useRef<CentreMenuModel>(null);
   /** Where the next menu starts: Title on the app you came from, Orbit on the category you chose or came from. */
   const lastApp = useRef<string | undefined>(undefined);
   const orbitStart = useRef(0);
@@ -130,8 +149,8 @@ export function Host({
   const pendingIntent = useRef<Intent | undefined>(undefined);
   const feed = useRef<NotificationFeed | null>(null);
   const broker = useRef(new RequestBroker());
-  const dialogRef = useRef<UiDialog>(null);
-  const requestStageRef = useRef<HTMLDivElement>(null);
+  /** Where the answering app mounts, inside the request dialog while it's open. */
+  const [requestStage, setRequestStage] = useState<HTMLDivElement | null>(null);
   const requestMounter = useRef<AppMounter | null>(null);
   const [answering, setAnswering] = useState<OpenRequest | null>(null);
   /** The previews this person may try, as a developer of their apps; none for everyone else. */
@@ -140,7 +159,6 @@ export function Host({
   const [featureApps, setFeatureApps] = useState<FeaturePreviewApp[]>([]);
   const [previewsOpen, setPreviewsOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const previewsRef = useRef<UiDialog>(null);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
   /** What each notification's buttons raise; the Shell only has their labels. */
@@ -327,16 +345,6 @@ export function Host({
     [fetchImpl, previewsUrl, session, tell],
   );
 
-  useEffect(() => {
-    const dialog = previewsRef.current;
-    if (!dialog) return;
-    if (previewsOpen) dialog.show();
-    else dialog.close();
-    const onClose = () => setPreviewsOpen(false);
-    dialog.addEventListener('ui-close', onClose);
-    return () => dialog.removeEventListener('ui-close', onClose);
-  }, [previewsOpen]);
-
   // Raising an intent counts up, so the app is mounted to answer it even when the location doesn't change.
   const [raised, setRaised] = useState(0);
   const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path, Boolean(pendingIntent.current)) : undefined), [manifest, floor, where, raised]);
@@ -414,33 +422,20 @@ export function Host({
   const contextForRef = useRef(contextFor);
   contextForRef.current = contextFor;
   useEffect(() => {
-    const dialog = dialogRef.current;
-    const stage = requestStageRef.current;
-    if (!dialog || !stage) return;
-    requestMounter.current ??= new AppMounter(stage, importEntry);
-    if (!answering) {
-      dialog.close();
-      void requestMounter.current.unmount();
-      return;
-    }
+    const stage = requestStage;
+    if (!answering || !stage) return;
+    const mounter = new AppMounter(stage, importEntry);
+    requestMounter.current = mounter;
     const { app, intent } = answering;
     const reply: IntentReply = { respond: (result) => broker.current.respond(result), cancel: () => broker.current.cancel() };
-    dialog.show();
-    requestMounter.current.mount(app, contextForRef.current(app, '/', intent, reply)).catch((err: Error) => {
+    mounter.mount(app, contextForRef.current(app, '/', intent, reply)).catch((err: Error) => {
       broker.current.cancel(new IntentError(`${app.name} didn't open: ${err.message}`));
     });
-  }, [answering, importEntry]);
-
-  // Closing the dialog without an answer cancels the request.
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const onClose = () => {
-      if (broker.current.current) broker.current.cancel();
+    return () => {
+      void mounter.unmount();
+      if (requestMounter.current === mounter) requestMounter.current = null;
     };
-    dialog.addEventListener('ui-close', onClose);
-    return () => dialog.removeEventListener('ui-close', onClose);
-  }, []);
+  }, [answering, requestStage, importEntry]);
 
   // Mount whichever app the location points at; Title and Orbit are the shell's own.
   useEffect(() => {
@@ -872,7 +867,7 @@ export function Host({
   const featuresOn = openApp?.previewsOn?.length ? featureApps.find((a) => a.app === openApp.id)?.previews.filter((p) => p.on) : undefined;
 
   return (
-    <ui-shell ref={shellRef} product="AUGUR">
+    <Shell model={shellModel}>
       {previewOf !== undefined ? (
         <aside className="preview-badge" role="status">
           <span>
@@ -887,18 +882,18 @@ export function Host({
             , for you alone
           </span>
           {previewing ? (
-            <ui-button kind="tertiary" size="sm" onClick={() => void switchPreview(previewing, null)}>
+            <Button kind="tertiary" size="sm" onPress={() => void switchPreview(previewing, null)}>
               Back to {previewing.version}
-            </ui-button>
+            </Button>
           ) : null}
         </aside>
       ) : null}
       {previewOf === undefined && featuresOn?.length ? (
         <aside className="preview-badge" role="status" data-features-on>
           <span>Preview on: {featuresOn.map((p) => p.name).join(', ')}</span>
-          <ui-button kind="tertiary" size="sm" onClick={() => setPreviewsOpen(true)}>
+          <Button kind="tertiary" size="sm" onPress={() => setPreviewsOpen(true)}>
             Previews
-          </ui-button>
+          </Button>
         </aside>
       ) : null}
       <Toasts
@@ -907,7 +902,7 @@ export function Host({
       />
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
       {screen && screen.kind !== 'app' && manifest?.length ? (
-        <ui-centre-menu
+        <CentreMenu
           key={screen.kind === 'orbit' ? `orbit:${screen.app.id}` : 'title'}
           ref={menuRef}
           variant={screen.kind}
@@ -916,18 +911,28 @@ export function Host({
       ) : null}
       {problem && (
         <section className="problem" role="alert">
-          <ui-heading heading={problem.title} summary={problem.summary} size="s" />
-          <ui-button kind="secondary" onClick={problem.retry}>
+          <Heading heading={problem.title} summary={problem.summary} size="s" />
+          <Button kind="secondary" onPress={problem.retry}>
             {problem.action ?? 'Try again'}
-          </ui-button>
+          </Button>
         </section>
       )}
       {((!manifest && !problem) || (opening && !problem)) && <p className="loading">Opening…</p>}
-      <ui-dialog ref={dialogRef} size="read" heading={answering?.app.name ?? ''} cancelLabel="Cancel">
-        <div ref={requestStageRef} className="request-stage" />
-      </ui-dialog>
-      <ui-dialog
-        ref={previewsRef}
+      <Dialog
+        open={!!answering}
+        onClose={() => {
+          // closing without an answer cancels the request
+          if (broker.current.current) broker.current.cancel();
+        }}
+        size="read"
+        heading={answering?.app.name ?? ''}
+        cancelLabel="Cancel"
+      >
+        <div ref={setRequestStage} className="request-stage" />
+      </Dialog>
+      <Dialog
+        open={previewsOpen}
+        onClose={() => setPreviewsOpen(false)}
         size="read"
         heading="Previews"
         summary="Features apps are trying before they’re everyone’s, and pull requests’ builds of the apps you’re a developer of. Each choice is yours alone."
@@ -935,7 +940,7 @@ export function Host({
       >
         {featureApps.map((app) => (
           <section key={`f:${app.app}`} className="previews" data-feature-previews={app.app}>
-            <ui-heading heading={app.name} summary="Features it’s trying out" size="s" />
+            <Heading heading={app.name} summary="Features it’s trying out" size="s" />
             <ul>
               {app.previews.map((p) => (
                 <li key={p.id}>
@@ -946,9 +951,9 @@ export function Host({
                     <small>{featureLine(p)}</small>
                   </span>
                   {choosable(p) ? (
-                    <ui-button kind={p.on ? 'tertiary' : 'secondary'} size="sm" busy={switching} onClick={() => void switchFeature(app, p.id, !p.on)}>
+                    <Button kind={p.on ? 'tertiary' : 'secondary'} size="sm" busy={switching} onPress={() => void switchFeature(app, p.id, !p.on)}>
                       {p.on ? 'Turn off' : 'Turn on'}
-                    </ui-button>
+                    </Button>
                   ) : null}
                 </li>
               ))}
@@ -957,7 +962,7 @@ export function Host({
         ))}
         {previewApps.map((app) => (
           <section key={app.app} className="previews" data-previews={app.app}>
-            <ui-heading heading={app.name} summary={app.chosen === undefined ? `You’re on ${app.version}, as everyone is.` : `You’re on pull request #${app.chosen}’s preview.`} size="s" />
+            <Heading heading={app.name} summary={app.chosen === undefined ? `You’re on ${app.version}, as everyone is.` : `You’re on pull request #${app.chosen}’s preview.`} size="s" />
             {app.previews.length ? (
               <ul>
                 {app.previews.map((p) => (
@@ -972,13 +977,13 @@ export function Host({
                       )}
                     </span>
                     {app.chosen === p.pr ? (
-                      <ui-button kind="tertiary" size="sm" busy={switching} onClick={() => void switchPreview(app, null)}>
+                      <Button kind="tertiary" size="sm" busy={switching} onPress={() => void switchPreview(app, null)}>
                         Back to {app.version}
-                      </ui-button>
+                      </Button>
                     ) : (
-                      <ui-button kind="secondary" size="sm" busy={switching} onClick={() => void switchPreview(app, p.pr)}>
+                      <Button kind="secondary" size="sm" busy={switching} onPress={() => void switchPreview(app, p.pr)}>
                         Use it
-                      </ui-button>
+                      </Button>
                     )}
                   </li>
                 ))}
@@ -989,8 +994,8 @@ export function Host({
             <LiveFromMyMachine app={app} busy={switching} onChoose={(entry) => void switchLive(app, entry)} />
           </section>
         ))}
-      </ui-dialog>
-    </ui-shell>
+      </Dialog>
+    </Shell>
   );
 }
 
@@ -1008,9 +1013,9 @@ function LiveFromMyMachine({ app, busy, onChoose }: { app: PreviewApp; busy: boo
           <br />
           <small>{app.live}</small>
         </span>
-        <ui-button kind="tertiary" size="sm" busy={busy} onClick={() => onChoose(null)}>
+        <Button kind="tertiary" size="sm" busy={busy} onPress={() => onChoose(null)}>
           Back to {app.version}
-        </ui-button>
+        </Button>
       </div>
     );
   }
@@ -1034,9 +1039,9 @@ function LiveFromMyMachine({ app, busy, onChoose }: { app: PreviewApp; busy: boo
         <small>Live from my machine: the address <code>pnpm dev:app {app.app} --live</code> prints</small>
         <input type="url" value={entry} placeholder="https://your-machine.ts.net/…/entry.ts" onChange={(e) => setEntry(e.currentTarget.value)} />
       </label>
-      <ui-button kind="secondary" size="sm" busy={busy} disabled={!entry.trim()} reason="Paste the address first." onClick={() => entry.trim() && onChoose(entry.trim())}>
+      <Button kind="secondary" size="sm" busy={busy} disabled={!entry.trim()} reason="Paste the address first." onPress={() => entry.trim() && onChoose(entry.trim())}>
         Load it
-      </ui-button>
+      </Button>
     </form>
   );
 }
@@ -1045,10 +1050,10 @@ function LiveFromMyMachine({ app, busy, onChoose }: { app: PreviewApp; busy: boo
 export function SignInProblem({ message, onSignIn }: { message: string; onSignIn: () => void }) {
   return (
     <main className="sign-in-problem" role="alert">
-      <ui-heading heading="You're not signed in" summary={message} size="m" />
-      <ui-button kind="primary" onClick={onSignIn}>
+      <Heading heading="You're not signed in" summary={message} size="m" />
+      <Button kind="primary" onPress={onSignIn}>
         Sign in
-      </ui-button>
+      </Button>
     </main>
   );
 }

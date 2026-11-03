@@ -33,7 +33,7 @@ test('notify puts a notification on the shell’s stream', async ({ page }) => {
   await page.goto('/reference');
   await press(page, 'notify');
   const titles = await page.evaluate(() =>
-    (document.querySelector('ui-shell') as unknown as { notifications: { title: string; level: string }[] }).notifications.map((n) => `${n.title}:${n.level}`),
+    ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { notifications: { title: string; level: string }[] }).notifications.map((n) => `${n.title}:${n.level}`),
   );
   expect(titles).toContain('Reference notification:needs');
 });
@@ -48,7 +48,7 @@ test('raise opens the app that handles the intent, with the intent', async ({ pa
 test('request opens the handling app over this one and resolves with its answer', async ({ page }) => {
   await page.goto('/reference');
   await press(page, 'request');
-  const answering = page.locator('ui-dialog [data-app="reference"]');
+  const answering = page.locator('.augur-dialog [data-app="reference"]');
   await expect(answering.locator('[data-check="intent"]')).toHaveText('reference.answer {"question":"six times seven"}');
   await answering.locator('[data-action="respond"]').click();
   await expect(check(page, 'answer')).toHaveText('42');
@@ -57,7 +57,7 @@ test('request opens the handling app over this one and resolves with its answer'
 test('a request the handler declines rejects as cancelled', async ({ page }) => {
   await page.goto('/reference');
   await press(page, 'request');
-  await page.locator('ui-dialog [data-app="reference"] [data-action="cancel"]').click();
+  await page.locator('.augur-dialog [data-app="reference"] [data-action="cancel"]').click();
   await expect(check(page, 'answer')).toHaveText('cancelled');
 });
 
@@ -90,18 +90,18 @@ test('an app sits on the still ground, and moving floors inside it never shows t
   since('1.1'); // the app says which floor it's on from SDK 1.1
   await page.goto('/@me/reference');
   await expect(check(page, 'floor')).toHaveText('You (me, personal, lead) dev-me');
-  const shell = page.locator('ui-shell');
-  await expect(shell).toHaveAttribute('background', 'none');
+  const shell = page.locator('.aerie-shell');
+  await expect(shell).toHaveAttribute('data-background', 'none');
   await shell.evaluate((el) => {
     const seen: string[] = [];
     (window as unknown as { grounds: string[] }).grounds = seen;
-    new MutationObserver(() => seen.push(el.getAttribute('background') ?? '')).observe(el, { attributes: true, attributeFilter: ['background'] });
-    el.dispatchEvent(new CustomEvent('ui-floor', { detail: { id: 'dev-org', direction: 'up' } }));
+    new MutationObserver(() => seen.push(el.getAttribute('data-background') ?? '')).observe(el, { attributes: true, attributeFilter: ['data-background'] });
+    (el as unknown as { shell: EventTarget }).shell.dispatchEvent(new CustomEvent('ui-floor', { detail: { id: 'dev-org', direction: 'up' } }));
   });
   await expect(page).toHaveURL(/\/@org\/reference$/);
   await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
   expect(await page.evaluate(() => (window as unknown as { grounds: string[] }).grounds.filter((g) => g !== 'none'))).toEqual([]);
-  await expect(shell).toHaveAttribute('background', 'none');
+  await expect(shell).toHaveAttribute('data-background', 'none');
 });
 
 test('fetch sends the token and the floor the app is on', async ({ page }) => {
@@ -120,10 +120,10 @@ test('a notification’s action raises its intent through the shell', async ({ p
   since('1.2');
   await page.goto('/reference/somewhere');
   await press(page, 'notify-action');
-  await page.evaluate(() => (document.querySelector('ui-shell') as unknown as { openView(id: string): void }).openView('stream'));
-  await page.locator('ui-shell .act', { hasText: 'Show' }).click();
+  await page.evaluate(() => ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { openView(id: string): void }).openView('stream'));
+  await page.locator('.aerie-shell .aerie-act', { hasText: 'Show' }).click();
   await expect(check(page, 'intent')).toHaveText('reference.show {"n":2}');
-  const left = await page.evaluate(() => (document.querySelector('ui-shell') as unknown as { notifications: { title: string }[] }).notifications.map((n) => n.title));
+  const left = await page.evaluate(() => ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { notifications: { title: string }[] }).notifications.map((n) => n.title));
   expect(left).not.toContain('Reference action');
 });
 
@@ -156,8 +156,8 @@ test('Home places the app’s glance card for the floor, with a working context'
 
 // Find over apps' content: the shell asks each app that declares `search`, on the person's floor.
 const find = async (page: Page, q: string) => {
-  await page.evaluate(() => (document.querySelector('ui-shell') as unknown as { openView(id: string): void }).openView('find'));
-  await page.locator('ui-shell .search input').fill(q);
+  await page.evaluate(() => ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { openView(id: string): void }).openView('find'));
+  await page.locator('.aerie-shell .aerie-search input').fill(q);
 };
 
 test('Find asks the app’s service, on the floor, and opens a result where it says', async ({ page }) => {
@@ -169,7 +169,7 @@ test('Find asks the app’s service, on the floor, and opens a result where it s
   });
   await page.goto('/@org/reference/somewhere');
   await find(page, 'travel');
-  const result = page.locator('ui-shell .view ul[aria-label="Reference"] .row');
+  const result = page.locator('.aerie-shell .aerie-view ul[aria-label="Reference"] .aerie-row');
   await expect(result).toContainText('Claim matching travel');
   await expect(result).toContainText('dev-org');
   await result.click();
@@ -184,9 +184,9 @@ test('Find doesn’t wait for a slow app: it says so, and lets go after the budg
   });
   await page.goto('/reference');
   await find(page, 'reference');
-  await expect(page.locator('ui-shell .view .row', { hasText: 'Reference' }).first()).toBeVisible();
+  await expect(page.locator('.aerie-shell .aerie-view .aerie-row', { hasText: 'Reference' }).first()).toBeVisible();
   // The reference app's own note: other apps in the catalogue (Folio, when it's on) have theirs.
-  const note = page.locator('ui-shell .view .group.label:has-text("Reference") + p.note.small');
+  const note = page.locator('.aerie-shell .aerie-view .aerie-group.aerie-label:has-text("Reference") + p.aerie-note.aerie-small');
   await expect(note).toHaveText('Still looking…');
   await expect(note).toHaveText('Didn’t answer in time.', { timeout: 3000 });
 });
