@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>While you were away · V6 · The walk-round</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: the site plan, marked up. Where the agents worked, room by room, with the walk they took in time order ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,var(--measure-card));gap:var(--space-5)}
+.plan{position:relative;min-height:0;border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-inset);padding:var(--space-4)}
+.floor{position:absolute;left:var(--space-4);right:var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.floor.up{top:var(--space-4);height:18%;background:var(--x-proposed-unseen)}
+.floor.here{top:calc(18% + var(--space-6));bottom:var(--space-4)}
+.floor .fl{position:absolute;top:var(--space-2);left:var(--space-3);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.floor .fl.r{left:auto;right:var(--space-3);color:var(--ink-muted);text-transform:none;letter-spacing:0;font-family:var(--font-sans);font-size:var(--type-small)}
+.room{position:absolute;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--slate-deep);padding:var(--space-2) var(--space-3)}
+.room h3{margin:0;font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.room .app{height:auto;display:block;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.room .nt{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.room.hot{border-color:var(--light)}
+svg.walk{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+svg.walk path{fill:none;stroke:var(--ink-muted);stroke-width:1.25;stroke-dasharray:3 4}
+.pins{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2)}
+.floor.up .pins{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);margin:0}
+.pin{position:relative;z-index:2;display:inline-flex;align-items:center;gap:var(--space-1);padding:2px var(--space-2) 2px 2px;border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);background:var(--slate);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap;transition:transform var(--motion-base) var(--ease-out)}
+.pin .no{display:inline-grid;place-items:center;width:var(--space-5);height:var(--space-5);border-radius:50%;background:var(--slate-deep);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--light)}
+.pin.sel{border-color:var(--light);box-shadow:0 0 0 3px color-mix(in srgb,var(--light) 16%,transparent)}
+.pin.standby{border-color:var(--x-proposed-standby)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.it{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:left;width:100%}
+.it .no{font-family:var(--font-mono);color:var(--ink)}
+.it b{display:block;font-weight:400;color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.it.sel{background:var(--surface-raised)}
+.it.sel b{color:var(--light)}
+@media (max-width:1400px){.room .nt{display:none}.it span.w{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>While you were away · V6</b> the walk-round: where the agents worked, on a marked-up plan of the floor · clerk of works' snagging walk, marked-up site plans</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* room positions on the plan, in % of the team floor box (layout only; names and counts come from DATA) */
+const POS = { incoming: [3, 12, 26, 34], surveys: [3, 54, 38, 40], triage: [46, 12, 30, 82], vessels: [80, 12, 18, 46] };
+const S = { sel: -1, walked: 0 };
+const ENT = DATA.diary.map((e, i) => ({ ...e, i }));
+const pinHTML = e => `<button class="pin ${e.kind} ${S.sel === e.i ? 'sel' : ''}" style="opacity:${e.i < S.walked ? 1 : .35}" data-i="${e.i}" aria-label="Stop ${e.i + 1}: ${e.text}"><span class="no">${e.i + 1}</span>${e.kind === 'standby' ? '<span class="lamp on"></span>' : I(KIND_ICON[e.kind], 14)} ${mm(e.agent)} ${e.n}</button>`;
+function drawWalk() {
+  const plan = $('.plan').getBoundingClientRect();
+  const pts = ENT.slice(0, S.walked).map(e => { const r = $(`.pin[data-i="${e.i}"]`).getBoundingClientRect(); return [r.left - plan.left + r.width / 2, r.top - plan.top + r.height / 2]; });
+  const svg = $('svg.walk'); svg.setAttribute('viewBox', `0 0 ${plan.width} ${plan.height}`);
+  svg.innerHTML = `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ')}"/>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Home', 'Agents on ' + F('team').name, 'Walk-round'], [['← →', 'stop by stop'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="plan" aria-label="Plan of ${F('team').name}">
+      <div class="floor up" data-tier="department"><span class="fl fword">${F('department').name} · ${F('department').word}</span><span class="fl r">${I('fence', 12)} ${DATA.places.find(p => p.id === 'dept').note}</span><div class="pins">${ENT.filter(e => e.place === 'dept').map(pinHTML).join('')}</div></div>
+      <div class="floor here" data-tier="team"><span class="fl fword">${F('team').name} · ${F('team').word}</span>
+        ${DATA.places.filter(p => p.floor === 'team').map(p => { const r = POS[p.id]; const n = ENT.filter(e => e.place === p.id); const hot = S.sel >= 0 && ENT[S.sel].place === p.id; return `<div class="room ${hot ? 'hot' : ''}" style="left:${r[0]}%;top:${r[1]}%;width:${r[2]}%;height:${r[3]}%"><span class="app">${p.app}</span><h3>${p.w}</h3><span class="nt">${p.note} · ${n.length ? plural(n.length, 'stop') : 'no stops'}</span><div class="pins">${n.map(pinHTML).join('')}</div></div>`; }).join('')}
+      </div>
+      <svg class="walk" aria-hidden="true"></svg>
+    </section>
+    <aside class="side scroll"><p class="eyebrow">${DATA.awaySince} to ${DATA.today}, ${DATA.now}</p><h1 class="title" style="font-size:var(--type-heading);line-height:var(--leading-heading)">Walk-round</h1>
+      <p class="small muted" style="margin-bottom:var(--space-2)">The stops in the order the agents made them. A room with no stop was not touched. The floor above is drawn, hatched: they may read there but not work.</p>
+      ${ENT.map(e => `<button class="it ${S.sel === e.i ? 'sel' : ''}" data-i="${e.i}"><span class="no">${e.i + 1}</span><span><b>${DATA.places.find(p => p.id === e.place).w} · ${KIND_WORD[e.kind].toLowerCase()}</b><span class="w">${e.t} · ${A(e.agent).name} · ${e.text}</span><span class="tk">${e.run} · ${e.tech}</span></span></button>`).join('')}
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys(); drawWalk();
+  $$('[data-i]').forEach(b => b.onclick = () => { S.sel = +b.dataset.i; S.walked = Math.max(S.walked, S.sel + 1); render(); });
+}
+function replay() {
+  clearLater(); S.sel = -1; S.walked = 0; settle(); render();
+  /* the moment: the walk is drawn stop by stop, once */
+  ENT.forEach((e, k) => later(() => { S.walked = k + 1; S.sel = k; render(); }, MOMENT() + k * ms('--motion-quick')));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.key === 'ArrowRight') { S.sel = Math.min(ENT.length - 1, S.sel + 1); S.walked = Math.max(S.walked, S.sel + 1); render(); }
+  if (e.key === 'ArrowLeft') { S.sel = Math.max(0, S.sel - 1); render(); }
+});
+replay();
+</script>
+</body>
+</html>

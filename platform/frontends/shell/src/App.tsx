@@ -76,6 +76,7 @@ import {
   type ServerNotification,
   type Session,
 } from './host/index.js';
+import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { pageKit, versionLine } from './host/kit.js';
 
 export interface HostProps {
@@ -670,6 +671,15 @@ export function Host({
       shell.removeEventListener('ui-notifications', send);
     };
   }, [bus, manifest, floor, home, session, contextFor, importEntry]);
+
+  // Domain events on this floor, for the apps here, each on the bus by its topic: apps' `refreshOn` hears them.
+  const followed = manifest && floor ? topicsFor(manifest).join(',') : '';
+  useEffect(() => {
+    if (!followed) return;
+    const stream = new DomainEventStream({ getToken: session.getToken, fetchImpl, baseUrl: eventsUrl, floor: floorId, topics: followed.split(','), bus });
+    stream.start();
+    return () => stream.stop();
+  }, [floorId, followed, session, fetchImpl, eventsUrl, bus]);
 
   // The person's notifications: what is unread now, then each new one as it arrives.
   useEffect(() => {
