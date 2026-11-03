@@ -1,0 +1,99 @@
+/**
+ * The gateway's own API's wire shapes, once: contracts/gateway.openapi.yaml is generated from them
+ * (pnpm contracts, ADR 0055). A shape with an `$id` is a named schema in the contract; routes point at
+ * it with `ref`. What the gateway forwards to other services is described in their contracts.
+ */
+import Type, { type Static, type TSchema } from 'typebox';
+
+/** Points at a named schema, keeping its TypeScript type. */
+export const ref = <T extends TSchema & { $id?: string }>(schema: T) => Type.Unsafe<Static<T>>(Type.Ref(schema.$id!));
+
+export const ComponentStatus = Type.Object(
+  {
+    name: Type.String({ description: 'The name it is reached at, e.g. "registry" or "sign-in"' }),
+    kind: Type.Enum(['gateway', 'service', 'app', 'sign-in'], { description: "A platform service, or an app's own service" }),
+    state: Type.Enum(['up', 'slow', 'down', 'checking'], { description: '"slow" answered in more than 2 seconds; "checking" has not been checked yet' }),
+    version: Type.Optional(Type.String({ description: 'The release its /healthz reports' })),
+    api: Type.Optional(Type.String({ description: 'The API major it serves, e.g. "v1"' })),
+    latencyMs: Type.Optional(Type.Integer({ description: 'How long the last answer took' })),
+    checkedAt: Type.Optional(Type.String({ format: 'date-time' })),
+    seenAt: Type.Optional(Type.String({ format: 'date-time', description: 'When it last answered' })),
+    problem: Type.Optional(Type.String({ description: 'Why it is down, in words an admin can act on' })),
+  },
+  { $id: 'ComponentStatus' },
+);
+
+export const BackupRun = Type.Object(
+  {
+    at: Type.String({ format: 'date-time' }),
+    ok: Type.Boolean(),
+    file: Type.Optional(Type.String()),
+    bytes: Type.Optional(Type.Integer()),
+    problem: Type.Optional(Type.String()),
+  },
+  { $id: 'BackupRun' },
+);
+
+export const PublicAccess = Type.Object(
+  {
+    open: Type.Boolean(),
+    until: Type.Optional(Type.String({ format: 'date-time', description: 'When it closes by itself' })),
+  },
+  {
+    $id: 'PublicAccess',
+    description: "Whether AUGUR is open to the internet through Tailscale Funnel (infra/deploy/public.sh). Absent when the gateway isn't told.",
+  },
+);
+
+export const BackupStatus = Type.Object(
+  {
+    state: Type.Enum(['ok', 'attention'], { description: '"attention" when backups cannot be relied on right now' }),
+    problem: Type.Optional(Type.String({ description: 'Why, in words an admin can act on' })),
+    lastBackup: Type.Optional(ref(BackupRun)),
+    lastRestoreTest: Type.Optional(
+      Type.Intersect([
+        ref(BackupRun),
+        Type.Object({
+          seconds: Type.Optional(Type.Integer()),
+          people: Type.Optional(Type.Integer({ description: 'People in the restored sign-in realm' })),
+          apps: Type.Optional(Type.Integer()),
+          auditEntries: Type.Optional(Type.Integer()),
+        }),
+      ]),
+    ),
+  },
+  { $id: 'BackupStatus' },
+);
+
+/** The gateway's public key, as a JSON Web Key. */
+const CallerKey = Type.Object({
+  kty: Type.Literal('OKP'),
+  crv: Type.Literal('Ed25519'),
+  x: Type.String(),
+  kid: Type.String(),
+  alg: Type.Literal('EdDSA'),
+  use: Type.Optional(Type.Literal('sig')),
+});
+
+export const CallerKeys = Type.Object({ keys: Type.Array(CallerKey) }, { description: 'The keys' });
+
+export const Status = Type.Object(
+  {
+    components: Type.Array(ref(ComponentStatus)),
+    backups: Type.Optional(ref(BackupStatus)),
+    publicAccess: Type.Optional(ref(PublicAccess)),
+  },
+  { description: 'Every component, the gateway first' },
+);
+
+/** What every refusal carries: a short code, and a sentence a person can read. */
+export const Refusal = Type.Object(
+  { error: Type.String({ examples: ['forbidden'] }), message: Type.String({ description: 'Says why, and what would change it' }) },
+  { $id: 'Refusal' },
+);
+
+/** A refusal, and when it happens. */
+export const refused = (description: string) => ({ ...ref(Refusal), description });
+
+/** Every named schema, in the order the contract lists them. */
+export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, BackupStatus];
