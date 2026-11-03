@@ -19,7 +19,7 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0011](0011-trunk-based-main-and-tags.md) | One trunk branch and release tags, instead of environment branches | Accepted | 2026-11-01 |
 | [0012](0012-apps-in-own-repositories.md) | Every app lives in its own repository, and pillar apps are default-installed apps | Accepted | 2026-11-01 |
 | [0013](0013-versions-and-releases.md) | One AUGUR version for deployments, and GitHub releases only for AUGUR and apps | Accepted | 2026-11-01 |
-| [0014](0014-agent-runtime.md) | Agents are apps, run by a durable runs service on DBOS | Proposed | 2026-10-24 |
+| [0014](0014-agent-runtime.md) | Agents are apps, run by a durable runs service on DBOS | Accepted in part (jobs engine); agent runtime Proposed | 2026-11-03 |
 | [0015](0015-react-kits-tailwind.md) | Frontends are React, with a shell kit and an app kit on one common base, styled with Tailwind | Accepted | 2026-11-01 |
 | [0016](0016-storybook-on-chromatic.md) | The kits' Storybook is hosted on Chromatic | Accepted | 2026-11-01 |
 | [0017](0017-signed-release-feed.md) | The release feed is signed, expires, and can mark a release halted | Accepted | 2026-11-01 |
@@ -37,7 +37,7 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0029](0029-reserve-focus-and-marking.md) | The SDK reserves a working context and a protective marking now | Accepted | 2026-11-01 |
 | [0030](0030-upgrade-centre-platform-frontend.md) | The Upgrade Centre is its own platform frontend, released with AUGUR | Accepted | 2026-11-01 |
 | [0031](0031-mirror-feeds-are-the-organisations-own.md) | A mirror's feed is the organisation's own, and carries the publisher's halt marks | Accepted | 2026-11-01 |
-| [0032](0032-platform-apps-and-pillar-apps.md) | Apps that ship with AUGUR are platform apps or pillar apps | Proposed | 2026-11-01 |
+| [0032](0032-platform-apps-and-pillar-apps.md) | Apps that ship with AUGUR are platform apps or pillar apps | Accepted | 2026-11-03 |
 | [0033](0033-renovate-for-dependency-updates.md) | Renovate proposes dependency updates, weekly and grouped, and never merges them | Accepted | 2026-11-01 |
 | [0034](0034-opentelemetry-in-the-service-kit.md) | Services send OpenTelemetry through the service kit, off until a collector is named | Accepted | 2026-11-01 |
 | [0035](0035-email-through-the-organisations-relay.md) | AUGUR sends email through the organisation's own SMTP relay | Accepted | 2026-11-01 |
@@ -54,6 +54,8 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0046](0046-ui-kit-in-its-own-repository.md) | The UI kit lives in its own repository, and the shell serves the version it pins | Accepted | 2026-11-02 |
 | [0047](0047-app-repositories-in-augurs-feed.md) | Apps in their own repositories release there, and AUGUR's feed lists them | Accepted | 2026-11-02 |
 | [0048](0048-kit-served-from-a-kit-url.md) | Apps load the UI kit from a kit URL that the deployment serves | Accepted | 2026-11-03 |
-| [0049](0049-pillar-apps-shipped-from-their-releases.md) | AUGUR ships the pinned releases of its pillar apps, made in their own repositories | Proposed | 2026-11-03 |
+| [0049](0049-pillar-apps-shipped-from-their-releases.md) | AUGUR ships the pinned releases of its pillar apps, made in their own repositories | Accepted | 2026-11-03 |
+| [0050](0050-alpha-proving-run.md) | Alpha is proved by a build gate and a 48-hour run on staging | Accepted | 2026-11-03 |
+| [0051](0051-install-a-halted-release-on-request.md) | A deployment admin can install a halted release on request, on dev and preview servers only | Accepted | 2026-11-03 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

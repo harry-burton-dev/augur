@@ -1,8 +1,8 @@
 # 0049. AUGUR ships the pinned releases of its pillar apps, made in their own repositories
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
-- **Decided by:** Harry (proposed; the default was taken so the apps could leave this repository)
+- **Decided by:** Harry
 - **Replaces:** none. Builds on [0012](0012-apps-in-own-repositories.md), [0017](0017-signed-release-feed.md) and [0047](0047-app-repositories-in-augurs-feed.md).
 
 ## Context
@@ -34,5 +34,5 @@ Option 1, for now; option 3 stays open as a later, separate change.
 
 ## Links
 
-- Linear PER-244
+- Linear PER-244, PER-278
 - Repository split plan (a private design note)
