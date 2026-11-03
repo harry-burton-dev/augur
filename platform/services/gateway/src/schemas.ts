@@ -65,6 +65,15 @@ export const BackupStatus = Type.Object(
   { $id: 'BackupStatus' },
 );
 
+export const Seeding = Type.Object(
+  {
+    allowed: Type.Boolean(),
+    why: Type.Optional(Type.String({ description: 'Why not, when it is off' })),
+    whoCanChange: Type.Optional(Type.String({ description: 'Who can turn it on, and how' })),
+  },
+  { $id: 'Seeding', description: 'Whether `pnpm seed` may fill this deployment with synthetic sample data (SEED_ALLOWED, ADR 0056)' },
+);
+
 /** The gateway's public key, as a JSON Web Key. */
 const CallerKey = Type.Object({
   kty: Type.Literal('OKP'),
@@ -82,6 +91,7 @@ export const Status = Type.Object(
     components: Type.Array(ref(ComponentStatus)),
     backups: Type.Optional(ref(BackupStatus)),
     publicAccess: Type.Optional(ref(PublicAccess)),
+    seeding: ref(Seeding),
   },
   { description: 'Every component, the gateway first' },
 );
@@ -112,4 +122,4 @@ export const Refusal = Type.Unsafe<{ error: string; message: string; [extension:
 export const refused = (description: string) => ({ description, content: { 'application/problem+json': { schema: ref(Refusal) } } });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, BackupStatus];
+export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, BackupStatus, Seeding];
