@@ -1,6 +1,6 @@
 # 0053. Squawk lints every new migration, and one runner in the service kit applies them
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-03)
 - **Date:** 2026-11-03
 - **Decided by:** Harry
 - **Replaces:** none
