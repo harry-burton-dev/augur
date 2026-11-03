@@ -10,4 +10,3 @@ spec:
     - ./apps/atlas.yaml
     - ./apps/auspex.yaml
     - ./apps/folio.yaml
-    - ./apps/mandate.yaml
