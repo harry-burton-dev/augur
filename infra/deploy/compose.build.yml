@@ -4,31 +4,38 @@
 # The images are tagged with PLATFORM_VERSION as usual, so set it to something that isn't a
 # release, such as `local`, or a later pull will replace them. The Upgrade Centre shows the server as
 # a build from source, based on the last release; upgrading from there replaces it with released images.
+# The builds read AUGUR's kit packages from GitHub Packages: set NODE_AUTH_TOKEN, in the shell you run
+# compose from, to a GitHub token with read:packages.
 services:
   web:
-    build: { context: ../.., dockerfile: infra/web.Dockerfile, target: web }
+    build: { context: ../.., dockerfile: infra/web.Dockerfile, secrets: [node_auth_token], target: web }
   gateway:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/gateway" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/gateway" } }
   identity:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/identity" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/identity" } }
   registry:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, target: registry, args: { PACKAGE: "@augur/registry" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], target: registry, args: { PACKAGE: "@augur/registry" } }
     # Says so in the Upgrade Centre: a build from source still carries the last release's number.
     environment:
       AUGUR_BUILD: source
   events:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/events" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/events" } }
   models:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/models" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/models" } }
   storage:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/storage" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/storage" } }
   folio:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/folio" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@apps/folio" } }
   folio-worker:
     build: { context: ../.., dockerfile: apps/folio/worker/Dockerfile }
   auspex:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/auspex" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@apps/auspex" } }
   atlas:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/atlas" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@apps/atlas" } }
   updater:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, target: updater, args: { PACKAGE: "@augur/updater" } }
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], target: updater, args: { PACKAGE: "@augur/updater" } }
+
+# The kit packages' read token, for the builds above (infra/web.Dockerfile, infra/service.Dockerfile).
+secrets:
+  node_auth_token:
+    environment: NODE_AUTH_TOKEN

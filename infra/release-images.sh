@@ -13,7 +13,7 @@ out=$(mktemp -d)
 build() {
   local name=$1
   shift
-  docker buildx build --push --provenance=true --sbom=true \
+  docker buildx build --push --provenance=true --sbom=true --secret id=node_auth_token,env=NODE_AUTH_TOKEN \
     --label "org.opencontainers.image.version=$version" \
     -t "$repo/$name:$version" -t "$repo/$name:$channel" \
     --metadata-file "$out/$name.json" "$@" . >&2

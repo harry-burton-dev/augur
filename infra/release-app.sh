@@ -22,7 +22,7 @@ frontend_pkg=$(name_of frontend)
 
 service=null
 if [ -n "$service_pkg" ]; then
-  docker buildx build --push --provenance=true --sbom=true \
+  docker buildx build --push --provenance=true --sbom=true --secret id=node_auth_token,env=NODE_AUTH_TOKEN \
     --label "org.opencontainers.image.version=$version" \
     --label "org.opencontainers.image.title=$id" \
     -t "$repo/$id:$version" -t "$repo/$id:$channel" \
