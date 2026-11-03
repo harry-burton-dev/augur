@@ -18,10 +18,10 @@ then write the prompt with "what to take from each".
 | Instrument panels | glass cockpit, dark cockpit, master caution, annunciator, MFD soft keys | avionics manuals, Open MCT | alerts, telemetry | cinematic |
 | Wear and history | edit wear, read wear, History Flow, provenance, patina, visible repair, strata | Hill and Hollan; Viégas and Wattenberg; Xanadu patterns | history, trust | wear and time |
 | Sound and listening | earcon, auditory icon, sonification, room tone, worldizing, aural alert | Brewster earcon guidelines; Apple Audio Graphs; Murch | alerts, ambient, a11y | room tone (run 3) |
-| Typography and editorial | standfirst, kicker, measure, baseline grid, optical size, grade axis | Bringhurst; Müller-Brockmann; Kinneir and Calvert | hierarchy, tables | batch 1 (C, queued) |
+| Typography and editorial | standfirst, kicker, measure, baseline grid, optical size, grade axis | Bringhurst; Müller-Brockmann; Kinneir and Calvert | hierarchy, tables | batch 1 (C, queued); batch 6 (Y, partly) |
 | Cartography | hillshade, hypsometric tint, contour, plan oblique, soundings, unsurveyed, generalisation | Imhof; nautical charts; Beck | Explorer, Data Atlas | batch 1 (D, queued) |
 | Paper tools for high-stakes work | flight progress strip, cocked strip, SBAR handover, T-card board, double entry | NATS EFPS; Sellen and Harper | handover, approvals | batch 1 (W1, queued) |
-| Process control rooms | high-performance HMI, ISA-101, grey-scale HMI, alarm rationalisation, alarm flood, shelving, EEMUA 191, situation awareness levels | ISA-101; EEMUA 191; Endsley | notices, Admin, Upgrade Centre | batch 2 (E) |
+| Process control rooms | high-performance HMI, ISA-101, grey-scale HMI, alarm rationalisation, alarm flood, shelving, EEMUA 191, situation awareness levels | ISA-101; EEMUA 191; Endsley | notices, Admin, Upgrade Centre | batch 2 (E); batch 6 (AB, partly) |
 | Music notation and scores | graphic score, Treatise, part and full score, conductor's score, cue, rehearsal mark, tacet | Cardew's *Treatise*; Feldman; orchestral scores | Mandate, team work, rollouts | batch 2 (F) |
 | Movement notation | Labanotation, Benesh, Eshkol-Wachman, staff, motif, phrasing | Laban; *Designing Gestural Interfaces* ch. 5 | gestures, radial menu, flows | batch 2 (F, partly) |
 | Game interfaces | diegetic, spatial, meta, non-diegetic, HUD-less, wayfinding in world, Dead Space health spine | Game UI Database; Fagerholt and Lorentzon taxonomy | floors, objects, letterbox | batch 2 (G) |
@@ -56,6 +56,12 @@ then write the prompt with "what to take from each".
 | Commissioning and procurement | brief, Plan of Work, purchase order, goods received note, change order, acceptance criteria | RIBA; procurement practice | Mandate asks, sign-off | batch 5 (V) |
 | Form design | one thing per page, check answers, pause point, document assembly, mail merge | GOV.UK Design System; Gawande; Jarrett | templates, repeatable outputs | batch 5 (X) |
 | Hallmarking and marks | hallmark, maker's mark, assay office, date letter, title block, kitemark, content credentials | Hallmarking Act 1973; C2PA | output quality, signing | batch 5 (W5) |
+| Art and print traditions | bokashi, ukiyo-e, chiaroscuro, tenebrism, colour interaction, colour field, art direction, graphics standards manual | Albers *Interaction of Color*; NASA Graphics Standards Manual; British Rail identity manual | art direction, empty states, Home, onboarding | batch 6 (Y) |
+| Argumentation and logic | Toulmin model, warrant, qualifier, rebuttal, pyramid principle, SCQA, MECE, Wigmore chart, argument map, IBIS, IRAC | Toulmin (1958); Minto (1987); Kunz and Rittel (1970) | outputs, briefings, decisions | batch 6 (Z) |
+| Intelligence analysis and forecasting | structured analytic techniques, ACH, key assumptions check, indicators, premortem, red team, outside view, reference class, Cynefin, Fermi estimate | Heuer (1999); Tradecraft Primer (2009); Tetlock | judgement, planning, Explorer | batch 6 (AA) |
+| Sensemaking and interpretation | DIKW, a difference that makes a difference, situation awareness levels, data/frame, sensemaking, interpretation, nut graf, common operational picture | Ackoff (1989); Endsley (1995); Klein, Moon and Hoffman (2006); Tilden (1957) | context, Home, handover, agents | batch 6 (AB) |
+| Mission command and strategy deployment | commander's intent, end state, two levels up, backbrief, disciplined initiative, Hoshin Kanri, catchball, OKR, BDI | ADP 6-0; Bungay *The Art of Action*; Klein *Sources of Power* | Mandate, approvals, Home | batch 6 (AC) |
+| Chess and game review | annotation symbols, Informator, critical moment, evaluation bar, opening book, ECO code, after-action review | de Groot; Chess Informant; annotated game collections | review, learning, decisions | batch 6 (W6) |
 
 ## Techniques worth a search on their own
 consequence preview · small multiples · sparkline · micro/macro reading ·
