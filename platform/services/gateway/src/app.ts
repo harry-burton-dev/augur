@@ -89,7 +89,7 @@ export interface GatewayOptions {
   backupDir?: string;
   /** What infra/deploy/public.sh writes (PUBLIC_ACCESS_FILE). Without it Status says nothing about the internet. */
   publicAccessFile?: string;
-  /** Whether this deployment lets an admin fill it with synthetic sample data (SEED_ALLOWED, ADR 0052). Off unless set. */
+  /** Whether this deployment lets an admin fill it with synthetic sample data (SEED_ALLOWED, ADR 0056). Off unless set. */
   seedAllowed?: boolean;
   /** Which floors a caller is on. Defaults to asking the identity upstream. */
   floors?: FloorLookup;

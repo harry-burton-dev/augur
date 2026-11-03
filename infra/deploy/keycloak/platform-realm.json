@@ -153,7 +153,7 @@
     {
       "clientId": "platform-cli",
       "name": "AUGUR command line",
-      "description": "Signs a person in from a terminal with a one-time code (device grant), for pnpm seed. ADR 0052.",
+      "description": "Signs a person in from a terminal with a one-time code (device grant), for pnpm seed. ADR 0056.",
       "enabled": true,
       "publicClient": true,
       "standardFlowEnabled": false,

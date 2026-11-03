@@ -1,4 +1,4 @@
-# 0052. Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal
+# 0056. Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal
 
 - **Status:** Proposed
 - **Date:** 2026-11-03
