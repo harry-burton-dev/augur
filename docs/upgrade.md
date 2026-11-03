@@ -54,6 +54,10 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Sample data, where you allow it
+
+`pnpm seed` (docs/seed.md) fills a deployment with synthetic sample people, floors, documents and entities, and only where `.env` sets `SEED_ALLOWED=true`; nothing changes on a server that doesn't. To use it on a server that already exists, also add its sign-in client, which Keycloak doesn't import into an existing realm: open the Keycloak admin console (`KEYCLOAK_CONSOLE=open`, deploy.md), choose the `platform` realm, **Clients → Import client**, and import the `platform-cli` entry from `infra/deploy/keycloak/platform-realm.json`. Then close the console again.
+
 ### AUGUR's repository gets a new name
 
 AUGUR's repository is being renamed from `im-platform` (Linear PER-244). Every release is signed by the repository's workflows, so from this release the updater and registry take AUGUR's releases, dev builds and feed signed under either name. A server must run this release **before** the rename, or it refuses everything released after it.
@@ -126,7 +130,7 @@ A release its publisher **halted** (the Halt rollout workflow, [release-channels
 
 ### Installing a halted release to test going back
 
-On a **dev or preview** server only, a deployment admin can install a halted release on purpose, to prove AUGUR goes back by itself from a broken one ([ADR 0051](decisions/0051-install-a-halted-release-on-request.md)). They name the exact version and say why, after entering their password again (`PUT /v1/platform/upgrade/halted` with `version` and `reason`). The release must be newer than the one the server runs, able to upgrade from it, and have no breaking release in between, because going back by itself is the point. The watch then judges it like any other upgrade. A production server (`SERVER_RING=production`) always refuses, and every request, allowed or refused, is in the audit log (`platform.halted-install-requested`, `platform.halted-install-refused`). Automatic policies never take a halted release, so it doesn't come back after the server went back.
+On a **dev or preview** server only, a deployment admin can install a halted release on purpose, to prove AUGUR goes back by itself from a broken one ([ADR 0051](decisions/0051-install-a-halted-release-on-request.md)). In the Upgrade Centre, open AUGUR and choose **Install … for a test** beside the halted release; it asks for the reason and may ask for your password again (the API is `PUT /v1/platform/upgrade/halted` with `version` and `reason`). On a production server the action stays visible but can't be used, and says why. The release must be newer than the one the server runs, able to upgrade from it, and have no breaking release in between, because going back by itself is the point. The watch then judges it like any other upgrade. A production server (`SERVER_RING=production`) always refuses, and every request, allowed or refused, is in the audit log (`platform.halted-install-requested`, `platform.halted-install-refused`). Automatic policies never take a halted release, so it doesn't come back after the server went back.
 
 ### The read key
 
