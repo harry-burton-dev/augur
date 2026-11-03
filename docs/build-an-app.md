@@ -180,6 +180,7 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 }
 ```
 
+- `id` is 2 to 40 lowercase letters, digits and dashes, and becomes the app's `/api/<id>`, `/apps/<id>/`, schema and bucket, so it can't be one a part of AUGUR answers to: a platform service's (`identity`, `registry`, `events`, `models`, `storage`, `gateway`, `updater`), a platform app's, a deployment service's (`postgres`, `keycloak`…), a path the front door serves (`api`, `sso`, `kit`…), or one starting `augur-` or `pg-`. The registry refuses such a manifest and says what has the id; the list is `RESERVED_APP_IDS` in `@augur/service-kit`.
 - `version` is copied from the frontend's `package.json` on release; don't edit it.
 - `sdk` is the range of SDK releases the app works with. The shell refuses an app outside it.
 - `icon` and menu `icon`s are the kit's icon names (see Storybook's Icons).

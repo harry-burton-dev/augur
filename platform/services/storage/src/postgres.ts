@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { reservedIdProblem } from '@augur/service-kit';
 
 /** What the database work needs from a connection: one statement at a time. */
 export interface Sql {
@@ -31,6 +32,9 @@ export async function prepareDatabase(sql: Sql): Promise<void> {
  * The login can't read any other schema: the platform's belong to the admin login.
  */
 export async function provisionDatabase(sql: Sql, { app, password }: { app: string; password: string }): Promise<void> {
+  // A schema named for a part of AUGUR (identity, registry, public…) would sit among the platform's own.
+  const reserved = reservedIdProblem(app);
+  if (reserved) throw new Error(`No schema was made for it: ${reserved}`);
   const role = pg.escapeIdentifier(roleFor(app));
   const schema = pg.escapeIdentifier(schemaFor(app));
   const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
@@ -45,6 +49,8 @@ export async function provisionDatabase(sql: Sql, { app, password }: { app: stri
 
 /** Takes a preview's login and schema away, with everything in the schema. Nothing happens when there's none. */
 export async function dropDatabase(sql: Sql, app: string): Promise<void> {
+  const reserved = reservedIdProblem(app);
+  if (reserved) throw new Error(`Nothing was dropped: ${reserved}`);
   const role = pg.escapeIdentifier(roleFor(app));
   await sql.query(`drop schema if exists ${pg.escapeIdentifier(schemaFor(app))} cascade`);
   const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);

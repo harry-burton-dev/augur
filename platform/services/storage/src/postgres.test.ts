@@ -2,6 +2,16 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
 
+describe('an app’s schema', () => {
+  it('is never one named for a part of AUGUR, made or dropped', async () => {
+    const said: string[] = [];
+    const sql = { query: async (text: string) => (said.push(text), { rows: [], rowCount: 0 }) } as unknown as Parameters<typeof provisionDatabase>[0];
+    await expect(provisionDatabase(sql, { app: 'registry', password: 'p'.repeat(20) })).rejects.toThrow('No schema was made for it: "registry" is kept for the registry');
+    await expect(dropDatabase(sql, 'public')).rejects.toThrow('Nothing was dropped');
+    expect(said).toEqual([]);
+  });
+});
+
 // Runs wherever DATABASE_URL points at a Postgres with pgvector; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
   const app = `storage-test-${process.pid}`;
