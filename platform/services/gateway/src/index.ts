@@ -13,6 +13,7 @@ loadConfigOrExit('gateway', [
   { name: 'CALLER_SIGNING_KEY', about: 'the key the gateway signs callers with (64 hex); without it a new one is made each start, so only one gateway can run.', secret: true },
   { name: 'APP_UPSTREAMS', about: 'apps’ services the gateway is started with, name=url, comma separated.' },
   { name: 'BACKUP_DIR', about: 'where the backup container writes its results, for Status.' },
+  { name: 'SEED_ALLOWED', about: 'true lets an admin fill this deployment with synthetic sample data (pnpm seed); off unless set.' },
   { name: 'PUBLIC_ACCESS_FILE', about: 'what infra/deploy/public.sh writes when AUGUR is open to the internet, for Status.' },
 ]);
 

@@ -1,5 +1,6 @@
 // Runs the contract tests against each build of the reference app: its source
-// (today's SDK), with Folio on and off, then every frozen build from an earlier SDK release.
+// (today's SDK), with Folio on and off, then every frozen build from an earlier SDK release
+// (one folder for each set of SDK minors whose builds were byte-for-byte the same; freeze.mjs).
 //   pnpm --filter @augur/contract-tests test:contract
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
@@ -26,13 +27,18 @@ if (!folio) {
   }
   console.log(`Folio isn't laid out in ${folioDir}, so every run has it off. To run with it: infra/shipped-app.sh folio`);
 }
+// Today's build runs every spec, with its feature preview `turned-on` on for the stand-in person
+// (SDK 1.7). Folio's own checks (tests/pillar.spec.ts) test the shell and Folio, not the app, so the
+// frozen builds run only the mount context's (tests/contract.spec.ts): Folio is still beside them.
+const source = { DEV_PREVIEWS: 'turned-on' };
 const targets = [
-  { name: 'source', folio: false, env: {} },
-  ...(folio ? [{ name: 'source', folio: true, env: {} }] : []),
+  { name: 'source', folio: false, env: source, specs: [] },
+  ...(folio ? [{ name: 'source', folio: true, env: source, specs: [] }] : []),
   ...chosen.map((release) => ({
     name: release,
     folio,
     env: { DEV_APP_ENTRY: '/apps/reference/entry.js', APP_DIST: `reference=${join(frozen, release)}` },
+    specs: ['tests/contract.spec.ts'],
   })),
 ];
 const label = (target) => `${target.name}, Folio ${target.folio ? 'on' : 'off'}`;
@@ -54,7 +60,7 @@ console.log(`${targets.length} runs of the reference app, ${atOnce} at a time ($
 if (chosen.length < releases.length) console.log(`Frozen builds: ${chosen.join(' and ')} of ${releases.length}; the Version packages pull request runs every one.`);
 const run = (target, i) =>
   new Promise((resolve) => {
-    const child = spawn('pnpm', ['exec', 'playwright', 'test'], {
+    const child = spawn('pnpm', ['exec', 'playwright', 'test', ...target.specs], {
       cwd: here,
       env: {
         ...process.env,

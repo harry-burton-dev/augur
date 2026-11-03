@@ -78,6 +78,10 @@ gunzip -c infra/deploy/backups/platform-<date>.sql.gz | pc exec -T postgres psql
 pc up -d --remove-orphans
 ```
 
+### Sample data, where you allow it
+
+`pnpm seed` (docs/seed.md) fills a deployment with synthetic sample people, floors, documents and entities, and only where `.env` sets `SEED_ALLOWED=true`; nothing changes on a server that doesn't. To use it on a server that already exists, also add its sign-in client, which Keycloak doesn't import into an existing realm: open the Keycloak admin console (`KEYCLOAK_CONSOLE=open`, deploy.md), choose the `platform` realm, **Clients → Import client**, and import the `platform-cli` entry from `infra/deploy/keycloak/platform-realm.json`. Then close the console again.
+
 ### AUGUR's repository gets a new name
 
 AUGUR's repository is being renamed from `im-platform` (Linear PER-244). Every release is signed by the repository's workflows, so from this release the updater and registry take AUGUR's releases, dev builds and feed signed under either name. A server must run this release **before** the rename, or it refuses everything released after it.
@@ -147,6 +151,10 @@ From this release the registry checks the release feed before it believes it ([A
 - `FEED_SIGNER` in `.env` overrides which workflow may sign the feed, as a regular expression. Leave it unset unless you publish AUGUR from a fork.
 
 A release its publisher **halted** (the Halt rollout workflow, [release-channels.md](release-channels.md#halting-a-release)) is still listed in the Upgrade Centre, marked halted with the reason, but is never offered, chosen as the next upgrade or installed. A server running one is told so first, and where to go: a newer release that isn't halted, or back to the one before.
+
+### Installing a halted release to test going back
+
+On a **dev or preview** server only, a deployment admin can install a halted release on purpose, to prove AUGUR goes back by itself from a broken one ([ADR 0051](decisions/0051-install-a-halted-release-on-request.md)). In the Upgrade Centre, open AUGUR and choose **Install … for a test** beside the halted release; it asks for the reason and may ask for your password again (the API is `PUT /v1/platform/upgrade/halted` with `version` and `reason`). On a production server the action stays visible but can't be used, and says why. The release must be newer than the one the server runs, able to upgrade from it, and have no breaking release in between, because going back by itself is the point. The watch then judges it like any other upgrade. A production server (`SERVER_RING=production`) always refuses, and every request, allowed or refused, is in the audit log (`platform.halted-install-requested`, `platform.halted-install-refused`). Automatic policies never take a halted release, so it doesn't come back after the server went back.
 
 ### The read key
 
@@ -251,6 +259,8 @@ It drives Docker, which can start any container, so it has the run of the server
 4. `pc up -d`. The realm job makes the updater's sign-in, and an upgrade you ask for starts within half a minute.
 
 Docker must be listening on `/var/run/docker.sock` (rootless Docker isn't). From then on, upgrade from the page, or by hand as above; both work. An upgrade waiting on the page while you upgrade by hand is best cancelled first.
+
+To see what the watch after an upgrade would see right now, after an upgrade by hand say, run one look of it: `pc exec -T updater node dist/index.js check`. It signs in as the updater, reads AUGUR's calls at the gateway for the last 10 minutes and asks every part whether it's ready, then prints one line of JSON: `ok`, what it looked at, and each problem in a sentence. It exits 1 when there's any. Unlike the watch, it doesn't let sign-in miss once or wait for a part to come back.
 
 ### The app runner
 

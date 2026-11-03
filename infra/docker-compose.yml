@@ -111,6 +111,8 @@ services:
       OIDC_ISSUER: http://localhost:8180/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/realms/platform/protocol/openid-connect/certs
       OIDC_AUDIENCE: platform-api
+      # Your own machine may be filled with sample data (pnpm seed, docs/seed.md).
+      SEED_ALLOWED: "true"
       # Each app's service, name=url. The platform knows no app by name.
       APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086
     ports: ["8080:8080"]
