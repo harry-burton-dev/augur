@@ -18,6 +18,8 @@ permissions:
   # Signed keyless, as refs/heads/main: the app runner takes a dev build only from this workflow on main.
   id-token: write
 env:
+  # Reads AUGUR's kit packages from GitHub Packages (.npmrc): a classic token with read:packages, else this run's own.
+  NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
   # Where AUGUR's images and release feed go. They stay at ghcr.io/<owner>/im-platform, the repository's
   # first name, where servers pull them from; the IMAGE_REPO variable moves them (docs/upgrade.md).
   IMAGE_REPO: ${{ vars.IMAGE_REPO || format('ghcr.io/{0}/im-platform', github.repository_owner) }}

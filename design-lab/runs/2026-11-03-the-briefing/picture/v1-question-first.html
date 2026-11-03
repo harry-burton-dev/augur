@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picture · V1 · Question first</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens (mixes of kit tokens; listed as "needs token" in notes.md)
+   --------------------------------------------------------------- */
+:root{
+  /* six ways to be empty (catalogue shortlist): corner ticks for "not known yet" */
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  --x-proposed-gap-tick: var(--space-2);
+  /* stale = 45 degree hatch, not yours to see = 135 degree hatch (catalogue) */
+  --x-proposed-hatch: color-mix(in srgb, var(--ink-muted) 34%, transparent);
+  --x-proposed-stale: repeating-linear-gradient(45deg, transparent 0 calc(var(--space-1) - 1px), var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  /* quiet text and context marks (wear and time --time-past-dim) */
+  --x-proposed-quiet: .62;
+  /* the floor you are on, as one alias */
+  --x-proposed-here: var(--floor-department-high);
+  /* micro type for numerals and keys */
+  --x-proposed-type-micro: .6875rem;
+  /* pencil and ink (reference desk): what a model wrote, until a person accepts it */
+  --x-proposed-pencil: color-mix(in srgb, var(--info) 55%, var(--ink-muted));
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--info) 6%, transparent);
+  /* data ink: the one series the finding is about, and its context */
+  --x-proposed-data: var(--light);
+  --x-proposed-data-ctx: color-mix(in srgb, var(--ink-muted) 55%, transparent);
+  /* the lit next step (light language) */
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+}
+:root, .mk-gap{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{display:flex;align-items:center;gap:var(--space-2);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.floorline{display:inline-block;width:var(--space-5);height:2px;background:var(--x-proposed-here)}
+h1{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;margin:var(--space-1) 0;color:var(--light)}
+.lede{margin:0;color:var(--ink-muted);font-size:var(--type-meta);line-height:var(--leading-meta);max-width:96ch}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.lab{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hintbar{position:fixed;right:var(--edge-tight);bottom:var(--edge-tight);z-index:998;background:var(--scrim);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);max-width:calc(100vw - 720px);justify-content:flex-end}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.pane{background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset);backdrop-filter:blur(var(--surface-blur))}
+
+/* two registers */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* the finding: the chart's title is the sentence */
+.finding{margin:0;font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);letter-spacing:var(--tracking-tight);max-width:60ch}
+.finding .n{font-family:var(--font-mono);font-weight:400}
+.sub{margin:var(--space-1) 0 0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.inkmark{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted)}
+.conf{display:inline-flex;align-items:baseline;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.conf b{white-space:nowrap;font-weight:400;color:var(--light);border-bottom:1px solid var(--hairline-strong)}
+
+/* charts */
+.ch{display:block;overflow:visible}
+.ch text{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);fill:var(--ink-muted)}
+.ch .grid{stroke:var(--hairline)}
+.ch .grid.zero{stroke:var(--hairline-strong)}
+.ch .ln{fill:none;stroke-linejoin:round;stroke-linecap:round}
+.ch .ln.emph{stroke:var(--x-proposed-data);stroke-width:2}
+.ch .ln.ctx{stroke:var(--x-proposed-data-ctx);stroke-width:1.25}
+.ch .dot.emph{fill:var(--x-proposed-data)}
+.ch .dot.ctx{fill:var(--ink-muted)}
+.ch .dl{font-family:var(--font-sans);font-size:var(--type-small)}
+.ch .dl.emph{fill:var(--light)}
+.ch .dv{font-family:var(--font-mono)}
+.ch .brk{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.ch .brl{fill:var(--ink-muted)}
+.ch .evt{stroke:var(--hairline-strong);stroke-dasharray:3 3}
+.ch .evl{fill:var(--ink)}
+.ch.bare{width:100%;height:auto}
+.draw{stroke-dasharray:1;stroke-dashoffset:0;transition:stroke-dashoffset var(--motion-run) var(--ease-out)}
+.pre .draw{stroke-dashoffset:1}
+@media (prefers-reduced-motion: reduce){.pre .draw{stroke-dashoffset:0;opacity:0}.draw{transition:opacity var(--motion-base)}}
+
+.bars{display:grid;gap:var(--space-2)}
+.br{display:grid;grid-template-columns:minmax(0,11rem) minmax(0,1fr) minmax(0,8rem);gap:var(--space-3);align-items:center;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.br.emph{color:var(--light)}
+.br .bl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt{position:relative;height:calc(var(--space-4) + var(--space-1));display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.bf{display:block;height:100%;width:var(--w);background:var(--x-proposed-data-ctx);border-radius:0 2px 2px 0;transition:width var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i,0) * var(--motion-instant))}
+.bf.emph{background:var(--x-proposed-data)}
+.pre .bf{width:0}
+.bv{font-family:var(--font-mono);font-size:var(--type-meta)}
+.bv.muted{font-family:var(--font-sans);font-size:var(--type-small)}
+.unseen-t{background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small)}
+.mk-gap{display:inline-block;background:var(--x-proposed-gap);width:calc(var(--space-6) + var(--space-4));height:calc(var(--space-4) + var(--space-1));flex:none}
+.mk-gap.s{width:calc(var(--space-5) + var(--space-3));height:var(--space-4);--x-proposed-gap-tick:var(--space-1)}
+.gapw{font-size:var(--type-small)}
+.age{display:inline-block;margin-left:var(--space-2);background:var(--x-proposed-stale);padding:0 var(--space-1);border-radius:2px;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));grid-auto-rows:minmax(calc(var(--space-7) - var(--space-2)),auto);gap:var(--space-2)}
+.tile{display:flex;flex-direction:column;justify-content:space-between;padding:var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline);background:color-mix(in srgb, var(--light) calc(var(--v) * 34%), var(--surface-inset));transition:opacity var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i,0) * var(--motion-instant));font-size:var(--type-small);line-height:var(--leading-small)}
+.tile b{font-weight:400;color:var(--light)}
+.tile .tv{font:400 var(--type-heading)/1 var(--font-mono);color:var(--light)}
+.tile .tw{color:var(--ink-muted)}
+.tile.emph{border-color:var(--x-proposed-data)}
+.tile.unseen-t{padding:var(--space-2);display:flex;flex-direction:column;gap:var(--space-1)}
+.tile.unseen-t span{display:inline-flex;gap:var(--space-1);align-items:center}
+.pre .tile{opacity:0}
+
+.iso{display:grid;gap:var(--space-2)}
+.iso + .iso{margin-top:var(--space-2)}
+.ir{display:grid;grid-template-columns:minmax(0,15rem) minmax(0,1fr) var(--space-7);gap:var(--space-3);align-items:center;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.ir .il{color:var(--ink);white-space:nowrap}
+.ir .is{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.ir .in{font-family:var(--font-mono);color:var(--ink-muted);text-align:right;white-space:nowrap}
+.sym{display:inline-flex;color:var(--x-proposed-data-ctx);transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out);transition-delay:calc(var(--i,0) * var(--motion-instant) / 2)}
+.sym.hot{color:var(--x-proposed-data)}
+.sym.mid{color:var(--ink)}
+.pre .sym{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .sym{transform:none}.sym{transition-delay:0ms}}
+
+.mult{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-3)}
+.mc{display:flex;flex-direction:column;gap:2px;padding:var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.mc b{font-weight:400;color:var(--ink)}
+.mc.emph b{color:var(--light)}
+.mc .mv{color:var(--ink-muted)}
+.mc.emph .mv{color:var(--light)}
+.mc.unseen-t span{display:inline-flex;gap:var(--space-1);align-items:center}
+
+table.rec{border-collapse:collapse;width:100%;font-size:var(--type-small);line-height:var(--leading-small)}
+.rec th{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);text-align:left;padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline-strong);position:sticky;top:0;background:var(--slate-deep)}
+.rec td{padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline);color:var(--ink);white-space:nowrap}
+.rec td.m{font-family:var(--font-mono);color:var(--ink-muted)}
+
+/* pencil and ink */
+.pencil{border:1px dashed var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3);margin:0}
+.pencil .pk{margin:0;display:flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--x-proposed-pencil)}
+.pencil .pb{margin:var(--space-1) 0;font-style:italic;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.pencil .pa{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+.pencil .pa button{height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink)}
+.pencil .pa button:hover{color:var(--light);border-color:var(--ink-muted)}
+.pencil .pl{font-size:var(--type-small);color:var(--ink-muted)}
+.pencil .pl a,.lnk{color:var(--ink);text-decoration:underline;text-decoration-color:var(--hairline-strong);text-underline-offset:var(--focus-gap)}
+.pencil .inked-by{display:none;margin:var(--space-1) 0 0;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted)}
+.pencil.inked .pa button{display:none}
+.pencil.inked .inked-by{display:block}
+.pencil.set-aside{opacity:var(--x-proposed-quiet)}
+.pencil.set-aside .pb{text-decoration:line-through;text-decoration-color:var(--ink-muted)}
+.gw-note{display:none;margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3);align-items:center;gap:var(--space-2)}
+.gw-off .pencil{display:none}
+.gw-off .gw-note{display:flex}
+.pin{font-style:italic;color:var(--ink);border-bottom:1px dashed var(--x-proposed-pencil)}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink)}
+.btn:hover{color:var(--light);border-color:var(--ink-muted)}
+.chip{display:inline-flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);font-size:var(--type-small);line-height:calc(var(--space-5) - var(--space-1));color:var(--ink)}
+@media (max-width:1400px){.x-cap{max-width:calc(50vw - var(--space-5))}.hintbar{max-width:calc(50vw - var(--space-4))}}
+
+/* ---------- this variant ---------- */
+.app{height:100vh;display:grid;grid-template-columns:minmax(0,17rem) minmax(0,1fr) minmax(0,21rem);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5);padding:var(--space-5) var(--edge) calc(var(--space-6) + var(--space-2))}
+.top{grid-column:1/-1}
+.left{display:flex;flex-direction:column;gap:var(--space-3);min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.set{padding:var(--space-3)}
+.set .nm{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);margin:var(--space-1) 0}
+.set p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.set .hid{display:flex;gap:var(--space-1);align-items:center;margin-top:var(--space-2)}
+.qs{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.q{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:0 var(--space-2);width:100%;padding:var(--space-2);border-radius:var(--radius-key);border:1px solid transparent;transition:background var(--motion-base),border-color var(--motion-base)}
+.q:hover{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.q .kbd{grid-row:span 2;align-self:start;margin-top:2px}
+.q .qa{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink)}
+.q .qf{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.q .tk{grid-column:2}
+.q[aria-pressed="true"]{background:var(--x-proposed-lit-wash);border-color:color-mix(in srgb,var(--x-proposed-lit) 50%,transparent)}
+.q[aria-pressed="true"] .qa{color:var(--light)}
+.mid{min-width:0;min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.fh{min-height:calc(var(--space-8) + var(--space-3))}
+.pic{flex:1;min-height:0;display:flex;align-items:flex-start;transition:opacity var(--motion-base) var(--ease-out)}
+.pic > *{width:100%}
+.pic > svg.ch{height:100%;max-height:100%}
+.pic.swap{opacity:0}
+.recs{max-height:100%;overflow:auto}
+.notes{display:grid;gap:var(--space-1)}
+.note{display:flex;gap:var(--space-2);align-items:flex-start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.note svg{flex:none;margin-top:2px}
+.note .mk-b{flex:none;width:var(--space-5);height:var(--space-3);margin-top:2px}
+.note .mk-b path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.note .mk-u{flex:none;width:var(--space-4);height:var(--space-3);margin-top:2px;background:var(--x-proposed-unseen);border:1px solid var(--hairline)}
+.acts{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.right{display:flex;flex-direction:column;gap:var(--space-4);min-height:0}
+.why p{margin:var(--space-1) 0 0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.never{list-style:none;margin:var(--space-1) 0 0;padding:0;display:grid;gap:var(--space-2)}
+.never li{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.never li svg{opacity:var(--x-proposed-quiet);margin-top:2px}
+.never li b{font-weight:400;color:var(--ink);text-decoration:line-through;text-decoration-color:var(--ink-muted)}
+.never .w{display:none}
+.never li:hover .w,.never li:focus-within .w,.right.open .never .w{display:inline}
+.nothere{border-left:2px solid var(--hairline-strong);padding-left:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0}
+.nothere b{font-weight:400;color:var(--ink)}
+@media (max-height:820px){.app{padding-top:var(--space-4);gap:var(--space-3) var(--space-4)}.q{padding:var(--space-1) var(--space-2)}.set{padding:var(--space-2) var(--space-3)}.lede{display:none}.never li:nth-child(n+7){display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app">
+  <header class="top">
+    <p class="eyebrow" id="eb"></p>
+    <h1>Choosing the picture</h1>
+    <p class="lede">Pick the question you want answered. AUGUR draws the one picture that answers it and writes what it shows as the title, from a fixed sentence. You never pick a chart type.</p>
+  </header>
+  <aside class="left">
+    <div class="set pane">
+      <p class="lab">Your records</p>
+      <p class="nm" id="setnm"></p>
+      <p id="setsub"></p>
+      <p class="hid" id="sethid"></p>
+      <p class="tk" id="settk"></p>
+    </div>
+    <p class="lab">What do you want to know?</p>
+    <ul class="qs" id="qs"></ul>
+  </aside>
+  <main class="mid">
+    <div class="fh">
+      <p class="inkmark" id="ink"></p>
+      <h2 class="finding" id="title"></h2>
+      <p class="sub" id="sub"></p>
+      <p class="conf" id="conf"></p>
+    </div>
+    <div class="pic" id="pic"></div>
+    <div class="notes" id="notes"></div>
+    <div class="acts">
+      <button class="btn" id="vrec" type="button"><i data-lucide="table-2" data-size="16"></i> See the records <span class="kbd">V</span></button>
+      <span class="muted" style="flex:1"></span>
+      <button class="btn" type="button"><i data-lucide="file-plus" data-size="16"></i> Put in a briefing</button>
+      <button class="btn" type="button"><i data-lucide="target" data-size="16"></i> Feed an intent</button>
+      <button class="btn" type="button"><i data-lucide="eye" data-size="16"></i> Watch for change</button>
+    </div>
+  </main>
+  <aside class="right" id="right">
+    <div id="lane"></div>
+    <div class="why"><p class="lab">Why this picture</p><p id="why"></p><p class="tk" id="whytk"></p></div>
+    <div>
+      <p class="lab">Never offered, and why <span class="kbd">N</span></p>
+      <ul class="never" id="never"></ul>
+    </div>
+    <p class="nothere" id="nothere"></p>
+  </aside>
+</div>
+<div class="x-cap"><b>Picture · V1</b> question first: six questions, one picture each, title is the finding · BLUF, Rosling, OWID</div>
+<script>
+const DATA = {
+  /* Sample data for one deployment. Every name, label, count and sentence template
+     on the page comes from here; nothing below this object is a literal from chat. */
+  org: { name: "Wealden and Coast Services" },
+  floor: { tier: "department", name: "Fleet and Depots", word: "Department" },
+  viewer: { name: "Priya Shah", initials: "PS", role: "Operator" },
+  lead: { name: "Tom Okafor", role: "Head of Depots" },
+  today: "2026-11-03",
+  months: ["2025-05","2025-06","2025-07","2025-08","2025-09","2025-10","2025-11","2025-12","2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10"],
+  areas: { north: "North", coast: "Coast", south: "South", east: "East" },
+  /* incidents per month per site; null = no record arrived for that month */
+  sites: [
+    { id: "s1", name: "Northgate depot",   short: "Northgate",   area: "north", gx: 2, gy: 1, inc: [2,1,2,2,1,2,3,2,2,2,4,5,4,5,6,5,6,7] },
+    { id: "s2", name: "Kettle Lane depot", short: "Kettle Lane", area: "north", gx: 3, gy: 1, inc: [1,1,0,1,1,1,2,1,1,1,3,3,4,3,4,4,5,4] },
+    { id: "s3", name: "Harbour Road depot",short: "Harbour Road",area: "north", gx: 4, gy: 2, inc: [1,2,1,1,2,1,1,2,1,null,2,3,3,4,3,4,4,5],
+      noRecord: { month: "2026-02", why: "the depot log didn't sync that month", who: "Sam Reid, depot admin" } },
+    { id: "s4", name: "Saltmarsh depot",   short: "Saltmarsh",   area: "coast", gx: 1, gy: 3, inc: [1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1] },
+    { id: "s5", name: "Pier Street yard",  short: "Pier Street", area: "coast", gx: 1, gy: 4, inc: [0,1,0,0,1,0,1,0,1,0,0,1,0,1,0,0,1,0] },
+    { id: "s6", name: "Ashby Cross depot", short: "Ashby Cross", area: "south", gx: 2, gy: 4, inc: [2,1,1,2,1,2,2,3,2,2,2,1,2,2,1,2,2,1] },
+    { id: "s7", name: "Millbrook transfer station", short: "Millbrook", area: "south", gx: 3, gy: 5, inc: [1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,1] },
+    { id: "s8", name: "Fenwick depot",     short: "Fenwick",     area: "east",  gx: 5, gy: 3, inc: [1,2,1,1,1,1,2,1,2,1,1,2,1,1,2,1,1,2] },
+    { id: "s9", name: "Oldfield recycling centre", short: "Oldfield", area: "east", gx: 5, gy: 4, inc: [0,0,1,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0] },
+    { id: "s10", name: "Ridgeway yard", short: "Ridgeway", area: "east", gx: 4, gy: 4, inc: null,
+      unseen: { keptBy: "Estates", ask: "Mina Lowe", floorWord: "Department" } }
+  ],
+  incidentKinds: [
+    { id: "slip", word: "Slip or trip", plural: "slips or trips", icon: "footprints" },
+    { id: "vehicle", word: "Vehicle damage", plural: "vehicle damage", icon: "truck" },
+    { id: "near", word: "Near miss", plural: "near misses", icon: "triangle-alert" },
+    { id: "injury", word: "Injury", plural: "injuries", icon: "bandage" }
+  ],
+  reporters: ["Ana Costa","Joe Marsh","Lena Novak","Rui Alves","Kit Barnes","Ola Nwosu"],
+  vehicles: [
+    { site: "s1", status: ["in","in","off","in","shop","in","off","in"] },
+    { site: "s2", status: ["in","in","off","in","in","in"] },
+    { site: "s3", status: ["in","in","in","in","in"], checked: "2026-09-23" },
+    { site: "s4", status: ["in","in","in","in"] },
+    { site: "s6", status: ["in","shop","in","in","in","in"] },
+    { site: "s8", status: ["in","in","off","in","in"] }
+  ],
+  noFleet: { sites: ["s5","s7","s9"], why: "keeps no vehicles of its own" },
+  reader: { name: "Tom Okafor", role: "Head of Depots", when: "Monday briefing" },
+  vehicleStatus: { in: "Can go out", shop: "In the workshop", off: "Off the road" },
+  contracts: [
+    { supplier: "Coastline Waste Ltd", value: 1840 },
+    { supplier: "Greaves Fleet Services", value: 960 },
+    { supplier: "Brightwater Cleaning", value: 620 },
+    { supplier: "Harlow Fuel Cards", value: 410 },
+    { supplier: "Medway Tyres", value: 280 },
+    { supplier: "Tidy Grounds", value: 190 },
+    { supplier: "Kestrel Pest Control", value: null, gap: { who: "Dev Patel, Procurement" } }
+  ],
+  event: { month: "2026-03", date: "2 March 2026", word: "night rounds started", cause: "the new night rounds", doc: "Night rounds: new shift pattern" },
+  documents: [
+    { id: "d1", title: "Night rounds: new shift pattern", app: "Artifacts", date: "2026-02-20" },
+    { id: "d2", title: "Depot safety report, October", app: "Artifacts", date: "2026-11-01" }
+  ],
+  intents: [
+    { id: "i1", title: "Bring depot slips down by a third by 31 March 2027", owner: "Tom Okafor", app: "Mandate" }
+  ],
+  recordSet: { word: "Incidents", one: "incident", lower: "incidents", from: "depot incident logs and inspection reports", source: "Depot incident log" },
+  periods: { last3: "in the last three months", last1: "in October 2026" },
+  /* Claims an operator might bring, for the demo (key C cycles them) */
+  claims: [
+    { text: "Incidents at all the depots have gone up since March", slots: { what: "all", where: "all", verb: "rose", when: "2026-03" } },
+    { text: "Northgate has the most incidents lately", slots: { what: "all", where: "s1", verb: "most", when: "last3" } },
+    { text: "Slips fell after the night rounds started", slots: { what: "slip", where: "all", verb: "fell", when: "2026-03" } },
+    { text: "Things are calmer on the coast this year", slots: { what: "all", where: "coast", verb: "steady", when: "2026-01" } }
+  ],
+  /* Questions an operator can ask, each with the one picture that answers it. */
+  questions: [
+    { id: "worse",  ask: "Is it getting worse?",           form: "line",   formWord: "A line over time",            tech: "line · monthly count · zero-based",
+      why: "Your question is about time, so time runs left to right. One line, from zero, so a rise isn't made to look bigger than it is." },
+    { id: "big",    ask: "Which is biggest?",              form: "bars",   formWord: "Bars, longest first",          tech: "horizontal bar · sorted · zero-based",
+      why: "Lengths are the easiest thing to compare. Longest first, names written out, every bar starting at zero." },
+    { id: "where",  ask: "Where is it happening?",         form: "tiles",  formWord: "One tile per site, roughly where it is", tech: "tile map · equal area · sequential ink",
+      why: "Each site gets the same size tile, placed roughly where it is. A shaded map would make big places look important for being big." },
+    { id: "many",   ask: "How many?",                      form: "count",  formWord: "Count with symbols",          tech: "isotype · 1 symbol = 1 record",
+      why: "One symbol is one incident, so you can count them. Symbols repeat; they never grow." },
+    { id: "after",  ask: "Did it change after something?", form: "slope",  formWord: "Before and after",            tech: "slope chart · two means",
+      why: "Each depot is one line from its monthly average before to its average after. Lines that climb are the ones that changed." },
+    { id: "same",   ask: "Is it the same everywhere?",     form: "multiples", formWord: "Small pictures, same scale", tech: "small multiples · shared y",
+      why: "One small picture per depot, all on the same scale, so you compare shapes, not axes." }
+  ],
+  /* Charts never offered to an operator, and why, in plain words. */
+  never: [
+    { word: "Pie or doughnut", why: "Angles are hard to compare. A count with symbols shows the share and the number.", tech: "pie, donut", icon: "chart-pie" },
+    { word: "Anything in 3D", why: "Depth changes how big things look. Nothing is gained.", tech: "3D bar, 3D pie", icon: "box" },
+    { word: "Two scales on one chart", why: "Two lines on different scales can be made to cross anywhere, so they suggest links that aren't there.", tech: "dual axis", icon: "chart-spline" },
+    { word: "Gauges and dials", why: "A number dressed as a car dashboard. Say the number.", tech: "gauge, speedometer", icon: "gauge" },
+    { word: "Bigger symbols for bigger numbers", why: "People read area, not height, so a symbol twice as tall looks four times as big. Repeat symbols instead.", tech: "scaled icons, bubbles", icon: "circle" },
+    { word: "Bars that don't start at zero", why: "A cut axis turns a small difference into a big one.", tech: "truncated axis", icon: "chart-no-axes-column" },
+    { word: "Layered areas", why: "Only the bottom layer can be read.", tech: "stacked area, streamgraph", icon: "chart-area" },
+    { word: "Shaded maps of raw counts", why: "Big places look important because they are big. Every site gets the same size tile.", tech: "choropleth (unnormalised)", icon: "map" }
+  ],
+  notHere: { word: "Does one thing go with another?", why: "Two things moving together isn't one causing the other. This needs an analyst.", where: "Explorer", who: "the Data team", tech: "scatter, correlation" },
+  /* IPCC and UK probability yardstick words, ranges in percent */
+  yardstick: [
+    { word: "Almost certain", lo: 95 }, { word: "Highly likely", lo: 80 }, { word: "Likely", lo: 55 },
+    { word: "A realistic possibility", lo: 25 }, { word: "Unlikely", lo: 10 }, { word: "Highly unlikely", lo: 0 }
+  ],
+  /* Sentence templates. The finding on every chart is filled from these; a model never writes a title. */
+  templates: {
+    trend: "{measure} {verb}, from about {a} to {b} a month, since {since}",
+    flat: "{measure} held steady at about {a} a month",
+    trendWhere: "{share} of the rise is at the {group} depots: {names}",
+    trendConf: "{word} to be a real rise, not chance: {kText} months since {since} were higher than any month before",
+    big: "{top} had the most {measure} {period}: {v}, {x} times {second}",
+    bigClose: "{top} had the most {measure} {period}: {v}, just ahead of {second} ({v2})",
+    where: "{pct} of {measure} {period} were at the {area} depots",
+    many: "{n} of {N} vehicles can't go out today; {k} of them are at {site}",
+    after: "{measure} rose at {k} of {N} depots after {event}; most at {top}",
+    afterGroup: "{measure} at the {group} depots went from {a} to {b} a month after {event}",
+    same: "Not the same everywhere: {k} depots rose, {m} held steady",
+    bigMoney: "{top} is the biggest contract: {v} a year, {pct} of all contract spend",
+    manyInc: "{n} {measure} {period}; {k} of them were {kind}",
+    whereSub: "Same size tile for every site. {measure} {period}.",
+    bigSub: "Three-month totals, {from} to {to}.",
+    countConf: "Counts, not estimates: each one is a record you can open",
+    afterConf: "{word} that {cause} caused it: the rise starts that month, but nothing here tests why",
+    claimChange: "{what} at {where} {verb} since {when}",
+    claimMost: "{where} has had the most {what} {when}",
+    verdicts: { yes: "True", part: "Partly true", no: "Not true" },
+    verbs: { rose: "have risen", fell: "have fallen", steady: "have held steady" },
+    whyPart: "True for {where} taken together, but only because of {k} of {N}: {names}. The other {m} held steady.",
+    whyNo: "They {actual}, from about {a} to {b} a month.",
+    whyYes: "Every depot in it agrees.",
+    noRecord: "No record for {month} at {site}: {why}. The total for that month isn't known, so the line breaks.",
+    unseen: "{site} is kept by {keptBy}. Its incidents are not counted here. Ask {ask}."
+  }
+};
+
+/* ---------- shared helpers for the picture variants (inlined by _src/build.js) ---------- */
+const U = (() => {
+  const css = getComputedStyle(document.documentElement);
+  const ms = n => parseFloat(css.getPropertyValue(n)) || 0;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s, r) => (r || document).querySelector(s);
+  const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fill = (t, o) => t.replace(/\{(\w+)\}/g, (_, k) => (o[k] !== undefined ? o[k] : '{' + k + '}'));
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MONL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthWord = (ym, style) => {
+    const [y, m] = ym.split('-').map(Number);
+    if (style === 'short') return MON[m - 1] + ' ' + String(y).slice(2);
+    if (style === 'mon') return MON[m - 1];
+    return MONL[m - 1] + ' ' + y;
+  };
+  const M = DATA.months, N = M.length;
+  const mi = ym => M.indexOf(ym);
+  const site = id => DATA.sites.find(s => s.id === id);
+  const seen = () => DATA.sites.filter(s => !s.unseen);
+  const unseen = () => DATA.sites.filter(s => s.unseen);
+  const mean = a => { const v = a.filter(x => x !== null); return v.length ? v.reduce((p, c) => p + c, 0) / v.length : null; };
+  const sum = a => a.reduce((p, c) => p + (c || 0), 0);
+  const totals = sites => M.map((_, i) => sites.some(s => s.inc[i] === null) ? null : sites.reduce((p, s) => p + s.inc[i], 0));
+  const areaWord = a => DATA.areas[a];
+
+  /* best single change point: split that minimises squared error of two means */
+  function changePoint(v) {
+    let best = null, bi = 3;
+    for (let i = 3; i <= N - 3; i++) {
+      if (v[i] === null) continue;
+      const A = v.slice(0, i).filter(x => x !== null), B = v.slice(i).filter(x => x !== null);
+      const ma = mean(A), mb = mean(B);
+      const e = A.reduce((p, x) => p + (x - ma) ** 2, 0) + B.reduce((p, x) => p + (x - mb) ** 2, 0);
+      if (best === null || e < best) { best = e; bi = i; }
+    }
+    return bi;
+  }
+  function yard(pct) { return DATA.yardstick.find(y => pct >= y.lo).word; }
+  function trend(v, measure) {
+    const cp = changePoint(v);
+    const before = v.slice(0, cp).filter(x => x !== null), after = v.slice(cp).filter(x => x !== null);
+    const a = Math.round(mean(before)), b = Math.round(mean(after.slice(-3)));
+    const hi = Math.max(...before);
+    const k = after.filter(x => x > hi).length, n = after.length;
+    const ra = mean(before), rb = mean(after);
+    let verb = 'held steady';
+    if (rb - ra >= 1 && rb > ra * 1.25) verb = b >= 2 * a ? 'doubled' : 'rose';
+    else if (ra - rb >= 1 && rb < ra * 0.8) verb = 'fell';
+    const since = monthWord(M[cp]);
+    const conf = yard(Math.min(90, Math.round(100 * k / n)));
+    const text = verb === 'held steady' ? fill(DATA.templates.flat, { measure, a }) : fill(DATA.templates.trend, { measure, verb, a, b, since });
+    return { cp, a, b, k, n, verb, since, conf, text, confText: fill(DATA.templates.trendConf, { word: conf, kText: k === n ? 'all ' + n : k + ' of the ' + n, since: monthWord(M[cp], 'mon') }) };
+  }
+  /* per-site rise before/after an index */
+  function riseBy(cp) {
+    return seen().map(s => {
+      const a = mean(s.inc.slice(0, cp)), b = mean(s.inc.slice(cp));
+      return { s, a, b, d: b - a };
+    });
+  }
+  function riseShare(cp, area) {
+    const r = riseBy(cp), tot = sum(r.map(x => Math.max(0, x.d))), g = r.filter(x => x.s.area === area);
+    return { pct: Math.round(100 * sum(g.map(x => Math.max(0, x.d))) / tot), names: g.map(x => x.s.short) };
+  }
+  const lastK = (s, k) => sum(s.inc.slice(-k));
+
+  /* ---------- records (one row per incident, generated from the monthly counts) ---------- */
+  function records() {
+    const out = []; let n = 4100;
+    seen().forEach((s, si) => s.inc.forEach((c, i) => {
+      for (let k = 0; k < (c || 0); k++) {
+        const day = ((si * 7 + i * 3 + k * 11) % 27) + 1;
+        const late = s.area === 'north' && i >= mi(DATA.event.month);
+        const kind = late ? (k % 3 === 2 ? 'vehicle' : 'slip') : DATA.incidentKinds[(si + i + k) % 4].id;
+        out.push({ id: 'INC-' + (n++), date: M[i] + '-' + String(day).padStart(2, '0'), month: M[i], site: s, kind,
+          night: late ? k % 4 !== 3 : (si + k) % 5 === 0,
+          who: DATA.reporters[(si + i + k) % DATA.reporters.length], src: (k + i) % 4 === 0 ? 'Inspection report' : 'Depot incident log' });
+      }
+    }));
+    return out.sort((a, b) => b.date.localeCompare(a.date));
+  }
+  const kindWord = id => DATA.incidentKinds.find(k => k.id === id).word;
+
+  /* ---------- pictures ---------- */
+  function ticks(max) {
+    const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+    const st = steps.find(s => max / s <= 5) || 1000;
+    const t = []; for (let v = 0; v <= max + 1e-9; v += st) t.push(v);
+    if (t[t.length - 1] < max) t.push(t[t.length - 1] + st);
+    return t;
+  }
+  function wavy(x1, x2, y, amp) {
+    let d = 'M' + x1 + ' ' + y; const seg = 6, w = (x2 - x1) / seg;
+    for (let i = 0; i < seg; i++) d += ' Q' + (x1 + w * i + w / 2) + ' ' + (y + (i % 2 ? amp : -amp)) + ' ' + (x1 + w * (i + 1)) + ' ' + y;
+    return d;
+  }
+  /* line over time; series: [{label, values, emph}] */
+  function line(o) {
+    const w = o.w || 760, h = o.h || 300, p = Object.assign({ l: 36, r: 150, t: 22, b: 28 }, o.pad || {});
+    const all = o.series.flatMap(s => s.values).filter(v => v !== null);
+    const tk = ticks(o.yMax || Math.max(...all)), ym = tk[tk.length - 1];
+    const x = i => p.l + i * (w - p.l - p.r) / (N - 1), y = v => p.t + (1 - v / ym) * (h - p.t - p.b);
+    let g = '';
+    if (!o.bare) {
+      tk.forEach(t => { g += `<line class="grid${t === 0 ? ' zero' : ''}" x1="${p.l}" x2="${w - p.r + 8}" y1="${y(t)}" y2="${y(t)}"/><text class="yt" x="${p.l - 8}" y="${y(t) + 4}" text-anchor="end">${t}</text>`; });
+      M.forEach((m, i) => { if (i % 3 === 0 || i === N - 1) g += `<text class="xt" x="${x(i)}" y="${h - 6}" text-anchor="middle">${monthWord(m, 'short')}</text>`; });
+    }
+    if (o.event) {
+      const ex = x(mi(o.event.month));
+      g += `<line class="evt" x1="${ex}" x2="${ex}" y1="${p.t - 6}" y2="${h - p.b}"/>`;
+      if (!o.bare) g += `<text class="evl" x="${ex + 6}" y="${p.t}">${esc(o.event.word)}</text>`;
+    }
+    o.series.forEach((s, si) => {
+      const segs = []; let cur = [];
+      s.values.forEach((v, i) => { if (v === null) { if (cur.length) segs.push(cur); cur = []; } else cur.push([x(i), y(v)]); });
+      if (cur.length) segs.push(cur);
+      segs.forEach(sg => { g += `<path class="ln draw ${s.emph ? 'emph' : 'ctx'}" pathLength="1" d="M${sg.map(q => q.join(' ')).join(' L')}"/>`; });
+      s.values.forEach((v, i) => {
+        if (v === null && i > 0 && i < N - 1 && s.values[i - 1] !== null && s.values[i + 1] !== null) {
+          const yy = (y(s.values[i - 1]) + y(s.values[i + 1])) / 2;
+          g += `<path class="brk" d="${wavy(x(i - 1) + 4, x(i + 1) - 4, yy, o.bare ? 2 : 4)}"/>`;
+          if (s.emph && !o.bare) g += `<text class="brl" x="${x(i)}" y="${yy - 10}" text-anchor="middle">no record</text>`;
+        }
+      });
+      const li = s.values.length - 1 - [...s.values].reverse().findIndex(v => v !== null);
+      if (s.emph || o.dots) g += `<circle class="dot ${s.emph ? 'emph' : 'ctx'}" cx="${x(li)}" cy="${y(s.values[li])}" r="${o.bare ? 2 : 3}"/>`;
+      if (!o.bare && s.label) g += `<text class="dl ${s.emph ? 'emph' : 'ctx'}" x="${x(li) + 10}" y="${y(s.values[li]) + 4 + (s.dy || 0)}">${esc(s.label)} <tspan class="dv">${s.values[li]}</tspan></text>`;
+    });
+    return `<svg class="ch${o.bare ? ' bare' : ''}" viewBox="0 0 ${w} ${h}" ${o.bare ? '' : 'width="100%"'} preserveAspectRatio="xMinYMin meet" role="img" aria-label="${esc(o.aria || 'line chart')}">${g}</svg>`;
+  }
+  /* bars, longest first; rows: [{label, value, emph, unseen, gap, note}] */
+  function bars(rows, o) {
+    o = o || {};
+    const max = o.max || Math.max(...rows.filter(r => r.value != null).map(r => r.value));
+    const fmt = o.fmt || (v => v);
+    return `<div class="bars">${rows.map((r, i) => {
+      let track, val;
+      if (r.unseen) { track = `<span class="bt unseen-t">${Icons.svg('lock', { size: 12 })} kept by ${esc(r.unseen.keptBy)} · ask ${esc(r.unseen.ask)}</span>`; val = `<span class="bv muted">not yours to see</span>`; }
+      else if (r.gap) { track = `<span class="bt"><span class="mk-gap s"></span> <span class="gapw">not known yet · ${esc(r.gap.who)} could fill it</span></span>`; val = `<span class="bv muted">?</span>`; }
+      else { track = `<span class="bt"><span class="bf${r.emph ? ' emph' : ''}" style="--w:${(100 * r.value / max).toFixed(1)}%;--i:${i}"></span></span>`; val = `<span class="bv">${fmt(r.value)}</span>`; }
+      return `<div class="br${r.emph ? ' emph' : ''}"><span class="bl">${esc(r.label)}</span>${track}${val}</div>`;
+    }).join('')}</div>`;
+  }
+  /* equal tiles placed roughly where each site is */
+  function tiles(o) {
+    const max = Math.max(...seen().map(o.value));
+    return `<div class="tiles">${DATA.sites.map((s, i) => {
+      const st = `grid-column:${s.gx};grid-row:${s.gy};--i:${i}`;
+      if (s.unseen) return `<div class="tile unseen-t" style="${st}"><b>${esc(s.short)}</b><span>${Icons.svg('lock', { size: 12 })} ${esc(s.unseen.keptBy)}</span><span class="tw">ask ${esc(s.unseen.ask)}</span></div>`;
+      const v = o.value(s);
+      return `<div class="tile${o.emph && o.emph(s) ? ' emph' : ''}" style="${st};--v:${(v / max).toFixed(2)}"><b>${esc(s.short)}</b><span class="tv">${v}</span><span class="tw">${esc(areaWord(s.area))}</span></div>`;
+    }).join('')}</div>`;
+  }
+  /* count with symbols; rows: [{label, items:[{cls}], note, stale}] */
+  function count(rows, icon, o) {
+    o = o || {};
+    let k = 0;
+    return `<div class="iso">${rows.map(r => `<div class="ir"><span class="il">${esc(r.label)}${r.stale ? `<span class="age">${esc(r.stale)}</span>` : ''}</span><span class="is">${r.items.map(it => `<span class="sym ${it.cls}" style="--i:${k++}" title="${esc(it.title || '')}">${Icons.svg(it.icon || icon, { size: o.size || 20, stroke: 1.5 })}</span>`).join('')}</span><span class="in">${r.note != null ? r.note : r.items.length}</span></div>`).join('')}</div>`;
+  }
+  /* before and after; rows: [{label, a, b, emph}] */
+  function slope(rows, o) {
+    o = o || {};
+    const w = o.w || 760, p = { l: 230, r: 230, t: 34, b: 12 }; let h = o.h || 300;
+    const mx = ticks(Math.max(...rows.flatMap(r => [r.a, r.b])));
+    const ym = mx[mx.length - 1], y = v => p.t + (1 - v / ym) * (h - p.t - p.b), xa = p.l, xb = w - p.r;
+    let g = `<text class="xt" x="${xa}" y="${p.t - 16}" text-anchor="middle">${esc(o.aWord || 'Before')}</text><text class="xt" x="${xb}" y="${p.t - 16}" text-anchor="middle">${esc(o.bWord || 'After')}</text>`;
+    g += `<line class="grid" x1="${xa}" x2="${xa}" y1="${p.t}" y2="${h - p.b}"/><line class="grid" x1="${xb}" x2="${xb}" y1="${p.t}" y2="${h - p.b}"/>`;
+    const placed = { a: [], b: [] };
+    const nudge = (arr, v) => { let yy = y(v); while (arr.some(q => Math.abs(q - yy) < 15)) yy += 15; arr.push(yy); return yy; };
+    [...rows].sort((r1, r2) => (r1.emph ? 1 : 0) - (r2.emph ? 1 : 0)).forEach(r => {
+      g += `<path class="ln draw ${r.emph ? 'emph' : 'ctx'}" pathLength="1" d="M${xa} ${y(r.a)} L${xb} ${y(r.b)}"/>`;
+      g += `<circle class="dot ${r.emph ? 'emph' : 'ctx'}" cx="${xa}" cy="${y(r.a)}" r="3"/><circle class="dot ${r.emph ? 'emph' : 'ctx'}" cx="${xb}" cy="${y(r.b)}" r="3"/>`;
+    });
+    let hy = h;
+    [...rows].sort((r1, r2) => r2.b - r1.b).forEach(r => {
+      const yy = nudge(placed.b, r.b); hy = Math.max(hy, yy + 10);
+      g += `<text class="dl ${r.emph ? 'emph' : 'ctx'}" x="${xb + 10}" y="${yy + 4}">${esc(r.label)} <tspan class="dv">${r.b.toFixed(1)}</tspan></text>`;
+    });
+    [...rows].filter(r => r.emph).sort((r1, r2) => r2.a - r1.a).forEach(r => {
+      g += `<text class="dl emph" x="${xa - 10}" y="${nudge(placed.a, r.a) + 4}" text-anchor="end"><tspan class="dv">${r.a.toFixed(1)}</tspan> ${esc(r.label)}</text>`;
+    });
+    const ctx = rows.filter(r => !r.emph);
+    if (ctx.length) { const lo = Math.min(...ctx.map(r => r.a)), hi = Math.max(...ctx.map(r => r.a)); g += `<text class="dl ctx" x="${xa - 10}" y="${nudge(placed.a, (lo + hi) / 2) + 4}" text-anchor="end">${ctx.length} others, ${lo.toFixed(1)} to ${hi.toFixed(1)}</text>`; }
+    h = hy;
+    return `<svg class="ch" viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="xMinYMin meet" role="img" aria-label="before and after">${g}</svg>`;
+  }
+  /* small pictures on the same scale */
+  function multiples(o) {
+    const ymax = Math.max(...seen().flatMap(s => s.inc.filter(v => v !== null)));
+    return `<div class="mult">${DATA.sites.map(s => {
+      if (s.unseen) return `<div class="mc unseen-t"><b>${esc(s.short)}</b><span>${Icons.svg('lock', { size: 12 })} kept by ${esc(s.unseen.keptBy)}</span></div>`;
+      const t = trend(s.inc, ''), rose = t.verb !== 'held steady' && t.verb !== 'fell';
+      return `<div class="mc${rose ? ' emph' : ''}"><b>${esc(s.short)}</b><span class="mv">${rose ? t.verb : 'held steady'}</span>${line({ series: [{ values: s.inc, emph: rose }], w: 200, h: 56, yMax: ymax, bare: true, pad: { l: 2, r: 6, t: 4, b: 4 }, event: o && o.event })}</div>`;
+    }).join('')}</div>`;
+  }
+  function table(rows, cols, o) {
+    o = o || {};
+    return `<table class="rec"><thead><tr>${cols.map(c => `<th>${esc(c.h)}</th>`).join('')}</tr></thead><tbody>${rows.slice(0, o.limit || rows.length).map(r => `<tr>${cols.map(c => `<td>${c.f(r)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  }
+
+  /* ---------- pencil (model) and ink ---------- */
+  function pencil(o) {
+    return `<div class="pencil" data-pencil><p class="pk">${Icons.svg('pencil-line', { size: 12 })} Suggested by the model · pencil until a person accepts it</p><p class="pb">${o.body}</p><div class="pa"><button class="acc" type="button">Accept</button><button class="aside" type="button">Set aside</button><span class="pl">${o.links || ''}</span></div><p class="inked-by"></p></div><p class="gw-note">${Icons.svg('power-off', { size: 12 })} Model gateway is off: no suggestions here. Nothing on the picture or in the finding changed.</p>`;
+  }
+  function wirePencils(root) {
+    $$('.pencil', root).forEach(p => {
+      $('.acc', p).onclick = () => { p.classList.add('inked'); $('.inked-by', p).textContent = 'Accepted by ' + DATA.viewer.initials + ' today · still marked as the model’s words'; };
+      $('.aside', p).onclick = () => { p.classList.add('set-aside'); };
+    });
+  }
+
+  /* ---------- page plumbing: keys, demo, hints ---------- */
+  let timers = [];
+  function later(t, f) { timers.push(setTimeout(f, reduced ? Math.min(t, ms('--motion-quick')) : t)); }
+  function clear() { timers.forEach(clearTimeout); timers = []; }
+  async function type(el, text, per) {
+    if (reduced) { el.textContent = text; return; }
+    el.textContent = '';
+    for (let i = 0; i < text.length; i++) { el.textContent += text[i]; await new Promise(r => timers.push(setTimeout(r, per || ms('--motion-instant') / 8))); }
+  }
+  function keys(extra) {
+    document.addEventListener('keydown', e => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (e.target.closest && e.target.closest('input,textarea,select')) return;
+      if (k === 't') { document.body.classList.toggle('tech'); flag('techflag', document.body.classList.contains('tech')); }
+      else if (k === 'g') { document.body.classList.toggle('gw-off'); flag('gwflag', !document.body.classList.contains('gw-off')); }
+      else if (k === 'r') { clear(); window.replay && window.replay(); }
+      else if (extra) extra(k, e);
+    });
+  }
+  function flag(id, on) { const b = document.getElementById(id); if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  function hints(list) {
+    const base = [['R', 'replay'], ['T', 'technical words'], ['G', 'model gateway on/off']];
+    return `<div class="hintbar hints">${list.concat(base).map(([k, w]) => `<span><span class="kbd">${k}</span>${w}</span>`).join('')}</div>`;
+  }
+  function floorLine() { return `<span class="floorline" data-tier="${DATA.floor.tier}"></span><span>${esc(DATA.floor.name)} <span class="muted">· ${esc(DATA.floor.word)}</span></span>`; }
+  return { ms, reduced, $, $$, esc, fill, cap, monthWord, mi, site, seen, unseen, mean, sum, totals, trend, riseBy, riseShare, lastK, records, kindWord, line, bars, tiles, count, slope, multiples, table, pencil, wirePencils, later, clear, type, keys, hints, floorLine, areaWord, M, N };
+})();
+
+/* ---------- one answer per question: finding (from templates), picture, notes ---------- */
+const A = (() => {
+  const T = DATA.templates, RS = DATA.recordSet, P = DATA.periods;
+  const list = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  const tot = () => U.totals(U.seen());
+  const evIdx = () => U.mi(DATA.event.month);
+  const ev = { month: DATA.event.month, word: DATA.event.word };
+  const notes = (withBreak) => {
+    const n = [];
+    if (withBreak) U.seen().filter(s => s.noRecord).forEach(s => n.push({ mark: 'break', text: U.fill(T.noRecord, { month: U.monthWord(s.noRecord.month), site: s.short, why: s.noRecord.why }), who: s.noRecord.who }));
+    U.unseen().forEach(s => n.push({ mark: 'unseen', text: U.fill(T.unseen, { site: s.name, keptBy: s.unseen.keptBy, ask: s.unseen.ask }) }));
+    return n;
+  };
+  const b = {};
+  b.worse = o => {
+    const t = tot(), tr = U.trend(t, RS.word), rs = U.riseShare(tr.cp, 'north');
+    return { title: tr.text + '.', sub: U.fill(T.trendWhere, { share: rs.pct >= 90 ? 'Nearly all' : rs.pct + '%', group: U.areaWord('north'), names: list(rs.names) }) + '.',
+      conf: tr.confText + '.', confWord: tr.conf, n: U.records().length,
+      pic: () => U.line(Object.assign({ series: [{ label: 'All depots', values: t, emph: true }], event: ev, aria: tr.text }, o || {})), notes: notes(true), strength: 5 };
+  };
+  b.big = o => {
+    const r = U.seen().map(s => ({ label: s.short, value: U.lastK(s, 3) })).sort((x, y) => y.value - x.value);
+    const [f, s2] = r, x = f.value / s2.value;
+    const title = x >= 1.5 ? U.fill(T.big, { top: f.label, measure: RS.lower, period: P.last3, v: f.value, x: x.toFixed(1), second: s2.label })
+      : U.fill(T.bigClose, { top: f.label, measure: RS.lower, period: P.last3, v: f.value, second: s2.label, v2: s2.value });
+    r[0].emph = true;
+    U.unseen().forEach(s => r.push({ label: s.short, unseen: s.unseen }));
+    return { title: title + '.', sub: U.fill(T.bigSub, { from: U.monthWord(U.M[U.N - 3]), to: U.monthWord(U.M[U.N - 1]) }), conf: T.countConf + '.', confWord: '',
+      n: U.sum(U.seen().map(s => U.lastK(s, 3))), pic: () => U.bars(r), notes: notes(false), strength: 3 };
+  };
+  b.where = o => {
+    const by = {}; U.seen().forEach(s => by[s.area] = (by[s.area] || 0) + U.lastK(s, 3));
+    const all = U.sum(Object.values(by)), top = Object.keys(by).sort((x, y) => by[y] - by[x])[0];
+    return { title: U.cap(U.fill(T.where, { pct: Math.round(100 * by[top] / all) + '%', measure: RS.lower, period: P.last3, area: U.areaWord(top) })) + '.',
+      sub: U.fill(T.whereSub, { measure: RS.word, period: P.last3 }), conf: T.countConf + '.', confWord: '', n: all,
+      pic: () => U.tiles({ value: s => U.lastK(s, 3), emph: s => s.area === top }), notes: notes(false), strength: 4 };
+  };
+  b.many = o => {
+    const recs = U.records().filter(r => r.month === U.M[U.N - 1]);
+    const by = DATA.incidentKinds.map(k => ({ k, rs: recs.filter(r => r.kind === k.id) })).filter(x => x.rs.length).sort((x, y) => y.rs.length - x.rs.length);
+    const rows = by.map((x, i) => ({ label: x.k.word, items: x.rs.map(r => ({ icon: x.k.icon, cls: i === 0 ? 'hot' : '', title: r.id + ' · ' + r.site.short })) }));
+    return { title: U.fill(T.manyInc, { n: recs.length, measure: RS.lower, period: P.last1, k: by[0].rs.length, kind: by[0].k.plural }) + '.',
+      sub: 'One symbol is one ' + RS.one + '.', conf: T.countConf + '.', confWord: '', n: recs.length,
+      pic: () => U.count(rows, 'circle', { size: o && o.size || 22 }), notes: notes(false), strength: 2 };
+  };
+  b.after = o => {
+    const r = U.riseBy(evIdx()), up = r.filter(x => x.d >= 1).sort((x, y) => y.d - x.d);
+    const rows = r.map(x => ({ label: x.s.short, a: x.a, b: x.b, emph: x.d >= 1 }));
+    const conf = DATA.yardstick.find(y => y.lo === 25).word;
+    return { title: U.fill(T.after, { measure: RS.word, k: up.length, N: r.length, event: DATA.event.word + ' on ' + DATA.event.date, top: up[0].s.short }) + '.',
+      sub: 'Average ' + RS.lower + ' a month at each depot, before and after.', conf: U.fill(T.afterConf, { word: conf, cause: DATA.event.cause }) + '.', confWord: conf, n: U.records().length,
+      pic: () => U.slope(rows, Object.assign({ aWord: 'Before ' + U.monthWord(DATA.event.month, 'short'), bWord: 'From ' + U.monthWord(DATA.event.month, 'short') }, o || {})), notes: notes(true), strength: 4 };
+  };
+  b.same = o => {
+    const tr = U.seen().map(s => U.trend(s.inc, '')), k = tr.filter(t => t.verb === 'rose' || t.verb === 'doubled').length;
+    return { title: U.fill(T.same, { k, m: tr.length - k }) + '.', sub: 'Every small picture uses the same scale.', conf: 'Each depot is judged on its own months.', confWord: '', n: U.records().length,
+      pic: () => U.multiples({ event: ev }), notes: notes(true), strength: 4 };
+  };
+  const confHTML = a => a.confWord && a.conf.startsWith(a.confWord) ? `<b>${U.esc(a.confWord)}</b><span>${U.esc(a.conf.slice(a.confWord.length).trim())}</span>` : `<span>${U.esc(a.conf)}</span>`;
+  return { get: (id, o) => b[id](o), list, confHTML };
+})();
+
+/* ---------- this variant ---------- */
+const Q = DATA.questions, RS = DATA.recordSet;
+U.$('#eb').innerHTML = U.floorLine() + '<span>· Data Atlas</span>';
+const recs = U.records();
+U.$('#setnm').innerHTML = Icons.svg('clipboard-list', { size: 20 }) + ' ' + RS.word;
+U.$('#setsub').textContent = recs.length + ' records · ' + U.monthWord(U.M[0]) + ' to ' + U.monthWord(U.M[U.N - 1]) + ' · ' + U.seen().length + ' sites';
+U.$('#sethid').innerHTML = U.unseen().map(s => Icons.svg('lock', { size: 12 }) + ' some more at ' + U.esc(s.short) + ', kept by ' + U.esc(s.unseen.keptBy)).join('');
+U.$('#settk').textContent = 'entity kind: Incident · source: ' + RS.from;
+U.$('#qs').innerHTML = Q.map((q, i) => `<li><button class="q" type="button" data-q="${q.id}" aria-pressed="false"><span class="kbd">${i + 1}</span><span class="qa">${U.esc(q.ask)}</span><span class="qf">${U.esc(q.formWord)}</span><span class="tk">${U.esc(q.tech)}</span></button></li>`).join('');
+U.$('#never').innerHTML = DATA.never.map(n => `<li tabindex="0">${Icons.svg(n.icon, { size: 16 })}<span><b>${U.esc(n.word)}</b> <span class="w">${U.esc(n.why)}</span><span class="tk">${U.esc(n.tech)}</span></span></li>`).join('');
+U.$('#nothere').innerHTML = `<b>${U.esc(DATA.notHere.word)}</b> isn't offered here. ${U.esc(DATA.notHere.why)} Ask ${U.esc(DATA.notHere.who)} in ${U.esc(DATA.notHere.where)}.`;
+const brk = '<svg class="mk-b" viewBox="0 0 28 12"><path d="M1 6 Q4 2 7 6 T13 6 T19 6 T27 6"/></svg>';
+const PENCIL = {
+  worse: { body: `The rise starts the month <span class="lnk">${U.esc(DATA.event.doc)}</span> began, and most new ${RS.lower} at the North depots are slips at night. Worth asking whether lighting on the night rounds is the cause.`, links: '<a href="#">from 64 records</a> · <a href="#">1 document</a>' },
+  after: { body: `Ashby Cross ran night rounds too and did not rise. The difference may be the yard lighting survey, which only Ashby Cross has.`, links: '<a href="#">from 41 records</a> · <a href="#">1 inspection</a>' }
+};
+let cur = null, showRecs = false;
+function show(id, first) {
+  cur = id; showRecs = false;
+  const q = Q.find(x => x.id === id), a = A.get(id);
+  U.$$('.q').forEach(b => b.setAttribute('aria-pressed', b.dataset.q === id ? 'true' : 'false'));
+  U.$('#ink').innerHTML = Icons.svg('pen-tool', { size: 12 }) + ' Finding · ink: filled from a fixed sentence, from ' + a.n + ' records' + '<span class="tk">&nbsp;· template: ' + id + '</span>';
+  const pic = U.$('#pic');
+  pic.classList.add('swap');
+  U.later(first ? 0 : U.ms('--motion-base'), () => {
+    document.body.classList.add('pre');
+    pic.innerHTML = a.pic();
+    U.$('#notes').innerHTML = a.notes.map(n => `<p class="note">${n.mark === 'break' ? brk : '<span class="mk-u"></span>'}<span>${U.esc(n.text)}${n.who ? ' Who can fix it: ' + U.esc(n.who) + '.' : ''}</span></p>`).join('');
+    pic.classList.remove('swap');
+    requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre')));
+  });
+  U.type(U.$('#title'), a.title);
+  U.$('#sub').textContent = a.sub;
+  U.$('#conf').innerHTML = A.confHTML(a);
+  U.$('#why').textContent = q.why;
+  U.$('#whytk').textContent = q.tech;
+  U.$('#lane').innerHTML = '<p class="lab" style="margin-bottom:var(--space-1)">The model’s note</p>' + (PENCIL[id] ? U.pencil(PENCIL[id]) : '<p class="note">No suggestion for this picture.</p>');
+  U.wirePencils(U.$('#lane'));
+}
+function records() {
+  showRecs = !showRecs;
+  if (!showRecs) return show(cur, true);
+  U.$('#pic').innerHTML = '<div class="recs scroll">' + U.table(recs, [
+    { h: 'Record', f: r => `<span class="mono">${r.id}</span>` }, { h: 'Date', f: r => `<span class="mono">${r.date}</span>` },
+    { h: 'Site', f: r => U.esc(r.site.short) }, { h: 'What happened', f: r => U.esc(U.kindWord(r.kind)) },
+    { h: 'Reported by', f: r => U.esc(r.who) }, { h: 'From', f: r => U.esc(r.src) }], { limit: 60 }) + '</div>';
+}
+U.$('#qs').addEventListener('click', e => { const b = e.target.closest('.q'); if (b) show(b.dataset.q); });
+U.$('#vrec').onclick = records;
+U.keys(k => {
+  const n = +k; if (n >= 1 && n <= Q.length) show(Q[n - 1].id);
+  if (k === 'v') records();
+  if (k === 'n') U.$('#right').classList.toggle('open');
+});
+document.body.insertAdjacentHTML('beforeend', U.hints([['1-6', 'ask'], ['V', 'records'], ['N', 'why never']]));
+window.replay = () => {
+  U.$('#title').textContent = ''; U.$('#sub').textContent = ''; U.$('#conf').textContent = ''; U.$('#pic').innerHTML = ''; U.$('#notes').innerHTML = ''; U.$('#lane').innerHTML = ''; U.$('#ink').textContent = '';
+  U.$('#why').textContent = 'Pick a question.';
+  U.$$('.q').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  U.later(U.ms('--motion-run'), () => show('worse', true));
+};
+Icons.hydrate();
+window.replay();
+</script>
+</body>
+</html>

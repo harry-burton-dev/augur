@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Reference desk · Can't answer V4 · Hand it on</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens (all mixes of kit tokens; "needs token" in notes.md)
+   --------------------------------------------------------------- */
+:root{
+  /* pencil: anything the model wrote or guessed. Graphite grey, dashed, never solid ink. */
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 72%, var(--info));
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--info) 6%, transparent);
+  /* six ways to be empty (carried from the catalogue run) */
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  --x-proposed-gap-tick: var(--space-2);
+  --x-proposed-hatch: color-mix(in srgb, var(--ink-muted) 40%, transparent);
+  --x-proposed-stale: repeating-linear-gradient(45deg, transparent 0 calc(var(--space-1) - 1px), var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-quiet: .62;
+  /* the floor you are on (Department here) */
+  --x-proposed-here: var(--floor-department-high);
+  --x-proposed-here-wash: color-mix(in srgb, var(--floor-department-high) 10%, transparent);
+  /* the answered part: plain record ink */
+  --x-proposed-fact: var(--ink);
+  --x-proposed-type-micro: .6875rem;
+}
+:root, .mk-gap, .gapbox{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+p{margin:0}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.lt{color:var(--light)}
+.small{font-size:var(--type-small);line-height:var(--leading-small)}
+.meta{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+
+/* ---------- chrome ---------- */
+.app{height:100vh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;padding:0 var(--edge)}
+.top{display:flex;align-items:center;gap:var(--space-3);height:var(--target-md);border-bottom:1px solid var(--hairline)}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.floorchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.floorchip i,.floorchip .fl{display:inline-block;width:var(--space-4);height:2px;background:var(--x-proposed-here)}
+.floorchip b{font-weight:400;color:var(--ink)}
+.top .sp{flex:1}
+.chipbtn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink-muted)}
+.chipbtn[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+.gwchip{border-style:dashed;border-color:var(--x-proposed-pencil);color:var(--x-proposed-pencil)}
+.gwchip.off{border-style:solid;border-color:var(--hairline-strong);color:var(--ink-muted);background:var(--surface-inset)}
+
+.qhead{padding:var(--space-4) 0 var(--space-3);border-bottom:1px solid var(--hairline);display:grid;gap:var(--space-2)}
+.qwords{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light);margin:0;letter-spacing:var(--tracking-tight)}
+.qwords::before{content:"\201C";color:var(--ink-muted)}
+.qwords::after{content:"\201D";color:var(--ink-muted)}
+.readas{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-1) var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.readas b{font-weight:400;color:var(--ink)}
+.main{min-height:0;padding:var(--space-4) 0 var(--space-2)}
+.foot{display:flex;justify-content:flex-end;align-items:center;gap:var(--space-4);min-height:calc(var(--space-6) + var(--space-3));padding-left:calc(var(--measure-glance) + var(--space-5))}
+.hints{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+
+/* two registers */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.btn:hover{border-color:var(--ink-muted);color:var(--light)}
+.btn.primary{border-color:color-mix(in srgb,var(--x-proposed-here) 60%,transparent);background:var(--x-proposed-here-wash);color:var(--light)}
+.btn[disabled]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+
+/* ---------- ink and pencil ---------- */
+/* ink: from the record, with its source. pencil: the model's, never counted. */
+.pencil{color:var(--x-proposed-pencil);text-decoration:underline dashed var(--x-proposed-pencil);text-underline-offset:var(--focus-gap);text-decoration-thickness:1px}
+.pchip{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--x-proposed-pencil);border:1px dashed var(--x-proposed-pencil);border-radius:2px;padding:0 var(--space-1);white-space:nowrap}
+.ichip{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink-muted);border:1px solid var(--hairline-strong);border-radius:2px;padding:0 var(--space-1);white-space:nowrap}
+.pbox{border:1px dashed var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key)}
+.gwoff .pencil-only{opacity:var(--x-proposed-quiet)}
+
+/* ---------- six ways to be empty ---------- */
+.mk{display:inline-block;vertical-align:middle;flex:none}
+.mk-gap{background:var(--x-proposed-gap);width:calc(var(--space-5) - var(--space-1));height:var(--space-4);vertical-align:-1px;--x-proposed-gap-tick:var(--space-1)}
+.gapbox{background:var(--x-proposed-gap)}
+.mk-none{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);border-bottom:1px solid var(--ink-muted);padding:0 1px}
+.mk-na{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.mk-stale{background:var(--x-proposed-stale);width:var(--space-4);height:var(--space-3);border-radius:2px}
+.mk-break{width:var(--space-5);height:var(--space-3);vertical-align:-1px}
+.mk-break path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.mk-break.s{width:var(--space-4)}
+.mk-unseen{display:inline-flex;align-items:center;justify-content:center;width:var(--space-4);height:var(--space-3);background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:2px;color:var(--ink-muted)}
+.mk-ok{width:var(--space-4);height:var(--space-3);background:var(--x-proposed-fact);border-radius:2px;opacity:.8}
+.age{background:var(--x-proposed-stale);padding:0 var(--space-1);border-radius:2px;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.some{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink-muted)}
+
+/* workings steps: which need the model gateway */
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.steps li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-1) 0;border-bottom:1px solid var(--hairline)}
+.steps li:last-child{border-bottom:0}
+.steps li .sx{color:var(--ink-muted);display:block}
+.steps li.gw .sx.off{display:none}
+.gwoff .steps li.gw .sx.on{display:none}
+.gwoff .steps li.gw .sx.off{display:block}
+.gwoff .steps li.gw .pchip{border-style:solid;border-color:var(--hairline-strong);color:var(--ink-muted);background:var(--x-proposed-unseen)}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+.x-cap{max-width:calc(var(--measure-glance) + var(--space-4))}
+
+.grid{height:100%;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-card);gap:var(--space-5);min-height:0}
+.left{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.lead{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);margin:0}
+.lead-sub{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.lead-sub b{font-weight:400;color:var(--ink)}
+/* before and after: the same strip twice, the second showing what the asks would fill */
+.ba{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-5)) minmax(0,1fr) calc(var(--space-7) + var(--space-5));gap:var(--space-2) var(--space-3);align-items:center}
+.ba .lab{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ba .lab b{display:block;font-weight:400;color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.ba .pc{font:400 var(--type-lead)/1 var(--font-mono);color:var(--light);text-align:right}
+.ba .pc small{display:block;font-size:var(--x-proposed-type-micro);color:var(--ink-muted);margin-top:var(--space-1)}
+.strip{display:flex;gap:2px;height:calc(var(--space-5) + var(--space-1))}
+.cell{flex:1;min-width:2px;border-radius:2px;transition:background var(--motion-slow) var(--ease-out),box-shadow var(--motion-slow) var(--ease-out)}
+.c-ok{background:color-mix(in srgb,var(--ink) 55%,transparent)}
+.c-gap{background:var(--x-proposed-gap);--x-proposed-gap-tick:var(--space-1)}
+.c-stale{background:var(--x-proposed-stale)}
+.c-norecord{background:none;border-top:1px dashed var(--ink-muted);border-bottom:1px dashed var(--ink-muted)}
+.c-will{background:var(--x-proposed-here-wash);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--x-proposed-here) 70%,transparent)}
+.c-hidden{background:var(--x-proposed-unseen);flex:3;-webkit-mask:linear-gradient(90deg,var(--shade),transparent);mask:linear-gradient(90deg,var(--shade),transparent)}
+.c-hidden.will{background:var(--x-proposed-here-wash)}
+/* the round: one card per person, the small questions they'd get */
+.round{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--measure-rail) + var(--space-6)),1fr));gap:var(--space-3);overflow:auto;min-height:0;align-content:start}
+.pcard{background:var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-3);display:grid;gap:var(--space-2);align-content:start;transition:opacity var(--motion-base) var(--ease-out)}
+.pcard.dim{opacity:var(--x-proposed-quiet)}
+.pcard h3{margin:0;display:flex;align-items:baseline;gap:var(--space-2);font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.pcard h3 span{font-size:var(--type-small);color:var(--ink-muted);margin-left:auto;font-family:var(--font-mono)}
+.pcard .role{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:calc(var(--space-2) * -1)}
+.qs{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.qs li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);align-items:start}
+.qs li .mk{margin-top:2px}
+.qs li.off{opacity:var(--x-proposed-quiet);text-decoration:line-through;text-decoration-color:var(--ink-muted)}
+.qs .hint{grid-column:2;display:flex;gap:var(--space-1);align-items:baseline;flex-wrap:wrap;color:var(--x-proposed-pencil)}
+.gwoff .qs .hint{display:none}
+
+.right{min-height:0;display:flex;flex-direction:column;gap:var(--space-2);background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-4);overflow:auto}
+.right h2{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);margin:0}
+.fix{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr) auto;gap:var(--space-1) var(--space-2);align-items:start;text-align:left;width:100%;padding:var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.fix:hover{background:var(--surface-inset)}
+.fix .box{width:var(--space-4);height:var(--space-4);border:1px solid var(--hairline-strong);border-radius:2px;display:grid;place-items:center;color:var(--slate-deep);margin-top:2px}
+.fix[aria-checked="true"] .box{background:var(--x-proposed-here);border-color:var(--x-proposed-here)}
+.fix[aria-checked="false"] .box svg{opacity:0}
+.fix b{display:block;font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.fix .kind{font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.conseq{border-top:1px solid var(--hairline);padding-top:var(--space-3);margin-top:auto;display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.conseq p b{font-weight:400;color:var(--light)}
+.draft{padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--x-proposed-pencil)}
+.gwoff .draft{border-style:solid;border-color:var(--hairline);color:var(--ink);background:none}
+</style>
+</head>
+<body class="pre">
+<div class="app">
+  <div id="chrome"></div>
+  <main class="main">
+    <div class="grid">
+      <section class="left">
+        <div class="dep" style="--i:0">
+          <p class="eyebrow">Hand it on</p>
+          <h2 class="lead" id="lead"></h2>
+          <p class="lead-sub" id="leadsub"></p>
+        </div>
+        <div class="ba dep" style="--i:1" id="ba"></div>
+        <p class="eyebrow dep" style="--i:2">What each person would be asked · one round, small questions</p>
+        <div class="round" id="round"></div>
+      </section>
+      <aside class="right dep" style="--i:3" id="right" aria-live="polite"></aside>
+    </div>
+  </main>
+  <footer class="foot" id="foot"></footer>
+</div>
+<div class="x-cap"><b>Can't answer · V4</b> hand it on: a gap becomes a round of small asks, previewed · referral slips, consequence preview</div>
+<script>
+const DATA = {
+ "app": "Data Atlas",
+ "today": "2026-11-03",
+ "askedAt": "Tue 3 Nov, 10:42",
+ "me": {
+  "n": "Rosa Lind",
+  "role": "Facilities operator"
+ },
+ "here": "dept",
+ "floors": {
+  "org": {
+   "n": "Halden Regional Services",
+   "tier": "org",
+   "word": "Org"
+  },
+  "dept": {
+   "n": "Facilities",
+   "tier": "department",
+   "word": "Department"
+  },
+  "finance": {
+   "n": "Finance",
+   "tier": "team",
+   "word": "Team"
+  },
+  "fleet": {
+   "n": "Fleet",
+   "tier": "team",
+   "word": "Team"
+  },
+  "upton": {
+   "n": "Upton care home",
+   "tier": "team",
+   "word": "Team"
+  }
+ },
+ "people": {
+  "priya": {
+   "n": "Priya Shah",
+   "role": "Contracts lead",
+   "floor": "dept"
+  },
+  "marcus": {
+   "n": "Marcus Bell",
+   "role": "Contract manager",
+   "floor": "dept"
+  },
+  "lena": {
+   "n": "Lena Novak",
+   "role": "Contract manager",
+   "floor": "dept"
+  },
+  "dev": {
+   "n": "Dev Okafor",
+   "role": "Finance team lead",
+   "floor": "finance"
+  },
+  "sam": {
+   "n": "Sam Achebe",
+   "role": "Fleet coordinator",
+   "floor": "fleet"
+  },
+  "joy": {
+   "n": "Joy Mensah",
+   "role": "Home manager",
+   "floor": "upton"
+  },
+  "ola": {
+   "n": "Ola Brennan",
+   "role": "Data Atlas admin",
+   "floor": "org"
+  },
+  "tom": {
+   "n": "Tom Reyes",
+   "role": "Head of Procurement",
+   "floor": "dept"
+  }
+ },
+ "gateway": {
+  "on": true,
+  "admin": "ola",
+  "offWhy": "The model gateway is off on this deployment. Ola Brennan, Data Atlas admin, can turn it on in Admin."
+ },
+ "empties": {
+  "ok": {
+   "plain": "answered",
+   "line": "The record answers it."
+  },
+  "gap": {
+   "plain": "not known yet",
+   "line": "Nobody has recorded it. Someone could."
+  },
+  "none": {
+   "plain": "none",
+   "line": "Someone checked: there is nothing."
+  },
+  "na": {
+   "plain": "doesn’t apply",
+   "line": "The question doesn’t fit this one."
+  },
+  "stale": {
+   "plain": "out of date",
+   "line": "Recorded, but read too long ago to trust."
+  },
+  "norecord": {
+   "plain": "no record",
+   "line": "The time it would need was lost. Nobody can close this."
+  },
+  "hidden": {
+   "plain": "not yours to see",
+   "line": "Kept on a floor you can’t open. Ask who keeps it."
+  }
+ },
+ "q1": {
+  "words": "Which suppliers have we not heard from since spring?",
+  "read": "Suppliers with a live contract on Facilities and above, with no contact recorded since 1 March 2026.",
+  "tech": "Supplier ⟶ hasContract(status=live) · max(contact.date) < 2026-03-01 · floors: dept, org",
+  "since": {
+   "pick": "1 March 2026",
+   "why": "spring, as the seasons count it",
+   "alt": "1 April 2026",
+   "altWhy": "your financial year"
+  },
+  "heard": {
+   "kinds": [
+    "invoice",
+    "meeting note",
+    "call log"
+   ],
+   "keptBy": "ola",
+   "modelAdds": "emails",
+   "modelWhy": "Data Atlas doesn’t hold emails, so this can’t count yet"
+  },
+  "suppliers": [
+   {
+    "n": "Kestrel Cleaning",
+    "svc": "Cleaning",
+    "st": "ok",
+    "last": "2026-10-21",
+    "via": "invoice",
+    "keeper": "marcus",
+    "paid": "2026-10-21"
+   },
+   {
+    "n": "Brightside Services",
+    "svc": "Cleaning",
+    "st": "ok",
+    "last": "2026-09-30",
+    "via": "meeting note",
+    "keeper": "marcus",
+    "paid": "2026-09-30"
+   },
+   {
+    "n": "Corvane Facilities",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2026-10-28",
+    "via": "invoice",
+    "keeper": "priya",
+    "paid": "2026-10-28"
+   },
+   {
+    "n": "Ridge Roofing",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2026-08-12",
+    "via": "call log",
+    "keeper": "lena",
+    "paid": "2026-02-20"
+   },
+   {
+    "n": "Harrow Electrical",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2026-10-02",
+    "via": "invoice",
+    "keeper": "lena",
+    "paid": "2026-10-02"
+   },
+   {
+    "n": "Greenbin Recycling",
+    "svc": "Waste",
+    "st": "ok",
+    "last": "2026-10-30",
+    "via": "invoice",
+    "keeper": "priya",
+    "paid": "2026-10-30"
+   },
+   {
+    "n": "Northgate Haulage",
+    "svc": "Waste",
+    "st": "ok",
+    "last": "2026-07-19",
+    "via": "invoice",
+    "keeper": "priya",
+    "paid": "2026-07-19"
+   },
+   {
+    "n": "Meadow Grounds",
+    "svc": "Grounds",
+    "st": "ok",
+    "last": "2026-09-04",
+    "via": "meeting note",
+    "keeper": "lena",
+    "paid": "2026-09-04"
+   },
+   {
+    "n": "Greenway Landscapes",
+    "svc": "Grounds",
+    "st": "ok",
+    "last": "2026-06-22",
+    "via": "invoice",
+    "keeper": "lena",
+    "paid": "2026-06-22"
+   },
+   {
+    "n": "Linden Security",
+    "svc": "Security",
+    "st": "ok",
+    "last": "2026-10-15",
+    "via": "call log",
+    "keeper": "marcus",
+    "paid": "2026-10-15"
+   },
+   {
+    "n": "Fairhaven Catering",
+    "svc": "Catering",
+    "st": "ok",
+    "last": "2026-10-09",
+    "via": "invoice",
+    "keeper": "marcus",
+    "paid": "2026-10-09"
+   },
+   {
+    "n": "Vale Water",
+    "svc": "Utilities",
+    "st": "ok",
+    "last": "2026-10-01",
+    "via": "invoice",
+    "keeper": "priya",
+    "paid": "2026-10-01"
+   },
+   {
+    "n": "Southern Power",
+    "svc": "Utilities",
+    "st": "ok",
+    "last": "2026-10-01",
+    "via": "invoice",
+    "keeper": "priya",
+    "paid": "2026-10-01"
+   },
+   {
+    "n": "Belmont Lifts",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2026-05-18",
+    "via": "meeting note",
+    "keeper": "lena",
+    "paid": "2026-05-18"
+   },
+   {
+    "n": "Calder Glazing",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2026-04-03",
+    "via": "invoice",
+    "keeper": "lena",
+    "paid": "2026-04-03"
+   },
+   {
+    "n": "Elstow Pest Control",
+    "svc": "Grounds",
+    "st": "ok",
+    "last": "2026-09-11",
+    "via": "call log",
+    "keeper": "marcus",
+    "paid": "2026-02-20"
+   },
+   {
+    "n": "Fernhill Hygiene",
+    "svc": "Cleaning",
+    "st": "ok",
+    "last": "2026-08-27",
+    "via": "invoice",
+    "keeper": "marcus",
+    "paid": "2026-08-27"
+   },
+   {
+    "n": "Glenrock Fire",
+    "svc": "Security",
+    "st": "ok",
+    "last": "2026-07-07",
+    "via": "meeting note",
+    "keeper": "marcus",
+    "paid": "2026-02-20"
+   },
+   {
+    "n": "Hartwell Locks",
+    "svc": "Security",
+    "st": "ok",
+    "last": "2026-03-24",
+    "via": "invoice",
+    "keeper": "marcus",
+    "paid": "2026-03-24"
+   },
+   {
+    "n": "Juniper Washrooms",
+    "svc": "Cleaning",
+    "st": "ok",
+    "last": "2026-06-05",
+    "via": "invoice",
+    "keeper": "marcus",
+    "paid": "2026-06-05"
+   },
+   {
+    "n": "Kingfisher Gas",
+    "svc": "Utilities",
+    "st": "ok",
+    "last": "2026-10-01",
+    "via": "invoice",
+    "keeper": "priya",
+    "paid": "2026-10-01"
+   },
+   {
+    "n": "Lowther Skips",
+    "svc": "Waste",
+    "st": "ok",
+    "last": "2026-05-29",
+    "via": "invoice",
+    "keeper": "priya",
+    "paid": "2026-05-29"
+   },
+   {
+    "n": "Marlow Gutters",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2026-02-11",
+    "via": "invoice",
+    "keeper": "lena",
+    "silent": true,
+    "paid": "2026-02-27"
+   },
+   {
+    "n": "Netherby Drainage",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2026-01-20",
+    "via": "meeting note",
+    "keeper": "lena",
+    "silent": true,
+    "paid": "2026-07-31"
+   },
+   {
+    "n": "Oakridge Trees",
+    "svc": "Grounds",
+    "st": "ok",
+    "last": "2025-11-14",
+    "via": "invoice",
+    "keeper": "lena",
+    "silent": true,
+    "paid": "2026-10-30"
+   },
+   {
+    "n": "Pennine Gritting",
+    "svc": "Grounds",
+    "st": "ok",
+    "last": "2026-02-26",
+    "via": "invoice",
+    "keeper": "lena",
+    "silent": true,
+    "paid": "2026-01-30"
+   },
+   {
+    "n": "Redwood Signs",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2025-10-03",
+    "via": "call log",
+    "keeper": "marcus",
+    "silent": true,
+    "paid": "2026-05-29"
+   },
+   {
+    "n": "Stanton Vending",
+    "svc": "Catering",
+    "st": "ok",
+    "last": "2026-01-08",
+    "via": "invoice",
+    "keeper": "marcus",
+    "silent": true,
+    "paid": "2026-08-28"
+   },
+   {
+    "n": "Tamar Clinical Waste",
+    "svc": "Waste",
+    "st": "ok",
+    "last": "2026-02-02",
+    "via": "invoice",
+    "keeper": "priya",
+    "silent": true,
+    "paid": "2026-09-30"
+   },
+   {
+    "n": "Wexcombe Paving",
+    "svc": "Repairs",
+    "st": "ok",
+    "last": "2025-12-09",
+    "via": "meeting note",
+    "keeper": "lena",
+    "silent": true,
+    "paid": "2026-02-27"
+   },
+   {
+    "n": "Yarrow Couriers",
+    "svc": "Waste",
+    "st": "none",
+    "keeper": "priya",
+    "by": "Priya Shah checked on 12 Oct: no contact since February",
+    "silent": true,
+    "paid": "2026-07-31"
+   },
+   {
+    "n": "Ambleside Shredding",
+    "svc": "Waste",
+    "st": "none",
+    "keeper": "priya",
+    "by": "Priya Shah checked on 12 Oct: no contact since February",
+    "silent": true,
+    "paid": "2026-10-30"
+   },
+   {
+    "n": "Ashdown Pest Control",
+    "svc": "Grounds",
+    "st": "gap",
+    "keeper": "marcus",
+    "paid": "2026-01-30",
+    "guess": {
+     "v": "met in June",
+     "from": "Supplier review minutes, Q2",
+     "why": "the minutes say \"Ashdown Pest\" was discussed with \"their rep\""
+    }
+   },
+   {
+    "n": "Brook Window Care",
+    "svc": "Cleaning",
+    "st": "gap",
+    "keeper": "marcus",
+    "paid": "2026-05-29"
+   },
+   {
+    "n": "Cobalt Alarms",
+    "svc": "Security",
+    "st": "gap",
+    "keeper": "marcus",
+    "paid": "2026-08-28"
+   },
+   {
+    "n": "Drayton Lift Testing",
+    "svc": "Repairs",
+    "st": "gap",
+    "keeper": "lena",
+    "paid": "2026-09-30"
+   },
+   {
+    "n": "Eastfield Mowing",
+    "svc": "Grounds",
+    "st": "gap",
+    "keeper": "lena",
+    "paid": "2026-02-27",
+    "guess": {
+     "v": "emailed in August",
+     "from": "Grounds season plan 2026",
+     "why": "a line in the plan reads \"confirmed with Eastfield, Aug\""
+    }
+   },
+   {
+    "n": "Foxley Water Coolers",
+    "svc": "Catering",
+    "st": "gap",
+    "keeper": "priya",
+    "paid": "2026-07-31"
+   },
+   {
+    "n": "Granby Sharps",
+    "svc": "Waste",
+    "st": "gap",
+    "keeper": "priya",
+    "paid": "2026-10-30"
+   },
+   {
+    "n": "Holloway Scaffolding",
+    "svc": "Repairs",
+    "st": "stale",
+    "last": "2026-02-17",
+    "via": "contractor report",
+    "keeper": "lena",
+    "read": "May",
+    "paid": "2026-01-30"
+   },
+   {
+    "n": "Ivel Asbestos Survey",
+    "svc": "Repairs",
+    "st": "stale",
+    "last": "2026-01-30",
+    "via": "contractor report",
+    "keeper": "lena",
+    "read": "May",
+    "paid": "2026-05-29"
+   },
+   {
+    "n": "Kelso Deep Clean",
+    "svc": "Cleaning",
+    "st": "stale",
+    "last": "2026-02-09",
+    "via": "contractor report",
+    "keeper": "marcus",
+    "read": "June",
+    "paid": "2026-08-28",
+    "guess": {
+     "v": "invoiced in July",
+     "from": "Payments export, July",
+     "why": "a payee called \"Kelso DC Ltd\" looks like the same company"
+    }
+   },
+   {
+    "n": "Merrow Roof Safety",
+    "svc": "Repairs",
+    "st": "norecord",
+    "last": "2025-12-15",
+    "via": "Halden depot inbox",
+    "keeper": "lena",
+    "paid": "2026-09-30"
+   },
+   {
+    "n": "Quarry Stone Masons",
+    "svc": "Repairs",
+    "st": "norecord",
+    "last": "2026-01-04",
+    "via": "Halden depot inbox",
+    "keeper": "lena",
+    "paid": "2026-02-27"
+   },
+   {
+    "n": "Ullswater Boilers",
+    "svc": "Utilities",
+    "st": "na",
+    "ended": "31 Jan"
+   },
+   {
+    "n": "Dunmore Removals",
+    "svc": "Repairs",
+    "st": "na",
+    "ended": "28 Feb"
+   },
+   {
+    "n": "Ironbridge Rail",
+    "svc": "Repairs",
+    "st": "na",
+    "ended": "15 Feb"
+   },
+   {
+    "n": "Granite Bins",
+    "svc": "Waste",
+    "st": "na",
+    "ended": "31 Jan"
+   },
+   {
+    "n": "Payroll Bureau",
+    "svc": "Finance",
+    "st": "hidden",
+    "floor": "finance"
+   },
+   {
+    "n": "Audit Partners",
+    "svc": "Finance",
+    "st": "hidden",
+    "floor": "finance"
+   },
+   {
+    "n": "Card Services",
+    "svc": "Finance",
+    "st": "hidden",
+    "floor": "finance"
+   }
+  ],
+  "kinds": [
+   {
+    "id": "invoice",
+    "w": "an invoice from them",
+    "held": true,
+    "on": true
+   },
+   {
+    "id": "meeting note",
+    "w": "a meeting note",
+    "held": true,
+    "on": true
+   },
+   {
+    "id": "call log",
+    "w": "a logged call",
+    "held": true,
+    "on": true
+   },
+   {
+    "id": "payment",
+    "w": "a payment to them",
+    "held": true,
+    "on": false,
+    "note": "paying isn’t hearing from, but every live supplier has one"
+   },
+   {
+    "id": "email",
+    "w": "an email",
+    "held": false,
+    "on": false,
+    "note": "Data Atlas doesn’t hold emails"
+   }
+  ],
+  "rephrase": [
+   {
+    "words": "Which suppliers have we not paid since 1 March?",
+    "kinds": [
+     "payment"
+    ],
+    "why": "Payments are kept for every live supplier, so this answers in full. It asks about money, not contact."
+   },
+   {
+    "words": "Which suppliers have we neither heard from nor paid since 1 March?",
+    "kinds": [
+     "invoice",
+     "meeting note",
+     "call log",
+     "payment"
+    ],
+    "why": "Gone quiet in every way we keep. Answers in full, and is narrower than yours: a supplier we paid counts as not quiet."
+   }
+  ],
+  "fixes": [
+   {
+    "id": "ask",
+    "st": "gap",
+    "title": "Ask the contract managers",
+    "kind": "Triage job",
+    "what": "one short question per supplier: “When did you last hear from them?”",
+    "gain": 7
+   },
+   {
+    "id": "reread",
+    "st": "stale",
+    "title": "Read the contractor reports again",
+    "kind": "Triage job",
+    "what": "the three reports were last read in May and June; Lena Novak keeps them",
+    "gain": 3
+   },
+   {
+    "id": "keep",
+    "st": "gap",
+    "title": "Ask for contact to be kept for every supplier",
+    "kind": "Mandate ask",
+    "what": "so the next question like this has no gaps",
+    "gain": 0,
+    "to": "tom"
+   },
+   {
+    "id": "access",
+    "st": "hidden",
+    "title": "Ask Finance for access",
+    "kind": "Share request",
+    "what": "some suppliers are kept on the Finance team floor",
+    "gain": null,
+    "to": "dev"
+   }
+  ]
+ },
+ "q2": {
+  "words": "Which of our vans are due their MOT next month?",
+  "read": "Vehicles of kind “van” kept on Facilities and above, with an MOT due in December 2026.",
+  "tech": "Vehicle(type=van) · motDue ∈ [2026-12-01, 2026-12-31] · motDue: no such detail",
+  "vans": 23,
+  "vansFloor": "dept",
+  "doc": {
+   "n": "Fleet register 2025.xlsx",
+   "lib": "Fleet library",
+   "date": "March 2025",
+   "rows": 19,
+   "col": "Notes"
+  },
+  "nearest": 4,
+  "spelled": 2,
+  "keeper": "sam",
+  "admin": "ola",
+  "diary": "MOT diary",
+  "reasons": [
+   {
+    "st": "ok",
+    "on": false,
+    "t": "Not found",
+    "say": "The vans are there: 23 kept on Facilities."
+   },
+   {
+    "st": "gap",
+    "on": true,
+    "t": "No place for it",
+    "say": "Vans have no “MOT due” detail in Data Atlas. Nobody has asked for one."
+   },
+   {
+    "st": "stale",
+    "on": true,
+    "t": "Only an old copy",
+    "say": "Fleet register 2025.xlsx in the Fleet library mentions MOTs. It is from March 2025."
+   },
+   {
+    "st": "hidden",
+    "on": true,
+    "t": "Kept elsewhere",
+    "say": "The Fleet team keeps an MOT diary on its own floor, which you can’t open."
+   },
+   {
+    "st": "norecord",
+    "on": false,
+    "t": "Lost",
+    "say": "Nothing the answer needs was lost."
+   },
+   {
+    "st": "na",
+    "on": false,
+    "t": "Doesn’t apply",
+    "say": "Every van needs an MOT, so the question fits all 23."
+   }
+  ]
+ },
+ "q3": {
+  "words": "Has anyone reported damp at Upton care home this year?",
+  "read": "Reports of damp, mould or condensation at Upton care home from 1 January 2026 to today.",
+  "tech": "Observation ⟶ about(Site:upton) · text~\"damp\" · 2026-01-01..2026-11-03",
+  "months": [
+   "Jan",
+   "Feb",
+   "Mar",
+   "Apr",
+   "May",
+   "Jun",
+   "Jul",
+   "Aug",
+   "Sep",
+   "Oct",
+   "Nov"
+  ],
+  "places": [
+   {
+    "n": "Incidents",
+    "where": "Data Atlas · Facilities",
+    "cells": "sssssssssss",
+    "how": "keys"
+   },
+   {
+    "n": "Repair requests",
+    "where": "Data Atlas · Facilities",
+    "cells": "sssssssssss",
+    "how": "keys"
+   },
+   {
+    "n": "Inspection notes",
+    "where": "Artifacts · Facilities library",
+    "cells": "sssssssssss",
+    "how": "meaning",
+    "found": {
+     "5": "condensation on the east windows"
+    }
+   },
+   {
+    "n": "Corvane monthly reports",
+    "where": "Artifacts · Contractor reports",
+    "cells": "ssssstttttt",
+    "how": "words",
+    "staleFrom": "June",
+    "keeper": "lena"
+   },
+   {
+    "n": "Depot phone log",
+    "where": "Data Atlas · Facilities",
+    "cells": "wwwssssssss",
+    "how": "keys",
+    "lost": "January to March, lost when the inbox moved"
+   },
+   {
+    "n": "Home’s own maintenance log",
+    "where": "Upton care home · Team floor",
+    "cells": "hhhhhhhhhhh",
+    "how": "-",
+    "ask": "joy"
+   },
+   {
+    "n": "Site survey",
+    "where": "Artifacts · Facilities library",
+    "cells": "nnnnnnnnsnn",
+    "how": "words",
+    "naWhy": "done once a year, in September"
+   }
+  ]
+ }
+};
+/* ===== shared helpers (inlined into every variant) ===== */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ic = (n, s) => Icons.svg(n, { size: s || 14, stroke: 1.5 });
+const P = id => DATA.people[id];
+const F = id => DATA.floors[id];
+const E = id => DATA.empties[id];
+const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const day = iso => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${MONTHS[m - 1]}${y !== 2026 ? ' ' + y : ''}`; };
+const tok = n => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(n)) || 0;
+const MS = n => RM ? 0 : tok(n);
+
+function breakSvg(small) {
+  return `<svg class="mk mk-break${small ? ' s' : ''}" viewBox="0 0 28 12" aria-hidden="true"><path d="M2 2 L6 10 L10 2 L14 10 L18 2 L22 10 L26 2"/></svg>`;
+}
+function mark(st) {
+  if (st === 'ok') return '<span class="mk mk-ok" aria-hidden="true"></span>';
+  if (st === 'gap') return '<span class="mk mk-gap" aria-hidden="true"></span>';
+  if (st === 'none') return '<span class="mk mk-none" aria-hidden="true">none</span>';
+  if (st === 'na') return '<span class="mk mk-na" aria-hidden="true">n/a</span>';
+  if (st === 'stale') return '<span class="mk mk-stale" aria-hidden="true"></span>';
+  if (st === 'norecord') return breakSvg(true);
+  if (st === 'hidden') return `<span class="mk mk-unseen" aria-hidden="true">${ic('lock', 9)}</span>`;
+  return '';
+}
+/* one line per supplier: why the answer stands as it does for it */
+function whyLine(s) {
+  const k = s.keeper ? P(s.keeper).n : '';
+  if (s.st === 'ok') return `Last ${esc(s.via)} ${esc(day(s.last))}`;
+  if (s.st === 'none') return esc(s.by);
+  if (s.st === 'gap') return `Contact isn’t recorded anywhere. ${esc(k)} could say`;
+  if (s.st === 'stale') return `Last ${esc(day(s.last))}, but its reports were last read in ${esc(s.read)}`;
+  if (s.st === 'norecord') return `Last ${esc(day(s.last))}; the depot inbox for January to April was lost`;
+  if (s.st === 'na') return `Contract ended ${esc(s.ended)}, before the date you asked about`;
+  if (s.st === 'hidden') return `Kept on the ${esc(F(s.floor).n)} team floor`;
+  return '';
+}
+const SUP = () => DATA.q1.suppliers;
+const visible = () => SUP().filter(s => s.st !== 'hidden');
+const applies = () => visible().filter(s => s.st !== 'na');
+const answered = () => applies().filter(s => s.st === 'ok' || s.st === 'none');
+const silentKnown = () => answered().filter(s => s.silent);
+const byState = st => SUP().filter(s => s.st === st);
+const pct = (a, b) => Math.round(100 * a / b);
+
+/* timers for the auto-demo; R replays */
+const TIMERS = [];
+const later = (fn, t) => { TIMERS.push(setTimeout(fn, RM ? Math.min(t, 1) : t)); };
+const clearTimers = () => TIMERS.splice(0).forEach(clearTimeout);
+
+/* the T switch: technical words one step down; the G switch: model gateway on or off */
+function setTech(on) {
+  document.body.classList.toggle('tech', on);
+  $$('[data-tech]').forEach(b => b.setAttribute('aria-pressed', on ? 'true' : 'false'));
+}
+let GW = DATA.gateway.on;
+const gwHooks = [];
+function setGateway(on) {
+  GW = on;
+  document.body.classList.toggle('gwoff', !on);
+  $$('[data-gw]').forEach(b => {
+    b.classList.toggle('off', !on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.innerHTML = on ? `${ic('pencil-line', 14)}Model gateway on` : `${ic('circle-slash', 14)}Model gateway off`;
+    b.title = on ? 'Pencil marks are the model’s. Press G to see the answer without it.' : DATA.gateway.offWhy;
+  });
+  gwHooks.forEach(f => f(on));
+}
+
+/* the top band and the question, from DATA */
+function chrome(q, extraRead) {
+  const here = F(DATA.here);
+  return `<header class="top">
+    <span class="brand">${esc(DATA.app)}</span>
+    <span class="floorchip"><span class="fl"></span><b>${esc(here.n)}</b> · ${esc(here.word)} floor</span>
+    <span class="sp"></span>
+    <button class="chipbtn gwchip" data-gw aria-pressed="true"></button>
+    <button class="chipbtn" data-tech aria-pressed="false">${ic('type', 14)}Technical words</button>
+  </header>
+  <section class="qhead">
+    <p class="eyebrow">${esc(DATA.me.n)} asked · ${esc(DATA.askedAt)}</p>
+    <h1 class="qwords">${esc(q.words)}</h1>
+    <p class="readas"><span>Read as</span><b>${esc(q.read)}</b>${extraRead || ''}</p>
+    <p class="tk">${esc(q.tech)}</p>
+  </section>`;
+}
+function hints(list) {
+  return `<div class="hints">${list.map(([k, t]) => `<span><span class="kbd">${k}</span>${t}</span>`).join('')}</div>`;
+}
+function wireCommon(replay) {
+  $$('[data-tech]').forEach(b => b.addEventListener('click', () => setTech(!document.body.classList.contains('tech'))));
+  $$('[data-gw]').forEach(b => b.addEventListener('click', () => setGateway(!GW)));
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.matches('input,textarea')) return;
+    const k = e.key.toLowerCase();
+    if (k === 'r') { replay(); }
+    if (k === 't') { setTech(!document.body.classList.contains('tech')); }
+    if (k === 'g') { setGateway(!GW); }
+  });
+  setGateway(GW);
+}
+
+const Q = DATA.q1;
+$('#chrome').outerHTML = chrome(Q, `<span class="ichip">${ic('calendar', 11)}since spring = ${esc(Q.since.pick)}</span>`);
+$('#foot').innerHTML = hints([['1–4', 'tick an ask'], ['Enter', 'hand them on'], ['G', 'model gateway'], ['T', 'technical words'], ['R', 'replay']]);
+const on = { ask: false, reread: false, keep: false, access: false };
+let sent = false;
+
+const ORDER = ['ok', 'gap', 'stale', 'norecord'];
+const rowsOf = () => applies().slice().sort((a, b) => ORDER.indexOf(a.st === 'none' ? 'ok' : a.st) - ORDER.indexOf(b.st === 'none' ? 'ok' : b.st));
+const fills = s => (s.st === 'gap' && on.ask) || (s.st === 'stale' && on.reread);
+function after() { return answered().length + applies().filter(fills).length; }
+
+function render() {
+  const ap = applies().length, now = answered().length, aft = after();
+  $('#lead').textContent = `For ${ap - now} suppliers I can’t say yet. Here is who could, and what asking would change.`;
+  $('#leadsub').innerHTML = `Today the answer is <b>${silentKnown().length}</b> suppliers. Nothing is sent until you press <b>Hand them on</b>, and every ask carries your question word for word.`;
+  const strip = will => rowsOf().map(s => `<span class="cell ${will && fills(s) ? 'c-will' : (s.st === 'none' ? 'c-ok' : 'c-' + s.st)}" title="${esc(s.n)}"></span>`).join('') + `<span class="cell c-hidden${will && on.access ? ' will' : ''}" title="some suppliers you can’t see"></span>`;
+  $('#ba').innerHTML = `
+    <span class="lab"><b>Now</b>covered</span><div class="strip" role="img" aria-label="now ${now} of ${ap}">${strip(false)}</div><span class="pc">${pct(now, ap)}%<small>${now} of ${ap}</small></span>
+    <span class="lab"><b>If they answer</b>preview</span><div class="strip" role="img" aria-label="after ${aft} of ${ap}">${strip(true)}</div><span class="pc">${pct(aft, ap)}%<small>${aft} of ${ap}${on.access ? ' + some' : ''}</small></span>`;
+  // the round, by person
+  const by = {};
+  applies().filter(s => s.st === 'gap' || s.st === 'stale').forEach(s => (by[s.keeper] = by[s.keeper] || []).push(s));
+  const cards = Object.keys(by).map(k => {
+    const L = by[k], live = L.filter(fills).length;
+    return `<div class="pcard${live ? '' : ' dim'}"><h3>${esc(P(k).n)}<span>${live} of ${L.length}</span></h3><p class="role">${esc(P(k).role)}, ${esc(F(P(k).floor).n)}</p><ul class="qs">${L.map(s => `<li class="${fills(s) ? '' : 'off'}">${mark(s.st)}<span>${s.st === 'gap' ? `When did we last hear from <b style="font-weight:400;color:var(--light)">${esc(s.n)}</b>?` : `Read ${esc(s.n)}’s reports since ${esc(s.read)} again.`}</span>${s.guess ? `<span class="hint"><span class="pchip">${ic('pencil-line', 10)}hint · model</span><span class="pencil">${esc(s.guess.v)}?</span><span class="muted">${esc(s.guess.from)}</span></span>` : ''}</li>`).join('')}</ul></div>`;
+  });
+  if (on.access) cards.push(`<div class="pcard"><h3>${esc(P('dev').n)}<span>1</span></h3><p class="role">${esc(P('dev').role)}, ${esc(F('finance').n)}</p><ul class="qs"><li>${mark('hidden')}<span>May ${esc(DATA.me.n.split(' ')[0])} see which suppliers you keep, for this question only?</span></li></ul></div>`);
+  if (on.keep) cards.push(`<div class="pcard"><h3>${esc(P('tom').n)}<span>1</span></h3><p class="role">${esc(P('tom').role)}, ${esc(F(P('tom').floor).n)}</p><ul class="qs"><li><span class="mk" style="color:var(--ink-muted)">${ic('flag', 14)}</span><span>A Mandate ask: keep a last-contact date for every live supplier.</span></li></ul></div>`);
+  $('#round').innerHTML = cards.join('');
+  right();
+}
+function right() {
+  const n = id => Q.fixes.find(f => f.id === id);
+  const people = new Set(); let qs = 0;
+  applies().filter(fills).forEach(s => { people.add(s.keeper); qs++; });
+  if (on.access) { people.add('dev'); qs++; }
+  if (on.keep) { people.add('tom'); qs++; }
+  const ap = applies().length;
+  const left = applies().length - after();
+  $('#right').innerHTML = `<h2>Asks</h2>` +
+    Q.fixes.map((f, i) => `<button class="fix" role="checkbox" aria-checked="${on[f.id]}" data-fix="${f.id}"><span class="box">${ic('check', 12)}</span><span><b>${esc(f.title)}</b>${esc(f.what)}</span><span class="kind">${esc(f.kind)} <span class="kbd">${i + 1}</span></span></button>`).join('') +
+    `<div class="conseq">
+      <p class="eyebrow">If you hand these on</p>
+      <p>${qs ? `<b>${qs} short ${qs === 1 ? 'question' : 'questions'}</b> to <b>${people.size} ${people.size === 1 ? 'person' : 'people'}</b>. If all are answered, this covers <b>${after()} of ${ap}</b> (${pct(after(), ap)}%).` : 'Tick an ask to see who it goes to and what it would change.'}</p>
+      <p>${left ? `Still open after: ${applies().filter(s => s.st === 'norecord').length} with no record, which nobody can close${!on.reread ? ', and the 3 out of date' : ''}${!on.ask ? ', and the 7 not known yet' : ''}.` : ''}${on.access ? '' : ' Some stay not yours to see.'}</p>
+      ${on.keep ? `<div class="draft pbox">${GW ? `<span class="pchip">${ic('pencil-line', 10)}drafted by the model · edit it</span>` : `<span class="ichip">${ic('file-text', 10)}from the template</span>`}<br>${GW ? 'Please keep a last-contact date for every live supplier, so a question like this one has no gaps next time.' : `Keep “last contact” for Supplier. Asked because: “${esc(Q.words)}”`}</div>` : ''}
+      <button class="btn primary" id="send" ${qs ? '' : 'disabled'}>${ic(sent ? 'check' : 'send', 14)}${sent ? 'Handed on · your question will re-answer as each lands' : 'Hand them on'}</button>
+    </div>`;
+  $$('#right [data-fix]').forEach(b => b.addEventListener('click', () => toggle(b.dataset.fix)));
+  $('#send').addEventListener('click', send);
+}
+function toggle(id) { on[id] = !on[id]; sent = false; render(); }
+function send() { if (!Object.values(on).some(Boolean)) return; sent = true; right(); }
+function play() {
+  clearTimers(); Object.keys(on).forEach(k => on[k] = false); sent = false;
+  document.body.classList.add('pre'); render();
+  later(() => document.body.classList.remove('pre'), 1200);
+  later(() => toggle('ask'), 1900);
+  later(() => toggle('reread'), 2500);
+}
+wireCommon(play);
+gwHooks.push(() => render());
+addEventListener('keydown', e => {
+  const k = +e.key; if (k >= 1 && k <= 4) toggle(Q.fixes[k - 1].id);
+  if (e.key === 'Enter' && !e.target.closest('button')) send();
+});
+play();
+</script>
+</body>
+</html>

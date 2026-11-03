@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question sheet · V5 · Three sizes</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+.grid{display:grid;grid-template-columns:calc(var(--measure-rail) * .82) minmax(0,.75fr) minmax(0,1.05fr) minmax(0,1.6fr);gap:0 var(--space-4)}
+.ch{padding:0 0 var(--space-2);border-bottom:1px solid var(--hairline-strong)}
+.ch .lab{display:block;color:var(--ink)}
+.ch p{margin:2px 0 0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ch p b{font-weight:400;color:var(--x-proposed-guess-ink)}
+.rh{padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);display:flex;flex-direction:column;gap:2px}
+.rh b{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);display:flex;align-items:center;gap:var(--space-2)}
+.rh span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rh .tech{display:none}
+.show-tech .rh .tech{display:block}
+.cell{padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);min-width:0;display:flex;align-items:center;position:relative}
+.cell > *{width:100%}
+.cell.hl::after{content:'';position:absolute;inset:calc(var(--space-1) * .5) calc(var(--space-2) * -1);border:1px solid var(--x-proposed-guess-ink);border-radius:var(--radius-inset);opacity:0;transition:opacity var(--motion-calm) var(--ease-out);pointer-events:none}
+.cell.hl.on::after{opacity:1}
+/* chip: one line, a pill */
+.chip{display:flex;align-items:center;gap:var(--space-2);min-height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-pill);background:var(--surface-raised);border:1px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap;overflow:hidden}
+.chip > span{overflow:hidden;text-overflow:ellipsis}
+.chip svg{flex:none;color:var(--ink-muted)}
+.chip .n{font-family:var(--font-mono);color:var(--light)}
+.chip.need{border-color:var(--hairline-strong)}
+.chip.need .nd{color:var(--ink);font-family:var(--font-mono)}
+/* card: a few lines in a pane */
+.card{border-radius:var(--radius-inset);background:var(--surface-pane);border:1px solid var(--hairline);padding:var(--space-2) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);display:flex;flex-direction:column;gap:2px}
+.card .big{font:200 var(--type-heading)/1 var(--font-sans);color:var(--light)}
+.card .m{color:var(--ink-muted)}
+.card .o{display:flex;gap:var(--space-3);flex-wrap:wrap}
+.card .o span{white-space:nowrap}
+.card .o .p{color:var(--light)}
+.card .o .p::before{content:'';display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--light);margin-right:var(--space-1);vertical-align:1px}
+.card .o .c{font-family:var(--font-mono);color:var(--ink-muted);margin-left:var(--space-1)}
+.fun{display:flex;align-items:baseline;gap:var(--space-1);font-family:var(--font-mono);color:var(--ink-muted);flex-wrap:wrap}
+.fun b{font-weight:400;color:var(--light)}
+.fun .g{color:var(--x-proposed-guess-ink);border-bottom:var(--x-proposed-guess-line)}
+.spark{display:flex;align-items:flex-end;gap:var(--space-1);height:var(--space-4)}
+.spark i{display:block;width:var(--space-2);background:var(--ink-muted);border-radius:1px}
+.spark i.l{background:var(--light)}
+/* page: an excerpt of the full sheet */
+.pg{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);display:flex;flex-direction:column;gap:2px}
+.pg .q{font-weight:300;font-size:var(--type-body);line-height:var(--leading-body)}
+.pg .m{color:var(--ink-muted)}
+.pg .t{display:none;font-family:var(--font-mono);color:var(--ink-muted);opacity:var(--x-quiet)}
+.show-tech .pg .t{display:block}
+.pg table{border-collapse:collapse;width:100%}
+.pg td{padding:1px var(--space-2) 1px 0;border-top:1px solid var(--hairline);white-space:nowrap}
+.pg td.s{white-space:normal}
+.pg td.nm{color:var(--light)}
+.pg td.s{font-family:var(--font-mono);color:var(--ink-muted)}
+.pg .st{display:grid;grid-template-columns:var(--space-3) minmax(0,1fr) var(--space-6) auto;gap:var(--space-2);align-items:baseline}
+.pg .st .c{font-family:var(--font-mono);text-align:right;color:var(--light)}
+.pg .st .w{font-family:var(--font-mono);color:var(--ink-muted);display:inline-flex;gap:2px;align-items:center}
+.pg .st.g .w,.pg .st.g .x{color:var(--x-proposed-guess-ink)}
+.pg .st.g .x{text-decoration:underline dashed var(--x-proposed-guess-ink) 1px;text-underline-offset:3px}
+.pg .gl{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-1)) minmax(0,1fr) auto;gap:var(--space-2);align-items:center}
+.pg .ask{font-family:var(--font-mono);color:var(--ink);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);padding:0 var(--space-2);white-space:nowrap}
+.nogw .gwonly{display:none}
+.nogwonly{display:none}
+.nogw .nogwonly{display:inline}
+.foot{margin-top:var(--space-3);display:flex;gap:var(--space-4);align-items:flex-start}
+.offnote{gap:var(--space-2);align-items:flex-start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--warning)}
+@media (max-width:1400px){
+  .grid{grid-template-columns:calc(var(--measure-rail) * .55) minmax(0,.8fr) minmax(0,1.05fr) minmax(0,1.45fr);gap:0 var(--space-3)}
+  .grid{grid-template-columns:calc(var(--measure-rail) * .7) minmax(0,.62fr) minmax(0,.95fr) minmax(0,1.6fr)}
+  .rh span:not(.tech){font-size:var(--type-small)}
+  .x2{display:none!important}
+  .lede{font-size:var(--type-small);line-height:var(--leading-small)}
+  .ch p:not(:last-child){display:none}
+  .cell,.rh{padding:var(--space-1) 0}
+  .lede{max-width:72ch}
+  .pg table tr:nth-child(n+3){display:none}
+  .pg .st:nth-child(n+3):nth-child(-n+4){display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="top"><div><span class="eyebrow" id="eyebrow"></span><h1 id="h1"></h1><p class="lede" id="lede"></p><div class="offnote" id="off" style="margin-top:var(--space-1)"></div></div><div id="tg"></div></div>
+  <div class="grid" id="grid"></div>
+</div>
+<div class="hints"><span><span class="kbd">G</span> assistant<span class="hl"> on/off</span></span><span><span class="kbd">T</span><span class="hl"> technical</span> words</span><span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Question sheet · V5</b> three sizes: chip, card, page · type foundry specimens, map scale and generalisation</div>
+<script>
+/*DATA*/
+const SHEET = {
+  eyebrow: 'The reference desk · question sheet · three sizes',
+  title: 'Three sizes',
+  lede: 'A type specimen shows a face at every size it will be used, and a map drops detail as its scale shrinks, by rule. Each part of a question is drawn as a chip, a card and a page. What drops at each size is decided here, and a guess never drops to a size that can’t mark it.',
+  cols: [
+    { l: 'Chip', d: 'One line. Glance, a toast, a mention in Mandate or Artifacts.', g: 'No guess at this size: it says “needs you” instead.' },
+    { l: 'Card', d: 'A few lines. Home, a list of saved questions.', g: 'A guess is dashed and says “guess”.' },
+    { l: 'Page', d: 'The whole sheet, with its workings.', g: 'A guess is dashed, cooler, and says who made it and who agreed.' }
+  ]
+};
+/*COMMON_JS*/
+const me = P(Q.by), s = DATA.steps, c = DATA.clarify;
+const chip = (i, h, cls) => `<div class="chip ${cls || ''}">${ic(i, 14)}<span>${h}</span></div>`;
+const CELLS = {
+  question: [
+    chip('message-circle-question', `“${Q.words}”`),
+    `<div class="card"><span class="yours">${Q.words}</span><span class="m">Read as: Suppliers <span class="guess gwonly">with a running contract</span> with no contact since 1 March</span></div>`,
+    `<div class="pg"><span class="q yours">${Q.words}</span><span>Read as: ${Q.reading}</span><span class="m"><span class="gwonly">Drafted by ${GW.plain} on ${SAV.saved}; </span>confirmed by ${me.name}.</span><span class="t">${Q.readingTech}</span></div>`
+  ],
+  clarify: [
+    chip('split', `<span class="nd">1 question for you</span>`, 'need'),
+    `<div class="card"><span>${c[0].ask}</span><span class="o">${c[0].opts.filter(o => o.n).map(o => `<span class="${o.pick ? 'p' : ''}">${o.l}<span class="c">${o.n}</span></span>`).join('')}</span></div>`,
+    `<div class="pg"><span>${c[0].ask} <span class="m">· raised by the org glossary</span></span><span class="m x2">${c[0].why}</span><span>${c[0].opts.map(o => `${o.pick ? '<b style="font-weight:400;color:var(--light)">● ' : '○ '}${o.l}${o.d ? ' (' + o.d + ')' : ''}${o.n ? ' · ' + o.n : ''}${o.pick ? '</b>' : ''}`).join('&ensp;')}</span><span class="m">Choices are in the order of the calendar, never of likelihood. None is preselected.</span></div>`
+  ],
+  workings: [
+    chip('list-checks', `6 steps<span class="gwonly"> · <span class="nd">1 guess needs you</span></span>`, 'need'),
+    `<div class="card"><span class="fun"><b>${s[0].n}</b>→<span class="g gwonly">${s[1].n}</span><span class="nogwonly">${s[1].n}</span>→<b>${s[3].n}</b> heard →<b>${s[5].n}</b> left</span><span class="m">3 sources searched · invoices not yours to see</span></div>`,
+    `<div class="pg">${s.map((x, i) => `<div class="st${x.by === 'guess' ? ' g' : ''}${x.k === 'maybe' ? ' gwonly' : ''}"><span class="m">${i + 1}</span><span class="x">${x.say}</span><span class="c">${fmt(x.n)}</span>${x.by === 'guess' ? `<span class="w gw-on">${ic(A(x.by).icon, 12)}${A(x.by).plain}</span><span class="w gw-off">${ic('user', 12)}You, as a filter</span>` : `<span class="w">${ic(A(x.by).icon, 12)}${A(x.by).plain}</span>`}</div>`).join('')}</div>`
+  ],
+  answer: [
+    chip('list', `<span class="n">${ANS.n}</span> suppliers · sure for ${ANS.sureN}`),
+    `<div class="card"><span style="display:flex;align-items:baseline;gap:var(--space-2)"><span class="big">${ANS.n}</span><span>suppliers · <span class="m">${ANS.sure}</span></span></span><span class="m">${ANS.rows.slice(0, 3).map(r => r.name).join(', ')} and ${ANS.n - 3} more</span><span><span class="guess gwonly">Easterby: maybe 12 Apr · guess</span></span></div>`,
+    `<div class="pg"><table>${ANS.rows.filter(r => r.maybe || r.noRecord || r.name.startsWith('Linden')).map(r => `<tr><td class="nm">${r.name}</td><td>${r.last ? r.last + `<span class="ref">${srcNo(r.src)}</span>` : mNoRecord('no record')}</td><td class="s">${r.maybe ? `<span class="guess gwonly">maybe ${r.maybe.date.replace(' 2026', '')} · guess by ${GW.plain}, not counted</span>` : r.noRecord ? 'no emails before ' + r.noRecord.before.replace(' 2026', '') : r.via}</td></tr>`).join('')}</table><span class="m">and ${ANS.n - 3} more, each with its source</span></div>`
+  ],
+  gap: [
+    chip('lock', `Some sources not yours to see`),
+    `<div class="card">${mShadow('Invoices · Finance')}<span class="m">and 2 more gaps: no record, not known yet</span></div>`,
+    `<div class="pg">${DATA.gaps.map((g, gi) => `<div class="gl${gi ? ' x2' : ''}"><span>${g.kind === 'shadow' ? mShadow('Finance') : g.kind === 'norecord' ? `<span style="display:inline-flex;gap:var(--space-1);align-items:center">${mWavy()}<span class="m">before Jan</span></span>` : mGap('Not known yet', '')}</span><span>${g.say}</span><span class="ask">Ask ${P(g.who).name.split(' ')[0]}</span></div>`).join('')}</div>`
+  ],
+  saved: [
+    chip('bookmark', `<span class="n">${ANS.n}</span> · changed ${SAV.changed.replace(' 2026', '')} · ${SAV.name}`),
+    `<div class="card"><span style="display:flex;justify-content:space-between;gap:var(--space-2)"><span>${SAV.name}</span><span class="spark">${SAV.runs.map((r, i) => `<i class="${i === SAV.runs.length - 1 ? 'l' : ''}" style="height:calc(var(--space-4) * ${r.n / 10})"></i>`).join('')}</span></span><span class="m">${FL(SAV.shared).name} · Mondays · last changed ${SAV.changed}</span></div>`,
+    `<div class="pg"><span>${SAV.name} <span class="m">· shared with ${FL(SAV.shared).name} · reruns ${SAV.reruns}</span></span><span class="m x2">Keeps ${SAV.keeps.join(', ')}.</span><span class="x2">${SAV.runs.map(r => `${r.at}: ${r.n}${r.changed ? ' (' + r.note + ')' : ''}`).join(' · ')}</span><span class="m"><span class="gwonly">${GW.Plain} was asked ${SAV.modelUsed}</span><span class="nogwonly">Never asked the assistant.</span></span></div>`
+  ]
+};
+function render() {
+  $('#eyebrow').textContent = SHEET.eyebrow; $('#h1').textContent = SHEET.title; $('#lede').textContent = SHEET.lede; $('#tg').innerHTML = toggles();
+  let h = `<div class="ch dep" style="--i:0"><span class="lab">Part</span><p>never claims, at any size</p></div>` + SHEET.cols.map((c, i) => `<div class="ch dep" style="--i:${i + 1}"><span class="lab">${c.l}</span><p>${c.d}</p><p><b>${c.g}</b></p></div>`).join('');
+  DATA.parts.forEach(p => {
+    h += `<div class="rh dep" style="--i:0"><b>${ic(p.icon, 14)}${p.plain}</b><span>${p.never}</span><span class="tech">${p.tech}</span></div>`;
+    CELLS[p.id].forEach((x, i) => { h += `<div class="cell dep${(p.id === 'answer' || p.id === 'workings') ? ' hl' : ''}" data-hl="${p.id}-${i}" style="--i:${i + 1}">${x}</div>`; });
+  });
+  $('#grid').innerHTML = h;
+  $('#off').innerHTML = `${ic('circle-alert', 14)}<span>${GW.offWhy} Nothing dashed at any size, and no chip says “needs you” for a guess. Counts, rows and gaps are the same.</span>`;
+  Icons.hydrate(document.body);
+}
+render();
+const SEQ = ['workings-0', 'answer-1', 'workings-2'];
+function reset() { $$('.cell.hl').forEach(c => c.classList.remove('on')); }
+function demo() { SEQ.forEach((id, i) => later(() => { reset(); $(`[data-hl="${id}"]`).classList.add('on'); }, ms('--motion-run') * (i + 1))); later(reset, ms('--motion-run') * (SEQ.length + 1) + ms('--motion-calm')); }
+boot(reset, demo);
+</script>
+</body>
+</html>

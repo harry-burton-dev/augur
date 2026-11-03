@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Placing · V2 · Twenty questions</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ======================================================================
+   Proposed tokens (all combinations of kit tokens; listed in notes.md).
+   ====================================================================== */
+:root{
+  --x-type-micro:.6875rem;                                              /* --type-micro: mono eyebrows inside data (wear-and-time asked for it too) */
+  --x-accent:var(--floor-team-high);                                    /* the floor this page sits on (Team) */
+  --x-accent-soft:color-mix(in srgb,var(--floor-team-high) 16%,transparent);
+  --x-accent-edge:color-mix(in srgb,var(--floor-team-high) 48%,transparent);
+  --x-gap-edge:color-mix(in srgb,var(--ink-muted) 60%,transparent);     /* --mark-gap: an expected detail not held yet (dashed, not hatched) */
+  --x-wait:color-mix(in srgb,var(--warning) 70%,var(--ink));            /* --mark-waiting: a thing waiting on a person, never alarming */
+  --x-out:.34;                                                          /* --dim-ruled-out: a kind the answers have ruled out */
+  --x-col-side:calc(var(--measure-card) - var(--space-4));              /* 368: the right-hand column */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.micro{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);letter-spacing:0;text-transform:none}
+.x-cap{max-width:calc(50% - var(--space-6))}
+.keys{position:fixed;right:var(--edge-tight);bottom:var(--edge-tight);z-index:var(--layer-chrome);display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-1) var(--space-3);max-width:calc(50% - var(--space-6));font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:lowercase;color:var(--ink-muted);background:var(--scrim);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key)}
+.keys span{display:inline-flex;gap:var(--space-1);align-items:center}
+
+/* studio words: the technical name, one step down, only when asked for */
+.st{display:none;font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:0;color:var(--ink-muted);text-transform:none}
+.st::before{content:"studio: ";opacity:.7}
+body.studio .st{display:block}
+body.studio span.st{display:inline;margin-left:var(--space-1)}
+
+/* ---- app frame (Data Atlas) ---- */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:color-mix(in srgb,var(--slate-deep) 70%,transparent);border-right:1px solid var(--hairline);padding:var(--edge) var(--edge-tight);display:flex;flex-direction:column;gap:var(--space-1)}
+.rail .an{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);padding:var(--space-2);margin-bottom:var(--space-4)}
+.nav{display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav svg{width:var(--space-4);height:var(--space-4)}
+.nav.on{background:var(--surface-raised);color:var(--ink);box-shadow:inset 2px 0 0 var(--x-accent)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail .foot{margin-top:auto;margin-bottom:var(--space-6);padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rail .foot b{font-weight:400;color:var(--ink)}
+.rail .floor{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2);margin-bottom:var(--space-3);font-size:var(--type-small);color:var(--ink-muted)}
+.rail .floor i,.rail .floor .dot{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--x-accent);flex:none}
+.main{position:relative;padding:var(--edge) var(--space-6) var(--space-7);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-5);margin-bottom:var(--space-4)}
+.head h1{margin:var(--space-2) 0 var(--space-1);font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.head .eyebrow{white-space:nowrap}
+.head .sub{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);max-width:var(--measure-read)}
+.head .sub b{font-weight:400;color:var(--ink)}
+
+/* the four steps: nothing skips Triage, so it is always the last one drawn */
+.steps{display:flex;align-items:center;gap:var(--space-2);flex:none;font-size:var(--type-small);color:var(--ink-muted)}
+.steps .s{display:inline-flex;align-items:center;gap:var(--space-2);height:calc(var(--space-5) + var(--space-1));padding:0 var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-pill);white-space:nowrap;transition:color var(--motion-base) var(--ease-standard),border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.steps .s b{font:400 var(--x-type-micro)/1 var(--font-mono)}
+.steps .s.done{color:var(--ink)}
+.steps .s.done b{color:var(--x-accent)}
+.steps .s.now{color:var(--light);border-color:var(--x-accent-edge);background:var(--x-accent-soft)}
+.steps .s.wait{color:var(--x-wait);border-color:color-mix(in srgb,var(--x-wait) 40%,transparent);border-style:dashed}
+.steps .sep{width:var(--space-3);height:1px;background:var(--hairline-strong)}
+.steps .s.lock{border-color:var(--hairline-strong)}
+.steps .s.lock svg{width:var(--space-3);height:var(--space-3)}
+
+.work{position:relative;flex:1;min-height:0}
+
+/* the new thing, as the operator said it */
+.said{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-3) var(--space-4)}
+.said .w{font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.said p{margin:var(--space-1) 0 0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.said .from{margin-top:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.said .from svg{width:var(--space-3);height:var(--space-3)}
+
+/* kind chip: plain word, icon, count; studio word below on request */
+.kind{display:inline-flex;align-items:center;gap:var(--space-2);color:var(--ink)}
+.kind svg{width:var(--space-4);height:var(--space-4);flex:none;color:var(--x-accent)}
+.kind .c{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);background:var(--surface-inset);white-space:nowrap}
+.btn svg{width:var(--space-4);height:var(--space-4)}
+.btn.go{border-color:var(--x-accent-edge);color:var(--light);background:var(--x-accent-soft)}
+.btn.quiet{border-color:var(--hairline)}
+.btn[aria-disabled="true"]{color:var(--ink-muted);border-style:dashed;cursor:help}
+.btn .kbd{margin-left:var(--space-1)}
+
+/* ---- "is it one of these?": near matches ---- */
+.near h3,.slip h3{margin:0 0 var(--space-1);font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.near .why{margin:0 0 var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.nm{display:block;width:100%;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);padding:var(--space-2) var(--space-3);margin-bottom:var(--space-2);transition:border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard),opacity var(--motion-base) var(--ease-standard)}
+.nm.lead{border-color:var(--x-accent-edge);background:var(--surface-raised)}
+.nm:not(.lead) .where{display:none}
+.nm:not(.lead) ul{display:flex;flex-wrap:wrap;gap:0 var(--space-3)}
+.nm:not(.lead) .acts{display:none}
+.near > .btn{margin-top:var(--space-1)}
+.nm .t{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2)}
+.nm .t b{font-weight:400;color:var(--light);font-size:var(--type-body)}
+.nm .t .kind{font-size:var(--type-small);color:var(--ink-muted)}
+.nm .t .kind svg{width:var(--space-3);height:var(--space-3)}
+.nm .where{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.nm ul{list-style:none;margin:var(--space-1) 0 0;padding:0;display:grid;gap:calc(var(--space-1) / 2);font-size:var(--type-small);line-height:var(--leading-small)}
+.nm li{display:flex;gap:var(--space-2);align-items:center;color:var(--ink)}
+.nm li svg{width:var(--space-3);height:var(--space-3);flex:none}
+.nm li.same svg{color:var(--success)}
+.nm li.diff{color:var(--ink-muted)}
+.nm .acts{display:flex;gap:var(--space-2);margin-top:var(--space-2);flex-wrap:wrap}
+.nm .acts .btn{height:calc(var(--space-5) + var(--space-1));font-size:var(--type-small)}
+.nm.pick{border-color:var(--x-accent);box-shadow:0 0 0 1px var(--x-accent-edge)}
+.nm.no{opacity:var(--x-out)}
+
+/* ---- the Triage slip: the last step of every path ---- */
+.slip{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-3) var(--space-4)}
+.slip .stamp{display:inline-flex;align-items:center;gap:var(--space-2);font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-accent);margin-bottom:var(--space-2)}
+.slip .stamp svg{width:var(--space-3);height:var(--space-3)}
+.slip.waiting .stamp{color:var(--x-wait)}
+.slip p{margin:0 0 var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.slip p.m{color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.det{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr);gap:0 var(--space-3);margin:var(--space-2) 0 var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.det > *{padding:calc(var(--space-1) + 1px) 0;border-bottom:1px solid var(--hairline)}
+.det .k{color:var(--ink-muted)}
+.det .v{color:var(--ink)}
+.gap{display:inline-flex;flex-direction:column;gap:0;width:100%;padding:0 var(--space-2) !important;border:1px dashed var(--x-gap-edge) !important;border-radius:var(--radius-key);color:var(--ink-muted)}
+.det .gap{margin:calc(var(--space-1) / 2) 0}
+.gap b{font-weight:400;color:var(--ink)}
+.who{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-1) var(--space-2);margin:var(--space-2) 0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.who svg{width:var(--space-4);height:var(--space-4);color:var(--ink)}
+.who b{font-weight:400;color:var(--ink)}
+
+.fade{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.fade.pre{opacity:0;transform:translateY(var(--space-2))}
+@media (prefers-reduced-motion: reduce){.fade{transition:opacity var(--motion-base) linear!important}.fade.pre{transform:none}}
+@media (max-height:840px){.main{padding-top:var(--edge-tight)}.head{margin-bottom:var(--space-3)}.head h1{font-size:var(--type-heading);line-height:var(--leading-heading)}}
+.nm .t .kind .st{display:none!important}
+
+/* ====================== V2: Twenty questions ====================== */
+.grid{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) var(--x-col-side);gap:var(--space-5)}
+.left{display:flex;flex-direction:column;gap:var(--space-4);min-height:0}
+.asked{display:flex;flex-direction:column;gap:calc(var(--space-1) / 2);font-size:var(--type-small);line-height:var(--leading-small)}
+.asked .a{display:grid;grid-template-columns:var(--space-5) auto auto;justify-content:start;gap:var(--space-2);align-items:baseline;color:var(--ink-muted);padding:calc(var(--space-1) / 2) var(--space-2);border-radius:var(--radius-key)}
+.asked .a:hover{background:var(--surface-inset)}
+.asked .a .n{font-family:var(--font-mono);color:var(--ink-muted)}
+.asked .a .ans{font-family:var(--font-mono);color:var(--ink);text-transform:lowercase;letter-spacing:var(--tracking-caps)}
+.asked .a .ans.unsure{color:var(--ink-muted)}
+.stage{position:relative;padding:var(--space-4) var(--space-5);border:1px solid var(--hairline-strong);border-radius:var(--radius-card);background:linear-gradient(var(--surface-raised),var(--surface-inset))}
+.stage .qn{display:flex;justify-content:space-between;align-items:baseline}
+.stage .q{margin:var(--space-2) 0 var(--space-3);font:300 var(--type-title-s)/var(--leading-title-s) var(--font-sans);color:var(--light);min-height:calc(var(--leading-title-s) * 2)}
+.stage .q.in{animation:qin var(--motion-slow) var(--ease-out)}
+@keyframes qin{from{opacity:0;transform:translateY(var(--space-2))}}
+.stage .ansrow{display:flex;gap:var(--space-2);align-items:center}
+.stage .ansrow .btn{height:var(--target-md);padding:0 var(--space-4);font-size:var(--type-body)}
+.stage .ansrow .btn.on{border-color:var(--x-accent);background:var(--x-accent-soft);color:var(--light)}
+.stage .why{margin-left:auto;max-width:calc(var(--measure-card) - var(--space-5));font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:right}
+.stage .why b{font-weight:400;color:var(--ink)}
+.stage.end .why{text-align:left;margin-left:0;max-width:none}
+.stage.end .q{font-size:var(--type-heading);line-height:var(--leading-heading);min-height:0}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-2)}
+.tile{position:relative;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);min-height:calc(var(--space-7) + var(--space-2));transition:opacity var(--motion-slow) var(--ease-standard),transform var(--motion-slow) var(--ease-standard),border-color var(--motion-slow) var(--ease-standard)}
+.tile .kind{font-size:var(--type-meta);flex-wrap:wrap;row-gap:0}
+.tile.ext .inapp{display:block}
+.tile .out{display:block;margin-top:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tile.ruled{opacity:var(--x-out);transform:translateY(var(--space-1))}
+.tile.ruled .kind > span:nth-child(2){text-decoration:line-through}
+.tile.left{border-color:var(--x-accent-edge)}
+.tile.only{border-color:var(--x-accent);background:var(--x-accent-soft)}
+.tile.ext .kind svg{color:var(--ink-muted)}
+.tile.ext .inapp{font-size:var(--type-small);color:var(--ink-muted)}
+.meter{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-small);color:var(--ink-muted)}
+.meter .bar{flex:1;height:var(--space-1);border-radius:var(--radius-pill);background:var(--hairline);overflow:hidden}
+.meter .bar i{display:block;height:100%;background:var(--x-accent);transition:width var(--motion-slow) var(--ease-out)}
+.right{display:flex;flex-direction:column;gap:var(--space-3);min-height:0;overflow:auto;scrollbar-width:thin}
+.right .idle{color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);border:1px dashed var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4)}
+@media (max-height:840px){.said p{display:none}.stage{padding:var(--space-3) var(--space-4)}.stage .q{font-size:var(--type-heading);line-height:var(--leading-heading);min-height:calc(var(--leading-heading) * 2)}.tile{min-height:var(--space-7)}.left{gap:var(--space-3)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" id="rail" aria-label="Data Atlas"></nav>
+  <main class="main">
+    <div class="head">
+      <div><div class="eyebrow" id="crumb"></div><h1 id="h1"></h1><div class="sub" id="sub"></div></div>
+      <div class="steps" id="steps" aria-label="Steps"></div>
+    </div>
+    <div class="work" id="work">
+<div class="grid">
+  <div class="left">
+    <div id="thing"></div>
+    <div class="stage" id="stage" aria-live="polite"></div>
+    <div class="meter" id="meter"></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="asked" id="asked"></div>
+  </div>
+  <aside class="right" id="right" aria-live="polite"></aside>
+</div>
+    </div>
+  </main>
+</div>
+<div class="keys" id="keys" aria-label="Keyboard"></div>
+<div class="x-cap"><b>Placing · V2</b> one question at a time, chosen to halve what is left; every kind stays on the table and says what ruled it out · the parlour game, Shannon's halving question, the vet's differential</div>
+<script>
+/* ======================================================================
+   Sample data: every name, word, count and question on this page comes
+   from here. In AUGUR it comes from Data Atlas: the ontology (kinds,
+   their details and links, each with a plain word and a studio word),
+   counts per kind, Triage, and the people who decide (steward, admin).
+   A regional services deployment; nothing here is drawn for one domain.
+   ====================================================================== */
+const DATA = {
+  app: 'Data Atlas',
+  floor: { kind: 'Team', name: 'Ashby Road Crew', above: 'Highways and Depots' },
+  viewer: { name: 'Dee Okafor', role: 'Crew coordinator' },
+  steward: { name: 'Priya Natarajan', role: 'Data steward', floor: 'Highways and Depots' },
+  admin: { name: 'Tom Rees', role: 'Data Atlas admin', floor: 'Org' },
+  nav: [
+    { label: 'Things we keep', icon: 'boxes', n: 4597 },
+    { label: 'Kinds of thing', icon: 'shapes', n: 7 },
+    { label: 'Add a thing', icon: 'message-square-plus', on: true },
+    { label: 'Triage', icon: 'inbox', n: 7 }
+  ],
+  /* plain word first, studio word one step down */
+  words: {
+    kind: ['kind of thing', 'class'], detail: ['detail', 'data property'], link: ['link', 'object property'],
+    near: ['is it one of these?', 'candidate match (entity resolution)'], triage: ['Triage', 'proposal queue'],
+    ask: ['ask for a new kind', 'ontology change request'], gap: ['not known yet', 'expected property, no value'],
+    key: ['the key', 'decision tree over class axioms'], genus: ['what it is', 'superclass'], diff: ['what sets it apart', 'differentia'],
+    example: ['like this one', 'exemplar / type specimen']
+  },
+  matching: { byMeaning: false, note: 'Matched by name, spelling and keys. Matching by meaning is off on this deployment.' },
+  steps: { fits: ['Say what it is', 'Find its kind', 'Is it one of these?', 'Triage'], misfit: ['Say what it is', 'Find its kind', 'Ask for a kind', 'Waits in Triage'] },
+
+  /* what a thing is (genus) and its shape: the two axes the kinds sit on */
+  genera: [
+    { id: 'place', word: 'Place', a: 'a place', studio: 'Site (BFO)' },
+    { id: 'thing', word: 'Thing', a: 'a thing', studio: 'Material Artifact' },
+    { id: 'someone', word: 'Someone', a: 'someone', studio: 'Agent' },
+    { id: 'agreement', word: 'Agreement', a: 'an agreement', studio: 'Directive Information Content Entity' },
+    { id: 'happening', word: 'Happening', a: 'something that happened', studio: 'Process' }
+  ],
+  shapes: [
+    { id: 'point', word: 'One, in one spot', studio: '0-dimensional / object' },
+    { id: 'line', word: 'Along a line, or over an area', studio: '1- or 2-dimensional region' },
+    { id: 'many', word: 'Many, counted as one', studio: 'Object aggregate' }
+  ],
+  kinds: [
+    { id: 'site', word: 'Site', studio: 'Facility', icon: 'building-2', n: 38, genus: 'place', shape: 'point',
+      diff: 'has an address people go to', says: 'A place with an address where people work: a depot, a yard, an office.',
+      has: ['Address', 'Run by', 'Opening hours', 'Capacity'], is: ['touch', 'stays', 'address'], eg: 'Ashby depot' },
+    { id: 'vehicle', word: 'Vehicle', studio: 'Ground Vehicle', icon: 'truck', n: 164, genus: 'thing', shape: 'point',
+      diff: 'moves under its own power', says: 'Moves under its own power, with a registration: a gritter, a van, a sweeper.',
+      has: ['Registration', 'Based at', 'Mileage', 'Next MOT'], is: ['touch', 'self'], eg: 'Gritter GR-04' },
+    { id: 'equipment', word: 'Equipment', studio: 'Material Artifact', icon: 'package', n: 702, genus: 'thing', shape: 'point',
+      diff: 'gets carried, towed or set up', says: 'Carried, towed or set up, with an asset tag: a generator, a cabin, a sign.',
+      has: ['Asset tag', 'Owned by', 'Kept at', 'Serial number', 'Last inspected'], is: ['touch'], eg: 'Welfare unit WU-03' },
+    { id: 'person', word: 'Person', studio: 'Person', icon: 'user', n: 1930, genus: 'someone', shape: 'point',
+      diff: 'is one person', says: 'One person: staff, a contractor, a member of the public.',
+      has: ['Name', 'Role', 'Works at', 'Phone'], is: ['someone', 'one'], eg: 'Sam Whitlock' },
+    { id: 'supplier', word: 'Supplier', studio: 'Organization (supplier role)', icon: 'handshake', n: 212, genus: 'someone', shape: 'many',
+      diff: 'is a company we buy or hire from', says: 'A company we buy from or hire from.',
+      has: ['Company number', 'Address', 'Contact', 'Approved until'], is: ['someone'], eg: 'Hallam Plant Hire' },
+    { id: 'contract', word: 'Contract', studio: 'Agreement', icon: 'file-signature', n: 446, genus: 'agreement', shape: 'point',
+      diff: 'sets out who does what, and until when', says: 'Agreed between us and someone, with dates: a hire, a service deal.',
+      has: ['Parties', 'Starts', 'Ends', 'Value'], is: ['agreed'], eg: 'Plant hire 2026/14' },
+    { id: 'incident', word: 'Incident', studio: 'Act', icon: 'siren', n: 1105, genus: 'happening', shape: 'point',
+      diff: 'happened at a time and place', says: 'Something that happened at a time and place: a collision, a spill, a near miss.',
+      has: ['When', 'Where', 'Reported by', 'Severity'], is: ['happened'], eg: 'Spill at Blyth layby' }
+  ],
+  /* cells the two axes predict but nobody has made a kind for (Mendeleev's gaps) */
+  predicted: [
+    { genus: 'place', shape: 'line', word: 'Route or area', diff: 'runs along a line, or covers an area, on the map', asks: [{ by: 'Highways and Depots', on: '12 Sep' }] },
+    { genus: 'thing', shape: 'line', word: 'Network', diff: 'runs between places: drains, cables, pipes', asks: [] },
+    { genus: 'place', shape: 'many', word: 'Estate', diff: 'is a group of places run together', asks: [] },
+    { genus: 'thing', shape: 'many', word: 'Fleet or set', diff: 'is many things looked after as one', asks: [] },
+    { genus: 'happening', shape: 'line', word: 'Programme of works', diff: 'goes on for weeks, in stages', asks: [] }
+  ],
+  /* kept by other pillar apps: the honest redirect, never a dead end */
+  elsewhere: [
+    { id: 'document', word: 'Document', app: 'Artifacts', icon: 'file-text', says: 'Written down: a report, a letter, a form.', is: ['written'] },
+    { id: 'intent', word: 'Something asked for', app: 'Mandate', icon: 'target', says: 'An ask, with someone responsible and a date.', is: ['asked'] }
+  ],
+  /* yes/no questions over what each kind "is" (twenty questions, trays) */
+  questions: [
+    { id: 'written', q: 'Is it written down, like a report, a letter or a form?' },
+    { id: 'touch', q: 'Could you touch it, stand on it or drive it?' },
+    { id: 'someone', q: 'Is it someone: a person or a company?' },
+    { id: 'stays', q: 'Does it stay in one place?' },
+    { id: 'self', q: 'Does it move under its own power?' },
+    { id: 'address', q: 'Does it have an address people go to?' },
+    { id: 'one', q: 'Is it one person?' },
+    { id: 'agreed', q: 'Is it something agreed, with dates?' },
+    { id: 'happened', q: 'Is it something that happened, at a time?' },
+    { id: 'asked', q: 'Is it something someone has asked to be done?' }
+  ],
+  /* the dichotomous key, written by the admin from the same kinds */
+  key: [
+    { n: 1, a: ['You could touch it, stand on it or drive it', 2], b: ['You couldn’t: it’s someone, an agreement or a happening', 5] },
+    { n: 2, a: ['It stays in one place', 3], b: ['It can be moved', 4] },
+    { n: 3, a: ['It has an address people go to', 'site'], b: ['It runs along a line, or covers an area, on the map', null] },
+    { n: 4, a: ['It moves under its own power, with a registration', 'vehicle'], b: ['It is carried, towed or set up', 'equipment'] },
+    { n: 5, a: ['It’s someone', 6], b: ['It was agreed, or it happened', 7] },
+    { n: 6, a: ['One person', 'person'], b: ['A company we buy or hire from', 'supplier'] },
+    { n: 7, a: ['Agreed between people, with dates', 'contract'], b: ['Happened at a time and place', 'incident'] }
+  ],
+  things: {
+    fits: {
+      said: 'Welfare cabin WU-07', note: 'Towed cabin with a toilet and a kettle, hired for the A614 resurfacing.',
+      from: 'From a hire confirmation email, typed in by Dee', kind: 'equipment', genus: 'thing', shape: 'point',
+      is: ['touch'], keyPath: ['1a', '2b', '4b'],
+      known: { 'Asset tag': 'WU-07', 'Owned by': 'Hallam Plant Hire', 'Kept at': 'Ashby depot' },
+      gaps: { 'Serial number': 'Hallam Plant Hire, on the hire contract', 'Last inspected': 'Fleet team, Highways and Depots' },
+      links: [['is kept at', 'Ashby depot', 'site'], ['is owned by', 'Hallam Plant Hire', 'supplier'], ['is hired under', 'Plant hire 2026/14', 'contract']],
+      like: 'wu3',
+      tryOn: { vehicle: { 'Registration': false, 'Based at': 'Ashby depot', 'Mileage': false, 'Next MOT': false } },
+      route: ['vehicle', 'equipment']
+    },
+    misfit: {
+      said: 'A614, Ollerton to Blyth', note: 'The 9 km stretch of road we are resurfacing this winter.',
+      from: 'Typed in by Dee', kind: null, genus: 'place', shape: 'line', closest: 'site',
+      is: ['touch', 'stays'], keyPath: ['1a', '2a', '3b'],
+      words: 'like a Site, but along a line on the map', like: 'ashby',
+      /* held up against a kind: a value, false = it can't have one, null = could have, not known */
+      tryOn: { site: { 'Address': false, 'Run by': 'Ashby Road Crew', 'Opening hours': false, 'Capacity': false } },
+      route: ['site', 'nofit'],
+      links: [['is looked after by', 'Ashby Road Crew', null], ['is worked on under', 'Resurfacing 2026/09', 'contract']]
+    }
+  },
+  /* existing entities the matcher found (matched by name, spelling, keys) */
+  near: {
+    fits: [
+      { id: 'wu7', name: 'Welfare unit WU-7', kind: 'equipment', where: 'Proposed by the hire contract feed · in Triage since 14 Oct', lead: true,
+        same: ['Owned by Hallam Plant Hire', 'Tag WU-7, one character from WU-07'], diff: ['Kept at Retford depot, not Ashby'] },
+      { id: 'wu3', name: 'Welfare unit WU-03', kind: 'equipment', where: 'Kept on Highways and Depots · since March',
+        same: ['Owned by Hallam Plant Hire'], diff: ['Tag WU-03', 'Kept at Ollerton yard'] },
+      { id: 'tr12', name: 'Trailer TR-12', kind: 'vehicle', where: 'Kept on Ashby Road Crew · since 2024',
+        same: ['Kept at Ashby depot', 'Towed'], diff: ['A Vehicle: has a registration'] }
+    ],
+    misfit: [
+      { id: 'ashby', name: 'Ashby depot', kind: 'site', where: 'Kept on Ashby Road Crew',
+        same: ['Stays in one place'], diff: ['Has an address', 'People work there'] },
+      { id: 'a614w', name: 'A614 works, phase 1', kind: 'incident', where: 'Kept on Highways and Depots',
+        same: ['Names the A614'], diff: ['An Incident: it happened on one day'] }
+    ]
+  },
+  examples: ['wu3', 'tr12', 'ashby', 'sam', 'hire', 'spill'],
+  entities: {
+    wu3: { name: 'Welfare unit WU-03', kind: 'equipment', d: { 'Asset tag': 'WU-03', 'Owned by': 'Hallam Plant Hire', 'Kept at': 'Ollerton yard', 'Serial number': 'HPH-WC-2231', 'Last inspected': '2 Oct' } },
+    tr12: { name: 'Trailer TR-12', kind: 'vehicle', d: { 'Registration': 'TR12 ARC', 'Based at': 'Ashby depot', 'Mileage': '—', 'Next MOT': 'Feb 2027' } },
+    ashby: { name: 'Ashby depot', kind: 'site', d: { 'Address': 'Mansfield Rd, Ashby', 'Run by': 'Sam Whitlock', 'Opening hours': '06:00–18:00', 'Capacity': '40 vehicles' } },
+    sam: { name: 'Sam Whitlock', kind: 'person', d: { 'Name': 'Sam Whitlock', 'Role': 'Depot manager', 'Works at': 'Ashby depot', 'Phone': '07700 900412' } },
+    hire: { name: 'Plant hire 2026/14', kind: 'contract', d: { 'Parties': 'Us, Hallam Plant Hire', 'Starts': '1 Nov', 'Ends': '31 Mar', 'Value': '£18,400' } },
+    spill: { name: 'Spill at Blyth layby', kind: 'incident', d: { 'When': '22 Oct, 14:10', 'Where': 'Blyth layby', 'Reported by': 'Sam Whitlock', 'Severity': 'Low' } }
+  },
+  /* the demo: which answers the operator gives, in order */
+  demo: { fits: 'fits', misfit: 'misfit' }
+};
+
+/* ---- helpers shared by every variant ---- */
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ms = t => { const v = getComputedStyle(document.documentElement).getPropertyValue(t).trim(); return v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000; };
+let timers = [];
+const later = (fn, d) => timers.push(setTimeout(fn, RM ? 0 : d));
+const clearLater = () => { timers.forEach(clearTimeout); timers = []; };
+const K = id => DATA.kinds.find(k => k.id === id);
+const G = id => DATA.genera.find(g => g.id === id);
+const ic = (n, s = 16) => Icons.svg(n, { size: s, stroke: 1.5 });
+const st = w => `<span class="st">${w}</span>`;
+const W = k => DATA.words[k];
+const fmt = n => n.toLocaleString('en-GB');
+let MODE = location.hash === '#misfit' ? 'misfit' : 'fits';
+if (location.hash === '#studio') document.body.classList.add('studio');
+
+function frame(V) {
+  $('#rail').innerHTML = `<div class="an">${DATA.app}</div>
+    <div class="floor"><span class="dot"></span>${DATA.floor.kind} · ${DATA.floor.name}</div>
+    ${DATA.nav.map(n => `<div class="nav${n.on ? ' on' : ''}">${ic(n.icon)}<span>${n.label}</span>${n.n != null ? `<span class="n">${fmt(n.n)}</span>` : ''}</div>`).join('')}
+    <div class="foot" id="railfoot"></div>`;
+  $('#crumb').textContent = `${DATA.floor.name} · ${DATA.app} · Add a thing`;
+  $('#h1').textContent = V.title;
+  $('#sub').innerHTML = V.sub;
+  studioFoot();
+}
+function studioFoot() {
+  const on = document.body.classList.contains('studio');
+  $('#railfoot').innerHTML = on
+    ? `<b>Studio words are on.</b> Each plain word shows the name admins use, one step down. <span class="kbd">S</span> hides them.`
+    : `Plain words only. Admins can show the <b>studio words</b> underneath with <span class="kbd">S</span>`;
+}
+function steps(at, waiting) {
+  const L = DATA.steps[MODE];
+  $('#steps').innerHTML = L.map((l, i) => {
+    const c = i < at ? 'done' : i === at ? (waiting && i === L.length - 1 ? 'wait' : 'now') : '';
+    const lock = i === L.length - 1 ? `<i data-lucide="${waiting ? 'hourglass' : 'shield-check'}"></i>` : '';
+    return `${i ? '<span class="sep"></span>' : ''}<span class="s ${c}${lock ? ' lock' : ''}"><b>${i < at ? '✓' : i + 1}</b>${l}${lock}</span>`;
+  }).join('');
+  Icons.hydrate($('#steps'));
+}
+function thingCard(t = DATA.things[MODE]) {
+  return `<div class="said"><div class="micro">The new thing, in your words</div><div class="w">${t.said}</div><p>${t.note}</p>
+    <div class="from">${ic('pencil-line', 12)}${t.from}</div></div>`;
+}
+function kindChip(k, count = true) {
+  return `<span class="kind">${ic(k.icon)}<span>${k.word}</span>${count ? `<span class="c">${fmt(k.n)}</span>` : ''}${st(k.studio)}</span>`;
+}
+function nearHTML(list = DATA.near[MODE], opt = {}) {
+  const head = opt.head ?? (MODE === 'fits' ? 'Is it one of these?' : 'Closest we already keep');
+  const why = opt.why ?? (MODE === 'fits'
+    ? `If it is, what you know is added to that record instead of making a second one. ${DATA.matching.note}`
+    : `None is the same kind of thing. Shown so you can check before asking for a new kind. ${DATA.matching.note}`);
+  return `<div class="near"><h3>${head}${st(W('near')[1])}</h3><p class="why">${why}</p>
+    ${list.map((n, i) => `<div class="nm${n.lead ? ' lead' : ''}" data-nm="${n.id}">
+      <div class="t"><b>${n.name}</b>${kindChip(K(n.kind), false)}</div>
+      <div class="where">${n.where}</div>
+      <ul>${n.same.map(s => `<li class="same">${ic('check', 12)}${s}</li>`).join('')}${n.diff.map(s => `<li class="diff">${ic('x', 12)}${s}</li>`).join('')}</ul>
+      ${MODE === 'fits' && !opt.noActs ? `<div class="acts"><button class="btn${n.lead ? ' go' : ' quiet'}" data-same="${n.id}">That’s it: add to it${n.lead ? ' <span class="kbd">Y</span>' : ''}</button></div>` : ''}
+    </div>`).join('')}
+    ${MODE === 'fits' && !opt.noActs ? `<button class="btn" data-new>None of these: it’s new <span class="kbd">Enter</span></button>` : ''}</div>`;
+}
+function detRows(k, t) {
+  return k.has.map(h => {
+    if (t.known && t.known[h]) return `<div class="k">${h}</div><div class="v">${t.known[h]}</div>`;
+    const who = t.gaps && t.gaps[h];
+    return `<div class="k">${h}</div><div class="v"><span class="gap"><span>Not known yet</span><span>${who ? `<b>${who}</b> could fill it` : 'Nobody named yet: Triage will ask'}</span></span></div>`;
+  }).join('');
+}
+/* the last step of every path: what goes to Triage, who checks it, what is still missing */
+function slipHTML(kind, same) {
+  const t = DATA.things[MODE], s = DATA.steward, a = DATA.admin;
+  if (MODE === 'misfit') {
+    const p = DATA.predicted.find(x => x.genus === t.genus && x.shape === t.shape);
+    const prior = p && p.asks.length ? p.asks.map(x => `${x.by} asked for this on ${x.on}`).join('; ') : '';
+    return `<div class="slip waiting"><div class="stamp">${ic('hourglass', 12)}Waiting for a kind${st(W('ask')[1])}</div>
+      <h3>${t.said}</h3>
+      <p>No kind of thing we keep fits it, so it can’t be placed yet. It waits in <b>Triage</b>, under <b>Unplaced</b>, with everything you said kept.</p>
+      <div class="who">${ic('user-round-check')}<span><b>${a.name}</b>, ${a.role} (${a.floor}), decides new kinds. Asked for: <b>“${p ? p.word : 'a new kind'}”</b>, ${t.words}.${prior ? ` ${prior}: yours is added to that ask (${p.asks.length + 1} asks).` : ''}</span>
+        ${ic('clipboard-list')}<span>Your answers go with the ask, so ${a.name.split(' ')[0]} sees why nothing fitted.</span>
+        ${ic('link')}<span>Until then it can’t be linked to other things. You can still attach the documents it came from.</span></div>
+      <p class="m">Closest kind: ${K(t.closest).word}. Putting it there would leave ${K(t.closest).has[0]} as a gap nobody can ever fill.</p>
+      <button class="btn quiet" aria-disabled="true" title="Possible, but ${s.name} would see you weren’t sure">Put it under ${K(t.closest).word} anyway</button></div>`;
+  }
+  const k = K(kind);
+  if (same) {
+    const n = DATA.near.fits.find(x => x.id === same);
+    return `<div class="slip"><div class="stamp">${ic('inbox', 12)}Sent to Triage, as an addition</div><h3>Add to ${n.name}</h3>
+      <p>What you know is proposed as details of the record we already keep. Where you disagree with it (${n.diff[0].toLowerCase()}), both are shown side by side until it’s decided.</p>
+      <div class="who">${ic('user-round-check')}<span><b>${s.name}</b>, ${s.role} (${s.floor}), checks it. Nothing skips Triage.</span></div></div>`;
+  }
+  return `<div class="slip"><div class="stamp">${ic('inbox', 12)}Sent to Triage, as a new ${k.word}</div><h3>${t.said}</h3>
+    <div class="det">${detRows(k, t)}</div>
+    <div class="who">${ic('user-round-check')}<span><b>${s.name}</b>, ${s.role} (${s.floor}), checks it before it’s kept. Nothing skips Triage.</span>
+    ${ic('waypoints')}<span>Links proposed with it: ${t.links.map(l => `${l[0]} <b>${l[1]}</b>`).join(', ')}.</span></div></div>`;
+}
+function keys(list) {
+  $('#keys').innerHTML = list.map(([k, l]) => `<span><span class="kbd">${k}</span>${l}</span>`).join('');
+}
+function reveal(el) { if (!el) return; el.classList.add('fade', 'pre'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('pre'))); }
+
+function boot(V) {
+  frame(V);
+  const go = () => { clearLater(); V.reset(); steps(0); keys([...V.keys(), ['N', MODE === 'fits' ? 'nothing fits' : 'one that fits'], ['S', 'studio words'], ['R', 'replay']]); later(() => V.demo(), ms('--motion-run')); };
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'r') { go(); return; }
+    if (k === 'n') { MODE = MODE === 'fits' ? 'misfit' : 'fits'; go(); return; }
+    if (k === 's') { document.body.classList.toggle('studio'); studioFoot(); if (V.onStudio) V.onStudio(); return; }
+    if (V.key && V.key(e)) e.preventDefault();
+  });
+  document.addEventListener('click', e => {
+    const s = e.target.closest('[data-same]'), n = e.target.closest('[data-new]');
+    if (s && V.done) V.done(s.dataset.same);
+    if (n && V.done) V.done(null);
+  });
+  go();
+}
+
+/* ====================== V2: Twenty questions ====================== */
+const ALL = [...DATA.kinds, ...DATA.elsewhere.map(e => ({ ...e, ext: true }))];
+const V = {
+  title: 'Add a thing', sub: 'Answer yes, no or not sure. Each question is picked to halve what’s left, and every kind stays on the table saying what ruled it out. <b>Then it goes to Triage.</b>',
+  keys() { return [['1 2 3', 'yes · no · not sure'], ['⌫', 'undo an answer'], ['Y', 'that’s it'], ['Enter', 'it’s new']]; },
+  reset() { this.ans = []; this.out = {}; this.confirm = null; this.result = undefined; $('#thing').innerHTML = thingCard(); $('#right').innerHTML = `<div class="idle">When a kind is found, things we already keep that look like it show here, so nothing gets kept twice.</div>`; this.draw(); },
+  left() { return ALL.filter(k => !this.out[k.id]); },
+  next() {
+    const L = this.left(), asked = new Set(this.ans.map(a => a.q));
+    if (L.length === 1 && this.confirm == null) return { confirm: L[0] };
+    let best = null, score = 1e9;
+    for (const q of DATA.questions) { if (asked.has(q.id)) continue; const y = L.filter(k => k.is.includes(q.id)).length; if (!y || y === L.length) continue; const s = Math.abs(L.length / 2 - y); if (s < score) { score = s; best = q; } }
+    return best ? { q: best, y: L.filter(k => k.is.includes(best.id)).length, n: L.length } : (L.length ? { confirm: L[0] } : null);
+  },
+  draw() {
+    const L = this.left(), nx = this.result === undefined ? this.next() : null;
+    this.cur = nx;
+    const st = $('#stage');
+    st.classList.toggle('end', this.result !== undefined);
+    if (this.result !== undefined) {
+      const k = this.result && (K(this.result) || ALL.find(x => x.id === this.result));
+      st.innerHTML = k ? `<div class="qn"><span class="micro">After ${this.ans.length} answers</span></div><div class="q">${k.ext ? 'That’s kept in ' + k.app + '.' : 'Found it: ' + k.word + '.'}</div><div class="ansrow"><span class="why">${k.says}${k.ext ? '' : ' We keep ' + fmt(k.n) + '.'}</span></div>`
+        : `<div class="qn"><span class="micro">After ${this.ans.length} answers</span></div><div class="q">Nothing we keep is like that, yet.</div><div class="ansrow"><span class="why" style="text-align:left;margin-left:0">Every kind on the table below says what ruled it out. That list goes with your ask, so the admin sees why.</span></div>`;
+    } else if (nx && nx.confirm) {
+      const k = nx.confirm;
+      st.innerHTML = `<div class="qn"><span class="micro">Question ${this.ans.length + 1} · only one kind left: check it</span></div><div class="q in">Is it like this: ${k.says.replace(/\.$/, '')}?</div>
+        <div class="ansrow"><button class="btn" data-a="1">Yes <span class="kbd">1</span></button><button class="btn" data-a="0">No <span class="kbd">2</span></button><span class="why">The game’s guess: <b>${k.word}</b>. A no here means nothing we keep fits.</span></div>`;
+    } else if (nx) {
+      st.innerHTML = `<div class="qn"><span class="micro">Question ${this.ans.length + 1}</span></div><div class="q in">${nx.q.q}</div>
+        <div class="ansrow"><button class="btn" data-a="1">Yes <span class="kbd">1</span></button><button class="btn" data-a="0">No <span class="kbd">2</span></button><button class="btn quiet" data-a="?">Not sure <span class="kbd">3</span></button>
+        <span class="why">Why this one: it splits the <b>${nx.n}</b> left into <b>${nx.y}</b> and <b>${nx.n - nx.y}</b>.</span></div>`;
+    }
+    $('#meter').innerHTML = `<span>${L.length} of ${ALL.length} still possible</span><span class="bar"><i style="width:${(L.length / ALL.length) * 100}%"></i></span><span>${this.ans.length} answered</span>`;
+    $('#tiles').innerHTML = ALL.map(k => `<div class="tile${this.out[k.id] ? ' ruled' : ''}${!this.out[k.id] && L.length <= 3 ? ' left' : ''}${this.result === k.id ? ' only' : ''}${k.ext ? ' ext' : ''}">
+      ${k.ext ? `<span class="kind">${ic(k.icon)}<span>${k.word}</span></span><span class="inapp">in ${k.app}</span>` : kindChip(k)}
+      ${this.out[k.id] ? `<span class="out">${this.out[k.id]}</span>` : ''}</div>`).join('');
+    $('#asked').innerHTML = this.ans.map((a, i) => `<div class="a"><span class="n">Q${i + 1}</span><span>${a.text}</span><span class="ans${a.v === '?' ? ' unsure' : ''}">${a.v === '?' ? 'not sure' : a.v ? 'yes' : 'no'}</span></div>`).join('');
+  },
+  answer(v) {
+    const nx = this.cur; if (!nx || this.result !== undefined) return;
+    if (nx.confirm) {
+      this.ans.push({ q: 'confirm', text: `Check: is it ${nx.confirm.word}?`, v });
+      this.confirm = v;
+      if (v === 1) this.result = nx.confirm.id; else { this.out[nx.confirm.id] = `Not like it (Q${this.ans.length})`; this.result = null; }
+      this.draw(); this.side(); return;
+    }
+    this.ans.push({ q: nx.q.id, text: nx.q.q, v });
+    if (v !== '?') for (const k of this.left()) if (k.is.includes(nx.q.id) !== !!v) this.out[k.id] = `${v ? 'No' : 'Yes'} to Q${this.ans.length}`;
+    if (!this.left().length) this.result = null;
+    steps(1); this.draw(); if (this.result !== undefined) this.side();
+  },
+  undo() { if (!this.ans.length) return; const ans = this.ans.slice(0, -1); this.reset(); steps(ans.length ? 1 : 0); for (const a of ans) this.answer(a.v); },
+  side() {
+    const r = $('#right');
+    if (this.result) {
+      const k = K(this.result);
+      if (!k) { r.innerHTML = `<div class="idle">Written things and asks are kept in other apps. Open ${ALL.find(x => x.id === this.result).app} to add it there; Data Atlas will keep what it’s about.</div>`; return; }
+      r.innerHTML = nearHTML(); steps(2);
+    } else { r.innerHTML = slipHTML(); steps(3, true); }
+    Icons.hydrate(r); reveal(r.firstElementChild);
+  },
+  done(same) { if (MODE !== 'fits' || !this.result) return; $('#right').innerHTML = slipHTML(this.result, same); steps(3); reveal($('#right').firstElementChild); },
+  demo() {
+    steps(1); const t = DATA.things[MODE]; let i = 0;
+    const tick = () => { const nx = this.cur; if (!nx || this.result !== undefined) return;
+      const v = nx.confirm ? (t.kind === nx.confirm.id ? 1 : 0) : (t.is.includes(nx.q.id) ? 1 : 0);
+      this.answer(v); i++; later(tick, ms('--motion-calm')); };
+    tick();
+  },
+  key(e) {
+    if (e.key === '1') { this.answer(1); return true; }
+    if (e.key === '2') { this.answer(0); return true; }
+    if (e.key === '3' && this.cur && !this.cur.confirm) { this.answer('?'); return true; }
+    if (e.key === 'Backspace') { this.undo(); return true; }
+    if (e.key.toLowerCase() === 'y') { this.done('wu7'); return true; }
+    if (e.key === 'Enter' && this.result) { this.done(null); return true; }
+  }
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b) V.answer(b.dataset.a === '?' ? '?' : +b.dataset.a); });
+boot(V);
+</script>
+</body>
+</html>

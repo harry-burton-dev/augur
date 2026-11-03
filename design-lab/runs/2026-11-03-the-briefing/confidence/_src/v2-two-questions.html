@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Confidence · V2 · Two questions, one place</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+.app{height:100vh;display:flex;flex-direction:column}
+.body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-decision);gap:var(--space-5);padding:var(--space-4) var(--edge) var(--space-6)}
+.left{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.head h1{font-size:var(--type-heading);line-height:var(--leading-heading)}
+.head .lede b{font-weight:400;color:var(--ink)}
+.mx{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:calc(var(--space-8) + var(--space-5)) minmax(0,1fr) var(--space-3) minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto repeat(3,minmax(0,1fr)) var(--space-2) minmax(0,.7fr) auto;gap:var(--space-1)}
+.ax{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding:var(--space-1) var(--space-2)}
+.ax b{display:block;font-weight:400;color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.ax.col{align-self:end}
+.ax.dis b{color:var(--x-proposed-disagree)}
+.ax.row{align-self:center;text-align:right}
+.ax.row .src-i{display:inline-flex;margin-left:auto;margin-bottom:var(--space-1)}
+.ax-t{position:absolute;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.cell{position:relative;border-radius:var(--radius-key);background:color-mix(in srgb,var(--ink) 4%,transparent);padding:var(--space-2);display:flex;flex-direction:column;gap:var(--space-1);min-height:0}
+.cell .cword{white-space:nowrap;font-size:var(--type-small);line-height:var(--leading-small);letter-spacing:var(--tracking-soft);text-transform:uppercase;display:flex;gap:var(--space-2);align-items:center}
+.cell .chips{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.cell.r0{background:color-mix(in srgb,var(--ink) 9%,transparent)} .cell.r0 .cword{color:var(--x-proposed-rung-0)}
+.cell.r1{background:color-mix(in srgb,var(--ink) 7%,transparent)} .cell.r1 .cword{color:var(--x-proposed-rung-1)}
+.cell.r2{background:color-mix(in srgb,var(--ink) 5%,transparent)} .cell.r2 .cword{color:var(--x-proposed-rung-2)}
+.cell.r3{background:color-mix(in srgb,var(--ink) 3%,transparent)} .cell.r3 .cword{color:var(--x-proposed-rung-3)}
+.cell.dis{background:var(--x-proposed-disagree-wash);border-left:2px solid var(--x-proposed-disagree)}
+.cell.none{grid-column:2 / -1;background:var(--x-proposed-gap);--x-proposed-gap-tick:var(--space-3);flex-direction:row;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3)}
+.cell.none .cword{color:var(--ink-muted)}
+.cell.none p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);max-width:52ch}
+.hidrow{grid-column:2 / -1;display:flex;gap:var(--space-3);align-items:center;padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);background:var(--x-proposed-unseen);border:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.hidrow b{font-weight:400;color:var(--ink)}
+.chip{position:relative;z-index:2;display:inline-flex;flex-wrap:wrap;align-items:center;gap:0 var(--space-2);white-space:nowrap;padding:var(--space-1) var(--space-2) var(--space-1) var(--space-1);border-radius:var(--radius-inset);background:var(--surface-pane);border:1px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);transition:transform var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out),box-shadow var(--motion-base)}
+.chip .n{display:inline-flex;align-items:center;justify-content:center;width:var(--space-4);height:var(--space-4);border-radius:var(--radius-pill);background:var(--surface-raised);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--light)}
+.chip.k-stale{background:linear-gradient(90deg,var(--surface-pane) 60%,transparent),var(--x-proposed-stale),var(--surface-inset);border-style:dashed;color:var(--ink)}
+.chip.k-gap{border-style:dashed;color:var(--ink-muted);background:transparent}
+.chip.k-hidden{background:var(--surface-inset)}
+.chip .tag{flex-basis:100%;padding-left:calc(var(--space-4) + var(--space-2));font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--x-proposed-rung-4)}
+.chip.sel{box-shadow:0 0 0 var(--focus-ring) var(--x-proposed-lit),0 0 var(--glow-blur) color-mix(in srgb,var(--green) 35%,transparent);border-color:transparent}
+.chip.wait{opacity:0;transform:translateX(calc(var(--travel-near) * -1))}
+@media (prefers-reduced-motion: reduce){.chip.wait{transform:none}}
+svg.moves{position:absolute;z-index:1;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+svg.moves path{fill:none;stroke-width:1.5;stroke-dasharray:4 4;stroke-linecap:round}
+svg.moves .m-fact{stroke:var(--ink)}
+svg.moves .m-dispute{stroke:var(--x-proposed-disagree)}
+svg.moves .m-gap{stroke:var(--ink-muted)}
+svg.moves .hd{stroke-dasharray:none}
+svg.moves .draw{stroke-dashoffset:0;transition:opacity var(--motion-calm) var(--ease-out)}
+svg.moves.wait .draw{opacity:0}
+.mlab{position:absolute;z-index:3;font-size:var(--type-small);line-height:var(--leading-small);background:var(--slate-deep);border:1px solid var(--hairline);border-radius:var(--radius-key);padding:var(--space-1) var(--space-2);max-width:calc(var(--measure-card) * .62);transition:opacity var(--motion-calm) var(--ease-out);pointer-events:none}
+.mlab.k-dispute{border-color:color-mix(in srgb,var(--warning) 35%,transparent);color:var(--x-proposed-disagree)}
+.mlab.k-fact{color:var(--ink)}
+.mlab.k-gap{color:var(--ink-muted)}
+.moves-wait .mlab{opacity:0}
+/* right */
+.right{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.panel{background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4)}
+.three{display:grid;gap:var(--space-2)}
+.three .t{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline)}
+.three .t b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.three .t span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.three .t.k-dispute{border-left:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash)}
+.three .t.k-gap{background:var(--x-proposed-gap);border-color:transparent;--x-proposed-gap-tick:var(--space-2)}
+.three .t .do{color:var(--ink)}
+.det{flex:1;min-height:0}
+.det .say{margin:var(--space-2) 0;font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink)}
+.det .say b{font-weight:400;color:var(--light)}
+.det .wy{margin:0 0 var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+</style>
+</head>
+<body>
+<div class="app pre" id="app">
+  <header class="top">
+    <span class="crumb" id="crumb"></span>
+    <span class="floor" id="floor"></span>
+    <span class="sp"></span>
+    <div class="hints" id="hints"></div>
+  </header>
+  <div class="body">
+    <section class="left">
+      <div class="head dep" style="--i:0">
+        <p class="eyebrow">How sure is each claim in this briefing</p>
+        <h1>Two questions put each claim in one place</h1>
+        <p class="lede"><b>How good is the best source?</b> (up) and <b>do the sources agree?</b> (across). The place gives the word. A claim that sources argue about, and one with no sources at all, sit outside the words.</p>
+        <p class="lede" id="gwl" style="margin-top:var(--space-1)"></p>
+      </div>
+      <div class="mx dep" style="--i:1" id="mx"></div>
+    </section>
+    <aside class="right">
+      <section class="panel dep" style="--i:2" id="three"></section>
+      <section class="panel det scroll dep" style="--i:3" id="det" aria-live="polite"></section>
+    </aside>
+  </div>
+</div>
+<div class="x-cap"><b>Confidence · V2</b> two questions, one place: the word comes from where a claim stands on evidence and agreement · IPCC confidence matrix (Mastrandrea 2010)</div>
+<script>
+/*@JS*/
+const $ = id => document.getElementById(id);
+const num = id => DATA.claims.indexOf(claim(id)) + 1;
+const ROWS = ['strong', 'fair', 'weak'];
+const ROWLAB = { strong: ['Usually trusted', 'grades A or B, and probably true'], fair: ['Fair', 'grade C, or only possibly true'], weak: ['Weak or ungraded', 'doubtful, or nobody graded it'] };
+const CELLWORD = { strong: [1, 0], fair: [2, 1], weak: [3, 2] }; // [one source, two or more agree] → rung
+const MOVES = ['c3', 'c4', 'c6'];
+let sel = 'c3';
+function place(d) {
+  const c = d.claim;
+  if (d.kind === 'gap') return { none: true };
+  if (d.kind === 'hidden') return { hid: true };
+  if (d.kind === 'dispute' || d.lean !== undefined) return { col: 'dis', row: d.lean === 1 ? d.sides[0].best : (d.sides[0].w >= d.sides[1].w ? d.sides[0].best : d.sides[1].best) };
+  const s = d.sides[0];
+  return { col: s.n >= 2 ? 'two' : 'one', row: s.best };
+}
+function chip(d) {
+  const c = d.claim;
+  const tag = d.kind === 'fact' && d.rung === 4 ? `<span class="tag">${d.word}</span>` : d.kind === 'stale' ? `<span class="tag" style="color:var(--ink-muted)">was ${DATA.yardstick[d.was].say}</span>` : '';
+  return `<button class="chip wait k-${d.kind}" data-c="${d.id}"><span class="n">${d.kind === 'hidden' ? Icons.svg('lock', { size: 10 }) : num(d.id)}</span>${c.short}${tag}</button>`;
+}
+function render() {
+  $('crumb').innerHTML = `${Icons.svg('library-big', { size: 14 })} ${DATA.app} <span>/</span> ${DATA.library} <span>/</span> <b>${DATA.briefing.title}</b> <span>/</span> How sure`;
+  $('floor').innerHTML = `<span class="fd"></span>${DATA.viewer.floor} · ${DATA.viewer.word}`;
+  $('hints').innerHTML = hints([['1 2 3', 'weak · disagree · gap'], ['← →', 'claim'], ['T', 'technical words'], ['G', 'assistant off'], ['R', 'replay']]);
+  const ds = DATA.claims.map(derive), Y = DATA.yardstick;
+  const at = (col, row) => ds.filter(d => { const p = place(d); return p.col === col && p.row === row; }).map(chip).join('');
+  let h = `<div></div>
+    <div class="ax col dis"><b>${Icons.svg('split', { size: 14 })} They disagree</b>No word until someone decides, unless one side has twice the weight<span class="tk">${DATA.outside.dispute.tech}</span></div><div></div>
+    <div class="ax col"><b>One source</b>nothing to check it against</div>
+    <div class="ax col"><b>Two or more agree</b>and none disagree</div>`;
+  ROWS.forEach(r => {
+    const [one, two] = CELLWORD[r];
+    h += `<div class="ax row"><b>${ROWLAB[r][0]}</b>${ROWLAB[r][1]}</div>
+      <div class="cell dis" data-col="dis" data-row="${r}"><div class="chips">${at('dis', r)}</div></div><div></div>
+      <div class="cell r${one}" data-col="one" data-row="${r}"><span class="cword">${Y[one].word}</span><span class="tk">${Y[one].tech}</span><div class="chips">${at('one', r)}</div></div>
+      <div class="cell r${two}" data-col="two" data-row="${r}"><span class="cword">${Y[two].word}</span><span class="tk">${Y[two].tech}</span><div class="chips">${at('two', r)}</div></div>`;
+  });
+  const gaps = ds.filter(d => d.kind === 'gap'), hid = ds.filter(d => d.kind === 'hidden');
+  h += `<div style="grid-column:1 / -1"></div>
+    <div class="ax row"><b>No sources yet</b>expected, nobody has said</div>
+    <div class="cell none" data-col="none"><span class="cword">${Icons.svg('square-dashed', { size: 14 })} ${DATA.outside.gap.word}</span><div class="chips">${gaps.map(chip).join('')}</div><p>Below “weak”, not beside it: there is nothing to weigh, so it gets no word, and it is never read as “unlikely”.</p></div>
+    <div class="ax row"><b>Can’t see the sources</b></div>
+    <div class="hidrow">${hid.map(chip).join('')}<span><b>${DATA.outside.hidden.word}.</b> ${hid.map(d => `${d.claim.short} is kept on the ${d.claim.floor} floor; ask ${d.claim.ask}.`).join(' ')}</span></div>
+    <svg class="moves wait" id="moves" aria-hidden="true"></svg>`;
+  $('mx').innerHTML = h;
+  const C = claim;
+  const t = [['c3', 'fact', 'A weak fact', 'Use it, and say “possible”. Any one more source lifts it.'],
+             ['c4', 'dispute', 'A dispute', `Don’t pick a side. Two answers stand until ${C('c4').decides.split(',')[0]} decides.`],
+             ['c6', 'gap', 'A gap', `Don’t guess and don’t say “unlikely”. Ask ${C('c6').who.split(',')[0]}.`]];
+  $('three').innerHTML = `<p class="eyebrow" style="margin-bottom:var(--space-2)">Three ways to be unsure · read differently</p><div class="three">${t.map(([id, k, n, s]) => `<button class="t k-${k}" data-c="${id}"><b>${n}: ${C(id).short.toLowerCase()}</b><span>${word(derive(id), { tech: false })}</span><span class="do">${s}</span></button>`).join('')}</div>`;
+  document.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => select(b.dataset.c)));
+  select(sel, true);
+}
+function centre(el, R) { const r = el.getBoundingClientRect(); return [r.left - R.left + r.width / 2, r.top - R.top + r.height / 2]; }
+function drawMoves() {
+  const svg = $('moves'), mx = $('mx'), R = mx.getBoundingClientRect();
+  const cell = (col, row) => mx.querySelector(`.cell[data-col="${col}"]${row ? `[data-row="${row}"]` : ''}`);
+  const routes = {
+    c3: { k: 'fact', to: cell('two', 'weak'), at: [.22, .55], lab: 'one more source' },
+    c4: { k: 'dispute', to: cell('one', 'strong'), at: [.55, .8], lab: `${claim('c4').decides.split(',')[0]} decides` },
+    c6: { k: 'gap', to: cell('one', 'weak'), at: [.45, .82], lab: `${claim('c6').who.split(',')[0]} answers` }
+  };
+  let p = '', labs = '';
+  MOVES.forEach(id => {
+    const ch = mx.querySelector(`.chip[data-c="${id}"]`), m = routes[id];
+    if (!ch || !m.to) return;
+    const cr = ch.getBoundingClientRect(), tr = m.to.getBoundingClientRect();
+    const x1 = id === 'c6' ? cr.left - R.left + cr.width / 2 : cr.right - R.left, y1 = id === 'c6' ? cr.top - R.top : cr.top - R.top + cr.height / 2;
+    const x2 = tr.left - R.left + tr.width * m.at[0], y2 = tr.top - R.top + tr.height * m.at[1];
+    const mxp = (x1 + x2) / 2, myp = id === 'c6' ? Math.max(y1, y2) : Math.min(y1, y2) - 30;
+    p += `<path class="draw m-${m.k}" d="M${x1} ${y1} Q ${id === 'c6' ? x1 : mxp} ${id === 'c6' ? y2 : myp} ${x2} ${y2}"/><circle class="draw m-${m.k}" cx="${x2}" cy="${y2}" r="4" style="fill:currentColor"/>`;
+    labs += `<div class="mlab k-${m.k}" style="left:${Math.min(x2 + 12, R.width - 230)}px;top:${y2 - 12}px">${m.lab}</div>`;
+  });
+  svg.innerHTML = p;
+  mx.querySelectorAll('.mlab').forEach(n => n.remove());
+  mx.insertAdjacentHTML('beforeend', `<div id="labs" class="moves-wait">${labs}</div>`);
+}
+function select(id, quiet) {
+  sel = id;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('sel', c.dataset.c === id));
+  const c = claim(id), d = derive(c), nx = next(c);
+  let say = sayValue(c);
+  if (d.kind === 'dispute') say = c.say.replace('{v}', `<b>${c.sides[0].value}</b> or <b>${c.sides[1].value}</b>`);
+  const srcs = c.sides ? c.sides.map((s, i) => `${c.sides.length > 1 ? `<p class="eyebrow" style="margin:var(--space-2) 0 var(--space-1)">${s.value}</p>` : ''}<ul class="srcs">${s.sources.map(srcRow).join('')}</ul>`).join('') : '';
+  $('det').innerHTML = `<p class="eyebrow">Claim ${num(id)} · ${c.about} · ${c.detail}</p><p class="say">${say}</p><p>${word(d)}</p><p class="wy">${why(c)}</p>${srcs}<p class="wy" style="margin-top:var(--space-2)">${Icons.svg('arrow-up', { size: 12 })} ${nx.say}.</p>`;
+}
+function play() {
+  clearLater(); $('app').classList.add('pre'); sel = 'c3'; render();
+  later(() => $('app').classList.remove('pre'), ms('--motion-instant'));
+  later(() => {
+    document.querySelectorAll('.chip.wait').forEach((c, i) => later(() => c.classList.remove('wait'), i * ms('--motion-instant')));
+  }, ms('--motion-run'));
+  later(() => { drawMoves(); requestAnimationFrame(() => { $('moves').classList.remove('wait'); $('labs').classList.remove('moves-wait'); }); }, ms('--motion-run') + ms('--motion-calm') + ms('--motion-base'));
+}
+window.onGw = on => { $('gwl').innerHTML = on ? '' : `${Icons.svg('power-off', { size: 12 })} The assistant is off. Nothing on this page changed: no part of it is written by a model; the places and words come from the rule.`; };
+let resizeT; addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { drawMoves(); $('moves').classList.remove('wait'); $('labs').classList.remove('moves-wait'); }, ms('--motion-quick')); });
+document.addEventListener('keydown', e => {
+  if (baseKeys(e, play)) return;
+  if (['1', '2', '3'].includes(e.key)) select(MOVES[+e.key - 1]);
+  const ids = DATA.claims.map(c => c.id);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const i = ids.indexOf(sel); select(ids[(i + (e.key === 'ArrowRight' ? 1 : ids.length - 1)) % ids.length]); }
+});
+play();
+</script>
+</body>
+</html>

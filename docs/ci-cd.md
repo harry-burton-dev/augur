@@ -151,12 +151,23 @@ Every job runs on GitHub's hosted Linux runners unless repository variables say 
 | `CI_RUNNER` | variable | JSON runner labels for every job, such as `["self-hosted","augur-ci"]` or a runner provider's label |
 | `RELEASE_RUNNER` | variable | x86-64 labels for the jobs that build images, if `CI_RUNNER` names Arm runners |
 | `CHROMATIC_PROJECT_TOKEN` | secret | publishes the Storybook; without it the job says so and publishes nothing |
+| `PACKAGES_READ_TOKEN` | secret | a classic token with `read:packages`, for installing the kit's packages from GitHub Packages (`.npmrc`, ADR 0046), in every workflow and image build; without it each run uses its own `GITHUB_TOKEN`, which reads only packages that grant this repository access |
+| `RELEASE_TOKEN` | secret | pushes the Version packages pull request and the Lockfile workflow's commit, so CI runs on them |
 | `RENOVATE_CHANGESET_KEY` | secret | the deploy key Renovate changeset pushes with, so CI runs on its commit |
 | `GITHUB_TOKEN` | built in | pushes images and releases; signing uses the workflow's OIDC token, no keys |
 
 Who may sign what is checked on the server side by the updater and the registry: images and feeds
 must be signed by this repository's workflows on `main` or a release branch
 ([release-channels.md](release-channels.md#signatures)).
+
+Image builds get the package token as a BuildKit secret (`--secret id=node_auth_token,env=NODE_AUTH_TOKEN`),
+so it never lands in a layer.
+
+### Lockfile
+
+`lockfile.yml` brings `pnpm-lock.yaml` up to date on a branch (Actions → Lockfile → Run workflow). Use it
+for a change that adds or bumps a kit package, made where no package token is set, such as a cloud
+session: pnpm can't resolve those packages there.
 
 ## Adding or changing a job
 

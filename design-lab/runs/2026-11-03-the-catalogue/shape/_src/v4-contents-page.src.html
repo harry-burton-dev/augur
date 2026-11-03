@@ -1,0 +1,109 @@
+title: Shape · V4 Contents page
+<!--css-->
+/* ===== V4: the contents page of an encyclopedia. Type, leaders and cross-references do the work; no boxes ===== */
+.book{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.8fr);gap:var(--space-6);overflow:auto;padding:var(--space-2) var(--space-2) var(--space-8) 0}
+.part{margin:0 0 var(--space-5)}
+.part-h{display:flex;align-items:baseline;gap:var(--space-3);margin:0 0 var(--space-1)}
+.part-h .no{font:400 var(--type-label)/1 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--c)}
+.part-t{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light);margin:0}
+.part-s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0 0 var(--space-3)}
+.entry{display:block;width:100%;padding:var(--space-2) 0 var(--space-3);border-radius:var(--radius-key);transition:background var(--motion-base),opacity var(--motion-base)}
+.entry:hover{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.line{display:flex;align-items:baseline;gap:var(--space-2)}
+.line .nm{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:400;white-space:nowrap}
+.line .lead{flex:1;border-bottom:1px dotted var(--hairline-strong);transform:translateY(-4px);min-width:var(--space-5)}
+.line .ct{font:400 var(--type-meta)/1 var(--font-mono);color:var(--ink)}
+.about{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:2px}
+.subs{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);margin-top:var(--space-1)}
+.subs .d{white-space:nowrap}
+.subs .d.thin{color:var(--ink-muted);font-style:italic}
+.subs .d.thin::after{content:"";display:inline-block;width:var(--space-4);height:var(--space-2);margin-left:var(--space-1);vertical-align:middle;border:1px solid var(--x-proposed-gap-ink);background-image:repeating-linear-gradient(135deg,var(--x-proposed-gap-ink) 0 1px,transparent 1px 3px)}
+.subs .pc{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.subs .sep{color:var(--ink-muted);margin:0 var(--space-1)}
+.see{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:var(--space-1)}
+.see i{font-style:italic}
+.see .x{color:var(--ink);transition:color var(--motion-base),background var(--motion-base);border-radius:2px;padding:0 2px}
+.entry.out .nm{color:var(--ink-muted)}
+.entry.out .lead{border-bottom-style:dashed}
+.entry.pred .nm{color:var(--ink-muted);font-style:italic}
+.entry.pred,.entry.out{padding:var(--space-1) 0}
+.entry.pred.gaphatch{background-image:repeating-linear-gradient(135deg,var(--x-proposed-gap-fill) 0 1px,transparent 1px var(--space-1))}
+.entry.pred .nm,.entry.out .nm{font-size:var(--type-body);line-height:var(--leading-body)}
+.book.focus .entry:not(.lit):not(.near){opacity:.4}
+.entry.lit{background:color-mix(in srgb,var(--x-here) 9%,transparent);box-shadow:inset 2px 0 0 var(--x-here);padding-left:var(--space-3)}
+.entry.near{box-shadow:inset 1px 0 0 var(--ink-muted);padding-left:var(--space-3)}
+.see .x.on{color:var(--light);background:color-mix(in srgb,var(--ink) 12%,transparent)}
+/* the index: every kind of link, alphabetical, as a back-of-book index */
+.idx h3{margin:0 0 var(--space-1);font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.idx .part-s{margin-bottom:var(--space-3)}
+.ix{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 var(--space-2);padding:var(--space-1) 0;font-size:var(--type-meta);line-height:var(--leading-meta);border-radius:2px;transition:opacity var(--motion-base),background var(--motion-base)}
+.ix .v{color:var(--ink)}
+.ix .w{grid-column:1 / -1;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ix .n{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.ix.thin .n::after{content:" · thin"}
+.ix.out .v{color:var(--ink-muted)}
+.book.focus .ix:not(.on){opacity:.35}
+.ix.on{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.letter{font:400 var(--type-label)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-label);margin:var(--space-3) 0 var(--space-1)}
+<!--html-->
+<div class="app">
+  <nav class="rail" aria-label="Data Atlas"></nav>
+  <main class="main">
+    <div class="head"><h1>Contents</h1><div class="sum" id="sum"></div></div>
+    <div class="floors" id="floors"></div>
+    <div class="book scroll" id="book"></div>
+  </main>
+  <aside class="drawer" aria-label="Kind of thing"><div class="drawer-in scroll"></div></aside>
+</div>
+<div class="x-cap"><b>Shape · V4</b> contents page: parts are floors, entries are kinds, "see" lines are links, an index of links · encyclopedia contents, Dewey/UDC, back-of-book index</div>
+<!--js-->
+const book = document.getElementById('book');
+const roman = ['One', 'Two', 'Three', 'Four', 'Five'];
+function entry(k){
+  const p = known(k);
+  const subs = k.details.map(d => '<span class="d' + (isThin(d[1]) ? ' thin' : '') + '" title="' + (missing(k, d) ? nf(missing(k, d)) + ' missing · ' + esc(k.gapBy) + ' could fill' : 'every record has it') + '">' + esc(d[0]) + (d[1] < 100 ? ' <span class="pc">' + d[1] + '%</span>' : '') + '</span>').join(' <span class="sep">·</span> ');
+  const out = DATA.links.filter(l => l.from === k.id), inn = DATA.links.filter(l => l.to === k.id);
+  const ref = (l, other) => '<span class="x" data-to="' + other + '">' + esc(K(other).plain) + '</span>';
+  const see = [...out.map(l => '<i>' + esc(l.verb) + '</i> ' + ref(l, l.to)), ...inn.map(l => ref(l, l.from) + ' <i>' + esc(l.verb) + '</i> these')].join(' ; ');
+  return '<button class="entry" data-id="' + k.id + '"><span class="line"><span class="nm">' + esc(k.plain) + '</span><span class="lead"></span><span class="ct">' + nf(k.count) + '</span></span>' +
+    '<span class="about" style="display:block">' + esc(k.about) + ' ' + esc(k.steward) + ' · ' + p + '% known' + (k.triage ? ' · ' + k.triage + ' waiting' : '') + ' <span class="tech">· ' + k.tech + '</span></span>' +
+    '<span class="subs" style="display:block">' + subs + '</span>' +
+    (see ? '<span class="see" style="display:block">See: ' + see + '</span>' : '') + '</button>';
+}
+function render(){
+  const parts = visibleFloors.slice().reverse().map(id => F(id));
+  let n = 0;
+  const col1 = parts.map(f => { const list = SEEN.filter(k => k.floor === f.id);
+    return '<section class="part"><div class="part-h"><span class="no" style="--c:' + floorColor(f) + '">Part ' + roman[n++] + '</span></div><h2 class="part-t">' + esc(f.name) + '</h2>' +
+      '<p class="part-s">' + floorWord(f) + ' · ' + (f.id === DATA.here ? 'kept here, where you are' : 'kept once for everyone; you read it from here') + ' · ' + list.length + ' kinds, ' + nf(list.reduce((a, k) => a + k.count, 0)) + ' entries</p>' + list.map(entry).join('') + '</section>'; });
+  const elsewhere = '<section class="part"><div class="part-h"><span class="no" style="--c:var(--ink-muted)">Other volumes</span></div><h2 class="part-t">Kept elsewhere</h2><p class="part-s">On floors you can\'t read from ' + esc(HERE.name) + '. Each says where, and who to ask.</p>' +
+    OUT.map(k => { const f = F(k.floor); return '<button class="entry out" data-id="' + k.id + '"><span class="line"><span class="nm">' + esc(k.plain) + '</span><span class="lead"></span><span class="ct"><i data-lucide="lock" data-size="12"></i></span></span><span class="about" style="display:block">See the ' + esc(f.name) + ' volume (' + floorWord(f) + (reach(k) === 'below' ? ', under ' + esc(HERE.name) : '') + '). Ask ' + esc(k.ask) + ', ' + esc(k.askRole) + '.</span></button>'; }).join('') + '</section>' +
+    '<section class="part"><div class="part-h"><span class="no" style="--c:var(--ink-muted)">Appendix</span></div><h2 class="part-t">Not yet written</h2><p class="part-s">Entries the ontology has room for, or words sources asked for. ' + esc(DATA.admins) + ' decides.</p>' +
+    DATA.unadopted.map(k => '<button class="entry pred gaphatch" data-id="' + k.id + '"><span class="line"><span class="nm">' + esc(k.plain) + '</span><span class="lead"></span><span class="ct">' + (k.asked ? 'asked ×' + k.asked : '—') + '</span></span></button>').join('') + '</section>';
+  /* index of links, alphabetical by the verb's first word */
+  const L = DATA.links.slice().sort((a, b) => a.verb.replace(/^(is|was|has) (a |usually )?/, '').localeCompare(b.verb.replace(/^(is|was|has) (a |usually )?/, '')));
+  let last = '', idx = '<div class="idx"><h3>Index of links</h3><p class="part-s">How kinds connect, A to Z. The number is how many links are recorded.</p>';
+  L.forEach(l => { const key = l.verb.replace(/^(is|was|has) (a |usually )?/, '')[0].toUpperCase(); if (key !== last){ idx += '<div class="letter">' + key + '</div>'; last = key; }
+    const vis = visibleLink(l);
+    idx += '<div class="ix' + (vis ? (isThin(l.cover) ? ' thin' : '') : ' out') + '" data-from="' + l.from + '" data-to="' + l.to + '"><span class="v">' + esc(l.verb) + '</span><span class="n">' + (vis ? nf(l.count) : 'elsewhere') + '</span><span class="w">' + esc(K(l.from).plain) + ' → ' + esc(K(l.to).plain) + (vis ? ' · ' + l.cover + '% say' : '') + '<span class="tech"> · ' + l.tech + '</span></span></div>'; });
+  idx += '</div>';
+  book.innerHTML = '<div>' + col1[0] + '</div><div>' + col1.slice(1).join('') + '</div><div>' + elsewhere + idx + '</div>';
+  Icons.hydrate(book);
+  book.querySelectorAll('.entry').forEach(e => e.onclick = ev => { const x = ev.target.closest('.x'); select(x ? x.dataset.to : e.dataset.id); });
+}
+let cur = null;
+function light(id){
+  cur = id; book.classList.toggle('focus', !!id);
+  const near = new Set(id ? linksOf(id).flatMap(l => [l.from, l.to]) : []);
+  book.querySelectorAll('.entry').forEach(e => { e.classList.toggle('lit', e.dataset.id === id); e.classList.toggle('near', e.dataset.id !== id && near.has(e.dataset.id)); });
+  book.querySelectorAll('.see .x').forEach(x => x.classList.toggle('on', x.dataset.to === id));
+  book.querySelectorAll('.ix').forEach(x => x.classList.toggle('on', !!id && (x.dataset.from === id || x.dataset.to === id)));
+  const lit = book.querySelector('.entry.lit'); if (lit) lit.scrollIntoView({ block: 'nearest', behavior: RM ? 'auto' : 'smooth' });
+}
+function select(id){ light(id); openKind(id); }
+onDrawer = id => { if (!id) light(null); };
+document.getElementById('sum').innerHTML = 'of what we keep · <b>' + SEEN.length + '</b> kinds of thing · <b>' + nf(totalSeen) + '</b> entries · <span class="hide-s">a detail in <i>italics</i> with a hatched mark is missing from most records</span>';
+document.getElementById('floors').innerHTML = floorStrip();
+mountShell('shape'); Icons.hydrate(document.body);
+keys(['click an entry or a "see" name · <span class="kbd">Tab</span>', '<span class="kbd">T</span> ontology words · <span class="kbd">Esc</span> close', '<span class="kbd">R</span> replay']);
+boot(() => { render(); light(null); }, () => select('vehicle'));

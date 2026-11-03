@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When the structure changes · V3 · Seams</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@BASE_CSS*/
+/* ---- V3: every structural change leaves a seam where it touched the record ---- */
+:root{
+  --x-stitch:repeating-linear-gradient(90deg,var(--x-seam) 0 1px,transparent 1px var(--space-2));   /* --mark-stitch: cross-stitches on a seam */
+  --x-seam-old:color-mix(in srgb,var(--x-seam) 45%,var(--ink-muted));         /* --mark-seam-aged: before your last visit */
+}
+.wall{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4);max-width:calc(var(--measure-wide) + var(--space-8) * 2);align-items:start}
+.card{position:relative;border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-3) var(--space-4) var(--space-2);transition:opacity var(--motion-slow) var(--ease-standard),filter var(--motion-slow) var(--ease-standard)}
+.card .k{display:flex;align-items:center;gap:var(--space-2);color:var(--ink-muted)}
+.card{overflow:hidden}
+.card .k .was{font-family:var(--font-sans);text-transform:none;letter-spacing:var(--tracking-soft);font-size:var(--type-small);text-decoration:line-through;text-decoration-color:var(--x-seam-old);color:var(--ink-muted);opacity:.8}
+.card .k .now{color:var(--ink)}
+.card h2{margin:var(--space-1) 0 var(--space-2);font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row{display:grid;grid-template-columns:calc(var(--space-8) - var(--space-3)) minmax(0,1fr);gap:var(--space-3);align-items:center;padding:var(--space-1) 0;border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);min-height:var(--target-sm)}
+.row .w{color:var(--ink-muted)}
+.row .w .tech{display:none} .techon .row .w .tech{display:block}
+.row .gap{font-size:var(--type-small);max-width:100%}
+.lnk{box-shadow:inset 0 -1px 0 var(--hairline-strong)}
+/* the seam: a stitched line across the card where the structure changed it */
+.seam{position:relative;display:flex;align-items:center;gap:var(--space-2);width:calc(100% + var(--space-4) * 2);margin:0 calc(var(--space-4) * -1);padding:0 var(--space-4);height:var(--space-4);color:var(--x-seam);cursor:help}
+.seam::before{content:"";position:absolute;left:0;right:0;top:50%;height:var(--space-2);transform:translateY(-50%);background:linear-gradient(var(--x-seam),var(--x-seam)) center/100% 1px no-repeat,var(--x-stitch);clip-path:inset(0 100% 0 0);transition:clip-path var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i) * var(--motion-base))}
+.seam .lab{position:relative;margin-left:auto;padding:0 var(--space-1);background:var(--slate-deep);border-radius:var(--radius-key);font:400 var(--x-type-micro)/var(--space-4) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;white-space:nowrap;opacity:0;transition:opacity var(--motion-base) var(--ease-out);transition-delay:calc(var(--i) * var(--motion-base) + var(--motion-calm))}
+.seam.old{color:var(--x-seam-old)} .seam.old::before{--x-seam:var(--x-seam-old);opacity:.7}
+.sewn .seam::before{clip-path:inset(0 0 0 0)}
+.sewn .seam .lab{opacity:1}
+.seam:focus-visible{outline-offset:0}
+.recentonly .seam.old{visibility:hidden}
+/* a kind gap: the record is not placed in a kind yet */
+.kgap{display:inline-flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2);border:1px dashed var(--x-gap-ink);border-radius:var(--radius-key);background:var(--x-gap-fill);font-size:var(--type-small);color:var(--ink)}
+.wall.focus .card:not(.sel){opacity:var(--x-near-dim);filter:saturate(.6)}
+.legend{display:flex;gap:var(--space-5);margin-bottom:var(--space-4);font-size:var(--type-small);color:var(--ink-muted);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.legend i.sw{display:inline-block;width:var(--space-6);height:var(--space-2);background:linear-gradient(var(--c),var(--c)) center/100% 1px no-repeat,repeating-linear-gradient(90deg,var(--c) 0 1px,transparent 1px var(--space-2))}
+@media (max-width:1400px){ .wall{gap:var(--space-3)} .card{padding:var(--space-2) var(--space-3) var(--space-1)} .seam{width:calc(100% + var(--space-3) * 2);margin:0 calc(var(--space-3) * -1);padding:0 var(--space-3)} .row{grid-template-columns:calc(var(--space-7) + var(--space-2)) minmax(0,1fr)} }
+@media (max-height:840px){ .main{padding-top:var(--space-4)} .head{margin-bottom:var(--space-2)} .row{min-height:calc(var(--target-sm) - var(--space-1));padding:0} .card h2{margin:0 0 var(--space-1)} }
+@media (prefers-reduced-motion: reduce){ .seam::before{transition:opacity var(--motion-base) linear!important;clip-path:none!important;opacity:0} .sewn .seam::before{opacity:1} .seam.old::before{opacity:0} .sewn .seam.old::before{opacity:.7} }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Data Atlas"><div class="an" id="appname"></div><div id="navs"></div><div class="foot" id="railfoot"></div></nav>
+  <main class="main" id="main">
+    <div class="head"><div><div class="eyebrow" id="crumb"></div><h1 id="ename"></h1><div class="sub" id="esub"></div></div></div>
+    <div class="legend" id="legend"></div>
+    <div class="wall" id="wall"></div>
+  </main>
+</div>
+<div class="tip" id="tip" role="tooltip"></div>
+<div class="keys" id="keys"></div>
+<div class="x-cap"><b>Structure changes · V3</b> a seam where the change touched · visible repair, kintsugi</div>
+<script>
+/*@DATA*/
+/*@BASE_JS*/
+const CH = Object.fromEntries(DATA.changes.map(c => [c.type, c]));
+const recent = c => c.when.slice(0, 10) > DATA.viewer.lastVisit;
+const day = c => fmtWhen(c.when).split(' ·')[0];
+let tech = false, n = 0;
+const seam = (c, label) => `<button class="seam${recent(c) ? '' : ' old'}" style="--i:${n++}" data-tip="seam" data-c="${c.id}" aria-label="${esc(label)}: why"><span class="lab">${esc(label)} · ${esc(day(c))}</span></button>`;
+const row = (w, html, t) => `<div class="row"><div class="w">${esc(w)}${t ? `<span class="tech">${esc(t)}</span>` : ''}</div><div>${html}</div></div>`;
+function siteCard(r, opts = {}) {
+  const k = kindOf('site'), add = CH['add-detail'], dk = CH['add-kind'];
+  const rows = siteRows(r, true);
+  const head = opts.depot ? `<div class="k micro">${ic(dk.newKind.icon, 14)}<span class="now">${esc(dk.newKind.word)}</span> · a kind of ${esc(k.word.toLowerCase())}</div>` : `<div class="k micro">${ic(k.icon, 14)}<span class="now">${esc(k.word)}</span></div>`;
+  return `<article class="card" data-c="${opts.depot ? dk.id : add.id}">${head}<h2>${esc(r.name)}</h2>${opts.depot ? seam(dk, 'filed as ' + dk.newKind.word.toLowerCase()) : ''}`
+    + rows.filter(x => !x.isNew).slice(0, 3).map(x => row(x.word, x.html, x.tech)).join('')
+    + seam(add, 'added') + rows.filter(x => x.isNew).map(x => row(x.word, x.html, x.tech)).join('') + `</article>`;
+}
+function vehicleCard(v) {
+  const sp = CH.split, k = kindOf('vehicle');
+  const head = v.placed ? `<div class="k micro">${ic(k.icon, 14)}<span class="was">${esc(k.word)}</span><span class="now">${esc(v.placed)}</span></div>`
+    : `<div class="k micro">${ic(k.icon, 14)}<span class="now">${esc(k.word)}</span></div>`;
+  return `<article class="card" data-c="${sp.id}">${head}<h2>${esc(v.name)}</h2>${seam(sp, v.placed ? 'split from ' + k.word.toLowerCase() : 'not placed yet')}`
+    + (v.placed ? '' : row('Which kind', `<span class="kgap" data-tip="kgap">${ic('circle-help', 14)} ${sp.into.map(x => esc(x.word.split(' ')[0])).join(' or ')}?</span>`))
+    + row('Kept at', `<span class="lnk">${esc(v.kept)}</span>`) + row('MOT due', `<span class="mono">${esc(v.mot)}</span>`)
+    + row(sp.by_detail, v.held ? esc(v.held) : `<span class="gap">${ic('user-check', 14)}<span>Not filled · <b>${esc(v.ask)}</b> can fill</span></span>`) + `</article>`;
+}
+function workCard(w) {
+  const rn = CH.rename;
+  return `<article class="card" data-c="${rn.id}"><div class="k micro">${ic(kindOf(rn.kind).icon, 14)}<span class="was">${esc(rn.from)}</span><span class="now">${esc(rn.to)}</span></div><h2>${esc(w.name)}</h2>${seam(rn, 'renamed')}`
+    + row('Reference', `<span class="mono">${esc(w.ref)}</span>`) + row('At site', `<span class="lnk">${esc(w.site)}</span>`) + row('Done by', `<span class="lnk">${esc(w.by)}</span>`) + row('Status', esc(w.status)) + `</article>`;
+}
+TIPS.seam = el => {
+  const c = DATA.changes.find(x => x.id === el.dataset.c), k = kindOf(c.kind);
+  const what = { 'add-detail': `${k.plural} gained a detail: “${c.detail?.word}”.`, 'add-kind': `A new kind, “${c.newKind?.word}”, was made inside ${k.plural}. This record matched: ${c.newKind?.rule.toLowerCase()}.`,
+    split: `“${k.word}” was split into ${c.into?.map(x => '“' + x.word + '”').join(' and ')}, by the detail “${c.by_detail}”.`, rename: `“${c.from}” is now called “${c.to}”. Nothing else changed.` }[c.type];
+  return `<div class="micro">Seam · ${esc(fmtWhen(c.when))}${recent(c) ? ' · since your last visit' : ''}</div><div class="t">${esc(what)}</div><p>${esc(c.why)}</p><p class="m">By ${esc(c.by)}, who ${esc(DATA.admin.role.toLowerCase())}. No value on this record was changed or lost.</p>`;
+};
+TIPS.kgap = () => { const sp = CH.split; return `<div class="micro">Gap · which kind</div><div class="t">Not placed in a kind yet</div><p>“${esc(sp.by_detail)}” is empty, so the split couldn't tell. ${sp.unsure} vehicles are waiting like this.</p><p class="m">Fleet keepers can fill it; the record moves when they do. Until then it stays a plain vehicle and nothing is hidden.</p>`; };
+function render() {
+  n = 0; const R = DATA.records;
+  $('#wall').innerHTML = siteCard(R[1]) + siteCard(R[0], { depot: true }) + workCard(DATA.workorders[0]) + vehicleCard(DATA.vehicles[0]) + vehicleCard(DATA.vehicles[1]) + siteCard(R[3]);
+  Icons.hydrate($('#wall'));
+}
+function demo() {
+  clearLater(); const w = $('#wall'); render(); w.className = 'wall' + (tech ? ' techon' : '');
+  later(() => w.classList.add('sewn'), reduced ? 0 : ms('--motion-run'));
+  later(() => { const s = $$('.seam')[1]; w.classList.add('focus'); s.closest('.card').classList.add('sel'); s.focus({ preventScroll: true }); }, ms('--motion-run') * 3);
+}
+document.addEventListener('focusin', e => { const c = e.target.closest('.card'); $$('.card').forEach(x => x.classList.toggle('sel', x === c)); $('#wall').classList.toggle('focus', !!c); });
+$('#crumb').textContent = DATA.app + ' · Your records';
+$('#ename').textContent = 'Records you look at';
+const nRecent = DATA.changes.filter(recent).length;
+$('#esub').innerHTML = `The kinds of thing changed <b>${nRecent} times since your last visit</b> (${esc(fmtWhen(DATA.viewer.lastVisit))}). Each change left a seam where it touched a record.`;
+$('#legend').innerHTML = `<span><i class="sw" style="--c:var(--x-seam)"></i>since your last visit</span><span><i class="sw" style="--c:var(--x-seam-old)"></i>earlier</span><span><span class="gap">${ic('user-check', 14)}<span>dashed edge: expected, not filled yet</span></span></span>`;
+rail(`Seams never fade away: a record keeps the history of its shape. Earlier seams are quieter. <b>Tab</b> to a seam to ask why.`);
+keys([['Tab', 'next seam'], ['S', 'recent only'], ['T', 'technical names'], ['R', 'replay']]);
+boot(demo, e => {
+  if (e.key === 's' || e.key === 'S') $('#wall').classList.toggle('recentonly');
+  if (e.key === 't' || e.key === 'T') { tech = !tech; $('#wall').classList.toggle('techon', tech); }
+  if (e.key === 'Escape') { document.activeElement.blur(); $('#wall').classList.remove('focus'); $('#tip').classList.remove('on'); }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Reference desk · Can't answer V6 · The weak word</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@COMMON_CSS@*/
+.qhead{display:none}
+.app{grid-template-rows:auto minmax(0,1fr) auto}
+.rd .row{flex-wrap:nowrap}
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4);min-height:0;padding-top:var(--space-2)}
+/* the question, parsed: each phrase hangs its reading under it, like a sentence diagram */
+.words{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,.8fr) minmax(0,1.2fr) minmax(0,1fr);gap:var(--space-4)}
+.ph{display:grid;grid-template-rows:auto auto 1fr;gap:var(--space-2);min-width:0}
+.ph .w{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light);padding-bottom:var(--space-2);border-bottom:2px solid var(--ink-muted);white-space:nowrap}
+.ph.weak .w{border-bottom-color:transparent;background:var(--x-proposed-gap);--x-proposed-gap-tick:var(--space-3);padding:0 var(--space-3) var(--space-2);justify-self:start}
+.ph.weak.lit .w{color:var(--light);text-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--x-proposed-here) 50%,transparent)}
+.ph .st{display:flex;gap:var(--space-2);align-items:center;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.ph .rd{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);display:grid;gap:var(--space-2);align-content:start;transition:border-color var(--motion-base) var(--ease-out),background var(--motion-base) var(--ease-out)}
+.ph .rd b{font-weight:400;color:var(--ink)}
+.ph.weak.lit .rd{border-color:color-mix(in srgb,var(--x-proposed-here) 60%,transparent);background:var(--x-proposed-here-wash)}
+.ph .rd .row{display:flex;gap:var(--space-2);align-items:baseline;flex-wrap:nowrap}
+.pre .ph .rd{opacity:0}
+.ph .rd{transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-base) var(--ease-out),background var(--motion-base) var(--ease-out);transition-delay:calc(var(--i) * var(--motion-quick))}
+
+/* what counts: the answer moves as you tick (dynamic queries) */
+.counts{display:grid;grid-template-columns:minmax(0,1fr) calc(var(--measure-card) + var(--space-5));gap:var(--space-5);align-items:center;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);padding:var(--space-3) 0}
+.kinds{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center}
+.kinds .lab{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);margin-right:var(--space-2)}
+.kc{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.kc[aria-checked="true"]{border-color:var(--ink);color:var(--light);background:var(--surface-raised)}
+.kc .kbd{margin-left:var(--space-1)}
+.kc.pencil-k{border-style:dashed;border-color:var(--x-proposed-pencil);color:var(--x-proposed-pencil)}
+.kc.pencil-k[aria-checked="true"]{background:var(--x-proposed-pencil-wash)}
+.kc[aria-disabled="true"]{background:var(--x-proposed-unseen);border-style:solid;border-color:var(--hairline);color:var(--ink-muted);cursor:not-allowed}
+.kinds .note{flex-basis:100%;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.live{display:grid;gap:var(--space-1)}
+.live .big{display:flex;align-items:baseline;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.live .big b{font-weight:200;font-size:var(--type-title);line-height:var(--leading-title);color:var(--light)}
+.cov{height:var(--space-2);border-radius:var(--radius-pill);border:1px dashed var(--ink-muted);position:relative;overflow:hidden}
+.cov i{position:absolute;left:0;top:0;bottom:0;background:var(--ink);transition:width var(--motion-slow) var(--ease-out)}
+.live .small{color:var(--ink-muted)}
+.live .small b{font-weight:400;color:var(--ink)}
+
+.rephr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);align-content:start;min-height:0;overflow:auto}
+.rephr h3{grid-column:1/-1;margin:0}
+.rc{display:grid;gap:var(--space-2);align-content:start;padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rc.orig{border-style:dashed}
+.rc .q{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.rc .q::before{content:"\201C";color:var(--ink-muted)}
+.rc .q::after{content:"\201D";color:var(--ink-muted)}
+.rc .res{display:flex;gap:var(--space-3);align-items:baseline;font-family:var(--font-mono);font-size:var(--type-small);color:var(--ink)}
+.rc .res b{font-weight:400;color:var(--light);font-size:var(--type-lead)}
+.rc .btn{justify-self:start}
+</style>
+</head>
+<body class="pre">
+<div class="app">
+  <div id="chrome"></div>
+  <main class="main">
+    <div class="wrap">
+      <section>
+        <p class="eyebrow" style="margin-bottom:var(--space-2)"></p>
+        <div class="words" id="words"></div>
+      </section>
+      <section class="counts dep" style="--i:6" id="counts"></section>
+      <section class="rephr dep" style="--i:8" id="rephr"></section>
+    </div>
+  </main>
+  <footer class="foot" id="foot"></footer>
+</div>
+<div class="x-cap"><b>Can't answer · V6</b> the weak word: the gap sits in one phrase · sentence diagrams, explain-the-query studies, dynamic queries</div>
+<script>
+/*@DATA@*/
+/*@COMMON_JS@*/
+const Q = DATA.q1;
+$('#chrome').outerHTML = chrome(Q);
+$('.wrap .eyebrow').textContent = `${DATA.me.n} asked · ${DATA.askedAt} · word by word, what the data can answer`;
+const KINDS = Q.kinds;
+const K = new Set(KINDS.filter(k => k.on).map(k => k.id));
+$('#foot').innerHTML = hints([['1–' + KINDS.length, 'what counts as hearing'], ['G', 'model gateway'], ['T', 'technical words'], ['R', 'replay']]);
+const MARCH = '2026-03-01';
+let lit = false;
+
+/* answer the question for a set of record kinds: the same rules, without the model */
+function evalK(set) {
+  let cov = 0, ans = 0;
+  applies().forEach(s => {
+    if (s.st === 'none') { cov++; ans++; return; }
+    const rel = [];
+    if (s.st === 'ok' && set.has(s.via)) rel.push(s.last);
+    if (set.has('payment') && s.paid) rel.push(s.paid);
+    if (!rel.length) return;
+    cov++;
+    if (rel.sort().pop() < MARCH) ans++;
+  });
+  return { cov, ans, all: applies().length };
+}
+function words() {
+  const r = evalK(K);
+  const hid = byState('hidden').length ? `<span class="row">${mark('hidden')}<span>Some are kept on the ${esc(F('finance').n)} team floor. Ask ${esc(P('dev').n)}.</span></span>` : '';
+  const P4 = [
+    { w: 'Which suppliers', st: 'ok', s: 'answers', rd: `<span><b>${visible().length} suppliers</b> kept on ${esc(F('dept').n)} and above, matched by their keys.</span><span class="row">${mark('na')}<span>${byState('na').length} ended before March: they don’t apply.</span></span>` },
+    { w: 'have we', st: 'ok', s: 'answers, mostly', rd: `<span><b>We</b> = ${esc(F('dept').n)}, and the floors above it.</span>${hid}` },
+    { w: 'not heard from', st: 'gap', s: 'the weak word', weak: true, rd: `<span><b>We keep ${[...K].filter(k => KINDS.find(x => x.id === k).held).map(esc).join(', ') || 'nothing you ticked'}.</b> For ${r.all - r.cov} suppliers none of those exist, so I can’t tell whether we heard from them.</span><span>Emails and calls to people’s own phones aren’t kept at all.</span><span class="row">${ic('user-round', 12)}<span>${esc(P(Q.heard.keptBy).n)} keeps what “heard from” means here.</span></span>` },
+    { w: 'since spring?', st: 'ok', s: 'answers', rd: `<span><b>${esc(Q.since.pick)}</b>: ${esc(Q.since.why)}.</span><span class="row"><button class="btn">${ic('calendar', 14)}${esc(Q.since.alt)} instead</button></span><span>${esc(cap1(Q.since.altWhy))}.</span>` },
+  ];
+  $('#words').innerHTML = P4.map((p, i) => `<div class="ph${p.weak ? ' weak' : ''}${p.weak && lit ? ' lit' : ''}" data-ph="${i}"><span class="w${p.weak ? ' gapbox' : ''}">${esc(p.w)}</span><span class="st">${p.st === 'gap' ? mark('gap') : `<span class="mk mk-ok" style="width:var(--space-3);height:var(--space-1)"></span>`}${esc(p.s)}</span><div class="rd" style="--i:${i}">${p.rd}</div></div>`).join('');
+}
+function counts() {
+  const r = evalK(K);
+  const emailOn = K.has('email');
+  const kc = KINDS.map((k, i) => {
+    const dis = !k.held && !GW;
+    const pen = !k.held && GW;
+    return `<button class="kc${pen ? ' pencil-k' : ''}" role="checkbox" aria-checked="${K.has(k.id)}" aria-disabled="${dis}" data-k="${k.id}" title="${esc(k.note || '')}">${K.has(k.id) ? ic('check', 12) : ''}${esc(k.w)}${pen ? ` <span class="pchip">${ic('pencil-line', 10)}model</span>` : ''}<span class="kbd">${i + 1}</span></button>`;
+  }).join('');
+  const g = SUP().filter(s => s.guess).length;
+  const note = !GW ? `Emails: ${esc(KINDS.find(k => k.id === 'email').note)}, and without the model I can’t read them for supplier names. ${esc(DATA.gateway.offWhy)}`
+    : emailOn ? `<span class="pencil">Emails are read by the model, as guesses: it thinks ${g} of the ${r.all - r.cov} were heard from.</span> Guesses never change the count; confirming one does.`
+    : `Paying them isn’t hearing from them, but every live supplier has a payment, so it would answer in full.`;
+  $('#counts').innerHTML = `<div class="kinds"><span class="lab">Hearing from them counts as</span>${kc}<span class="note">${note}</span></div>
+    <div class="live" aria-live="polite"><span class="big"><b>${r.ans}</b> suppliers, as far as I can see</span><div class="cov" role="img" aria-label="covers ${r.cov} of ${r.all}"><i style="width:${pct(r.cov, r.all)}%"></i></div><span class="small">covers <b>${r.cov} of ${r.all}</b> (${pct(r.cov, r.all)}%) · ${r.all - r.cov} I can’t say</span></div>`;
+  $$('#counts [data-k]').forEach(b => b.addEventListener('click', () => toggle(b.dataset.k)));
+}
+function rephr() {
+  const orig = evalK(new Set(KINDS.filter(k => k.on).map(k => k.id)));
+  const cards = Q.rephrase.map(x => { const r = evalK(new Set(x.kinds)); return `<div class="rc"><span class="q">${esc(x.words)}</span><span class="res"><b>${r.ans}</b><span>covers ${r.cov} of ${r.all} (${pct(r.cov, r.all)}%)</span></span><span>${esc(x.why)}</span><button class="btn primary">${ic('corner-down-right', 14)}Ask this instead</button></div>`; }).join('');
+  $('#rephr').innerHTML = `<h3 class="eyebrow">Would one of these do? Each one the data can answer, and says how it differs from yours</h3>${cards}
+    <div class="rc orig"><span class="q">${esc(Q.words)}</span><span class="res"><b>${orig.ans}</b><span>covers ${orig.cov} of ${orig.all} (${pct(orig.cov, orig.all)}%)</span></span><span>Keep yours as it is. It stays saved with its gap said, and I’ll answer it again as the gap fills.</span><button class="btn">${ic('bookmark', 14)}Keep mine</button></div>`;
+}
+function toggle(id) {
+  const k = KINDS.find(x => x.id === id);
+  if (!k.held && !GW) return;
+  K.has(id) ? K.delete(id) : K.add(id);
+  words(); counts();
+}
+function render() { words(); counts(); rephr(); }
+function play() {
+  clearTimers(); lit = false; K.clear(); KINDS.filter(k => k.on).forEach(k => K.add(k.id));
+  document.body.classList.add('pre'); render();
+  later(() => document.body.classList.remove('pre'), 1200);
+  later(() => { lit = true; const w = $('.ph.weak'); w && w.classList.add('lit'); }, 2300);
+}
+wireCommon(play);
+gwHooks.push(() => { if (!GW) K.delete('email'); if ($('#counts').innerHTML) { words(); counts(); } });
+addEventListener('keydown', e => { const n = +e.key; if (n >= 1 && n <= KINDS.length) toggle(KINDS[n - 1].id); });
+play();
+</script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Action V4 · The order in a sentence</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: the action is a paragraph you write by choosing. Every choice shows what it reaches before you pick ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(320px,28%) minmax(0,1fr);gap:var(--space-6)}
+.left{min-height:0;border-right:1px solid var(--hairline);padding-right:var(--space-4)}
+.left .fd-h{font-size:var(--type-lead);line-height:var(--leading-lead)}
+.right{min-height:0;display:flex;flex-direction:column;gap:var(--space-4);max-width:var(--measure-wide)}
+.right h1{margin:0;font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.para{display:grid;gap:var(--space-4)}
+.sent{position:relative;margin:0;font-weight:300;font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-2));color:var(--ink-muted)}
+.sent .no{display:inline-flex;align-items:center;justify-content:center;width:var(--space-5);height:var(--space-5);margin-right:var(--space-2);border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink);vertical-align:3px}
+/* a choice: dashed underline, a caret; it opens a list that previews each option's reach */
+.slot{position:relative;display:inline;color:var(--light);border-bottom:1px dashed var(--ink-muted);border-radius:2px;padding:0 2px;font-weight:400}
+.slot::after{content:"▾";font-size:var(--type-small);color:var(--ink-muted);margin-left:var(--space-1);vertical-align:2px}
+.slot[aria-expanded="true"]{background:var(--surface-raised);border-bottom-color:var(--x-proposed-lit)}
+/* a consequence: computed, ink, never chosen */
+.sent.pv .val{color:var(--x-proposed-lit)}
+.sent.pv .val.warn{color:var(--x-proposed-disagree)}
+.sent.pv::before{content:"";position:absolute;left:calc(var(--space-3) * -1);top:var(--space-1);bottom:var(--space-1);width:2px;background:var(--x-proposed-lit)}
+.val{color:var(--light);font-weight:400;white-space:nowrap}
+.val.n{font-family:var(--font-mono);font-size:calc(var(--type-heading) * .86)}
+.val.warn{color:var(--x-proposed-disagree)}
+.fl{color:var(--fc);font-weight:400;white-space:nowrap}
+.sent .tk{font-size:var(--x-proposed-type-micro);margin-top:var(--space-1);font-weight:400}
+.pop{position:absolute;z-index:var(--layer-menu);min-width:calc(var(--measure-decision) + var(--space-6));padding:var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));box-shadow:var(--shadow-overlay);font-size:var(--type-meta);line-height:var(--leading-meta);animation:pop var(--motion-base) var(--ease-out)}
+@keyframes pop{from{opacity:0;transform:translateY(calc(var(--space-1) * -1))}}
+.pop .ph{margin:0 var(--space-2) var(--space-1);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.opt{display:grid;grid-template-columns:2px minmax(0,1fr) auto;gap:0 var(--space-3);width:100%;padding:var(--space-2);border-radius:var(--radius-key);color:var(--ink)}
+.opt::before{content:"";grid-row:span 2;background:var(--fc);border-radius:1px}
+.opt:hover,.opt.hot{background:var(--surface-raised)}
+.opt b{font-weight:400;color:var(--light)}
+.opt .r{text-align:right;font:400 var(--type-meta)/var(--leading-meta) var(--font-mono);color:var(--light);white-space:nowrap}
+.opt .s{grid-column:2 / span 2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.opt .m{display:inline-block;width:var(--space-7);height:var(--space-1);border-radius:1px;background:var(--x-proposed-unseen);vertical-align:2px;margin-right:var(--space-1);overflow:hidden}
+.opt .m i{display:block;height:100%;background:var(--ink)}
+.more{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.more button{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink-muted);font-size:var(--type-meta)}
+.more button:hover{color:var(--ink);border-style:solid}
+.sent .x{margin-left:var(--space-2);color:var(--ink-muted);vertical-align:1px;border-radius:var(--radius-key)}
+.do{margin-top:auto;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:center;border-top:1px solid var(--hairline-strong);padding-top:var(--space-3)}
+.do p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.do p b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.sent{font-size:var(--type-lead);line-height:calc(var(--leading-lead) + var(--space-2))}.val.n{font-size:var(--type-lead)}.left .claims li:nth-child(n+3){display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Action · V4</b> the order in a sentence: choose the words, the reach fills itself in · BLUF orders, said in a sentence, reactive documents</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* the paragraph: one sentence per action, in the order you add them */
+const S = { lines: [], open: null, preview: null };
+const fresh = () => ({ publish: { verb: 'publish', lib: 'L1', tell: 'none' }, feed: { verb: 'feed', intent: 'I1' }, watch: { verb: 'watch', when: 'above' } });
+const peopleWord = n => `${fmt(n)} ${n === 1 ? 'person' : 'people'}`;
+const hiddenAsk = reader => [...new Set(DATA.groups.filter(g => openN(g, reader) < total(g)).map(askFor))];
+const orList = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' or ' + a[a.length - 1];
+
+const OPTS = {
+  lib: () => DATA.libraries.map(l => ({ id: l.id, tier: l.floor, w: l.name, r: peopleWord(F(l.floor).reach), o: allOpen(l.floor),
+    s: `${F(l.floor).word} floor · ${l.approval ? 'needs ' + P(l.approval).name + '’s approval' : 'goes straight in'}` })),
+  intent: () => DATA.intents.map(t => ({ id: t.id, tier: t.floor, w: t.title, r: peopleWord(t.followers + 1), o: allOpen(t.floor), s: `${P(t.owner).name} · due ${t.due} · ${t.state}` })),
+  when: () => DATA.watch.presets.map(p => ({ id: p.id, tier: DATA.myFloor, w: p.plain + (p.n !== undefined ? ' ' + p.n : ''), r: 'just you', s: p.id === 'any' ? 'could be several times a week' : p.id === 'above' ? 'two more fall due on 21 Nov' : 'only when every van is inspected' })),
+  tell: () => [{ id: 'none', tier: DATA.myFloor, w: 'nobody', r: '0', s: 'readers find it in the library' }, { id: 'p2', tier: 'department', w: P('p2').name, r: '1', s: P('p2').role + ' · one notice' }]
+};
+const optLabel = (k, id) => OPTS[k]().find(o => o.id === id).w;
+function slot(i, k, id) { return `<button class="slot" data-i="${i}" data-k="${k}" aria-haspopup="listbox" aria-expanded="${S.open && S.open.i === i && S.open.k === k}">${optLabel(k, id)}</button>`; }
+
+function sentenceHTML(line0, i) {
+  let html, tech;
+  const pv = S.preview && S.preview.i === i;
+  const line = pv ? { ...line0, [S.preview.k]: S.preview.id } : line0;
+  if (line.verb === 'publish') {
+    const l = DATA.libraries.find(x => x.id === line.lib), r = F(l.floor).reach, o = allOpen(l.floor), t = allTotal();
+    const ask = hiddenAsk(l.floor);
+    html = `Publish it as a briefing in ${slot(i, 'lib', line.lib)}. <span class="val">${peopleWord(r)}</span> on the <span class="fl" data-tier="${l.floor}">${F(l.floor).word} floor</span>${l.floor === 'org' ? '' : ' and under it'} can read it.
+      ${o < t ? `Some can open only <span class="val n ${o < t / 2 ? 'warn' : ''}">${o} of ${t}</span> records behind it, and their copy says to ask <span class="val" style="white-space:normal">${orList(ask)}</span> for the rest.` : `They can open every record behind it.`}
+      Tell ${slot(i, 'tell', line.tell)}.${l.approval ? ` <span class="val warn">It waits for ${P(l.approval).name}’s approval.</span>` : ''}`;
+    tech = `library=${l.id} · acl: floor ≥ ${l.floor} · claims link ${t} records, ${o} resolvable for the lowest reader`;
+  } else if (line.verb === 'feed') {
+    const it = DATA.intents.find(x => x.id === line.intent), ow = P(it.owner);
+    html = `Feed it to ${slot(i, 'intent', line.intent)}, which <span class="val">${ow.name}</span> owns, due <span class="val">${it.due}</span>. <span class="val">${peopleWord(it.followers + 1)}</span> see it as evidence; ${ow.name.split(' ')[0]} can open <span class="val n">${allOpen(it.floor)} of ${allTotal()}</span> records behind it. It doesn’t change the intent’s state: ${ow.name.split(' ')[0]} decides.`;
+    tech = `intent=${it.id} · evidence += finding ${DATA.finding.id} · notify owner + ${it.followers}`;
+  } else {
+    html = `Watch it and tell me ${slot(i, 'when', line.when)}. It is <span class="val n">${DATA.watch.now}</span> now. It is checked on each new inspection and every night as dates pass, and only counts what I can open (<span class="val n">${allOpen(DATA.myFloor)} of ${allTotal()}</span>). <span class="val">Nobody else</span> can see the watch.`;
+    tech = `recipe: ${DATA.finding.recipe.tech} · on: ${DATA.watch.triggers.map(x => x.tech.split(' · ')[0]).join(', ')}`;
+  }
+  return `<p class="sent dep ${pv ? 'pv' : ''}" style="--i:${i}"><span class="no">${i + 1}</span>${html}<button class="x" data-del="${i}" aria-label="Remove this sentence">${I('x', 16)}</button><span class="tk">${tech}</span></p>`;
+}
+function popHTML() {
+  if (!S.open) return '';
+  const { i, k } = S.open, cur = S.lines[i][k];
+  return `<div class="pop" role="listbox" id="pop"><p class="ph">${k === 'lib' ? 'Which library · who can read it · what they can open' : k === 'intent' ? 'Which intent · who sees it' : k === 'tell' ? 'Tell someone now' : 'When to tell you'}</p>
+    ${OPTS[k]().map(o => `<button class="opt ${o.id === cur ? 'hot' : ''}" role="option" aria-selected="${o.id === cur}" data-tier="${o.tier}" data-id="${o.id}"><b>${o.w}</b><span class="r">${o.r}</span><span class="s">${o.o !== undefined ? `<span class="m"><i style="width:${o.o / allTotal() * 100}%"></i></span>opens ${o.o} of ${allTotal()} · ` : ''}${o.s}</span></button>`).join('')}</div>`;
+}
+function doHTML() {
+  if (!S.lines.length) return `<div class="do"><p>Add what you want done. Nothing happens until you press Do it.</p><button class="btn" aria-disabled="true">Do it</button></div>`;
+  const waits = S.lines.some(l => l.verb === 'publish' && DATA.libraries.find(x => x.id === l.lib).approval);
+  return `<div class="do"><p><b>${S.lines.length} ${S.lines.length === 1 ? 'thing' : 'things'}</b> will happen, in this order. The paragraph is kept with the finding, so anyone who opens it later can read what was done and by whom.${waits ? ' One waits for an approval.' : ''}</p><button class="btn go">${I('check', 14)} Do it</button></div>`;
+}
+function render() {
+  const has = v => S.lines.some(l => l.verb === v);
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.finding.subject, 'Finding ' + DATA.finding.id],
+    [['P F W', 'add'], ['Enter', 'choose'], ['Esc', 'close'], ['A', 'accept'], ['T', 'admin words', 'h-t'], ['G', 'model off', 'h-g'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap"><div class="left scroll">${findingHTML()}</div>
+    <div class="right"><div><p class="eyebrow">What to do with it</p><h1>In a sentence</h1></div>
+      <div class="para" id="para">${S.lines.map(sentenceHTML).join('')}</div>
+      <div class="more">${!has('publish') ? `<button data-add="publish">${I('send', 14)} Publish it <span class="kbd">P</span></button>` : ''}${!has('feed') ? `<button data-add="feed">${I('target', 14)} Feed an intent <span class="kbd">F</span></button>` : ''}${!has('watch') ? `<button data-add="watch">${I('binoculars', 14)} Watch it <span class="kbd">W</span></button>` : ''}</div>
+      ${doHTML()}</div></div></main>${popHTML()}`;
+  Icons.hydrate($('#app'));
+  $$('.slot').forEach(b => b.onclick = e => { e.stopPropagation(); const o = { i: +b.dataset.i, k: b.dataset.k }; S.open = S.open && S.open.i === o.i && S.open.k === o.k ? null : o; render(); });
+  $$('[data-add]').forEach(b => b.onclick = () => add(b.dataset.add));
+  $$('[data-del]').forEach(b => b.onclick = () => { S.lines.splice(+b.dataset.del, 1); S.open = null; render(); });
+  if (S.open) {
+    const s = $(`.slot[data-i="${S.open.i}"][data-k="${S.open.k}"]`).getBoundingClientRect(), pop = $('#pop');
+    pop.style.left = Math.min(s.left, innerWidth - pop.offsetWidth - 24) + 'px'; pop.style.top = ($(`.slot[data-i="${S.open.i}"]`).closest(".sent").getBoundingClientRect().bottom + 6) + "px";
+    $$('.opt', pop).forEach(b => { b.onclick = e => { e.stopPropagation(); S.lines[S.open.i][S.open.k] = b.dataset.id; S.open = null; S.preview = null; render(); };
+      /* moving through the list rewrites the sentence in place: the reach before the choice */
+      const go = () => { if (S.preview && S.preview.id === b.dataset.id) return; S.preview = { ...S.open, id: b.dataset.id }; S.focusId = b.dataset.id; render(); };
+      b.onmouseenter = go; b.onfocus = go; });
+    const f = (S.focusId && $(`.opt[data-id="${S.focusId}"]`, pop)) || $('.opt.hot', pop) || $('.opt', pop);
+    if (document.activeElement !== f) { f.onfocus = null; f.focus(); f.onfocus = () => {}; }
+    $$('.opt', pop).forEach(b => b.classList.toggle('hot', S.preview ? b.dataset.id === S.preview.id : b.dataset.id === S.lines[S.open.i][S.open.k]));
+  }
+}
+window.__rerender = render;
+function add(v) { if (S.lines.some(l => l.verb === v)) return; S.lines.push(fresh()[v]); S.open = null; render(); }
+document.addEventListener('click', () => { if (S.open) { S.open = null; S.preview = null; S.focusId = null; render(); } });
+
+function replay() {
+  clearLater();
+  S.lines = []; S.open = null; S.preview = null; S.focusId = null; STATE.accepted = false;
+  document.body.classList.add('pre'); render();
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre')));
+  /* the moment: "publish" is added, its library list opens with each option's reach, then a second sentence joins */
+  const t = ms('--motion-run');
+  later(() => { S.lines.push(fresh().publish); S.lines.push(fresh().feed); render(); }, t * .5);
+  later(() => { S.open = { i: 0, k: 'lib' }; render(); }, t);
+  later(() => { S.preview = { i: 0, k: 'lib', id: 'L2' }; S.focusId = 'L2'; render(); }, t + ms('--motion-calm'));
+  later(() => { S.preview = { i: 0, k: 'lib', id: 'L3' }; S.focusId = 'L3'; render(); }, t + ms('--motion-run'));
+}
+document.addEventListener('keydown', e => {
+  if (S.open && e.key === 'Escape') { S.open = null; S.preview = null; S.focusId = null; render(); return; }
+  if (S.open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); const o = $$('.opt'); const i = o.indexOf(document.activeElement); o[(i + (e.key === 'ArrowDown' ? 1 : -1) + o.length) % o.length].focus(); return; }
+  if (e.target.closest && e.target.closest('.opt')) return;
+  if (commonKeys(e, render, replay)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'p') add('publish'); else if (k === 'f') add('feed'); else if (k === 'w') add('watch');
+});
+replay();
+</script>
+</body>
+</html>

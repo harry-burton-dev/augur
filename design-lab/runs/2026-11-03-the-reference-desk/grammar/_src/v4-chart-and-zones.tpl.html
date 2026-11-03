@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question sheet · V4 · Chart and zones</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+:root{
+  /* --x-proposed-contour-alt: an alternative reading's line, drawn but not chosen (a dashed contour) */
+  --x-proposed-contour-alt: 1px dashed var(--hairline-strong);
+}
+.main{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);gap:var(--space-5);align-items:start}
+.chart{border-radius:var(--radius-inset);background:var(--surface-pane);border:1px solid var(--hairline);box-shadow:var(--shadow-raised);padding:var(--space-3) var(--space-4) var(--space-3)}
+.qh{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3);margin-bottom:var(--space-2)}
+.qh .yours{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead)}
+.rd{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0 0 var(--space-2)}
+.rd b{font-weight:400;color:var(--ink)}
+/* plot: name column + track */
+.plot{position:relative;display:grid;grid-template-columns:calc(var(--measure-rail) * .85) minmax(0,1fr);column-gap:var(--space-3)}
+.trk{position:relative}
+.nm{font-size:var(--type-small);line-height:calc(var(--space-5) - var(--space-1));color:var(--light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm.h{color:var(--ink-muted)}
+.rw{height:calc(var(--space-5) - var(--space-1));position:relative;z-index:1;border-top:1px solid var(--hairline)}
+.dot{position:absolute;z-index:2;top:50%;width:var(--space-3);height:var(--space-3);margin:calc(var(--space-3) / -2) 0 0 calc(var(--space-3) / -2);border-radius:var(--radius-pill);background:var(--light)}
+.dot.h{background:var(--ink-muted)}
+.dot.g{background:transparent;border:var(--x-proposed-guess-line)}
+.lbl{position:absolute;top:50%;transform:translateY(-50%);background:color-mix(in srgb, var(--slate-deep) 70%, transparent);border-radius:var(--radius-key);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap;padding-left:var(--space-3)}
+.lbl.g{color:var(--x-proposed-guess-ink)}
+.lbl.l{transform:translate(-100%,-50%);padding:0 var(--space-3) 0 0}
+.sil{position:absolute;top:50%;height:1px;background:linear-gradient(90deg,var(--hairline-strong),transparent)}
+.wv{position:absolute;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:var(--space-1);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.fold{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding:var(--space-1) 0}
+/* contours: the reading's cut-off and its alternatives */
+.ctr{position:absolute;bottom:0;width:0;border-left:1px solid var(--light);transition:left var(--motion-calm) var(--ease-out)}
+.ctr.alt{border-left:var(--x-proposed-contour-alt)}
+.ctr .cl{position:absolute;top:0;left:var(--space-1);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--light);white-space:nowrap}
+.ctr.alt .cl{color:var(--ink-muted)}
+.ax{display:flex;position:relative;height:var(--space-4);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.ax span{position:absolute;transform:translateX(-50%);top:var(--space-1)}
+.zone-l{font-size:var(--type-small);line-height:var(--space-5);color:var(--ink-muted);white-space:nowrap}
+.zn{height:calc(var(--space-4) + var(--space-1));position:relative;margin-top:var(--space-1)}
+.zn i{position:absolute;top:0;bottom:0;border-radius:var(--radius-key)}
+.zA{background:color-mix(in srgb, var(--ink) 16%, transparent)}
+.zB{background:color-mix(in srgb, var(--ink) 8%, transparent);border:1px solid var(--hairline)}
+.zN{background:var(--surface-inset)}
+.zL{background:var(--x-shadow),var(--surface-inset);border:1px solid var(--hairline)}
+.zn b{position:absolute;top:50%;transform:translateY(-50%);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink);padding:0 var(--space-2);white-space:nowrap;display:flex;align-items:center;gap:var(--space-1)}
+.zn b.m{color:var(--ink-muted)}
+.zh{border-top:1px solid var(--hairline-strong);margin-top:var(--space-2);padding-top:var(--space-1)}
+/* side */
+.side{display:flex;flex-direction:column;gap:var(--space-4)}
+.cart{border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:var(--space-3);background:var(--surface-inset)}
+.cart .t{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);text-align:center;letter-spacing:var(--tracking-soft)}
+.cart .s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:center;margin-bottom:var(--space-2)}
+.cart .r{display:grid;grid-template-columns:var(--space-7) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);border-top:1px solid var(--hairline);padding:2px 0}
+.cart .r span:first-child{font-family:var(--font-mono);color:var(--ink-muted)}
+.cart .r.ch span:last-child::after{content:' · answer changed';color:var(--warning)}
+.sym{display:grid;gap:var(--space-1)}
+.sym div{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr);gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sym b{font-weight:400;color:var(--ink)}
+.sym .k{position:relative;height:var(--space-4);display:flex;align-items:center;justify-content:center}
+.sym .tech{display:none}
+.show-tech .sym .tech{display:inline}
+.nev{display:grid;gap:2px}
+.nev div{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.nev b{font-weight:400;color:var(--ink)}
+.offnote{gap:var(--space-2);align-items:flex-start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--warning)}
+.nogw .dot.g,.nogw .lbl.g{display:none}
+@media (max-width:1400px){
+  .main{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:var(--space-4)}
+  .lede{max-width:72ch}
+  .plot{grid-template-columns:calc(var(--measure-rail) * .7) minmax(0,1fr)}
+  .rw,.nm{height:calc(var(--space-5) - var(--space-2));line-height:calc(var(--space-5) - var(--space-2))}
+  .side{gap:var(--space-3)}
+
+  .chart{padding:var(--space-2) var(--space-3)}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="top"><div><span class="eyebrow" id="eyebrow"></span><h1 id="h1"></h1><p class="lede" id="lede"></p></div><div id="tg"></div></div>
+  <div class="main">
+    <div class="chart dep" style="--i:0" id="chart"></div>
+    <div class="side">
+      <div class="cart dep" style="--i:1" id="cart"></div>
+      <div class="dep" style="--i:2"><div class="lab" style="margin-bottom:var(--space-1)" id="symh"></div><div class="sym" id="sym"></div></div>
+      <div class="offnote" id="off"></div>
+      <div class="dep" style="--i:3"><div class="nev" id="nev"></div></div>
+    </div>
+  </div>
+</div>
+<div class="hints"><span><span class="kbd">G</span> assistant<span class="hl"> on/off</span></span><span><span class="kbd">T</span><span class="hl"> technical</span> words</span><span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Question sheet · V4</b> chart and zones: the answer over its sources · sea charts, zones of confidence</div>
+<script>
+/*DATA*/
+const SHEET = {
+  eyebrow: 'The reference desk · question sheet · chart and zones',
+  title: 'Chart and zones',
+  lede: 'A sea chart prints every sounding over a diagram of how well each area was surveyed, and says “reported” for what nobody has checked. Here the answer is drawn over its sources: where the record is complete, partial, missing or not yours, and which marks are only the assistant’s.',
+  symTitle: 'Chart symbols', zonesTitle: 'Where “heard from” was looked for',
+  cart: 'Kept on the chart',
+  zones: { A: 'Complete', B: 'Partial', N: 'Not kept', L: 'Not yours to see' }
+};
+/*COMMON_JS*/
+const D = s => new Date(s).getTime();
+const X0 = D(ANS.axis.from), X1 = D(ANS.axis.to);
+const x = s => ((D(s) - X0) / (X1 - X0) * 100);
+const months = []; for (let d = new Date(X0); d.getTime() <= X1; d.setMonth(d.getMonth() + 1)) months.push(new Date(d));
+const CUTS = [ { at: '31 May 2026', n: 17, l: 'since 31 May' }, { at: '1 Apr 2026', n: 12, l: 'since 1 April' }, { at: '1 Mar 2026', n: 9, l: 'since 1 March' } ];
+function render() {
+  $('#eyebrow').textContent = SHEET.eyebrow; $('#h1').textContent = SHEET.title; $('#lede').textContent = SHEET.lede; $('#tg').innerHTML = toggles();
+  const rows = ANS.rows.slice().sort((a, b) => (a.last ? D(a.last) : 0) - (b.last ? D(b.last) : 0));
+  const row = (r, h) => {
+    let t = '';
+    if (r.last) t += `<span class="sil" style="left:${x(r.last)}%;right:0"></span><span class="dot${h ? ' h' : ''}" style="left:${x(r.last)}%"></span><span class="lbl${x(r.last) > 30 ? ' l' : ''}" style="left:${x(r.last)}%">${r.last.replace(/ 20\d\d/, '')} · ${r.via}<span class="ref">${srcNo(r.src)}</span></span>`;
+    if (r.maybe) t += `<span class="dot g" style="left:${x(r.maybe.date)}%"></span><span class="lbl g" style="left:${x(r.maybe.date)}%">${r.maybe.date.replace(/ 20\d\d/, '')}? guess</span>`;
+    if (r.noRecord) t += `<span class="wv" style="left:0">${mWavy(20)} no emails kept ${mWavy(20)}</span><span class="lbl" style="left:${x('1 Jan 2026')}%">nothing found since January</span>`;
+    return `<span class="nm${h ? ' h' : ''}">${r.name}</span><div class="rw">${t}</div>`; };
+  const zrow = s => { const L = SHEET.zones;
+    if (s.locked) return `<span class="zone-l">${s.name}</span><div class="zn"><i class="zL" style="left:0;right:0"></i><b class="m">${ic('lock', 12)} ${L.L} · kept on ${FL(s.floor).name} · ask ${P(s.who).name}</b></div>`;
+    const f = '1 ' + s.from, st = Math.max(0, x(f));
+    return `<span class="zone-l">${s.name}<span class="ref">${srcNo(s.id)}</span></span><div class="zn">${st > 0 ? `<i class="zN" style="left:0;width:${st}%"></i><b class="m" style="left:0">${mWavy(24)} ${L.N}</b>` : ''}<i class="z${s.zone}" style="left:${st}%;right:0"></i><b style="left:${st}%">${L[s.zone]} · ${fmt(s.n)} ${s.what}</b></div>`; };
+  $('#chart').innerHTML = `<div class="qh"><span class="yours">${Q.words}</span><span class="lab">${ANS.n} of ${ANS.of}</span></div>
+    <p class="rd">Read as: <b>${Q.reading}</b> <span class="guess" style="font-size:var(--type-small)">running contracts</span> was the assistant’s suggestion; you said yes.</p>
+    <div class="plot" id="plot"><span></span><div class="trk" style="height:calc(var(--space-6) + var(--space-1))"></div>
+      ${rows.map(r => row(r)).join('')}
+      <span class="fold" style="grid-column:1/-1;border-top:1px solid var(--hairline-strong)">Left out: 39 heard from since 1 March (3 shown) · 13 with no running contract</span>
+      ${ANS.heard.map(r => row(r, true)).join('')}
+      <span></span><div class="ax">${months.map((m, i) => i % 2 ? '' : `<span style="left:${(m.getTime() - X0) / (X1 - X0) * 100}%">${m.toLocaleString('en-GB', { month: 'short' })}${m.getMonth() === 0 || i === 0 ? ' ' + String(m.getFullYear()).slice(2) : ''}</span>`).join('')}</div>
+      <span class="zone-l zh lab" style="grid-column:1/-1">${SHEET.zonesTitle}</span>
+      ${DATA.sources.map(zrow).join('')}
+    </div>`;
+  /* contours sit over the whole plot's track column */
+  const plot = $('#plot'), tr = document.createElement('div');
+  tr.style.cssText = 'position:absolute;top:0;bottom:0;left:0;right:0;grid-column:2;grid-row:1 / span 40;pointer-events:none;z-index:0';
+  tr.innerHTML = CUTS.map((c, i) => `<div class="ctr ${i < 2 ? 'alt' : ''}" data-c="${i}" style="left:${x(c.at)}%;top:${['var(--space-5)', 'var(--space-3)', '0'][i]}"><span class="cl">${c.n} ${c.l}${i === 2 ? ' ✓' : ''}</span></div>`).join('');
+  plot.appendChild(tr);
+  $('#cart').innerHTML = `<div class="lab" style="text-align:center">${SHEET.cart}</div><div class="t">${SAV.name}</div><div class="s">${P(SAV.by).name} · shared with ${FL(SAV.shared).name} · reruns every Monday</div>
+    <div class="r"><span>Edition</span><span>${SAV.saved}: ${SAV.runs[0].n} suppliers, ${SAV.runs[0].note}</span></div>
+    ${SAV.runs.slice(1).map(r => `<div class="r${r.changed ? ' ch' : ''}"><span>${r.at}</span><span>${r.n}: ${r.note}</span></div>`).join('')}
+    <div class="r"><span>Asked</span><span>${GW.plain} once, on ${SAV.saved.replace(' 2026', '')}. Reruns redraw from the record only.</span></div>`;
+  $('#symh').textContent = SHEET.symTitle;
+  $('#sym').innerHTML = [
+    [`<span class="dot" style="left:50%"></span>`, 'Sounding', 'last contact, from the record, with its source number', 'observation'],
+    [`<span class="dot g" style="left:50%"></span>`, 'Reported', 'the assistant’s guess. Hollow, dashed, never used to draw the line', 'chart “Rep”: not surveyed · model gateway'],
+    [`<span style="width:100%;border-top:1px solid var(--light)"></span>`, 'The reading', 'the cut-off you chose; dashed lines are the other readings, with their counts', 'contour'],
+    [`<span class="zA" style="width:100%;height:var(--space-3);border-radius:var(--radius-key)"></span>`, 'Complete', 'this source covers this stretch of time', 'zone A'],
+    [`${mWavy(36)}`, 'Not kept', 'no record for this stretch; says when it starts', 'unassessed · U'],
+    [`<span class="zL" style="width:100%;height:var(--space-3);border-radius:var(--radius-key)"></span>`, 'Not yours to see', 'a source on another floor; says whom to ask', 'shadow 135°']
+  ].map(([k, b, d, t]) => `<div><span class="k">${k}</span><span><b>${b}</b> ${d} <span class="tech">· ${t}</span></span></div>`).join('');
+  $('#off').innerHTML = `${ic('circle-alert', 14)}<span>${GW.offWhy} No reported marks: the 12 Apr email waits in Triage, unmatched. Every sounding and line is the same.</span>`;
+  $('#nev').innerHTML = DATA.parts.map(p => `<div><b>${p.plain}</b> never claims ${p.never}</div>`).join('');
+  Icons.hydrate(document.body);
+}
+render();
+function reset() { const c = $('[data-c="2"]'); c.style.left = x(CUTS[0].at) + '%'; c.querySelector('.cl').textContent = CUTS[0].n + ' ' + CUTS[0].l; }
+function demo() {
+  const c = $('[data-c="2"]');
+  [1, 2].forEach((k, i) => later(() => { c.style.left = x(CUTS[k].at) + '%'; c.querySelector('.cl').textContent = CUTS[k].n + ' ' + CUTS[k].l + (k === 2 ? ' · chosen' : ''); }, ms('--motion-calm') * (i * 2 + 1)));
+}
+boot(reset, demo);
+</script>
+</body>
+</html>

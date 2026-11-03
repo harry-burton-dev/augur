@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question sheet · V1 · Enquiry slip</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens for the question sheet. Each is a mix of kit tokens and
+   is listed as "needs token" in notes.md.
+   --------------------------------------------------------------- */
+:root{
+  /* --x-proposed-guess-ink: the ink of anything the assistant (model gateway) proposed and nobody has confirmed.
+     A cool, quieter ink than a fact; never the only carrier (always with the dashed line and a word). */
+  --x-proposed-guess-ink: color-mix(in srgb, var(--info) 42%, var(--ink-muted));
+  /* --x-proposed-guess-line: the dashed rule under or around a guess. Dashes = "drawn, not surveyed". */
+  --x-proposed-guess-line: 1px dashed var(--x-proposed-guess-ink);
+  /* --x-proposed-yours: the person's own words, kept verbatim. */
+  --x-proposed-yours: var(--light);
+  /* carried from the catalogue: six ways to be empty */
+  --x-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  --x-gap-tick: var(--space-2);
+  --x-gap:
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) left top / var(--x-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) left top / 1px var(--x-gap-tick) no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) right top / var(--x-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) right top / 1px var(--x-gap-tick) no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) left bottom / var(--x-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) left bottom / 1px var(--x-gap-tick) no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) right bottom / var(--x-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) right bottom / 1px var(--x-gap-tick) no-repeat;
+  --x-hatch: color-mix(in srgb, var(--ink-muted) 26%, transparent);
+  --x-stale: repeating-linear-gradient(45deg, transparent 0 var(--space-2), var(--x-hatch) var(--space-2) calc(var(--space-2) + 1px));
+  --x-shadow: repeating-linear-gradient(135deg, transparent 0 var(--space-2), var(--hairline-strong) var(--space-2) calc(var(--space-2) + 1px));
+  --x-quiet: .62;
+}
+body{overflow:auto}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.wrap{max-width:calc(var(--measure-wide) * 1.75);margin:0 auto;padding:var(--space-4) var(--edge) var(--space-7)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+h1{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;margin:var(--space-1) 0 var(--space-1);color:var(--light)}
+h2{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.lede{margin:0;color:var(--ink-muted);font-size:var(--type-meta);line-height:var(--leading-meta);max-width:100ch}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.sm{font-size:var(--type-small);line-height:var(--leading-small)}
+.lab{font:400 var(--type-small)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.tech{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);opacity:var(--x-quiet)}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5);margin-bottom:var(--space-4)}
+.toggles{display:flex;gap:var(--space-2);flex:none}
+#tg{flex:none}
+.sw{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-3);min-height:var(--target-sm);border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);background:var(--surface-pane);font-size:var(--type-meta);color:var(--ink);white-space:nowrap}
+.sw .ss{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+#swg[aria-checked="false"] .ss{color:var(--warning)}
+
+/* --- the three voices: your words, the record, a guess --- */
+.yours{color:var(--x-proposed-yours)}
+.yours::before{content:'“'}.yours::after{content:'”'}
+.ref{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);vertical-align:super;margin-left:2px}
+.guess{color:var(--x-proposed-guess-ink);text-decoration:underline dashed var(--x-proposed-guess-ink) 1px;text-underline-offset:4px}
+.gtag{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-guess-ink);border:var(--x-proposed-guess-line);border-radius:var(--radius-pill);padding:2px var(--space-2);white-space:nowrap;vertical-align:middle}
+.rtag{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);padding:2px var(--space-2);white-space:nowrap;vertical-align:middle}
+
+/* --- six ways to be empty (from the catalogue) --- */
+.gapslot{background:var(--x-gap);padding:var(--space-1) var(--space-3);display:flex;flex-direction:column;justify-content:center;gap:2px;font-size:var(--type-small);line-height:var(--leading-small)}
+.gapslot .gl{color:var(--ink-muted)} .gapslot .gw{color:var(--ink)}
+.staleage{background:var(--x-stale);padding:0 var(--space-1);border-radius:var(--radius-key);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.shadowslot{background:var(--x-shadow),var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-key);padding:var(--space-1) var(--space-2);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small)}
+.shadowslot svg{flex:none}
+.wavy{display:inline-block;vertical-align:middle}
+.floorEdge{border-left:2px solid var(--fc)}
+[data-tier="department"]{--fc:var(--floor-department-high)}
+[data-tier="team"]{--fc:var(--floor-team-high)}
+[data-tier="org"]{--fc:var(--floor-org-high)}
+[data-tier="you"]{--fc:var(--floor-you-high)}
+.fdot{display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--fc);vertical-align:1px}
+
+/* --- assistant off (G): whatever needed it says so, and the route that works without it shows --- */
+.offnote{display:none}
+.nogw .offnote{display:flex}
+.nogw .needs-gw{opacity:var(--x-quiet)}
+
+/* deposit animation: parts arrive in order, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-quick))}
+.pre .dep{opacity:0;transform:translateY(calc(var(--space-1) * -1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}}
+.hints{position:fixed;right:var(--edge-tight);bottom:var(--edge-tight);z-index:999;display:flex;gap:var(--space-3);align-items:center;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);background:var(--scrim);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key)}
+.kbd{font:400 var(--type-small)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink)}
+@media (max-width:1400px){.hints .hl{display:none}.hints{gap:var(--space-2)}}
+.gw-off{display:none!important}
+.nogw .gw-on{display:none!important}
+.nogw .gw-off{display:inline-flex!important}
+.gw-off-g{display:none!important}
+.nogw .gw-off-g{display:grid!important}
+.gw-off-f{display:none!important}
+.nogw .gw-off-f{display:inline-flex!important}
+
+.main{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:var(--space-5);align-items:start}
+/* the slip: a ruled form, six fields */
+.slip{border-radius:var(--radius-inset);background:var(--surface-pane);border:1px solid var(--hairline);box-shadow:var(--shadow-raised);padding:var(--space-2) var(--space-4) var(--space-3)}
+.slip-h{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3);padding:var(--space-1) 0 var(--space-2);border-bottom:1px solid var(--hairline-strong)}
+.fld{display:grid;grid-template-columns:calc(var(--measure-rail) * .58) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--hairline)}
+.fld:first-of-type{border-top:0}
+.fn{display:flex;gap:var(--space-2);align-items:flex-start;color:var(--ink)}
+.fn .no{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.fn b{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.fn .tech{display:none}
+.show-tech .fn .tech{display:block}
+.fv{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);min-width:0}
+.big{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead)}
+.rd{margin-top:var(--space-1);color:var(--ink-muted)}
+.rd .tq{display:none;font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);margin-top:2px}
+.show-tech .rd .tq{display:block}
+/* pencil and ink */
+.pen{color:var(--x-proposed-guess-ink);text-decoration:underline dashed var(--x-proposed-guess-ink) 1px;text-underline-offset:4px;transition:color var(--motion-calm) var(--ease-out),text-decoration-color var(--motion-calm) var(--ease-out)}
+.pen .pi{display:inline-flex;vertical-align:-2px;margin-left:2px;opacity:1;transition:opacity var(--motion-calm)}
+.pen.inked{color:var(--light);text-decoration:underline solid var(--hairline-strong) 1px}
+.pen.inked .pi{opacity:0;width:0;margin:0;overflow:hidden}
+.ink{color:var(--light)}
+.cl{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.4fr);gap:var(--space-2);padding:2px 0;font-size:var(--type-small);line-height:var(--leading-small)}
+.cl .q{color:var(--ink)}
+.opts{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);color:var(--ink-muted)}
+.opts .o{white-space:nowrap}
+.opts .o.p{color:var(--light)}
+.opts .o.p::before{content:'';display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--light);margin-right:var(--space-1);vertical-align:1px}
+.opts .n{font-family:var(--font-mono);margin-left:var(--space-1);color:var(--ink-muted)}
+.by{display:inline-flex;gap:2px;align-items:center;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.st{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr) calc(var(--space-7) - var(--space-3)) calc(var(--space-8) + var(--space-5));gap:var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small);padding:1px 0}
+.st .i{font-family:var(--font-mono);color:var(--ink-muted)}
+.st .c{font-family:var(--font-mono);text-align:right;color:var(--light)}
+.st .o{color:var(--ink-muted)}
+.st .c.g{color:var(--x-proposed-guess-ink)}
+.ans{display:flex;gap:var(--space-4);align-items:baseline}
+.ans .nn{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--light)}
+.rows{margin-top:var(--space-1);display:grid;gap:1px}
+.row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.5fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);padding:1px 0;align-items:center}
+.row .nm{color:var(--light)}
+.gp{display:flex;flex-direction:column;gap:var(--space-1)}
+.gp > div{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-4)) minmax(0,1fr);gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small)}
+.sv{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sv b{font-weight:400;color:var(--ink)}
+/* right: the rules */
+.side{display:flex;flex-direction:column;gap:var(--space-4)}
+.legend{display:grid;gap:var(--space-2)}
+.lg{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-5)) minmax(0,1fr);gap:var(--space-3);align-items:baseline;border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.lg .sp{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.lg p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.lg p b{font-weight:400;color:var(--ink)}
+.never{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1)}
+.never li{display:grid;grid-template-columns:calc(var(--space-8) - var(--space-3)) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.never li b{font-weight:400;color:var(--ink)}
+.gwt{width:100%;border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small)}
+.gwt th{font:400 var(--type-small)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);text-align:left;padding:0 var(--space-2) var(--space-1) 0}
+.gwt td{border-top:1px solid var(--hairline);padding:2px var(--space-2) 2px 0;color:var(--ink-muted);vertical-align:top}
+.gwt td:first-child{color:var(--ink);white-space:nowrap}
+.gwt .y{color:var(--x-proposed-guess-ink)}
+.offnote{gap:var(--space-2);align-items:flex-start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--warning);margin-top:var(--space-1)}
+.nogw .pen:not(.inked){color:var(--ink-muted);text-decoration:none}
+.nogw .pen .pi{opacity:0}
+@media (max-width:1400px){
+  .main{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:var(--space-4)}
+  .wrap{padding-top:var(--space-3)}
+  .lede{max-width:70ch}
+  .fld{padding:3px 0}
+  .slip-h{padding:0 0 var(--space-1)}
+  .ans .nn{font-size:var(--type-heading)}
+  .legend{gap:0}.lg{padding-top:var(--space-1)}
+  .side{gap:var(--space-3)}
+  .big{font-size:var(--type-body);line-height:var(--leading-body)}
+  .row:nth-child(n+3):not(:last-child){display:none}
+  .cl{grid-template-columns:minmax(0,.75fr) minmax(0,1.6fr)}
+  .gp > div{grid-template-columns:var(--space-8) minmax(0,1fr)}
+  .never li{grid-template-columns:var(--space-8) minmax(0,1fr)}
+  .gwt td:nth-child(2),.gwt th:nth-child(2){display:none}
+  .rows .row:nth-child(2){display:none}
+  .lg{grid-template-columns:var(--space-8) minmax(0,1fr)}
+  .fld{grid-template-columns:calc(var(--measure-rail) * .48) minmax(0,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="top"><div><span class="eyebrow" id="eyebrow"></span><h1 id="h1"></h1><p class="lede" id="lede"></p></div><div id="tg"></div></div>
+  <div class="main">
+    <div class="slip dep" style="--i:0" id="slip"></div>
+    <div class="side">
+      <div class="dep" style="--i:1"><h2 id="lgh"></h2><div class="legend" id="legend"></div></div>
+      <div class="dep" style="--i:2"><div class="lab" style="margin-bottom:var(--space-1)" id="nvh"></div><ul class="never" id="never"></ul></div>
+      <div class="dep" style="--i:3"><table class="gwt" id="gwt"></table><div class="offnote" id="off"></div></div>
+    </div>
+  </div>
+</div>
+<div class="hints"><span><span class="kbd">G</span> assistant<span class="hl"> on/off</span></span><span><span class="kbd">T</span><span class="hl"> technical</span> words</span><span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Question sheet · V1</b> enquiry slip: pencil until you ink it · reference desk slips, Dervin and Dewdney</div>
+<script>
+/* ===== Sample data: every word, name, count and date on these sheets comes from here.
+   A different deployment brings its own kinds, sources, people and glossary; nothing below is drawn for one trade. ===== */
+const DATA = {
+  deployment: 'Regional services (sample)',
+  today: '3 Nov 2026',
+  floors: {
+    ops:         { name: 'Operations', tier: 'department' },
+    procurement: { name: 'Procurement', tier: 'team' },
+    finance:     { name: 'Finance', tier: 'team' },
+    org:         { name: 'Whole organisation', tier: 'org' }
+  },
+  people: {
+    me:    { name: 'Sam Achebe', role: 'duty officer', floor: 'ops' },
+    jo:    { name: 'Jo Reyes', role: 'procurement desk', floor: 'procurement' },
+    priya: { name: 'Priya Nair', role: 'finance lead', floor: 'finance' },
+    dev:   { name: 'Dev Patel', role: 'Operations colleague', floor: 'ops' }
+  },
+  apps: { atlas: 'Data Atlas', artifacts: 'Artifacts', mandate: 'Mandate' },
+  /* The model gateway, in both registers. on = the admin has turned it on. */
+  gateway: { plain: 'the assistant', Plain: 'The assistant', tech: 'model gateway · askModel', on: true,
+    offWhy: 'The assistant is off for this organisation. Admins turn it on in Admin.',
+    offStill: 'Questions still work: you pick the reading from a sentence, and Data Atlas matches by keys, names and spelling.' },
+  /* Words the organisation has defined once, for everyone (an admin keeps the glossary; no model needed to find them). */
+  glossary: [
+    { word: 'spring', means: '1 March to 31 May', by: 'Org glossary' },
+    { word: 'financial year', means: 'starts 1 April', by: 'Org glossary' }
+  ],
+  /* The question, as the person typed it, cut into the parts it was read by. */
+  question: {
+    words: 'which suppliers have we not heard from since spring?',
+    by: 'me', floor: 'ops', first: '20 Oct 2026, 09:14',
+    parts: [
+      { t: 'which suppliers', reads: 'Suppliers', how: 'name', tech: 'kind = Supplier (cco:Organization)' },
+      { t: 'have we not heard from', reads: 'no email, delivery note or meeting note', how: 'guess', tech: 'NOT EXISTS contact(source ∈ s1,s2,s3)', alt: 'pick what counts as contact' },
+      { t: 'since spring', reads: 'since 1 March 2026', how: 'glossary', tech: 'contact.date ≥ 2026-03-01', alt: 'pick a date' }
+    ],
+    /* What the assistant added that the person never said. */
+    added: { says: 'only suppliers with a running contract', how: 'guess', tech: 'has Contract(status = running)', left: 13 },
+    reading: 'Suppliers with a running contract that have had no email, delivery note or meeting note from us since 1 March 2026.',
+    readingTech: 'Supplier ∧ ∃Contract(running) ∧ ¬∃Contact(date ≥ 2026-03-01, src ∈ {s1,s2,s3})'
+  },
+  /* Clarifications: each one neutral, each choice with the count it would leave (counts come from the record, never the model). */
+  clarify: [
+    { id: 'when', ask: 'Since spring: from when?', why: 'Spring is in the org glossary as 1 March to 31 May. “Since” could mean either end.', raisedBy: 'glossary',
+      opts: [ { l: 'Since 1 March', d: 'spring began', n: 9, pick: true }, { l: 'Since 1 April', d: 'your financial year', n: 12 }, { l: 'Since 31 May', d: 'spring ended', n: 17 }, { l: 'Another date', d: '', n: null } ] },
+    { id: 'contact', ask: 'Heard from: which records count?', why: 'Data Atlas keeps four kinds of record that link a supplier to us.', raisedBy: 'guess',
+      opts: [ { l: 'Emails', d: 'Supplier correspondence', n: 1204, pick: true, src: 's1' }, { l: 'Delivery notes', d: 'at our sites', n: 3310, pick: true, src: 's2' }, { l: 'Meeting notes', d: 'Operations', n: 212, pick: true, src: 's3' }, { l: 'Invoices', d: 'kept on Finance', n: null, locked: true, src: 's4' } ] },
+    { id: 'running', ask: 'Only suppliers we still have a contract with?', why: 'You didn’t say this. The assistant suggests it: 13 suppliers’ contracts have ended.', raisedBy: 'guess',
+      opts: [ { l: 'Yes, running contracts only', d: '', n: 9, pick: true }, { l: 'No, include ended contracts', d: '', n: 22 } ] }
+  ],
+  /* Where "heard from" is looked for. */
+  sources: [
+    { id: 's1', name: 'Supplier correspondence', what: 'emails', app: 'artifacts', floor: 'procurement', n: 1204, from: 'Jan 2026', zone: 'A' },
+    { id: 's2', name: 'Delivery notes', what: 'delivery notes', app: 'atlas', floor: 'ops', n: 3310, from: 'Apr 2024', zone: 'A' },
+    { id: 's3', name: 'Meeting notes', what: 'meeting notes', app: 'artifacts', floor: 'ops', n: 212, from: 'Sep 2025', zone: 'B' },
+    { id: 's4', name: 'Invoices', what: 'invoices', app: 'atlas', floor: 'finance', n: null, from: null, zone: 'U', locked: true, who: 'priya' }
+  ],
+  /* The workings, step by step. by = who did it: you, the record (Data Atlas, no model) or a guess (model gateway). */
+  steps: [
+    { k: 'start',  say: 'Start with every supplier you can read', n: 61, by: 'record', how: 'kept on Whole organisation', tech: 'kind = Supplier · floors: org' },
+    { k: 'keep',   say: 'Keep those with a running contract', n: 48, out: 13, outWhy: 'contract ended', by: 'guess', ok: 'me', how: 'the assistant suggested it; you said yes', tech: '∃ Contract(status = running)' },
+    { k: 'look',   say: 'Look for an email, delivery note or meeting note since 1 March', n: 4726, unit: 'records searched', by: 'record', how: '3 sources; invoices not searched', tech: 'src ∈ {s1,s2,s3} · date ≥ 2026-03-01' },
+    { k: 'match',  say: 'Match each record to its supplier', n: 39, unit: 'suppliers heard from', by: 'record', how: '34 by company number, 5 by name spelling', tech: 'key match 34 · trigram ≥ 0.82 ×5' },
+    { k: 'maybe',  say: 'One email might be from Easterby Cleaning', n: 1, unit: 'not counted', by: 'guess', how: 'matched by meaning, not confirmed', tech: 'pgvector cosine 0.71 · unconfirmed' },
+    { k: 'left',   say: 'Left: suppliers with no contact since 1 March', n: 9, by: 'record', how: '48 − 39', tech: 'set difference' }
+  ],
+  /* The answer: rows from the record. sure = rests on the record alone. */
+  answer: {
+    n: 9, of: 48, sureN: 7,
+    sure: 'Sure for 7 of 9. Two rest on less: see their notes.',
+    rows: [
+      { name: 'Linden Grounds', last: '8 Dec 2025', via: 'delivery note', src: 's2', ends: 'Aug 2027' },
+      { name: 'Moorside Tyres', last: '27 Jan 2026', via: 'meeting note', src: 's3', ends: 'Mar 2027' },
+      { name: 'Fenwick Lifts', last: '2 Feb 2026', via: 'delivery note', src: 's2', ends: 'Jan 2028' },
+      { name: 'Tamsin Print & Post', last: '11 Feb 2026', via: 'email', src: 's1', ends: 'Dec 2026', gap: 'Contact person', gapWho: 'jo' },
+      { name: 'Coldwell Waste Partners', last: '14 Feb 2026', via: 'email', src: 's1', ends: 'Mar 2027' },
+      { name: 'Ridgeway Electrical', last: '19 Feb 2026', via: 'email', src: 's1', ends: 'Jun 2027' },
+      { name: 'Easterby Cleaning Co', last: '20 Feb 2026', via: 'email', src: 's1', ends: 'Sep 2027', maybe: { date: '12 Apr 2026', what: 'an email signed “the cleaning crew”', score: 'a likely match by meaning' } },
+      { name: 'Pellow Security', last: '25 Feb 2026', via: 'email', src: 's1', ends: 'Feb 2027' },
+      { name: 'Carrow IT Supplies', last: null, via: null, ends: 'Nov 2027', noRecord: { before: 'Jan 2026', why: 'Supplier correspondence starts in January 2026' } }
+    ],
+    /* a few of the 39 heard from since 1 March, for sheets that show what was left out */
+    heard: [
+      { name: 'Blyth Winter Services', last: '6 May 2026', via: 'meeting note', src: 's3' },
+      { name: 'Hallam Haulage Ltd', last: '14 Sep 2026', via: 'delivery note', src: 's2', spell: true },
+      { name: 'Northgate Fuels', last: '22 Oct 2026', via: 'email', src: 's1' }
+    ],
+    axis: { from: '1 Sep 2025', to: '3 Nov 2026' }
+  },
+  /* What the answer can't see, and who could fill it. kind = one of the six ways to be empty. */
+  gaps: [
+    { kind: 'shadow', say: 'Invoices are kept on Finance. Some of these 9 may have invoiced since March.', who: 'priya', ask: 'Ask Priya Nair, finance lead' },
+    { kind: 'norecord', say: 'No emails before January 2026, so Carrow IT Supplies may never have written.', who: 'jo', ask: 'Jo Reyes can say when Carrow last wrote' },
+    { kind: 'gap', say: 'Contact person not known yet for Tamsin Print & Post.', who: 'jo', ask: 'Procurement can add it' }
+  ],
+  /* The question kept as an object. */
+  saved: {
+    name: 'Suppliers not heard from since spring',
+    by: 'me', saved: '20 Oct 2026', shared: 'ops', reruns: 'every Monday, 07:00, and whenever it’s opened',
+    reads: 'the data as it is now; every run is kept, so any run opens as it was',
+    modelUsed: 'once, on 20 Oct, to read your words. Reruns use the reading you confirmed and never ask it again.',
+    changed: '27 Oct 2026',
+    runs: [
+      { at: '20 Oct', n: 10, note: 'first asked' },
+      { at: '27 Oct', n: 9, note: 'Northgate Fuels emailed on 22 Oct', changed: true },
+      { at: '3 Nov', n: 9, note: 'no change' }
+    ],
+    keeps: ['your words, as typed', 'the reading you confirmed', 'each choice you made', 'the sources and floors it read', 'when each run happened and what it found']
+  },
+  /* The six parts of a question sheet. never = what each must never claim. */
+  parts: [
+    { id: 'question', plain: 'Question', tech: 'query text + reading', icon: 'message-circle-question',
+      set: 'Your words, verbatim, in quotes. Under them, the reading: the same question in the record’s words.',
+      never: 'to be understood before you confirm the reading. Your words are never rewritten in place.' },
+    { id: 'clarify', plain: 'Clarification', tech: 'disambiguation', icon: 'split',
+      set: 'One neutral question at a time, two to four choices, each with the count it would leave, and “something else”.',
+      never: 'a right answer. It never leads, and never asks what the record can answer itself.' },
+    { id: 'workings', plain: 'Workings', tech: 'query plan, in plain words', icon: 'list-checks',
+      set: 'Numbered steps in the order they ran, each with its count, who did it, and what it left out.',
+      never: 'to be complete beyond its sources. Nothing left out goes unsaid.' },
+    { id: 'answer', plain: 'Answer', tech: 'result set', icon: 'list',
+      set: 'Rows from the record, each with where it came from. A count first, and how sure, in words.',
+      never: 'more certainty than its weakest step, or a guess as a fact. Zero is said with what was checked.' },
+    { id: 'gap', plain: 'Gap', tech: 'coverage note', icon: 'square-dashed',
+      set: 'One of the six ways to be empty, with what it means for this answer and who could fill it.',
+      never: '“nothing found” when it means “not looked” or “not yours to see”.' },
+    { id: 'saved', plain: 'Saved question', tech: 'stored query + run log', icon: 'bookmark',
+      set: 'A name, your words, the confirmed reading, who it’s shared with, when it reruns, when its answer last changed.',
+      never: 'that today’s answer is the one it was saved with. It never asks the assistant again.' }
+  ],
+  /* Who can do a step. */
+  actors: {
+    me:     { plain: 'You', tech: 'person', icon: 'user' },
+    record: { plain: 'Data Atlas', tech: 'query engine · keys, names, spelling', icon: 'database' },
+    guess:  { plain: 'The assistant', tech: 'model gateway', icon: 'circle-dashed' },
+    glossary: { plain: 'Org glossary', tech: 'deployment config · glossary', icon: 'book-a' }
+  }
+};
+
+const SHEET = {
+  eyebrow: 'The reference desk · question sheet · enquiry slip',
+  title: 'Enquiry slip',
+  lede: 'Every question is a slip with six fields, filled in the order a reference desk would. Anything the assistant proposes is pencilled in. Only you ink it, and nothing pencilled is ever counted.',
+  slipName: 'Enquiry', legendTitle: 'Pencil and ink', neverTitle: 'What each field must never claim',
+  legend: [
+    { sp: () => `<span class="yours">since spring</span>`, b: 'Your words', t: 'In quotes, exactly as typed. Kept for good, never rewritten.' },
+    { sp: () => `<span class="ink">since 1 March 2026</span><span class="ref">G</span>`, b: 'Inked', t: 'From the record, the org glossary, or a choice you made. Its source is marked: a number, or G for the glossary.' },
+    { sp: () => `<span class="pen">no reply since March<span class="pi">${ic('pencil', 12)}</span></span>`, b: 'Pencilled', t: 'The assistant’s guess. Dashed, cooler, with a pencil. Not counted until you ink it; never in a count.' }
+  ],
+  gwHeads: ['Field', 'With the assistant', 'Without it']
+};
+/* ===== Shared helpers (generated into every sheet) ===== */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const ms = n => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(n)) || 0;
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ic = (n, s) => Icons.svg(n, { size: s || 16, stroke: 1.5 });
+const FL = id => DATA.floors[id];
+const P = id => DATA.people[id];
+const SRC = id => DATA.sources.find(s => s.id === id);
+const PART = id => DATA.parts.find(p => p.id === id);
+const A = id => DATA.actors[id];
+const fmt = n => n == null ? 'some' : n.toLocaleString('en-GB');
+const Q = DATA.question, ANS = DATA.answer, SAV = DATA.saved, GW = DATA.gateway;
+const srcNo = id => DATA.sources.findIndex(s => s.id === id) + 1;
+
+/* the empty marks, drawn small enough to sit in a line */
+const mGap = (label, who) => `<span class="gapslot"><span class="gl">${label}</span>${who ? `<span class="gw">${who}</span>` : ''}</span>`;
+const mShadow = text => `<span class="shadowslot">${ic('lock', 14)}<span>${text}</span></span>`;
+function mWavy(w) { w = w || 28; let d = ''; for (let x = 0, i = 0; x <= w; x += 4, i++) d += `${i ? 'L' : 'M'}${x},${i % 2 ? 2 : 8}`;
+  return `<svg class="wavy" width="${w}" height="10" viewBox="0 0 ${w} 10" aria-hidden="true"><path d="${d}" style="fill:none;stroke:var(--ink-muted);stroke-width:1"/></svg>`; }
+const mNoRecord = text => `<span style="display:inline-flex;align-items:center;gap:var(--space-2)">${mWavy()}<span class="muted">${text}</span>${mWavy()}</span>`;
+
+/* the assistant (model gateway) on or off, and technical words, as page state */
+const STATE = { gw: GW.on, tech: false };
+const HOOKS = { gw: [], tech: [] };
+function setGW(v) { STATE.gw = v; document.body.classList.toggle('nogw', !v); const b = $('#swg'); if (b) { b.setAttribute('aria-checked', v); b.querySelector('.ss').textContent = v ? 'on' : 'off'; } HOOKS.gw.forEach(f => f(v)); }
+function setTech(v) { STATE.tech = v; document.body.classList.toggle('show-tech', v); const b = $('#swt'); if (b) { b.setAttribute('aria-checked', v); b.querySelector('.ss').textContent = v ? 'on' : 'off'; } HOOKS.tech.forEach(f => f(v)); }
+function toggles() {
+  return `<div class="toggles"><button class="sw" id="swg" role="switch" aria-checked="true">${ic('circle-dashed', 14)}<span>${GW.Plain}</span><span class="ss">on</span><span class="kbd">G</span></button>
+    <button class="sw" id="swt" role="switch" aria-checked="false">${ic('code', 14)}<span>Technical words</span><span class="ss">off</span><span class="kbd">T</span></button></div>`;
+}
+function wireToggles() {
+  const g = $('#swg'), t = $('#swt');
+  if (g) g.addEventListener('click', () => setGW(!STATE.gw));
+  if (t) t.addEventListener('click', () => setTech(!STATE.tech));
+  document.addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'g' || e.key === 'G') setGW(!STATE.gw);
+    if (e.key === 't' || e.key === 'T') setTech(!STATE.tech); });
+}
+/* timers for the auto-demo; R replays from the start */
+const TIMERS = [];
+const later = (fn, t) => TIMERS.push(setTimeout(fn, t));
+function boot(reset, demo) {
+  const w = $('#wrap');
+  const run = () => { TIMERS.splice(0).forEach(clearTimeout); setGW(GW.on); setTech(false); reset(); w.classList.add('pre'); later(() => { w.classList.remove('pre'); demo(); }, ms('--motion-run')); };
+  document.addEventListener('keydown', e => { if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) run(); });
+  wireToggles();
+  run();
+}
+
+const by = k => `<span class="by">${ic(A(k).icon, 12)}${A(k).plain}</span>`;
+const pen = (t, id) => `<span class="pen" data-pen="${id}">${t}<span class="pi">${ic('pencil', 12)}</span></span>`;
+const NOGW = {
+  question: 'You pick the reading from a sentence: Suppliers that have no [pick what counts] since [pick a date].',
+  clarify: 'Raised by the structure instead: a word in the glossary, a detail with several sources. Running contracts is offered as a filter, not asked.',
+  workings: 'The same steps. The one meaning-match is skipped and its email waits in Triage.',
+  answer: 'The same rows: guesses were never counted. 9 if you add the running-contract filter the sentence offers, 22 if not.', gap: 'The same.', saved: 'The same. It never needed the assistant to rerun.'
+};
+const WITH = {
+  question: 'Reads your words into a draft reading (pencilled)', clarify: 'Suggests one question you didn’t ask (running contracts)',
+  workings: 'One match by meaning, pencilled', answer: 'Nothing: rows come from the record', gap: 'Nothing', saved: 'Nothing: reruns use your inked reading'
+};
+function field(i, id, body) { const p = PART(id);
+  return `<div class="fld"><div class="fn"><span class="no">${i}</span><span><b>${p.plain}</b><span class="tech">${p.tech}</span></span></div><div class="fv">${body}</div></div>`; }
+function render() {
+  $('#eyebrow').textContent = SHEET.eyebrow; $('#h1').textContent = SHEET.title; $('#lede').textContent = SHEET.lede; $('#tg').innerHTML = toggles();
+  const me = P(Q.by);
+  const reading = `<span class="ink">Suppliers</span> ${pen('with a running contract', 'run')} that have had ${pen('no email, delivery note or meeting note', 'hf')} from us <span class="ink">since 1 March 2026</span><span class="ref">G</span>.`;
+  const cl = DATA.clarify.map(c => `<div class="cl"><span class="q">${c.ask}</span><span class="opts">${c.opts.map(o => `<span class="o${o.pick ? ' p' : ''}">${o.l}${o.locked ? ' ' + ic('lock', 11) : ''}${o.n != null ? `<span class="n">${fmt(o.n)}</span>` : ''}</span>`).join('')}</span></div>`).join('');
+  const st = DATA.steps.map((s, i) => (s.k === 'maybe' ? `<div class="st gw-off-g"><span class="i">${i + 1}</span><span>One email matched nobody <span class="o">· waits in Triage, not counted</span></span><span class="c">1</span><span>${by('record')}</span></div>` : '') + `<div class="st${s.k === 'maybe' ? ' gw-on' : ''}"><span class="i">${i + 1}</span><span>${s.by === 'guess' ? pen(s.say, 's' + i) : s.say}${s.out ? ` <span class="o">· ${s.out} left out: ${s.outWhy}</span>` : ''}</span><span class="c${s.k === 'maybe' ? ' g' : ''}">${fmt(s.n)}</span><span>${by(s.by)}</span></div>`).join('');
+  const r = ANS.rows;
+  const rowH = x => `<div class="row"><span class="nm">${x.name}</span><span>${x.last ? `${x.last}<span class="ref">${srcNo(x.src)}</span>` : mNoRecord('no record before ' + x.noRecord.before)}</span><span class="muted">${x.maybe ? `<span class="gw-on">${pen('maybe ' + x.maybe.date + ': ' + x.maybe.what, 'ez')}</span><span class="gw-off">contract to ${x.ends}</span>` : x.gap ? mGap(x.gap + ' not known yet', '') : 'contract to ' + x.ends}</span></div>`;
+  const rows = [r[6], r[8], r[3]].map(rowH).join('') + `<div class="row"><span class="muted" style="grid-column:1/-1">and the rest of the ${r.length}, each with its source</span></div>`;
+  const gp = DATA.gaps.map(g => `<div><span>${g.kind === 'shadow' ? mShadow('Finance') : g.kind === 'norecord' ? `<span style="display:inline-flex;gap:var(--space-1);align-items:center">${mWavy()}<span class="muted">before Jan</span></span>` : mGap('Not known yet', '')}</span><span>${g.say} <span class="muted">${g.ask}.</span></span></div>`).join('');
+  $('#slip').innerHTML = `<div class="slip-h"><span class="lab">${SHEET.slipName} · ${Q.first} · ${me.name}, ${FL(Q.floor).name}</span><span class="lab" style="display:inline-flex;align-items:center;gap:var(--space-2)"><span data-tier="${FL(Q.floor).tier}" class="fdot"></span>${FL(Q.floor).name}</span></div>`
+    + field(1, 'question', `<div class="big yours">${Q.words}</div><div class="rd">Reading: ${reading}<div class="tq">${Q.readingTech}</div></div>`)
+    + field(2, 'clarify', cl)
+    + field(3, 'workings', st)
+    + field(4, 'answer', `<div class="ans"><span class="nn">${ANS.n}</span><span>suppliers of ${ANS.of} with a running contract<br><span class="muted">${ANS.sure}</span></span></div><div class="rows">${rows}</div>`)
+    + field(5, 'gap', `<div class="gp">${gp}</div>`)
+    + field(6, 'saved', `<div class="sv"><b>${SAV.name}</b><span>shared with <b>${FL(SAV.shared).name}</b></span><span>reruns ${SAV.reruns}</span><span>answer last changed <b>${SAV.changed}</b></span><span>${ic('circle-dashed', 12)} asked ${SAV.modelUsed}</span></div>`);
+  $('#lgh').textContent = SHEET.legendTitle;
+  $('#legend').innerHTML = SHEET.legend.map(l => `<div class="lg"><span class="sp">${l.sp()}</span><p><b>${l.b}.</b> ${l.t}</p></div>`).join('');
+  $('#nvh').textContent = SHEET.neverTitle;
+  $('#never').innerHTML = DATA.parts.map(p => `<li><b>${p.plain}</b><span>Never claims ${p.never}</span></li>`).join('');
+  $('#gwt').innerHTML = `<thead><tr><th>${SHEET.gwHeads[0]}</th><th>${SHEET.gwHeads[1]}</th><th>${SHEET.gwHeads[2]}</th></tr></thead><tbody>` + DATA.parts.map(p => `<tr><td>${p.plain}</td><td class="${/^Nothing/.test(WITH[p.id]) ? '' : 'y'}">${WITH[p.id]}</td><td>${NOGW[p.id]}</td></tr>`).join('') + '</tbody>';
+  $('#off').innerHTML = `${ic('circle-alert', 14)}<span>${GW.offWhy} ${GW.offStill}</span>`;
+  Icons.hydrate(document.body);
+}
+render();
+const order = ['run', 's1', 'hf'];
+function reset() { $$('.pen').forEach(p => p.classList.remove('inked')); }
+function demo() { order.forEach((id, i) => later(() => $$(`[data-pen="${id}"]`).forEach(p => p.classList.add('inked')), ms('--motion-calm') * (i + 1))); }
+boot(reset, demo);
+</script>
+</body>
+</html>

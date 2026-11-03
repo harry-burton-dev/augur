@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When the structure changes · V4 · Consequence preview</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@BASE_CSS*/
+/* ---- V4: the studio shows the consequence before the admin commits ---- */
+.rail .who{padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-bottom:var(--space-3)}
+.nav .t2{display:block;font:400 var(--x-type-micro)/1 var(--font-mono);color:var(--ink-muted);opacity:.7;margin-top:2px}
+.nav{height:auto;min-height:var(--target-sm);padding:var(--space-1) var(--space-2)}
+.split{display:grid;grid-template-columns:minmax(0,calc(var(--measure-decision) - var(--space-5))) minmax(0,1fr);gap:var(--space-5);min-height:0;flex:1}
+/* the draft: what the admin is about to do, in plain words with the technical line under */
+.draft{display:flex;flex-direction:column;gap:var(--space-3)}
+.types{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-1)}
+.types button{display:flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink-muted)}
+.types button[aria-pressed="true"]{border-color:var(--hairline-strong);background:var(--surface-raised);color:var(--light)}
+.types .kbd{margin-left:auto;opacity:.7}
+.form{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-4)}
+.form h2{margin:0 0 var(--space-3);font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.fld{display:grid;grid-template-columns:calc(var(--space-8) - var(--space-4)) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);align-items:baseline}
+.fld > span:first-child{color:var(--ink-muted);font-size:var(--type-small)}
+.fld .tech{display:block}
+.fld .val{color:var(--ink)}
+.fld .val b{font-weight:400;color:var(--light)}
+/* the preview: a developing print. Numbers arrive, bars grow, then the commit lights. */
+.pv{position:relative;border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:linear-gradient(180deg,var(--surface-pane),var(--surface-inset));padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3);min-height:0;overflow:auto;scrollbar-width:thin}
+.pv .top{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4)}
+.pv h2{margin:var(--space-1) 0 0;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.pv h2 b{font:400 var(--type-heading)/1 var(--font-mono);color:var(--light)}
+.blk{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-3)) minmax(0,1fr);gap:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--hairline);opacity:.25;transition:opacity var(--motion-calm) var(--ease-out)}
+.dev .blk{opacity:1}
+.blk > .micro{padding-top:2px}
+.floors{display:flex;flex-direction:column;gap:var(--space-1)}
+.fb{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-4)) minmax(0,1fr) calc(var(--space-6) + var(--space-2));gap:var(--space-3);align-items:center;font-size:var(--type-small)}
+.fb .tr{height:var(--space-2);border-radius:var(--radius-pill);background:var(--hairline);overflow:hidden}
+.fb .tr i{display:block;height:100%;width:0;background:var(--c);border-radius:var(--radius-pill);transition:width var(--motion-calm) var(--ease-out)}
+.fb b{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink);text-align:right}
+.st{display:flex;height:var(--space-3);gap:2px;border-radius:var(--radius-key);overflow:hidden;margin-bottom:var(--space-2)}
+.st i{display:block;flex:0 1 0;transition:flex-grow var(--motion-calm) var(--ease-out)}
+.s-filled{background:var(--ink)} .s-doc{background:color-mix(in srgb,var(--info) 70%,var(--ink-muted))} .s-keep{background:var(--ink-muted)} .s-nobody{background:var(--warning)} .s-new{background:var(--x-new)}
+.leg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-1) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.leg span{display:flex;gap:var(--space-2);align-items:baseline}
+.leg i{flex:none;width:var(--space-2);height:var(--space-2);border-radius:2px;align-self:center}
+.leg b{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink)}
+.views{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.views li{display:grid;grid-template-columns:var(--space-5) calc(var(--space-8) + var(--space-5)) minmax(0,1fr);gap:var(--space-2) var(--space-3);align-items:start;font-size:var(--type-small);line-height:var(--leading-small)}
+.views li svg{color:var(--ink-muted);margin-top:1px}
+.views li .a{color:var(--ink)}
+.views li .a small{display:block;color:var(--ink-muted)}
+.views li .e{color:var(--ink-muted)}
+.views li.warn .e{color:var(--warning)}
+.keep{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.keep b{font-weight:400;color:var(--ink)}
+.commit{display:flex;align-items:center;gap:var(--space-3);margin-top:auto;padding-top:var(--space-3);border-top:1px solid var(--hairline)}
+.commit .btn.go{opacity:.35;pointer-events:none;transition:opacity var(--motion-calm) var(--ease-out)}
+.ready .commit .btn.go{opacity:1;pointer-events:auto}
+.commit .note{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);flex:1}
+.done{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);background:var(--veil);border-radius:var(--radius-inset);opacity:0;pointer-events:none;transition:opacity var(--motion-calm) var(--ease-out);text-align:center;padding:var(--space-6)}
+.done.on{opacity:1;pointer-events:auto}
+.done h3{margin:0;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.done p{margin:0;max-width:var(--measure-prose);color:var(--ink-muted);font-size:var(--type-meta)}
+@media (max-height:840px){ .main{padding-top:var(--space-4);padding-bottom:var(--space-7)} .head{margin-bottom:var(--space-2)} .pv{padding:var(--space-3) var(--space-4);gap:var(--space-2)} .blk{padding-top:var(--space-2)} .views{gap:var(--space-1)} .form{padding:var(--space-3)} .fld{padding:var(--space-1) 0} .head h1{font-size:var(--type-title-s)} .pv h2,.pv h2 b{font-size:var(--type-lead);line-height:var(--leading-lead)} }
+@media (max-width:1400px){ .split{grid-template-columns:minmax(0,calc(var(--measure-card) - var(--space-4))) minmax(0,1fr)} .types{grid-template-columns:1fr} .views li{grid-template-columns:var(--space-5) calc(var(--space-8) + var(--space-2)) minmax(0,1fr)} }
+@media (prefers-reduced-motion: reduce){ .fb .tr i,.st i{transition:none!important} }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Studio"><div class="an" id="appname"></div><div class="who" id="who"></div><div id="navs"></div><div class="foot" id="railfoot"></div></nav>
+  <main class="main" id="main">
+    <div class="head"><div><div class="eyebrow" id="crumb"></div><h1 id="ename"></h1><div class="sub" id="esub"></div></div></div>
+    <div class="split">
+      <section class="draft" aria-label="The change"><div class="types" role="group" aria-label="Kind of change" id="types"></div><div class="form" id="form"></div></section>
+      <section class="pv" id="pv" aria-label="What this will do" aria-live="polite"></section>
+    </div>
+  </main>
+</div>
+<div class="tip" id="tip" role="tooltip"></div>
+<div class="keys" id="keys"></div>
+<div class="x-cap"><b>Structure changes · V4</b> consequence preview before commit · proof prints</div>
+<script>
+/*@DATA*/
+/*@BASE_JS*/
+const TYPES = { 'add-detail': ['Add a detail', 'list-plus'], 'add-kind': ['Add a kind', 'shapes'], split: ['Split a kind', 'split'], rename: ['Rename', 'text-cursor-input'] };
+let ci = 0;
+const C = () => DATA.changes[ci];
+function form(c) {
+  const k = kindOf(c.kind);
+  const F = (w, v, t) => `<div class="fld"><span>${esc(w)}</span><span class="val">${v}${t ? `<span class="tech">${esc(t)}</span>` : ''}</span></div>`;
+  const body = {
+    'add-detail': () => F('To', `<b>${esc(k.plural)}</b>`, k.tech) + F('Detail', `<b>${esc(c.detail.word)}</b>, ${esc(c.detail.valueWord)}`, `${c.detail.tech} · ${c.detail.range}`) + F('Expected', 'Every site should hold it. Missing ones show as gaps.', 'owl:minCardinality 1 (advisory)') + F('Why', esc(c.why)),
+    'add-kind': () => F('Inside', `<b>${esc(k.plural)}</b>`, k.tech) + F('New kind', `<b>${esc(c.newKind.word)}</b>`, `${c.newKind.tech} rdfs:subClassOf ${k.tech}`) + F('Rule', esc(c.newKind.rule)) + F('Why', esc(c.why)),
+    split: () => F('Split', `<b>${esc(k.plural)}</b>`, k.tech) + F('Into', c.into.map(x => `<b>${esc(x.word)}</b>`).join(' and '), c.into.map(x => x.tech).join(', ')) + F('Decided by', `the detail “${esc(c.by_detail)}”`) + F('Why', esc(c.why)),
+    rename: () => F('Kind', `<b>${esc(c.from)}</b>`, k.tech + ' (unchanged)') + F('New name', `<b>${esc(c.to)}</b> · ${esc(c.toPlural)}`, 'rdfs:label, skos:altLabel keeps “' + c.from + '”') + F('Why', esc(c.why))
+  }[c.type]();
+  return `<h2>${esc(TYPES[c.type][0])}</h2>${body}`;
+}
+/* the shares that land on the records, per kind of change */
+function shares(c) {
+  if (c.type === 'add-detail') { const g = c.gaps; return { total: g.total, head: `Gaps on <b>${g.total - g.filled}</b> of ${g.total} records`, parts: [['filled', g.filled, 'already filled'], ['doc', g.fromDocs, c.fillers.fromDocs.word.toLowerCase()], ['keep', g.keepers, c.fillers.keepers.word.toLowerCase()], ['nobody', g.nobody, c.fillers.nobody.word.toLowerCase()]] }; }
+  if (c.type === 'add-kind') return { total: c.match.sure + c.match.ask, head: `<b>${c.match.sure + c.match.ask}</b> sites become ${esc(c.newKind.plural.toLowerCase())}`, parts: [['new', c.match.sure, 'match the rule'], ['keep', c.match.ask, 'a keeper confirms']] };
+  if (c.type === 'split') return { total: kindOf(c.kind).count, head: `<b>${kindOf(c.kind).count}</b> ${esc(kindOf(c.kind).plural.toLowerCase())} are placed`, parts: [['new', c.into[0].n, c.into[0].word.toLowerCase()], ['filled', c.into[1].n, c.into[1].word.toLowerCase()], ['keep', c.unsure, 'can’t tell: a keeper places them']] };
+  return { total: c.n, head: `<b>${c.n.toLocaleString('en-GB')}</b> records show a new name`, parts: [['new', c.n, 'renamed, nothing else changes']] };
+}
+function preview(c) {
+  const s = shares(c), maxF = Math.max(...c.byFloor.map(f => f.n));
+  const pv = $('#pv'); pv.className = 'pv';
+  pv.innerHTML = `<div class="top"><div><div class="micro">What this will do · before anything changes</div><h2>${s.head}</h2></div><span class="micro">draft · not saved</span></div>
+    <div class="blk"><div class="micro">On which floors</div><div class="floors">${c.byFloor.map(f => `<div class="fb f-${f.floor}"><span class="fl f-${f.floor}">${esc(DATA.floors[f.floor].label)}</span><span class="tr"><i data-w="${f.n / maxF * 100}"></i></span><b>${f.n.toLocaleString('en-GB')}</b></div>`).join('')}</div></div>
+    <div class="blk"><div class="micro">Who will be asked</div><div class="keep">${c.asks.map(a => `<div><b class="mono">${a.n}</b> ${esc(a.who)}</div>`).join('')}</div></div>
+    <div class="blk"><div class="micro">What records will show</div><div><div class="st">${s.parts.map(p => `<i class="s-${p[0]}" data-g="${p[1]}"></i>`).join('')}</div><div class="leg">${s.parts.map(p => `<span><i class="s-${p[0]}"></i><b>${p[1].toLocaleString('en-GB')}</b> ${esc(p[2])}</span>`).join('')}</div></div></div>
+    <div class="blk"><div class="micro">Which apps’ views</div><ul class="views">${c.views.map(v => `<li class="${v.warn ? 'warn' : ''}">${ic(v.icon, 16)}<span class="a">${esc(v.app)}<small>${esc(v.what)}</small></span><span class="e">${v.warn ? ic('triangle-alert', 12) + ' ' : ''}${esc(v.effect)}</span></li>`).join('')}</ul></div>
+    <div class="blk"><div class="micro">What won’t change</div><div class="keep"><b>No value is removed or rewritten.</b> Each record it touches carries a notice. You can take it back from Changes.</div></div>
+    <div class="commit"><span class="note">${c.views.some(v => v.warn) ? `${c.views.filter(v => v.warn).length} view${c.views.filter(v => v.warn).length > 1 ? 's' : ''} may need their owner. They will be told.` : 'Nothing needs its owner’s attention.'}</span><button class="btn quiet" id="save">Save draft</button><button class="btn go" id="go">${ic('git-commit-horizontal', 16)} Make the change <span class="kbd">Enter</span></button></div>
+    <div class="done" id="done">${ic('circle-check', 28)}<h3>Changed</h3><p>${esc(s.head.replace(/<[^>]+>/g, ''))}. Notices are on each record; ${c.views.filter(v => v.warn).length ? 'owners of the flagged views have been told' : 'no view needed its owner'}.</p><button class="btn" id="undo">${ic('undo-2', 14)} Take it back <span class="kbd">U</span></button></div>`;
+  $('#go').onclick = commit; $('#undo').onclick = () => $('#done').classList.remove('on');
+  Icons.hydrate(pv);
+}
+function develop() {
+  const pv = $('#pv'); pv.classList.add('dev');
+  $$('.fb .tr i', pv).forEach(i => i.style.width = i.dataset.w + '%');
+  $$('.st i', pv).forEach(i => i.style.flexGrow = i.dataset.g);
+  later(() => pv.classList.add('ready'), reduced ? 0 : ms('--motion-calm'));
+}
+function commit() { if ($('#pv').classList.contains('ready')) $('#done').classList.add('on'); }
+function setType(i, anim) {
+  ci = i; const c = C();
+  $$('#types button').forEach((b, j) => b.setAttribute('aria-pressed', j === i));
+  $('#form').innerHTML = form(c); preview(c); Icons.hydrate($('#form'));
+  if (anim) later(develop, reduced ? 0 : ms('--motion-run')); else requestAnimationFrame(() => requestAnimationFrame(develop));
+}
+$('#appname').textContent = DATA.app + ' studio';
+$('#who').innerHTML = `${esc(DATA.admin.name)}<br>${esc(DATA.admin.role)} <span class="tech">(${esc(DATA.admin.tech)})</span>`;
+$('#navs').innerHTML = DATA.studioNav.map(n => `<a class="nav${n.on ? ' on' : ''}" href="#"><i data-lucide="${n.icon}" data-size="16"></i><span>${esc(n.label)}<span class="t2">${esc(n.tech)}</span></span>${n.n != null ? `<span class="n">${n.n}</span>` : ''}</a>`).join('');
+$('#railfoot').innerHTML = `Plain words first; the technical name sits under each, for you. Operators never see the second line.`;
+$('#crumb').textContent = `${DATA.app} studio · Kinds of thing`;
+$('#ename').textContent = 'A change, previewed';
+$('#esub').innerHTML = `Everything on the right is counted from today’s records before you commit. <b>Nothing changes until you press Make the change.</b>`;
+$('#types').innerHTML = DATA.changes.map((c, i) => `<button data-i="${i}" aria-pressed="false">${ic(TYPES[c.type][1], 16)}${esc(TYPES[c.type][0])}<span class="kbd">${i + 1}</span></button>`).join('');
+$$('#types button').forEach(b => b.onclick = () => setType(+b.dataset.i));
+keys([['1 2 3 4', 'kind of change'], ['Enter', 'make the change'], ['U', 'take back'], ['R', 'replay']]);
+function demo() { clearLater(); setType(0, true); }
+boot(demo, e => {
+  if (/^[1-4]$/.test(e.key) && DATA.changes[+e.key - 1]) setType(+e.key - 1);
+  if (e.key === 'Enter') commit();
+  if (e.key === 'u' || e.key === 'U') $('#done')?.classList.remove('on');
+});
+</script>
+</body>
+</html>

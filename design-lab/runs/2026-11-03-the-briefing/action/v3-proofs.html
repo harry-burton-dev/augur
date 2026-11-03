@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Action V3 · Proofs</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens. All are mixes of kit tokens; listed as
+   "needs token" in notes.md. Marks carried from the catalogue run.
+   --------------------------------------------------------------- */
+:root{
+  /* six ways to be empty (catalogue run): corner ticks for not known yet */
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  /* stale: 45 degree hatch */
+  --x-proposed-hatch: color-mix(in srgb, var(--ink-muted) 34%, transparent);
+  --x-proposed-stale: repeating-linear-gradient(45deg, transparent 0 calc(var(--space-1) - 1px), var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  /* not yours to see: 135 degree hatch plus a lock */
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  /* sources disagree: a warning-tinted edge, never red */
+  --x-proposed-disagree: color-mix(in srgb, var(--warning) 70%, var(--ink));
+  --x-proposed-disagree-wash: color-mix(in srgb, var(--warning) 7%, transparent);
+  /* quiet lines, doesn't-apply text (wear and time) */
+  --x-proposed-quiet: .62;
+  /* mono numerals in data */
+  --x-proposed-type-micro: .6875rem;
+  /* the lit next step (light language) */
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  /* pencil (reference desk): what a model wrote, until a person accepts it */
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 70%, transparent);
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--ink) 3%, transparent);
+  /* reach: how far a light falls through floors below where a thing is kept */
+  --x-proposed-reach-wash: 14%;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.lite{color:var(--light)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hints .on{color:var(--x-proposed-lit)}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+
+/* floors */
+[data-tier="department"]{--fc:var(--floor-department-high);--fl:var(--floor-department-low)}
+[data-tier="team"]{--fc:var(--floor-team-high);--fl:var(--floor-team-low)}
+[data-tier="org"]{--fc:var(--floor-org-high);--fl:var(--floor-org-low)}
+[data-tier="you"]{--fc:var(--floor-you-high);--fl:var(--floor-you-low)}
+.fchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-4);height:2px;background:var(--fc);border-radius:1px}
+.fword{color:var(--fc)}
+
+/* two registers: technical line one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* six ways to be empty, the two this surface meets most */
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);vertical-align:1px;white-space:nowrap}
+.mk-unseen{display:inline-flex;align-items:center;justify-content:center;width:var(--space-4);height:var(--space-3);background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:2px;color:var(--ink-muted);flex:none}
+.mk-disagree{display:inline-block;width:var(--space-4);height:var(--space-3);border-left:2px solid var(--x-proposed-disagree);border-right:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash);flex:none;vertical-align:-1px}
+.mk-gap{display:inline-block;width:var(--space-5);height:var(--space-4);vertical-align:-3px;
+  --t:var(--space-1);
+  background:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--t) no-repeat}
+.mk-break{width:var(--space-5);height:var(--space-3);vertical-align:-1px}
+.mk-break path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+
+/* pencil and ink */
+.pencil{border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3)}
+.pencil .pt{font-style:italic;color:var(--ink)}
+.pencil .pl{display:flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);margin:0 0 var(--space-1)}
+.pencil.inked{border-style:solid;border-color:var(--hairline-strong);background:none}
+.pencil.inked .pt{font-style:normal}
+.pencil.off{border-style:dashed;border-color:var(--hairline)}
+.pencil.off .pt{font-style:normal}
+.pbtn{display:inline-flex;align-items:center;gap:var(--space-1);height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink);margin-left:auto}
+
+/* confidence word, with the yardstick at word size */
+.cw{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--light);white-space:nowrap;vertical-align:1px}
+.cw .yd{display:inline-grid;grid-template-columns:repeat(7,var(--space-1));gap:1px}
+.cw .yd i{height:var(--space-2);background:var(--hairline-strong);border-radius:1px}
+.cw .yd i.on{background:var(--ink)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);transition:background var(--motion-quick) var(--ease-standard),border-color var(--motion-quick) var(--ease-standard)}
+.btn:hover{background:var(--surface-raised)}
+.btn.go{border-color:var(--x-proposed-lit);color:var(--light);background:var(--x-proposed-lit-wash)}
+.btn[aria-disabled="true"]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+
+/* app frame */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.top{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--slate-deep) 70%,transparent);min-width:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0;white-space:nowrap}
+.crumb{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);white-space:nowrap;min-width:0;overflow:hidden}
+.crumb b{font-weight:400;color:var(--light)}
+.crumb svg{opacity:var(--x-proposed-quiet);flex:none}
+.top .hints{margin-left:auto;justify-content:flex-end}
+.main{min-height:0;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));overflow:hidden}
+
+/* the finding: headline (ink, template), bottom line (pencil), claims (ink) */
+.fd-h{margin:var(--space-1) 0 var(--space-3);font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);letter-spacing:var(--tracking-tight)}
+.fd-h .spk{vertical-align:-4px;margin-left:var(--space-2)}
+.claims{list-style:none;margin:var(--space-3) 0 0;padding:0;display:grid;gap:var(--space-2)}
+.claims li{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.claims li > svg{margin-top:2px;color:var(--ink-muted)}
+.claims .bs{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:2px}
+.claims .bs b{font-weight:400;color:var(--ink);text-decoration:underline;text-decoration-color:var(--hairline-strong);text-underline-offset:var(--focus-gap)}
+.claims li.judge .ct{font-style:normal}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+
+/* isotype figures: counted, never scaled; a part figure is cut, not shrunk */
+.figs{display:flex;flex-wrap:wrap;gap:1px;color:var(--ink)}
+.fig{display:inline-flex;clip-path:inset(0 calc((1 - var(--part)) * 100%) 0 0)}
+.ck{white-space:nowrap}
+.ck-all{color:var(--ink)}
+.ck-part{color:var(--x-proposed-disagree)}
+.ck-none{color:var(--ink-muted);background:var(--x-proposed-unseen);padding:0 var(--space-1);border-radius:2px}
+.x-cap{max-width:calc(100vw - 2 * var(--edge-tight))}
+
+/* ---- V3: pull a proof for each reader before it goes. You pick the proof, not the setting ---- */
+.wrap{height:100%;display:flex;flex-direction:column;gap:var(--space-3)}
+.head{display:flex;align-items:flex-end;gap:var(--space-5);flex-wrap:wrap}
+.head h1{margin:0;font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.head .lede{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);max-width:70ch}
+.verbs{display:flex;gap:var(--space-2);margin-left:auto}
+.verb{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted);font-size:var(--type-meta)}
+.verb[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+.proofs{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4)}
+.proof{position:relative;min-height:0;display:flex;flex-direction:column;text-align:left;border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);overflow:hidden;transition:box-shadow var(--motion-base) var(--ease-out),border-color var(--motion-base) var(--ease-out),opacity var(--motion-base)}
+.proof[aria-checked="true"]{border-color:var(--fc);box-shadow:0 0 0 var(--focus-ring) var(--fc),0 0 var(--glow-blur) color-mix(in srgb,var(--fc) 30%,transparent)}
+.proof .pf{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--fc) 10%,transparent)}
+.proof .pf b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.proof .pf .n{margin-left:auto;font:400 var(--type-meta)/1 var(--font-mono);color:var(--light)}
+.proof .pf .n small{font:400 var(--type-small)/1 var(--font-sans);color:var(--ink-muted);margin-left:var(--space-1)}
+.proof .pf .kbd{margin-left:var(--space-2)}
+.pb{flex:1;min-height:0;padding:var(--space-3) var(--space-4)}
+.pb .h{margin:0 0 var(--space-2);font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.pb .figs{color:var(--ink-muted);margin:0 0 var(--space-1)}
+.fkey{margin:0 0 var(--space-2);font-size:var(--x-proposed-type-micro);line-height:1.4;color:var(--ink-muted)}
+.pb ul{list-style:none;margin:var(--space-2) 0 0;padding:0;display:grid;gap:var(--space-2)}
+.pb li{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.pb li .t{display:block;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.links{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:2px}
+.lk{display:inline-flex;align-items:center;gap:var(--space-1);border-bottom:1px solid var(--hairline-strong);color:var(--ink);font-size:var(--type-small);line-height:var(--leading-small)}
+.lk.some{border-bottom-style:dashed}
+.lk.some em{font-style:normal;color:var(--ink-muted)}
+.waits{display:flex;gap:var(--space-2);align-items:center;padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);
+  --t:var(--space-2);
+  background:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--t) no-repeat}
+.bline{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.proof .pfoot{padding:var(--space-2) var(--space-3);border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.proof .pfoot b{font-weight:400;color:var(--ink)}
+.meter{flex:none;display:inline-flex;width:calc(var(--space-8) - var(--space-4));height:var(--space-2);border-radius:1px;overflow:hidden;background:var(--x-proposed-unseen);outline:1px solid var(--hairline);outline-offset:-1px}
+.meter i{background:var(--ink);transition:width var(--motion-calm) var(--ease-out)}
+.pre .meter i{width:0!important}
+.diff{box-shadow:inset 2px 0 0 var(--x-proposed-disagree);padding-left:var(--space-2);margin-left:calc(var(--space-2) * -1)}
+.ghost{opacity:var(--x-proposed-quiet)}
+.ibtns{display:flex;gap:var(--space-1);margin-top:var(--space-2)}
+.ibtns span{display:inline-flex;align-items:center;gap:var(--space-1);height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted);font-size:var(--type-small)}
+.go-bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.go-bar p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.go-bar p.big{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+@media (max-width:1400px){.head .lede{display:none}.pb li .t{font-size:var(--type-small);line-height:var(--leading-small)}.pb .h{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Action · V3</b> proofs: what each reader will see, before it goes · printer’s proofs, “view as”</div>
+<script>
+/* Sample data. Every name, label, count and floor below is deployment data:
+   nothing in the markup or the scripts repeats any of it. */
+const DATA = {
+  org: 'Ridgeway Regional Services',
+  me: 'p1',
+  myFloor: 'team',
+  today: '3 Nov 2026',
+  /* floors, top first. reach = people who can read something kept on this floor
+     (everyone on it and on the floors under it). */
+  floors: {
+    org:        { name: 'Ridgeway Regional Services', word: 'Org',        reach: 1180, under: '6 departments' },
+    department: { name: 'Fleet and Facilities',       word: 'Department', reach: 34,   under: '3 teams' },
+    team:       { name: 'North depot crew',           word: 'Team',       reach: 9,    under: '' }
+  },
+  floorOrder: ['org', 'department', 'team'],
+  people: {
+    p1: { name: 'Sam Okafor',    role: 'Depot coordinator',   floor: 'team' },
+    p2: { name: 'Priya Nair',    role: 'Fleet lead',          floor: 'department' },
+    p3: { name: 'Jo Barnes',     role: 'North depot keeper',  floor: 'team' },
+    p4: { name: 'Dana Whitlock', role: 'Contracts manager',   floor: 'org' },
+    p5: { name: 'Health and safety desk', role: 'Keeps incident reports', floor: 'org' }
+  },
+  /* the finding, as Data Atlas and the briefing builder hold it */
+  finding: {
+    id: 'F-0412',
+    subject: 'North depot vans',
+    /* the headline is built from a template and the counts: ink */
+    headline: { tpl: '{n} of {of} {subject} are overdue for inspection, up from {was} in {wasWhen}.', n: 7, of: 18, was: 2, wasWhen: 'August' },
+    /* the bottom line may be drafted by the model: pencil until a person accepts it */
+    bottomLine: {
+      model: 'Book Kestrel’s missed October visit this month, or about 9 vans may be off the road by December.',
+      template: '{n} of {of} {subject} are overdue for inspection. Kestrel’s October visit has not been rebooked.'
+    },
+    series: [ { m: 'Jun', v: 1 }, { m: 'Jul', v: 2 }, { m: 'Aug', v: 2 }, { m: 'Sep', v: 4 }, { m: 'Oct', v: 5 }, { m: 'Nov', v: 7 } ],
+    forecast: { m: 'Dec', v: 9 },
+    checked: 'today 09:12',
+    recipe: {
+      plain: 'vans at the North depot whose next inspection is past its date',
+      tech: 'count(Vehicle ∩ basedAt=Site:north-depot ∩ nextInspection < today())'
+    }
+  },
+  /* records behind the finding, grouped. kept = how many are kept on each floor */
+  groups: [
+    { id: 'vans',   label: 'North depot vans',            icon: 'truck',           app: 'Data Atlas', kept: { department: 11, team: 7 },  keeper: 'p3', tech: 'Vehicle' },
+    { id: 'insp',   label: 'inspection records',          icon: 'clipboard-check', app: 'Data Atlas', kept: { department: 16, team: 30 }, keeper: 'p3', tech: 'InspectionEvent' },
+    { id: 'log',    label: 'Depot inspection log',        icon: 'file-text',       app: 'Artifacts',  kept: { team: 1 },                  keeper: 'p3', tech: 'document' },
+    { id: 'report', label: 'Kestrel report, October',     icon: 'file-text',       app: 'Artifacts',  kept: { department: 1 },            keeper: 'p2', tech: 'document' },
+    { id: 'con',    label: 'Kestrel servicing contract',  icon: 'scroll-text',     app: 'Data Atlas', kept: { org: 1 },                   keeper: 'p4', tech: 'Contract' },
+    { id: 'inc',    label: 'Incident report on NV-14',    icon: 'triangle-alert',  app: 'Data Atlas', kept: { org: 1 },                   keeper: 'p5', restricted: true, tech: 'Incident (restricted)' }
+  ],
+  /* the claims of the briefing. kind count = ink fact; judge = a judgement with a yardstick word */
+  claims: [
+    { id: 'c1', kind: 'count', text: '7 of 18 North depot vans are overdue for inspection.', basis: ['vans', 'insp', 'log'],
+      sources: 'Two sources agree on 7; Kestrel’s report says 5 (it counts two booked vans as done).', disagree: true },
+    { id: 'c2', kind: 'count', text: 'That is up from 2 in August.', basis: ['insp'], sources: 'From 46 inspection records.' },
+    { id: 'c3', kind: 'count', text: 'Kestrel’s October visit was cancelled and has not been rebooked.', basis: ['con', 'report'], sources: 'The contract and Kestrel’s own report agree.' },
+    { id: 'c4', kind: 'judge', text: 'If no visit is booked, 9 vans will be overdue by December.', basis: ['vans'], word: 4,
+      sources: 'From the due dates of 18 vans. Two more fall due on 21 Nov.' },
+    { id: 'c5', kind: 'count', text: 'One of the overdue vans also has an open incident report.', basis: ['inc'], sources: 'Kept by the Health and safety desk.' }
+  ],
+  /* the probability yardstick (UK PHIA), plain word first */
+  yardstick: [
+    { w: 'Remote chance', r: '≤5%' }, { w: 'Highly unlikely', r: '10–20%' }, { w: 'Unlikely', r: '25–35%' },
+    { w: 'Realistic possibility', r: '40–50%' }, { w: 'Likely', r: '55–75%' }, { w: 'Highly likely', r: '80–90%' }, { w: 'Almost certain', r: '≥95%' }
+  ],
+  /* where a briefing can go (Artifacts libraries) */
+  libraries: [
+    { id: 'L1', name: 'North depot notes',       floor: 'team' },
+    { id: 'L2', name: 'Fleet briefings',         floor: 'department' },
+    { id: 'L3', name: 'Board papers',            floor: 'org', approval: 'p2', approvalWhy: 'Board papers need the Department lead’s approval (set by your admin).' }
+  ],
+  /* what a finding can feed (Mandate intents) */
+  intents: [
+    { id: 'I1', title: 'Keep every fleet vehicle roadworthy', owner: 'p2', floor: 'department', due: '31 Mar 2027', followers: 6, bound: 'vans', state: 'On track' },
+    { id: 'I2', title: 'Renew the Kestrel servicing contract', owner: 'p4', floor: 'org', due: '15 Jan 2027', followers: 4, bound: 'con', state: 'On track' },
+    { id: 'I3', title: 'Monthly safety walk-round at each depot', owner: 'p3', floor: 'team', due: '30 Nov 2026', followers: 3, bound: 'vans', state: 'Due soon' }
+  ],
+  /* watching: what makes the count move, and how Data Atlas and the events service see it */
+  watch: {
+    now: 7, max: 18,
+    presets: [ { id: 'any', plain: 'whenever the count changes' }, { id: 'above', plain: 'when it goes above', n: 8 }, { id: 'zero', plain: 'when it is back to', n: 0 } ],
+    triggers: [
+      { icon: 'clipboard-check', plain: 'A new inspection is recorded', who: 'Data Atlas', tech: 'atlas.observation.recorded · kind=InspectionEvent', has: true },
+      { icon: 'clock',           plain: 'A due date passes overnight', who: 'events service clock', needs: 'a clock in the events service', tech: 'events.schedule · daily 00:05 · re-run recipe', has: false },
+      { icon: 'file-text',       plain: 'A source is withdrawn in Artifacts', who: 'Artifacts', tech: 'document.withdrawn → evidence marked', has: true },
+      { icon: 'split',           plain: 'The disagreement is settled in Triage', who: 'Data Atlas Triage', needs: 'Data Atlas to announce when Triage settles a disagreement', tech: 'atlas.triage.resolved · detail=nextInspection', has: false },
+      { icon: 'history',         plain: 'Nothing new arrives for 21 days', who: 'events service clock', needs: 'the events service to notice when nothing arrives', tech: 'events.silence · window=21d', has: false }
+    ]
+  }
+};
+
+/* ---- shared helpers (same in every variant) ---- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const I = (n, size = 16, stroke = 1.5) => Icons.svg(n, { size, stroke });
+const RANK = Object.fromEntries(DATA.floorOrder.map((f, i) => [f, i]));
+const P = id => DATA.people[id];
+const F = id => DATA.floors[id];
+const G = id => DATA.groups.find(g => g.id === id);
+const fmt = n => n.toLocaleString('en-GB');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ms = v => parseFloat(css(v)) || 0;
+const fill = (tpl, o) => tpl.replace(/\{(\w+)\}/g, (_, k) => o[k] ?? DATA.finding[k] ?? '');
+
+/* access: a reader on floor r opens what is kept on r or on the floors above it */
+const canOpen = (keptOn, reader) => RANK[keptOn] <= RANK[reader];
+const total = g => Object.values(g.kept).reduce((a, b) => a + b, 0);
+const openN = (g, reader) => g.restricted ? 0 : Object.entries(g.kept).reduce((a, [f, n]) => a + (canOpen(f, reader) ? n : 0), 0);
+const allTotal = () => DATA.groups.reduce((a, g) => a + total(g), 0);
+const allOpen = reader => DATA.groups.reduce((a, g) => a + openN(g, reader), 0);
+/* who to ask about what a reader can't open in a group */
+const askFor = g => P(g.keeper).name;
+/* a claim is checkable by a reader if every record behind it opens, partly if some do */
+function checkable(c, reader) {
+  const o = c.basis.map(G).map(g => openN(g, reader) / total(g));
+  if (o.every(x => x === 1)) return 'all';
+  if (o.some(x => x > 0)) return 'part';
+  return 'none';
+}
+const CHECK_WORD = { all: 'they can check it', part: 'they can check part of it', none: 'they can’t open what’s behind it' };
+
+/* the probability yardstick at word size */
+function cw(i) {
+  const y = DATA.yardstick[i];
+  return `<span class="cw" title="${y.w}: ${y.r}"><span class="yd" aria-hidden="true">${DATA.yardstick.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</span>${y.w}<span class="tk">&nbsp;· ${y.r} · probability yardstick</span></span>`;
+}
+
+/* sparkline at word size; the forecast point is a judgement, so it is dotted */
+function spark(w = 96, h = 22, withForecast = true) {
+  const s = DATA.finding.series, f = DATA.finding.forecast;
+  const pts = withForecast ? [...s, f] : s;
+  const max = Math.max(...pts.map(p => p.v)), n = pts.length - 1;
+  const X = i => 2 + i * (w - 4) / n, Y = v => h - 2 - v * (h - 4) / max;
+  const ink = s.map((p, i) => `${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  const last = s.length - 1;
+  const fc = withForecast ? `<line x1="${X(last)}" y1="${Y(s[last].v)}" x2="${X(n)}" y2="${Y(f.v)}" stroke="var(--ink-muted)" stroke-dasharray="1.5 2.5" stroke-width="1.25"/><circle cx="${X(n)}" cy="${Y(f.v)}" r="2" fill="none" stroke="var(--ink-muted)"/>` : '';
+  return `<svg class="spk" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Overdue each month: ${s.map(p => p.m + ' ' + p.v).join(', ')}${withForecast ? ', ' + f.m + ' likely ' + f.v : ''}"><polyline points="${ink}" fill="none" stroke="var(--ink)" stroke-width="1.25" stroke-linejoin="round"/><circle cx="${X(last)}" cy="${Y(s[last].v)}" r="2.25" fill="var(--light)"/>${fc}</svg>`;
+}
+
+/* isotype: repeated figures, never a scaled one. returns markup and the key */
+function figures(n, opts = {}) {
+  const per = n > 60 ? 20 : 1, k = Math.ceil(n / per);
+  const sz = opts.size || 14;
+  let out = '';
+  for (let i = 0; i < k; i++) {
+    const part = (i === k - 1 && n % per) ? (n % per) / per : 1;
+    out += `<span class="fig" style="--part:${part}">${I(opts.icon || 'user-round', sz, 1.5)}</span>`;
+  }
+  return { html: `<span class="figs" role="img" aria-label="${fmt(n)} people">${out}</span>`, key: per === 1 ? 'each figure is one person' : `each figure is ${per} people` };
+}
+
+/* the finding, as one block (headline ink, bottom line pencil, claims ink) */
+const STATE = { tech: false, gateway: true, accepted: false };
+function headlineHTML() {
+  const h = DATA.finding.headline;
+  return fill(h.tpl, h);
+}
+function bottomLineHTML() {
+  const b = DATA.finding.bottomLine, h = DATA.finding.headline;
+  if (!STATE.gateway) {
+    return `<div class="pencil off" data-bl><p class="pl">${I('file-text', 12)} Model gateway is off · bottom line from the template, no number changes</p><p class="pt" style="margin:0">${fill(b.template, h)}</p></div>`;
+  }
+  if (STATE.accepted) {
+    return `<div class="pencil inked" data-bl><p class="pl">${I('pen-line', 12)} Bottom line · drafted by the model, accepted by ${P(DATA.me).name}</p><p class="pt" style="margin:0">${b.model}</p></div>`;
+  }
+  return `<div class="pencil" data-bl><p class="pl">${I('pencil', 12)} Bottom line · drafted by the model, not yet accepted <button class="pbtn" data-accept>${I('check', 12)} Accept <span class="kbd">A</span></button></p><p class="pt" style="margin:0">${b.model}</p><p class="tk">every number in it comes from the claims below; the model may only choose words</p></div>`;
+}
+function claimsHTML(reader) {
+  return `<ul class="claims">${DATA.claims.map((c, i) => {
+    const chk = reader ? checkable(c, reader) : null;
+    const ic = c.kind === 'judge' ? 'scale' : 'circle-dot';
+    const basis = c.basis.map(G).map(g => `<b>${g.label}</b>`).join(', ');
+    return `<li class="dep ${c.kind}" style="--i:${i}">${I(ic, 14)}<span><span class="ct">${c.text}</span> ${c.kind === 'judge' ? cw(c.word) : ''}${c.disagree ? ' <span class="mk-disagree" title="sources disagree"></span>' : ''}
+      <span class="bs">${c.sources} From ${basis}.${chk ? ` <span class="ck ck-${chk}">${CHECK_WORD[chk]}</span>` : ''}</span></span></li>`;
+  }).join('')}</ul>`;
+}
+function findingHTML(opts = {}) {
+  return `<p class="eyebrow">Finding · ${DATA.finding.subject} · checked ${DATA.finding.checked}</p>
+    <h2 class="fd-h">${headlineHTML()} ${spark()}</h2>
+    ${bottomLineHTML()}
+    ${opts.claims === false ? '' : claimsHTML(opts.reader)}`;
+}
+
+/* top bar */
+function topHTML(crumbs, hints) {
+  const me = P(DATA.me), fl = F(DATA.myFloor);
+  return `<header class="top"><p class="brand">AUGUR</p>
+    <nav class="crumb" aria-label="Where you are">${crumbs.map((c, i) => (i ? I('chevron-right', 14) : '') + (i === crumbs.length - 1 ? `<b>${c}</b>` : `<span>${c}</span>`)).join('')}</nav>
+    <span class="fchip" data-tier="${DATA.myFloor}">${fl.name} · ${fl.word}</span>
+    <div class="hints">${hints.map(([k, w, id]) => `<span ${id ? `id="${id}"` : ''}><span class="kbd">${k}</span>${w}</span>`).join('')}</div></header>`;
+}
+
+/* keys shared by every variant */
+function commonKeys(e, rerender, replay) {
+  const k = e.key.toLowerCase();
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  if (k === 'r') { replay(); return true; }
+  if (k === 't') { STATE.tech = !STATE.tech; document.body.classList.toggle('tech', STATE.tech); $('#h-t')?.classList.toggle('on', STATE.tech); return true; }
+  if (k === 'g') { STATE.gateway = !STATE.gateway; $('#h-g')?.classList.toggle('on', !STATE.gateway); rerender(); return true; }
+  if (k === 'a') { STATE.accepted = !STATE.accepted; rerender(); return true; }
+  return false;
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-accept]')) { STATE.accepted = true; window.__rerender && window.__rerender(); } });
+
+/* timers for the auto demo, cleared on replay */
+let TIMERS = [];
+const later = (fn, t) => TIMERS.push(setTimeout(fn, reduced ? Math.min(t, 50) : t));
+const clearLater = () => { TIMERS.forEach(clearTimeout); TIMERS = []; };
+
+const V = { verb: 'publish', pick: { publish: 'L2', feed: 'I1', watch: 'above' }, shown: false };
+const VERBS = [
+  { id: 'publish', key: 'P', plain: 'Publish as a briefing', icon: 'send' },
+  { id: 'feed', key: 'F', plain: 'Feed an intent', icon: 'target' },
+  { id: 'watch', key: 'W', plain: 'Watch for change', icon: 'binoculars' }
+];
+
+/* a record link, as this reader will see it */
+function linkFor(g, reader) {
+  const o = openN(g, reader), t = total(g);
+  if (o === t) return `<span class="lk">${I(g.icon, 12)}${t > 1 ? t + ' ' : ''}${g.label}</span>`;
+  /* the reader is not told how many they can't open: "some" */
+  if (o > 0) return `<span class="lk some">${I(g.icon, 12)}${o} ${g.label} <em>· some more locked, ask ${askFor(g)}</em></span>`;
+  return `<span class="unseen">${I('lock', 11)} ${g.label} · ask ${askFor(g)}</span>`;
+}
+function bottomLineProof() {
+  if (!STATE.gateway) return `<p class="bline">${fill(DATA.finding.bottomLine.template, DATA.finding.headline)}</p>`;
+  if (STATE.accepted) return `<p class="bline">${DATA.finding.bottomLine.model}</p>`;
+  return `<div class="waits">${I('pencil', 14)} The bottom line is still in pencil. It won’t go out until ${P(DATA.me).name} accepts it.</div>`;
+}
+function readerProof(reader, title, sub, n, idx, id, extra = '') {
+  const o = allOpen(reader), t = allTotal();
+  const f = figures(n, { size: 11 });
+  return `<section role="radio" tabindex="0" class="proof dep" data-tier="${reader}" data-id="${id}" aria-checked="${V.pick[V.verb] === id}" style="--i:${idx}">
+    <div class="pf"><b>${title}</b><span class="muted" style="font-size:var(--type-small)">${sub}</span><span class="n">${fmt(n)}<small>${n === 1 ? 'reader' : 'readers'}</small></span><span class="kbd">${idx + 1}</span></div>
+    <div class="pb scroll">${n > 1 ? f.html : ''}<p class="fkey">${n > 1 ? f.key : ""}</p><p class="tk">reader floor: ${reader}</p>${extra}
+      <p class="h">${headlineHTML()}</p>${bottomLineProof()}
+      <ul>${DATA.claims.map(c => {
+        const k = checkable(c, reader);
+        return `<li class="${k !== 'all' ? 'diff' : ''}"><span class="t">${c.text} ${c.kind === 'judge' ? cw(c.word) : ''}</span><span class="links">${c.basis.map(G).map(g => linkFor(g, reader)).join('')}</span></li>`;
+      }).join('')}</ul></div>
+    <div class="pfoot"><span class="meter" aria-hidden="true"><i style="width:${o / t * 100}%"></i></span><span>Can open <b>${o} of ${t}</b> records behind it</span></div></section>`;
+}
+function intentProof(it, idx) {
+  const ow = P(it.owner);
+  const extra = `<p class="eyebrow">${I('target', 11)} Intent · due ${it.due} · ${it.state}</p><p class="bline" style="margin:var(--space-1) 0 var(--space-2);color:var(--light)">${it.title}</p><p class="eyebrow" style="margin-bottom:var(--space-1)">New evidence from ${P(DATA.me).name}</p>`;
+  const html = readerProof(it.floor, ow.name, it.title.length > 26 ? it.title.slice(0, 24) + '…' : it.title, it.followers + 1, idx, it.id, extra);
+  return html.replace('</ul></div>', `</ul><div class="ibtns ghost" aria-label="What ${ow.name} can do">${'<span>Mark at risk</span><span>Not relevant</span><span>Ask a question</span>'}</div><p class="tk">${ow.name} decides; feeding never changes an intent’s state</p></div>`);
+}
+function watchProof(p, idx) {
+  const why = { any: ['8 overdue, up from 7.', 'A due date passed overnight (NV-03).'], above: ['9 overdue: above your mark of 8.', 'Two due dates passed overnight on 21 Nov.'], zero: ['None overdue.', 'Kestrel’s visit was recorded for all 7 vans.'] }[p.id];
+  return `<section role="radio" tabindex="0" class="proof dep" data-tier="${DATA.myFloor}" data-id="${p.id}" aria-checked="${V.pick.watch === p.id}" style="--i:${idx}">
+    <div class="pf"><b>Tell me ${p.plain}${p.n !== undefined ? ' ' + p.n : ''}</b><span class="n">1<small>just you</small></span><span class="kbd">${idx + 1}</span></div>
+    <div class="pb"><p class="eyebrow">What you’d get · an example</p>
+      <p class="h" style="margin-top:var(--space-2)">${DATA.finding.subject}: ${why[0]}</p>
+      <p class="bline"><b style="font-weight:400;color:var(--light)">Why it moved:</b> ${why[1]}</p>
+      <p class="bline muted" style="margin-top:var(--space-2)">A notice always names one reason: something happened, a date passed, a source was withdrawn, a disagreement was settled, or what you can see changed.</p>
+      <p class="tk">fires on: ${DATA.watch.triggers.map(t => t.tech).join(' | ')}</p>
+      <p class="bline muted" style="margin-top:var(--space-2)">Nobody else is told, and nobody else can see this watch.</p></div>
+    <div class="pfoot"><span>Counts only what you can open: <b>${allOpen(DATA.myFloor)} of ${allTotal()}</b></span></div></section>`;
+}
+function goBar() {
+  if (V.verb === 'publish') {
+    const l = DATA.libraries.find(x => x.id === V.pick.publish);
+    const any = DATA.claims.filter(c => checkable(c, l.floor) !== 'all').length;
+    return `<div class="go-bar"><div><p class="big">Publish to ${l.name}: ${fmt(F(l.floor).reach)} readers on the ${F(l.floor).word} floor and under it.</p><p class="muted">${any} of ${DATA.claims.length} claims point to records some of them can’t open (marked at the edge). ${l.approval ? l.approvalWhy : ''}</p></div>
+      ${l.approval ? `<button class="btn">${I('user-round', 14)} Ask ${P(l.approval).name} to approve</button>` : `<button class="btn go">${I('send', 14)} Publish this proof</button>`}</div>`;
+  }
+  if (V.verb === 'feed') {
+    const it = DATA.intents.find(x => x.id === V.pick.feed);
+    return `<div class="go-bar"><div><p class="big">Feed “${it.title}”: ${P(it.owner).name} and ${it.followers} followers see it as evidence.</p><p class="muted">It never changes the intent’s state by itself.</p></div><button class="btn go">${I('target', 14)} Feed it</button></div>`;
+  }
+  return `<div class="go-bar"><div><p class="big">Watch: only you are told.</p><p class="muted">You can stop it from your watches list, and it ends by itself when the finding is archived.</p></div><button class="btn go">${I('binoculars', 14)} Watch</button></div>`;
+}
+
+function render() {
+  let proofs;
+  if (V.verb === 'publish') proofs = DATA.libraries.map((l, i) => readerProof(l.floor, l.name, F(l.floor).word + ' floor', F(l.floor).reach, i, l.id));
+  else if (V.verb === 'feed') proofs = DATA.intents.map((it, i) => intentProof(it, i));
+  else proofs = DATA.watch.presets.map((p, i) => watchProof(p, i));
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.finding.subject, 'Finding ' + DATA.finding.id],
+    [['P F W', 'what to do'], ['1–3', 'pick a proof'], ['A', 'accept'], ['T', 'admin words', 'h-t'], ['G', 'model off', 'h-g'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div class="head"><div><p class="eyebrow">Before it goes</p><h1>Proofs</h1></div><p class="lede">${V.verb === 'publish' ? 'The same briefing, as each library’s readers will see it. Pick the proof you mean to publish.' : V.verb === 'feed' ? 'The same finding, as each intent’s owner will see it.' : 'What each kind of watch would tell you, and when.'}</p>
+      <div class="verbs">${VERBS.map(v => `<button class="verb" data-verb="${v.id}" aria-pressed="${V.verb === v.id}">${I(v.icon, 14)} ${v.plain} <span class="kbd">${v.key}</span></button>`).join('')}</div></div>
+      <div class="proofs" role="radiogroup" aria-label="Proofs">${proofs.join('')}</div>
+      ${goBar()}</div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.verb').forEach(b => b.onclick = () => { V.verb = b.dataset.verb; render(); });
+  $$('.proof').forEach(b => { b.onclick = () => { V.pick[V.verb] = b.dataset.id; render(); }; b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.click(); } }; });
+}
+window.__rerender = render;
+function replay() {
+  clearLater();
+  Object.assign(V, { verb: 'publish', pick: { publish: 'L1', feed: 'I1', watch: 'above' } });
+  STATE.accepted = false;
+  document.body.classList.add('pre'); render();
+  /* the moment: three proofs are pulled side by side, then the pick moves to the Department proof */
+  later(() => document.body.classList.remove('pre'), ms('--motion-run'));
+  later(() => { V.pick.publish = 'L2'; render(); }, ms('--motion-run') + ms('--motion-calm') * 2);
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const k = e.key.toLowerCase();
+  const v = VERBS.find(x => x.key.toLowerCase() === k);
+  if (v) { V.verb = v.id; render(); return; }
+  const n = parseInt(k, 10);
+  const list = V.verb === 'publish' ? DATA.libraries : V.verb === 'feed' ? DATA.intents : DATA.watch.presets;
+  if (n >= 1 && n <= list.length) { V.pick[V.verb] = list[n - 1].id; render(); }
+});
+replay();
+</script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+/* ======================================================================
+   Proposed tokens (combinations of kit tokens only). Listed in notes.md.
+   ====================================================================== */
+:root{
+  --x-type-micro:.6875rem;                                                   /* --type-micro: mono eyebrows inside data (wear-and-time already proposes it) */
+  --x-gap-ink:color-mix(in srgb,var(--ink-muted) 70%,transparent);            /* --mark-gap: the dashed edge of an expected-but-missing value */
+  --x-gap-fill:color-mix(in srgb,var(--ink) 3%,transparent);                 /* --mark-gap-fill: a gap is a held place, faintly lit, not hatch */
+  --x-hatch:color-mix(in srgb,var(--ink-muted) 34%,transparent);             /* --mark-stale-hatch (wear and time): 'no record', not a gap */
+  --x-stale:repeating-linear-gradient(45deg,transparent 0 var(--space-1),var(--x-hatch) var(--space-1) calc(var(--space-1) + 1px));
+  --x-new:color-mix(in srgb,var(--green) 70%,var(--ink));                    /* --mark-structure-new: the structure itself changed here */
+  --x-new-wash:color-mix(in srgb,var(--green) 10%,transparent);
+  --x-seam:color-mix(in srgb,var(--warning) 55%,var(--ink));                 /* --mark-seam (wear-and-time grammar V1) */
+  --x-paper:color-mix(in srgb,var(--ink) 92%,var(--warning));             /* --surface-slip: a paper notice, the one light surface */
+  --x-paper-ink:var(--slate-deep);
+  --x-near-dim:.55;                                                          /* far plane when one thing is in focus */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.micro{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.tech{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted);letter-spacing:0}
+.kbd{display:inline-block;font:400 var(--x-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);min-width:var(--space-4);text-align:center}
+.keys{position:fixed;right:var(--edge-tight);bottom:var(--edge-tight);z-index:var(--layer-chrome);display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-1) var(--space-3);max-width:calc(100% - var(--measure-glance) - var(--space-6));font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-soft)}
+.keys > span{display:inline-flex;align-items:center;gap:var(--space-1);white-space:nowrap}
+
+/* ---- app frame ---- */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:color-mix(in srgb,var(--slate-deep) 70%,transparent);border-right:1px solid var(--hairline);padding:var(--edge) var(--edge-tight);display:flex;flex-direction:column;gap:var(--space-1);min-height:0}
+.rail .an{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);padding:var(--space-2);margin-bottom:var(--space-4)}
+.nav{text-decoration:none;display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav.on{background:var(--surface-raised);color:var(--ink)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail .foot{margin-top:auto;margin-bottom:var(--space-6);padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rail .foot b{font-weight:400;color:var(--ink)}
+.main{position:relative;padding:var(--edge) var(--space-6) var(--space-7);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-5);margin-bottom:var(--space-4)}
+.head h1{margin:var(--space-2) 0 var(--space-1);font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.head .sub{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.head .sub b{font-weight:400;color:var(--ink)}
+
+/* ---- buttons ---- */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);color:var(--ink);white-space:nowrap}
+.btn:hover{background:var(--surface-raised)}
+.btn.go{border-color:color-mix(in srgb,var(--green) 50%,transparent);color:var(--green)}
+.btn.quiet{border-color:transparent;color:var(--ink-muted)}
+.btn[aria-disabled="true"]{color:var(--ink-muted);border-style:dashed;cursor:help}
+
+/* ---- floors ---- */
+.fl{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.fl::before{content:"";width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--c)}
+.f-org{--c:var(--floor-org-high)} .f-department{--c:var(--floor-department-high)} .f-team{--c:var(--floor-team-high)} .f-you{--c:var(--floor-you-high)}
+
+/* ---- the gap: an expected detail a record doesn't hold yet ----
+   A held place: dashed edge, faint fill, and who could fill it. Different
+   from wear-and-time's 'no record' (hatch), which says nobody can know. */
+.gap{display:inline-flex;align-items:center;gap:var(--space-2);min-height:calc(var(--space-5) - var(--space-1));padding:0 var(--space-2);border:1px dashed var(--x-gap-ink);border-radius:var(--radius-key);background:var(--x-gap-fill);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.gap b{font-weight:400;color:var(--ink)}
+.gap.nobody{border-color:color-mix(in srgb,var(--warning) 50%,transparent)}
+.gap.nobody b{color:var(--warning)}
+.gap.doc b{color:var(--ink)}
+.newtag{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-new);white-space:nowrap}
+
+/* ---- why-pane ---- */
+.tip{position:fixed;z-index:var(--layer-overlay);width:var(--measure-card);padding:var(--space-3) var(--space-4);background:var(--surface-overlay);-webkit-backdrop-filter:blur(var(--surface-blur));backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);box-shadow:var(--shadow-overlay);opacity:0;pointer-events:none;transition:opacity var(--motion-quick) var(--ease-out)}
+.tip.on{opacity:1}
+.tip .t{margin:var(--space-1) 0;color:var(--light);font-size:var(--type-body);line-height:var(--leading-body)}
+.tip p{margin:0 0 var(--space-1);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.tip p.m{color:var(--ink-muted)}
+
+.fade{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+@media (prefers-reduced-motion: reduce){ .fade{transition:opacity var(--motion-base) linear!important;transform:none!important} }

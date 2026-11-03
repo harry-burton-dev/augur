@@ -28,6 +28,9 @@ permissions:
   packages: write
   # For the Release feed workflow, which signs the feed.
   id-token: write
+env:
+  # Reads AUGUR's kit packages from GitHub Packages (.npmrc): a classic token with read:packages, else this run's own.
+  NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 jobs:
   halt:
     runs-on: ubuntu-latest

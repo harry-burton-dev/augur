@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facets · V6 · A trail you can rewind</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ======================================================================
+   Proposed tokens (combinations of kit tokens; listed in notes.md)
+   ====================================================================== */
+:root{
+  --x-proposed-type-micro:.6875rem;                                                   /* --type-micro: mono numerals inside data (also proposed by wear-and-time) */
+  --x-proposed-floor:var(--floor-department-high);                                     /* the floor accent this page sits on */
+  --x-proposed-floor-soft:color-mix(in srgb,var(--floor-department-high) 18%,transparent);
+  --x-proposed-hatch:color-mix(in srgb,var(--ink-muted) 34%,transparent);             /* --mark-gap-hatch: same ink as wear-and-time's stale hatch */
+  --x-proposed-gap:repeating-linear-gradient(45deg,transparent 0 var(--space-1),var(--x-proposed-hatch) var(--space-1) calc(var(--space-1) + 1px)); /* --mark-gap */
+  --x-proposed-na:repeating-linear-gradient(90deg,transparent 0 var(--space-2),color-mix(in srgb,var(--ink-muted) 16%,transparent) var(--space-2) calc(var(--space-2) + 1px)); /* --mark-not-applicable: ruled, not hatched */
+  --x-proposed-bar:color-mix(in srgb,var(--floor-department-high) 46%,transparent);    /* --count-bar */
+  --x-proposed-bar-ghost:color-mix(in srgb,var(--ink) 10%,transparent);                /* --count-bar-before: what was there before the last choice */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.micro{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);letter-spacing:0}
+.keys{position:fixed;left:var(--edge-tight);bottom:calc(var(--space-6) + var(--space-1));width:calc(var(--measure-rail) - var(--edge-tight) * 2);z-index:var(--layer-chrome);display:flex;flex-direction:column;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:lowercase;color:var(--ink-muted);background:var(--scrim);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key)}
+
+/* ---- app frame ---- */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:color-mix(in srgb,var(--slate-deep) 70%,transparent);border-right:1px solid var(--hairline);padding:var(--edge) var(--edge-tight);display:flex;flex-direction:column;gap:var(--space-1)}
+.rail .an{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);padding:var(--space-2);margin-bottom:var(--space-4)}
+.nav{text-decoration:none;display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav.on{background:var(--surface-raised);color:var(--ink)}
+.nav.off{opacity:.62;cursor:help}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail .foot{margin-top:auto;margin-bottom:calc(var(--space-8) + var(--space-7));padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rail .foot b{font-weight:400;color:var(--ink)}
+.rail .foot .fl{display:block;width:var(--space-5);height:2px;border-radius:1px;background:var(--x-proposed-floor);margin-bottom:var(--space-2);box-shadow:0 0 var(--glow-blur) var(--x-proposed-floor)}
+.main{position:relative;padding:var(--edge) var(--space-6) var(--space-7);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-5);margin-bottom:var(--space-4)}
+.head h1{margin:var(--space-2) 0 var(--space-1);font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.head .sub{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);max-width:var(--measure-read)}
+.head .sub b{font-weight:400;color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);background:var(--surface-inset);white-space:nowrap}
+.btn:hover{background:var(--surface-raised)}
+.tech{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:0;color:var(--ink-muted);opacity:.8}
+body.admin-off .tech{display:none!important}
+
+/* ---- result list ---- */
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.res{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) calc(var(--space-7) - var(--space-2)) calc(var(--space-8) + var(--space-4)) calc(var(--space-6) + var(--space-2));align-items:center;gap:var(--space-3);min-height:var(--target-md);padding:0 var(--space-2);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);animation:resin var(--motion-base) var(--ease-out) both}
+@keyframes resin{from{opacity:0;transform:translateY(calc(var(--space-1) * -1))}}
+.res .ki{color:var(--ink-muted);display:flex}
+.res .nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+.res .nm small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.res .rg,.res .dt{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res .dt.na{opacity:.6}
+.gapv{background:var(--x-proposed-gap);color:var(--ink)!important;padding:0 var(--space-1);border-radius:var(--radius-key);border:1px dashed var(--hairline-strong);cursor:help;justify-self:start}
+.res .ms{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted);text-align:right;cursor:help}
+
+/* ---- reasons for an empty choice: never a blank ---- */
+.why{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) 0;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.why + .why{border-top:1px solid var(--hairline)}
+.why .wi{display:flex;padding-top:2px;color:var(--ink-muted)}
+.why b{display:block;font-weight:400;color:var(--ink)}
+.why span{color:var(--ink-muted)}
+.why.w-reach .wi{color:var(--floor-team-high)}
+.why.w-triage .wi{color:var(--info)}
+.why.w-gap .wi{color:var(--ink)}
+/* the mark legend, the same everywhere on the page */
+.mk{display:inline-block;width:var(--space-4);height:var(--space-3);border-radius:2px;vertical-align:-1px;border:1px solid var(--hairline-strong)}
+.mk.gap{background:var(--x-proposed-gap);border-style:dashed}
+.mk.na{background:var(--x-proposed-na)}
+.mk.none{background:transparent}
+
+:root{
+  --x-proposed-trail-h:calc(var(--space-8) + var(--space-5));                         /* --trail-height: the narrowing band */
+}
+/* ---- V6: the choices as a trail that narrows, rewindable, with the undone steps kept as a branch ---- */
+.trail{position:relative;height:var(--x-proposed-trail-h);margin:var(--space-2) 0 var(--space-4)}
+.trail > svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.band{fill:var(--x-proposed-bar);transition:d var(--motion-slow) var(--ease-out)}
+.band.ghost{fill:none;stroke:var(--ink-muted);stroke-dasharray:3 4;opacity:.7}
+.band.prev{fill:color-mix(in srgb,var(--light) 10%,transparent)}
+.tn{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;transform:translateX(-50%);width:calc(var(--space-8) + var(--space-3));text-align:center;pointer-events:none}
+.tn > *{pointer-events:auto}
+.tn .lb{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.tn .lb small{display:block;font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.tn .ct{font:200 var(--type-heading)/1 var(--font-sans);color:var(--light);font-variant-numeric:tabular-nums}
+.tn .acts{display:flex;gap:var(--space-1);opacity:0;transition:opacity var(--motion-quick) var(--ease-standard)}
+.tn:hover .acts,.tn:focus-within .acts,.tn.hot .acts{opacity:1}
+.tn .acts button{display:inline-flex;align-items:center;gap:var(--space-1);height:var(--space-5);padding:0 var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-small);background:var(--surface-overlay);white-space:nowrap}
+.tn.ghost .lb,.tn.ghost .ct{color:var(--ink-muted)}
+.tn.ghost .ct{font-size:var(--type-lead)}
+.tn.cur .ct{color:var(--x-proposed-floor);text-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--x-proposed-floor) 60%,transparent)}
+.redo{position:absolute;right:0;bottom:calc(var(--space-1) * -1);display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:var(--space-6)}
+.next{min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.next h2,.rs h2{margin:0 0 var(--space-2);font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.fx{display:grid;grid-template-columns:calc(var(--space-8) - var(--space-3)) minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) 0;border-top:1px solid var(--hairline)}
+.fx > span{font-size:var(--type-meta);color:var(--ink-muted);padding-top:var(--space-1)}
+.fx > span .tech{display:block}
+.chips{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.ch{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);color:var(--ink)}
+.ch .c{font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-floor)}
+.ch:hover{background:var(--surface-raised)}
+.ch.zero{border-style:dashed;color:var(--ink-muted)}
+.ch.zero .c{color:var(--ink-muted);font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-caps);text-transform:uppercase;display:inline-flex;gap:2px;align-items:center}
+.ch.gap{background:var(--x-proposed-gap)}
+.ch.used{opacity:.5}
+.fx.done > span{color:var(--ink)}
+.whybox{margin-top:var(--space-2);padding:var(--space-2) var(--space-3);border-left:2px solid var(--hairline-strong);background:var(--surface-inset);border-radius:0 var(--radius-key) var(--radius-key) 0}
+.rs{min-height:0;display:flex;flex-direction:column}
+.rs .sc{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.rs .res{grid-template-columns:var(--space-5) minmax(0,1fr) calc(var(--space-7) - var(--space-2)) calc(var(--space-8) + var(--space-4))}
+.rs .res .ms{display:none}
+@media (max-height:840px){:root{--x-proposed-trail-h:calc(var(--space-8) + var(--space-2))}}
+</style>
+</head>
+<body class="admin-off">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Facets · V6</b> choices as a narrowing trail; rewind to any step, the undone steps wait as a branch · undo trees, Sankey's width-as-quantity, breadcrumbs</div>
+<script>
+/* Sample data for one deployment: a regional services organisation. Swap this object and every label, count and reason follows. */
+const DATA = {"app":"Data Atlas","today":"2026-11-03","year":2026,"floor":{"type":"department","name":"Regional Services","short":"Department"},"elsewhere":[null,{"name":"Coast works crew","type":"team","ask":"Dee Harper"},{"name":"Coast care team","type":"team","ask":"Rui Matos"},{"name":"North water crew","type":"team","ask":"Sam Okafor"}],"kinds":[{"id":"site","one":"site","many":"sites","icon":"map-pin","tech":"cco:Facility","date":"last inspected","verb":"were last inspected","keeper":"Estates desk","expects":["service","region","last inspected","manager","address"]},{"id":"supplier","one":"supplier","many":"suppliers","icon":"factory","tech":"cco:Organization","date":"last reviewed","verb":"were last reviewed","keeper":"Procurement","expects":["service","region","last reviewed","company number","contact"]},{"id":"contract","one":"contract","many":"contracts","icon":"file-signature","tech":"cco:Contract","date":"ends","verb":"end","keeper":"Contracts team","expects":["service","region","ends","supplier","value","owner"]},{"id":"person","one":"person","many":"people","icon":"user-round","tech":"cco:Person","date":null,"verb":null,"keeper":"HR partner","expects":["service","region","role","line manager"]},{"id":"vehicle","one":"vehicle","many":"vehicles","icon":"truck","tech":"cco:GroundVehicle","date":"next service","verb":"are due a service","keeper":"Fleet desk","expects":["service","region","next service","registration","base site"]},{"id":"incident","one":"incident","many":"incidents","icon":"siren","tech":"cco:Incident","date":"happened","verb":"happened","keeper":"Duty desk","expects":["service","region","happened","reported by","site"]}],"facets":[{"id":"kind","plain":"What kind","q":"What kind of thing","pmest":"P","pm":"Personality","tech":"rdf:type","icon":"shapes"},{"id":"service","plain":"About","q":"Which service is it part of","pmest":"M","pm":"Matter","tech":"ex:partOfService","icon":"layers","values":[{"id":"water","label":"Water"},{"id":"waste","label":"Waste"},{"id":"roads","label":"Roads"},{"id":"care","label":"Care"},{"id":"buildings","label":"Buildings"}]},{"id":"state","plain":"Status","q":"What is happening to it","pmest":"E","pm":"Energy","tech":"ex:hasStatus","icon":"activity","values":[{"id":"active","label":"Running"},{"id":"review","label":"Under review"},{"id":"paused","label":"Paused"},{"id":"closed","label":"Finished"}]},{"id":"region","plain":"Where","q":"Where is it","pmest":"S","pm":"Space","tech":"cco:located_in","icon":"map","values":[{"id":"north","label":"North"},{"id":"south","label":"South"},{"id":"east","label":"East"},{"id":"west","label":"West"},{"id":"coast","label":"Coast"}]},{"id":"when","plain":"When","q":"When is its key date","pmest":"T","pm":"Time","tech":"cco:occurs_on (per kind)","icon":"calendar","values":[{"id":"before","label":"Before this year"},{"id":"this","label":"This year"},{"id":"next","label":"Next year"},{"id":"later","label":"Later"}]}],"records":[[1,"Riverside depot","site","waste","active","east","2024-02",0,0,1,0,["address"]],[2,"Hillfoot pumping station","site","care","active","north","2024-02",0,0,1,5,["address"]],[3,"Market Street office","site","water","paused","coast","2025-01",0,0,2,3,["address"]],[4,"Elm Road yard","site","buildings","active","south","2025-09",0,0,1,2,[]],[5,"Harbour transfer station","site","buildings","active","north","2026-01",0,0,2,3,[]],[6,"Upton care home","site","care","active","coast","2024-03",0,0,3,2,[]],[7,"Mill Lane works","site","roads","active","west","2024-02",0,0,3,3,["address"]],[8,"Station Road library","site","water","active","north","2026-06",0,0,3,0,[]],[9,"Kingsmead salt barn","site","roads","review","north","2026-02",0,0,3,2,["manager"]],[10,"Brook Farm reservoir","site","roads","active","west",null,0,0,0,1,["address","last inspected"]],[11,"Westgate offices","site","waste","active","east","2025-07",0,0,3,4,[]],[12,"Fenside recycling centre","site","waste","review","east","2026-05",0,0,3,1,[]],[13,"Bridge Street hub","site","water","active","south","2024-11",0,0,2,2,[]],[14,"Cliff Top day centre","site","waste","review","north","2025-10",0,0,0,3,[]],[15,"Old Quay garage","site","care","active","coast","2025-02",0,0,1,3,[]],[16,"Larch Hill tower","site","water","active","south","2024-02",0,0,2,4,["manager","address"]],[17,"Greyfriars hall","site","water","active","north","2026-07",0,0,2,3,["manager"]],[18,"Northfield landfill","site","water","active","north","2025-08",0,0,2,5,["address"]],[19,"Sandbank outfall","site","care","active","east","2024-09",0,0,1,5,["manager"]],[20,"Ashby clinic","site","water","active","coast","2025-11",0,0,2,1,[]],[21,"Moor End shelter","site","waste","review","east","2026-06",0,0,1,6,[]],[22,"Copse Lane store","site","care","active","south","2024-04",0,0,0,6,[]],[23,"Northgate Haulage","supplier","care","active","east","2025-08",0,0,1,0,[]],[24,"Pennine Pipe Co","supplier","water","closed","south","2024-06",0,0,0,3,[]],[25,"Brightwater Labs","supplier","roads","review",null,"2023-11",0,0,0,3,["company number","region"]],[26,"Ashdown Fleet Services","supplier","care","active","south","2025-02",0,0,1,5,[]],[27,"Carver & Lowe","supplier","waste","paused","north","2024-01",0,0,0,4,["company number"]],[28,"Meridian Care Ltd","supplier","care","active","coast","2025-03",0,0,2,5,["contact"]],[29,"Holt Surfacing","supplier","buildings","paused","north","2024-07",0,0,0,2,[]],[30,"Tidewell Marine Works","supplier","waste","paused",null,"2024-10",0,0,0,5,["region"]],[31,"Greenbin Recycling","supplier","care","active","east","2026-09",0,0,1,1,["company number","contact"]],[32,"Oakfield Facilities","supplier","water","active","coast","2024-03",0,0,0,2,["company number"]],[33,"Stonebridge Plant Hire","supplier","buildings","active","coast","2023-09",0,0,0,4,["company number"]],[34,"Avon Valve","supplier","care","review",null,"2023-08",0,0,0,5,["region"]],[35,"Clearway Signs","supplier","care","paused","east","2026-09",0,0,1,4,[]],[36,"Kestrel Cleaning","supplier","care","active","south",null,0,0,0,3,["company number","last reviewed"]],[37,"Harrow Electrical","supplier","waste","active","north","2023-03",0,0,1,1,[]],[38,"Bluewater Testing","supplier","waste","review","west","2023-07",0,0,0,1,["contact"]],[39,"Fairhaven Catering","supplier","care","active",null,"2026-06",0,0,1,0,["region"]],[40,"Linden Security","supplier","buildings","active","east","2023-07",0,0,0,0,[]],[41,"Ridge Roofing","supplier","water","active","south",null,0,0,0,3,["last reviewed"]],[42,"Portland Aggregates","supplier","care","review","east",null,0,0,0,2,["last reviewed"]],[43,"Meadow Grounds","supplier","water","active",null,"2024-07",0,0,0,2,["region"]],[44,"Saltmarsh Dredging","supplier","buildings","active","north","2023-05",0,0,2,3,[]],[45,"Vale Transport","supplier","buildings","active","east",null,0,0,0,2,["last reviewed"]],[46,"Quarry Lane Concrete","supplier","waste","active","north","2025-11",0,0,2,5,[]],[47,"Brandt Software","supplier","waste","active",null,"2023-05",0,0,0,4,["company number","contact","region"]],[48,"Elmstead Medical","supplier","waste","active","west","2023-11",0,0,1,4,[]],[49,"Meter reading \u00b7 lot 1","contract","water","active","east","2026-06",0,0,2,1,["owner"]],[50,"Kerbside collection \u00b7 lot 1","contract","waste","closed","south","2025-11",0,0,0,7,[]],[51,"Resurfacing \u00b7 lot 1","contract","roads","review","coast","2029-04",0,0,0,5,["supplier"]],[52,"Respite beds \u00b7 lot 1","contract","care","active","east","2029-06",0,0,0,6,[]],[53,"Cleaning \u00b7 lot 1","contract","buildings","active","west","2028-05",0,0,2,2,["owner"]],[54,"Leak detection \u00b7 lot 1","contract","water","active","south","2029-01",0,0,4,3,["owner"]],[55,"Landfill gas monitoring \u00b7 lot 1","contract","waste","paused","coast","2027-12",0,0,0,7,["supplier"]],[56,"Pothole repair \u00b7 lot 1","contract","roads","active","coast","2029-09",0,0,1,2,["value"]],[57,"Home visits \u00b7 lot 1","contract","care","active","north","2026-11",0,0,0,4,["supplier"]],[58,"Roof repair \u00b7 lot 1","contract","buildings","review","west",null,0,0,4,2,["ends"]],[59,"Reservoir inspection \u00b7 lot 1","contract","water","closed","west","2025-05",0,0,3,8,[]],[60,"Kerbside collection \u00b7 lot 2","contract","waste","active","west","2028-11",0,0,4,3,["supplier"]],[61,"Resurfacing \u00b7 lot 2","contract","roads","active","east","2027-10",0,0,0,4,["supplier","value"]],[62,"Respite beds \u00b7 lot 2","contract","care","active","west","2029-05",0,0,1,5,["value"]],[63,"Lift servicing \u00b7 lot 1","contract","buildings","closed","north","2025-05",0,0,3,5,[]],[64,"Meter reading \u00b7 lot 2","contract","water","active","west","2026-02",0,0,1,5,["supplier"]],[65,"Recycling haulage \u00b7 lot 1","contract","waste","paused","north","2026-08",0,0,3,8,["value","owner"]],[66,"Resurfacing \u00b7 lot 3","contract","roads","active","west","2026-07",0,0,2,7,["owner"]],[67,"Day centre meals \u00b7 lot 1","contract","care","closed","north","2025-12",0,0,4,2,[]],[68,"Lift servicing \u00b7 lot 2","contract","buildings","active","east","2027-01",0,0,1,4,["supplier"]],[69,"Leak detection \u00b7 lot 2","contract","water","active","east","2029-06",0,0,3,4,[]],[70,"Kerbside collection \u00b7 lot 3","contract","waste","active","north","2028-08",0,0,4,3,["supplier"]],[71,"Street lighting \u00b7 lot 1","contract","roads","active","south","2028-06",0,0,3,4,[]],[72,"Transport to clinics \u00b7 lot 1","contract","care","active","east","2029-11",0,0,3,4,[]],[73,"Roof repair \u00b7 lot 2","contract","buildings","active","west","2028-07",0,0,0,6,["value"]],[74,"Reservoir inspection \u00b7 lot 2","contract","water","active","south","2027-10",0,0,4,4,["supplier"]],[75,"Recycling haulage \u00b7 lot 2","contract","waste","active","west","2027-01",0,0,4,4,[]],[76,"Resurfacing \u00b7 lot 4","contract","roads","active","north","2026-07",0,0,0,3,[]],[77,"Transport to clinics \u00b7 lot 2","contract","care","active","north","2028-10",0,0,4,8,["supplier"]],[78,"Security \u00b7 lot 1","contract","buildings","closed","west","2025-04",0,0,3,2,[]],[79,"Mains repair \u00b7 lot 1","contract","water","closed","coast","2025-03",0,0,2,3,[]],[80,"Bin supply \u00b7 lot 1","contract","waste","review","east",null,0,0,1,7,["supplier","ends"]],[81,"Pothole repair \u00b7 lot 2","contract","roads","active","east","2029-01",0,0,1,8,[]],[82,"Day centre meals \u00b7 lot 2","contract","care","active","coast","2029-04",0,0,1,8,["owner"]],[83,"Cleaning \u00b7 lot 2","contract","buildings","review","west","2027-04",0,0,2,7,["owner"]],[84,"Leak detection \u00b7 lot 3","contract","water","review","east","2026-01",0,0,1,5,[]],[85,"Bulky waste \u00b7 lot 1","contract","waste","active","south","2028-04",0,0,4,3,["value"]],[86,"Street lighting \u00b7 lot 2","contract","roads","active","south","2028-11",0,0,0,3,["owner"]],[87,"Home visits \u00b7 lot 2","contract","care","closed","west","2025-03",0,0,0,2,[]],[88,"Roof repair \u00b7 lot 3","contract","buildings","active","south","2026-03",0,0,3,6,[]],[89,"Leak detection \u00b7 lot 4","contract","water","active","east","2026-02",0,0,0,4,[]],[90,"Recycling haulage \u00b7 lot 3","contract","waste","active","west","2027-07",0,0,3,4,[]],[91,"Resurfacing \u00b7 lot 5","contract","roads","active","east","2028-01",0,0,3,1,[]],[92,"Home visits \u00b7 lot 3","contract","care","closed","west","2025-05",0,0,2,5,["value"]],[93,"Kerbside collection \u00b7 north lot","contract","waste","active","north","2026-05",0,0,2,4,[]],[94,"Recycling haulage \u00b7 north lot","contract","waste","active","north","2026-11",0,0,2,4,[]],[95,"Asha Patel","person","roads","active","coast",null,0,0,5,5,["line manager"]],[96,"Tom Reid","person","roads","active","coast",null,0,0,0,0,[]],[97,"Grace Mwangi","person","waste","active",null,null,0,0,3,4,["region"]],[98,"Owen Hughes","person","care","active","south",null,0,0,5,4,[]],[99,"Lena Novak","person","waste","active","east",null,0,0,4,1,[]],[100,"Jamal Idris","person","buildings","active","south",null,0,0,0,7,[]],[101,"Freya Lund","person","buildings","paused","south",null,0,0,0,4,[]],[102,"Kofi Mensah","person","buildings","active",null,null,0,0,5,7,["line manager","region"]],[103,"Isla Grant","person","waste","paused","west",null,0,0,1,8,[]],[104,"Mateo Ruiz","person","water","active","east",null,0,0,2,4,[]],[105,"Nora Byrne","person","roads","active","south",null,0,0,2,9,["line manager"]],[106,"Hugo Lam","person","waste","active","west",null,0,0,4,3,[]],[107,"Priya Shah","person","water","active","north",null,0,0,1,7,["line manager"]],[108,"Ben Carter","person","roads","active",null,null,0,0,1,9,["region"]],[109,"Yara Haddad","person","buildings","paused","north",null,0,0,3,9,[]],[110,"Leo Fitz","person","roads","active","north",null,0,0,4,5,["line manager"]],[111,"Maya Cohen","person","waste","active",null,null,0,0,2,0,["region"]],[112,"Sean Doyle","person","buildings","paused","south",null,0,0,3,5,[]],[113,"Gritter 18","vehicle","roads","active","north","2026-04",0,0,1,1,[]],[114,"Refuse truck 46","vehicle","waste","review","south",null,0,0,1,0,["next service"]],[115,"Tanker 56","vehicle","water","review","west","2027-07",0,0,1,3,["registration"]],[116,"Minibus 83","vehicle","care","paused","west","2027-03",0,0,1,1,["registration","base site"]],[117,"Van 60","vehicle","waste","active","coast",null,0,0,2,2,["registration","next service"]],[118,"Sweeper 23","vehicle","roads","active","south","2027-05",0,0,0,2,[]],[119,"Tipper 59","vehicle","roads","active","east","2026-08",0,0,2,1,["registration"]],[120,"Crane lorry 76","vehicle","buildings","active","south","2026-08",0,0,1,0,["base site"]],[121,"Gritter 51","vehicle","roads","active","coast","2026-01",0,0,2,3,[]],[122,"Refuse truck 59","vehicle","waste","review","west","2027-11",0,0,1,3,[]],[123,"Tanker 67","vehicle","water","paused","coast",null,0,0,1,1,["next service"]],[124,"Minibus 66","vehicle","care","active","east","2026-03",0,0,2,0,["base site"]],[125,"Van 16","vehicle","water","paused","east","2026-12",0,0,1,1,[]],[126,"Sweeper 31","vehicle","roads","review","south","2026-04",0,0,2,1,[]],[127,"Tipper 68","vehicle","roads","active","east","2027-03",0,0,2,3,[]],[128,"Crane lorry 30","vehicle","buildings","review","east","2026-06",0,0,1,2,["registration"]],[129,"Gritter 67","vehicle","roads","active","coast","2027-02",0,0,2,0,["registration"]],[130,"Refuse truck 83","vehicle","waste","active","east","2027-12",0,0,1,0,[]],[131,"Tanker 84","vehicle","water","closed","coast","2026-05",0,0,1,0,[]],[132,"Minibus 16","vehicle","care","active","west","2027-10",0,0,0,0,[]],[133,"Burst main, Larch Hill","incident","water","active",null,"2026-05",0,0,1,1,["site","region"]],[134,"Fall at home, Castle Walk","incident","care","active","west","2025-03",0,0,0,0,[]],[135,"Vehicle collision, Kings Road","incident","roads","closed","east","2026-05",0,0,1,3,["reported by"]],[136,"Fall at home, Elm Road","incident","care","closed","north","2025-01",0,0,0,0,["site"]],[137,"Lift failure, Brook Close","incident","buildings","active","south","2025-07",0,0,0,2,[]],[138,"Missed collection, Castle Walk","incident","waste","closed","north","2026-12",0,0,0,3,[]],[139,"Flooded underpass, Fen Way","incident","roads","closed","north","2026-04",0,0,0,2,["reported by"]],[140,"Vehicle collision, Rope Walk","incident","roads","closed","west","2026-05",0,0,0,1,["site"]],[141,"Fly-tipping, Larch Hill","incident","waste","closed","south","2025-12",0,0,0,3,["reported by"]],[142,"Vehicle collision, Brook Close","incident","roads","closed","coast","2026-08",0,0,0,2,[]],[143,"Fall at home, Mill Lane","incident","care","closed","coast","2025-10",0,0,0,2,["reported by","site"]],[144,"Flooded underpass, Elm Road","incident","roads","closed","north","2025-03",0,0,0,2,[]],[145,"Fall at home, Mill Lane","incident","care","closed","coast","2025-12",0,0,0,0,["reported by","site"]],[146,"Vehicle collision, Fen Way","incident","roads","active","east","2026-02",0,0,1,2,[]],[147,"Roof leak, Larch Hill","incident","buildings","active","east","2026-05",0,0,1,2,[]],[148,"Lift failure, Elm Road","incident","buildings","closed","west","2025-07",0,0,0,0,["reported by"]],[149,"Lift failure, Elm Road","incident","buildings","closed","south","2026-01",0,0,0,2,[]],[150,"Pothole damage, Quay Street","incident","roads","review","south","2026-10",0,0,1,1,[]],[151,"Lost key fob, Rope Walk","incident","care","closed","south","2025-11",0,0,0,2,[]],[152,"Power cut, Fen Way","incident","buildings","closed","west","2025-07",0,0,1,1,["reported by","site"]],[153,"Roof leak, Elm Road","incident","buildings","closed","south","2026-03",0,0,1,2,[]],[154,"Sewer odour, Hill Rise","incident","water","review","west","2026-03",0,0,0,2,[]],[155,"Pothole damage, Quay Street","incident","roads","review","south","2025-05",0,0,0,1,[]],[156,"Lost key fob, Mill Lane","incident","care","active","coast","2026-03",0,0,0,0,[]],[157,"Fall at home, Mill Lane","incident","care","active","south","2026-12",0,0,1,1,["site"]],[158,"Roof leak, Castle Walk","incident","buildings","closed","north","2026-07",0,0,0,1,[]],[159,"Fly-tipping, Larch Hill","incident","waste","active","west","2025-12",0,0,1,1,[]],[160,"Vehicle collision, Fen Way","incident","roads","active","coast","2025-11",0,0,0,3,["reported by"]],[161,"Fall at home, Rope Walk","incident","care","review","south","2026-07",0,0,0,2,["reported by"]],[162,"Burst main, Hill Rise","incident","water","active","west","2025-01",0,0,1,0,["reported by"]],[163,"Pothole repair \u00b7 coast lot","contract","roads","active","coast","2026-12",1,0,1,2,[]],[164,"Flooded underpass, Rope Walk","incident","roads","active","coast","2026-10",1,0,0,0,[]],[165,"Fall at home, Castle Walk","incident","care","review","coast","2026-09",2,0,0,0,[]],[166,"Rui Matos","person","care","active","coast",null,2,0,0,0,[]],[167,"Minibus 44","vehicle","care","active","coast","2027-02",2,0,0,0,[]],[168,"Burst main, Fen Way","incident","water","active","north","2026-10",3,0,0,0,[]],[169,"Fen Way valve house","site","water","active","north","2026-04",3,0,0,0,[]],[170,"Coastline Gritting Ltd","supplier","roads","active","coast","2026-08",0,1,0,0,[]],[171,"Gritting \u00b7 coast lot 2","contract","roads","active","coast","2026-12",0,1,0,0,[]],[172,"Missed collection, Quay Street","incident","waste","active","coast","2026-10",0,1,0,0,[]]]};
+
+/* ---- Facet engine, shared by every variant (inlined at build) ----
+   Choices: sel = {facetId: Set(valueIds)}. OR inside a facet, AND across facets.
+   Every value reads as one of: a value id, GAP (expected but not recorded) or NA (this kind has no such detail). */
+const F = (() => {
+  const GAP = '_gap', NA = '_na';
+  const KIND = Object.fromEntries(DATA.kinds.map(k => [k.id, k]));
+  const FACET = Object.fromEntries(DATA.facets.map(f => [f.id, f]));
+  FACET.kind.values = DATA.kinds.map(k => ({ id: k.id, label: k.many[0].toUpperCase() + k.many.slice(1) }));
+  const recs = DATA.records.map(a => ({ id: a[0], name: a[1], kind: a[2], service: a[3], state: a[4], region: a[5], date: a[6], reach: a[7], triage: a[8], intents: a[9], docs: a[10], missing: a[11] }));
+  const Y = DATA.year;
+  function bucket(d) { const y = +d.slice(0, 4); return y < Y ? 'before' : y === Y ? 'this' : y === Y + 1 ? 'next' : 'later'; }
+  function val(r, fid) {
+    if (fid === 'when') { if (!KIND[r.kind].date) return NA; return r.date ? bucket(r.date) : GAP; }
+    const v = r[fid]; return v == null ? GAP : v;
+  }
+  const visible = r => !r.reach && !r.triage;
+  function matches(r, sel, skip) {
+    for (const fid in sel) { if (fid === skip) continue; const s = sel[fid]; if (!s || !s.size) continue; if (!s.has(val(r, fid))) return false; }
+    return true;
+  }
+  const results = (sel, pool) => (pool || recs).filter(r => visible(r) && matches(r, sel));
+  function counts(fid, sel) {
+    const c = {}; FACET[fid].values.forEach(v => c[v.id] = 0); c[GAP] = 0; c[NA] = 0;
+    recs.forEach(r => { if (visible(r) && matches(r, sel, fid)) c[val(r, fid)]++; });
+    return c;
+  }
+  function clone(sel) { const o = {}; for (const k in sel) o[k] = new Set(sel[k]); return o; }
+  function pick(sel, fid, vid, mode) { const o = clone(sel); if (mode === 'only') o[fid] = new Set([vid]); else { o[fid] = o[fid] || new Set(); o[fid].has(vid) ? o[fid].delete(vid) : o[fid].add(vid); } return o; }
+  /* what picking this value would leave, before you pick it */
+  const leaves = (sel, fid, vid, mode) => results(pick(sel, fid, vid, mode || 'add')).length;
+  const size = sel => Object.values(sel).reduce((n, s) => n + (s ? s.size : 0), 0);
+  function label(fid, vid) {
+    if (vid === GAP) return 'Not recorded';
+    if (vid === NA) return 'Does not apply';
+    const v = FACET[fid].values.find(x => x.id === vid); return v ? v.label : vid;
+  }
+  function kindsIn(list) { const s = new Set(list.map(r => r.kind)); return DATA.kinds.filter(k => s.has(k.id)); }
+  function things(sel, n) {
+    const ks = sel.kind && sel.kind.size ? [...sel.kind].map(k => KIND[k]) : null;
+    if (ks && ks.length === 1) return n === 1 ? ks[0].one : ks[0].many;
+    if (ks) return ks.map(k => k.many).join(' or ');
+    return n === 1 ? 'thing' : 'things';
+  }
+  const join = (a, w) => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' ' + (w || 'or') + ' ' + a[a.length - 1];
+  /* a facet choice as words in a sentence */
+  function phrase(sel, fid) {
+    const s = sel[fid]; if (!s || !s.size) return '';
+    const ls = [...s].map(v => label(fid, v));
+    if (fid === 'service') return 'about ' + join(ls.map(x => x.toLowerCase()));
+    if (fid === 'state') return 'that are ' + join(ls.map(x => x.toLowerCase()));
+    if (fid === 'region') return s.has(GAP) && s.size === 1 ? 'with no place recorded' : 'in the ' + join(ls);
+    if (fid === 'when') {
+      const ks = sel.kind && sel.kind.size === 1 ? KIND[[...sel.kind][0]] : null;
+      const w = join(ls.map(x => x.toLowerCase()));
+      return ks && ks.verb ? 'that ' + ks.verb + ' ' + w : 'with a key date ' + w;
+    }
+    return '';
+  }
+  /* the choice as a verb phrase: 'end this year', 'are in the Coast' */
+  function pred(sel, fid, vid) {
+    const l = label(fid, vid);
+    if (vid === GAP) return 'are missing it';
+    if (fid === 'kind') return 'are ' + l.toLowerCase();
+    if (fid === 'service') return 'are about ' + l.toLowerCase();
+    if (fid === 'state') return 'are ' + l.toLowerCase();
+    if (fid === 'region') return 'are in the ' + l;
+    const ks = sel.kind && sel.kind.size === 1 ? KIND[[...sel.kind][0]] : null;
+    return ks && ks.verb ? ks.verb + ' ' + l.toLowerCase() : 'have a key date ' + l.toLowerCase();
+  }
+  function describe(sel) {
+    const n = results(sel).length;
+    const parts = ['service', 'region', 'state', 'when'].map(f => phrase(sel, f)).filter(Boolean);
+    return { n, text: [things(sel, n)].concat(parts).join(' ') };
+  }
+  /* Why is this empty? Every zero gets a reason, never a blank. */
+  function why(sel, fid, vid) {
+    const base = recs.filter(r => visible(r) && matches(r, sel, fid));
+    const app = base.filter(r => val(r, fid) !== NA);
+    const want = pick(sel, fid, vid, 'only');
+    const reach = recs.filter(r => r.reach && !r.triage && matches(r, want));
+    const tri = recs.filter(r => r.triage && matches(r, want));
+    const out = [];
+    const T = things(sel, 2);
+    if (!base.length) out.push({ type: 'before', icon: 'list-filter', head: 'Your other choices leave nothing', text: 'Nothing is left before this choice. Undo a choice to see more.' });
+    else if (!app.length) {
+      const has = DATA.kinds.filter(k => fid !== 'when' || k.date).map(k => k.many);
+      out.push({ type: 'na', icon: 'ban', head: 'Does not apply', text: cap(T) + ' have no ' + (FACET[fid].plain.toLowerCase()) + ' detail here. Only ' + join(has, 'and') + ' do.' });
+    }
+    const gaps = app.filter(r => val(r, fid) === GAP);
+    if (reach.length) {
+      const by = {}; reach.forEach(r => (by[r.reach] = by[r.reach] || []).push(r));
+      Object.keys(by).forEach(k => { const fl = DATA.elsewhere[k]; out.push({ type: 'reach', icon: 'lock', head: by[k].length + ' kept on ' + fl.name, text: 'A ' + fl.type + ' floor below yours: you can’t open ' + (by[k].length === 1 ? 'it' : 'them') + ' from here. Ask ' + fl.ask + '.', n: by[k].length }); });
+    }
+    if (tri.length) out.push({ type: 'triage', icon: 'inbox', head: tri.length + ' waiting in Triage', text: 'Proposed by a source, not accepted yet. ' + (tri.length === 1 ? 'It counts' : 'They count') + ' once someone accepts ' + (tri.length === 1 ? 'it' : 'them') + '.', n: tri.length });
+    if (gaps.length) { const ks = kindsIn(gaps); out.push({ type: 'gap', icon: 'circle-dashed', head: gaps.length + ' with no ' + FACET[fid].plain.toLowerCase() + ' recorded', text: 'Any of them could be ' + label(fid, vid).toLowerCase() + '. ' + join(ks.map(k => k.keeper), 'or') + ' can fill ' + (gaps.length === 1 ? 'it' : 'them') + ' in.', n: gaps.length }); }
+    if (base.length && app.length) {
+      const c = counts(fid, sel); const near = FACET[fid].values.filter(v => v.id !== vid && c[v.id]).map(v => label(fid, v.id).toLowerCase() + ' ' + c[v.id]);
+      out.unshift({ type: 'none', icon: 'search-x', head: 'None, checked ' + app.length + ' ' + things(sel, app.length), text: 'No ' + T + ' ' + pred(sel, fid, vid) + '.' + (near.length ? ' Nearest: ' + near.slice(0, 3).join(', ') + '.' : '') });
+    }
+    return out;
+  }
+  /* the whole result is empty: which single choice to undo gives most back */
+  function recover(sel) {
+    let best = null;
+    for (const fid in sel) for (const vid of sel[fid] || []) {
+      const s = pick(sel, fid, vid, 'add'); const n = results(s).length;
+      if (!best || n > best.n) best = { fid, vid, n };
+    }
+    return best;
+  }
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+  const css = getComputedStyle(document.documentElement);
+  const ms = name => parseFloat(css.getPropertyValue(name)) || 0;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wait = t => new Promise(r => setTimeout(r, reduced ? 1 : t));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function fmtDate(r) { const k = KIND[r.kind]; if (!k.date) return ''; if (!r.date) return null; const [y, m] = r.date.split('-'); return k.date + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m - 1] + ' ' + y; }
+  /* one result row: kind, name, where, key date; gaps drawn as gaps */
+  function row(r) {
+    const k = KIND[r.kind]; const d = fmtDate(r);
+    const reg = r.region ? label('region', r.region) : null;
+    return '<li class="res"><span class="ki">' + Icons.svg(k.icon, { size: 16 }) + '</span><span class="nm">' + esc(r.name) + '<small>' + k.one + ' · ' + label('service', r.service).toLowerCase() + '</small></span>' +
+      (reg ? '<span class="rg">' + reg + '</span>' : '<span class="rg gapv" title="Where is not recorded. ' + k.keeper + ' can fill it.">where?</span>') +
+      (d === '' ? '<span class="dt na">no key date</span>' : d ? '<span class="dt">' + d + '</span>' : '<span class="dt gapv" title="' + k.date + ' is not recorded. ' + k.keeper + ' can fill it.">' + k.date + '?</span>') +
+      (r.missing.length ? '<span class="ms" title="Missing: ' + r.missing.join(', ') + '">' + r.missing.length + ' gap' + (r.missing.length > 1 ? 's' : '') + '</span>' : '<span class="ms ok"></span>') + '</li>';
+  }
+  function reasons(list) {
+    return list.map(x => '<div class="why w-' + x.type + '"><span class="wi">' + Icons.svg(x.icon, { size: 16 }) + '</span><div><b>' + esc(x.head) + '</b><span>' + esc(x.text) + '</span></div></div>').join('');
+  }
+  const elsewhereTotal = () => recs.filter(r => r.reach).length;
+  const triageTotal = () => recs.filter(r => r.triage).length;
+  return { pred, GAP, NA, KIND, FACET, recs, val, visible, matches, results, counts, pick, leaves, size, label, things, describe, phrase, why, recover, ms, reduced, wait, esc, row, reasons, cap, join, fmtDate, clone, elsewhereTotal, triageTotal };
+})();
+
+/* the app frame shared by every variant: Data Atlas on a Department floor */
+function frame(active) {
+  const nav = [['compass', 'What we keep', 0], ['list-filter', 'Find', 1], ['inbox', 'Triage', 0, F.triageTotal()], ['pencil-line', 'Studio', 0, null, true]];
+  return '<nav class="rail" aria-label="Data Atlas"><div class="an">' + DATA.app + '</div>' +
+    nav.map(n => '<a class="nav' + (n[2] ? ' on' : '') + (n[4] ? ' off' : '') + '" href="#" ' + (n[4] ? 'aria-disabled="true" title="Admins change the kinds of thing here. Ask your floor admin."' : '') + '>' + Icons.svg(n[0], { size: 16 }) + '<span>' + n[1] + '</span>' + (n[3] != null ? '<span class="n">' + n[3] + '</span>' : '') + (n[4] ? '<span class="n">' + Icons.svg('lock', { size: 12 }) + '</span>' : '') + '</a>').join('') +
+    '<div class="foot"><span class="fl"></span><b>' + DATA.floor.name + '</b><br>' + DATA.floor.short + ' floor: what is kept here and above. ' + F.elsewhereTotal() + ' kept below are counted, locked.</div></nav>';
+}
+function keys(list) { return '<div class="keys" aria-hidden="true">' + list.map(k => '<span><span class="kbd">' + k[0] + '</span> ' + k[1] + '</span>').join('') + '</div>'; }
+
+const app = document.getElementById('app');
+let steps = [], cur = 0, hot = null, ask = null; // steps[0..cur) are in force; steps[cur..] are the undone branch
+const total = F.results({}).length;
+const selAt = n => { const s = {}; steps.slice(0, n).forEach(x => s[x.f] = new Set([x.v])); return s; };
+const without = i => { const s = {}; steps.slice(0, cur).forEach((x, j) => { if (j !== i) s[x.f] = new Set([x.v]); }); return s; };
+app.innerHTML = frame() + '<main class="main"><div class="head"><div><div class="eyebrow">' + DATA.app + ' · ' + DATA.floor.name + '</div><h1>Find, step by step</h1><div class="sub">Each choice narrows the trail. <b>Rewind to any step</b>, or drop one step alone; what you undid waits as a faint branch until you choose again.</div></div><button class="btn" id="tbtn">' + Icons.svg('code', { size: 16 }) + 'Technical names <span class="kbd">T</span></button></div><div class="trail" id="trail"></div><div class="body"><section class="next" id="next"></section><section class="rs" id="rs"></section></div></main>' +
+  keys([['click', 'choose next'], ['⌫', 'rewind one'], ['⇧⌫', 'redo'], ['esc', 'back to start'], ['T', 'technical names'], ['R', 'replay']]);
+function trail() {
+  const T = document.getElementById('trail'); const w = T.clientWidth, h = T.clientHeight;
+  const all = [{ start: true }].concat(steps);
+  const n = Math.max(5, all.length); const pad = F.ms('--space-8') / 2 + F.ms('--space-3');
+  const X = i => pad + i * (w - pad * 2) / (n - 1);
+  const cnt = all.map((_, i) => F.results(selAt(i)).length);
+  const mid = h / 2 + F.ms('--space-1'), maxH = h / 2 - F.ms('--space-6') + F.ms('--space-3');
+  const H = c => Math.max(1.5, Math.sqrt(c / total) * maxH);
+  let s = '';
+  for (let i = 0; i < all.length - 1; i++) {
+    const a = X(i), b = X(i + 1), ha = H(cnt[i]), hb = H(cnt[i + 1]), m = (a + b) / 2;
+    const d = 'M' + a + ' ' + (mid - ha) + ' C' + m + ' ' + (mid - ha) + ' ' + m + ' ' + (mid - hb) + ' ' + b + ' ' + (mid - hb) + ' L' + b + ' ' + (mid + hb) + ' C' + m + ' ' + (mid + hb) + ' ' + m + ' ' + (mid + ha) + ' ' + a + ' ' + (mid + ha) + 'Z';
+    const ghost = i + 1 > cur, prev = hot != null && i + 1 > hot && i + 1 <= cur;
+    s += '<path class="band' + (ghost ? ' ghost' : prev ? ' prev' : '') + '" d="' + d + '"/>';
+  }
+  let nodes = '';
+  all.forEach((x, i) => {
+    const ghost = i > cur, isCur = i === cur;
+    const lb = x.start ? 'Everything<small>kept here</small>' : F.esc(F.label(x.f, x.v)) + '<small>' + F.FACET[x.f].plain + '</small>';
+    let acts = '';
+    if (!x.start && !ghost) acts = '<span class="acts"><button data-rw="' + (i - 1) + '" title="Rewind to before this step">' + Icons.svg('undo-2', { size: 14 }) + 'rewind</button><button data-drop="' + (i - 1) + '" title="Drop just this step">' + Icons.svg('x', { size: 14 }) + 'drop: +' + (F.results(without(i - 1)).length - cnt[cur]) + '</button></span>';
+    else if (x.start && cur) acts = '<span class="acts"><button data-rw="-1">' + Icons.svg('rotate-ccw', { size: 14 }) + 'start over</button></span>';
+    else if (ghost) acts = '<span class="acts"><button data-redo="' + (i - 1) + '">' + Icons.svg('redo-2', { size: 14 }) + 'redo to here</button></span>';
+    nodes += '<div class="tn' + (ghost ? ' ghost' : '') + (isCur ? ' cur' : '') + (hot === i ? ' hot' : '') + '" data-i="' + i + '" style="left:' + X(i) + 'px"><span class="lb">' + lb + '</span><span class="ct">' + cnt[i] + '</span>' + acts + '</div>';
+  });
+  T.innerHTML = '<svg aria-hidden="true">' + s + '</svg>' + nodes + (steps.length > cur ? '<div class="redo">' + Icons.svg('git-branch', { size: 14 }) + (steps.length - cur) + ' undone step' + (steps.length - cur > 1 ? 's' : '') + ' kept as a branch</div>' : '');
+}
+function next() {
+  const S = selAt(cur), N = document.getElementById('next');
+  const used = new Set(steps.slice(0, cur).map(x => x.f));
+  let h = '<h2>Choose next</h2>';
+  DATA.facets.forEach(f => {
+    const c = F.counts(f.id, S); const vals = f.values.concat(c[F.GAP] ? [{ id: F.GAP, label: 'Not recorded' }] : []);
+    if (used.has(f.id)) { const st = steps.slice(0, cur).find(x => x.f === f.id); h += '<div class="fx done"><span>' + f.plain + '</span><div class="chips"><span class="ch used">' + F.label(f.id, st.v) + ' · chosen</span></div></div>'; return; }
+    const allNa = vals.every(v => !c[v.id]) && c[F.NA];
+    h += '<div class="fx"><span>' + f.plain + '<span class="tech">' + f.pm + ' · ' + f.tech + '</span></span><div class="chips">';
+    if (allNa) h += '<span class="ch zero" style="background:var(--x-proposed-na)">does not apply to ' + F.things(S, 2) + '</span>';
+    else vals.forEach(v => {
+      const n = c[v.id];
+      if (n) { h += '<button class="ch' + (v.id === F.GAP ? ' gap' : '') + '" data-f="' + f.id + '" data-v="' + v.id + '">' + v.label + '<span class="c">' + n + '</span></button>'; return; }
+      const w = F.why(S, f.id, v.id); const top = w.find(x => x.type === 'reach') || w.find(x => x.type === 'triage') || w[0];
+      const tag = top.type === 'reach' ? Icons.svg('lock', { size: 12 }) + top.n + ' below' : top.type === 'triage' ? Icons.svg('inbox', { size: 12 }) + top.n + ' waiting' : top.type === 'na' ? 'n/a' : 'none';
+      h += '<button class="ch zero" data-why="' + f.id + '|' + v.id + '" aria-expanded="' + (ask === f.id + '|' + v.id) + '">' + v.label + '<span class="c">' + tag + '</span></button>';
+    });
+    h += '</div></div>';
+    if (ask && ask.split('|')[0] === f.id) h += '<div class="fx" style="border-top:0;padding-top:0"><span></span><div class="whybox">' + F.reasons(F.why(S, f.id, ask.split('|')[1])) + '</div></div>';
+  });
+  N.innerHTML = h;
+}
+function results() {
+  const res = F.results(selAt(cur)), d = F.describe(selAt(cur));
+  document.getElementById('rs').innerHTML = '<h2>' + res.length + ' ' + F.esc(cur ? d.text : 'things kept here') + '</h2><div class="sc"><ul class="list">' + res.slice(0, 50).map(F.row).join('') + '</ul></div>';
+}
+function render() { trail(); next(); results(); }
+function choose(f, v) { steps = steps.slice(0, cur).concat([{ f, v }]); cur = steps.length; hot = null; ask = null; render(); }
+app.addEventListener('click', e => {
+  const c = e.target.closest('.ch[data-f]'); if (c) { choose(c.dataset.f, c.dataset.v); return; }
+  const z = e.target.closest('[data-why]'); if (z) { ask = ask === z.dataset.why ? null : z.dataset.why; next(); return; }
+  const rw = e.target.closest('[data-rw]'); if (rw) { cur = +rw.dataset.rw + 1; hot = null; ask = null; render(); return; }
+  const dr = e.target.closest('[data-drop]'); if (dr) { const i = +dr.dataset.drop; steps = steps.slice(0, cur).filter((_, j) => j !== i).concat(steps.slice(cur)); cur--; hot = null; render(); return; }
+  const rd = e.target.closest('[data-redo]'); if (rd) { cur = +rd.dataset.redo + 1; hot = null; render(); }
+});
+app.addEventListener('mouseover', e => { const t = e.target.closest('.tn'); const i = t ? +t.dataset.i : null; if (i !== hot && (i == null || i < cur)) { hot = i; trail(); } });
+document.getElementById('tbtn').onclick = () => document.body.classList.toggle('admin-off');
+addEventListener('resize', trail);
+let run = 0;
+async function demo() {
+  const me = ++run; steps = []; cur = 0; hot = null; ask = null; render();
+  await F.wait(F.ms('--motion-run'));
+  const st = F.ms('--motion-calm') * .6;
+  for (const [f, v] of [['kind', 'contract'], ['service', 'waste'], ['region', 'north'], ['when', 'this']]) { if (me !== run) return; choose(f, v); await F.wait(st); }
+  if (me !== run) return; cur = 3; hot = 3; ask = null; render(); const z = document.querySelector('.ch.zero[data-why]'); if (z) { ask = z.dataset.why; next(); }
+}
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') demo();
+  else if (e.key === 't' || e.key === 'T') document.body.classList.toggle('admin-off');
+  else if (e.key === 'Backspace' && e.shiftKey) { if (cur < steps.length) { cur++; render(); } }
+  else if (e.key === 'Backspace') { if (cur) { cur--; render(); } }
+  else if (e.key === 'Escape') { cur = 0; ask = null; render(); }
+});
+demo();
+</script>
+</body>
+</html>

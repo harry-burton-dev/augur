@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grammar · V4 · Five questions</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+.wrap{padding-top:var(--space-4)}
+.top{margin-bottom:var(--space-3)}
+.sent{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);background:var(--surface-pane);border:1px solid var(--hairline);margin-bottom:var(--space-3);}
+.sent .say{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--ink)}
+.sent .say b{font-weight:300;color:var(--light);border-bottom:1px solid var(--hairline-strong)}
+.sent .say .n{font-family:var(--font-mono);font-size:var(--type-lead);color:var(--light)}
+.sent .cc{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);margin-top:var(--space-1)}
+.sent .cc b{font-weight:400;color:var(--ink)}
+.res{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);max-width:var(--measure-glance);font-size:var(--type-small);align-items:center}
+.res .rl{flex-basis:100%;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-bottom:var(--space-1)}
+.res .rc{display:flex;align-items:center;gap:var(--space-2);color:var(--ink);padding-left:var(--space-2);border-left:2px solid var(--fc)}
+.cols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) var(--space-3) minmax(0,.8fr);gap:var(--space-3)}
+.col{display:flex;flex-direction:column;gap:var(--space-2);min-width:0}
+.col .hd{display:flex;align-items:baseline;gap:var(--space-2)}
+.col .L{font-weight:200;font-size:var(--type-title);line-height:1;color:var(--light);width:var(--space-6)}
+.col .q{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.col .q small{display:block;font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.col .ours{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.col .ours b{font-weight:400;color:var(--ink)}
+.vals{display:flex;flex-direction:column;gap:var(--space-1)}
+.chip{display:flex;justify-content:space-between;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline);font-size:var(--type-small);color:var(--ink);text-align:left;transition:background var(--motion-base) var(--ease-standard),border-color var(--motion-base),opacity var(--motion-base)}
+.chip b{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.chip[aria-pressed="true"]{background:var(--surface-raised);border-color:var(--hairline-strong)}
+.chip[aria-pressed="true"] b{color:var(--light)}
+.chip.zero{opacity:var(--x-quiet)}
+.chip.zero b{color:var(--ink-muted)}
+.chip.gap{border-color:transparent;background:var(--x-gap);border-radius:0}
+.chip.gap[aria-pressed="true"]{background:var(--x-gap),var(--surface-raised)}
+.chip[aria-disabled="true"]{background:var(--x-shadow);color:var(--ink-muted);cursor:default}
+.chip.lit{border-color:var(--ink)}
+.chip.gap.lit{background:var(--x-gap),var(--surface-raised);color:var(--light)}
+.sep{border-left:1px dashed var(--hairline-strong);justify-self:center}
+.col.kept .L{font-size:var(--type-lead);width:auto;font-weight:300}
+.col .nv{margin-top:auto}
+.gloss{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:var(--space-3);margin-top:var(--space-4);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.gloss div{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);min-width:0}
+.gloss b{display:block;font-weight:400;font-size:var(--type-meta);color:var(--ink)}
+.gloss code{display:block;font-family:var(--font-mono);color:var(--ink-muted);opacity:var(--x-quiet)}
+.famh{display:flex;align-items:baseline;gap:var(--space-3);margin:var(--space-4) 0 var(--space-2)}
+.famh h2{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.fam .tk{display:none}
+@media (max-width:1400px){.gloss{grid-template-columns:repeat(5,minmax(0,1fr))}.col .ours{display:none}.sent .say{font-size:var(--type-lead);line-height:var(--leading-lead)}}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="top"><span class="eyebrow" id="eyebrow"></span><h1 id="h1"></h1><p class="lede" id="lede"></p></div>
+  <div class="sent dep" style="--i:0" aria-live="polite"><div><div class="say" id="say"></div><div class="cc" id="cc"></div></div><div class="res" id="res"></div></div>
+  <div class="cols" id="cols"></div>
+  <div class="gloss" id="gloss"></div>
+  <div class="famh"><h2 id="famh"></h2><span class="sm muted" id="famd"></span></div>
+  <div class="fam" id="fam"></div>
+</div>
+<div class="hints"><span>click a value</span><span><span class="kbd">0</span> clear</span><span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Grammar · V4</b> five questions: Ranganathan’s PMEST facets mapped to Data Atlas · Colon Classification 1933, faceted search</div>
+<script>
+/*DATA*/
+const SHEET = {
+  eyebrow: 'The catalogue · grammar · facet sheet',
+  title: 'Five questions',
+  lede: 'Ranganathan described anything with five questions. Answer some, in any order; each count says what is left. A missing answer is a choice too, never dropped.',
+  kind: 'vehicle',        /* the kind the sample rows below belong to */
+  /* PMEST: L = Ranganathan’s letter; name = his word (one step down); q = the operator’s question; ours = the AUGUR term it maps to; punct = colon-class connecting symbol */
+  facets: [
+    { L: 'P', name: 'Personality', q: 'What is it?', term: 'kind', ours: '<b>Kind of thing</b>, and the kinds inside it. The hatched kinds are real counts; this sheet’s sample rows are vehicles only.', punct: '', field: 'kind' },
+    { L: 'M', name: 'Matter', q: 'What is it like?', term: 'detail', ours: '<b>Details</b>: what it is made of or has', punct: ';', field: 'fuel', detail: 'Fuel' },
+    { L: 'E', name: 'Energy', q: 'What happened to it?', term: 'link', ours: '<b>Links</b> to incidents and intents', punct: ':', field: 'event' },
+    { L: 'S', name: 'Space', q: 'Where?', term: 'detail', ours: '<b>Where</b> it is: a place detail or link', punct: '.', field: 'base', detail: 'Based at' },
+    { L: 'T', name: 'Time', q: 'When?', term: 'detail', ours: '<b>When</b>: a date it holds', punct: '’', field: 'service', detail: 'Next service' }
+  ],
+  /* values for the sample: weights generate the rows deterministically; null = not known yet */
+  values: {
+    fuel: [['Diesel', 48], ['Electric', 18], ['Petrol', 15], [null, 6]],
+    event: [['In an incident', 23], ['Used by an intent', 5], ['Neither', 59]],
+    base: [['Kestrel Road Depot', 39], ['Ashby Yard', 26], ['Mill Vale', 16], [null, 6]],
+    service: [['This month', 11], ['Next 3 months', 27], ['Later', 36], [null, 13]]
+  },
+  demo: ['fuel', 'event', 'base', 'service'],
+  demoPick: { fuel: 'Diesel', event: 'In an incident', base: 'Kestrel Road Depot' },
+  famTitle: 'Six things that look empty',
+  famLede: 'In a filter, “not known yet” is a value with its count, marked as a gap. The other five never become filter values.'
+};
+/*COMMON_JS*/
+/* deterministic sample rows for one kind, from SHEET.values */
+function rng(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const kind = K(SHEET.kind);
+const ROWS = (() => { const r = rng(7), rows = [];
+  const deck = f => { const d = []; SHEET.values[f].forEach(([v, n]) => { for (let i = 0; i < n; i++) d.push(v); }); for (let i = d.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; } return d; };
+  const D = {}; Object.keys(SHEET.values).forEach(f => D[f] = deck(f));
+  for (let i = 0; i < kind.count; i++) rows.push({ name: `${kind.name} ${String(i + 1).padStart(2, '0')}`, kind: kind.id, fuel: D.fuel[i], event: D.event[i], base: D.base[i], service: D.service[i] });
+  return rows; })();
+const NK = '\u0000nk';   /* the "not known yet" choice */
+let pick = {};
+const match = (row, except) => Object.entries(pick).every(([f, v]) => f === except || (f === 'kind' ? row.kind === v : (v === NK ? row[f] == null : row[f] === v)));
+const left = (f, v) => ROWS.filter(r => match(r, f) && (f === 'kind' ? r.kind === v : v === NK ? r[f] == null : r[f] === v)).length;
+function chips(fc) {
+  if (fc.field === 'kind') return DATA.kinds.map(k => k.id === SHEET.kind
+    ? `<button class="chip" data-f="kind" data-v="${k.id}" aria-pressed="${pick.kind === k.id}"><span>${k.plural}</span><b>${fmt(k.count)}</b></button>`
+    : `<span class="chip" aria-disabled="true" title="This sheet’s sample rows are ${kind.plural.toLowerCase()} only"><span>${k.plural}</span><b>${fmt(k.count)}</b></span>`).slice(0, 5).join('');
+  return SHEET.values[fc.field].map(([v]) => { const key = v == null ? NK : v, n = left(fc.field, key), on = pick[fc.field] === key;
+    return `<button class="chip ${v == null ? 'gap' : ''} ${n ? '' : 'zero'}" data-f="${fc.field}" data-v="${key}" aria-pressed="${on}"><span>${v == null ? 'Not known yet' : v}</span><b>${n}</b></button>`; }).join('');
+}
+function sentence() {
+  const n = ROWS.filter(r => match(r)).length, f = SHEET.facets;
+  const part = (fc, txt) => pick[fc.field] ? `<b>${txt}</b>` : '';
+  const v = k => pick[k] === NK ? null : pick[k];
+  const bits = [];
+  if (pick.fuel) bits.push(part(f[1], v('fuel') ? v('fuel').toLowerCase() : `${f[1].detail.toLowerCase()} not known yet`));
+  bits.push(pick.kind ? `<b>${kind.plural.toLowerCase()}</b>` : 'things');
+  if (pick.event) bits.push(part(f[2], v('event') ? v('event').toLowerCase().replace('neither', 'in no incident or intent') : ''));
+  if (pick.base) bits.push(part(f[3], v('base') ? `at ${v('base')}` : 'with no base known yet'));
+  if (pick.service) bits.push(part(f[4], v('service') ? `serviced ${v('service').toLowerCase()}` : 'with no service date yet'));
+  const s = bits.join(' ').replace(/^(<b>)?(.)/, (m, b, c) => (b || '') + c.toUpperCase());
+  $('#say').innerHTML = Object.keys(pick).length ? `${s}: <span class="n">${n}</span>` : `Everything we keep: <span class="n">${fmt(DATA.kinds.reduce((a, k) => a + k.count, 0))}</span> cards. Answer a question below.`;
+  const cc = [pick.kind ? kind.name : '', ...SHEET.facets.slice(1).map(fc => pick[fc.field] ? fc.punct + (pick[fc.field] === NK ? '[ ]' : pick[fc.field].replace(/(^|\s+)(\w)/g, (m, a, c) => c.toUpperCase())) : '')].join('');
+  $('#cc').innerHTML = `Colon notation, one step down: <b>${cc || '—'}</b>`;
+  const res = ROWS.filter(r => match(r)).slice(0, 3), fl = FL(kind.floor);
+  $('#res').innerHTML = Object.keys(pick).length ? `<span class="rl">Cards left · ${n}</span>` + res.map(r => `<span class="rc" data-tier="${fl.tier}">${ic(kind.icon, 14)}${r.name}</span>`).join('') + (n > 3 ? `<span class="muted">and ${n - 3} more</span>` : '') : '';
+}
+function render() {
+  $('#eyebrow').textContent = SHEET.eyebrow; $('#h1').textContent = SHEET.title; $('#lede').textContent = SHEET.lede;
+  const fl = FL(kind.floor);
+  $('#cols').innerHTML = SHEET.facets.map((fc, i) => `<section class="col dep" style="--i:${i + 1}"><div class="hd"><span class="L">${fc.L}</span><span class="q">${fc.q}<small>${fc.name} · ${T(fc.term).tech.split(' · ')[0]}</small></span></div>
+      <div class="vals" data-col="${fc.field}">${chips(fc)}</div><p class="ours" style="margin:0">${fc.ours}</p></section>`).join('')
+    + `<span class="sep" aria-hidden="true"></span><section class="col kept dep" style="--i:6"><div class="hd"><span class="L">Kept on</span></div><div class="vals"><span class="chip" data-tier="${fl.tier}" style="border-left:2px solid var(--fc)"><span>${fl.name}</span><b>${kind.count}</b></span></div>
+      <p class="ours" style="margin:0"><b>Not a sixth question.</b> It says who keeps a card, not what the thing is. You can narrow by it; it never describes the thing.</p><p class="never nv" style="margin:0"><b>Never means</b> ${T('floor').never}</p></section>`;
+  $('#gloss').innerHTML = DATA.terms.map((t, i) => `<div class="dep" style="--i:${i}"><b>${t.plain}</b><code>${t.tech.split(' · ')[0]}</code>${t.never.split('. ')[0].replace(/\.$/, '')}.</div>`).join('');
+  $('#famh').textContent = SHEET.famTitle; $('#famd').textContent = SHEET.famLede;
+  renderFamily($('#fam'), { ids: ['gap', 'none', 'stale', 'norecord', 'shadow', 'could'] });
+  wire(); sentence(); Icons.hydrate(document.body);
+}
+function refresh() { SHEET.facets.forEach(fc => { const el = $(`.vals[data-col="${fc.field}"]`); if (el) el.innerHTML = chips(fc); }); wire(); sentence(); Icons.hydrate(document.body); }
+function wire() { $$('.chip[data-f]').forEach(c => c.onclick = () => { const f = c.dataset.f, v = c.dataset.v; if (pick[f] === v) delete pick[f]; else pick[f] = v; refresh(); }); }
+function lit(f, v) { const c = $(`.chip[data-f="${f}"][data-v="${v}"]`); if (c) { c.classList.add('lit'); later(() => c.classList.remove('lit'), ms('--motion-run')); } }
+document.addEventListener('keydown', e => { if (e.key === '0') { pick = {}; refresh(); } });
+render();
+boot(() => { pick = {}; refresh(); }, () => {
+  const step = ms('--motion-slow') + ms('--motion-quick');
+  later(() => { pick.kind = kind.id; refresh(); lit('kind', kind.id); }, 0);
+  SHEET.demo.forEach((f, i) => later(() => { const best = SHEET.values[f].filter(([v]) => v != null).map(([v]) => [v, left(f, v)]).sort((a, b) => b[1] - a[1])[0]; const want = SHEET.demoPick[f]; pick[f] = want && left(f, want) ? want : best[0]; refresh(); lit(f, best[0]); }, step * (i + 1)));
+  later(() => { const g = $$('.chip.gap').find(c => !c.classList.contains('zero')); g && g.classList.add('lit'); }, step * (SHEET.demo.length + 1));
+});
+</script>
+</body>
+</html>

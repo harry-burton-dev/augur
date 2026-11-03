@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workings · V6 · Two hands</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ======================================================================
+   Proposed tokens (mixes of kit tokens; listed as "needs token" in notes.md)
+   ====================================================================== */
+:root{
+  --x-proposed-type-micro:.6875rem;                                        /* mono numerals in data (catalogue, wear and time asked too) */
+  --x-proposed-here:var(--floor-department-high);                           /* the floor this page sits on */
+  --x-proposed-here-soft:color-mix(in srgb,var(--floor-department-high) 16%,transparent);
+  --x-proposed-quiet:.62;                                                    /* doesn't-apply and left-out lines */
+  /* --mark-guess: a model's guess is drawn in dots, never in a colour. Facts are solid. */
+  --x-proposed-guess-ink:color-mix(in srgb,var(--ink) 70%,transparent);
+  --x-proposed-guess-dots:radial-gradient(circle,var(--x-proposed-guess-ink) 0 1px,transparent 1.5px) 0 100% / var(--space-1) 3px repeat-x;
+  --x-proposed-guess-wash:radial-gradient(circle,color-mix(in srgb,var(--ink) 9%,transparent) 0 1px,transparent 1.5px) 0 0 / var(--space-1) var(--space-1);
+  /* six ways to be empty (catalogue): corner ticks for not known yet */
+  --x-proposed-gap-ink:color-mix(in srgb,var(--ink-muted) 78%,transparent);
+  --x-proposed-gap-tick:var(--space-2);
+  /* 45° stale hatch, 135° not-yours-to-see hatch */
+  --x-proposed-hatch:color-mix(in srgb,var(--ink-muted) 34%,transparent);
+  --x-proposed-stale:repeating-linear-gradient(45deg,transparent 0 calc(var(--space-1) - 1px),var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-unseen:repeating-linear-gradient(135deg,transparent 0 calc(var(--space-1) - 1px),var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  /* the answer's own light: the lit path, used once per screen */
+  --x-proposed-lit:color-mix(in srgb,var(--green) 80%,var(--light));
+  --x-proposed-lit-wash:color-mix(in srgb,var(--green) 9%,transparent);
+}
+:root,.mk-gap{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+html{height:100%}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.micro{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);padding:2px var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);letter-spacing:0;min-width:1.5em;text-align:center;text-transform:none}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.ico{display:inline-flex;vertical-align:-3px}
+
+/* ---- app frame ---- */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:color-mix(in srgb,var(--slate-deep) 70%,transparent);border-right:1px solid var(--hairline);padding:var(--edge) var(--edge-tight);display:flex;flex-direction:column;gap:var(--space-1);min-height:0}
+.rail .an{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);padding:var(--space-2);margin-bottom:var(--space-4)}
+.nav{display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav.on{background:var(--surface-raised);color:var(--ink)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail .foot{margin-top:auto;padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rail .foot b{font-weight:400;color:var(--ink)}
+.rail .foot .fl{display:block;width:var(--space-5);height:2px;border-radius:1px;background:var(--x-proposed-here);margin-bottom:var(--space-2);box-shadow:0 0 var(--glow-blur) var(--x-proposed-here)}
+.keys{display:flex;flex-direction:column;gap:var(--space-1);margin:var(--space-3) 0 calc(var(--space-6) + var(--space-1));padding:var(--space-2);font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted);border-top:1px solid var(--hairline)}
+.keys span{display:flex;gap:var(--space-2);align-items:center}
+.main{position:relative;padding:var(--edge) var(--space-6) calc(var(--space-6) + var(--space-3));overflow:hidden;display:flex;flex-direction:column;min-height:0;min-width:0}
+@media (max-width:1400px){.main{padding-left:var(--space-5);padding-right:var(--space-5)}}
+
+/* ---- the question, in the person's words, then said in a sentence ---- */
+.asked{display:flex;align-items:baseline;gap:var(--space-3);font-size:var(--type-meta);color:var(--ink-muted);margin:var(--space-1) 0 var(--space-2)}
+.asked q{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink);quotes:"“" "”"}
+.said{font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--ink);letter-spacing:var(--tracking-tight);max-width:calc(var(--measure-wide) + var(--space-8))}
+.said .w{font:inherit;color:var(--light);border-bottom:1px dashed var(--hairline-strong);border-radius:var(--radius-key) var(--radius-key) 0 0;padding:0 2px;transition:background var(--motion-quick) var(--ease-standard)}
+.said .w:hover,.said .w[aria-expanded="true"]{background:var(--surface-raised)}
+.said .w.guess-src{border-bottom:0;background:var(--x-proposed-guess-dots);padding-bottom:3px}
+.said .w.fresh{animation:fresh var(--motion-calm) var(--ease-out)}
+@keyframes fresh{from{color:var(--x-proposed-lit);text-shadow:0 0 var(--glow-blur) var(--x-proposed-lit)}}
+
+/* ---- who set each step: you, the desk, a model ---- */
+.by{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.by.model{color:var(--ink);background:var(--x-proposed-guess-dots);padding-bottom:4px}
+/* a model's guess: dotted, upright, with the bot mark and the word "guess" */
+.guess{background:var(--x-proposed-guess-dots);padding-bottom:3px}
+.guess-box{border:1px dotted var(--x-proposed-guess-ink);background-image:var(--x-proposed-guess-wash)}
+.gw-off .needs-gw{opacity:var(--x-proposed-quiet)}
+.gw-note{display:none}
+.gw-off .gw-note{display:inline}
+
+/* ---- the six ways to be empty (from the catalogue), used where they arise ---- */
+.mk{display:inline-block;vertical-align:middle;flex:none}
+.mk-gap{background:var(--x-proposed-gap);width:var(--space-5);height:var(--space-4);--x-proposed-gap-tick:var(--space-1)}
+.mk-stale{background:var(--x-proposed-stale);width:var(--space-5);height:var(--space-3);border-radius:2px}
+.mk-unseen{background:var(--x-proposed-unseen);width:var(--space-5);height:var(--space-3);border-radius:2px}
+.mk-norec{width:var(--space-5);height:var(--space-3);background:
+  radial-gradient(circle at 50% 0,transparent 3px,var(--ink-muted) 3px 4px,transparent 4px) 0 0 / var(--space-2) 6px repeat-x;opacity:.8}
+.mk-guess{width:var(--space-5);height:var(--space-3);background:var(--x-proposed-guess-wash);border:1px dotted var(--x-proposed-guess-ink);border-radius:2px}
+
+/* ---- popover of choices: each shows what the answer would become ---- */
+.pop{position:absolute;z-index:var(--layer-overlay);width:var(--measure-decision);padding:var(--space-2);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);box-shadow:var(--shadow-overlay);font:400 var(--type-meta)/var(--leading-meta) var(--font-sans);color:var(--ink);letter-spacing:0;animation:popin var(--motion-base) var(--ease-out) both}
+@keyframes popin{from{opacity:0;transform:translateY(calc(var(--space-1) * -1))}}
+.pop .ph{display:flex;justify-content:space-between;gap:var(--space-3);padding:var(--space-1) var(--space-2) var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.opt{width:100%;display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;min-height:var(--target-sm);padding:0 var(--space-2);border-radius:var(--radius-key)}
+.opt:hover,.opt:focus-visible{background:var(--surface-raised)}
+.opt .c{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.opt .c b{color:var(--ink);font-weight:400}
+.opt small{display:block;color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.opt[aria-checked="true"]{color:var(--light)}
+.opt[aria-checked="true"] .tick{color:var(--x-proposed-lit)}
+.opt .tick{color:transparent;display:flex}
+.opt[disabled]{opacity:var(--x-proposed-quiet);cursor:help}
+.pop .pf{padding:var(--space-2);border-top:1px solid var(--hairline);margin-top:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+
+/* ---- two registers: technical words one step down, with T ---- */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:.8;white-space:pre-wrap}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* ---- buttons and chips ---- */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);background:var(--surface-inset);white-space:nowrap;color:var(--ink)}
+.btn:hover{background:var(--surface-raised)}
+.btn[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+.toolbar{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+.stamp{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.stamp b{color:var(--ink);font-weight:400}
+
+/* the head every variant shares */
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-5)}
+.head .toolbar{flex:none;padding-top:var(--space-1)}
+@media (prefers-reduced-motion: reduce){*{animation-duration:var(--motion-instant)!important;transition-duration:var(--motion-instant)!important}}
+
+/* ---- V6: the answer worked twice, from the record alone and with a model's help; only the difference needs a person ---- */
+.lane{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-4)}
+.ls{position:relative;padding:var(--space-2) var(--space-3);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);animation:popin var(--motion-base) var(--ease-out) both;min-width:0}
+.ls b{display:block;color:var(--ink);font-weight:400;margin-bottom:2px}
+.ls .tag{display:flex;align-items:center;gap:var(--space-1);margin-top:var(--space-1);font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono)}
+.ls.model{border-style:dotted;border-color:var(--x-proposed-guess-ink);background-image:var(--x-proposed-guess-wash)}
+.ls.model .tag{color:var(--ink)}
+.ls.off{opacity:var(--x-proposed-quiet)}
+.ls .no{position:absolute;top:var(--space-2);right:var(--space-3);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;margin-top:var(--space-4);background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-card);padding:var(--space-3) var(--space-4);backdrop-filter:blur(var(--surface-blur))}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:var(--space-4)}
+.ch{display:flex;align-items:baseline;gap:var(--space-2);padding-bottom:var(--space-2);border-bottom:1px solid var(--hairline-strong)}
+.ch .n{font:200 var(--type-title)/1 var(--font-sans);color:var(--light);font-variant-numeric:tabular-nums}
+.ch .t{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ch .t b{display:block;color:var(--ink);font-weight:400;font-size:var(--type-meta)}
+.ch.mid{justify-content:center;text-align:center;align-items:center;flex-direction:column;gap:0}
+.ch.mid .t{max-width:var(--measure-decision)}
+.ch.right{justify-content:flex-end;text-align:right}
+.rows{overflow:auto;min-height:0;flex:1;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.agree{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:var(--space-4);align-items:center;min-height:calc(var(--target-sm) - var(--space-1));border-bottom:1px solid var(--hairline);font-size:var(--type-meta)}
+.agree .bar{grid-column:1 / 4;display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);padding:0 var(--space-2)}
+.agree .bar .mid{flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--hairline-strong),transparent)}
+.agree .d{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.agree.less .d{color:var(--warning)}
+.dis{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:var(--space-4);align-items:stretch;padding:var(--space-3) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);transition:background var(--motion-base) var(--ease-standard)}
+.dis.hot{background:linear-gradient(90deg,transparent,var(--x-proposed-here-soft),transparent)}
+.dis .l,.dis .r{padding:var(--space-1) var(--space-2)}
+.dis .l small,.dis .r small{display:block;color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.dis .l{color:var(--light)}
+.dis .r{text-align:right;color:var(--ink-muted)}
+.dis .r .nm{background:var(--x-proposed-guess-dots);padding-bottom:3px;color:var(--ink)}
+.dis .l .tag,.dis .r .tag{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.dis .l .tag{color:var(--x-proposed-lit)}
+.ev{padding:var(--space-2) var(--space-3);border:1px dotted var(--x-proposed-guess-ink);border-radius:var(--radius-inset);background-image:var(--x-proposed-guess-wash);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ev b{color:var(--ink);font-weight:400}
+.ev .q{display:block;color:var(--ink);margin:var(--space-1) 0}
+.ev .acts{display:flex;gap:var(--space-2);margin-top:var(--space-2);flex-wrap:wrap}
+.ev .acts .btn{height:calc(var(--target-sm) - var(--space-2));font-size:var(--type-small)}
+.ev .done{display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-2);color:var(--ink)}
+.ev.rej{border-style:solid;border-color:var(--hairline);background-image:none}
+.grp{display:flex;align-items:center;gap:var(--space-2);margin:var(--space-3) 0 var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.grp .ln{flex:1;height:1px;background:var(--hairline)}
+.grp button{color:var(--ink);text-transform:none;letter-spacing:0;text-decoration:underline dotted var(--hairline-strong);text-underline-offset:3px}
+.unk{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.unk b{color:var(--ink);font-weight:400}
+.gwlog{display:flex;justify-content:space-between;gap:var(--space-1) var(--space-3);flex-wrap:wrap;padding-top:var(--space-2);margin-top:var(--space-2);border-top:1px solid var(--hairline);font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.gwlog b{color:var(--ink);font-weight:400}
+.techq{display:none;margin:var(--space-2) 0 0;padding:var(--space-2) var(--space-3);background:var(--surface-inset);border-radius:var(--radius-key);font:400 var(--x-proposed-type-micro)/1.55 var(--font-mono);color:var(--ink-muted);white-space:pre}
+.tech .techq{display:block}
+@media (max-height:840px){.said{font-size:var(--type-lead);line-height:var(--leading-lead)}.lane .ls{padding:var(--space-1) var(--space-2)}.ls .tag{display:none}.dis{padding:var(--space-2) 0}}
+@media (max-width:1400px){.ls b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Workings · V6</b> two hands: worked from the record alone and with a model's help; only the difference needs you · double reading, tracked changes</div>
+<script>
+/* Sample data for one deployment: a regional services organisation.
+   Swap this object and every name, label, date, count, keeper and reason follows. */
+const DATA = {
+  app: "Data Atlas", today: "2026-11-03",
+  floor: { name: "Regional Services", type: "department", above: "the Org" },
+  person: { name: "Priya Shah", role: "Procurement officer" },
+  asked: { words: "which suppliers have we not heard from since spring?", at: "2026-11-03 10:14" },
+  kind: { one: "supplier", many: "suppliers", tech: "cco:Organization" },
+  /* what the desk asked back, and who settled each answer */
+  since: { value: "2026-03-01", by: "you", asked: "Since spring: which day?",
+    options: [
+      { v: "2026-03-01", label: "1 March", why: "spring by the calendar" },
+      { v: "2026-03-20", label: "20 March", why: "the equinox" },
+      { v: "2026-04-01", label: "1 April", why: "the start of the financial year" } ] },
+  statuses: [
+    { id: "live", label: "running", on: true },
+    { id: "paused", label: "paused", on: false },
+    { id: "finished", label: "finished", on: false } ],
+  /* "heard from" is read by the model gateway as these kinds of contact; the person confirmed it */
+  heard: { said: "heard from", by: "model", confirmed: "you", fallback: "Without the model, the desk shows this list with nothing ticked and asks you to tick what counts." },
+  kinds: [
+    { id: "invoice", label: "invoice", many: "invoices", icon: "receipt", on: true, src: "inv" },
+    { id: "email", label: "email", many: "emails", icon: "mail", on: true, src: "inbox" },
+    { id: "meeting", label: "meeting", many: "meetings", icon: "users", on: true, src: "notes" },
+    { id: "call", label: "call", many: "calls", icon: "phone", on: true, src: "calls" },
+    { id: "mention", label: "mention in a document", many: "mentions in documents", icon: "file-text", on: false, src: "docs" } ],
+  /* how a contact record is linked to a supplier; only "meaning" uses the model gateway */
+  matches: [
+    { id: "key", label: "company number", icon: "hash", model: false, tech: "key match: companyNumber" },
+    { id: "name", label: "exact name", icon: "equal", model: false, tech: "label = label" },
+    { id: "spelling", label: "close spelling", icon: "spell-check", model: false, tech: "pg_trgm similarity ≥ 0.8" },
+    { id: "meaning", label: "meaning", icon: "bot", model: true, tech: "pgvector cosine ≥ 0.86 via model gateway" } ],
+  sources: {
+    inv: { name: "Invoices ledger", keeper: "Finance", from: "2023-04-01" },
+    inbox: { name: "Procurement inbox", keeper: "Procurement desk", from: "2026-01-05" },
+    notes: { name: "Supplier meetings, a library in Artifacts", keeper: "Procurement desk", from: "2024-01-01" },
+    calls: { name: "Call log", keeper: "Procurement desk", from: "2025-06-01", gap: ["2026-08-12", "2026-09-02"] },
+    docs: { name: "Site reports in Artifacts", keeper: "Estates desk", from: "2024-01-01" } },
+  /* contacts: [kind, date, how it was matched, what the record says] */
+  suppliers: [
+    { id: 1, name: "Northgate Haulage", status: "live", c: [["invoice", "2026-09-14", "key", "Invoice NH-2231"], ["email", "2026-06-02", "name", "Re: route changes"]] },
+    { id: 2, name: "Pennine Pipe Co", status: "live", c: [["email", "2026-02-11", "name", "Price list 2026"], ["invoice", "2025-12-03", "key", "Invoice PP-0911"]] },
+    { id: 3, name: "Brightwater Labs", status: "live", c: [["meeting", "2026-03-04", "name", "Lab results review"], ["invoice", "2026-01-22", "key", "Invoice BW-114"]] },
+    { id: 4, name: "Ashdown Fleet Services", status: "live", c: [["invoice", "2026-10-02", "key", "Invoice AF-7781"]] },
+    { id: 5, name: "Carver & Lowe", status: "finished", ended: "2025-09-30", c: [["invoice", "2025-08-19", "key", "Final invoice CL-330"]] },
+    { id: 6, name: "Meridian Care Ltd", status: "live", c: [["email", "2026-06-20", "spelling", "From “Meridian Care Limited”"], ["invoice", "2026-02-02", "key", "Invoice MC-5520"]] },
+    { id: 7, name: "Holt Surfacing", status: "live", c: [["invoice", "2026-01-30", "key", "Invoice HS-208"]], merged: "Holt Surfacing Ltd" },
+    { id: 8, name: "Tidewell Marine Works", status: "live", c: [["email", "2026-07-08", "meaning", "From “the dredging team at Tidewell”, no company number"], ["invoice", "2025-11-14", "key", "Invoice TM-401"]] },
+    { id: 9, name: "Greenbin Recycling", status: "live", c: [["call", "2026-05-12", "name", "Call about bin lifts"]] },
+    { id: 10, name: "Oakfield Facilities", status: "live", c: [["invoice", "2025-12-02", "key", "Invoice OF-1200"]] },
+    { id: 11, name: "Stonebridge Plant Hire", status: "live", c: [], since: "2024-05-01" },
+    { id: 12, name: "Avon Valve", status: "live", c: [["mention", "2026-04-15", "name", "Named in “Kingsmead salt barn, April site report”"], ["email", "2025-10-09", "name", "Valve recall notice"]] },
+    { id: 13, name: "Kestrel Cleaning", status: "live", c: [["meeting", "2026-08-21", "key", "Contract review"]] },
+    { id: 14, name: "Clearway Signs", status: "paused", paused: "2026-06-01", c: [["invoice", "2026-01-20", "key", "Invoice CS-090"]] },
+    { id: 15, name: "Harrow Electrical", status: "live", c: [["email", "2026-02-27", "name", "Holiday cover"]] },
+    { id: 16, name: "Bluewater Testing", status: "live", c: [["invoice", "2026-10-20", "key", "Invoice BT-3301"]] },
+    { id: 17, name: "Linden Security", status: "live", c: [["email", "2026-04-03", "spelling", "From “Linden Secuirty”"]] },
+    { id: 18, name: "Ridge Roofing", status: "live", usual: "call", c: [["call", "2026-02-02", "name", "Call about gutters"], ["call", "2025-11-20", "name", "Call about quote"]] },
+    { id: 19, name: "Saltmarsh Dredging", status: "live", c: [["email", "2026-09-01", "meaning", "From accounts@smd-marine, signed “Saltmarsh”"], ["invoice", "2026-01-12", "key", "Invoice SD-77"]] },
+    { id: 20, name: "Quarry Lane Concrete", status: "live", c: [["meeting", "2026-05-30", "name", "Site walk, Elm Road"]] },
+    { id: 21, name: "Elmstead Medical", status: "live", c: [["invoice", "2025-11-18", "key", "Invoice EM-62"]] } ],
+  /* matches on a floor this person can't open: shown as "some", never a count */
+  hidden: { floor: "Coast works crew", type: "team", ask: "Dee Harper", count: "some" },
+  /* who could fill the gaps */
+  gapKeeper: { name: "Grace Mwangi", desk: "Procurement desk" },
+  intent: { title: "Review suppliers we've lost touch with", by: "Grace Mwangi", due: "2026-11-30" }
+};
+
+/* The answer engine shared by all six variants. Everything it says comes from DATA. */
+const E = (() => {
+  const K = Object.fromEntries(DATA.kinds.map(k => [k.id, k]));
+  const M = Object.fromEntries(DATA.matches.map(m => [m.id, m]));
+  const ST = Object.fromEntries(DATA.statuses.map(s => [s.id, s]));
+  const MON = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const ms = n => parseFloat(css(n)) || 0;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const wait = t => new Promise(r => setTimeout(r, reduced ? Math.min(t, ms("--motion-quick")) : t));
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const d = s => new Date(s + "T12:00:00");
+  const day = s => { if (!s) return ""; const x = d(s); return x.getDate() + " " + MON[x.getMonth()].slice(0, 3); };
+  const dayY = s => { if (!s) return ""; const x = d(s); return x.getDate() + " " + MON[x.getMonth()] + " " + x.getFullYear(); };
+  const dayShortY = s => { if (!s) return ""; const x = d(s); return x.getDate() + " " + MON[x.getMonth()].slice(0, 3) + " " + x.getFullYear(); };
+  const daysBetween = (a, b) => Math.round((d(b) - d(a)) / 864e5);
+  const list = (a, w = "and") => a.length < 2 ? (a[0] || "") : a.slice(0, -1).join(", ") + " " + w + " " + a[a.length - 1];
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+  const sinceLabel = v => (DATA.since.options.find(o => o.v === v) || { label: dayY(v) }).label;
+
+  function defaults() {
+    return {
+      since: DATA.since.value,
+      status: new Set(DATA.statuses.filter(s => s.on).map(s => s.id)),
+      kinds: new Set(DATA.kinds.filter(k => k.on).map(k => k.id)),
+      match: new Set(DATA.matches.map(m => m.id)),
+      gateway: true
+    };
+  }
+  const clone = P => ({ since: P.since, status: new Set(P.status), kinds: new Set(P.kinds), match: new Set(P.match), gateway: P.gateway });
+
+  /* Run the question. Returns each supplier's fate and the reason in plain words. */
+  function run(P) {
+    const R = { all: [], outStatus: [], answer: [], maybe: [], unknown: [], heard: [] };
+    for (const s of DATA.suppliers) {
+      const row = { s, notes: [] };
+      R.all.push(row);
+      if (!P.status.has(s.status)) { row.fate = "status"; row.why = "Contract " + ST[s.status].label + (s.ended ? " on " + dayShortY(s.ended) : s.paused ? " since " + dayShortY(s.paused) : ""); R.outStatus.push(row); continue; }
+      const usable = [], ignored = [];
+      for (const c of s.c) {
+        const [kind, date, match, text] = c, o = { kind, date, match, text, model: M[match].model };
+        if (!P.kinds.has(kind)) { o.skip = "kind"; ignored.push(o); continue; }
+        if (!P.match.has(match)) { o.skip = "match"; ignored.push(o); continue; }
+        if (M[match].model && !P.gateway) { o.skip = "gateway"; ignored.push(o); continue; }
+        usable.push(o);
+      }
+      usable.sort((a, b) => b.date.localeCompare(a.date));
+      row.usable = usable; row.ignored = ignored;
+      row.last = usable[0] || null;
+      row.lastFact = usable.find(c => !c.model) || null;
+      if (!s.c.length) { row.fate = "unknown"; row.why = "No contact of any kind is recorded for them"; row.sure = "none"; R.unknown.push(row); continue; }
+      const after = usable.filter(c => c.date >= P.since);
+      const afterFact = after.filter(c => !c.model);
+      if (afterFact.length) { row.fate = "heard"; row.by = afterFact[0]; row.why = cap(K[afterFact[0].kind].label) + " on " + dayShortY(afterFact[0].date); R.heard.push(row); continue; }
+      if (after.length) { row.fate = "maybe"; row.by = after[0]; row.why = "Only a model's match links them to " + an(K[after[0].kind].label) + " on " + dayShortY(after[0].date); row.sure = "guess"; R.maybe.push(row); continue; }
+      row.fate = "answer";
+      row.why = row.last ? "Last: " + K[row.last.kind].label + " on " + dayShortY(row.last.date) : "Nothing that counts";
+      // sureness: a source they usually use had a gap after the date
+      row.sure = "sure";
+      if (s.usual) { const src = DATA.sources[K[s.usual].src]; if (src.gap && src.gap[1] >= P.since) { row.sure = "less"; row.doubt = "They usually phone, and the " + src.name.toLowerCase() + " kept nothing from " + day(src.gap[0]) + " to " + day(src.gap[1]) + "."; } }
+      for (const g of ignored) if (g.date >= P.since) row.notes.push(g.skip === "kind" ? cap(an(K[g.kind].label)) + " on " + day(g.date) + " doesn't count" : g.skip === "gateway" ? "A model's match on " + day(g.date) + " is off" : "A " + M[g.match].label + " match on " + day(g.date) + " is off");
+      R.answer.push(row);
+    }
+    R.visible = DATA.suppliers.length;
+    R.inScope = R.visible - R.outStatus.length;
+    return R;
+  }
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const an = w => (/^[aeiou]/i.test(w) ? "an " : "a ") + w;
+
+  /* The question said in a sentence, built from the steps (never written by a model). */
+  function sentence(P, html = true) {
+    const w = (t, cls, step) => html ? '<button class="w ' + (cls || "") + '" data-step="' + step + '">' + esc(t) + "</button>" : t;
+    const st = DATA.statuses.filter(s => P.status.has(s.id)).map(s => s.label);
+    const ks = DATA.kinds.filter(k => P.kinds.has(k.id)).map(k => k.label);
+    return cap(DATA.kind.many) + " kept on " + DATA.floor.name + " or " + DATA.floor.above + ", with a " + w(list(st, "or") + " contract", "", "status") + ", with " + w("no " + (ks.length ? list(ks, "or") : "contact of any kind"), "guess-src", "kinds") + " from them since " + w(dayY(P.since), "", "since") + ".";
+  }
+  function tech(P) {
+    return "FIND " + DATA.kind.tech + " ?o\n  WHERE floor(?o) IN (" + DATA.floor.type + ", org)\n  AND contract(?o).status IN (" + [...P.status].join(", ") + ")\n  AND NOT EXISTS contact ?c (\n    kind(?c) IN (" + [...P.kinds].join(", ") + ")\n    AND date(?c) >= " + P.since + "\n    AND linked(?c, ?o) BY " + DATA.matches.filter(m => P.match.has(m.id) && (!m.model || P.gateway)).map(m => m.id).join(" | ") + ")";
+  }
+  /* What the answer would be with one step changed: the consequence preview for every choice. */
+  function preview(P, change) { const Q = clone(P); change(Q); const r = run(Q); return { n: r.answer.length, maybe: r.maybe.length, unknown: r.unknown.length, r }; }
+  function diff(a, b) { // names entering and leaving the answer
+    const A = new Set(a.answer.map(x => x.s.id)), B = new Set(b.answer.map(x => x.s.id));
+    return { joined: b.answer.filter(x => !A.has(x.s.id)), left: a.answer.filter(x => !B.has(x.s.id)) };
+  }
+  const steps = [
+    { id: "floor", plain: "Where to look", by: "desk", model: false },
+    { id: "status", plain: "Who counts as a supplier we still use", by: "you", model: false },
+    { id: "kinds", plain: "What counts as hearing from them", by: "model", model: true },
+    { id: "match", plain: "How contacts are linked to a supplier", by: "desk", model: "part" },
+    { id: "since", plain: "Since when", by: "you", model: false }
+  ];
+  const BY = { you: { label: "you chose", short: "you", icon: "user-round" }, desk: { label: "the desk's default", short: "the desk", icon: "library" }, model: { label: "a model's reading, you confirmed", short: "a model", icon: "bot" } };
+  function hydrate(el) { if (window.Icons) Icons.hydrate(el || document); }
+  return { an, K, M, ST, css, ms, reduced, wait, esc, day, dayY, dayShortY, daysBetween, list, plural, cap, sinceLabel, defaults, clone, run, sentence, tech, preview, diff, steps, BY, hydrate, d };
+})();
+
+/* Shared chrome: the rail, the head, and the choices for every step (with the answer each would give). */
+const UI = (() => {
+  const { esc, BY } = E;
+  const I = (n, s = 16) => Icons.svg(n, { size: s });
+  function rail(keys) {
+    return '<nav class="rail" aria-label="' + esc(DATA.app) + '"><div class="an">' + esc(DATA.app) + '</div>' +
+      '<a class="nav on" aria-current="page">' + I("message-circle-question") + 'Ask</a>' +
+      '<a class="nav">' + I("bookmark") + 'Saved questions<span class="n">4</span></a>' +
+      '<a class="nav">' + I("shapes") + 'Kinds of thing</a>' +
+      '<a class="nav">' + I("inbox") + 'Triage<span class="n">3</span></a>' +
+      '<div class="foot"><span class="fl"></span>On <b>' + esc(DATA.floor.name) + '</b>, a Department. You see what is kept here and on ' + esc(DATA.floor.above) + '.</div>' +
+      '<div class="keys">' + keys.map(k => '<span><span class="kbd">' + k[0] + '</span>' + k[1] + '</span>').join("") + '</div></nav>';
+  }
+  function byChip(by, short) { const b = BY[by]; return '<span class="by ' + by + '" title="' + esc(b.label) + '">' + I(b.icon, 12) + (short ? b.short : b.label) + '</span>'; }
+  function gwChip(on) { return on ? '<span class="by model">' + I("bot", 12) + 'model gateway on</span>' : '<span class="by">' + I("power-off", 12) + 'model gateway off, so every step uses the record only</span>'; }
+  function stamp() { return '<span class="stamp">Asked by <b>' + esc(DATA.person.name) + '</b> · ' + esc(DATA.asked.at) + ' · data as it is now</span>'; }
+
+  /* options for one step: [{v, label, sub, on, n, disabled, why}] */
+  function options(step, P) {
+    const base = E.run(P).answer.length;
+    const pv = f => E.preview(P, f);
+    if (step === "since") return DATA.since.options.map(o => { const p = pv(Q => Q.since = o.v); return { v: o.v, label: o.label + " " + E.d(o.v).getFullYear(), sub: o.why, on: P.since === o.v, n: p.n, maybe: p.maybe }; });
+    if (step === "status") return DATA.statuses.map(s => { const p = pv(Q => Q.status.has(s.id) ? Q.status.delete(s.id) : Q.status.add(s.id)); return { v: s.id, label: E.cap(s.label) + " contracts", on: P.status.has(s.id), n: p.n, multi: true, disabled: P.status.has(s.id) && P.status.size === 1, why: "Keep at least one" }; });
+    if (step === "kinds") return DATA.kinds.map(k => { const p = pv(Q => Q.kinds.has(k.id) ? Q.kinds.delete(k.id) : Q.kinds.add(k.id)); return { v: k.id, icon: k.icon, label: E.cap(k.many), sub: DATA.sources[k.src].name + " · kept since " + E.dayShortY(DATA.sources[k.src].from), on: P.kinds.has(k.id), n: p.n, multi: true }; });
+    if (step === "match") return DATA.matches.map(m => { const p = pv(Q => Q.match.has(m.id) ? Q.match.delete(m.id) : Q.match.add(m.id)); return { v: m.id, icon: m.icon, label: "By " + m.label, sub: m.model ? (P.gateway ? "Uses the model gateway: a guess" : "Needs the model gateway, which is off") : "Works without a model", on: P.match.has(m.id) && (!m.model || P.gateway), n: p.n, multi: true, disabled: m.model && !P.gateway, why: "Admin turns the model gateway on", model: m.model, tech: m.tech }; });
+    if (step === "floor") return [{ v: "here", label: DATA.floor.name + " and " + DATA.floor.above, on: true, n: base, disabled: true, why: "Where you are" }, { v: "below", label: "Floors below, such as " + DATA.hidden.floor, sub: "Not yours to see: ask " + DATA.hidden.ask, on: false, n: null, disabled: true, unseen: true }];
+    return [];
+  }
+  function apply(P, step, v) {
+    if (step === "since") P.since = v;
+    else if (step === "status") { if (P.status.has(v)) { if (P.status.size > 1) P.status.delete(v); } else P.status.add(v); }
+    else if (step === "kinds") { P.kinds.has(v) ? P.kinds.delete(v) : P.kinds.add(v); }
+    else if (step === "match") { P.match.has(v) ? P.match.delete(v) : P.match.add(v); }
+  }
+  const QUESTION = { since: DATA.since.asked, status: "Which suppliers do we still use?", kinds: "What counts as hearing from them?", match: "How should contacts be linked to a supplier?", floor: "Where should the desk look?" };
+  function popHTML(step, P, base) {
+    const os = options(step, P);
+    let h = '<div class="ph"><span>' + esc(QUESTION[step]) + '</span><span>answer becomes</span></div>';
+    for (const o of os) {
+      const delta = o.n == null ? "" : o.n === base ? '<b>' + o.n + '</b>' : '<b>' + o.n + '</b> (' + (o.n > base ? "+" : "") + (o.n - base) + ')';
+      h += '<button class="opt" role="menuitemcheckbox" data-step="' + step + '" data-v="' + o.v + '" aria-checked="' + !!o.on + '"' + (o.disabled ? ' disabled title="' + esc(o.why || "") + '"' : '') + '>' +
+        '<span class="tick">' + (o.unseen ? '<span class="mk mk-unseen" style="width:var(--space-4)"></span>' : I(o.multi ? "check" : "check", 14)) + '</span>' +
+        '<span>' + (o.icon ? '<span class="ico muted">' + I(o.icon, 14) + '</span> ' : '') + '<span class="' + (o.model ? 'guess' : '') + '">' + esc(o.label) + '</span>' + (o.sub ? '<small>' + esc(o.sub) + '</small>' : '') + (o.tech ? '<span class="tk">' + esc(o.tech) + '</span>' : '') + '</span>' +
+        '<span class="c">' + (o.disabled && o.why && !o.unseen ? esc(o.why) : delta) + '</span></button>';
+    }
+    if (step === "kinds") h += '<div class="pf">' + I("bot", 12) + ' A model read “' + esc(DATA.heard.said) + '” as these; you confirmed. ' + esc(DATA.heard.fallback) + '</div>';
+    if (step === "match") h += '<div class="pf">Matching by number, name and spelling is how ' + esc(DATA.app) + ' links records without a model. Only “meaning” asks the model gateway.</div>';
+    if (step === "floor") h += '<div class="pf">' + E.cap(DATA.hidden.count) + ' suppliers kept on ' + esc(DATA.hidden.floor) + ' may fit. You can’t open that floor; ' + esc(DATA.hidden.ask) + ' can rerun this question there.</div>';
+    return h;
+  }
+  /* place a popover under an anchor, inside a container */
+  function place(pop, anchor, box) {
+    const ar = anchor.getBoundingClientRect(), br = box.getBoundingClientRect();
+    const edge = parseFloat(E.css("--edge")) || 24;
+    let left = ar.left - br.left; const max = innerWidth - br.left - pop.offsetWidth - edge;
+    pop.style.left = Math.max(0, Math.min(left, max)) + "px";
+    let top = ar.bottom - br.top + 6; const room = innerHeight - ar.bottom - edge * 2;
+    if (pop.offsetHeight > room && ar.top > pop.offsetHeight + edge) top = ar.top - br.top - pop.offsetHeight - 6;
+    pop.style.top = top + "px";
+  }
+  /* a rolling number */
+  const rolls = new WeakMap();
+  function roll(el, to) {
+    if (!el) return; const from = +(el.dataset.v || to); el.dataset.v = to; const me = (rolls.get(el) || 0) + 1; rolls.set(el, me);
+    const t0 = performance.now(), dur = E.reduced ? 1 : E.ms("--motion-calm");
+    (function f(t) { if (rolls.get(el) !== me) return; const p = Math.min(1, (t - t0) / dur); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(f); })(t0);
+  }
+  return { I, rail, byChip, gwChip, stamp, options, apply, popHTML, place, roll, QUESTION };
+})();
+
+/* ================= V6 ================= */
+let P = E.defaults(), decided = {}, hot = null, shownLane = 99, showHeard = false;
+const app = document.getElementById("app");
+app.innerHTML = UI.rail([["R", "replay"], ["↑ ↓", "next difference"], ["C", "confirm the match"], ["N", "not them"], ["G", "model gateway on/off"], ["T", "technical words"]]) + '<main class="main" id="main"></main>';
+const main = document.getElementById("main"), I = UI.I;
+const TODAY_CALLS = 14, LIMIT = 500;   /* sample: model gateway calls Data Atlas made today, and its daily allowance */
+function render() {
+  const Pm = E.clone(P); Pm.gateway = true;
+  const Pr = E.clone(P); Pr.gateway = false;
+  const Rm = E.run(Pm), Rr = E.run(Pr);
+  /* a person's ruling on a match: "not them" makes both hands agree; "confirm" proposes it to Triage */
+  const rejected = new Set(Object.keys(decided).filter(k => decided[k] === "no").map(Number));
+  const ansM = Rm.answer.map(r => r.s.id).concat(Rm.maybe.filter(r => rejected.has(r.s.id)).map(r => r.s.id));
+  const nm = ansM.length, nr = Rr.answer.length;
+  const ks = DATA.kinds.filter(k => P.kinds.has(k.id));
+  let h = '<div class="head"><div><p class="eyebrow">' + E.esc(DATA.app) + ' · Ask · worked twice</p><div class="asked">' + I("quote", 14) + '<q>' + E.esc(DATA.asked.words) + '</q></div><div class="said">' + E.sentence(P) + '</div></div>' +
+    '<div class="toolbar"><button class="btn" id="gw" aria-pressed="' + P.gateway + '">' + I(P.gateway ? "bot" : "power-off") + (P.gateway ? "Model on" : "Model off") + '</button><button class="btn" id="tb">' + I("code") + 'Technical</button><button class="btn">' + I("bookmark-plus") + 'Save question</button></div></div><div class="techq">' + E.esc(E.tech(P)) + '</div>';
+  /* the lane: every step, and whether it needs the model gateway */
+  const L = [
+    { b: "Where to look", t: DATA.floor.name + " and " + DATA.floor.above, m: false, tag: "floors and access" },
+    { b: "Contracts that count", t: E.cap(E.list(DATA.statuses.filter(s => P.status.has(s.id)).map(s => s.label), "or")), m: false, tag: "you chose" },
+    { b: "“" + DATA.heard.said + "” means", t: E.cap(E.list(ks.map(k => k.many), "or")), m: true, tag: P.gateway ? "a model read it; you confirmed" : "you ticked them" },
+    { b: "Since spring", t: E.dayY(P.since), m: false, tag: "asked back; you chose" },
+    { b: "Linking contacts", t: "Number, name, spelling" + (P.gateway ? " + meaning" : ""), m: "part", tag: P.gateway ? "meaning uses the model" : "no model" },
+    { b: "Saying the answer", t: "Sentences from the steps", m: false, tag: "a template, never a model" }
+  ];
+  h += '<div class="lane" aria-label="Steps">' + L.slice(0, shownLane).map((s, i) => '<div class="ls' + (s.m && P.gateway ? " model" : "") + '" style="animation-delay:calc(var(--motion-instant) * ' + (shownLane === 99 ? 0 : i) + ')"><span class="no">' + (i + 1) + '</span><b>' + E.esc(s.b) + '</b>' + E.esc(s.t) + '<span class="tag">' + (s.m && P.gateway ? I("bot", 12) : I("badge-check", 12)) + E.esc(s.tag) + '</span></div>').join("") + '</div>';
+  /* the two answers */
+  h += '<section class="body"><div class="cols"><div class="ch"><span class="n">' + nr + '</span><span class="t"><b>From the record alone</b>numbers, names and spelling; no model</span></div>' +
+    '<div class="ch mid"><span class="t"><b>' + (P.gateway ? 'Where the two differ' : 'The model gateway is off') + '</b>' + (P.gateway ? 'Only these need a person. Each is a model’s guess until confirmed in Triage.' : 'Only the record is used. An admin turns the gateway on in Admin; nothing else here changes.') + '</span></div>' +
+    '<div class="ch right"><span class="t"><b>With the model’s help</b>adds matching by meaning</span><span class="n">' + (P.gateway ? nm : '–') + '</span></div></div><div class="rows">';
+  const agreed = Rr.answer.filter(r => ansM.includes(r.s.id) || !P.gateway);
+  const diffs = P.gateway ? Rr.answer.filter(r => !Rm.answer.find(x => x.s.id === r.s.id)) : [];
+  if (diffs.length) {
+    h += '<div class="grp">' + I("bot", 12) + ' ' + diffs.length + ' differ<span class="ln"></span></div>';
+    diffs.forEach(r => {
+      const m = Rm.all.find(x => x.s.id === r.s.id), dec = decided[r.s.id];
+      h += '<div class="dis' + (hot === r.s.id ? " hot" : "") + '" data-id="' + r.s.id + '"><div class="l"><span class="tag">in the answer</span><br>' + E.esc(r.s.name) + '<small>Last ' + E.esc(E.K[r.last.kind].label) + ' the record can link: ' + E.dayShortY(r.last.date) + '</small></div>' +
+        '<div class="ev' + (dec === "no" ? " rej" : "") + '"><b>' + I("bot", 12) + ' The model matched ' + E.an(E.K[m.by.kind].label) + ' of ' + E.dayShortY(m.by.date) + ' to them by meaning.</b><span class="q">' + E.esc(m.by.text) + '</span>No company number or name in it matches the record.' +
+        (dec === "yes" ? '<div class="done">' + I("inbox", 14) + 'Sent to Triage as a proposal. Still a guess here until ' + E.esc(DATA.gapKeeper.desk) + ' accepts it.</div>' : dec === "no" ? '<div class="done">' + I("x", 14) + 'You said not them. Both hands now agree; the model won’t be asked again for this email.</div>' :
+          '<div class="acts"><button class="btn" data-dec="yes" data-id="' + r.s.id + '">' + I("check", 14) + 'It’s them: propose</button><button class="btn" data-dec="no" data-id="' + r.s.id + '">' + I("x", 14) + 'Not them</button></div>') + '</div>' +
+        '<div class="r">' + (dec === "no" ? '<span class="tag" style="color:var(--x-proposed-lit)">in the answer</span><br>' + E.esc(r.s.name) + '<small>by your ruling</small>' : '<span class="tag">not in the answer</span><br><span class="nm">' + E.esc(r.s.name) + '</span><small>heard from ' + E.day(m.by.date) + ', by a guess</small>') + '</div></div>';
+    });
+  }
+  h += '<div class="grp">' + I("badge-check", 12) + ' ' + agreed.length + ' both agree: not heard from<span class="ln"></span></div>';
+  h += agreed.filter(r => !diffs.includes(r)).map(r => '<div class="agree' + (r.sure === "less" ? " less" : "") + '"><div class="bar"><span>' + E.esc(r.s.name) + '</span><span class="mid"></span><span class="d" title="' + E.esc(r.doubt || "") + '">' + (r.sure === "less" ? I("circle-help", 12) + ' less sure · ' : '') + E.esc(r.why.replace("Last: ", "last ")) + '</span></div></div>').join("");
+  if (Rr.unknown.length) h += '<div class="grp">Neither can tell<span class="ln"></span></div>' + Rr.unknown.map(r => '<div class="unk"><span class="mk mk-gap"></span><span><b>' + E.esc(r.s.name) + '</b>: no contact of any kind recorded. ' + E.esc(DATA.gapKeeper.name) + ' could add one.</span></div>').join("");
+  h += '<div class="grp">' + Rm.heard.length + ' both agree: heard from <button id="sh">' + (showHeard ? 'hide' : 'show') + '</button><span class="ln"></span></div>';
+  if (showHeard) h += Rm.heard.map(r => '<div class="agree"><div class="bar"><span class="muted">' + E.esc(r.s.name) + '</span><span class="mid"></span><span class="d">' + E.esc(r.why) + '</span></div></div>').join("");
+  h += '</div><div class="gwlog"><span>' + UI.gwChip(P.gateway) + '</span><span>' + (P.gateway ? 'This answer asked the model gateway <b>' + (Rm.maybe.length + 1) + ' times</b> (reading “' + E.esc(DATA.heard.said) + '”, then matching) · logged in the audit log before each call · ' + E.esc(DATA.app) + ' has used <b>' + TODAY_CALLS + ' of ' + LIMIT + '</b> today' : 'No calls to the model gateway') + '</span><span>' + E.cap(DATA.hidden.count) + ' on ' + E.esc(DATA.hidden.floor) + ': not yours to see, ask ' + E.esc(DATA.hidden.ask) + '</span></div></section>';
+  main.innerHTML = h;
+  E.hydrate(main);
+}
+main.addEventListener("click", e => {
+  const d = e.target.closest("[data-dec]"); if (d) { decided[+d.dataset.id] = d.dataset.dec; hot = +d.dataset.id; render(); return; }
+  if (e.target.closest("#sh")) { showHeard = !showHeard; render(); return; }
+  if (e.target.closest("#gw")) { P.gateway = !P.gateway; render(); return; }
+  if (e.target.closest("#tb")) { document.body.classList.toggle("tech"); return; }
+  const r = e.target.closest(".dis"); if (r) { hot = +r.dataset.id; render(); }
+});
+let runId = 0;
+async function demo() {
+  const me = ++runId; P = E.defaults(); decided = {}; hot = null; showHeard = false; shownLane = 0; render();
+  await E.wait(E.ms("--motion-run")); if (me !== runId) return;
+  for (let i = 1; i <= 6; i++) { shownLane = i; render(); await E.wait(E.ms("--motion-instant")); if (me !== runId) return; }
+  shownLane = 99;
+  const ids = [...main.querySelectorAll(".dis")].map(x => +x.dataset.id);
+  if (!ids.length) return;
+  hot = ids[0]; render();
+  await E.wait(E.ms("--motion-calm")); if (me !== runId) return;
+  decided[ids[0]] = "yes"; hot = ids[1] || ids[0]; render();
+}
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  const ids = [...main.querySelectorAll(".dis")].map(x => +x.dataset.id);
+  if (k === "r") demo();
+  else if (k === "g") { P.gateway = !P.gateway; render(); }
+  else if (k === "t") document.body.classList.toggle("tech");
+  else if ((k === "arrowdown" || k === "arrowup") && ids.length) { let i = ids.indexOf(hot); i = k === "arrowdown" ? Math.min(ids.length - 1, i + 1) : Math.max(0, i - 1); hot = ids[i]; render(); e.preventDefault(); }
+  else if ((k === "c" || k === "n") && hot != null && ids.includes(hot)) { decided[hot] = k === "c" ? "yes" : "no"; render(); }
+});
+demo();
+</script>
+</body>
+</html>

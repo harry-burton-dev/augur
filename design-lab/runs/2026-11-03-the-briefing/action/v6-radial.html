@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Action V6 · Radial with reach</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens. All are mixes of kit tokens; listed as
+   "needs token" in notes.md. Marks carried from the catalogue run.
+   --------------------------------------------------------------- */
+:root{
+  /* six ways to be empty (catalogue run): corner ticks for not known yet */
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  /* stale: 45 degree hatch */
+  --x-proposed-hatch: color-mix(in srgb, var(--ink-muted) 34%, transparent);
+  --x-proposed-stale: repeating-linear-gradient(45deg, transparent 0 calc(var(--space-1) - 1px), var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  /* not yours to see: 135 degree hatch plus a lock */
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  /* sources disagree: a warning-tinted edge, never red */
+  --x-proposed-disagree: color-mix(in srgb, var(--warning) 70%, var(--ink));
+  --x-proposed-disagree-wash: color-mix(in srgb, var(--warning) 7%, transparent);
+  /* quiet lines, doesn't-apply text (wear and time) */
+  --x-proposed-quiet: .62;
+  /* mono numerals in data */
+  --x-proposed-type-micro: .6875rem;
+  /* the lit next step (light language) */
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  /* pencil (reference desk): what a model wrote, until a person accepts it */
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 70%, transparent);
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--ink) 3%, transparent);
+  /* reach: how far a light falls through floors below where a thing is kept */
+  --x-proposed-reach-wash: 14%;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.lite{color:var(--light)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hints .on{color:var(--x-proposed-lit)}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+
+/* floors */
+[data-tier="department"]{--fc:var(--floor-department-high);--fl:var(--floor-department-low)}
+[data-tier="team"]{--fc:var(--floor-team-high);--fl:var(--floor-team-low)}
+[data-tier="org"]{--fc:var(--floor-org-high);--fl:var(--floor-org-low)}
+[data-tier="you"]{--fc:var(--floor-you-high);--fl:var(--floor-you-low)}
+.fchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-4);height:2px;background:var(--fc);border-radius:1px}
+.fword{color:var(--fc)}
+
+/* two registers: technical line one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* six ways to be empty, the two this surface meets most */
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);vertical-align:1px;white-space:nowrap}
+.mk-unseen{display:inline-flex;align-items:center;justify-content:center;width:var(--space-4);height:var(--space-3);background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:2px;color:var(--ink-muted);flex:none}
+.mk-disagree{display:inline-block;width:var(--space-4);height:var(--space-3);border-left:2px solid var(--x-proposed-disagree);border-right:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash);flex:none;vertical-align:-1px}
+.mk-gap{display:inline-block;width:var(--space-5);height:var(--space-4);vertical-align:-3px;
+  --t:var(--space-1);
+  background:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--t) no-repeat}
+.mk-break{width:var(--space-5);height:var(--space-3);vertical-align:-1px}
+.mk-break path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+
+/* pencil and ink */
+.pencil{border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3)}
+.pencil .pt{font-style:italic;color:var(--ink)}
+.pencil .pl{display:flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);margin:0 0 var(--space-1)}
+.pencil.inked{border-style:solid;border-color:var(--hairline-strong);background:none}
+.pencil.inked .pt{font-style:normal}
+.pencil.off{border-style:dashed;border-color:var(--hairline)}
+.pencil.off .pt{font-style:normal}
+.pbtn{display:inline-flex;align-items:center;gap:var(--space-1);height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink);margin-left:auto}
+
+/* confidence word, with the yardstick at word size */
+.cw{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--light);white-space:nowrap;vertical-align:1px}
+.cw .yd{display:inline-grid;grid-template-columns:repeat(7,var(--space-1));gap:1px}
+.cw .yd i{height:var(--space-2);background:var(--hairline-strong);border-radius:1px}
+.cw .yd i.on{background:var(--ink)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);transition:background var(--motion-quick) var(--ease-standard),border-color var(--motion-quick) var(--ease-standard)}
+.btn:hover{background:var(--surface-raised)}
+.btn.go{border-color:var(--x-proposed-lit);color:var(--light);background:var(--x-proposed-lit-wash)}
+.btn[aria-disabled="true"]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+
+/* app frame */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.top{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--slate-deep) 70%,transparent);min-width:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0;white-space:nowrap}
+.crumb{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);white-space:nowrap;min-width:0;overflow:hidden}
+.crumb b{font-weight:400;color:var(--light)}
+.crumb svg{opacity:var(--x-proposed-quiet);flex:none}
+.top .hints{margin-left:auto;justify-content:flex-end}
+.main{min-height:0;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));overflow:hidden}
+
+/* the finding: headline (ink, template), bottom line (pencil), claims (ink) */
+.fd-h{margin:var(--space-1) 0 var(--space-3);font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);letter-spacing:var(--tracking-tight)}
+.fd-h .spk{vertical-align:-4px;margin-left:var(--space-2)}
+.claims{list-style:none;margin:var(--space-3) 0 0;padding:0;display:grid;gap:var(--space-2)}
+.claims li{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.claims li > svg{margin-top:2px;color:var(--ink-muted)}
+.claims .bs{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:2px}
+.claims .bs b{font-weight:400;color:var(--ink);text-decoration:underline;text-decoration-color:var(--hairline-strong);text-underline-offset:var(--focus-gap)}
+.claims li.judge .ct{font-style:normal}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+
+/* isotype figures: counted, never scaled; a part figure is cut, not shrunk */
+.figs{display:flex;flex-wrap:wrap;gap:1px;color:var(--ink)}
+.fig{display:inline-flex;clip-path:inset(0 calc((1 - var(--part)) * 100%) 0 0)}
+.ck{white-space:nowrap}
+.ck-all{color:var(--ink)}
+.ck-part{color:var(--x-proposed-disagree)}
+.ck-none{color:var(--ink-muted);background:var(--x-proposed-unseen);padding:0 var(--space-1);border-radius:2px}
+.x-cap{max-width:calc(100vw - 2 * var(--edge-tight))}
+
+/* ---- V6: the right-click radial on a finding. Fixed directions; the outer ring holds targets; the hub and the card say the reach ---- */
+:root{
+  /* radial geometry, as in the cinematic run's radial (x-radial-*) */
+  --x-proposed-radial-r: calc(var(--space-8) + var(--space-5));
+  --x-proposed-radial-outer: calc(var(--space-8) * 2 + var(--space-4));
+  --x-proposed-radial-hub: calc(var(--space-7) - var(--space-2));
+  /* far focal plane (cinematic focus planes): blur + desaturate, no black scrim */
+  --x-proposed-plane-far-blur: 3px;
+  --x-proposed-plane-far-sat: .35;
+}
+.stage{position:relative;height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,30%);gap:var(--space-5)}
+.far{position:absolute;inset:0;right:calc(30% + var(--space-5));transition:filter var(--motion-slow) var(--ease-out),opacity var(--motion-slow) var(--ease-out)}
+.open .far,.open .card{filter:blur(var(--x-proposed-plane-far-blur)) saturate(var(--x-proposed-plane-far-sat));opacity:.55}
+.tbl{width:100%;border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tbl th{text-align:left;font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline-strong)}
+.tbl td{padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline)}
+.tbl td.od{color:var(--ink)}
+.card{transition:filter var(--motion-slow) var(--ease-out),opacity var(--motion-slow) var(--ease-out);position:absolute;left:var(--space-6);top:var(--space-7);width:var(--measure-glance);z-index:2;padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-card);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));box-shadow:var(--shadow-raised)}
+.card .claims li:nth-child(n+3){display:none}
+.card .fd-h{font-size:var(--type-lead);line-height:var(--leading-lead)}
+.card .hint{margin:var(--space-3) 0 0;font-size:var(--type-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+
+/* the radial */
+.radial{position:fixed;left:0;top:0;width:0;height:0;z-index:var(--layer-overlay);pointer-events:none}
+.ring{position:absolute;left:calc(var(--x-proposed-radial-r) * -1 - var(--space-6));top:calc(var(--x-proposed-radial-r) * -1 - var(--space-6));width:calc((var(--x-proposed-radial-r) + var(--space-6)) * 2);height:calc((var(--x-proposed-radial-r) + var(--space-6)) * 2);border-radius:var(--radius-pill);background:radial-gradient(closest-side,var(--slate-deep) 78%,transparent);opacity:0;transform:scale(.85);transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out)}
+.open .ring{opacity:1;transform:none}
+.hub{position:absolute;left:calc(var(--x-proposed-radial-hub) * -1);top:calc(var(--x-proposed-radial-hub) * -1);width:calc(var(--x-proposed-radial-hub) * 2);height:calc(var(--x-proposed-radial-hub) * 2);border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);background:var(--surface-pane);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;padding:var(--space-3);opacity:0;transition:opacity var(--motion-base) var(--ease-out)}
+.open .hub{opacity:1}
+.hub b{font:400 var(--type-heading)/1 var(--font-mono);color:var(--light)}
+.hub span{font-size:var(--x-proposed-type-micro);line-height:1.3;color:var(--ink-muted)}
+.hub .fw{color:var(--fc)}
+.sl{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:var(--space-1);width:calc(var(--space-7) + var(--space-4));color:var(--ink-muted);font-size:var(--type-small);line-height:1.2;text-align:center;pointer-events:auto;opacity:0;transition:opacity var(--motion-base) var(--ease-out),color var(--motion-instant)}
+.open .sl{opacity:1;transition-delay:calc(var(--k) * var(--motion-instant) / 2)}
+.sl .ic{display:flex;align-items:center;justify-content:center;width:var(--target-md);height:var(--target-md);border-radius:var(--radius-pill);border:1px solid var(--hairline);background:var(--surface-pane);transition:border-color var(--motion-quick),background var(--motion-quick)}
+.sl.on{color:var(--light)}
+.sl.on .ic{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--green) 35%,transparent)}
+.sl.new .ic{border-style:dashed}
+.sl.danger.on .ic{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent);box-shadow:none}
+.sl .kbd{opacity:var(--x-proposed-quiet)}
+.tg{position:absolute;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);background:var(--surface-overlay);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap;pointer-events:auto;animation:tgin var(--motion-base) var(--ease-out) both;animation-delay:calc(var(--k) * var(--motion-instant))}
+@keyframes tgin{from{opacity:0;transform:translate(-50%,-50%) scale(.9)}}
+.tg::before{content:"";width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--fc)}
+.tg.on{border-color:var(--fc);color:var(--light);box-shadow:0 0 0 var(--focus-ring) var(--fc)}
+.tg .lk{color:var(--ink-muted);display:inline-flex}
+
+/* the consequence card */
+.conseq{grid-column:2;align-self:start;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);opacity:.35;transition:opacity var(--motion-base)}
+.open .conseq{opacity:1}
+.conseq h2{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.conseq p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.conseq p.m{color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.fbars{display:grid;gap:var(--space-1)}
+.fbar{display:grid;grid-template-columns:calc(var(--space-7) + var(--space-3)) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.fbar .w{color:var(--fc)}
+.fbar .track{height:var(--space-2);border-radius:1px;background:var(--hairline);overflow:hidden;display:flex}
+.fbar .track i{height:100%;background:var(--fc)}
+.fbar .track i.no{background:var(--x-proposed-unseen)}
+.fbar .n{font-family:var(--font-mono);color:var(--ink);min-width:var(--space-6);text-align:right}
+.fbar.off{opacity:.45}
+.explain{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.explain b{font-weight:400;color:var(--ink)}
+.conseq .acts{display:flex;gap:var(--space-2);justify-content:flex-end}
+@media (max-width:1400px){.card{width:var(--measure-decision);left:var(--space-4)}.card .claims{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Action · V6</b> the radial on a finding: fixed directions, targets on the outer ring, reach in the hub · cinematic radial + consequence preview, marking menus</div>
+<script>
+/* Sample data. Every name, label, count and floor below is deployment data:
+   nothing in the markup or the scripts repeats any of it. */
+const DATA = {
+  org: 'Ridgeway Regional Services',
+  me: 'p1',
+  myFloor: 'team',
+  today: '3 Nov 2026',
+  /* floors, top first. reach = people who can read something kept on this floor
+     (everyone on it and on the floors under it). */
+  floors: {
+    org:        { name: 'Ridgeway Regional Services', word: 'Org',        reach: 1180, under: '6 departments' },
+    department: { name: 'Fleet and Facilities',       word: 'Department', reach: 34,   under: '3 teams' },
+    team:       { name: 'North depot crew',           word: 'Team',       reach: 9,    under: '' }
+  },
+  floorOrder: ['org', 'department', 'team'],
+  people: {
+    p1: { name: 'Sam Okafor',    role: 'Depot coordinator',   floor: 'team' },
+    p2: { name: 'Priya Nair',    role: 'Fleet lead',          floor: 'department' },
+    p3: { name: 'Jo Barnes',     role: 'North depot keeper',  floor: 'team' },
+    p4: { name: 'Dana Whitlock', role: 'Contracts manager',   floor: 'org' },
+    p5: { name: 'Health and safety desk', role: 'Keeps incident reports', floor: 'org' }
+  },
+  /* the finding, as Data Atlas and the briefing builder hold it */
+  finding: {
+    id: 'F-0412',
+    subject: 'North depot vans',
+    /* the headline is built from a template and the counts: ink */
+    headline: { tpl: '{n} of {of} {subject} are overdue for inspection, up from {was} in {wasWhen}.', n: 7, of: 18, was: 2, wasWhen: 'August' },
+    /* the bottom line may be drafted by the model: pencil until a person accepts it */
+    bottomLine: {
+      model: 'Book Kestrel’s missed October visit this month, or about 9 vans may be off the road by December.',
+      template: '{n} of {of} {subject} are overdue for inspection. Kestrel’s October visit has not been rebooked.'
+    },
+    series: [ { m: 'Jun', v: 1 }, { m: 'Jul', v: 2 }, { m: 'Aug', v: 2 }, { m: 'Sep', v: 4 }, { m: 'Oct', v: 5 }, { m: 'Nov', v: 7 } ],
+    forecast: { m: 'Dec', v: 9 },
+    checked: 'today 09:12',
+    recipe: {
+      plain: 'vans at the North depot whose next inspection is past its date',
+      tech: 'count(Vehicle ∩ basedAt=Site:north-depot ∩ nextInspection < today())'
+    }
+  },
+  /* records behind the finding, grouped. kept = how many are kept on each floor */
+  groups: [
+    { id: 'vans',   label: 'North depot vans',            icon: 'truck',           app: 'Data Atlas', kept: { department: 11, team: 7 },  keeper: 'p3', tech: 'Vehicle' },
+    { id: 'insp',   label: 'inspection records',          icon: 'clipboard-check', app: 'Data Atlas', kept: { department: 16, team: 30 }, keeper: 'p3', tech: 'InspectionEvent' },
+    { id: 'log',    label: 'Depot inspection log',        icon: 'file-text',       app: 'Artifacts',  kept: { team: 1 },                  keeper: 'p3', tech: 'document' },
+    { id: 'report', label: 'Kestrel report, October',     icon: 'file-text',       app: 'Artifacts',  kept: { department: 1 },            keeper: 'p2', tech: 'document' },
+    { id: 'con',    label: 'Kestrel servicing contract',  icon: 'scroll-text',     app: 'Data Atlas', kept: { org: 1 },                   keeper: 'p4', tech: 'Contract' },
+    { id: 'inc',    label: 'Incident report on NV-14',    icon: 'triangle-alert',  app: 'Data Atlas', kept: { org: 1 },                   keeper: 'p5', restricted: true, tech: 'Incident (restricted)' }
+  ],
+  /* the claims of the briefing. kind count = ink fact; judge = a judgement with a yardstick word */
+  claims: [
+    { id: 'c1', kind: 'count', text: '7 of 18 North depot vans are overdue for inspection.', basis: ['vans', 'insp', 'log'],
+      sources: 'Two sources agree on 7; Kestrel’s report says 5 (it counts two booked vans as done).', disagree: true },
+    { id: 'c2', kind: 'count', text: 'That is up from 2 in August.', basis: ['insp'], sources: 'From 46 inspection records.' },
+    { id: 'c3', kind: 'count', text: 'Kestrel’s October visit was cancelled and has not been rebooked.', basis: ['con', 'report'], sources: 'The contract and Kestrel’s own report agree.' },
+    { id: 'c4', kind: 'judge', text: 'If no visit is booked, 9 vans will be overdue by December.', basis: ['vans'], word: 4,
+      sources: 'From the due dates of 18 vans. Two more fall due on 21 Nov.' },
+    { id: 'c5', kind: 'count', text: 'One of the overdue vans also has an open incident report.', basis: ['inc'], sources: 'Kept by the Health and safety desk.' }
+  ],
+  /* the probability yardstick (UK PHIA), plain word first */
+  yardstick: [
+    { w: 'Remote chance', r: '≤5%' }, { w: 'Highly unlikely', r: '10–20%' }, { w: 'Unlikely', r: '25–35%' },
+    { w: 'Realistic possibility', r: '40–50%' }, { w: 'Likely', r: '55–75%' }, { w: 'Highly likely', r: '80–90%' }, { w: 'Almost certain', r: '≥95%' }
+  ],
+  /* where a briefing can go (Artifacts libraries) */
+  libraries: [
+    { id: 'L1', name: 'North depot notes',       floor: 'team' },
+    { id: 'L2', name: 'Fleet briefings',         floor: 'department' },
+    { id: 'L3', name: 'Board papers',            floor: 'org', approval: 'p2', approvalWhy: 'Board papers need the Department lead’s approval (set by your admin).' }
+  ],
+  /* what a finding can feed (Mandate intents) */
+  intents: [
+    { id: 'I1', title: 'Keep every fleet vehicle roadworthy', owner: 'p2', floor: 'department', due: '31 Mar 2027', followers: 6, bound: 'vans', state: 'On track' },
+    { id: 'I2', title: 'Renew the Kestrel servicing contract', owner: 'p4', floor: 'org', due: '15 Jan 2027', followers: 4, bound: 'con', state: 'On track' },
+    { id: 'I3', title: 'Monthly safety walk-round at each depot', owner: 'p3', floor: 'team', due: '30 Nov 2026', followers: 3, bound: 'vans', state: 'Due soon' }
+  ],
+  /* watching: what makes the count move, and how Data Atlas and the events service see it */
+  watch: {
+    now: 7, max: 18,
+    presets: [ { id: 'any', plain: 'whenever the count changes' }, { id: 'above', plain: 'when it goes above', n: 8 }, { id: 'zero', plain: 'when it is back to', n: 0 } ],
+    triggers: [
+      { icon: 'clipboard-check', plain: 'A new inspection is recorded', who: 'Data Atlas', tech: 'atlas.observation.recorded · kind=InspectionEvent', has: true },
+      { icon: 'clock',           plain: 'A due date passes overnight', who: 'events service clock', needs: 'a clock in the events service', tech: 'events.schedule · daily 00:05 · re-run recipe', has: false },
+      { icon: 'file-text',       plain: 'A source is withdrawn in Artifacts', who: 'Artifacts', tech: 'document.withdrawn → evidence marked', has: true },
+      { icon: 'split',           plain: 'The disagreement is settled in Triage', who: 'Data Atlas Triage', needs: 'Data Atlas to announce when Triage settles a disagreement', tech: 'atlas.triage.resolved · detail=nextInspection', has: false },
+      { icon: 'history',         plain: 'Nothing new arrives for 21 days', who: 'events service clock', needs: 'the events service to notice when nothing arrives', tech: 'events.silence · window=21d', has: false }
+    ]
+  }
+};
+
+/* ---- shared helpers (same in every variant) ---- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const I = (n, size = 16, stroke = 1.5) => Icons.svg(n, { size, stroke });
+const RANK = Object.fromEntries(DATA.floorOrder.map((f, i) => [f, i]));
+const P = id => DATA.people[id];
+const F = id => DATA.floors[id];
+const G = id => DATA.groups.find(g => g.id === id);
+const fmt = n => n.toLocaleString('en-GB');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ms = v => parseFloat(css(v)) || 0;
+const fill = (tpl, o) => tpl.replace(/\{(\w+)\}/g, (_, k) => o[k] ?? DATA.finding[k] ?? '');
+
+/* access: a reader on floor r opens what is kept on r or on the floors above it */
+const canOpen = (keptOn, reader) => RANK[keptOn] <= RANK[reader];
+const total = g => Object.values(g.kept).reduce((a, b) => a + b, 0);
+const openN = (g, reader) => g.restricted ? 0 : Object.entries(g.kept).reduce((a, [f, n]) => a + (canOpen(f, reader) ? n : 0), 0);
+const allTotal = () => DATA.groups.reduce((a, g) => a + total(g), 0);
+const allOpen = reader => DATA.groups.reduce((a, g) => a + openN(g, reader), 0);
+/* who to ask about what a reader can't open in a group */
+const askFor = g => P(g.keeper).name;
+/* a claim is checkable by a reader if every record behind it opens, partly if some do */
+function checkable(c, reader) {
+  const o = c.basis.map(G).map(g => openN(g, reader) / total(g));
+  if (o.every(x => x === 1)) return 'all';
+  if (o.some(x => x > 0)) return 'part';
+  return 'none';
+}
+const CHECK_WORD = { all: 'they can check it', part: 'they can check part of it', none: 'they can’t open what’s behind it' };
+
+/* the probability yardstick at word size */
+function cw(i) {
+  const y = DATA.yardstick[i];
+  return `<span class="cw" title="${y.w}: ${y.r}"><span class="yd" aria-hidden="true">${DATA.yardstick.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</span>${y.w}<span class="tk">&nbsp;· ${y.r} · probability yardstick</span></span>`;
+}
+
+/* sparkline at word size; the forecast point is a judgement, so it is dotted */
+function spark(w = 96, h = 22, withForecast = true) {
+  const s = DATA.finding.series, f = DATA.finding.forecast;
+  const pts = withForecast ? [...s, f] : s;
+  const max = Math.max(...pts.map(p => p.v)), n = pts.length - 1;
+  const X = i => 2 + i * (w - 4) / n, Y = v => h - 2 - v * (h - 4) / max;
+  const ink = s.map((p, i) => `${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  const last = s.length - 1;
+  const fc = withForecast ? `<line x1="${X(last)}" y1="${Y(s[last].v)}" x2="${X(n)}" y2="${Y(f.v)}" stroke="var(--ink-muted)" stroke-dasharray="1.5 2.5" stroke-width="1.25"/><circle cx="${X(n)}" cy="${Y(f.v)}" r="2" fill="none" stroke="var(--ink-muted)"/>` : '';
+  return `<svg class="spk" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Overdue each month: ${s.map(p => p.m + ' ' + p.v).join(', ')}${withForecast ? ', ' + f.m + ' likely ' + f.v : ''}"><polyline points="${ink}" fill="none" stroke="var(--ink)" stroke-width="1.25" stroke-linejoin="round"/><circle cx="${X(last)}" cy="${Y(s[last].v)}" r="2.25" fill="var(--light)"/>${fc}</svg>`;
+}
+
+/* isotype: repeated figures, never a scaled one. returns markup and the key */
+function figures(n, opts = {}) {
+  const per = n > 60 ? 20 : 1, k = Math.ceil(n / per);
+  const sz = opts.size || 14;
+  let out = '';
+  for (let i = 0; i < k; i++) {
+    const part = (i === k - 1 && n % per) ? (n % per) / per : 1;
+    out += `<span class="fig" style="--part:${part}">${I(opts.icon || 'user-round', sz, 1.5)}</span>`;
+  }
+  return { html: `<span class="figs" role="img" aria-label="${fmt(n)} people">${out}</span>`, key: per === 1 ? 'each figure is one person' : `each figure is ${per} people` };
+}
+
+/* the finding, as one block (headline ink, bottom line pencil, claims ink) */
+const STATE = { tech: false, gateway: true, accepted: false };
+function headlineHTML() {
+  const h = DATA.finding.headline;
+  return fill(h.tpl, h);
+}
+function bottomLineHTML() {
+  const b = DATA.finding.bottomLine, h = DATA.finding.headline;
+  if (!STATE.gateway) {
+    return `<div class="pencil off" data-bl><p class="pl">${I('file-text', 12)} Model gateway is off · bottom line from the template, no number changes</p><p class="pt" style="margin:0">${fill(b.template, h)}</p></div>`;
+  }
+  if (STATE.accepted) {
+    return `<div class="pencil inked" data-bl><p class="pl">${I('pen-line', 12)} Bottom line · drafted by the model, accepted by ${P(DATA.me).name}</p><p class="pt" style="margin:0">${b.model}</p></div>`;
+  }
+  return `<div class="pencil" data-bl><p class="pl">${I('pencil', 12)} Bottom line · drafted by the model, not yet accepted <button class="pbtn" data-accept>${I('check', 12)} Accept <span class="kbd">A</span></button></p><p class="pt" style="margin:0">${b.model}</p><p class="tk">every number in it comes from the claims below; the model may only choose words</p></div>`;
+}
+function claimsHTML(reader) {
+  return `<ul class="claims">${DATA.claims.map((c, i) => {
+    const chk = reader ? checkable(c, reader) : null;
+    const ic = c.kind === 'judge' ? 'scale' : 'circle-dot';
+    const basis = c.basis.map(G).map(g => `<b>${g.label}</b>`).join(', ');
+    return `<li class="dep ${c.kind}" style="--i:${i}">${I(ic, 14)}<span><span class="ct">${c.text}</span> ${c.kind === 'judge' ? cw(c.word) : ''}${c.disagree ? ' <span class="mk-disagree" title="sources disagree"></span>' : ''}
+      <span class="bs">${c.sources} From ${basis}.${chk ? ` <span class="ck ck-${chk}">${CHECK_WORD[chk]}</span>` : ''}</span></span></li>`;
+  }).join('')}</ul>`;
+}
+function findingHTML(opts = {}) {
+  return `<p class="eyebrow">Finding · ${DATA.finding.subject} · checked ${DATA.finding.checked}</p>
+    <h2 class="fd-h">${headlineHTML()} ${spark()}</h2>
+    ${bottomLineHTML()}
+    ${opts.claims === false ? '' : claimsHTML(opts.reader)}`;
+}
+
+/* top bar */
+function topHTML(crumbs, hints) {
+  const me = P(DATA.me), fl = F(DATA.myFloor);
+  return `<header class="top"><p class="brand">AUGUR</p>
+    <nav class="crumb" aria-label="Where you are">${crumbs.map((c, i) => (i ? I('chevron-right', 14) : '') + (i === crumbs.length - 1 ? `<b>${c}</b>` : `<span>${c}</span>`)).join('')}</nav>
+    <span class="fchip" data-tier="${DATA.myFloor}">${fl.name} · ${fl.word}</span>
+    <div class="hints">${hints.map(([k, w, id]) => `<span ${id ? `id="${id}"` : ''}><span class="kbd">${k}</span>${w}</span>`).join('')}</div></header>`;
+}
+
+/* keys shared by every variant */
+function commonKeys(e, rerender, replay) {
+  const k = e.key.toLowerCase();
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  if (k === 'r') { replay(); return true; }
+  if (k === 't') { STATE.tech = !STATE.tech; document.body.classList.toggle('tech', STATE.tech); $('#h-t')?.classList.toggle('on', STATE.tech); return true; }
+  if (k === 'g') { STATE.gateway = !STATE.gateway; $('#h-g')?.classList.toggle('on', !STATE.gateway); rerender(); return true; }
+  if (k === 'a') { STATE.accepted = !STATE.accepted; rerender(); return true; }
+  return false;
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-accept]')) { STATE.accepted = true; window.__rerender && window.__rerender(); } });
+
+/* timers for the auto demo, cleared on replay */
+let TIMERS = [];
+const later = (fn, t) => TIMERS.push(setTimeout(fn, reduced ? Math.min(t, 50) : t));
+const clearLater = () => { TIMERS.forEach(clearTimeout); TIMERS = []; };
+
+/* the radial's direction contract (cinematic run): slot 0 is 12 o'clock, clockwise.
+   A finding reuses the document slots: Publish keeps 2, Feed takes Move's slot 3 (put it somewhere), Watch takes Pin's slot 7 */
+const SLOTS = [
+  { k: 0, id: 'open', plain: 'Open the records', icon: 'book-open' },
+  { k: 1, id: 'share', plain: 'Share', icon: 'user-plus' },
+  { k: 2, id: 'publish', plain: 'Publish as a briefing', icon: 'send', isNew: false },
+  { k: 3, id: 'feed', plain: 'Feed an intent', icon: 'target', isNew: true },
+  { k: 4, id: 'discard', plain: 'Discard', icon: 'trash-2', danger: true },
+  { k: 5, id: 'history', plain: 'History', icon: 'history' },
+  { k: 6, id: 'edit', plain: 'Edit words', icon: 'pencil' },
+  { k: 7, id: 'watch', plain: 'Watch for change', icon: 'binoculars', isNew: true }
+];
+const R = { open: false, x: 0, y: 0, slot: null, target: null };
+const TG = {
+  publish: () => DATA.libraries.map(l => ({ id: l.id, w: l.name, floor: l.floor, lock: !!l.approval })),
+  feed: () => DATA.intents.map(t => ({ id: t.id, w: t.title, floor: t.floor })),
+  watch: () => DATA.watch.presets.map(p => ({ id: p.id, w: 'Tell me ' + p.plain + (p.n !== undefined ? ' ' + p.n : ''), floor: DATA.myFloor }))
+};
+const own = f => { const i = RANK[f], below = DATA.floorOrder[i + 1]; return F(f).reach - (below ? F(below).reach : 0); };
+/* resolve a length token (custom properties hold calc() unresolved) */
+const px = v => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;visibility:hidden;width:var(' + v + ')'; document.body.appendChild(d); const w = d.getBoundingClientRect().width; d.remove(); return w; };
+
+function farHTML() {
+  const vans = Array.from({ length: DATA.watch.max }, (_, i) => ({ id: 'NV-' + String(i + 1).padStart(2, '0'), od: i % 18 < DATA.watch.now }));
+  return `<div class="far" aria-hidden="${R.open}"><table class="tbl"><thead><tr><th>Van</th><th>Kept on</th><th>Next inspection</th><th>Keeper</th></tr></thead><tbody>
+    ${vans.map((v, i) => `<tr><td>${v.id}</td><td>${i < DATA.groups[0].kept.department ? F('department').word : F('team').word}</td><td class="${v.od ? 'od' : ''}">${v.od ? 'past its date' : 'in date'}</td><td>${P(DATA.groups[0].keeper).name}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function reachFor() {
+  const s = R.slot && SLOTS.find(x => x.k === R.slot);
+  if (!s || !TG[s.id]) return null;
+  const t = TG[s.id]().find(x => x.id === R.target) || TG[s.id]()[0];
+  if (s.id === 'publish') { const l = DATA.libraries.find(x => x.id === t.id); return { s, t, l, people: F(l.floor).reach, floors: DATA.floorOrder.filter(f => RANK[f] >= RANK[l.floor]), low: l.floor }; }
+  if (s.id === 'feed') { const it = DATA.intents.find(x => x.id === t.id); return { s, t, it, people: it.followers + 1, floors: [it.floor], low: it.floor }; }
+  return { s, t, people: 1, floors: [DATA.myFloor], low: DATA.myFloor };
+}
+function hubHTML() {
+  const r = reachFor();
+  if (!r) return `<div class="hub"><span>Pick a direction</span></div>`;
+  return `<div class="hub" data-tier="${r.low}"><b>${fmt(r.people)}</b><span>${r.people === 1 ? 'just you' : 'can read it'}</span><span class="fw">${r.floors.map(f => F(f).word).join(' · ')}</span></div>`;
+}
+function radialHTML() {
+  const rr = px('--x-proposed-radial-r'), ro = px('--x-proposed-radial-outer');
+  const at = (k, rad) => { const a = (k * 45 - 90) * Math.PI / 180; return [Math.cos(a) * rad, Math.sin(a) * rad]; };
+  const slots = SLOTS.map(s => { const [x, y] = at(s.k, rr); return `<button class="sl ${R.slot === s.k ? 'on' : ''} ${s.danger ? 'danger' : ''} ${s.isNew ? 'new' : ''}" style="left:${x}px;top:${y}px;--k:${s.k}" data-k="${s.k}"><span class="ic">${I(s.icon, 18)}</span>${s.plain}<span class="kbd">${s.k + 1}</span></button>`; }).join('');
+  let tgs = '';
+  const s = R.slot !== null && SLOTS.find(x => x.k === R.slot);
+  if (s && TG[s.id]) {
+    const list = TG[s.id]();
+    tgs = list.map((t, i) => { const [x, y] = at(s.k + (i - (list.length - 1) / 2) * .62, ro); return `<button class="tg ${R.target === t.id ? 'on' : ''}" data-tier="${t.floor}" data-t="${t.id}" style="left:${x}px;top:${y}px;--k:${i}">${t.w}${t.lock ? `<span class="lk">${I('lock', 12)}</span>` : ''}</button>`; }).join('');
+  }
+  return `<div class="radial" style="left:${R.x}px;top:${R.y}px" role="menu" aria-label="Do something with this finding"><div class="ring"></div>${hubHTML()}${slots}${tgs}</div>`;
+}
+function conseqHTML() {
+  const r = reachFor();
+  if (!r) return `<aside class="conseq"><h2>What will happen</h2><p class="m">Right-click the finding, or press Space, to see what each choice would reach before you choose it.</p></aside>`;
+  const t = allTotal();
+  const bars = DATA.floorOrder.map(f => {
+    const n = r.floors.includes(f) ? (r.s.id === 'publish' ? own(f) : r.people) : 0, o = openN ? allOpen(f) : 0;
+    return `<div class="fbar ${n ? '' : 'off'}" data-tier="${f}"><span class="w">${F(f).word}</span><span class="track" title="opens ${o} of ${t}"><i style="width:${n ? o / t * 100 : 0}%"></i><i class="no" style="width:${n ? (t - o) / t * 100 : 0}%"></i></span><span class="n">${n ? fmt(n) : '—'}</span></div>`;
+  }).join('');
+  let head, body, act;
+  if (r.s.id === 'publish') {
+    head = `Publish to ${r.l.name}`;
+    body = `<p>${fmt(r.people)} people on the ${F(r.l.floor).word} floor${r.l.floor === 'org' ? '' : ' and under it'} can read it. Some can open only <b class="lite">${allOpen(r.l.floor)} of ${t}</b> records behind it.</p>`;
+    act = r.l.approval ? `<div class="explain">${I('lock', 14)}<span><b>You can’t publish here yourself.</b> ${r.l.approvalWhy} Choosing it sends ${P(r.l.approval).name} a request with this preview.</span></div><div class="acts"><button class="btn">${I('user-round', 14)} Ask ${P(r.l.approval).name} <span class="kbd">Enter</span></button></div>` : `<div class="acts"><button class="btn go">${I('send', 14)} Publish <span class="kbd">Enter</span></button></div>`;
+  } else if (r.s.id === 'feed') {
+    head = `Feed “${r.it.title}”`;
+    body = `<p>${P(r.it.owner).name} and ${r.it.followers} followers see it as evidence; ${P(r.it.owner).name.split(" ")[0]} can open <b class="lite">${allOpen(r.it.floor)} of ${t}</b> records behind it. It doesn’t change the intent’s state.</p>`;
+    act = `<div class="acts"><button class="btn go">${I('target', 14)} Feed it <span class="kbd">Enter</span></button></div>`;
+  } else {
+    head = `Watch: ${r.t.w.toLowerCase()}`;
+    body = `<p>Only you are told. It counts only what you can open.</p>`;
+    act = `<div class="acts"><button class="btn go">${I('binoculars', 14)} Watch <span class="kbd">Enter</span></button></div>`;
+  }
+  return `<aside class="conseq"><p class="eyebrow">Before you choose</p><p class="m">${headlineHTML()} ${spark(72, 16)}</p><h2>${head}</h2>${body}<div class="fbars">${bars}</div><p class="m">Bar: share of the ${t} records behind it that readers on that floor can open; hatched, what they can’t. Their copy says whom to ask.</p><p class="tk">reach = Σ people(floor ≥ ${r.low}) · resolvable = records kept on floor ≤ reader</p>${act}</aside>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.finding.subject],
+    [['Space', 'menu'], ['1–8', 'direction'], ['Tab', 'target'], ['Enter', 'do it'], ['Esc', 'close'], ['T', 'admin words', 'h-t'], ['G', 'model off', 'h-g'], ['R', 'replay']]) +
+    `<main class="main ${R.open ? 'open' : ''}" id="main"><div class="stage">${farHTML()}<article class="card" id="card" tabindex="0" aria-label="Finding">${findingHTML()}<p class="hint">${I('mouse-pointer-click', 14)} Right-click or Space for what to do with it</p></article><div></div>${conseqHTML()}</div>${R.open ? radialHTML() : ''}</main>`;
+  Icons.hydrate($('#app'));
+  $('#card').oncontextmenu = e => { e.preventDefault(); openAt(e.clientX, e.clientY); };
+  $$('.sl').forEach(b => { b.onmouseenter = () => pickSlot(+b.dataset.k); b.onclick = () => pickSlot(+b.dataset.k); });
+  $$('.tg').forEach(b => { b.onmouseenter = () => { R.target = b.dataset.t; render(); }; b.onclick = () => { R.target = b.dataset.t; render(); }; });
+}
+window.__rerender = render;
+function openAt(x, y) {
+  const rr = px('--x-proposed-radial-outer') + px('--space-5');
+  const stage = $('.stage').getBoundingClientRect(), right = stage.right - stage.width * .3 - px('--space-5');
+  R.x = Math.max(stage.left + rr * .62, Math.min(x, right - rr * .62)); R.y = Math.max(stage.top + rr * .55, Math.min(y, innerHeight - rr * .7)); R.open = true; render();
+}
+function pickSlot(k) { if (R.slot === k) return; R.slot = k; const s = SLOTS.find(x => x.k === k); R.target = TG[s.id] ? TG[s.id]()[0].id : null; render(); }
+function centre() { const c = $('#card').getBoundingClientRect(); return [c.left + c.width / 2, c.top + c.height / 2]; }
+
+function replay() {
+  clearLater();
+  Object.assign(R, { open: false, slot: null, target: null }); STATE.accepted = false;
+  document.body.classList.add('pre'); render();
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre')));
+  /* the moment: right-click on the finding; Publish lights; the targets fan out; the pointer rests on the locked one */
+  const t = ms('--motion-run'), step = ms('--motion-calm');
+  later(() => { const [x, y] = centre(); openAt(x, y); }, t);
+  later(() => pickSlot(2), t + step);
+  later(() => { R.target = 'L2'; render(); }, t + step * 2);
+  later(() => { R.target = 'L3'; render(); }, t + step * 3);
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && R.open) { Object.assign(R, { open: false, slot: null, target: null }); render(); return; }
+  if (e.key === ' ' && !R.open) { e.preventDefault(); const [x, y] = centre(); openAt(x, y); return; }
+  if (R.open && /^[1-8]$/.test(e.key)) { pickSlot(+e.key - 1); return; }
+  if (R.open && e.key === 'Tab') { e.preventDefault(); const s = SLOTS.find(x => x.k === R.slot); if (s && TG[s.id]) { const l = TG[s.id](); const i = l.findIndex(x => x.id === R.target); R.target = l[(i + (e.shiftKey ? -1 : 1) + l.length) % l.length].id; render(); } return; }
+  if (R.open && e.key.startsWith('Arrow')) { e.preventDefault(); const d = { ArrowUp: 0, ArrowRight: 2, ArrowDown: 4, ArrowLeft: 6 }[e.key]; pickSlot(d); return; }
+  commonKeys(e, render, replay);
+});
+addEventListener('resize', () => { if (R.open) { const [x, y] = centre(); openAt(x, y); } });
+replay();
+</script>
+</body>
+</html>
