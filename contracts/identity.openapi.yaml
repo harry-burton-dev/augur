@@ -12,16 +12,41 @@ components:
     Refusal:
       type: object
       required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
         - error
         - message
       properties:
-        error:
+        type:
           type: string
-          examples:
-            - forbidden
-        message:
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
           type: string
           description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
     TeamLevels:
       type: object
       required:
@@ -494,19 +519,19 @@ paths:
         "403":
           description: Not a platform service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such floor
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The caller's token can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /workspaces/{id}/people:
@@ -540,19 +565,19 @@ paths:
         "403":
           description: Not a platform service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such team
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The caller's token can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /people/{id}/principals:
@@ -588,19 +613,19 @@ paths:
         "400":
           description: An id longer than 100 characters
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a platform service, or an app without people:read
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The caller's token or the app's grants can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /directory:
@@ -681,19 +706,19 @@ paths:
         "400":
           description: A query it does not know, or a value out of range
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a platform service, or an app without people:read
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The caller's token or the app's grants can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /members:
@@ -727,19 +752,19 @@ paths:
         "400":
           description: No principals, or a query it does not know
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a platform service, or an app without people:read
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The caller's token or the app's grants can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/apps/{id}/credential:
@@ -784,25 +809,25 @@ paths:
         "400":
           description: Not an app id, or not 64 hex characters
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not the app runner
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "502":
           description: The sign-in service refused the change
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The caller's token can't be checked right now, or identity isn't connected to the sign-in service or can't reach it
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
@@ -836,31 +861,31 @@ paths:
         "400":
           description: Not an app id
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "502":
           description: The sign-in service refused the change
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service, or can't reach it
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /me:
@@ -876,7 +901,7 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /me/preferences:
@@ -892,7 +917,7 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     put:
@@ -913,13 +938,13 @@ paths:
         "400":
           description: A field it doesn't know, or a value out of range
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /me/workspaces:
@@ -944,7 +969,7 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /me/map:
@@ -961,7 +986,7 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /me/workspaces/{id}/rollup:
@@ -995,13 +1020,13 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: The caller isn't on that floor
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/roles:
@@ -1020,19 +1045,19 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/people:
@@ -1051,19 +1076,19 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
@@ -1093,31 +1118,31 @@ paths:
         "400":
           description: A field is missing or wrong, or a role or department doesn't exist
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: The username or email is taken
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/people/{id}:
@@ -1139,25 +1164,25 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such person
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     patch:
@@ -1185,37 +1210,37 @@ paths:
         "400":
           description: A field is wrong, or a role or department doesn't exist
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such person
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: The change would lock the caller out, or the email is taken
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/people/{id}/password:
@@ -1243,25 +1268,25 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin, or not a deployment admin when the person is one
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such person
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/departments:
@@ -1280,19 +1305,19 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
@@ -1327,31 +1352,31 @@ paths:
         "400":
           description: The name is empty or has a /, the parent doesn't exist, or it would sit more than 5 deep
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: A department beside it already has that name
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/levels:
@@ -1367,19 +1392,19 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     put:
@@ -1412,25 +1437,25 @@ paths:
         "400":
           description: No names, more than 5, an empty or too-long name, or two levels with the same name
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/departments/{id}:
@@ -1468,37 +1493,37 @@ paths:
         "400":
           description: The name is empty or has a /
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such department
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: A department beside it already has that name
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /admin/departments/{id}/members/{person}:
@@ -1521,25 +1546,25 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such person or department
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     delete:
@@ -1561,25 +1586,25 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such person or department
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
 servers:

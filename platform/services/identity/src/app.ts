@@ -1,7 +1,7 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
+import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, problemDetails, serviceFastifyOptions, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
 import { describeApi } from './contract.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
@@ -51,7 +51,8 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  */
 export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit, verifyService, callers, grants }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
-  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } }).withTypeProvider<TypeBoxTypeProvider>();
+  const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
+  await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
