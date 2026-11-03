@@ -9,6 +9,7 @@ import { openAiCompatible, standIn, type ModelProvider } from './provider.ts';
  *   MODEL_NAME      the model to ask, as that API names it
  *   MODEL_EMBEDDING_NAME  the model that turns text into vectors, for matching
  *                   by meaning, when the API has one (the stand-in always does)
+ *   MODEL_TIMEOUT_SECONDS  how long to wait for an answer (60 when unset or empty)
  * Undefined without MODEL_API_URL: then there is no model.
  */
 export const providerFromEnv = (env = process.env): ModelProvider | undefined => {
@@ -19,5 +20,5 @@ export const providerFromEnv = (env = process.env): ModelProvider | undefined =>
   const model = env.MODEL_NAME?.trim();
   if (!model) throw new Error('MODEL_NAME is not set: say which model to ask, as the API at MODEL_API_URL names it.');
   const embeddingModel = env.MODEL_EMBEDDING_NAME?.trim() || undefined;
-  return openAiCompatible({ baseUrl: url, apiKey: env.MODEL_API_KEY?.trim() || undefined, model, embeddingModel, timeoutMs: Number(env.MODEL_TIMEOUT_SECONDS ?? 60) * 1000 });
+  return openAiCompatible({ baseUrl: url, apiKey: env.MODEL_API_KEY?.trim() || undefined, model, embeddingModel, timeoutMs: Number(env.MODEL_TIMEOUT_SECONDS || 60) * 1000 });
 };

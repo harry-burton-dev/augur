@@ -14,7 +14,7 @@ import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appReposFrom, appRunner } from './runner.ts';
 import { composeAppHost, composeServer } from './server.ts';
-import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity } from './signers.ts';
+import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity, repositoryOfIdentity } from './signers.ts';
 import { checkOnce, lookAfterWatch, ROLL_ORDER, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
 
 // Every setting the updater reads, checked before it starts (in production, a missing one stops it).
@@ -28,6 +28,9 @@ loadConfigOrExit('updater', [
   { name: 'GITHUB_READ_USER', about: 'the GitHub account the deployment’s read key (secrets/github-read-key) belongs to, for private images.' },
   { name: 'IMAGE_PULL_USER', about: 'before read keys: who the pull token in secrets/image-pull-token belongs to.' },
   { name: 'APP_SECRETS_KEY', about: 'the key apps’ secrets are made from, for the app runner.', secret: true },
+  { name: 'IMAGE_SIGNER', about: 'who must sign AUGUR’s images and the apps the runner installs, for AUGUR published from a fork (default: the publisher’s Release workflow).' },
+  { name: 'IMAGE_SIGNER_ISSUER', about: 'who issues that signer’s certificates (default: GitHub Actions).' },
+  { name: 'AUGUR_DEV_SIGNER', about: 'who must sign AUGUR’s dev builds (default: the dev builds workflow in IMAGE_SIGNER’s repository, or the publisher’s).' },
 ]);
 
 const POLL_MS = 30_000;
@@ -52,8 +55,11 @@ const IMAGE_SIGNER = setting('IMAGE_SIGNER', RELEASE_SIGNER);
 const GITHUB_READ_USER = setting('GITHUB_READ_USER');
 const IMAGE_PULL_USER = setting('IMAGE_PULL_USER');
 if (!PLATFORM_DIR) throw new Error('PLATFORM_DIR is not set: the updater needs the deploy folder’s path on the host (docs/upgrade.md).');
-/** Who signs AUGUR's dev builds, which only a dev server runs: the dev builds workflow on dev, in the same repository. */
-const AUGUR_DEV_SIGNER = setting('AUGUR_DEV_SIGNER', augurDevIdentity(AUGUR_REPOSITORIES));
+/**
+ * Who signs AUGUR's dev builds, which only a dev server runs: the dev builds workflow on main, in the
+ * repository IMAGE_SIGNER names when a fork sets it, else in the publisher's.
+ */
+const AUGUR_DEV_SIGNER = setting('AUGUR_DEV_SIGNER', augurDevIdentity(repositoryOfIdentity(IMAGE_SIGNER) ?? AUGUR_REPOSITORIES));
 const signer = { identity: IMAGE_SIGNER, issuer: setting('IMAGE_SIGNER_ISSUER', GITHUB_ISSUER) };
 // The watch after an upgrade checks the sign-in realm answers, as the updater reaches it inside Docker.
 const signInUrl = setting('OIDC_INTERNAL_URL') || setting('OIDC_ISSUER') || undefined;

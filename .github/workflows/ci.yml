@@ -88,6 +88,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm check:versions
       - run: pnpm check:release
+      - run: pnpm check:settings
       - run: pnpm check:catalog
       - run: pnpm test:scripts
       # Into a hotfix's release/<unit>-<major.minor> branch only that unit's fixes go, as patches

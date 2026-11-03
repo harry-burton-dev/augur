@@ -30,6 +30,13 @@ export const devBuildIdentity = (workflow: string | readonly string[]) => `^${an
 /** The identity AUGUR's dev builds are signed with: that workflow, on main, in `repository` (owner/repo) or any of several. */
 export const augurDevIdentity = (repository: string | readonly string[]) =>
   devBuildIdentity((typeof repository === 'string' ? [repository] : [...repository]).map((r) => `${r}/${AUGUR_DEV_WORKFLOW}`));
+/**
+ * The repository (owner/repo) a certificate identity names, such as
+ * `https://github.com/acme/augur/.github/workflows/release.yml@refs/heads/main` or that as a pattern
+ * (`^https://github\\.com/acme/augur/...`). Undefined for a pattern of several, or one that names none.
+ */
+export const repositoryOfIdentity = (identity: string): string | undefined =>
+  /^\^?https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\//.exec(identity.replace(/\\(?=[.\/-])/g, ''))?.[1];
 /** An AUGUR or app version that's a dev build: <next patch>-dev.<run>. */
 export const isDevBuild = (version: string) => /-dev\.\d+$/.test(version);
 export const releaseIdentity = (workflow: string | readonly string[]) => `^${anyOf(workflow)}@refs/heads/(${[...RELEASE_BRANCHES, HOTFIX_BRANCH].join('|')})$`;

@@ -48,7 +48,7 @@ followEvents({
 }).start();
 ```
 
-Events come in the order they were committed, never with a gap: an event is only handed out once every transaction that started before it has finished. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` on the events service), so a follower that's been off for longer starts from what's left.
+Events come in the order they were committed, never with a gap: an event is only handed out once every transaction that started before it has finished. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` in `.env` changes it), so a follower that's been off for longer starts from what's left.
 
 ## The platform's topics
 

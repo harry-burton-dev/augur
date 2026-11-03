@@ -27,7 +27,7 @@ Some choices:
 
 The gateway also needs its own sign-in, `MODELS_CLIENT_SECRET` (`openssl rand -hex 32`), to check apps' grants and write the audit log. Then `pc up -d`, and turn models on in Admin.
 
-Optionally set `MODEL_EMBEDDING_NAME` too, for matching by meaning (below).
+Optionally set `MODEL_EMBEDDING_NAME` too, for matching by meaning (below), and `MODEL_TIMEOUT_SECONDS` for how long the gateway waits for an answer (60 seconds unless set).
 
 Admin's Status shows the gateway like every service. When a call fails, the person sees why in words (for example "The model provider answered 401: check MODEL_API_KEY"), and the gateway's log has the rest.
 

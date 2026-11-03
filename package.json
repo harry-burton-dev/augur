@@ -14,6 +14,7 @@
     "register-app": "node scripts/register-app.mjs",
     "check:versions": "node scripts/versions.mjs check",
     "check:release": "node scripts/augur-release.mjs check",
+    "check:settings": "node scripts/check-settings.mjs",
     "check:migrations": "node scripts/check-migrations.mjs check",
     "sync:migrations": "node scripts/check-migrations.mjs sync",
     "test:scripts": "node --test scripts/*.test.mjs",

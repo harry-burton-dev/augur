@@ -33,9 +33,10 @@ Fill in `infra/deploy/.env`:
 - `PLATFORM_VERSION`: the same release, without `augur@`, for example `0.1.1`.
 - `PLATFORM_URL`: `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`.
 - `TS_AUTHKEY`: the key from the admin console.
-- `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `FOLIO_CLIENT_SECRET`, `FOLIO_DATABASE_PASSWORD`, `FOLIO_BUCKET_SECRET`, `AUSPEX_CLIENT_SECRET`, `ATLAS_CLIENT_SECRET`, `ATLAS_DATABASE_PASSWORD`: long random strings, each different. Compose refuses to start without them. `openssl rand -hex 32` makes one. The `FOLIO_` ones are for Artifacts (Folio in code), the document libraries every deployment ships with.
+- `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `FOLIO_CLIENT_SECRET`, `FOLIO_DATABASE_PASSWORD`, `FOLIO_BUCKET_SECRET`, `AUSPEX_CLIENT_SECRET`, `ATLAS_CLIENT_SECRET`, `ATLAS_DATABASE_PASSWORD`: long random strings, each different. Compose refuses to start without them. `openssl rand -hex 32` makes one. The `FOLIO_` ones are for Artifacts (Folio in code), the document libraries every deployment ships with; `AUSPEX_` is Explorer's and `ATLAS_` Data Atlas's. `ATLAS_BUCKET_SECRET` is one more, though optional: without it the storage job works it out from `APP_SECRETS_KEY`.
 - **Database logins**: `POSTGRES_PASSWORD` is Postgres's admin login, used only by the storage job and backups. Each platform service (identity, registry, events, models) and Keycloak connects with its own login, which owns only its own schema (Keycloak: its own database) and can't read anyone else's. The storage job makes them from the `*_DATABASE_PASSWORD` values on every `up`, as it does apps' logins, so changing one in `.env` and running `pc up -d` changes it.
-- `PLATFORM_ADMIN_*`: you. This is the first person who can sign in, as an admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one.
+- `PLATFORM_ADMIN_USER`, `PLATFORM_ADMIN_PASSWORD`, `PLATFORM_ADMIN_EMAIL`, `PLATFORM_ADMIN_FIRST_NAME`, `PLATFORM_ADMIN_LAST_NAME` and `PLATFORM_ADMIN_DEPARTMENT` (`Platform` unless you change it): you. This is the first person who can sign in, as an admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one.
+- `ORG_NAME`, optional: what the organisation's own floor is called (`Organisation` unless you set it).
 
 Then:
 
@@ -56,7 +57,11 @@ identity can't start until its settings are fixed:
   - KEYCLOAK_URL is not set: Keycloak as identity reaches it, such as http://keycloak:8080/sso.
 ```
 
-`pc logs <service>` shows it. Any secret (a password, a client secret, a bucket key, `DATABASE_URL`) can be given as a file instead: set `<NAME>_FILE` to its path inside the container, for a Docker secret or a file decrypted at deploy, and leave `<NAME>` unset. The file's contents, less a final newline, are used.
+`pc logs <service>` shows it.
+
+Every setting a deployment can set is described once, in `infra/deploy/settings.schema.json`: which services read it, whether it's required, its default, whether it's a secret, and the guide section that explains it. `.env.example` lists them all. CI's `pnpm check:settings` holds `compose.yml`, `.env.example`, the guides and the services' code to it, so a setting the guides tell you to put in `.env` always reaches the service that reads it. Compose passes each one by name to the services that read it; only the storage job, which reads every app's secrets by the app's name, reads the whole `.env`.
+
+Any secret (a password, a client secret, a bucket key, `DATABASE_URL`) can be given as a file instead: set `<NAME>_FILE` to its path inside the container, for a Docker secret or a file decrypted at deploy, and leave `<NAME>` unset. The file's contents, less a final newline, are used.
 
 ## Day to day
 
