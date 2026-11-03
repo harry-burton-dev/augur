@@ -232,6 +232,8 @@ It drives Docker, which can start any container, so it has the run of the server
 
 Docker must be listening on `/var/run/docker.sock` (rootless Docker isn't). From then on, upgrade from the page, or by hand as above; both work. An upgrade waiting on the page while you upgrade by hand is best cancelled first.
 
+To see what the watch after an upgrade would see right now, after an upgrade by hand say, run one look of it: `pc exec -T updater node dist/index.js check`. It signs in as the updater, reads AUGUR's calls at the gateway for the last 10 minutes and asks every part whether it's ready, then prints one line of JSON: `ok`, what it looked at, and each problem in a sentence. It exits 1 when there's any. Unlike the watch, it doesn't let sign-in miss once or wait for a part to come back.
+
 ### The app runner
 
 The updater can also install, upgrade and remove apps that don't ship with AUGUR, from their own signed releases ([Versioning](versioning.md#app-releases)), with no change to `compose.yml` or `.env` per app. It runs them in a Compose project of its own, `augur-apps`, which it writes in `infra/deploy/apps/` (`compose.yml`, a settings file per container and `state.json`). Don't edit those: they're rewritten on every install.

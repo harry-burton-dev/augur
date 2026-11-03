@@ -1,8 +1,9 @@
 name: Deploy test
 # Does a new AUGUR release install, upgrade and go back? Once per release, with the images the
 # Release workflow just pushed, so nothing is built twice: a fresh server on the new release, then
-# the release before it upgraded to the new one with its data, then back (docs/deploy-test.md).
-# It boots the stack three times in about five minutes; it never runs on pull requests, to keep CI
+# the release before it upgraded to the new one with its data, then back, then a fresh one with the
+# updater, broken on purpose (docs/deploy-test.md).
+# It boots the stack four times in about seven minutes; it never runs on pull requests, to keep CI
 # minutes down. Run it by hand from Actions to try any two releases.
 on:
   workflow_call:
@@ -89,4 +90,11 @@ jobs:
         run: infra/deploy-test.sh upgrade "$FROM"
         env:
           FROM: ${{ steps.releases.outputs.from }}
+          LOCAL_TAG: ${{ steps.releases.outputs.to }}
+      # The release's images are pulled already; this adds the updater's. Its watch must see AUGUR
+      # broken on purpose (a part stopped) and well again (docs/deploy-test.md, "Broken on purpose").
+      - name: Broken on purpose, seen by the updater
+        if: ${{ !cancelled() }}
+        run: infra/deploy-test.sh broken
+        env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}
