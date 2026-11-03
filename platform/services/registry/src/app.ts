@@ -13,7 +13,8 @@ import {
   recordAudit,
   SCOPES,
   ServiceAuthUnavailable,
-  serviceLogging,
+  problemDetails,
+  serviceFastifyOptions,
   signedInRecently,
   type FloorLookup,
   type FloorPlace,
@@ -207,7 +208,8 @@ export const buildApp = async ({
   const live = new LiveOverrides(updates.ring, tailnet);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
-  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  const app = Fastify(serviceFastifyOptions());
+  await app.register(problemDetails());
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', async () => health('registry', version, API_VERSION));
