@@ -1,6 +1,6 @@
 {
   "name": "@augur/shell",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "private": true,
   "type": "module",
   "description": "The shell host: wraps ui-shell, loads apps from the registry manifest, mounts the current app and routes intents.",
