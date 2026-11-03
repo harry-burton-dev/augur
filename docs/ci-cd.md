@@ -72,7 +72,8 @@ everything.
 | `deploy-images` | `infra`, `.dockerignore`, any `package.json`, the workspace file or the lockfile | never | the compose files are valid; the four main images build, the web image serves the shipped apps' frontends, and none runs as root; nginx and its Content Security Policy; the backup and restore scripts |
 
 **The contract tests' frozen builds.** `platform/contract/frozen/` holds a build of the reference app
-from each SDK minor. An ordinary pull request runs today's build (Folio on and off) and only the
+from each SDK minor whose bundle differed from the one before (a folder stands for the run of
+identical minors it starts), and runs only the contract spec. An ordinary pull request runs today's build (Folio on and off) and only the
 oldest and newest frozen builds (`CONTRACT_FROZEN=edges`); the Version packages pull request and a
 run by hand run every one, so nothing is released without the full set passing.
 

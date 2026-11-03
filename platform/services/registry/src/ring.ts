@@ -24,3 +24,13 @@ export const takesAugurDevBuilds = (ring: Ring) => ring === 'dev';
 
 /** Why a production server won't follow preview releases, as Admin shows it. */
 export const PRODUCTION_ONLY = 'This is a production server (SERVER_RING=production in .env), so it takes only releases promoted to production.';
+
+/**
+ * Whether a server on `ring` may install a release its publisher halted, when a deployment admin asks
+ * for it by name, to prove AUGUR goes back by itself from a broken release (ADR 0051): dev and preview only.
+ */
+export const takesHaltedOnRequest = (ring: Ring) => ring !== 'production';
+
+/** Why a production server won't install a halted release, as the Upgrade Centre shows it. */
+export const HALTED_PRODUCTION_ONLY =
+  'This is a production server (SERVER_RING=production in .env), so it never installs a release its publisher halted. Only a dev or preview server does, to test going back.';

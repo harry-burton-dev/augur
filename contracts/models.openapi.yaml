@@ -16,16 +16,41 @@ components:
     Refusal:
       type: object
       required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
         - error
         - message
       properties:
-        error:
+        type:
           type: string
-          examples:
-            - forbidden
-        message:
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
           type: string
           description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
     ChatRequest:
       type: object
       required:
@@ -218,7 +243,7 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /settings:
@@ -234,13 +259,13 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     put:
@@ -270,31 +295,31 @@ paths:
         "400":
           description: An invalid change
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: Turning on with no model set up
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The change can't be recorded in the audit log, so it wasn't made
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /usage:
@@ -321,13 +346,13 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /chat:
@@ -349,43 +374,43 @@ paths:
         "400":
           description: An invalid request, or a person's call without an agent
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: Neither a signed-in person nor a service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Models are off, or the app isn't granted models:use there
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "429":
           description: The app has used its calls for today
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "502":
           description: The model provider failed or refused; the message says what to check
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: No model is set up, or grants or the audit log can't be reached
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "504":
           description: The model took too long
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /embeddings:
@@ -441,43 +466,43 @@ paths:
         "400":
           description: An invalid request
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: Neither a signed-in person nor a service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Models are off, a person asked, or the app isn't granted models:use there
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "429":
           description: The app has used its calls for today
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "502":
           description: The model provider failed or refused; the message says what to check
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: No model or no embedding model is set up, or grants or the audit log can't be reached
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "504":
           description: The model took too long
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
 servers:
