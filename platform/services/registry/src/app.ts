@@ -35,6 +35,7 @@ import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import {
   appEntrySchema,
+  categoryOf,
   conflictFor,
   DEFAULT_UPLOAD_MB,
   entryOriginProblem,
@@ -48,6 +49,7 @@ import {
   unbuiltApps,
   versionProblem,
   type AppEntry,
+  type CategoryInForce,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { LiveOverrides } from './live.ts';
@@ -146,15 +148,20 @@ const settingsOf = (r: AppRecord) => ({
   }),
 });
 
-const catalogueEntry = (r: AppRecord, allowed: string[], pillar: boolean) => {
+const catalogueEntry = (r: AppRecord, allowed: string[], ships: boolean, kind: CategoryInForce) => {
   const blocked = entryOriginProblem(r.entry, allowed);
+  const { category: _asked, ...entry } = r.entry;
   return {
-    ...r.entry,
+    ...entry,
     // Registered from an origin no longer allowed: kept, but not offered.
     ...(blocked ? { blocked } : {}),
     platform: false,
+    // The kind in force (ADR 0032), and the app's own claim when it isn't used, so Admin can say why.
+    ...(kind.category ? { category: kind.category } : {}),
+    ...(kind.refused ? { categoryRefused: kind.refused } : {}),
     // Ships with AUGUR: its version comes with the release, and it's turned off rather than removed.
-    ...(pillar ? { pillar: true } : {}),
+    // `pillar` is the old name for `ships`, kept for /v1 readers.
+    ...(ships ? { ships: true, pillar: true } : {}),
     enabled: r.enabled,
     registeredBy: r.registeredBy,
     registeredAt: r.registeredAt,
@@ -205,8 +212,12 @@ export const buildApp = async ({
   now = () => new Date(),
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
+  /** The apps the app runner installed from the signed app feed, whose kind is honoured too. */
+  const feedApps = async () => new Set((await store.installedApps()).map((i) => i.app));
+  const kindOf = (entry: Pick<AppEntry, 'id' | 'category'>, feed: ReadonlySet<string>) => categoryOf(entry, { ships: isPillar(entry.id), fromFeed: feed.has(entry.id) });
   const live = new LiveOverrides(updates.ring, tailnet);
-  const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
+  const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[], feed: ReadonlySet<string>) =>
+    catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id), kindOf(r.entry, feed));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
   // Before anything reads the caller: only the gateway's signed word says who is calling.
@@ -255,6 +266,7 @@ export const buildApp = async ({
           const kept = await store.frontends();
           const previews = await previewsChosenBy(caller?.id);
           const optIns = caller ? await store.featureOptIns({ person: caller.id }) : [];
+          const feed = await feedApps();
           const at = new Date();
           const registered = (await store.records())
             .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
@@ -265,7 +277,10 @@ export const buildApp = async ({
               const served = servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept);
               // Live on the workbench: this developer's own machine's frontend, in place of any build.
               const from = live.of(caller?.id, r.entry.id);
-              return { ...served, ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
+              // Only the kind in force (ADR 0032): a claim the registry doesn't honour never reaches the shell.
+              const { category: _asked, ...rest } = served;
+              const { category } = kindOf(r.entry, feed);
+              return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
             });
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
@@ -294,7 +309,8 @@ export const buildApp = async ({
           const rules = await store.rules();
           const platform = platformApps
             .filter((a) => !unbuiltApps.has(a.id))
-            .map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description, requiredRole: a.requiredRole, state: { on: true, why: 'platform' } as const }));
+            .map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description, requiredRole: a.requiredRole, category: categoryOf(a, { ships: false, fromFeed: false }).category, state: { on: true, why: 'platform' } as const }));
+          const feed = await feedApps();
           const registered = (await store.records())
             .filter((r) => !entryOriginProblem(r.entry, allowed))
             .map((r) => {
@@ -302,7 +318,9 @@ export const buildApp = async ({
               const rule = 'by' in state ? rules.find((x) => x.app === r.entry.id && x.workspace === state.by) : undefined;
               return {
                 id: r.entry.id, name: r.entry.name, icon: r.entry.icon, description: r.entry.description, requiredRole: r.entry.requiredRole,
-                floors: floorKindsOf(r.entry), pillar: isPillar(r.entry.id) || undefined,
+                floors: floorKindsOf(r.entry), category: kindOf(r.entry, feed).category,
+                // `pillar` is the old name for `ships`, kept for /v1 readers.
+                ships: isPillar(r.entry.id) || undefined, pillar: isPillar(r.entry.id) || undefined,
                 state: rule ? { ...state, setBy: rule.setBy, setAt: rule.setAt } : state,
               };
             });
@@ -336,7 +354,8 @@ export const buildApp = async ({
         const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
         const allowed = await allowedOrigins();
         const kept = await store.frontends();
-        return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed, kept))];
+        const feed = await feedApps();
+        return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed, kept, feed))];
       });
 
       /** An app's kept versions, newest first, and which one the shell is given. */
@@ -366,7 +385,7 @@ export const buildApp = async ({
             target: req.params.id,
             detail: { version: changed.entry.version },
           });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         } catch (err) {
           if (err instanceof UnknownVersionError) return reply.code(404).send({ error: 'not_found', message: err.message });
           if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
@@ -468,6 +487,9 @@ export const buildApp = async ({
           if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });
           const conflict = conflictFor(entry, await store.list());
           if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
+          // A kind the app may not claim is kept and explained to admins, never a reason to refuse it (ADR 0032).
+          const { refused } = kindOf(entry, await feedApps());
+          if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');
           try {
             const created = await store.put(entry, by.id);
             // An app that ships with AUGUR may do what its release asks: the admin chose the release.
@@ -567,7 +589,7 @@ export const buildApp = async ({
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, upstream: url, by: by.id }, 'app upstream set');
           await record(req, { actor: by, app: 'registry', action: url ? 'app.upstream-set' : 'app.upstream-cleared', target: req.params.id, detail: url ? { url } : {} });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         },
       );
 
@@ -587,7 +609,7 @@ export const buildApp = async ({
             req.log.info({ app: req.params.id, enabled: req.body.enabled, by: caller.id }, req.body.enabled ? 'app turned on' : 'app turned off');
             await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: req.body.enabled ? 'app.enabled' : 'app.disabled', target: req.params.id });
           }
-          return entryOf({ ...before, enabled: req.body.enabled }, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf({ ...before, enabled: req.body.enabled }, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         },
       );
 
@@ -660,7 +682,7 @@ export const buildApp = async ({
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, scopes: req.body.scopes, by: caller.id }, 'app scopes granted');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.scopes-granted', target: req.params.id, detail: { scopes: req.body.scopes } });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         },
       );
 
@@ -688,7 +710,7 @@ export const buildApp = async ({
           }
           const changed = (await store.limitUploads(req.params.id, mb))!;
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.upload-limit-set', target: req.params.id, detail: { mb } });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         },
       );
 

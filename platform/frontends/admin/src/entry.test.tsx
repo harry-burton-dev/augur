@@ -4,7 +4,7 @@ import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { departmentPath, type AppInstalls, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
-import { appStatus, floorStatus, floorTree, rollbackNote, scopeWords, uploadChoices } from './apps-model.js';
+import { appEyebrow, appStatus, floorStatus, floorTree, kindOf, kindWords, refusedKindNote, rollbackNote, scopeWords, uploadChoices } from './apps-model.js';
 import { headline, stateOf } from './status.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
 import { placeOf, portalLink } from './line.js';
@@ -278,6 +278,38 @@ describe('Apps', () => {
     const kept = (version: string, entry = library.entry) => ({ version, entry: { ...library, version, entry }, registeredBy: 'library', registeredAt: '', serving: false });
     expect(rollbackNote(library, kept('0.1.0'))).toMatch(/loads from the same address as 0.2.0/);
     expect(rollbackNote(library, kept('0.1.0', '/apps/library/0.1.0/entry.js'))).toBe('');
+  });
+
+  it('says what kind of app each is, from the kind in force, and why a claimed kind isn’t used', () => {
+    expect(appStatus({ ...library, sdk: '^2.0.0' }, '1.0.0').why).toBe('It works with AUGUR SDK ^2.0.0; this deployment has 1.0.0.');
+    const explorer = { ...library, id: 'auspex', name: 'Explorer', category: 'platform' as const, ships: true, pillar: true };
+    const artifacts = { ...library, id: 'folio', name: 'Artifacts', category: 'pillar' as const, ships: true, pillar: true };
+    const mandate = { ...library, id: 'mandate', name: 'Mandate', category: 'pillar' as const, registeredBy: 'mandate' };
+    const rogue = { ...library, registeredBy: 'library', categoryRefused: { asked: 'pillar', why: 'x' } };
+    expect([catalogue[0]!, explorer, artifacts, mandate, rogue].map((a) => kindWords(a).label)).toEqual(['Platform app', 'Platform app', 'Pillar app', 'Pillar app', 'App']);
+    expect(appEyebrow(catalogue[0]!)).toBe('Platform app · built into AUGUR');
+    expect(appEyebrow(explorer)).toBe('Platform app · ships with AUGUR');
+    expect(appEyebrow(artifacts)).toBe('Pillar app · ships with AUGUR');
+    expect(appEyebrow(mandate)).toBe('Pillar app · registered by mandate');
+    expect(appEyebrow(rogue)).toBe('Registered by library');
+    // A shipped app that says no kind, and a registry from before `ships`.
+    expect(appEyebrow({ ...library, pillar: true })).toBe('Ships with AUGUR');
+    // A kind this Admin doesn't know reads as an app.
+    expect(kindOf({ ...library, category: 'tool' as never })).toBeUndefined();
+    expect(refusedKindNote(rogue)).toBe('Its manifest says it’s a pillar app. Only apps that ship with AUGUR or come from its app feed can be one, so it’s listed as an app.');
+    expect(refusedKindNote(mandate)).toBe('');
+  });
+
+  it('lists each app’s kind and explains a refused one in its dialog', async () => {
+    const rogue = { ...library, registeredBy: 'library', categoryRefused: { asked: 'platform', why: 'x' } };
+    gateway((_m, url) => (url === '/api/registry/v1/apps' ? Response.json([...catalogue, rogue]) : url.endsWith('/versions') || url.endsWith('/floors') ? Response.json([]) : undefined));
+    const el = await open('/apps');
+    expect(el.textContent).toContain('Kind');
+    expect(el.textContent).toContain('Platform app');
+    await openRow(el, 'Library');
+    const dialog = document.querySelector('.augur-dialog')!;
+    expect(dialog.textContent).toContain('Registered by library');
+    expect(dialog.querySelector('[data-kind-refused]')?.textContent).toContain('Its manifest says it’s a platform app.');
   });
 
   it('offers only lower upload limits, and lays floors out as a tree, deciding each as the registry does', () => {

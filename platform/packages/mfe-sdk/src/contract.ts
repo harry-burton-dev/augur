@@ -1,5 +1,15 @@
 import type { Focus } from './refs.js';
 
+/**
+ * The kinds of app that ship with AUGUR (SDK 1.11, ADR 0032): `platform`, for
+ * using and managing AUGUR, and `pillar`, the foundation of what AUGUR
+ * produces. Every other app is just an app and has no kind. A later kind is
+ * added in a minor, so a reader treats a value it doesn't know as no kind.
+ */
+export const APP_CATEGORIES = ['platform', 'pillar'] as const;
+/** One of `APP_CATEGORIES` (SDK 1.11). */
+export type AppCategory = (typeof APP_CATEGORIES)[number];
+
 /** One entry in the registry manifest the shell loads at startup. */
 export interface AppManifestEntry {
   id: string;
@@ -86,6 +96,14 @@ export interface AppManifestEntry {
    * doesn't offer a working context yet, so this changes nothing today.
    */
   focus?: boolean;
+  /**
+   * What kind of app this is (SDK 1.11, ADR 0032): `platform`, for using and
+   * managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only
+   * apps that ship with AUGUR or come from its signed app feed can be either;
+   * every other app is just an app. The registry gives the shell the kind in
+   * force, so an app's claim the registry doesn't honour arrives as no kind.
+   */
+  category?: AppCategory;
 }
 
 /** A feature an app is trying out (SDK 1.7). */
