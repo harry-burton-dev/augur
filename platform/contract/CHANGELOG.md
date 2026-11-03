@@ -1,5 +1,11 @@
 # @augur/contract-tests
 
+## 0.1.12
+
+### Patch Changes
+
+- a19adb5: The shell is drawn in React on Aerie: the band, the floor gauge, the sky and its views (`Shell` with a `ShellModel`), Title and Orbit (`CentreMenu`), the water, and the request and previews dialogs on Common. The shell's own UI no longer uses the Lit kit; `@augur/ui-kit` is still served to apps through the import map until SDK 2.
+
 ## 0.1.11
 
 ### Patch Changes
