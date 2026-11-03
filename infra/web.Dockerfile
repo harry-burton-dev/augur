@@ -23,6 +23,11 @@ RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/a
 
 # nginx as an unprivileged user, listening on 8080 rather than 80.
 FROM nginxinc/nginx-unprivileged:1.30-alpine AS web
+# Take Alpine's security fixes that came out after the base image was built (the deploy test's Trivy
+# step fails a release on a critical one with a fix), then drop back to nginx's own user.
+USER root
+RUN apk upgrade --no-cache
+USER 101
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 # Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
 ENV APP_ORIGINS=""
