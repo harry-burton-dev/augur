@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask flow</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ======================================================================
+   Proposed tokens (time language). Each is listed in notes.md "Needs".
+   Derived from kit tokens only: no new hex values, no new ms values.
+   ====================================================================== */
+:root{
+  --x-type-micro:.6875rem;                    /* proposed --type-micro (mono numerals), as the cinematic run */
+  --x-now:var(--light);                       /* now line: the only bright vertical */
+  --x-now-glow:color-mix(in srgb,var(--light) 35%,transparent);
+  --x-tide:color-mix(in srgb,var(--info) 40%,var(--ink-muted));  /* tide line: a missed date, a water stain, never an alert */
+  --x-tide-stain:color-mix(in srgb,var(--info) 10%,transparent);
+  --x-hw:var(--ink);                          /* high-water mark: engraved, not lit */
+  --x-seam:color-mix(in srgb,var(--light) 62%,transparent); /* seam: a visible repair (kintsugi), neutral light, never severity */
+  --x-travel:var(--hairline-strong);          /* distance to travel: dashed, dry, ahead of now */
+  --x-past:.62;                               /* past is quieter than now: opacity for anything before the latest state */
+  --x-stale-hatch:repeating-linear-gradient(135deg,transparent 0 var(--space-1),var(--hairline-strong) var(--space-1) calc(var(--space-1) + 1px));
+  --x-water-lo:color-mix(in srgb,var(--navy) 70%,transparent);
+  --x-water-hi:color-mix(in srgb,var(--green) 55%,transparent);
+  --x-org:var(--floor-org-high);--x-department:var(--floor-department-high);--x-team:var(--floor-team-high);--x-you:var(--floor-you-high);
+}
+button{font:inherit;color:inherit}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{font:400 var(--type-small)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.micro{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);font-variant-numeric:tabular-nums}
+.kbd{display:inline-block;font:400 var(--x-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid currentColor;border-radius:var(--radius-key);opacity:.75;letter-spacing:0;text-transform:none}
+.x-cap .k{margin-left:var(--space-4);color:var(--ink-muted)}
+.x-cap .k b{color:var(--ink)}
+
+/* the intent header: the same on every variant */
+.top{position:relative;padding:var(--space-5) var(--edge) var(--space-4);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2) var(--space-6);align-items:end;border-bottom:1px solid var(--hairline)}
+.top::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--floor-team-high) 30%,var(--floor-team-low) 70%,transparent);opacity:.7}
+.crumb{display:flex;align-items:center;gap:var(--space-2)}
+.crumb .dot{width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--floor-team-high);box-shadow:0 0 var(--space-2) var(--floor-team-low)}
+.top h1{grid-column:1;margin:var(--space-1) 0 0;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.facts{grid-column:2;grid-row:1 / span 2;display:flex;gap:var(--space-5);align-items:flex-end}
+.fact{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+.fact .v{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);white-space:nowrap}
+.fact .v b{font-weight:400;color:var(--light)}
+.who-org{color:var(--x-org)}.who-department{color:var(--x-department)}.who-team{color:var(--x-team)}
+/* ember (light language: going stale, cools with age) */
+.ember{display:inline-flex;align-items:center;gap:var(--space-2);background:none;border:0;padding:0;cursor:help;text-align:left}
+.ember i{display:block;width:var(--space-2);height:var(--space-2);border-radius:50%;background:color-mix(in srgb,var(--warning) calc((1 - var(--age,.4)) * 100%),var(--ink-muted));box-shadow:0 0 calc((1 - var(--age,.4)) * var(--space-4)) color-mix(in srgb,var(--warning) calc((1 - var(--age,.4)) * 80%),transparent)}
+/* stale hatch */
+.stale{background-image:var(--x-stale-hatch)}
+/* the "why are you like this, and since when?" pane: one for every mark */
+.why{position:fixed;z-index:var(--layer-overlay);width:var(--measure-card);padding:var(--space-4);background:var(--surface-overlay);-webkit-backdrop-filter:blur(var(--surface-blur));backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);box-shadow:var(--shadow-overlay);opacity:0;transform:translateY(var(--space-1));pointer-events:none;transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out)}
+.why.on{opacity:1;transform:none}
+.why .t{margin:var(--space-1) 0 var(--space-2);font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.why .b{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.why dl{display:grid;grid-template-columns:auto 1fr;gap:var(--space-1) var(--space-3);margin:var(--space-3) 0 0;padding-top:var(--space-3);border-top:1px solid var(--hairline)}
+.why dt{font:400 var(--x-type-micro)/var(--leading-meta) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.why dd{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+[data-why]{cursor:help}
+@media (prefers-reduced-motion: reduce){.why{transform:none!important;transition:opacity var(--motion-base) linear!important}}
+
+body{display:flex;flex-direction:column;overflow:hidden}
+.main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-glance);gap:var(--space-6);padding:var(--space-5) var(--edge) var(--space-7)}
+.flowbox{position:relative;display:flex;flex-direction:column;min-height:0}
+.bar{display:flex;align-items:center;gap:var(--space-4);margin-bottom:var(--space-3);white-space:nowrap}
+.bar .sp{flex:1}
+.seg{display:inline-flex;border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);overflow:hidden}
+.seg button{background:none;border:0;padding:var(--space-1) var(--space-3);font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--surface-raised);color:var(--light)}
+.legend{display:flex;gap:var(--space-4)}
+.legend{gap:var(--space-3)}.legend span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.legend i{display:block;width:var(--space-3);height:var(--space-2);border-radius:1px;opacity:.7}
+.flow{position:relative;flex:1;min-height:0}
+.flow svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.clip{position:absolute;inset:0;clip-path:inset(0 100% 0 0);transition:clip-path var(--motion-run) var(--ease-standard)}
+.clip.in{clip-path:inset(0 0 0 0)}
+.lbl{font:400 var(--x-type-micro) var(--font-mono);letter-spacing:var(--tracking-caps);fill:var(--ink-muted);text-transform:uppercase}
+.lbl.lit{fill:var(--light)}
+.rib{transition:opacity var(--motion-base) var(--ease-standard)}
+.slice{cursor:pointer;outline:none}
+.slice .frame{fill:transparent;stroke:transparent}
+.slice:hover .frame{stroke:var(--hairline-strong)}
+.slice:focus-visible .frame{stroke:var(--focus);stroke-width:var(--focus-ring)}
+.slice.sel .frame{stroke:var(--x-now)}
+.sel-col{transition:transform var(--motion-slow) var(--ease-out),opacity var(--motion-base)}
+/* reading pane: the ask at the chosen revision */
+.read{display:flex;flex-direction:column;gap:var(--space-4);min-height:0}
+.card{padding:var(--space-5);background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset)}
+.card h2{margin:var(--space-2) 0 var(--space-4);font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.ask{font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--ink);margin:0}
+.ask .c{border-radius:2px;padding:0 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.ask .c.new{text-decoration:underline double var(--x-seam);text-underline-offset:var(--space-1);color:var(--light)}
+.ask .c.gone{text-decoration:line-through;color:var(--ink-muted);opacity:var(--x-past);font-size:var(--type-body)}
+.ask .c.tide{color:var(--x-tide)}
+.ask .c[data-f=org]{background:color-mix(in srgb,var(--x-org) 12%,transparent)}
+.ask .c[data-f=department]{background:color-mix(in srgb,var(--x-department) 12%,transparent)}
+.ask .c[data-f=team]{background:color-mix(in srgb,var(--x-team) 12%,transparent)}
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3)}
+.sum div{padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.sum b{display:block;font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);color:var(--light)}
+.hint{color:var(--ink-muted);font-size:var(--type-small)}
+@media (max-width:1400px){.main{grid-template-columns:minmax(0,1fr) var(--measure-decision)}.ask{font-size:var(--type-body);line-height:var(--leading-body)}}
+@media (prefers-reduced-motion: reduce){.clip{clip-path:none!important;opacity:0;transition:opacity var(--motion-calm) linear!important}.clip.in{opacity:1}}
+</style>
+</head>
+<body>
+<header class="top" id="top"></header>
+<main class="main">
+  <section class="flowbox" aria-label="The ask over time">
+    <div class="bar"><span class="eyebrow" id="ftitle"></span><span class="sp"></span><div class="legend micro" id="legend"></div>
+      <div class="seg" role="group" aria-label="Spacing"><button id="byRev" aria-pressed="false">By edit</button><button id="byDate" aria-pressed="true">By date</button></div></div>
+    <div class="flow" id="flow"></div>
+  </section>
+  <section class="read" id="read" aria-live="polite"></section>
+</main>
+<div class="why" id="why" role="tooltip"></div>
+<div class="x-cap"><b>Intents · V3</b> ask flow: every edit of the ask as a slice, clauses as bands by author · History Flow (Viégas, Wattenberg), kintsugi seams <span class="k"><b>← →</b> step edits · <b>D</b> spacing · <b>R</b> replay</span></div>
+<script>
+const DATA={
+  app:'Mandate',
+  now:'2026-11-02', asked:'2026-08-04', staleAfter:14,
+  labels:{asked:'Asked by',owner:'Owner',due:'Due',toTravel:'to travel',status:'Status',why:'Why, and since when',since:'Since',whoCan:'Who can change it',now:'Now'},
+  people:{
+    'Maya Okafor':{name:'Maya Okafor',floor:'org',unit:'Org · Finance Director'},
+    'Lena Hart':{name:'Lena Hart',floor:'department',unit:'Finance Operations'},
+    'Ana Sousa':{name:'Ana Sousa',floor:'team',unit:'Payables lead'},
+    'Tom Reyes':{name:'Tom Reyes',floor:'team',unit:'Payables'}},
+  intent:{name:'Supplier payments on the new ledger',where:['Finance Operations','Payables'],asker:'Maya Okafor',owner:'Ana Sousa'},
+  /* every deadline the ask has carried; a passed, unmet one is a tide line */
+  deadlines:[
+    {date:'2026-09-30',set:'2026-08-04',by:'Maya Okafor',movedOn:'2026-10-02',movedBy:'Ana Sousa',why:'The bank sent its new payment file format three weeks late.'},
+    {date:'2026-10-31',set:'2026-10-02',by:'Ana Sousa',movedOn:'2026-10-31',movedBy:'Maya Okafor',why:'Overseas reconciliation failed its dry run; Internal Audit added a sign-off.'},
+    {date:'2026-11-28',set:'2026-10-31',by:'Maya Okafor'}],
+  /* effort: contributions a week (tasks closed, linked documents edited, approvals given); null = no record */
+  effortLabel:'contributions a week',
+  weeks:['2026-08-03','2026-08-10','2026-08-17','2026-08-24','2026-08-31','2026-09-07','2026-09-14','2026-09-21','2026-09-28','2026-10-05','2026-10-12','2026-10-19','2026-10-26','2026-11-02'],
+  effort:[2,5,8,6,null,null,9,15,24,12,18,31,22,1],
+  gap:{from:'2026-08-31',to:'2026-09-13',why:'Events from these two weeks were lost when storage moved servers. Work happened; the record of it did not survive.',who:'Platform admins (events service)'},
+  /* acceptance criteria: the distance to travel in work, not only days */
+  criteria:[
+    {text:'Domestic suppliers paid from the new ledger',added:'2026-08-04',met:'2026-09-16'},
+    {text:'Old ledger read-only',added:'2026-08-04',met:'2026-10-21'},
+    {text:'Overseas suppliers paid from the new ledger',added:'2026-08-18',met:null},
+    {text:'Reconciled daily with no manual step',added:'2026-10-07',met:null},
+    {text:'Signed off by Internal Audit',added:'2026-10-31',met:null}],
+  /* the ask's own edit history */
+  revisions:[
+    {n:1,date:'2026-08-04',by:'Maya Okafor',note:'Asked',text:'Pay every supplier from the new ledger by 30 Sep, and make the old ledger read-only.'},
+    {n:2,date:'2026-08-18',by:'Lena Hart',note:'Scope widened',text:'Pay every supplier, including overseas suppliers, from the new ledger by 30 Sep, and make the old ledger read-only.'},
+    {n:3,date:'2026-09-09',by:'Tom Reyes',note:'Scope cut',text:'Pay every supplier, including overseas suppliers but not legacy card payments, from the new ledger by 30 Sep, and make the old ledger read-only.'},
+    {n:4,date:'2026-10-02',by:'Ana Sousa',note:'Deadline moved',text:'Pay every supplier, including overseas suppliers but not legacy card payments, from the new ledger by 31 Oct, and make the old ledger read-only.'},
+    {n:5,date:'2026-10-07',by:'Maya Okafor',note:'Criterion added',text:'Pay every supplier, including overseas suppliers but not legacy card payments, from the new ledger by 31 Oct, reconciled daily with no manual step, and make the old ledger read-only.'},
+    {n:6,date:'2026-10-31',by:'Maya Okafor',note:'Deadline moved, sign-off added',text:'Pay every supplier, including overseas suppliers but not legacy card payments, from the new ledger by 28 Nov, reconciled daily with no manual step, signed off by Internal Audit, and make the old ledger read-only.'}],
+  status:{date:'2026-10-14',by:'Tom Reyes',text:'Overseas file tests pass with two of three banks.'},
+  /* known events ahead (the almanac side) */
+  ahead:[
+    {date:'2026-11-10',label:'Third bank file test',by:'Tom Reyes'},
+    {date:'2026-11-16',label:'Audit freeze begins',by:'Maya Okafor'},
+    {date:'2026-11-23',label:'Internal Audit review',by:'Lena Hart'}],
+
+  v3:{title:'The ask, edit by edit',orgLabel:'Org',gone:'removed',slot:'Deadline',
+    /* clauses in sentence order; slot groups clauses that replace one another */
+    clauses:[
+      {id:'pay',text:'Pay every supplier',by:'Maya Okafor',from:1},
+      {id:'os',text:'including overseas suppliers',by:'Lena Hart',from:2},
+      {id:'card',text:'but not legacy card payments',by:'Tom Reyes',from:3},
+      {id:'ledger',text:'from the new ledger',by:'Maya Okafor',from:1},
+      {id:'d1',slot:'due',text:'by 30 Sep',by:'Maya Okafor',from:1,to:3,missed:true},
+      {id:'d2',slot:'due',text:'by 31 Oct',by:'Ana Sousa',from:4,to:5,missed:true},
+      {id:'d3',slot:'due',text:'by 28 Nov',by:'Maya Okafor',from:6},
+      {id:'rec',text:'reconciled daily with no manual step',by:'Maya Okafor',from:5},
+      {id:'aud',text:'signed off by Internal Audit',by:'Maya Okafor',from:6},
+      {id:'ro',text:'and make the old ledger read-only',by:'Maya Okafor',from:1}]}
+};
+/* ---------- shared helpers (time language) ---------- */
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const ROOT=getComputedStyle(document.documentElement);
+function ms(n){const v=ROOT.getPropertyValue(n).trim();return v.endsWith('ms')?parseFloat(v):parseFloat(v)*1000}
+function px(n){return parseFloat(ROOT.getPropertyValue(n))}
+const DAY=864e5,MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const D=s=>+new Date(s+"T00:00:00Z");
+const days=(a,b)=>Math.round((D(b)-D(a))/DAY);
+const fmt=s=>{const x=new Date(D(s));return x.getUTCDate()+' '+MON[x.getUTCMonth()]};
+const plural=(n,w)=>n+' '+w+(Math.abs(n)===1?'':'s');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const person=n=>DATA.people[n]||{name:n,floor:'you',unit:''};
+const whoTag=n=>{const p=person(n);return `<span class="who-${p.floor}">${esc(p.name)}</span>`};
+function deadline(){return DATA.deadlines[DATA.deadlines.length-1].date}
+function header(){
+  const I=DATA.intent,dl=deadline(),left=days(DATA.now,dl),st=DATA.status,age=days(st.date,DATA.now);
+  return `<div class="crumb eyebrow"><span class="dot"></span>${esc(I.where.join(' / '))} · ${esc(DATA.app)}</div>
+  <h1>${esc(I.name)}</h1>
+  <div class="facts">
+    <div class="fact"><span class="micro">${esc(DATA.labels.asked)}</span><span class="v">${whoTag(I.asker)} · ${fmt(DATA.asked)}</span></div>
+    <div class="fact"><span class="micro">${esc(DATA.labels.owner)}</span><span class="v">${whoTag(I.owner)}</span></div>
+    <div class="fact"><span class="micro">${esc(DATA.labels.due)}</span><span class="v"><b>${fmt(dl)}</b> · ${plural(left,'day')} ${esc(DATA.labels.toTravel)}</span></div>
+    <div class="fact"><span class="micro">${esc(DATA.labels.status)}</span><button class="ember v" style="--age:${Math.min(1,age/30).toFixed(2)}" data-why="status"><i></i>${plural(age,'day')} old</button></div>
+  </div>`;
+}
+/* why-pane: any [data-why] element answers "why are you like this, and since when?" */
+const WHY={};
+function baseWhy(){
+  const st=DATA.status,age=days(st.date,DATA.now);
+  WHY.status={k:DATA.labels.status,t:`Last status ${plural(age,'day')} old`,b:`“${st.text}”`,since:`${fmt(st.date)} · ${whoTag(st.by)}`,who:`${whoTag(DATA.intent.owner)} or anyone on ${esc(DATA.intent.where.at(-1))} can refresh it. Stale after ${plural(DATA.staleAfter,'day')}.`};
+}
+function showWhy(el,anchor){
+  const w=WHY[el.dataset.why];if(!w)return;const p=$('#why');
+  p.innerHTML=`<div class="eyebrow">${esc(w.k||DATA.labels.why)}</div><div class="t">${w.t}</div>${w.b?`<div class="b">${w.b}</div>`:''}<dl>${w.since?`<dt>${esc(DATA.labels.since)}</dt><dd>${w.since}</dd>`:''}${w.who?`<dt>${esc(DATA.labels.whoCan)}</dt><dd>${w.who}</dd>`:''}</dl>`;
+  const r=(anchor||el).getBoundingClientRect(),pw=p.offsetWidth,ph=p.offsetHeight,g=px('--space-3');
+  let x=Math.min(innerWidth-pw-g,Math.max(g,r.left+r.width/2-pw/2)),y=r.bottom+g;
+  if(y+ph>innerHeight-g*4)y=Math.max(g,r.top-ph-g);
+  p.style.left=x+'px';p.style.top=y+'px';p.classList.add('on');
+}
+function hideWhy(){$('#why')?.classList.remove('on')}
+function wireWhy(){
+  document.addEventListener('mouseover',e=>{const el=e.target.closest('[data-why]');if(el)showWhy(el)});
+  document.addEventListener('mouseout',e=>{const el=e.target.closest('[data-why]');if(el&&!el.contains(e.relatedTarget))hideWhy()});
+  document.addEventListener('focusin',e=>{const el=e.target.closest('[data-why]');if(el)showWhy(el)});
+  document.addEventListener('focusout',hideWhy);
+}
+/* auto-demo: the moment plays ~1.2 s after load (motion-run) and replays with R */
+let TIMERS=[];
+function later(fn,t){TIMERS.push(setTimeout(fn,t))}
+function boot(reset,play){
+  baseWhy();wireWhy();
+  const go=()=>{TIMERS.forEach(clearTimeout);TIMERS=[];hideWhy();reset();later(play,ms('--motion-run'))};
+  addEventListener('keydown',e=>{if(e.target.closest('input,textarea'))return;if(e.key==='r'||e.key==='R')go();if(e.key==='Escape')hideWhy()});
+  go();Icons.hydrate(document.body);
+}
+
+const F=$('#flow');let mode='date',sel=DATA.revisions.length,S={};
+const R=DATA.revisions,CL=DATA.v3.clauses,N=R.length;
+const alive=(c,n)=>c.from<=n&&(c.to==null||n<=c.to);
+const words=c=>c.text.split(/\s+/).length;
+function build(){
+  const W=F.clientWidth,H=F.clientHeight,top=px('--space-5'),bot=px('--space-6'),sw=px('--space-3'),l=px('--space-1'),r=W-px('--space-8');
+  const t0=D(DATA.asked),t1=D(DATA.now);
+  const X=i=>mode==='date'?l+(D(R[i].date)-t0)/(t1-t0)*(r-l-sw):l+i/(N-1)*(r-l-sw);
+  const nowX=r+sw*.5;
+  const g=px('--space-1'),maxW=Math.max(...R.map(v=>CL.filter(c=>alive(c,v.n)).reduce((a,c)=>a+words(c),0))),maxC=Math.max(...R.map(v=>CL.filter(c=>alive(c,v.n)).length));
+  const u=(H-top-bot-g*maxC)/maxW;
+  /* per slice: y ranges for each clause */
+  const lay=R.map(v=>{let y=top,m={};CL.forEach(c=>{if(alive(c,v.n)){const h=words(c)*u;m[c.id]=[y,y+h];y+=h+g}});return m});
+  let ribs='',cols='',axis='';
+  const fc=c=>`var(--x-${person(c.by).floor})`;
+  for(let i=0;i<N-1;i++){const a=lay[i],b=lay[i+1],xa=X(i)+sw,xb=X(i+1),mx=(xa+xb)/2;
+    CL.forEach(c=>{if(a[c.id]&&b[c.id]){const [a0,a1]=a[c.id],[b0,b1]=b[c.id];
+      ribs+=`<path class="rib" data-c="${c.id}" d="M${xa},${a0} C${mx},${a0} ${mx},${b0} ${xb},${b0} L${xb},${b1} C${mx},${b1} ${mx},${a1} ${xa},${a1} Z" fill="${fc(c)}" opacity=".22"/>`}
+      else if(a[c.id]&&!b[c.id]){const [a0,a1]=a[c.id];/* a clause that ends: a frayed taper, and if it was a missed date, a tide line */
+      ribs+=`<path d="M${xa},${a0} L${xa+(xb-xa)*.35},${(a0+a1)/2} L${xa},${a1} Z" fill="${fc(c)}" opacity=".16"/>`}});}
+  /* carry the latest slice to now */
+  { const a=lay[N-1],xa=X(N-1)+sw;CL.forEach(c=>{if(a[c.id]){const [a0,a1]=a[c.id];ribs+=`<rect class="rib" data-c="${c.id}" x="${xa}" y="${a0}" width="${nowX-xa}" height="${a1-a0}" fill="${fc(c)}" opacity=".22"/>`}}) }
+  R.forEach((v,i)=>{const x=X(i);let blocks='';
+    CL.forEach(c=>{const m=lay[i][c.id];if(!m)return;const isNew=c.from===v.n&&v.n>1;
+      blocks+=`<rect x="${x}" y="${m[0]}" width="${sw}" height="${m[1]-m[0]}" fill="${fc(c)}" opacity="${isNew?.9:.6}"/>`;
+      if(isNew)blocks+=`<line x1="${x-px('--space-1')}" x2="${x-px('--space-1')}" y1="${m[0]}" y2="${m[1]}" stroke="var(--x-seam)"/><line x1="${x-px('--space-1')-2}" x2="${x-px('--space-1')-2}" y1="${m[0]}" y2="${m[1]}" stroke="var(--x-seam)"/>`;
+      if(c.missed&&c.to===v.n){blocks+=`<g class="tide-mk" data-why="tide-${c.id}"><line x1="${x+sw+px('--space-2')}" x2="${x+sw+px('--space-2')}" y1="${top-px('--space-2')}" y2="${H-bot}" stroke="var(--x-tide)" stroke-dasharray="1 3"/></g>`}});
+    cols+=`<g class="slice${i+1===sel?' sel':''}" data-i="${i}" tabindex="0" role="button" aria-label="Edit ${v.n}, ${fmt(v.date)}, ${esc(v.note)} by ${esc(person(v.by).name)}">${blocks}
+      <rect class="frame" x="${x-px('--space-1')}" y="${top-px('--space-3')}" width="${sw+px('--space-2')}" height="${H-bot-top+px('--space-4')}" rx="2"/>
+      <text class="lbl${i+1===sel?' lit':''}" x="${x+sw/2}" y="${top-px('--space-3')}" text-anchor="middle">r${v.n}</text>
+      <text class="lbl" x="${x+sw/2}" y="${H-bot+px('--space-4')}" text-anchor="middle">${mode==='date'||true?fmt(v.date):''}</text></g>`});
+  /* missed deadlines as tide lines on the date axis (where they fell due, by date spacing only) */
+  let tides='';if(mode==='date')DATA.deadlines.filter(d=>d.movedOn).forEach((d,k)=>{const x=l+(D(d.date)-t0)/(t1-t0)*(r-l-sw);
+    tides+=`<g class="mark" data-why="tide${k}" tabindex="0" role="button" aria-label="Tide line, due ${fmt(d.date)}, missed"><line x1="${x}" x2="${x}" y1="${top}" y2="${H-bot+px('--space-2')}" stroke="var(--x-tide)" stroke-dasharray="1 3"/>
+      <text class="lbl" x="${x}" y="${H-bot+px('--space-5')+px('--space-1')}" text-anchor="middle" style="fill:var(--x-tide)">due ${fmt(d.date)} · missed</text>
+      <rect x="${x-px('--space-2')}" y="${top}" width="${px('--space-4')}" height="${H-bot-top}" fill="transparent"/></g>`});
+  F.innerHTML=`<div class="clip" id="clip"><svg>${ribs}${cols}${tides}
+    <line x1="${nowX}" x2="${nowX}" y1="${top-px('--space-4')}" y2="${H-bot+px('--space-2')}" stroke="var(--x-now)"/>
+    <text class="lbl lit" x="${nowX+px('--space-2')}" y="${top}">${DATA.labels.now}</text>
+    <text class="lbl" x="${nowX+px('--space-2')}" y="${top+px('--space-4')}">${fmt(DATA.now)}</text>
+    <text class="lbl" x="${nowX+px('--space-2')}" y="${top+px('--space-5')+px('--space-3')}">same for</text>
+    <text class="lbl" x="${nowX+px('--space-2')}" y="${top+px('--space-6')+px('--space-3')}">${plural(days(R[N-1].date,DATA.now),'day')}</text>
+  </svg></div>`;
+  $$('.slice',F).forEach(e=>{e.addEventListener('click',()=>select(+e.dataset.i+1));e.addEventListener('keydown',k=>{if(k.key==='Enter'||k.key===' '){k.preventDefault();select(+e.dataset.i+1)}})});
+  $$('.rib',F).forEach(e=>{e.addEventListener('mouseenter',()=>hl(e.dataset.c));e.addEventListener('mouseleave',()=>hl(null))});
+}
+function hl(id){$$('.rib',F).forEach(e=>e.style.opacity=id==null?'':(e.dataset.c===id?.5:.08))}
+function readPane(){
+  const v=R[sel-1],p=person(v.by),prev=sel-1;
+  const parts=[];CL.forEach(c=>{const on=alive(c,v.n),was=prev>=1&&alive(c,prev);
+    if(on)parts.push(`<span class="c${c.from===v.n&&v.n>1?' new':''}${c.missed&&D(R[sel-1].date)>D(c.slot?DATA.deadlines.find(d=>'by '+fmt(d.date)===c.text)?.date:DATA.now)?' tide':''}" data-f="${person(c.by).floor}">${esc(c.text)}</span>`);
+    else if(was)parts.push(`<span class="c gone" title="${DATA.v3.gone}">${esc(c.text)}</span>`)});
+  const first=CL.filter(c=>alive(c,1)).length,now=CL.filter(c=>alive(c,v.n)).length,added=CL.filter(c=>!c.slot&&c.from>1&&c.from<=v.n).length,moved=CL.filter(c=>c.slot&&c.from>1&&c.from<=v.n).length;
+  $('#read').innerHTML=`<div class="card"><div class="eyebrow">r${v.n} of ${N} · ${fmt(v.date)} · <span class="who-${p.floor}">${esc(p.name)}</span></div>
+    <h2>${esc(v.note)}</h2><p class="ask">${parts.join(' ')}</p></div>
+    <div class="sum"><div><span class="micro">Clauses added</span><b>${added}</b></div><div><span class="micro">Deadline moved</span><b>${moved}×</b></div><div><span class="micro">Asked → this edit</span><b>${days(DATA.asked,v.date)}<small class="micro"> days</small></b></div></div>
+    <div class="hint">New words carry a seam (double underline) at the edit that added them. Removed words stay, struck through. Colour is the author's floor.</div>`;
+}
+function select(n){sel=Math.max(1,Math.min(N,n));$$('.slice',F).forEach((e,i)=>{e.classList.toggle('sel',i+1===sel);e.querySelector('.lbl').classList.toggle('lit',i+1===sel)});readPane()}
+function setMode(m){mode=m;$('#byRev').setAttribute('aria-pressed',m==='rev');$('#byDate').setAttribute('aria-pressed',m==='date');build();$('#clip').classList.add('in')}
+function whys(){
+  DATA.deadlines.filter(d=>d.movedOn).forEach((d,k)=>WHY['tide'+k]={k:'Tide line',t:`Due ${fmt(d.date)}, missed`,b:`The deadline clause was rewritten ${fmt(d.movedOn)}: ${esc(d.why)}`,since:`${fmt(d.date)}`,who:`${whoTag(DATA.intent.asker)} (the asker) moves deadlines`});
+}
+$('#ftitle').textContent=DATA.v3.title;
+const floorName={org:DATA.v3.orgLabel,department:DATA.intent.where[0],team:DATA.intent.where[1]};
+$('#legend').innerHTML=['org','department','team'].map(f=>`<span><i style="background:var(--x-${f})"></i>${esc(floorName[f])}</span>`).join('');
+$('#byRev').onclick=()=>setMode('rev');$('#byDate').onclick=()=>setMode('date');
+addEventListener('keydown',e=>{if(e.key==='ArrowRight')select(sel+1);if(e.key==='ArrowLeft')select(sel-1);if(e.key==='d'||e.key==='D')setMode(mode==='date'?'rev':'date')});
+addEventListener('resize',()=>{build();$('#clip').classList.add('in')});
+$('#top').innerHTML=header();whys();
+function reset(){sel=1;build();readPane();$('#clip').classList.remove('in')}
+function play(){$('#clip').classList.add('in');const st=ms('--motion-slow'),run=ms('--motion-run');
+  for(let k=2;k<=N;k++)later(()=>select(k),RM.matches?0:run*(k-1)/(N-1));
+  later(()=>{const el=$('[data-why=tide1]');if(el)showWhy(el,el.querySelector('text'))},run+st*2);}
+boot(reset,play);
+</script>
+</body>
+</html>

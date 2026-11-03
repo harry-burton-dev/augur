@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provenance · V5 ask in place</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<style>
+/* Proposed tokens (each listed under "needs token" in notes.md) */
+:root{
+  --x-type-micro: .6875rem;                 /* proposed --type-micro */
+  --x-stratum-mix: 34%;                     /* proposed --stratum-mix */
+  --x-past-dim: .5;                         /* proposed --time-past-dim */
+  --x-seam: color-mix(in srgb, var(--light) 80%, transparent);   /* proposed --mark-seam */
+  --x-fault: var(--warning);                /* proposed --mark-fault */
+  --x-hatch: repeating-linear-gradient(135deg, transparent 0 var(--space-1), var(--hairline-strong) var(--space-1) calc(var(--space-1) + 1px));  /* proposed --mark-stale-hatch */
+  --x-near-blur: 1.5px;                     /* cinematic --focus-near-blur, reused */
+  --x-near-dim: .72;
+  --x-glyph-w: calc(var(--space-8) - var(--space-4));   /* 100: word-sized strata */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+body{overflow:hidden}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink)}
+.keys{position:fixed;right:var(--edge);top:var(--edge);display:flex;gap:var(--space-3);align-items:center;font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:color-mix(in srgb,var(--slate-deep) 70%,transparent);border-right:1px solid var(--hairline);padding:var(--edge) var(--edge-tight);display:flex;flex-direction:column;gap:var(--space-1)}
+.rail .an{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);padding:var(--space-2);margin-bottom:var(--space-4)}
+.nav{text-decoration:none;display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav.on{background:var(--surface-raised);color:var(--ink)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.main{padding:var(--edge) var(--space-6);overflow:hidden}
+.main h1{margin:var(--space-2) 0 var(--space-1);font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.main .sub{font-size:var(--type-meta);color:var(--ink-muted);margin-bottom:var(--space-5)}
+
+.tbl{max-width:calc(var(--measure-wide) + var(--space-8));transition:none}
+.th,.tr{display:grid;grid-template-columns:var(--space-3) calc(var(--space-8) + var(--space-6)) minmax(0,1fr) calc(var(--space-8) + var(--space-4)) calc(var(--space-8) + var(--space-7));align-items:center;column-gap:var(--space-4)}
+.th{padding:0 var(--space-3) var(--space-2);border-bottom:1px solid var(--hairline)}
+.row{border-bottom:1px solid var(--hairline);transition:filter var(--motion-slow) var(--ease-standard),opacity var(--motion-slow) var(--ease-standard)}
+.tr{width:100%;min-height:var(--x-row);padding:0 var(--space-3);border-radius:var(--radius-key)}
+.tr:hover{background:color-mix(in srgb,var(--surface-raised) 50%,transparent)}
+.tr .a{font-size:var(--type-meta);color:var(--ink-muted)}
+.tr .v{display:flex;align-items:center;gap:var(--space-4);min-width:0}
+.tr .v b{font:400 var(--type-body)/1 var(--font-mono);color:var(--ink);white-space:nowrap}
+.tr .age{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.tr .age .stale{color:var(--ink);background:var(--x-hatch);padding:0 var(--space-1);border-radius:var(--radius-key)}
+.tr .src{font-size:var(--type-small);color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* read wear in the margin (Hill and Hollan): how much this fact is used, never by whom */
+.wear{display:flex;flex-direction:column;gap:1px;align-self:stretch;justify-content:center}
+.wear i{display:block;height:2px;border-radius:1px;background:var(--ink-muted)}
+.beacon{display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--green);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--green) 70%,transparent)}
+svg.glyph{width:var(--x-glyph-w);height:var(--space-4);flex:none;overflow:visible}
+
+/* the answer opens in place, under the value */
+.why{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--motion-slow) var(--ease-out)}
+.why > div{overflow:hidden}
+.row.open .why{grid-template-rows:1fr}
+.row.open .tr{background:var(--surface-raised)}
+.row.open{border-bottom-color:transparent}
+.ans{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-6)) minmax(0,1fr) calc(var(--measure-card) - var(--space-6));column-gap:var(--space-5);padding:var(--space-4) var(--space-3) var(--space-5) calc(var(--space-3) * 2 + var(--space-4));
+  background:linear-gradient(var(--surface-raised),var(--surface-inset));border-radius:0 0 var(--radius-inset) var(--radius-inset)}
+.ans svg{width:100%;height:var(--x-col-h);overflow:visible}
+.ans h2{margin:0 0 var(--space-2);font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.ans p{margin:0 0 var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.ans p.m{color:var(--ink-muted)}
+.ans .stale{background:var(--x-hatch);padding:0 var(--space-1);border-radius:var(--radius-key)}
+.ans ol{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.ans ol li{display:grid;grid-template-columns:calc(var(--space-7) + var(--space-2)) 1fr;gap:var(--space-2);color:var(--ink-muted)}
+.ans ol li b{font-weight:400;color:var(--ink)}
+.ans ol li .d{font-family:var(--font-mono)}
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);margin:var(--space-2) var(--space-2) 0 0}
+.btn.go{border-color:color-mix(in srgb,var(--green) 50%,transparent);color:var(--green)}
+/* rack focus: the rest of the record steps back while one value answers */
+.tbl.asking .row:not(.open){filter:blur(var(--x-near-blur)) saturate(.6) brightness(var(--x-near-dim))}
+.tbl.asking .row:not(.open):hover,.tbl.asking .row:not(.open):focus-within{filter:none}
+.dep{opacity:0;transition:opacity var(--motion-base) var(--ease-out)}
+.dep.in{opacity:var(--op,1)}
+@media (prefers-reduced-motion: reduce){.why{transition:none}.tbl.asking .row:not(.open){filter:brightness(var(--x-near-dim))}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="Data Atlas">
+    <div class="an" id="appname"></div>
+    <div id="navs"></div>
+  </nav>
+  <main class="main">
+    <div class="eyebrow" id="crumb"></div>
+    <h1 id="ename"></h1>
+    <div class="sub" id="esub"></div>
+    <div class="tbl" id="tbl" role="table" aria-label="Facts">
+      <div class="th eyebrow" role="row"><span></span><span>Fact</span><span>Value · its strata</span><span>Verified</span><span>Source</span></div>
+      <div id="rows"></div>
+    </div>
+  </main>
+</div>
+<div class="keys"><span><span class="kbd">↑</span> <span class="kbd">↓</span> fact</span><span><span class="kbd">?</span> or <span class="kbd">Enter</span> why, since when</span><span><span class="kbd">Esc</span> close</span><span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Provenance · V5</b> ask in place: every value carries word-sized strata and opens its own history under itself · Tufte sparklines, Hill and Hollan read wear</div>
+<script src="../../../_kit/icons.js"></script>
+<script>
+/* ------------------------------------------------------------------ sample data (one object) */
+const DATA = {
+  now: '2026-11-02', start: '2023-03-01',
+  app: 'Data Atlas',
+  nav: [ { label: 'Entities', icon: 'boxes', n: 1284 }, { label: 'Suppliers', icon: 'truck', n: 212, on: true }, { label: 'Triage', icon: 'inbox', n: 7 }, { label: 'Disputes', icon: 'git-fork', n: 1 }, { label: 'Sources', icon: 'database', n: 14 } ],
+  viewer: { name: 'Harry', teams: ['Supplier data'] },
+  entity: { type: 'Supplier', name: 'Kestrel Logistics', owner: 'Supplier data' },
+  wearNote: 'Uses this quarter, counted, never named',
+  sources: {
+    register: { label: 'Companies register', floor: 'org' },
+    report: { label: 'Annual report', floor: 'department' },
+    questionnaire: { label: 'Supplier questionnaire', floor: 'team' },
+    payroll: { label: 'Payroll extract', floor: 'department' },
+    contract: { label: 'Contract system', floor: 'team' },
+    you: { label: 'Entered by hand', floor: 'you' },
+    web: { label: 'Web profile crawl', floor: null }
+  },
+  facts: [
+    { attr: 'Headcount', unit: 'employees', refreshMonths: 12, uses: 231, record: [
+      { kind: 'value', from: '2023-03-06', value: 240, source: 'register', by: 'Register import', note: 'First record' },
+      { kind: 'value', from: '2023-09-18', value: 265, source: 'report', by: 'Dana Okafor', note: 'Annual report 2023, page 4' },
+      { kind: 'rejected', at: '2023-12-02', value: 268, source: 'web', by: 'Dana Okafor', reason: 'Rounded copy of the annual report' },
+      { kind: 'gap', from: '2024-01-10', to: '2024-11-04', reason: 'Register feed paused (licence lapsed)' },
+      { kind: 'value', from: '2024-11-04', value: 265, source: 'report', by: 'Sam Reyes', note: 'Re-checked after the gap' },
+      { kind: 'rejected', at: '2024-11-04', value: 410, source: 'web', by: 'Sam Reyes', reason: 'Counts contractors, not employees' },
+      { kind: 'value', from: '2025-02-20', value: 312, source: 'questionnaire', by: 'Sam Reyes', note: 'Questionnaire, Q1 2025' },
+      { kind: 'dispute', from: '2025-06-03', to: '2025-08-14', sides: [ { value: 290, party: 'Procurement', floor: 'team' }, { value: 312, party: 'Finance', floor: 'department' } ] },
+      { kind: 'value', from: '2025-08-14', value: 305, source: 'payroll', by: 'Ines Duarte', seam: true, note: 'Payroll extract, 31 Jul 2025; settled the dispute' },
+      { kind: 'pending', at: '2026-04-22', value: 330, source: 'report', by: 'Annual report import', note: 'Annual report 2025, page 6' } ] },
+    { attr: 'Annual revenue', unit: 'GBP m', refreshMonths: 12, uses: 412, record: [
+      { kind: 'value', from: '2023-03-06', value: 38.2, source: 'register', by: 'Register import', note: 'Filed accounts 2022' },
+      { kind: 'value', from: '2023-09-18', value: 41.0, source: 'report', by: 'Dana Okafor', note: 'Annual report 2023' },
+      { kind: 'rejected', at: '2024-06-12', value: 52.0, source: 'web', by: 'Sam Reyes', reason: 'Group figure, not this company' },
+      { kind: 'value', from: '2024-09-30', value: 44.6, source: 'report', by: 'Sam Reyes', note: 'Annual report 2024' },
+      { kind: 'value', from: '2025-12-01', value: 47.9, source: 'report', by: 'Sam Reyes', note: 'Annual report 2025' } ] },
+    { attr: 'Registered office', unit: '', refreshMonths: 24, uses: 18, record: [
+      { kind: 'value', from: '2023-03-06', value: 'Leeds', source: 'register', by: 'Register import', note: 'Register entry' },
+      { kind: 'value', from: '2025-04-07', value: 'York', source: 'register', by: 'Register import', note: 'Change of address filed' } ] },
+    { attr: 'Payment terms', unit: 'days', refreshMonths: 6, uses: 96, record: [
+      { kind: 'value', from: '2023-05-02', value: 60, source: 'contract', by: 'Contract system', note: 'Framework agreement' },
+      { kind: 'dispute', from: '2024-02-01', to: '2024-03-20', sides: [ { value: 30, party: 'Procurement', floor: 'team' }, { value: 60, party: 'Finance', floor: 'department' } ] },
+      { kind: 'value', from: '2024-03-20', value: 45, source: 'contract', by: 'Ines Duarte', seam: true, note: 'Contract variation 3' },
+      { kind: 'gap', from: '2025-01-15', to: '2026-11-02', reason: 'Contract system no longer syncs this field' } ] },
+    { attr: 'Primary contact', unit: '', refreshMonths: 6, uses: 54, record: [
+      { kind: 'value', from: '2023-03-20', value: 'A. Brooks', source: 'you', by: 'Harry', note: 'Entered by hand' },
+      { kind: 'value', from: '2024-05-13', value: 'M. Chen', source: 'questionnaire', by: 'Sam Reyes', note: 'Questionnaire' },
+      { kind: 'rejected', at: '2025-03-03', value: 'J. Patel', source: 'web', by: 'Sam Reyes', reason: 'Left the company' },
+      { kind: 'value', from: '2026-07-01', value: 'R. Silva', source: 'questionnaire', by: 'Sam Reyes', note: 'Questionnaire Q2 2026' } ] },
+    { attr: 'Risk rating', unit: '', refreshMonths: 6, uses: 140, record: [
+      { kind: 'value', from: '2023-04-11', value: 'Low', source: 'contract', by: 'Risk review', note: 'Onboarding review' },
+      { kind: 'value', from: '2025-06-03', value: 'Medium', source: 'contract', by: 'Risk review', note: 'Raised during the headcount dispute' },
+      { kind: 'value', from: '2026-09-09', value: 'Low', source: 'contract', by: 'Risk review', note: 'Review closed' } ] }
+  ],
+  demoOpen: 0
+};
+
+/* ------------------------------------------------------------------ helpers */
+const $ = s => document.querySelector(s);
+const D = s => new Date(s + 'T00:00:00Z');
+const days = (a, b) => Math.round((D(b) - D(a)) / 864e5);
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmt = s => { const d = D(s); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+const fmtS = s => { const d = D(s); return MON[d.getUTCMonth()] + ' ' + String(d.getUTCFullYear()).slice(2); };
+const age = n => n < 45 ? n + ' days' : n < 540 ? Math.round(n / 30.4) + ' months' : (n / 365).toFixed(1) + ' years';
+const ageS = n => n < 45 ? n + 'd' : n < 540 ? Math.round(n / 30.4) + 'mo' : (n / 365).toFixed(1) + 'y';
+const addMonths = (s, m) => { const d = D(s); d.setUTCMonth(d.getUTCMonth() + m); return d.toISOString().slice(0, 10); };
+const css = v => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v));
+const FV = { org: '--floor-org-high', department: '--floor-department-high', team: '--floor-team-high', you: '--floor-you-high' };
+const fill = f => f ? `color-mix(in srgb, var(${FV[f]}) var(--x-stratum-mix), var(--slate-deep))` : 'color-mix(in srgb, var(--ink-muted) 22%, var(--slate-deep))';
+const edge = f => f ? `var(${FV[f]})` : 'var(--ink-muted)';
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const canTriage = DATA.viewer.teams.includes(DATA.entity.owner);
+const HATCH = `<pattern id="h" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" style="stroke:var(--hairline-strong);stroke-width:1.5"/></pattern>`;
+
+function derive(f) {
+  const vals = [];
+  f.record.forEach((r, i) => { if (r.kind !== 'value') return; const n = f.record.slice(i + 1).find(q => q.kind === 'value' || q.kind === 'gap' || q.kind === 'dispute'); vals.push({ ...r, to: n ? n.from : DATA.now }); });
+  const cur = vals[vals.length - 1];
+  const openGap = f.record.find(r => r.kind === 'gap' && r.to === DATA.now);
+  const staleFrom = openGap ? openGap.from : addMonths(cur.from, f.refreshMonths);
+  const stale = D(DATA.now) >= D(staleFrom);
+  const pending = f.record.find(r => r.kind === 'pending');
+  return { vals, cur, staleFrom, stale, pending, openGap };
+}
+
+/* word-sized strata: the whole history at the size of a word */
+function glyph(f) {
+  const d = derive(f), W = 100, H = 16, x = s => days(DATA.start, s) / days(DATA.start, DATA.now) * W;
+  let s = `<svg class="glyph" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><defs>${HATCH}</defs>`;
+  d.vals.forEach(v => { s += `<rect x="${x(v.from)}" y="5" width="${Math.max(1, x(v.to) - x(v.from))}" height="7" style="fill:${fill(DATA.sources[v.source].floor)}"/>`; if (v.seam) s += `<rect x="${x(v.from) - .6}" y="3" width="1.2" height="11" style="fill:var(--x-seam)"/>`; });
+  f.record.forEach(r => {
+    if (r.kind === 'gap') s += `<rect x="${x(r.from)}" y="5" width="${x(r.to) - x(r.from)}" height="7" fill="url(#h)" style="stroke:var(--hairline-strong);stroke-width:.6"/>`;
+    if (r.kind === 'dispute') s += `<rect x="${x(r.from)}" y="4" width="${Math.max(2, x(r.to) - x(r.from))}" height="9" style="fill:none;stroke:var(--x-fault);stroke-width:1"/>`;
+    if (r.kind === 'rejected') s += `<circle cx="${x(r.at)}" cy="1.8" r="1.5" style="fill:none;stroke:var(--ink-muted);stroke-width:.8"/>`;
+  });
+  if (d.stale && !d.openGap) s += `<rect x="${x(d.staleFrom)}" y="5" width="${x(DATA.now) - x(d.staleFrom)}" height="7" fill="url(#h)"/>`;
+  s += `<rect x="${W - .6}" y="0" width="1.2" height="${H}" style="fill:var(--light);opacity:.6"/></svg>`;
+  return s;
+}
+
+/* the column that opens under a value: youngest on top */
+function column(f, H) {
+  const d = derive(f), W = 150, cw = 56, x0 = 0;
+  const first = f.record[0].from || f.record[0].at;
+  const y = s => (1 - days(first, s) / days(first, DATA.now)) * (H - 8) + 4;
+  const op = s => (1 - days(s, DATA.now) / days(first, DATA.now) * (1 - css('--x-past-dim'))).toFixed(2);
+  let s = `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs>${HATCH}</defs>`;
+  let k = 0;
+  d.vals.forEach(v => {
+    s += `<g class="dep" style="--op:${op(v.to)}" data-k="${k++}"><rect x="${x0}" y="${y(v.to)}" width="${cw}" height="${Math.max(1, y(v.from) - y(v.to))}" style="fill:${fill(DATA.sources[v.source].floor)}"/>` +
+      `<line x1="${x0}" x2="${x0 + cw}" y1="${y(v.from)}" y2="${y(v.from)}" style="stroke:${v.seam ? 'var(--x-seam)' : edge(DATA.sources[v.source].floor)};stroke-opacity:${v.seam ? 1 : .5};stroke-width:${v.seam ? 1.5 : 1}"/>` +
+      (y(v.from) - y(v.to) > 13 ? `<text x="${cw + 8}" y="${(y(v.from) + y(v.to)) / 2 + 4}" style="fill:var(--ink);font:400 var(--type-small) var(--font-mono)">${v.value}</text>` : '') + `</g>`;
+  });
+  f.record.forEach(r => {
+    if (r.kind === 'gap') s += `<g class="dep" data-k="${k++}"><rect x="${x0}" y="${y(r.to)}" width="${cw}" height="${y(r.from) - y(r.to)}" style="fill:var(--slate-deep)"/><rect x="${x0}" y="${y(r.to)}" width="${cw}" height="${y(r.from) - y(r.to)}" fill="url(#h)"/><text x="${cw + 8}" y="${(y(r.from) + y(r.to)) / 2 + 4}" style="fill:var(--ink-muted);font:400 var(--x-type-micro) var(--font-mono);letter-spacing:var(--tracking-caps)">NO RECORD</text></g>`;
+    if (r.kind === 'dispute') s += `<g class="dep" data-k="${k++}"><rect x="${x0 - 3}" y="${y(r.to)}" width="${cw / 2}" height="${y(r.from) - y(r.to)}" style="fill:${fill(r.sides[0].floor)}"/><rect x="${x0 + cw / 2 + 3}" y="${y(r.to) - 3}" width="${cw / 2}" height="${y(r.from) - y(r.to)}" style="fill:${fill(r.sides[1].floor)}"/><path d="M${cw / 2 - 3},${y(r.to) - 4} L${cw / 2 + 3},${(y(r.to) + y(r.from)) / 2} L${cw / 2 - 2},${y(r.from) + 4}" style="fill:none;stroke:var(--x-fault);stroke-width:1.25"/></g>`;
+    if (r.kind === 'rejected') s += `<g class="dep" data-k="${k++}"><circle cx="${x0 - 10}" cy="${y(r.at)}" r="3" style="fill:none;stroke:var(--ink-muted)"/></g>`;
+  });
+  if (d.stale && !d.openGap) s += `<g class="dep" data-k="${k++}"><rect x="${x0}" y="${y(DATA.now)}" width="${cw}" height="${y(d.staleFrom) - y(DATA.now)}" fill="url(#h)"/><line x1="${x0 - 4}" x2="${x0 + cw + 4}" y1="${y(d.staleFrom)}" y2="${y(d.staleFrom)}" style="stroke:var(--ink-muted);stroke-dasharray:2 2"/></g>`;
+  s += `<line x1="${x0 - 14}" x2="${x0 + cw + 4}" y1="${y(DATA.now)}" y2="${y(DATA.now)}" style="stroke:var(--light);stroke-opacity:.6"/>`;
+  if (d.pending) s += `<g class="dep" data-k="${k++}"><rect x="${x0 + 6}" y="${y(DATA.now) - 9}" width="${cw - 12}" height="6" rx="2" style="fill:color-mix(in srgb,var(--green) 35%,var(--slate-deep));stroke:var(--green)"/></g>`;
+  return s + '</svg>';
+}
+
+function answer(f) {
+  const d = derive(f), c = d.cur, src = DATA.sources[c.source];
+  const u = f.unit ? ' ' + f.unit : '';
+  const log = f.record.map(r => {
+    const t = r.from || r.at;
+    const w = r.kind === 'value' ? `<b>${r.value}</b> accepted · ${DATA.sources[r.source].label} · ${r.by}` : r.kind === 'rejected' ? `<b>${r.value}</b> rejected · ${r.reason.toLowerCase()}` : r.kind === 'gap' ? `<b>no record</b> for ${age(days(r.from, r.to))} · ${r.reason.toLowerCase()}` : r.kind === 'dispute' ? `<b>dispute</b> · ${r.sides.map(s => s.party + ' ' + s.value).join(' vs ')}` : `<b style="color:var(--green)">${r.value}</b> proposed · waiting ${days(r.at, DATA.now)} days`;
+    return `<li><span class="d">${fmtS(t)}</span><span>${w}</span></li>`;
+  }).reverse().join('');
+  return `<div class="col">${column(f, css('--x-col-h'))}</div>
+    <div><div class="eyebrow">Why ${c.value}, and since when?</div>
+      <h2>${c.value}${u} since ${fmt(c.from)}</h2>
+      <p>From the ${src.label.toLowerCase()}, accepted by ${c.by}. ${c.note}.</p>
+      ${d.stale ? `<p><span class="stale">${d.openGap ? 'No source since ' + fmt(d.openGap.from) : 'Stale since ' + fmt(d.staleFrom)}</span> · ${d.openGap ? d.openGap.reason + '.' : 're-verified every ' + f.refreshMonths + ' months.'} The ${DATA.entity.owner} team can refresh it${canTriage ? ', and you are in it' : ''}.</p>` : `<p class="m">Verified; next check ${fmt(addMonths(c.from, f.refreshMonths))}.</p>`}
+      <p class="m">${f.uses} uses this quarter in documents and reports (${DATA.wearNote.toLowerCase()}).</p>
+      ${d.pending ? `<button class="btn go"><span class="beacon"></span>Review proposal: ${d.pending.value}</button>` : ''}<button class="btn">Refresh from source</button></div>
+    <div><div class="eyebrow" style="margin-bottom:var(--space-2)">The record</div><ol>${log}</ol></div>`;
+}
+
+/* ------------------------------------------------------------------ render */
+let open = -1;
+function render() {
+  document.documentElement.style.setProperty('--x-row', (innerHeight < 850 ? 48 : 56) + 'px');
+  document.documentElement.style.setProperty('--x-col-h', (innerHeight < 850 ? 210 : 260) + 'px');
+  const mx = Math.max(...DATA.facts.map(f => f.uses));
+  $('#rows').innerHTML = DATA.facts.map((f, i) => {
+    const d = derive(f);
+    const marks = Math.max(1, Math.round(f.uses / mx * 8));
+    return `<div class="row" role="row" data-i="${i}">
+      <button class="tr" aria-expanded="false" aria-label="${f.attr}: ${d.cur.value}${f.unit ? ' ' + f.unit : ''}. Ask why.">
+        <span class="wear" title="${f.uses} uses this quarter">${'<i></i>'.repeat(marks)}</span>
+        <span class="a">${f.attr}</span>
+        <span class="v"><b>${d.cur.value}${f.unit ? ' <span style="color:var(--ink-muted);font-size:var(--type-small)">' + f.unit + '</span>' : ''}</b>${glyph(f)}${d.pending ? '<span class="beacon" title="A proposal is waiting"></span>' : ''}</span>
+        <span class="age">${d.stale ? '<span class="stale">' + (d.openGap ? 'no source ' : 'stale ') + ageS(days(d.staleFrom, DATA.now)) + '</span>' : ageS(days(d.cur.from, DATA.now)) + ' ago'}</span>
+        <span class="src">${DATA.sources[d.cur.source].label} · ${d.cur.by}</span>
+      </button>
+      <div class="why" role="region"><div><div class="ans" data-a="${i}"></div></div></div>
+    </div>`;
+  }).join('');
+  /* wear marks dim with fewer uses */
+  document.querySelectorAll('.wear').forEach((w, i) => w.style.opacity = (.35 + .65 * DATA.facts[i].uses / mx).toFixed(2));
+  document.querySelectorAll('.tr').forEach((b, i) => { b.onclick = () => toggle(i); b.onfocus = () => cur = i; });
+}
+let cur = 0;
+function toggle(i, force) {
+  const rows = document.querySelectorAll('.row');
+  const willOpen = force !== undefined ? force : open !== i;
+  rows.forEach(r => { r.classList.remove('open'); r.querySelector('.tr').setAttribute('aria-expanded', 'false'); });
+  $('#tbl').classList.remove('asking');
+  open = -1;
+  if (!willOpen) return;
+  open = i; cur = i;
+  const r = rows[i], a = r.querySelector('.ans');
+  a.innerHTML = answer(DATA.facts[i]);
+  r.classList.add('open'); r.querySelector('.tr').setAttribute('aria-expanded', 'true');
+  $('#tbl').classList.add('asking');
+  const deps = [...a.querySelectorAll('.dep')];
+  const step = reduce ? 0 : css('--motion-instant');
+  deps.forEach((g, k) => setTimeout(() => g.classList.add('in'), css('--motion-quick') + k * step));
+}
+
+/* ------------------------------------------------------------------ demo */
+let timers = [];
+function demo() {
+  timers.forEach(clearTimeout); timers = [];
+  render(); open = -1;
+  timers.push(setTimeout(() => { toggle(DATA.demoOpen, true); document.querySelectorAll('.tr')[DATA.demoOpen].focus({ preventScroll: true }); }, css('--motion-run')));
+}
+addEventListener('keydown', e => {
+  const trs = document.querySelectorAll('.tr');
+  if (e.key === 'r' || e.key === 'R') demo();
+  else if (e.key === 'Escape') { toggle(open, false); trs[cur].focus(); }
+  else if (e.key === '?') toggle(cur, true);
+  else if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(trs.length - 1, cur + 1); trs[cur].focus(); if (open >= 0) toggle(cur, true); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); trs[cur].focus(); if (open >= 0) toggle(cur, true); }
+});
+$('#appname').textContent = DATA.app;
+$('#navs').innerHTML = DATA.nav.map(n => `<a class="nav${n.on ? ' on' : ''}" href="#"><i data-lucide="${n.icon}" data-size="16"></i>${n.label}<span class="n">${n.n}</span></a>`).join('');
+Icons.hydrate();
+$('#crumb').textContent = DATA.app + ' · ' + DATA.entity.type;
+$('#ename').textContent = DATA.entity.name;
+$('#esub').textContent = DATA.facts.length + ' facts · owned by the ' + DATA.entity.owner + ' team · margin marks show use, not users';
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { const o = open; render(); if (o >= 0) toggle(o, true); }, 100); });
+demo();
+</script>
+</body>
+</html>

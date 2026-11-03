@@ -1,5 +1,12 @@
 # @augur/service-kit
 
+## 0.11.0
+
+### Minor Changes
+
+- 137791c: OpenTelemetry for every service (ADR 0034): `@augur/service-kit/telemetry` sends traces, metrics and logs over OTLP once `OTEL_EXPORTER_OTLP_ENDPOINT` names a collector, and does nothing until then. Compose loads it before each Node service and has an optional `observability` profile with Grafana's all-in-one stack. See docs/observability.md.
+- 2021f8a: Deployment admins now hear in the shell when a new AUGUR or app release is available, and deployment admins and admins hear when an upgrade or install finishes, fails or goes back by itself (ADR 0044). Platform services can address a notification to an `audience` such as `role:deployment-admin`, worked out by identity as it's sent, and any sender can give one a `key` so each person is told that news once (events contract 1.7.0, identity contract 1.14.0).
+
 ## 0.10.0
 
 ### Minor Changes

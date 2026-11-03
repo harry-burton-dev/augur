@@ -1,5 +1,37 @@
 # @augur/registry
 
+## 0.14.0
+
+### Minor Changes
+
+- b9e2818: Installing, upgrading or removing an app and changing how it takes new releases need the deployment-admin role, and changing how any unit takes updates asks for a fresh sign-in (ADR 0022, PER-200).
+- 245ee83: Upgrading AUGUR, going back to an earlier release, taking back a waiting upgrade and changing how a unit takes updates (policy, pin, windows) need the `deployment-admin` role (ADR 0022). A refusal says so as `requiredRole: 'deployment-admin'`, so the Upgrade Centre can name the role.
+- 9e88e11: The registry reports what the deployment runs to the company's Backstage, signed with the deployment's own key, after each change and once a day, or exports it as a file for an air-gapped server (ADR 0019). Set DEPLOYMENT_ID (and PORTAL_URL) in .env to turn it on; DEPLOYMENT_REPORTING=off turns it off.
+- 3e9a46a: Each unit (AUGUR and every installed app) has a desired state: policy, how far Automatic goes, a semver pin and weekly upgrade windows in the deployment's time zone (ADR 0020). AUGUR on production installs patch releases by itself in Sunday's 02:00 window unless an admin changes that; apps keep their channel and policy. New `GET /platform/overview` lists every unit with its record, what Automatic does next and what needs an admin; failed and went-back results stay in Needs you until an admin marks them looked at, for every admin. DEPLOYMENT_TIME_ZONE sets the time zone.
+- 1743f40: Automatic waits until an admin has upgraded AUGUR on a server once, and a 0.x minor counts as a major for AUGUR and apps (ADR 0020, amended). ADR 0045 is accepted.
+- 7dffd91: A watch too quiet to judge errors by keeps going lightly until AUGUR's services have had 20 calls, for up to a day. A problem it finds then shows in Needs you and doesn't go back by itself (ADR 0020, amended).
+- 7aa2c19: A service call that names no floor is checked on the organisation's floor, as the gateway already does, so an app that is off for the organisation can't act everywhere by naming none. Identity's `/v1/workspaces/org` names the organisation's floor.
+- 3d000f8: After an upgrade to a newer release, the updater watches it for 10 minutes before calling it done: sign-in must keep answering and no more than 5% of the gateway's calls may fail (ADR 0020). If either fails it goes back by itself, unless a breaking release lies between, when it leaves the release running and says so. The registry asks for the watch with each forward upgrade, and the new watch step is listed.
+- eaf538e: A new build of an app version's frontend now takes the old build's place instead of being refused. Each build is kept in a folder of its own (`/apps/<id>/<version>_<digest>/`), so browsers, which keep a folder for good, load the new one straight away. Before this, the workbench and any server that got a rebuilt pillar app (Artifacts, Data Atlas, Explorer) without a version change kept serving the first build it was given: the registry answered 409 and the app's service only logged it. Frontends kept before this stay where they are until their app gives a new build, which happens on its next start. Migration 019 adds the folder.
+- d64d724: SDK 1.10: a generic `Ref` and `EntityBinding` for apps that bind their things to entities (ADR 0025), an optional reserved `marking` on every reference, and a reserved `ctx.focus` with a `focus` manifest field (ADR 0029). Nothing sets or enforces either yet. The registry accepts `focus` in a manifest.
+- 5fec7d8: The registry checks the release feed's cosign signature and expiry before it believes it, and turns down an unsigned, tampered or expired feed (ADR 0017). Releases can be halted with the new Halt rollout workflow: a halted release is listed with its reason but never offered, chosen or installed, and a server running one is told where to go. The Upgrade Centre says how far the feed is trusted and shows halted releases. Mirrors pass halt marks on.
+- 2021f8a: Deployment admins now hear in the shell when a new AUGUR or app release is available, and deployment admins and admins hear when an upgrade or install finishes, fails or goes back by itself (ADR 0044). Platform services can address a notification to an `audience` such as `role:deployment-admin`, worked out by identity as it's sent, and any sender can give one a `key` so each person is told that news once (events contract 1.7.0, identity contract 1.14.0).
+- 8b6525f: The Upgrade Centre opens as its own app at /upgrades (ADR 0030): an overview (Needs you, this deployment, units, next window, last checked), a page for AUGUR and each installed app (how it moves, what is on offer, going back) and the history. Changes still go through Admin, Upgrade Centre until the change flow ships.
+
+### Patch Changes
+
+- 7bb3f92: An app upgrade is watched for 5 minutes after the switch, while the old version still runs. If the new version stops answering, the runner goes back to the old one by itself.
+- 975801a: AUGUR's repository is about to be renamed from `im-platform`. The updater and registry now take AUGUR's releases, dev builds and release feed signed under either name, and an app built in AUGUR's repository counts as the same publisher under both. Images and the feed stay at `ghcr.io/harry-burton-dev/im-platform`, so nothing on a server changes. A server needs this release before the rename (docs/upgrade.md).
+- 23a2f8f: Each platform service and Keycloak connects to Postgres with its own login, which owns only its own schema (Keycloak: its own database). The storage job makes the logins from `PLATFORM_DATABASE_LOGINS` and the `*_DATABASE_PASSWORD` settings, and hands each one what its service made as the admin login. The services make their schema only when it isn't there, since their own logins may not create schemas.
+- 6a7d54b: A server built from source (compose.build.yml) says so: the registry reports `running.build: 'source'`, and the Upgrade Centre and Admin show AUGUR as built from source, based on the last release, instead of looking like an out-of-date release.
+- dbcb6b9: The Upgrade Centre opens again: its manifest entry asked for SDK ^1.10.0, which this AUGUR doesn't speak until the next release, so the shell wouldn't open it. It now asks for ^1.9.0, and a test checks every platform app asks for an SDK its own AUGUR speaks.
+- Updated dependencies [137791c]
+- Updated dependencies [fccb126]
+- Updated dependencies [d64d724]
+- Updated dependencies [2021f8a]
+  - @augur/service-kit@0.11.0
+  - @augur/mfe-sdk@1.10.0
+
 ## 0.13.1
 
 ### Patch Changes

@@ -1,7 +1,7 @@
 ---
 batch: 1
 kind: steered
-concepts: [periphery-channel, dark-when-normal]
+concepts: [periphery-channel, dark-when-normal, time-is-matter]
 ---
 
 # Prompt B: Room tone. Sound as a calm second channel.
@@ -101,3 +101,8 @@ Harry can judge annoyance honestly.
 - Which sounds help screen reader users, and which would clash with a
   screen reader's own speech?
 - What does an open-plan office or a shared screen in a meeting need?
+
+## Carry from earlier runs
+Read `design-lab/concepts/README.md`. In particular:
+- `time-is-matter` (wear and time run): history never glows; the sound version is that the past is silent. Only what needs you makes a sound.
+- `the-record-has-edges`: a sync or source going silent is a state worth hearing when it changes.

@@ -1,7 +1,7 @@
 ---
 batch: 1
 kind: steered
-concepts: [honest-blank, focal-planes]
+concepts: [honest-blank, focal-planes, past-under-water, overview-rung, the-record-has-edges]
 ---
 
 # Prompt D: Data as landscape. Cartography for an organisation.
@@ -86,3 +86,9 @@ answer in each.
 - Cost: SVG vs canvas for a 2,000-node org, and what degrades gracefully.
 - Data the shell doesn't have yet (load per team, confidence per fact,
   dependencies between intents).
+
+## Carry from earlier runs
+Read `design-lab/concepts/README.md`. In particular:
+- `past-under-water` (wear and time run): one water plane for the past; on a map, sea level can be "now".
+- `overview-rung`: one cell per object for any large scope, then step down.
+- `the-record-has-edges`: "unsurveyed" and "no record" as different marks from "stale".

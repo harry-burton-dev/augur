@@ -1,5 +1,36 @@
 # @augur/admin
 
+## 0.12.1
+
+### Patch Changes
+
+- Updated dependencies [9e021dd]
+  - @augur/app-kit@0.3.0
+
+## 0.12.0
+
+### Minor Changes
+
+- 1abdc90: Admin is on React and Quill (PER-243), in the three-column frame with its sections in the rail and the Upgrade Centre one press away. Its Upgrade Centre page has gone, as ADR 0030 said it would after one release: what was the Updates screen is now **Dev to production**, showing the line from dev to production and sending you to the Upgrade Centre to upgrade, hold or go back. Status's "a release is out" note opens the Upgrade Centre too. **Go back** on an installed app now opens its confirmation; before, it did nothing for any version other than the newest.
+- 5fec7d8: The registry checks the release feed's cosign signature and expiry before it believes it, and turns down an unsigned, tampered or expired feed (ADR 0017). Releases can be halted with the new Halt rollout workflow: a halted release is listed with its reason but never offered, chosen or installed, and a server running one is told where to go. The Upgrade Centre says how far the feed is trusted and shows halted releases. Mirrors pass halt marks on.
+
+### Patch Changes
+
+- 7bb3f92: An app upgrade is watched for 5 minutes after the switch, while the old version still runs. If the new version stops answering, the runner goes back to the old one by itself.
+- b9e2818: Installing, upgrading or removing an app and changing how it takes new releases need the deployment-admin role, and changing how any unit takes updates asks for a fresh sign-in (ADR 0022, PER-200).
+- 3d000f8: After an upgrade to a newer release, the updater watches it for 10 minutes before calling it done: sign-in must keep answering and no more than 5% of the gateway's calls may fail (ADR 0020). If either fails it goes back by itself, unless a breaking release lies between, when it leaves the release running and says so. The registry asks for the watch with each forward upgrade, and the new watch step is listed.
+- 6a7d54b: A server built from source (compose.build.yml) says so: the registry reports `running.build: 'source'`, and the Upgrade Centre and Admin show AUGUR as built from source, based on the last release, instead of looking like an out-of-date release.
+- Updated dependencies [527a413]
+- Updated dependencies [f8e9b46]
+- Updated dependencies [da54ae3]
+- Updated dependencies [7c8027d]
+- Updated dependencies [d500567]
+- Updated dependencies [a8854e2]
+- Updated dependencies [fccb126]
+- Updated dependencies [d64d724]
+  - @augur/app-kit@0.2.0
+  - @augur/mfe-sdk@1.10.0
+
 ## 0.11.0
 
 ### Minor Changes

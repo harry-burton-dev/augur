@@ -56,4 +56,4 @@ turns up a strong concept, the next batch steers on it like any other.
 | Run | Prompt | Result |
 |---|---|---|
 | [2026-11-02 cinematic](runs/2026-11-02-cinematic/) | cinematic and instrument-panel UI | 42 prototypes; shortlist led by the light language, focal planes, radial menu, urgent path |
-| [2026-11-02 wear and time](runs/2026-11-02-wear-and-time/) | history as a material | in progress |
+| [2026-11-02 wear and time](runs/2026-11-02-wear-and-time/) | history as a material | 42 prototypes; shortlist led by one time scale and now line, visible repairs (seams), "why, and since when?" in place, back after two weeks |

@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intent ledger</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ======================================================================
+   Proposed tokens (time language). Each is listed in notes.md "Needs".
+   Derived from kit tokens only: no new hex values, no new ms values.
+   ====================================================================== */
+:root{
+  --x-type-micro:.6875rem;                    /* proposed --type-micro (mono numerals), as the cinematic run */
+  --x-now:var(--light);                       /* now line: the only bright vertical */
+  --x-now-glow:color-mix(in srgb,var(--light) 35%,transparent);
+  --x-tide:color-mix(in srgb,var(--info) 40%,var(--ink-muted));  /* tide line: a missed date, a water stain, never an alert */
+  --x-tide-stain:color-mix(in srgb,var(--info) 10%,transparent);
+  --x-hw:var(--ink);                          /* high-water mark: engraved, not lit */
+  --x-seam:color-mix(in srgb,var(--light) 62%,transparent); /* seam: a visible repair (kintsugi), neutral light, never severity */
+  --x-travel:var(--hairline-strong);          /* distance to travel: dashed, dry, ahead of now */
+  --x-past:.62;                               /* past is quieter than now: opacity for anything before the latest state */
+  --x-stale-hatch:repeating-linear-gradient(135deg,transparent 0 var(--space-1),var(--hairline-strong) var(--space-1) calc(var(--space-1) + 1px));
+  --x-water-lo:color-mix(in srgb,var(--navy) 70%,transparent);
+  --x-water-hi:color-mix(in srgb,var(--green) 55%,transparent);
+  --x-org:var(--floor-org-high);--x-department:var(--floor-department-high);--x-team:var(--floor-team-high);--x-you:var(--floor-you-high);
+}
+button{font:inherit;color:inherit}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{font:400 var(--type-small)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.micro{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);font-variant-numeric:tabular-nums}
+.kbd{display:inline-block;font:400 var(--x-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid currentColor;border-radius:var(--radius-key);opacity:.75;letter-spacing:0;text-transform:none}
+.x-cap .k{margin-left:var(--space-4);color:var(--ink-muted)}
+.x-cap .k b{color:var(--ink)}
+
+/* the intent header: the same on every variant */
+.top{position:relative;padding:var(--space-5) var(--edge) var(--space-4);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2) var(--space-6);align-items:end;border-bottom:1px solid var(--hairline)}
+.top::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--floor-team-high) 30%,var(--floor-team-low) 70%,transparent);opacity:.7}
+.crumb{display:flex;align-items:center;gap:var(--space-2)}
+.crumb .dot{width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--floor-team-high);box-shadow:0 0 var(--space-2) var(--floor-team-low)}
+.top h1{grid-column:1;margin:var(--space-1) 0 0;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.facts{grid-column:2;grid-row:1 / span 2;display:flex;gap:var(--space-5);align-items:flex-end}
+.fact{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+.fact .v{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);white-space:nowrap}
+.fact .v b{font-weight:400;color:var(--light)}
+.who-org{color:var(--x-org)}.who-department{color:var(--x-department)}.who-team{color:var(--x-team)}
+/* ember (light language: going stale, cools with age) */
+.ember{display:inline-flex;align-items:center;gap:var(--space-2);background:none;border:0;padding:0;cursor:help;text-align:left}
+.ember i{display:block;width:var(--space-2);height:var(--space-2);border-radius:50%;background:color-mix(in srgb,var(--warning) calc((1 - var(--age,.4)) * 100%),var(--ink-muted));box-shadow:0 0 calc((1 - var(--age,.4)) * var(--space-4)) color-mix(in srgb,var(--warning) calc((1 - var(--age,.4)) * 80%),transparent)}
+/* stale hatch */
+.stale{background-image:var(--x-stale-hatch)}
+/* the "why are you like this, and since when?" pane: one for every mark */
+.why{position:fixed;z-index:var(--layer-overlay);width:var(--measure-card);padding:var(--space-4);background:var(--surface-overlay);-webkit-backdrop-filter:blur(var(--surface-blur));backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);box-shadow:var(--shadow-overlay);opacity:0;transform:translateY(var(--space-1));pointer-events:none;transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out)}
+.why.on{opacity:1;transform:none}
+.why .t{margin:var(--space-1) 0 var(--space-2);font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.why .b{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.why dl{display:grid;grid-template-columns:auto 1fr;gap:var(--space-1) var(--space-3);margin:var(--space-3) 0 0;padding-top:var(--space-3);border-top:1px solid var(--hairline)}
+.why dt{font:400 var(--x-type-micro)/var(--leading-meta) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.why dd{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+[data-why]{cursor:help}
+@media (prefers-reduced-motion: reduce){.why{transform:none!important;transition:opacity var(--motion-base) linear!important}}
+
+:root{--x-row:calc(var(--space-7) - var(--space-2));--x-col-name:calc(var(--measure-card) - var(--space-6));--x-col-read:calc(var(--measure-rail) - var(--space-2))}
+body{overflow:hidden}
+.top h1{font-size:var(--type-heading)}
+.ledger{position:relative;margin:var(--space-4) var(--edge) 0}
+.head,.row>.line{display:grid;grid-template-columns:var(--x-col-name) minmax(0,1fr) var(--x-col-read);gap:var(--space-5);align-items:center}
+.head{height:var(--space-6);border-bottom:1px solid var(--hairline)}
+.axis{position:relative;height:100%}
+.axis span{position:absolute;bottom:var(--space-2);font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);padding-left:var(--space-1);border-left:1px solid var(--hairline-strong)}
+.rows{position:relative}
+.row{position:relative;z-index:1;border-bottom:1px solid var(--hairline)}
+.row>.line{position:relative;z-index:1;width:100%;min-height:var(--x-row);background:none;border:0;padding:0;text-align:left;cursor:pointer;color:inherit}
+.row>.line:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:calc(var(--focus-gap) * -1)}
+.row:hover{background:color-mix(in srgb,var(--surface-raised) 50%,transparent)}
+.nm{display:flex;flex-direction:column;min-width:0}
+.nm .t{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm .o{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.life{position:relative;height:var(--x-row)}
+.life svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.rd{display:flex;flex-direction:column;align-items:flex-end;gap:calc(var(--space-1) / 2)}
+.rd .d{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);white-space:nowrap}
+.rd .s{font:400 var(--x-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap;display:flex;align-items:center;gap:var(--space-2)}
+.row.done{opacity:var(--x-past)}
+.row.done .rd .d{color:var(--success)}
+/* bloom (light language: needs you). At most three on a screen; it breathes, and stops on reduced motion */
+.row.needs{isolation:isolate}
+.row.needs::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(60% 140% at 15% 50%,color-mix(in srgb,var(--green) 16%,transparent),transparent);animation:breathe var(--motion-still) var(--ease-standard) infinite alternate;opacity:0;transition:opacity var(--motion-calm)}
+body.lit .row.needs::before{opacity:1}
+.row.needs .nm .t{color:var(--light)}
+.row.needs .rd .d{color:var(--green)}
+@keyframes breathe{from{opacity:calc(1 - var(--breathe) * 3)}to{opacity:1}}
+/* shadow (unavailable): stays in the list, says why and who */
+.row.shadow{background:repeating-linear-gradient(135deg,transparent 0 var(--space-1),var(--hairline) var(--space-1) calc(var(--space-1) + 1px))}
+.row.shadow>.line{cursor:help}
+.row.shadow .nm .t{color:var(--ink-muted)}
+.why-row{display:grid;grid-template-columns:var(--x-col-name) minmax(0,1fr) var(--x-col-read);gap:var(--space-5);overflow:hidden;max-height:0;transition:max-height var(--motion-slow) var(--ease-out)}
+.row.open .why-row{max-height:calc(var(--space-8) * 2)}
+.why-row .say{grid-column:2 / span 2;padding:0 0 var(--space-4);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+.why-row .say div{position:relative;z-index:1;padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);background:color-mix(in srgb,var(--slate-deep) 92%,var(--slate))}
+.why-row .say b{display:block;font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);margin-top:var(--space-1)}
+.why-row .say p{margin:var(--space-1) 0 0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.why-row .act{grid-column:1;padding:0 0 var(--space-4);display:flex;flex-direction:column;gap:var(--space-2);align-items:flex-start}
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);background:var(--surface-raised);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);cursor:pointer}
+.btn.go{border-color:color-mix(in srgb,var(--green) 50%,transparent);color:var(--light)}
+.nowline{position:absolute;top:0;bottom:0;width:1px;background:var(--x-now);box-shadow:0 0 var(--space-2) var(--x-now-glow);pointer-events:none;z-index:0}
+.nowline span{position:absolute;top:calc(var(--space-5) * -1 + var(--space-1));left:50%;transform:translateX(-50%);font:400 var(--x-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light);white-space:nowrap;background:var(--slate-deep);padding:var(--space-1)}
+.key{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-5);margin:var(--space-4) var(--edge) 0;padding-left:calc(var(--x-col-name) + var(--space-5))}
+.key span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.key svg{width:var(--space-5);height:var(--space-3);overflow:visible}
+.lbl{font:400 var(--x-type-micro) var(--font-mono);letter-spacing:var(--tracking-caps);fill:var(--ink-muted);text-transform:uppercase}
+@media (max-height:820px){:root{--x-row:calc(var(--space-6) + var(--space-1))}.ledger{margin-top:var(--space-2)}.why-row .say div{padding:var(--space-2)}}
+@media (prefers-reduced-motion: reduce){.row.needs::before{animation:none}.why-row{transition:max-height var(--motion-calm) linear!important}}
+</style>
+</head>
+<body>
+<header class="top" id="top"></header>
+<section class="ledger" id="ledger" aria-label="Intents"></section>
+<div class="key micro" id="key"></div>
+<div class="why" id="why" role="tooltip"></div>
+<div class="x-cap"><b>Intents · V6</b> intent ledger: every intent's whole life at word size, one now line through all · Tufte sparklines, Open MCT now line, tide tables <span class="k"><b>↑ ↓</b> move · <b>Enter</b> why and since when · <b>R</b> replay</span></div>
+<script>
+const DATA={
+  app:'Mandate',
+  now:'2026-11-02', asked:'2026-08-04', staleAfter:14,
+  labels:{asked:'Asked by',owner:'Owner',due:'Due',toTravel:'to travel',status:'Status',why:'Why, and since when',since:'Since',whoCan:'Who can change it',now:'Now'},
+  people:{
+    'Maya Okafor':{name:'Maya Okafor',floor:'org',unit:'Org · Finance Director'},
+    'Lena Hart':{name:'Lena Hart',floor:'department',unit:'Finance Operations'},
+    'Ana Sousa':{name:'Ana Sousa',floor:'team',unit:'Payables lead'},
+    'Tom Reyes':{name:'Tom Reyes',floor:'team',unit:'Payables'}},
+  intent:{name:'Supplier payments on the new ledger',where:['Finance Operations','Payables'],asker:'Maya Okafor',owner:'Ana Sousa'},
+  /* every deadline the ask has carried; a passed, unmet one is a tide line */
+  deadlines:[
+    {date:'2026-09-30',set:'2026-08-04',by:'Maya Okafor',movedOn:'2026-10-02',movedBy:'Ana Sousa',why:'The bank sent its new payment file format three weeks late.'},
+    {date:'2026-10-31',set:'2026-10-02',by:'Ana Sousa',movedOn:'2026-10-31',movedBy:'Maya Okafor',why:'Overseas reconciliation failed its dry run; Internal Audit added a sign-off.'},
+    {date:'2026-11-28',set:'2026-10-31',by:'Maya Okafor'}],
+  /* effort: contributions a week (tasks closed, linked documents edited, approvals given); null = no record */
+  effortLabel:'contributions a week',
+  weeks:['2026-08-03','2026-08-10','2026-08-17','2026-08-24','2026-08-31','2026-09-07','2026-09-14','2026-09-21','2026-09-28','2026-10-05','2026-10-12','2026-10-19','2026-10-26','2026-11-02'],
+  effort:[2,5,8,6,null,null,9,15,24,12,18,31,22,1],
+  gap:{from:'2026-08-31',to:'2026-09-13',why:'Events from these two weeks were lost when storage moved servers. Work happened; the record of it did not survive.',who:'Platform admins (events service)'},
+  /* acceptance criteria: the distance to travel in work, not only days */
+  criteria:[
+    {text:'Domestic suppliers paid from the new ledger',added:'2026-08-04',met:'2026-09-16'},
+    {text:'Old ledger read-only',added:'2026-08-04',met:'2026-10-21'},
+    {text:'Overseas suppliers paid from the new ledger',added:'2026-08-18',met:null},
+    {text:'Reconciled daily with no manual step',added:'2026-10-07',met:null},
+    {text:'Signed off by Internal Audit',added:'2026-10-31',met:null}],
+  /* the ask's own edit history */
+  revisions:[
+    {n:1,date:'2026-08-04',by:'Maya Okafor',note:'Asked',text:'Pay every supplier from the new ledger by 30 Sep, and make the old ledger read-only.'},
+    {n:2,date:'2026-08-18',by:'Lena Hart',note:'Scope widened',text:'Pay every supplier, including overseas suppliers, from the new ledger by 30 Sep, and make the old ledger read-only.'},
+    {n:3,date:'2026-09-09',by:'Tom Reyes',note:'Scope cut',text:'Pay every supplier, including overseas suppliers but not legacy card payments, from the new ledger by 30 Sep, and make the old ledger read-only.'},
+    {n:4,date:'2026-10-02',by:'Ana Sousa',note:'Deadline moved',text:'Pay every supplier, including overseas suppliers but not legacy card payments, from the new ledger by 31 Oct, and make the old ledger read-only.'},
+    {n:5,date:'2026-10-07',by:'Maya Okafor',note:'Criterion added',text:'Pay every supplier, including overseas suppliers but not legacy card payments, from the new ledger by 31 Oct, reconciled daily with no manual step, and make the old ledger read-only.'},
+    {n:6,date:'2026-10-31',by:'Maya Okafor',note:'Deadline moved, sign-off added',text:'Pay every supplier, including overseas suppliers but not legacy card payments, from the new ledger by 28 Nov, reconciled daily with no manual step, signed off by Internal Audit, and make the old ledger read-only.'}],
+  status:{date:'2026-10-14',by:'Tom Reyes',text:'Overseas file tests pass with two of three banks.'},
+  /* known events ahead (the almanac side) */
+  ahead:[
+    {date:'2026-11-10',label:'Third bank file test',by:'Tom Reyes'},
+    {date:'2026-11-16',label:'Audit freeze begins',by:'Maya Okafor'},
+    {date:'2026-11-23',label:'Internal Audit review',by:'Lena Hart'}],
+
+  v6:{floorTitle:'Payables · intents',viewer:'Ana Sousa',range:['2026-07-13','2026-12-27'],
+    cols:{name:'Intent',read:'To travel'},
+    /* one row per intent; the main intent's own record comes from the top-level fields */
+    rows:[
+      {name:'Vendor master clean-up',owner:'Tom Reyes',asked:'2026-07-20',deadlines:[{date:'2026-10-15',movedOn:'2026-10-16',movedBy:'Maya Okafor',why:'Supplier data owners were on leave.'},{date:'2026-10-29'}],
+        effort:[6,8,7,3,1,0,0,0,0,0,0,0,0,0,0,0],status:{date:'2026-09-02',by:'Tom Reyes',text:'Paused while the ledger move takes the team.'},edits:['2026-08-10','2026-10-16'],
+        needs:{what:'Past its deadline',can:'You can extend it, close it or hand it back to the asker.'}},
+      {main:true},
+      {name:'Card contract exit',owner:'Ana Sousa',asked:'2026-08-03',deadlines:[{date:'2026-10-31',movedOn:'2026-10-31',movedBy:'Maya Okafor',why:'The card provider asked for a 60-day notice.'},{date:'2026-11-15'}],
+        effort:[1,1,0,0,0,1,2,6,14,22,null,null,9,1],status:{date:'2026-10-30',by:'Ana Sousa',text:'Notice sent; waiting on the provider.'},edits:['2026-10-31']},
+      {name:'Duplicate payment checks',owner:'Lena Hart',asked:'2026-09-01',deadlines:[{date:'2026-12-12'}],effort:[2,3,3,4,4,3,3,4,5,1],status:{date:'2026-10-29',by:'Lena Hart',text:'Rules drafted; testing with October payments.'},edits:[]},
+      {name:'Close the old ledger',owner:'Ana Sousa',asked:'2026-08-10',deadlines:[{date:'2026-12-20'}],effort:[3,4,4,5,4,5,4,5,4,4,5,4,1],status:{date:'2026-10-27',by:'Ana Sousa',text:'Read-only since 21 Oct; archive plan agreed.'},edits:['2026-09-14']},
+      {name:'Year-end accruals review',owner:null,asked:'2026-09-15',deadlines:[{date:'2026-12-31'}],shadow:{why:'Asked at Org level; its detail is visible to finance directors only.',who:'Maya Okafor'}},
+      {name:'Friday payment run',owner:'Tom Reyes',asked:'2026-07-13',deadlines:[{date:'2026-10-16'}],effort:[2,2,3,4,3,2,3,4,3,2,2,1,1,0],done:'2026-10-14',status:{date:'2026-10-14',by:'Tom Reyes',text:'Done: first Friday run paid 312 suppliers.'},edits:['2026-08-24']}]}
+};
+/* ---------- shared helpers (time language) ---------- */
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const ROOT=getComputedStyle(document.documentElement);
+function ms(n){const v=ROOT.getPropertyValue(n).trim();return v.endsWith('ms')?parseFloat(v):parseFloat(v)*1000}
+function px(n){return parseFloat(ROOT.getPropertyValue(n))}
+const DAY=864e5,MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const D=s=>+new Date(s+"T00:00:00Z");
+const days=(a,b)=>Math.round((D(b)-D(a))/DAY);
+const fmt=s=>{const x=new Date(D(s));return x.getUTCDate()+' '+MON[x.getUTCMonth()]};
+const plural=(n,w)=>n+' '+w+(Math.abs(n)===1?'':'s');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const person=n=>DATA.people[n]||{name:n,floor:'you',unit:''};
+const whoTag=n=>{const p=person(n);return `<span class="who-${p.floor}">${esc(p.name)}</span>`};
+function deadline(){return DATA.deadlines[DATA.deadlines.length-1].date}
+function header(){
+  const I=DATA.intent,dl=deadline(),left=days(DATA.now,dl),st=DATA.status,age=days(st.date,DATA.now);
+  return `<div class="crumb eyebrow"><span class="dot"></span>${esc(I.where.join(' / '))} · ${esc(DATA.app)}</div>
+  <h1>${esc(I.name)}</h1>
+  <div class="facts">
+    <div class="fact"><span class="micro">${esc(DATA.labels.asked)}</span><span class="v">${whoTag(I.asker)} · ${fmt(DATA.asked)}</span></div>
+    <div class="fact"><span class="micro">${esc(DATA.labels.owner)}</span><span class="v">${whoTag(I.owner)}</span></div>
+    <div class="fact"><span class="micro">${esc(DATA.labels.due)}</span><span class="v"><b>${fmt(dl)}</b> · ${plural(left,'day')} ${esc(DATA.labels.toTravel)}</span></div>
+    <div class="fact"><span class="micro">${esc(DATA.labels.status)}</span><button class="ember v" style="--age:${Math.min(1,age/30).toFixed(2)}" data-why="status"><i></i>${plural(age,'day')} old</button></div>
+  </div>`;
+}
+/* why-pane: any [data-why] element answers "why are you like this, and since when?" */
+const WHY={};
+function baseWhy(){
+  const st=DATA.status,age=days(st.date,DATA.now);
+  WHY.status={k:DATA.labels.status,t:`Last status ${plural(age,'day')} old`,b:`“${st.text}”`,since:`${fmt(st.date)} · ${whoTag(st.by)}`,who:`${whoTag(DATA.intent.owner)} or anyone on ${esc(DATA.intent.where.at(-1))} can refresh it. Stale after ${plural(DATA.staleAfter,'day')}.`};
+}
+function showWhy(el,anchor){
+  const w=WHY[el.dataset.why];if(!w)return;const p=$('#why');
+  p.innerHTML=`<div class="eyebrow">${esc(w.k||DATA.labels.why)}</div><div class="t">${w.t}</div>${w.b?`<div class="b">${w.b}</div>`:''}<dl>${w.since?`<dt>${esc(DATA.labels.since)}</dt><dd>${w.since}</dd>`:''}${w.who?`<dt>${esc(DATA.labels.whoCan)}</dt><dd>${w.who}</dd>`:''}</dl>`;
+  const r=(anchor||el).getBoundingClientRect(),pw=p.offsetWidth,ph=p.offsetHeight,g=px('--space-3');
+  let x=Math.min(innerWidth-pw-g,Math.max(g,r.left+r.width/2-pw/2)),y=r.bottom+g;
+  if(y+ph>innerHeight-g*4)y=Math.max(g,r.top-ph-g);
+  p.style.left=x+'px';p.style.top=y+'px';p.classList.add('on');
+}
+function hideWhy(){$('#why')?.classList.remove('on')}
+function wireWhy(){
+  document.addEventListener('mouseover',e=>{const el=e.target.closest('[data-why]');if(el)showWhy(el)});
+  document.addEventListener('mouseout',e=>{const el=e.target.closest('[data-why]');if(el&&!el.contains(e.relatedTarget))hideWhy()});
+  document.addEventListener('focusin',e=>{const el=e.target.closest('[data-why]');if(el)showWhy(el)});
+  document.addEventListener('focusout',hideWhy);
+}
+/* auto-demo: the moment plays ~1.2 s after load (motion-run) and replays with R */
+let TIMERS=[];
+function later(fn,t){TIMERS.push(setTimeout(fn,t))}
+function boot(reset,play){
+  baseWhy();wireWhy();
+  const go=()=>{TIMERS.forEach(clearTimeout);TIMERS=[];hideWhy();reset();later(play,ms('--motion-run'))};
+  addEventListener('keydown',e=>{if(e.target.closest('input,textarea'))return;if(e.key==='r'||e.key==='R')go();if(e.key==='Escape')hideWhy()});
+  go();Icons.hydrate(document.body);
+}
+
+const V=DATA.v6;
+const main={name:DATA.intent.name,owner:DATA.intent.owner,asked:DATA.asked,deadlines:DATA.deadlines.map(d=>({date:d.date,movedOn:d.movedOn,movedBy:d.movedBy,why:d.why})),effort:DATA.effort,status:DATA.status,edits:DATA.revisions.slice(1).map(r=>r.date),gap:DATA.gap};
+const ROWS=V.rows.map(r=>r.main?main:r);
+const due=r=>r.deadlines.at(-1).date;
+const left=r=>days(DATA.now,due(r));
+/* sort: needs you first, then by distance to travel; done last */
+ROWS.sort((a,b)=>(!!b.needs-!!a.needs)||(!!a.done-!!b.done)||(left(a)-left(b)));
+let X;
+function scale(w){const t0=D(V.range[0]),t1=D(V.range[1]);return s=>(D(s)-t0)/(t1-t0)*w}
+function life(r,w,h){
+  const x=scale(w),mid=h*.62,top=h*.18,a=x(r.asked),dl=x(due(r)),now=x(DATA.now),end=r.done?x(r.done):now;
+  let s='';
+  if(r.shadow){return `<line x1="${a}" x2="${dl}" y1="${mid}" y2="${mid}" stroke="var(--hairline-strong)" stroke-dasharray="1 4"/><text class="lbl" x="${a}" y="${mid-px('--space-2')}">${esc(r.shadow.why)}</text>`}
+  const ef=r.effort||[],m=Math.max(1,...ef.filter(v=>v!=null)),wk=7*DAY;
+  /* water: effort as a word-size step area, up to now (or done) */
+  let d='',on=false;ef.forEach((v,i)=>{const s0=D(r.asked)+i*wk,s1=Math.min(s0+wk,D(r.done||DATA.now)+DAY);if(s0>D(r.done||DATA.now))return;
+    const x0=x(new Date(s0).toISOString().slice(0,10)),x1=x(new Date(s1).toISOString().slice(0,10)),y=mid-(v||0)/m*(mid-top);
+    if(v==null){if(on){d+=` L${x0},${mid} Z`;on=false}s+=`<rect x="${x0}" y="${top}" width="${x1-x0}" height="${mid-top}" fill="url(#hatch)"/>`;return}
+    d+=on?` L${x0},${y} L${x1},${y}`:`M${x0},${mid} L${x0},${y} L${x1},${y}`;on=true});
+  if(on)d+=` L${end},${mid} Z`;
+  s+=`<path d="${d}" fill="url(#wg)" stroke="var(--green)" stroke-opacity=".5" stroke-width="1"/>`;
+  s+=`<line x1="${a}" x2="${end}" y1="${mid}" y2="${mid}" stroke="var(--hairline-strong)"/>`;
+  /* high-water mark */
+  const hi=ef.indexOf(m);if(hi>=0&&m>1){const hx=x(new Date(D(r.asked)+hi*wk+wk/2).toISOString().slice(0,10));s+=`<path d="M${hx-3},${top-5} L${hx+3},${top-5} L${hx},${top-1} Z" fill="var(--x-hw)" opacity=".8"/>`}
+  /* tide lines: every missed deadline */
+  r.deadlines.filter(k=>k.movedOn).forEach(k=>{const tx=x(k.date);s+=`<line x1="${tx}" x2="${tx}" y1="${top-2}" y2="${h-2}" stroke="var(--x-tide)" stroke-dasharray="1 2"/>`});
+  /* seams: the ask changed */
+  (r.edits||[]).forEach(e=>{const ex=x(e);s+=`<line x1="${ex-1}" x2="${ex-1}" y1="${mid+3}" y2="${mid+8}" stroke="var(--x-seam)"/><line x1="${ex+1}" x2="${ex+1}" y1="${mid+3}" y2="${mid+8}" stroke="var(--x-seam)"/>`});
+  /* stale hatch: from the day the status went stale to now */
+  if(r.status&&!r.done){const st=D(r.status.date)+DATA.staleAfter*DAY;if(st<D(DATA.now)){const sx=x(new Date(st).toISOString().slice(0,10));s+=`<rect x="${sx}" y="${mid+2}" width="${now-sx}" height="${px('--space-2')}" fill="url(#hatch)" stroke="var(--warning)" stroke-opacity=".35"/>`}}
+  /* distance to travel, or the overrun past a deadline */
+  if(r.done){s+=`<circle cx="${end}" cy="${mid}" r="3" fill="var(--success)"/>`}
+  else if(dl>now){s+=`<line x1="${now}" x2="${dl}" y1="${mid}" y2="${mid}" stroke="var(--x-travel)" stroke-dasharray="3 3"/><line x1="${dl}" x2="${dl}" y1="${mid-6}" y2="${mid+6}" stroke="var(--ink)"/>`}
+  else{s+=`<line x1="${dl}" x2="${dl}" y1="${top-2}" y2="${h-2}" stroke="var(--green)"/><line x1="${dl}" x2="${now}" y1="${mid}" y2="${mid}" stroke="var(--green)" stroke-width="2"/>`}
+  return s;
+}
+const defs=`<defs><linearGradient id="wg" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="var(--navy)" stop-opacity=".5"/><stop offset="1" stop-color="var(--green)" stop-opacity=".35"/></linearGradient><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="var(--hairline-strong)"/></pattern></defs>`;
+function readout(r){
+  if(r.shadow)return `<span class="d">${fmt(due(r))}</span><span class="s"><i data-lucide="lock" data-size="12"></i>ask ${esc(r.shadow.who)}</span>`;
+  if(r.done)return `<span class="d">Done ${fmt(r.done)}</span><span class="s">${plural(days(r.done,due(r)),'day')} early</span>`;
+  const l=left(r),age=r.status?days(r.status.date,DATA.now):0,stale=age>DATA.staleAfter;
+  return `<span class="d">${l>=0?plural(l,'day'):`${plural(-l,'day')} past due`}</span><span class="s">${fmt(due(r))}${r.deadlines.length>1?` · moved ${r.deadlines.length-1}×`:''}${stale?` <span class="ember" style="--age:${Math.min(1,age/60).toFixed(2)}"><i></i>${age}d</span>`:''}</span>`;
+}
+function sayWhy(r){
+  const st=r.status,age=st?days(st.date,DATA.now):0,ef=r.effort||[],m=Math.max(...ef.filter(v=>v!=null)),hi=ef.indexOf(m),miss=r.deadlines.filter(k=>k.movedOn);
+  const l=left(r);
+  return `<div><span class="micro">${l<0?'Past its deadline':'Distance to travel'}</span><b>${l<0?`${plural(-l,'day')} since ${fmt(due(r))}`:`${plural(l,'day')} to ${fmt(due(r))}`}</b><p>${r.needs?esc(r.needs.can):`Set ${fmt(r.deadlines.at(-1).set||r.deadlines.at(-2)?.movedOn||r.asked)}`}</p></div>
+  <div><span class="micro">Tide lines</span><b>${miss.length?miss.map(k=>fmt(k.date)).join(', '):'None'}</b><p>${miss.length?esc(miss.at(-1).why):'No date missed yet.'}</p></div>
+  <div><span class="micro">High water</span><b>${m} · w/c ${fmt(new Date(D(r.asked)+hi*7*DAY).toISOString().slice(0,10))}</b><p>${hi<ef.length-6?`Nothing near it for ${plural(ef.length-1-hi,'week')}.`:'Recent.'}</p></div>
+  <div><span class="micro">Status</span><b>${plural(age,'day')} old</b><p>“${esc(st.text)}” · ${esc(person(st.by).name||st.by)}</p></div>`;
+}
+function render(){
+  const R=ROWS.map((r,i)=>{const cls=[r.needs?'needs':'',r.done?'done':'',r.shadow?'shadow':''].join(' ');
+    return `<div class="row ${cls}" data-i="${i}"><button class="line" aria-expanded="false" ${r.shadow?`data-why="sh${i}"`:''}>
+      <span class="nm"><span class="t">${esc(r.name)}</span><span class="o">${r.owner?esc(r.owner):'Org'} · asked ${fmt(r.asked)}${r.needs?' · '+esc(r.needs.what):''}</span></span>
+      <span class="life"><svg data-i="${i}"></svg></span>
+      <span class="rd">${readout(r)}</span></button>
+      ${r.shadow?'':`<div class="why-row"><div class="act">${r.needs?`<button class="btn go"><i data-lucide="calendar-clock" data-size="14"></i>Extend</button><button class="btn"><i data-lucide="undo-2" data-size="14"></i>Hand back</button>`:''}</div><div class="say">${sayWhy(r)}</div></div>`}</div>`}).join('');
+  $('#ledger').innerHTML=`<div class="head"><span class="eyebrow">${esc(V.cols.name)} · ${ROWS.length}</span><span class="axis" id="axis"></span><span class="eyebrow" style="text-align:right">${esc(V.cols.read)}</span></div><div class="rows" id="rows">${R}<div class="nowline" id="nowl"><span>${DATA.labels.now} · ${fmt(DATA.now)}</span></div></div>`;
+  $$('.row>.line').forEach(b=>b.addEventListener('click',()=>toggle(b.parentElement)));
+  $$('.row').forEach((r,i)=>{const sh=ROWS[i].shadow;if(sh)WHY['sh'+i]={k:'Unavailable',t:'You can see this intent exists',b:esc(sh.why),since:fmt(ROWS[i].asked),who:`Ask <span class="who-org">${esc(sh.who)}</span> for access.`}});
+  draw();Icons.hydrate($('#ledger'));
+}
+function draw(){
+  const svg=$$('.life svg'),w=svg[0].parentElement.clientWidth,h=svg[0].parentElement.clientHeight;X=scale(w);
+  svg.forEach(s=>s.innerHTML=defs+life(ROWS[+s.dataset.i],w,h));
+  const off=svg[0].parentElement.getBoundingClientRect().left-$('#rows').getBoundingClientRect().left;
+  $('#nowl').style.left=(off+X(DATA.now))+'px';
+  let ax='';for(let m=6;m<=11;m++){const s=`2026-${String(m+1).padStart(2,'0')}-01`;const x=X(s);if(x<0||x>w)continue;ax+=`<span style="left:${x}px">${MON[m]}</span>`}
+  $('#axis').innerHTML=ax;
+}
+function toggle(row,force){const o=force!=null?force:!row.classList.contains('open');if(ROWS[+row.dataset.i].shadow)return;row.classList.toggle('open',o);row.querySelector('.line').setAttribute('aria-expanded',o)}
+function key(){
+  const k=[['water','effort'],['hw','high-water mark'],['tide','tide line · missed date'],['seam','seam · the ask changed'],['stale','stale status'],['travel','distance to travel'],['now','now']];
+  const g={water:`<rect x="0" y="2" width="24" height="8" fill="url(#wg)"/>`,hw:`<path d="M9,2 L15,2 L12,7 Z" fill="var(--x-hw)"/>`,tide:`<line x1="12" x2="12" y1="0" y2="12" stroke="var(--x-tide)" stroke-dasharray="1 2"/>`,seam:`<line x1="11" x2="11" y1="2" y2="10" stroke="var(--x-seam)"/><line x1="13" x2="13" y1="2" y2="10" stroke="var(--x-seam)"/>`,stale:`<rect x="0" y="3" width="24" height="7" fill="url(#hatch)" stroke="var(--warning)" stroke-opacity=".35"/>`,travel:`<line x1="0" x2="24" y1="6" y2="6" stroke="var(--x-travel)" stroke-dasharray="3 3"/>`,now:`<line x1="12" x2="12" y1="0" y2="12" stroke="var(--x-now)"/>`};
+  $('#key').innerHTML=k.map(([id,t])=>`<span><svg>${defs}${g[id]}</svg>${t}</span>`).join('');
+}
+let cur=0;
+addEventListener('keydown',e=>{const rows=$$('.row>.line');if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();cur=Math.max(0,Math.min(rows.length-1,cur+(e.key==='ArrowDown'?1:-1)));rows[cur].focus()}});
+addEventListener('resize',draw);
+$('#top').innerHTML=header().replace(/<h1>.*?<\/h1>/,`<h1>${esc(V.floorTitle)}</h1>`).replace(/<div class="facts">[\s\S]*<\/div>\s*$/,`<div class="facts"><div class="fact"><span class="micro">Viewing as</span><span class="v">${whoTag(V.viewer)}</span></div><div class="fact"><span class="micro">${esc(DATA.labels.now)}</span><span class="v"><b>${fmt(DATA.now)}</b></span></div></div>`);
+render();key();
+function reset(){document.body.classList.remove('lit');$$('.row').forEach(r=>toggle(r,false))}
+function play(){document.body.classList.add('lit');later(()=>toggle($('.row.needs')),ms('--motion-calm'))}
+boot(reset,play);
+</script>
+</body>
+</html>

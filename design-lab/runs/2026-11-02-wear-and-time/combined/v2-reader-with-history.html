@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Combined · V2 · Reader with history</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* =====================================================================
+   Proposed tokens. Names and recipes from ../grammar/v1-time-language.html;
+   every one is "needs token" in notes-v2.md. All are combinations of kit tokens.
+   ===================================================================== */
+:root{
+  --x-seam: color-mix(in srgb, var(--warning) 55%, var(--ink));          /* --mark-seam: repair gold, never "warning" */
+  --x-wear: color-mix(in srgb, var(--ink) 55%, transparent);             /* --mark-wear */
+  --x-wear-read: color-mix(in srgb, var(--ink-muted) 28%, transparent);  /* --mark-wear-read */
+  --x-tide: color-mix(in srgb, var(--ink-muted) 60%, transparent);       /* --mark-tide */
+  --x-now: color-mix(in srgb, var(--light) 80%, transparent);            /* --mark-now: the one now line */
+  --x-hatch: color-mix(in srgb, var(--ink-muted) 26%, transparent);      /* --mark-stale-hatch */
+  --x-stale: repeating-linear-gradient(45deg, transparent 0 var(--space-2), var(--x-hatch) var(--space-2) calc(var(--space-2) + 1px));
+  --x-shadow: repeating-linear-gradient(135deg, transparent 0 var(--space-2), var(--hairline) var(--space-2) calc(var(--space-2) + 1px));
+  --x-past-dim: .62;                                                      /* --time-past-dim */
+  --x-since-edge: color-mix(in srgb, var(--ink) 70%, transparent);       /* --mark-since-edge: "changed since you read", matter */
+  --x-margin: var(--space-8);
+  --x-aside: calc(var(--measure-drawer) + var(--space-6));
+  --x-aside-history: calc(var(--measure-drawer) + var(--space-8) + var(--space-6)); /* History mode widens the aside */
+  --x-wrail: var(--space-6);                                               /* the wear rail (scroll bar as record) */
+  --f-department: var(--floor-department-high);
+  --f-team: var(--floor-team-high);
+  --f-org: var(--floor-org-high);
+  --f-you: var(--floor-you-high);
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input{font:inherit;color:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.lucide{flex:none}
+.kbd{display:inline-block;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1)}
+[hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+[data-floor="department"]{--fc:var(--f-department)} [data-floor="team"]{--fc:var(--f-team)} [data-floor="org"]{--fc:var(--f-org)} [data-floor="you"]{--fc:var(--f-you)}
+
+.water{position:fixed;inset:0;pointer-events:none;background:radial-gradient(70% 45% at 50% 115%, color-mix(in srgb, var(--navy) 42%, transparent), transparent 70%)}
+
+/* ===== top band ===== */
+.band{position:fixed;top:0;left:0;right:0;height:var(--band-top);display:flex;align-items:center;gap:var(--space-4);padding:0 var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb, var(--slate-deep) 82%, transparent);z-index:var(--layer-chrome)}
+.app-name{font-size:var(--type-meta);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.fchip{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--space-5);padding:0 var(--space-3);border-radius:var(--radius-pill);border:1px solid color-mix(in srgb, var(--fc) 40%, transparent);color:var(--fc);font-size:var(--type-small);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-2);height:var(--space-2);border-radius:50%;background:currentColor}
+.crumbs{display:flex;align-items:center;gap:var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);white-space:nowrap;min-width:0}
+.crumbs b{font-weight:400;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.band-r{margin-left:auto;display:flex;align-items:center;gap:var(--space-4);font:400 var(--type-small)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.me{width:var(--target-sm);height:var(--target-sm);border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb, var(--f-you) 18%, var(--slate-deep));border:1px solid color-mix(in srgb, var(--f-you) 45%, transparent);color:var(--light);font:400 var(--type-small)/1 var(--font-sans);letter-spacing:var(--tracking-soft)}
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);background:var(--surface-inset);font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:0;text-transform:none;color:var(--ink);white-space:nowrap;transition:background var(--motion-quick)}
+.btn:hover{background:var(--surface-raised)}
+.btn[aria-pressed="true"]{border-color:color-mix(in srgb, var(--ink) 50%, transparent);background:var(--surface-raised);color:var(--light)}
+.btn[aria-disabled="true"]{cursor:not-allowed;color:var(--ink-muted);border-style:dashed;background:var(--x-shadow)}
+.btn .kbd{padding:0 var(--space-1)}
+.why{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.why b{font-weight:400;color:var(--ink)}
+
+/* ===== stage: reader · wear rail · aside ===== */
+.stage{position:fixed;top:var(--band-top);left:0;right:0;bottom:0}
+.reader{position:absolute;top:0;bottom:0;left:0;right:calc(var(--x-aside) + var(--x-wrail));overflow-y:auto;overflow-x:hidden;scrollbar-width:none;transition:filter var(--motion-slow) var(--ease-standard),right var(--motion-slow) var(--ease-standard)}
+.reader::-webkit-scrollbar{display:none}
+body.hist{--x-aside:var(--x-aside-history)}
+.page{position:relative;width:calc(var(--measure-read) + 2 * var(--x-margin));margin:0 auto;padding:var(--space-6) 0 var(--space-8)}
+.row{position:relative;display:grid;grid-template-columns:var(--x-margin) var(--measure-read) var(--x-margin)}
+.ml,.mr{position:relative;min-width:0}
+.tx{margin:0;min-width:0}
+.dhead .tx{padding-bottom:var(--space-5);border-bottom:1px solid var(--hairline);margin-bottom:var(--space-5)}
+.dhead h1{margin:var(--space-2) 0 var(--space-2);font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-soft);color:var(--light)}
+.dmeta{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.dmeta b{font-weight:400;color:var(--ink)}
+.sec{margin-bottom:var(--space-5);isolation:isolate}
+.hrow .tx{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:var(--space-3);margin:0 0 var(--space-3)}
+.hrow h2{margin:0;font-weight:400;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);min-width:0}
+.hrow h2 .n{font:400 var(--type-meta)/1 var(--font-mono);color:var(--ink-muted);margin-right:var(--space-3)}
+.state{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.state.over{color:var(--ink)}
+.prow p{margin:0 0 var(--space-4);color:var(--ink);font-size:var(--type-body);line-height:var(--leading-body);transition:opacity var(--motion-base)}
+
+/* seam (reader V3): the repaired words keep a fine gold double line, for good */
+.fix{position:relative;cursor:pointer;border-radius:2px;background:linear-gradient(var(--x-seam),var(--x-seam)) 0 100% / 100% 1px no-repeat,linear-gradient(var(--x-seam),var(--x-seam)) 0 calc(100% - 3px) / 100% 1px no-repeat;padding-bottom:2px;transition:background-color var(--motion-base)}
+.fix:hover,.fix.open{background-color:color-mix(in srgb, var(--x-seam) 12%, transparent)}
+.seam-m{position:absolute;right:var(--space-4);top:var(--space-1);display:flex;flex-direction:column;align-items:flex-end;gap:var(--space-1);font:400 var(--type-small)/1 var(--font-mono);color:var(--x-seam);white-space:nowrap}
+.seam-m i{display:block;width:2px;height:var(--space-5);border-radius:var(--radius-pill);background:linear-gradient(var(--x-seam),color-mix(in srgb, var(--x-seam) 20%, transparent))}
+.seam-m span{color:var(--ink-muted)}
+.prow.lit .tx{background:color-mix(in srgb, var(--light) 3%, transparent);border-radius:var(--radius-key);box-shadow:0 0 0 var(--space-2) color-mix(in srgb, var(--light) 3%, transparent)}
+/* changed since you read: matter for ordinary edits, light only when it needs you */
+.since-m{position:absolute;right:var(--space-3);top:var(--space-1);bottom:var(--space-4);width:2px;border-radius:var(--radius-pill);background:var(--x-since-edge)}
+.unread{display:flex;gap:var(--space-2);align-items:center;margin:0 0 var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);transition:opacity var(--motion-slow),color var(--motion-slow)}
+.unread b{font-weight:400;color:var(--ink)}
+.unread.need{position:relative;color:var(--green)}
+.unread.need b{color:var(--green)}
+.unread.need::before{content:"";position:absolute;inset:calc(var(--space-2) * -1) calc(var(--space-3) * -1);border-radius:var(--radius-inset);background:radial-gradient(closest-side, color-mix(in srgb, var(--green) 20%, transparent), transparent);z-index:-1;animation:breathe var(--motion-still) var(--ease-standard) infinite alternate}
+@keyframes breathe{from{opacity:calc(1 - var(--breathe) * 3)}to{opacity:1}}
+.unread.done{color:var(--ink-muted)}
+.unread.done::before{animation:none;opacity:0;transition:opacity var(--motion-calm)}
+.unread.done b{color:var(--ink)}
+/* stale (reader V4): a state, hatched, with its age, its reason and who */
+.sec.stale .prow .tx{background-image:var(--x-stale)}
+.sec.stale .prow p{color:color-mix(in srgb, var(--ink) 82%, transparent)}
+.stale-card{display:grid;grid-template-columns:auto 1fr;gap:var(--space-2) var(--space-3);margin:0 0 var(--space-4);padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px dashed var(--hairline-strong);background:var(--x-stale),var(--surface-inset);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.stale-card b{font-weight:400;color:var(--ink)}
+.stale-card .acts{grid-column:2;display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-top:var(--space-1)}
+/* read since it changed (reader V6): a waterline per audience group */
+.gauge{display:flex;align-items:center;gap:var(--space-2);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key)}
+.gauge:hover{background:var(--surface-inset);color:var(--ink)}
+.gauge .bars{display:flex;gap:2px;width:var(--space-7);height:var(--space-2)}
+.gb{position:relative;flex:var(--n);border-radius:1px;background:var(--hairline);overflow:hidden}
+.gb i{position:absolute;left:0;top:0;bottom:0;width:calc(var(--f) * 100%);background:color-mix(in srgb, var(--fc) 60%, transparent);transition:width var(--motion-calm) var(--ease-out)}
+.gb.all{--fc:var(--ink-muted)}
+.gauge.sel{color:var(--ink);box-shadow:inset 0 0 0 1px var(--hairline-strong)}
+
+/* ===== the wear rail (reader V1): the scroll bar is the record ===== */
+.wrail{position:absolute;top:0;bottom:0;right:var(--x-aside);width:var(--x-wrail);border-left:1px solid var(--hairline);display:flex;flex-direction:column;padding:var(--space-3) 0 var(--space-6);transition:right var(--motion-slow) var(--ease-standard)}
+.wrail .hd{display:grid;grid-template-columns:1fr 1fr;text-align:center;font:400 var(--type-label)/1 var(--font-mono);color:var(--ink-muted);margin-bottom:var(--space-2)}
+.rail{position:relative;flex:1;margin:0 var(--space-1);cursor:pointer;border-radius:var(--radius-key)}
+.rail:focus-visible{outline-offset:0}
+.spine{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--hairline)}
+.wear{position:absolute;height:var(--h);top:var(--y);display:flex;transform-origin:var(--o) 50%;transition:transform var(--motion-calm) var(--ease-out),opacity var(--motion-calm);transition-delay:calc(var(--i) * var(--motion-instant) / 2)}
+.wear.e{right:50%;flex-direction:row-reverse;--o:100%}
+.wear.r{left:50%;--o:0%}
+.wear i{display:block;height:100%;width:var(--w);background:color-mix(in srgb, var(--fc) 46%, transparent)}
+.wear.r i{background:var(--x-wear-read)}
+body.pre .wear{transform:scaleX(0);opacity:0}
+.sec-tick{position:absolute;left:0;right:0;top:var(--y);height:1px;background:var(--hairline);pointer-events:none}
+.seam-tick{position:absolute;left:calc(50% - var(--space-3));width:var(--space-5);top:var(--y);height:2px;margin-top:-1px;background:var(--x-seam);border-radius:var(--radius-pill);pointer-events:none}
+.stale-band{position:absolute;left:0;right:0;top:var(--y);height:var(--h);background:var(--x-stale);border-top:1px dashed var(--hairline-strong);border-bottom:1px dashed var(--hairline-strong);pointer-events:none}
+.since-b{position:absolute;left:calc(var(--space-1) * -1);top:var(--y);height:var(--h);width:2px;border-radius:var(--radius-pill);background:var(--x-since-edge);pointer-events:none}
+.since-b.need{background:var(--green);box-shadow:0 0 var(--space-2) color-mix(in srgb, var(--green) 50%, transparent)}
+.since-b.done{background:var(--x-since-edge);box-shadow:none}
+.thumb{position:absolute;left:calc(var(--space-1) * -1);right:calc(var(--space-1) * -1);top:var(--y);height:var(--h);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:color-mix(in srgb, var(--light) 5%, transparent);pointer-events:none}
+.wrail .ft{font:400 var(--type-label)/var(--leading-label) var(--font-mono);color:var(--ink-muted);text-align:center;margin-top:var(--space-2)}
+
+/* ===== aside ===== */
+.aside{position:absolute;top:0;bottom:0;right:0;width:var(--x-aside);border-left:1px solid var(--hairline);background:color-mix(in srgb, var(--slate-deep) 62%, transparent);overflow:hidden;transition:width var(--motion-slow) var(--ease-standard)}
+.aside h3{margin:0;font-weight:400;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.aside p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.aside p b{font-weight:400;color:var(--ink)}
+.pane{position:absolute;inset:0;padding:var(--space-5) var(--space-4) var(--space-7);display:flex;flex-direction:column;gap:var(--space-3);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent;transition:opacity var(--motion-slow) var(--ease-standard)}
+.pane.off{opacity:0;pointer-events:none;visibility:hidden;transition:opacity var(--motion-slow) var(--ease-standard),visibility 0s linear var(--motion-slow)}
+.pane-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
+/* almanac (reader V4): every section on one scale, one now line through them all */
+.strip{display:block;width:100%;height:var(--space-4);overflow:visible}
+.strip .base{stroke:var(--hairline-strong);stroke-width:1;vector-effect:non-scaling-stroke}
+.strip .tick{stroke:color-mix(in srgb, var(--fc) calc(45% + var(--fresh) * 50%), transparent);stroke-width:2;vector-effect:non-scaling-stroke}
+.strip .tick.rep{stroke:var(--x-seam)}
+.strip .rev{stroke:var(--ink-muted);stroke-width:1;vector-effect:non-scaling-stroke}
+.strip .travel{stroke:var(--ink-muted);stroke-width:1;stroke-dasharray:2 3;vector-effect:non-scaling-stroke}
+.strip .due{stroke:var(--ink);stroke-width:2;vector-effect:non-scaling-stroke}
+.strip .tide{stroke:var(--x-tide);stroke-width:1;stroke-dasharray:3 2;vector-effect:non-scaling-stroke}
+.strip .hatch{fill:url(#hatch)}
+.strip .you{stroke:var(--f-you);stroke-width:1;stroke-dasharray:2 2;vector-effect:non-scaling-stroke}
+body.pre .strip .travel,body.pre .strip .hatch,body.pre .strip .tide,body.pre .strip .due{opacity:0}
+.strip .travel,.strip .hatch,.strip .tide,.strip .due{transition:opacity var(--motion-calm) var(--ease-out)}
+.almwrap{position:relative}
+.alm-axis{position:relative;height:var(--space-4);margin-left:var(--space-5);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.alm-axis span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.alm-axis span:first-child{transform:none}
+.alm-axis span:last-child{transform:translateX(-100%)}
+.alm-axis span.n{color:var(--light)}
+.alm{display:grid;gap:0}
+.ar{display:grid;grid-template-columns:var(--space-4) 1fr;gap:0 var(--space-2);align-items:center;text-align:left;padding:var(--space-1) 0;border-radius:var(--radius-key);transition:background var(--motion-quick)}
+.ar:hover,.ar.sel{background:var(--surface-inset)}
+.ar .n{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);text-align:right}
+.ar .t{display:flex;justify-content:space-between;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);min-width:0}
+.ar .t span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ar .t span:last-child{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.ar .t span.over{color:var(--ink)}
+.ar .strip{grid-column:2}
+.onenow{position:absolute;top:0;bottom:0;width:1px;background:var(--x-now);pointer-events:none;transition:opacity var(--motion-calm)}
+body.pre .onenow{opacity:0}
+.key{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.key span{display:flex;gap:var(--space-1);align-items:center}
+.key svg{flex:none;width:var(--space-5);height:var(--space-3)}
+/* read since panel (reader V6) */
+.rs{display:grid;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--hairline);transition:opacity var(--motion-quick)}
+.rs.out{opacity:0}
+.big{display:flex;align-items:baseline;gap:var(--space-2)}
+.big b{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--light);font-variant-numeric:tabular-nums}
+.big span{color:var(--ink-muted);font-size:var(--type-meta)}
+.gr{display:grid;grid-template-columns:1fr auto;gap:var(--space-1) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.gr .v{font-family:var(--font-mono);font-size:var(--type-small);color:var(--ink-muted)}
+.gr .gb{grid-column:1 / -1;height:var(--space-2)}
+.hw{display:grid;grid-template-columns:auto 1fr;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.hw b{font-weight:400;color:var(--ink)}
+.priv{display:grid;grid-template-columns:auto 1fr;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.priv b{font-weight:400;color:var(--ink)}
+.acts{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+/* parallel page (reader V3): the section as it stood before the repair */
+.then{filter:saturate(.6);opacity:var(--x-past-dim)}
+.then h4{margin:0 0 var(--space-3);font-weight:400;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.then p{margin:0 0 var(--space-4);font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink)}
+.then p.same{color:var(--ink-muted)}
+.was{text-decoration:line-through;text-decoration-color:var(--x-seam);text-decoration-thickness:1px;color:var(--ink)}
+.repair{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border-left:2px solid var(--x-seam);background:color-mix(in srgb, var(--x-seam) 6%, transparent);border-radius:0 var(--radius-key) var(--radius-key) 0}
+.repair p{color:var(--ink)}
+.repair .who{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--ink-muted)}
+#links{position:fixed;inset:0;pointer-events:none;z-index:var(--layer-view);overflow:visible}
+#links .same{fill:color-mix(in srgb, var(--ink) 5%, transparent);stroke:var(--hairline);stroke-width:1;opacity:0;transition:opacity var(--motion-slow)}
+#links.on .same{opacity:1}
+#links .seam{fill:none;stroke:var(--x-seam);stroke-width:1.5;stroke-dasharray:var(--len);stroke-dashoffset:var(--len);transition:stroke-dashoffset var(--motion-calm) var(--ease-out)}
+#links.on .seam{stroke-dashoffset:0}
+
+/* ===== "why is this €54, and since when?" (reader V2), in place ===== */
+.card{display:grid;gap:var(--space-3);padding:var(--space-4);border-radius:var(--radius-inset);background:var(--surface-overlay);border:1px solid var(--hairline-strong);box-shadow:var(--shadow-raised)}
+.card h4{margin:0;font-weight:400;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.card p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.card p b{font-weight:400;color:var(--ink)}
+#links .tether{fill:none;stroke:var(--x-seam);stroke-width:1;stroke-dasharray:2 3;opacity:.8}
+.strata{display:grid;gap:2px}
+.st{display:grid;grid-template-columns:var(--space-7) 1fr;align-items:center;gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.st .v{font-family:var(--font-mono);color:var(--ink);text-align:right}
+.st .bar{position:relative;height:var(--space-4);border-radius:2px;background:color-mix(in srgb, var(--fc) calc(14% + var(--fresh) * 22%), transparent);border-left:2px solid color-mix(in srgb, var(--fc) 70%, transparent)}
+.st.err .bar{border-left-color:var(--x-seam);background:repeating-linear-gradient(90deg, color-mix(in srgb, var(--x-seam) 18%, transparent) 0 var(--space-1), transparent var(--space-1) var(--space-2))}
+.st.now .v{color:var(--light)}
+.st.now .bar{box-shadow:inset calc(var(--space-1) * -1) 0 0 var(--x-now)}
+.st.unc span:last-child{padding-left:var(--space-2);border-left:1px dashed var(--ink-muted)}
+.axis{display:grid;grid-template-columns:var(--space-7) 1fr;gap:var(--space-3);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.axis div{display:flex;justify-content:space-between}
+.seamwhy{display:flex;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-left:2px solid var(--x-seam);background:color-mix(in srgb, var(--x-seam) 6%, transparent);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+
+/* ===== History mode (reader V5): only on request ===== */
+.flow svg{display:block;width:100%;overflow:visible}
+.flow .band2{fill:color-mix(in srgb, var(--fc) 70%, transparent)}
+.flow .link{fill:color-mix(in srgb, var(--fc) 34%, transparent)}
+.flow .band2.fix{fill:var(--x-seam)}
+.flow .unc{fill:none;stroke:var(--ink-muted);stroke-width:1;stroke-dasharray:2 2}
+.flow .now{stroke:var(--x-now);stroke-width:1}
+.flow .you{stroke:var(--f-you);stroke-width:1;stroke-dasharray:3 3}
+.flow .lbl{font:400 var(--type-small) var(--font-mono);fill:var(--ink-muted)}
+.flow .lbl.you-l{fill:var(--f-you)}
+.flow .cur{stroke:var(--ink);stroke-width:1.5}
+.flow .knob{fill:var(--slate-deep);stroke:var(--ink);stroke-width:1.5}
+.flow .hit{fill:transparent;cursor:pointer}
+.scrub input{width:100%;margin:0;accent-color:var(--ink);cursor:pointer}
+.ver{display:grid;gap:var(--space-1);padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);background:var(--surface-inset);border:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);min-height:calc(var(--space-8) - var(--space-4))}
+.ver .h{display:flex;justify-content:space-between;gap:var(--space-3);color:var(--light)}
+.ver .h span:last-child{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.ver .d{color:var(--ink-muted)} .ver .d b{font-weight:400;color:var(--ink)}
+.fkey{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.fkey span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.fkey i{display:block;width:var(--space-3);height:var(--space-2);border-radius:1px;background:color-mix(in srgb, var(--fc) 52%, transparent)}
+.fkey i.u{height:0;border-top:1px dashed var(--ink-muted);background:none}
+.fkey i.s{background:var(--x-seam)}
+body.past .reader{filter:saturate(.55) brightness(.9)}
+.pastbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:var(--space-3);margin:0 auto;width:calc(var(--measure-read) + 2 * var(--x-margin));padding:var(--space-2) var(--space-3);border-radius:0 0 var(--radius-inset) var(--radius-inset);background:var(--surface-bar);border:1px solid var(--hairline-strong);border-top:0;font-size:var(--type-meta);color:var(--ink);transform:translateY(-110%);opacity:0;height:0;overflow:hidden;transition:transform var(--motion-base) var(--ease-out),opacity var(--motion-base)}
+body.past .pastbar{transform:none;opacity:1;height:auto;overflow:visible}
+.pastbar .grow{flex:1} .pastbar b{font-weight:400;color:var(--light)}
+.prow.diff .ml::after{content:attr(data-d);position:absolute;right:var(--space-4);top:var(--space-1);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.prow.swap p{opacity:.15}
+body.past .seam-m,body.past .since-m,body.past .unread{opacity:0;transition:opacity var(--motion-base)}
+
+.hints{display:flex;gap:var(--space-3);align-items:center;font:400 var(--type-small)/1 var(--font-mono);letter-spacing:0;text-transform:none;color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center}
+@media (max-width:1440px){:root{--x-margin:var(--space-7);--x-aside:var(--measure-drawer);--x-aside-history:calc(var(--measure-drawer) + var(--space-8))} .crumbs{display:none} .h-x{display:none!important}}
+@media (prefers-reduced-motion: reduce){.card{transform:none}.unread.need::before{animation:none}.wear{transition:opacity var(--motion-base)}body.pre .wear{transform:none}}
+</style>
+</head>
+<body class="pre">
+<div class="water" aria-hidden="true"></div>
+<header class="band" id="band"></header>
+<main class="stage">
+  <div class="reader" id="reader" tabindex="-1"><div class="pastbar" id="pastbar"></div><article class="page" id="page"></article></div>
+  <div class="wrail" id="wrail"><div class="hd" aria-hidden="true"><span title="edit wear"><i data-lucide="pencil" data-size="12"></i></span><span title="read wear"><i data-lucide="eye" data-size="12"></i></span></div>
+    <div class="rail" id="rail" tabindex="0" role="scrollbar" aria-controls="reader" aria-orientation="vertical" aria-label="Document, with edit wear, read wear, repairs and stale parts" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+    <div class="ft" id="railft"></div></div>
+  <aside class="aside" id="aside" aria-label="This policy over time">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--x-hatch);stroke-width:1"/></pattern></defs></svg>
+    <div class="pane" id="list"></div>
+    <div class="pane off" id="why" role="region" aria-label="Why and since when" aria-live="polite"></div>
+    <div class="pane off" id="par" aria-live="polite"></div>
+    <div class="pane off" id="hist" aria-label="History flow"></div>
+  </aside>
+</main>
+<svg id="links" aria-hidden="true"></svg>
+<div class="x-cap"><b>Combined · V2</b> reader with history: seams first, stale, since when, read since, History on request · reader V1 to V6</div>
+<script>
+/* ===== Sample data: every name, label and count on this page comes from here ===== */
+const DATA = {
+  now: '2026-11-02',
+  app: 'Artifacts', orgName: 'Org',
+  floor: { kind: 'department', name: 'Finance' },
+  library: 'Policies',
+  you: { initials: 'MO', name: 'You', lastReadAgo: 35 },
+  people: {
+    pr: { name: 'Priya Raman', floor: 'department', role: 'Policy owner' },
+    sk: { name: 'Sana Kader', floor: 'department', role: 'Editor' },
+    jm: { name: 'Jonas Meyer', floor: 'team', role: 'Editor, Field Operations' },
+    al: { name: 'Ade Lawal', floor: 'org', role: 'Org compliance' }
+  },
+  audience: { groups: [{ floor: 'department', name: 'Finance', n: 22 }, { floor: 'team', name: 'Field Operations', n: 16 }] },
+  privacy: { minGroup: 5 },                 /* a question for Harry, not a decision */
+  readTrackingSinceAgo: 500,                /* read events exist from here on: older is an unconformity */
+  historyKeptSinceAgo: 900,                 /* imported from the old intranet; nothing older survives */
+  doc: { kind: 'Policy', title: 'Travel and expenses policy', owner: 'pr', status: 'Published' },
+  /* edits: [days ago, who, kind]; readSince: readers per group since the section last changed;
+     readBefore: the high-water mark the previous version reached; values: a repaired value's strata */
+  sections: [
+    { id: 's1', title: 'Purpose', reviewedAgo: 120, reviewEvery: 365, readSince: { department: 18, team: 13 },
+      edits: [[900, 'pr', 'write'], [610, 'pr', 'edit']],
+      paras: [
+        { id: 'p1', read: .92, edit: .10, t: 'This policy sets out how we book, pay for and claim back travel and expenses for work. It applies the same rules to everyone and keeps spending visible to the people who approve it.' },
+        { id: 'p2', read: .55, edit: .25, t: 'Where this policy and a local agreement disagree, the stricter rule applies until the policy owner says otherwise.' }] },
+    { id: 's2', title: 'Who this applies to', reviewedAgo: 120, reviewEvery: 365, readSince: { department: 16, team: 11 },
+      edits: [[900, 'pr', 'write'], [400, 'al', 'edit'], [210, 'al', 'edit']],
+      paras: [
+        { id: 'p1', read: .45, edit: .50, t: 'Everyone who travels or spends money on behalf of the department, including contractors with a purchase order. Guests we invite are covered by section 7.' }] },
+    { id: 's3', title: 'Booking travel', reviewedAgo: 75, reviewEvery: 365, readSince: { department: 13, team: 9 },
+      edits: [[900, 'pr', 'write'], [200, 'jm', 'edit'], [75, 'jm', 'correction']],
+      paras: [
+        { id: 'p1', read: .85, edit: .60, t: 'Book rail travel at least {14 days} ahead where you can, and choose standard class unless the journey is longer than three hours.',
+          seam: { ago: 75, who: 'jm', was: '7 days', why: 'The 14-day rule took effect in April and this line was missed when the section was updated.' },
+          values: [[900, '7 days', 'pr'], [210, '7 days', 'pr', 'err'], [75, '14 days', 'jm']],
+          history: [[900, 'Book rail travel at least 7 days ahead where you can, and choose standard class.'], [200, 'Book rail travel at least 7 days ahead where you can, and choose standard class unless the journey is longer than three hours.']] },
+        { id: 'p2', read: .70, edit: .30, t: 'Flights need approval before booking. Ask the travel desk for two quotes and attach both to the request.' }] },
+    { id: 's4', title: 'Daily allowances', reviewedAgo: 9, reviewEvery: 365, readSince: { department: 4, team: 2 }, readBefore: 31, changedSinceYou: true,
+      edits: [[900, 'pr', 'write'], [300, 'pr', 'edit'], [40, 'sk', 'edit'], [9, 'sk', 'correction']],
+      paras: [
+        { id: 'p1', read: .97, edit: .85, t: 'The daily allowance for an overnight stay is {€54}, which covers breakfast, dinner and incidental costs. Lunch is covered only when you are away from your usual place of work for more than five hours.',
+          seam: { ago: 9, who: 'sk', was: '€45', why: 'The figure was transposed when the new year’s rate table was copied in. €45 was never the approved rate.' },
+          values: [[900, '€42', 'pr'], [300, '€48', 'pr'], [40, '€45', 'sk', 'err'], [9, '€54', 'sk']],
+          history: [[900, 'The daily allowance for an overnight stay is €42, which covers breakfast, dinner and incidental costs.'], [300, 'The daily allowance for an overnight stay is €48, which covers breakfast, dinner and incidental costs. Lunch is covered only when you are away for more than five hours.'], [40, 'The daily allowance for an overnight stay is €45, which covers breakfast, dinner and incidental costs. Lunch is covered only when you are away from your usual place of work for more than five hours.']] },
+        { id: 'p2', read: .60, edit: .35, t: 'Allowances are paid with your next salary run. You do not need receipts for the allowance itself, only for costs above it.' }] },
+    { id: 's5', title: 'Approvals', reviewedAgo: 30, reviewEvery: 365, readSince: { department: 9, team: 5 }, readBefore: 26, changedSinceYou: true,
+      edits: [[900, 'pr', 'write'], [200, 'jm', 'edit'], [190, 'al', 'edit'], [185, 'jm', 'edit'], [180, 'al', 'edit'], [60, 'pr', 'edit'], [45, 'jm', 'edit'], [44, 'al', 'edit'], [30, 'pr', 'edit']],
+      paras: [
+        { id: 'p1', read: .50, edit: .98, t: 'Any single cost above €1,000 needs approval from your budget holder before you commit to it. Below that, your line manager approves.',
+          history: [[900, 'Any single cost above €500 needs approval from your budget holder.'], [200, 'Any single cost above €1,000 needs approval from your budget holder.'], [190, 'Any single cost above €500 needs approval from your budget holder.'], [185, 'Any single cost above €1,000 needs approval from your budget holder.'], [180, 'Any single cost above €500 needs approval from your budget holder.'], [60, 'Any single cost above €750 needs approval from your budget holder before you commit to it.'], [45, 'Any single cost above €1,000 needs approval from your budget holder before you commit to it.'], [44, 'Any single cost above €750 needs approval from your budget holder before you commit to it.']] },
+        { id: 'p2', read: .35, edit: .40, t: 'Approvals are recorded against the request, so anyone in the approval chain can see who agreed and when.' }] },
+    { id: 's6', title: 'Claiming and receipts', reviewedAgo: 430, reviewEvery: 180, refresh: 'jm', readSince: { department: 17, team: 13 },
+      stale: 'It still names the paper claim form, which was retired in June. Claims now go through the Expenses app.',
+      edits: [[900, 'pr', 'write'], [430, 'jm', 'edit']],
+      paras: [
+        { id: 'p1', read: .75, edit: .20, t: 'Claim expenses within 30 days using the paper claim form, signed by your line manager, and post it to the finance office with your receipts.' },
+        { id: 'p2', read: .50, edit: .15, t: 'Keep original receipts for six years. Scans are accepted only for costs under €50.' }] },
+    { id: 's7', title: 'Exceptions', reviewedAgo: 300, reviewEvery: 365, readSince: { department: 6, team: 3 },
+      edits: [[900, 'pr', 'write'], [700, 'pr', 'edit']],
+      paras: [
+        { id: 'p1', read: .12, edit: .10, t: 'Exceptions to this policy need written agreement from the policy owner. Each exception is recorded and looked at again at the next policy review.' }] }
+  ]
+};
+
+/* ===== helpers ===== */
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = getComputedStyle(document.documentElement);
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ms = n => parseFloat(tok(n)) || 0;
+const px = n => { const v = tok(n); return v.endsWith('rem') ? parseFloat(v) * 16 : parseFloat(v) || 0; };
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const NOW = new Date(DATA.now + 'T12:00:00');
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dateOf = a => { const d = new Date(NOW); d.setDate(d.getDate() - a); return d; };
+const fdate = a => { const d = dateOf(a); return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear(); };
+const fshort = a => { const d = dateOf(a); return d.getDate() + ' ' + MON[d.getMonth()]; };
+const span = d => { d = Math.abs(d); if (d < 1) return 'today'; if (d < 14) return d + (d === 1 ? ' day' : ' days'); if (d < 60) return Math.round(d / 7) + ' weeks'; if (d < 540) return Math.round(d / 30.4) + ' months'; return (Math.round(d / 36.5) / 10) + ' years'; };
+const ago = d => d < 1 ? 'today' : span(d) + ' ago';
+const person = id => DATA.people[id];
+const TOT = DATA.audience.groups.reduce((a, g) => a + g.n, 0), K = DATA.privacy.minGroup;
+const lastChange = s => Math.min(...s.edits.map(e => e[0]));
+const lastEdit = s => s.edits.reduce((a, e) => e[0] < a[0] ? e : a);
+const docChanged = () => Math.min(...DATA.sections.map(lastChange));
+const versions = () => [...new Set(DATA.sections.flatMap(s => s.edits.map(e => e[0])))].sort((a, b) => b - a);
+const dueIn = s => s.reviewEvery - s.reviewedAgo;            /* negative: overdue */
+const seamHTML = p => p.t.replace(/\{([^}]*)\}/g, (_, w) => `<span class="fix" data-fix="${p.id}">${w}</span>`);
+const plain = t => t.replace(/[{}]/g, '');
+const wait = t => new Promise(r => setTimeout(r, RM ? Math.min(t, ms('--motion-instant')) : t));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sid = (s, p) => s.id + '-' + p.id;
+const fresh = a => Math.max(0, 1 - Math.sqrt(a / DATA.historyKeptSinceAgo));
+const seams = () => DATA.sections.flatMap(s => s.paras.filter(p => p.seam).map(p => ({ s, p })));
+const owner = () => person(DATA.doc.owner);
+
+/* read since it changed (V6): the privacy floor. A split shows only when every group has at least K readers. */
+let READ = new Set();
+const groupCount = (s, g) => s.readSince[g.floor] + (READ.has(s.id) && g.floor === DATA.floor.kind ? 1 : 0);
+const readTotal = s => DATA.audience.groups.reduce((a, g) => a + groupCount(s, g), 0);
+const split = s => DATA.audience.groups.every(g => groupCount(s, g) >= K);
+const needs = s => s.changedSinceYou && !READ.has(s.id) && s.paras.some(p => p.seam && p.seam.ago < DATA.you.lastReadAgo);
+const bars = s => split(s) ? DATA.audience.groups.map(g => `<span class="gb" data-floor="${g.floor}" style="--n:${g.n}"><i style="--f:${groupCount(s, g) / g.n}"></i></span>`).join('') : `<span class="gb all" style="--n:1"><i style="--f:${readTotal(s) / TOT}"></i></span>`;
+
+/* ===== band ===== */
+function renderBand() {
+  $('#band').innerHTML = `<span class="app-name">${esc(DATA.app)}</span>
+    <span class="fchip" data-floor="${DATA.floor.kind}">${esc(DATA.floor.name)}</span>
+    <nav class="crumbs" aria-label="Breadcrumb">${esc(DATA.library)} <i data-lucide="chevron-right" data-size="14"></i> <b>${esc(DATA.doc.title)}</b></nav>
+    <div class="band-r"><span class="hints"><span><span class="kbd">N</span> next repair</span><span><span class="kbd">B</span> before and after</span><span class="h-x"><span class="kbd">Esc</span> close</span><span><span class="kbd">R</span> replay</span></span><button class="btn" id="bHist" aria-pressed="false"><i data-lucide="history" data-size="16"></i>History <span class="kbd">H</span></button><span>Version ${versions().length}</span><span>${esc(DATA.doc.status)}</span><span class="me" title="${esc(DATA.you.name)}">${esc(DATA.you.initials)}</span></div>`;
+  $('#bHist').onclick = () => toggleHistory();
+}
+
+/* ===== the document ===== */
+function stateOf(s) { const d = dueIn(s); return d < 0 ? { t: `review ${span(-d)} overdue`, over: true } : d <= 182 ? { t: `review in ${span(d)}` } : { t: `reviewed ${ago(s.reviewedAgo)}` }; }
+function renderDoc() {
+  const o = owner(), last = DATA.sections.reduce((a, s) => lastChange(s) < lastChange(a) ? s : a);
+  let h = `<header class="row dhead"><div class="ml"></div><div class="tx">
+      <div class="eyebrow">${esc(DATA.doc.kind)} · ${esc(DATA.library)}</div>
+      <h1>${esc(DATA.doc.title)}</h1>
+      <div class="dmeta"><span>Owner <b>${esc(o.name)}</b></span><span>Changed <b>${ago(docChanged())}</b></span><span><b>${seams().length} repairs</b>, kept visible</span><span>Read since last change <b id="docread"></b></span></div>
+    </div><div class="mr"></div></header>`;
+  DATA.sections.forEach((s, i) => {
+    const st = stateOf(s);
+    h += `<section class="sec${s.stale ? ' stale' : ''}" id="${s.id}"><div class="row hrow"><div class="ml"></div><div class="tx"><h2><span class="n">${i + 1}</span>${esc(s.title)}</h2><span class="state${st.over ? ' over' : ''}">${st.t}</span><button class="gauge" data-sec="${s.id}"></button></div><div class="mr"></div></div>`;
+    if (s.changedSinceYou) {
+      const fixed = s.paras.some(p => p.seam && p.seam.ago < DATA.you.lastReadAgo), n = s.edits.filter(e => e[0] < DATA.you.lastReadAgo).length;
+      h += `<div class="row"><div class="ml"></div><p class="tx unread${fixed ? ' need' : ''}" data-note="${s.id}"><i data-lucide="${fixed ? 'eye' : 'history'}" data-size="16"></i><span>Changed since you last read it, ${ago(DATA.you.lastReadAgo)}: ${fixed ? '<b>a figure you read was repaired.</b>' : `<b>${n} ${n === 1 ? 'edit' : 'edits'}</b>, no repairs.`}</span></p><div class="mr"></div></div>`;
+    }
+    if (s.stale) {
+      const who = person(s.refresh), dueAgo = -dueIn(s);
+      h += `<div class="row"><div class="ml"></div><div class="tx stale-card"><i data-lucide="hourglass" data-size="18"></i>
+        <div><b>Out of date for ${span(dueAgo)}.</b> Its review fell due on ${fdate(dueAgo)}. ${esc(s.stale)}</div>
+        <div class="acts"><button class="btn"><i data-lucide="message-square" data-size="16"></i>Ask ${esc(who.name)}</button><span class="why"><b>${esc(who.name)}</b> can refresh it; ${esc(owner().name)} can mark it as still right.</span></div></div><div class="mr"></div></div>`;
+    }
+    s.paras.forEach(p => { h += `<div class="row prow" data-pid="${sid(s, p)}"><div class="ml">${p.seam ? `<div class="seam-m"><i></i>repair<span>${span(p.seam.ago)}</span></div>` : ''}${s.changedSinceYou && !p.seam && p.history ? '<span class="since-m" title="Changed since you read it"></span>' : ''}</div><p class="tx">${seamHTML(p)}</p><div class="mr"></div></div>`; });
+    h += `</section>`;
+  });
+  $('#page').innerHTML = h;
+  $$('.prow .fix').forEach(f => { f.tabIndex = 0; f.setAttribute('role', 'button'); f.setAttribute('aria-label', `${f.textContent}: repaired. Why is it ${f.textContent}, and since when?`); });
+  DATA.sections.forEach(gauge);
+  docRead();
+}
+function gauge(s) {
+  const el = $(`.gauge[data-sec="${s.id}"]`); el.innerHTML = `<span>${readTotal(s)} of ${TOT}</span><span class="bars">${bars(s)}</span>`;
+  el.setAttribute('aria-label', `${readTotal(s)} of ${TOT} have read this section since it changed ${ago(lastChange(s))}`);
+}
+function docRead() { const s = DATA.sections.reduce((a, s) => lastChange(s) < lastChange(a) ? s : a); $('#docread').textContent = `${readTotal(s)} of ${TOT}`; }
+
+/* ===== the wear rail (V1) ===== */
+let marks = [];
+function floorsOf(s) { const c = {}; s.edits.forEach(e => { const f = person(e[1]).floor; c[f] = (c[f] || 0) + 1; }); return c; }
+function layoutRail() {
+  const rail = $('#rail'), H = rail.clientHeight, total = $('#page').offsetHeight, half = rail.clientWidth / 2 - px('--space-1');
+    let h = '<div class="spine"></div>', i = 0; marks = [];
+  DATA.sections.forEach(s => {
+    const se = $('#' + s.id), sy = se.offsetTop / total * H, sh = se.offsetHeight / total * H;
+    h += `<div class="sec-tick" style="--y:${sy}px"></div>`;
+    if (s.stale) h += `<div class="stale-band" style="--y:${sy}px;--h:${sh}px"></div>`;
+    if (s.changedSinceYou) h += `<div class="since-b${needs(s) ? ' need' : READ.has(s.id) ? ' done' : ''}" data-since="${s.id}" style="--y:${sy}px;--h:${sh}px"></div>`;
+    const fl = floorsOf(s), n = s.edits.length;
+    s.paras.forEach(p => {
+      const el = $(`[data-pid="${sid(s, p)}"]`), y = el.offsetTop / total * H, hh = Math.max(2, el.offsetHeight / total * H - 2), w = p.edit * half;
+      h += `<div class="wear e" style="--y:${y}px;--h:${hh}px;--i:${i}">${Object.entries(fl).map(([f, c]) => `<i data-floor="${f}" style="--w:${(w * c / n).toFixed(1)}px"></i>`).join('')}</div>`;
+      h += `<div class="wear r" style="--y:${y}px;--h:${hh}px;--i:${i++}"><i style="--w:${(p.read * half).toFixed(1)}px"></i></div>`;
+      if (p.seam) h += `<div class="seam-tick" style="--y:${y + hh / 2}px"></div>`;
+      marks.push({ s, p, y, hh });
+    });
+  });
+  h += '<div class="thumb" id="thumb"></div>';
+  rail.innerHTML = h; thumb();
+  $('#railft').innerHTML = `reads<br>since<br>${fshort(DATA.readTrackingSinceAgo).split(' ')[1]} ${dateOf(DATA.readTrackingSinceAgo).getFullYear() % 100}`;
+}
+function thumb() {
+  const r = $('#reader'), rail = $('#rail'), H = rail.clientHeight, t = $('#thumb'); if (!t) return;
+  const sh = r.scrollHeight; t.style.setProperty('--y', (r.scrollTop / sh * H) + 'px'); t.style.setProperty('--h', (r.clientHeight / sh * H) + 'px');
+  rail.setAttribute('aria-valuenow', Math.round(r.scrollTop / Math.max(1, sh - r.clientHeight) * 100));
+}
+
+/* ===== the almanac (V4) and read since (V6) in the aside ===== */
+const PAST = DATA.historyKeptSinceAgo, FUT = 182, NOWX = 760;
+const X = d => d >= 0 ? NOWX * (1 - Math.sqrt(Math.min(d, PAST) / PAST)) : NOWX + (1000 - NOWX) * Math.min(-d, FUT) / FUT;
+function strip(s) {
+  const due = -dueIn(s), over = due > 0;
+  let h = `<svg class="strip" viewBox="0 0 1000 16" preserveAspectRatio="none" aria-hidden="true">`;
+  if (over) h += `<rect class="hatch" x="${X(due)}" y="1" width="${NOWX - X(due)}" height="14"/>`;
+  h += `<line class="base" x1="0" y1="8" x2="${NOWX}" y2="8"/>`;
+  s.edits.forEach(e => { h += `<line class="tick${e[2] === 'correction' ? ' rep' : ''}" data-floor="${person(e[1]).floor}" style="--fresh:${fresh(e[0]).toFixed(2)}" x1="${X(e[0])}" y1="2" x2="${X(e[0])}" y2="14"/>`; });
+  h += `<line class="rev" x1="${X(s.reviewedAgo)}" y1="12" x2="${X(s.reviewedAgo)}" y2="16"/>`;
+  if (s.changedSinceYou) h += `<line class="you" x1="${X(DATA.you.lastReadAgo)}" y1="0" x2="${X(DATA.you.lastReadAgo)}" y2="16"/>`;
+  if (over) h += `<line class="tide" x1="${X(due)}" y1="0" x2="${X(due)}" y2="16"/>`;
+  else { h += `<line class="travel" x1="${NOWX}" y1="8" x2="${X(due)}" y2="8"/>`; if (dueIn(s) <= FUT) h += `<line class="due" x1="${X(due)}" y1="3" x2="${X(due)}" y2="13"/>`; }
+  return h + `</svg>`;
+}
+let SEL = 's1';
+function renderList() {
+  const over = DATA.sections.filter(s => dueIn(s) < 0), soon = DATA.sections.filter(s => dueIn(s) >= 0 && dueIn(s) <= FUT);
+  const ticks = [[PAST, String(dateOf(PAST).getFullYear())], [365, String(dateOf(365).getFullYear())], [0, 'now', 'n'], [-FUT, '+6 mo']];
+  $('#list').innerHTML = `<span class="eyebrow">Almanac · this ${esc(DATA.doc.kind.toLowerCase())} over time</span>
+    <h3>${over.length} out of date · ${seams().length} repairs</h3>
+    <div class="almwrap" id="almwrap"><div class="alm-axis">${ticks.map(t => `<span class="${t[2] || ''}" style="left:${X(t[0]) / 10}%">${t[1]}</span>`).join('')}</div>
+      <div class="alm" id="alm">${DATA.sections.map((s, i) => { const st = stateOf(s); return `<button class="ar" data-go="${s.id}"><span class="n">${i + 1}</span><span class="t"><span>${esc(s.title)}</span><span class="${st.over ? 'over' : ''}">${st.t.replace('review ', '').replace('reviewed ', '')}</span></span><span></span>${strip(s)}</button>`; }).join('')}</div>
+      <div class="onenow" id="onenow"></div></div>
+    <div class="key">${[['<line class="tick" data-floor="department" style="--fresh:1" x1="14" y1="1" x2="14" y2="11"/>', 'change'], ['<line class="tick rep" x1="14" y1="1" x2="14" y2="11"/>', 'repair'], ['<line class="you" x1="14" y1="0" x2="14" y2="12"/>', 'you read'], ['<line class="travel" x1="2" y1="6" x2="22" y2="6"/><line class="due" x1="23" y1="2" x2="23" y2="10"/>', 'to review'], ['<line class="tide" x1="6" y1="0" x2="6" y2="12"/><rect class="hatch" x="6" y="1" width="20" height="10"/>', 'missed, stale since']].map(([i, l]) => `<span><svg viewBox="0 0 28 12" class="strip" preserveAspectRatio="none">${i}</svg>${l}</span>`).join('')}</div>
+    <div class="rs" id="rs"></div>`;
+  $$('.ar').forEach(b => b.addEventListener('click', () => { go(b.dataset.go); select(b.dataset.go); }));
+  placeNow(); readPanel();
+}
+function placeNow() { const a = $('#alm'), w = $('#almwrap'); if (!a) return; const st = $('.ar .strip', a); if (!st) return; const r = st.getBoundingClientRect(), wr = w.getBoundingClientRect(); const n = $('#onenow'); n.style.left = (r.left - wr.left + r.width * NOWX / 1000) + 'px'; n.style.top = px('--space-4') + 'px'; }
+function readPanel() {
+  const s = DATA.sections.find(x => x.id === SEL), n = readTotal(s), le = lastEdit(s), hw = s.readBefore;
+  $$('.ar').forEach(b => b.classList.toggle('sel', b.dataset.go === SEL)); $$('.gauge').forEach(b => b.classList.toggle('sel', b.dataset.sec === SEL));
+  const html = `<span class="eyebrow">Read since it changed · ${esc(s.title)}</span>
+    <div class="big"><b>${n}</b><span>of ${TOT} since ${fshort(le[0])}${le[2] === 'correction' ? ', a repair' : ''}</span></div>
+    ${split(s) ? DATA.audience.groups.map(g => `<div class="gr"><span>${esc(g.name)}</span><span class="v">${groupCount(s, g)} of ${g.n}</span><span class="gb" data-floor="${g.floor}"><i style="--f:${groupCount(s, g) / g.n}"></i></span></div>`).join('')
+      : `<p class="why"><b>Split by group hidden.</b> One group has fewer than ${K} readers since the change; showing the other would give its number away.</p>`}
+    ${hw ? `<div class="hw"><i data-lucide="waves" data-size="16"></i><span><b>${hw}</b> read the old version: the high-water mark. <b>${hw - n}</b> still to read it.</span></div>` : ''}
+    <div class="acts"><button class="btn" aria-disabled="true" aria-describedby="tell-why"><i data-lucide="send" data-size="16"></i>Tell ${hw ? 'the ' + (hw - n) + ' who read the old version' : 'readers'}</button></div>
+    <p class="why" id="tell-why">Only <b>${esc(owner().name)}</b> (${esc(owner().role.toLowerCase())}) can notify readers, and sees the same counts, never names.</p>`;
+  ['#rs', '#rs2'].forEach(q => { const el = $(q); if (el) { el.innerHTML = html.replace(/tell-why/g, 'tell-why' + q.slice(3)); Icons.hydrate(el); } });
+}
+function select(id) { if (id === SEL) return; SEL = id; const r = $('#rs'); if (!r) return; r.classList.add('out'); setTimeout(() => { readPanel(); r.classList.remove('out'); }, RM ? 0 : ms('--motion-quick')); }
+
+/* ===== the "why and since when" card (V2) on a repaired value ===== */
+let CARD = null;
+function openCard(s, p) {
+  CARD = { s, p }; untieSeam();
+  const row = $(`[data-pid="${sid(s, p)}"]`), f = row.querySelector('.fix'), H = DATA.historyKeptSinceAgo, Xa = a => Math.sqrt(a / H);
+  $$('.fix.open').forEach(x => x.classList.remove('open')); $$('.prow.lit').forEach(r => r.classList.remove('lit')); f.classList.add('open'); row.classList.add('lit');
+  const vs = p.values.map((v, i) => ({ ago: v[0], v: v[1], who: v[2], err: v[3] === 'err', until: i < p.values.length - 1 ? p.values[i + 1][0] : 0, now: i === p.values.length - 1 }));
+  const cur = vs[vs.length - 1], who = person(p.seam.who), wrong = vs.filter(v => v.err).reduce((a, v) => a + (v.ago - v.until), 0);
+  $('#why').innerHTML = `<div class="pane-head"><span class="eyebrow">Why is this ${esc(cur.v)}, and since when?</span><button class="btn" aria-label="Close" onclick="closeCard()"><i data-lucide="x" data-size="16"></i></button></div>
+    <div class="card" id="card"><h4 id="why-h">${esc(cur.v)} since ${fdate(cur.ago)}</h4>
+    <div class="strata">${vs.slice().reverse().map(v => `<div class="st${v.now ? ' now' : ''}${v.err ? ' err' : ''}" data-floor="${person(v.who).floor}"><span class="v">${esc(v.v)}</span><span class="bar" style="--fresh:${fresh(v.ago).toFixed(2)};margin-left:${((1 - Xa(v.ago)) * 100).toFixed(1)}%;margin-right:${(Xa(v.until) * 100).toFixed(1)}%"></span></div>
+      <div class="st"><span></span><span>${v.now ? 'now' : 'for ' + span(v.ago - v.until)} · ${esc(person(v.who).name)}${v.err ? ' · <b style="font-weight:400;color:var(--x-seam)">wrong</b>' : ''}</span></div>`).join('')}
+      <div class="st unc"><span class="v">?</span><span>no record before ${fdate(H)}: moved from the old intranet</span></div></div>
+    <div class="axis"><span></span><div><span>${dateOf(H).getFullYear()}</span><span>now</span></div></div>
+    <div class="seamwhy"><i data-lucide="scissors" data-size="16"></i><span>${esc(p.seam.why)} Repaired by ${esc(who.name)}, ${ago(p.seam.ago)}. The wrong value stood for ${span(wrong)}.</span></div>
+    <p>Read since the repair: <b>${readTotal(s)} of ${TOT}</b>. ${needs(s) ? '<b style="font-weight:400;color:var(--green)">You read the old value</b> on your last visit.' : ''}</p>
+    <div class="acts"><button class="btn" id="cBefore"><i data-lucide="git-compare-arrows" data-size="16"></i>Before and after <span class="kbd">B</span></button><button class="btn"><i data-lucide="message-square" data-size="16"></i>Ask ${esc(who.name.split(' ')[0])}</button></div></div>
+    <div class="rs" id="rs2"></div>`;
+  Icons.hydrate($('#why'));
+  $('#cBefore').onclick = () => openSeam(s, p);
+  SEL = s.id; readPanel();
+  showPane('why'); setTimeout(() => { drawLinks(); requestAnimationFrame(() => $('#links').classList.add('on')); }, RM ? 0 : ms('--motion-slow'));
+}
+function closeCard() { if (!CARD) return; CARD = null; $('#links').classList.remove('on'); $('#links').innerHTML = ''; if (!OPEN) { $$('.fix.open').forEach(x => x.classList.remove('open')); $$('.prow.lit').forEach(r => r.classList.remove('lit')); showPane(document.body.classList.contains('hist') ? 'hist' : 'list'); } }
+function showPane(id) { ['list', 'why', 'par', 'hist'].forEach(p => $('#' + p).classList.toggle('off', p !== id)); }
+
+/* ===== the seam opened: both states side by side (V3, Xanadu) ===== */
+let OPEN = null;
+function before(p) { const h = p.history.filter(h => h[0] > p.seam.ago); return h[h.length - 1][1]; }
+function openSeam(s, p) {
+  closeCard(); if (document.body.classList.contains('hist')) toggleHistory(false);
+  OPEN = { s, p };
+  const row = $(`[data-pid="${sid(s, p)}"]`); $$('.prow.lit').forEach(r => r.classList.remove('lit')); row.classList.add('lit'); row.querySelector('.fix').classList.add('open');
+  const r = $('#reader'); r.scrollTo({ top: row.offsetTop - r.clientHeight / 3, behavior: RM ? 'auto' : 'smooth' });
+  const was = before(p), who = person(p.seam.who), o = owner();
+  $('#par').innerHTML = `<div class="pane-head"><span class="eyebrow">Before the repair · ${fdate(p.seam.ago + 1)}</span><button class="btn" aria-label="Close" onclick="closeSeam()"><i data-lucide="x" data-size="16"></i></button></div>
+    <div class="then"><h4>${esc(s.title)}</h4>${s.paras.map(q => q === p ? `<p data-then="${q.id}">${esc(was).replace(esc(p.seam.was), `<span class="was">${esc(p.seam.was)}</span>`)}</p>` : `<p class="same" data-then="${q.id}">${esc(plain(q.t))}</p>`).join('')}</div>
+    <div class="repair"><div class="who"><i data-lucide="scissors" data-size="14"></i>Repaired by ${esc(who.name)} · ${fdate(p.seam.ago)}</div><p>${esc(p.seam.why)}</p>
+      <p class="why"><b>${readTotal(s)} of ${TOT}</b> have read this since the repair.</p></div>
+    <div class="acts"><button class="btn" aria-disabled="true" aria-describedby="undo-why"><i data-lucide="undo-2" data-size="16"></i>Undo repair</button></div>
+    <p class="why" id="undo-why">Only <b>${esc(o.name)}</b> (${esc(o.role.toLowerCase())}) can undo a repair, and the undo leaves a seam too.</p>`;
+  Icons.hydrate($('#par'));
+  showPane('par');
+  setTimeout(() => { drawLinks(); requestAnimationFrame(() => $('#links').classList.add('on')); }, RM ? 0 : ms('--motion-slow'));
+}
+function untieSeam() { OPEN = null; $('#links').classList.remove('on'); $('#links').innerHTML = ''; }
+function closeSeam() { untieSeam(); $$('.fix.open').forEach(f => f.classList.remove('open')); $$('.prow.lit').forEach(r => r.classList.remove('lit')); showPane('list'); }
+function drawLinks() {
+  const svg = $('#links');
+  if (CARD && !OPEN) { const row = $(`[data-pid="${sid(CARD.s, CARD.p)}"]`), f = row.querySelector('.fix').getBoundingClientRect(), tx = row.querySelector('.tx').getBoundingClientRect(), t = $('#why-h').getBoundingClientRect(), y2 = t.top + t.height / 2, y1 = f.top + f.height / 2, x1 = tx.right + px('--space-2'), x2 = t.left - px('--space-5'), m = (x1 + x2) / 2;
+    svg.innerHTML = f.bottom < $('#reader').getBoundingClientRect().top ? '' : `<path class="tether" d="M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}"/><circle cx="${x1}" cy="${y1}" r="2" style="fill:var(--x-seam)"/><circle cx="${x2}" cy="${y2}" r="2" style="fill:var(--x-seam)"/>`; return; }
+  if (!OPEN) { svg.innerHTML = ''; return; }
+  const { s, p } = OPEN, g = px('--space-2'), top = $('#reader').getBoundingClientRect().top; let h = '';
+  s.paras.forEach(q => {
+    const a = $(`[data-pid="${sid(s, q)}"] .tx`).getBoundingClientRect(), b = $(`[data-then="${q.id}"]`).getBoundingClientRect();
+    if (a.bottom < top) return;
+    const x1 = a.right + g, x2 = b.left - g, m = (x1 + x2) / 2;
+    h += `<path class="same" d="M${x1},${a.top} C${m},${a.top} ${m},${b.top} ${x2},${b.top} L${x2},${b.bottom - g} C${m},${b.bottom - g} ${m},${a.bottom - g} ${x1},${a.bottom - g} Z"/>`;
+    if (q === p) {
+      const f = $(`[data-pid="${sid(s, q)}"] .fix`).getBoundingClientRect(), w = $('#par .was').getBoundingClientRect(), fy = f.top + f.height / 2, wy = w.top + w.height / 2, L = Math.hypot(x2 - x1, wy - fy) * 1.6;
+      h += `<path class="seam" style="--len:${L}" d="M${x1},${fy} C${m},${fy} ${m},${wy} ${x2},${wy}"/><circle cx="${x1}" cy="${fy}" r="2" style="fill:var(--x-seam)"/><circle cx="${x2}" cy="${wy}" r="2" style="fill:var(--x-seam)"/>`;
+    }
+  });
+  svg.innerHTML = h;
+}
+
+/* ===== History mode (V5): the whole history as one picture, only when asked for ===== */
+const V = versions();                            /* days ago, oldest first */
+let CUR = V.length - 1, YOU = 0, FX = [];
+const curAgo = (s, p) => p.seam ? p.seam.ago : p.history ? lastChange(s) : DATA.historyKeptSinceAgo;
+function textAt(s, p, a) { const c = [...(p.history || []), [curAgo(s, p), plain(p.t)]].filter(e => e[0] >= a); return c.length ? c[c.length - 1][1] : ''; }
+const editorAt = (s, a) => { const e = s.edits.filter(e => e[0] >= a); return e[e.length - 1]; };
+function renderHist() {
+  YOU = V.reduce((b, a, i) => a >= DATA.you.lastReadAgo ? i : b, 0);
+  const fl = [...new Set(Object.values(DATA.people).map(p => p.floor))];
+  $('#hist').innerHTML = `<div class="pane-head"><span class="eyebrow">History · ${V.length} versions in one picture</span><button class="btn" aria-label="Close history" onclick="toggleHistory(false)"><i data-lucide="x" data-size="16"></i></button></div>
+    <div class="flow" id="flow"></div>
+    <div class="scrub"><label class="sr" for="scrub">Version</label><input type="range" id="scrub" min="0" max="${V.length - 1}" step="1" value="${CUR}"></div>
+    <div class="ver" id="ver" aria-live="polite"></div>
+    <div class="acts"><button class="btn" id="hSince"><i data-lucide="history" data-size="16"></i>When I last read it <span class="kbd">Y</span></button><button class="btn" id="hNow"><i data-lucide="arrow-right" data-size="16"></i>Now <span class="kbd">End</span></button></div>
+    <div class="fkey">${fl.map(f => `<span><i data-floor="${f}"></i>${esc((DATA.audience.groups.find(g => g.floor === f) || { name: DATA.orgName }).name)}</span>`).join('')}<span><i class="s"></i>repair</span><span><i class="u"></i>no record before ${fdate(DATA.historyKeptSinceAgo)}</span></div>
+    <p class="why">Each column is a version; each band a section, as thick as its text and coloured by the floor of who changed it. <span class="kbd">←</span> <span class="kbd">→</span> replay the page in place.</p>`;
+  Icons.hydrate($('#hist'));
+  $('#scrub').addEventListener('input', () => setV(+$('#scrub').value));
+  $('#hSince').onclick = () => setV(YOU); $('#hNow').onclick = () => setV(V.length - 1);
+}
+function drawFlow() {
+  const box = $('#flow'); if (!box || !box.clientWidth) return;
+  const W = box.clientWidth, H = Math.min(innerHeight * .36, px('--measure-card')), padL = px('--space-4'), padR = px('--space-5'), top = px('--space-5');
+  const len = V.map(a => DATA.sections.map(s => s.paras.reduce((n, p) => n + textAt(s, p, a).length, 0)));
+  const max = Math.max(...len.map(l => l.reduce((a, b) => a + b, 0))), gap = px('--space-2'), k = (H - gap * DATA.sections.length) / max;
+  const step = (W - padL - padR) / (V.length - 1), cw = Math.max(2, step * .16), xs = V.map((a, i) => padL + i * step); FX = xs;
+  const ys = len.map(l => { let y = top; return l.map(n => { const r = [y, y + n * k]; y += n * k + gap; return r; }); });
+  let h = '';
+  for (let i = 0; i < V.length - 1; i++) DATA.sections.forEach((s, j) => { const a = ys[i][j], b = ys[i + 1][j], f = person(editorAt(s, V[i])[1]).floor;
+    h += `<path class="link" data-floor="${f}" d="M${xs[i] + cw / 2},${a[0]} L${xs[i + 1] - cw / 2},${b[0]} L${xs[i + 1] - cw / 2},${b[1]} L${xs[i] + cw / 2},${a[1]} Z"/>`; });
+  V.forEach((a, i) => DATA.sections.forEach((s, j) => { const e = editorAt(s, a), y = ys[i][j];
+    h += `<rect class="band2${e[0] === a && e[2] === 'correction' ? ' fix' : ''}" data-floor="${person(e[1]).floor}" x="${xs[i] - cw / 2}" y="${y[0]}" width="${cw}" height="${Math.max(1, y[1] - y[0])}"/>`; }));
+  let w = ''; const x0 = padL - cw; for (let y = top; y <= top + H; y += 6) w += `${w ? 'L' : 'M'}${x0 + ((y / 6) % 2 ? 2 : -2)},${y}`;
+  h += `<path class="unc" d="${w}"/>`;
+  DATA.sections.forEach((s, j) => { const y = ys[V.length - 1][j]; h += `<text class="lbl" x="${xs[V.length - 1] + px('--space-3')}" y="${(y[0] + y[1]) / 2 + 4}">${j + 1}</text>`; });
+  h += `<line class="you" x1="${xs[YOU]}" y1="${top - px('--space-1')}" x2="${xs[YOU]}" y2="${top + H + px('--space-2')}"/><text class="lbl you-l" x="${xs[YOU] - px('--space-1')}" y="${top - px('--space-2')}" text-anchor="end">you read it here</text>`;
+  h += `<line class="now" x1="${xs[V.length - 1] + cw}" y1="${top - px('--space-1')}" x2="${xs[V.length - 1] + cw}" y2="${top + H + px('--space-2')}"/><text class="lbl" x="${xs[V.length - 1] + cw}" y="${top + H + px('--space-5')}" text-anchor="end">now</text>`;
+  h += `<text class="lbl" x="${padL}" y="${top + H + px('--space-5')}">${fdate(V[0]).slice(-8)}</text>`;
+  h += `<g id="curg"><line class="cur" x1="0" y1="0" x2="0" y2="${top + H}"/><circle class="knob" cx="0" cy="${top + H}" r="5"/></g>`;
+  h += V.map((a, i) => `<rect class="hit" data-i="${i}" x="${xs[i] - step / 2}" y="0" width="${step}" height="${top + H}"><title>Version ${i + 1}, ${fdate(a)}</title></rect>`).join('');
+  box.innerHTML = `<svg height="${top + H + px('--space-6')}" viewBox="0 0 ${W} ${top + H + px('--space-6')}" role="img" aria-label="History flow: sections as bands, versions left to right, coloured by who changed them">${h}</svg>`;
+  $$('.hit', box).forEach(r => r.addEventListener('click', () => setV(+r.dataset.i)));
+  const g = $('#curg'); if (g) g.setAttribute('transform', `translate(${FX[CUR]},0)`);
+}
+function setV(i, quiet) {
+  CUR = i; const sc = $('#scrub'); if (sc) sc.value = i; const g = $('#curg'); if (g) g.setAttribute('transform', `translate(${FX[i]},0)`);
+  const a = V[i], isNow = i === V.length - 1, changed = DATA.sections.flatMap(s => s.edits.filter(e => e[0] === a).map(e => ({ s, e })));
+  document.body.classList.toggle('past', !isNow);
+  DATA.sections.forEach(s => s.paras.forEach(p => {
+    const row = $(`[data-pid="${sid(s, p)}"]`), t = textAt(s, p, a), pEl = row.querySelector('p'), html = isNow ? seamHTML(p) : esc(t);
+    if (pEl.dataset.v !== String(i)) { pEl.dataset.v = i;
+      if (!quiet && !RM && pEl.innerHTML !== html) { row.classList.add('swap'); setTimeout(() => { pEl.innerHTML = html; row.classList.remove('swap'); if (isNow) rebindFix(); }, ms('--motion-quick')); }
+      else pEl.innerHTML = html; }
+    const diff = !isNow && t !== plain(p.t); row.classList.toggle('diff', diff); row.querySelector('.ml').dataset.d = diff ? 'changed since' : '';
+  }));
+  if (isNow) rebindFix();
+  const ed = changed.map(c => `<b>${esc(c.s.title)}</b> by ${esc(person(c.e[1]).name)}${c.e[2] === 'correction' ? ' (a repair)' : c.e[2] === 'write' ? ' (first written here)' : ''}`).join('; ');
+  const vb = $('#ver'); if (vb) vb.innerHTML = `<div class="h"><span>Version ${i + 1}${isNow ? ' · now' : i === YOU ? ' · when you last read it' : ''}</span><span>${fdate(a)}</span></div><div class="d">${ed}.</div>${i === YOU ? `<div class="d">Since then: <b>${V.length - 1 - i} versions</b>, ${DATA.sections.filter(s => lastChange(s) < V[i]).length} sections changed.</div>` : ''}`;
+  $('#pastbar').innerHTML = `<i data-lucide="history" data-size="16"></i><span class="grow">Viewing <b>version ${i + 1}</b> as it stood on ${fdate(a)}, ${ago(a)}. Changed paragraphs are marked.</span><button class="btn" onclick="setV(V.length - 1)">Back to now <span class="kbd">End</span></button>`;
+  Icons.hydrate($('#pastbar'));
+}
+function toggleHistory(on) {
+  on = on === undefined ? !document.body.classList.contains('hist') : on;
+  if (on) { closeCard(); if (OPEN) closeSeam(); }
+  document.body.classList.toggle('hist', on); $('#bHist').setAttribute('aria-pressed', on);
+  showPane(on ? 'hist' : 'list');
+  if (!on) setV(V.length - 1, true);
+  setTimeout(() => { drawFlow(); layoutRail(); placeNow(); }, RM ? 0 : ms('--motion-slow'));
+}
+
+/* ===== moves ===== */
+function go(id) { const r = $('#reader'), el = $('#' + id); r.scrollTo({ top: el.offsetTop - px('--space-6'), behavior: RM ? 'auto' : 'smooth' }); }
+function rebindFix() {
+  $$('.prow .fix').forEach(f => { if (f.dataset.bound) return; f.dataset.bound = 1; f.tabIndex = 0; f.setAttribute('role', 'button');
+    const s = DATA.sections.find(s => s.paras.some(p => p.id === f.dataset.fix && $(`[data-pid="${sid(s, p)}"]`) && $(`[data-pid="${sid(s, p)}"]`).contains(f))), p = s.paras.find(p => p.id === f.dataset.fix);
+    f.addEventListener('click', e => { e.stopPropagation(); openCard(s, p); });
+    f.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCard(s, p); } }); });
+}
+let IDX = -1;
+function markRead(id) {
+  READ.add(id); const s = DATA.sections.find(x => x.id === id); gauge(s); docRead();
+  const n = $(`[data-note="${id}"]`); if (n) n.classList.add('done'); const b = $(`[data-since="${id}"]`); if (b) b.classList.add('done'), b.classList.remove('need');
+  if (SEL === id) readPanel();
+}
+let spyT = 0, dwellT = 0;
+function spy() {
+  thumb(); if (OPEN || CARD) drawLinks();
+  clearTimeout(spyT); spyT = setTimeout(() => {
+    const r = $('#reader'), mid = r.scrollTop + r.clientHeight * .4;
+    const s = [...DATA.sections].reverse().find(s => $('#' + s.id).offsetTop <= mid) || DATA.sections[0];
+    if (!CARD) select(s.id);
+    /* dwell: your reading counts once you have stayed on a changed section */
+    clearTimeout(dwellT); if (needs(s)) dwellT = setTimeout(() => markRead(s.id), ms('--motion-hold'));
+  }, ms('--motion-quick'));
+}
+
+/* ===== demo: shows its moment ~1.2 s after load; R replays ===== */
+let RUN = 0;
+function reset() {
+  closeCard(); if (OPEN) closeSeam(); if (document.body.classList.contains('hist')) toggleHistory(false);
+  READ.clear(); DATA.sections.forEach(gauge); docRead();
+  $$('.unread').forEach(n => n.classList.remove('done')); SEL = 's1';
+  document.body.classList.add('pre'); $('#reader').scrollTo({ top: 0 }); layoutRail(); readPanel();
+}
+async function play() {
+  const my = ++RUN, alive = () => my === RUN; reset();
+  await wait(ms('--motion-run')); if (!alive()) return;
+  document.body.classList.remove('pre');
+  const s = DATA.sections.find(needs), p = s.paras.find(p => p.seam), r = $('#reader');
+  r.scrollTo({ top: $('#' + s.id).offsetTop - px('--space-8'), behavior: RM ? 'auto' : 'smooth' });
+  await wait(ms('--motion-calm') + ms('--motion-slow')); if (!alive()) return;
+  openCard(s, p);
+}
+function boot() {
+  renderBand(); renderDoc(); renderList(); renderHist(); rebindFix(); Icons.hydrate();
+  layoutRail(); setV(V.length - 1, true);
+  const r = $('#reader'), rail = $('#rail');
+  r.addEventListener('scroll', spy, { passive: true });
+  addEventListener('resize', () => { layoutRail(); placeNow(); drawFlow(); if (OPEN || CARD) drawLinks(); });
+  rail.addEventListener('click', e => { const b = rail.getBoundingClientRect(); r.scrollTo({ top: (e.clientY - b.top) / b.height * r.scrollHeight - r.clientHeight / 2, behavior: RM ? 'auto' : 'smooth' }); });
+  rail.addEventListener('keydown', e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { r.scrollBy(0, (e.key === 'ArrowDown' ? 1 : -1) * px('--travel-floor')); e.preventDefault(); e.stopPropagation(); } });
+  $$('.gauge').forEach(b => b.addEventListener('click', () => select(b.dataset.sec)));
+  document.addEventListener('click', e => { if (CARD && !e.target.closest('.aside,.fix')) closeCard(); });
+  document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || (e.target.matches && e.target.matches('input'))) return;
+    const k = e.key, hist = document.body.classList.contains('hist');
+    if (k === 'r' || k === 'R') { e.preventDefault(); play(); }
+    else if (k === 'Escape') { if (CARD) closeCard(); else if (OPEN) closeSeam(); else if (hist) toggleHistory(false); }
+    else if (k === 'n' || k === 'N') { IDX = (IDX + 1) % seams().length; const { s, p } = seams()[IDX]; r.scrollTo({ top: $('#' + s.id).offsetTop - px('--space-8'), behavior: RM ? 'auto' : 'smooth' }); setTimeout(() => openCard(s, p), RM ? 0 : ms('--motion-calm')); }
+    else if (k === 'b' || k === 'B') { const c = CARD || (seams()[Math.max(0, IDX)]); if (c) openSeam(c.s, c.p); }
+    else if (k === 'h' || k === 'H') toggleHistory();
+    else if (hist && k === 'ArrowLeft') setV(Math.max(0, CUR - 1));
+    else if (hist && k === 'ArrowRight') setV(Math.min(V.length - 1, CUR + 1));
+    else if (hist && (k === 'y' || k === 'Y')) setV(YOU);
+    else if (hist && k === 'End') setV(V.length - 1);
+  });
+  play();
+}
+boot();
+</script>
+</body>
+</html>
