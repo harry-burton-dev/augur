@@ -2,7 +2,7 @@
   "version": "0.15.0",
   "name": "Bittern",
   "channel": "beta",
-  "released": "2026-11-02",
+  "released": "2026-11-03",
   "upgradeFrom": ">=0.1.0",
   "changed": [
     "@augur/app-kit",
