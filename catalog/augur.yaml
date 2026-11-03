@@ -270,6 +270,7 @@ spec:
     - api:default/models-api
     - api:default/registry-api
   dependsOn:
+    - resource:default/keycloak
     - resource:default/postgres
 ---
 apiVersion: backstage.io/v1alpha1
