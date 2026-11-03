@@ -71,7 +71,7 @@ Links from one record to another, in the same app or in another, kept by the app
 
 Table shape: `links (id, from_id, relation, to_app, to_kind, to_id, to_label, by, at)`. Show the inverse name ("Superseded by") on the other end when it's yours.
 
-How Artifacts does it, to copy (`apps/folio/service/src/links.ts`, `apps/folio/frontend/src/folio-links.ts`):
+How Artifacts does it, to copy (in augur-folio: `service/src/links.ts`, `frontend/src/folio-links.ts`):
 
 - Its own records are `{app: 'folio', kind: 'unit', id: '<library>/<record>'}`. Pick one id shape for your records and keep it.
 - Anyone who can see a record sees its links, both ways; whoever may change it links and unlinks. Linking to one of your own records needs the caller to be able to open it, and keeps its current name as the label.

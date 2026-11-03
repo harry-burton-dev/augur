@@ -22,13 +22,15 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/models" } }
   storage:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/storage" } }
+  # The apps that ship with AUGUR aren't built here: they live in their own repositories (ADR 0049). A
+  # build from source runs AUGUR's images of them from the newest beta release, or SHIPPED_APPS_VERSION's.
   folio:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/folio" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio:${SHIPPED_APPS_VERSION:-beta}
   folio-worker:
-    build: { context: ../.., dockerfile: apps/folio/worker/Dockerfile }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${SHIPPED_APPS_VERSION:-beta}
   auspex:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/auspex" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${SHIPPED_APPS_VERSION:-beta}
   atlas:
-    build: { context: ../.., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/atlas" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${SHIPPED_APPS_VERSION:-beta}
   updater:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, target: updater, args: { PACKAGE: "@augur/updater" } }
