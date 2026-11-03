@@ -124,6 +124,10 @@ From this release the registry checks the release feed before it believes it ([A
 
 A release its publisher **halted** (the Halt rollout workflow, [release-channels.md](release-channels.md#halting-a-release)) is still listed in the Upgrade Centre, marked halted with the reason, but is never offered, chosen as the next upgrade or installed. A server running one is told so first, and where to go: a newer release that isn't halted, or back to the one before.
 
+### Installing a halted release to test going back
+
+On a **dev or preview** server only, a deployment admin can install a halted release on purpose, to prove AUGUR goes back by itself from a broken one ([ADR 0051](decisions/0051-install-a-halted-release-on-request.md)). They name the exact version and say why, after entering their password again (`PUT /v1/platform/upgrade/halted` with `version` and `reason`). The release must be newer than the one the server runs, able to upgrade from it, and have no breaking release in between, because going back by itself is the point. The watch then judges it like any other upgrade. A production server (`SERVER_RING=production`) always refuses, and every request, allowed or refused, is in the audit log (`platform.halted-install-requested`, `platform.halted-install-refused`). Automatic policies never take a halted release, so it doesn't come back after the server went back.
+
 ### The read key
 
 While the repository is private, a deployment needs one **read key**: a GitHub token that can read this repository's packages and nothing else. With it, the registry checks GitHub for new AUGUR releases (the Upgrade Centre) and new app releases (Admin → Apps) itself, and the updater pulls both. The releases are listed in a feed the Release workflow keeps beside the images, `ghcr.io/harry-burton-dev/im-platform/feed`, so the one token GitHub's container registry accepts covers everything. It replaces the two tokens servers needed before (`release-feed-token` and `image-pull-token`), which still work until you swap them.
