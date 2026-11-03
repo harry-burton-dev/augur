@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A mistake · V6 · The andon cord</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: anyone who sees an agent's mistake can stop that kind of work at once. Stopping is reversible and says who; only the supervisor restarts ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,1fr);gap:var(--space-6)}
+.left{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.berth{padding:var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);display:grid;gap:var(--space-2)}
+.berth h3{margin:0;font-weight:400;font-size:var(--type-meta);color:var(--light)}
+.br{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:var(--space-4);align-items:center;padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);font-size:var(--type-meta)}
+.br.bad{background:var(--x-proposed-disagree-wash);outline:1px solid var(--x-proposed-disagree)}
+.br .n{font-family:var(--font-mono);color:var(--light)}
+.cord{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-4);align-items:center;padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.cord .pull{display:grid;place-items:center;width:var(--target-md);height:var(--target-md);border-radius:50%;border:1.5px solid var(--x-proposed-disagree);color:var(--x-proposed-disagree)}
+.cord.on .pull{background:var(--x-proposed-disagree);color:var(--slate-deep)}
+.cord b{display:block;font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.cord span.s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.right{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.rl{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rl b{font-weight:400;color:var(--ink)}
+.stopped{display:inline-flex;gap:var(--space-2);align-items:center;padding:var(--space-1) var(--space-3);border:1px solid var(--x-proposed-disagree);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--light)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A mistake · V6</b> the andon cord: anyone who sees it can stop that kind of work, at once, with their name on it · Toyota's andon and jidoka</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const MK = DATA.mistake, f = MK.fact, AG = 'a1', a = A(AG), U = MK.used[0]; ME = MK.found.who;
+const S = { pulled: false };
+function render() {
+  const s0 = MK.siblings[0];
+  const mode = S.pulled ? modeHTML(AG, { next: { w: 'Hold', what: `${MK.lot.rule}, stopped by ${first(ME)}` }, boxNext: true }).replace(`<b>${a.next[0].w}</b> ${a.next[0].what}`, `<b>Hold</b> ${MK.lot.rule}`) : modeHTML(AG);
+  $('#app').innerHTML = topHTML(['Mandate', U.what], [['P', 'pull the cord'], ['R', 'replay'], ['T', 'ADR words']], 'department') +
+  `<main class="main"><div class="wrap">
+    <section class="left"><div><p class="eyebrow">${U.app} · ${U.kindWord} · ${P(U.owner).name}</p><h1 class="title">${U.what}</h1></div>
+      <div class="berth"><h3>Small-vessel berths (under 3,000 GT)</h3>
+        <div class="br bad"><span>${s0.v}</span><span class="n">${s0.proposed} GT ${mm(AG, true)}</span><span class="small">${I('flag', 14)} ${first(ME)}: nearer 5,000</span></div>
+        <div class="br"><span>${MK.siblings[3].v}</span><span class="n">${MK.siblings[3].right} GT</span><span></span></div></div>
+      <div class="cord ${S.pulled ? 'on' : ''}"><button class="pull" data-p aria-label="Stop this kind of work">${I('octagon-pause', 22)}</button>
+        <span><b>${S.pulled ? `Stopped: ${MK.lot.rule}` : `Stop ${a.name} reading ${MK.lot.rule}`}</b><span class="s">${S.pulled ? `By ${P(ME).name}, ${MK.pausedAt}. Nothing new is made this way until ${P(a.supervisor).name} restarts it. It is in ${first(a.supervisor)}’s Inbox.` : `You don’t supervise ${a.name}, but you can stop the kind of work that made this. It is reversible and says it was you.`}</span></span></div>
+      ${mode}
+    </section>
+    <aside class="right"><p class="eyebrow">The cord</p>
+      <p class="rl"><b>Anyone who can see the work can pull it.</b> It stops one kind of work, not the agent, and never undoes anything. A pause is the safest thing there is: the work waits.</p>
+      <p class="rl"><b>Only the supervisor restarts it,</b> or narrows it, or keeps it stopped. The person who pulled it is told what was decided.</p>
+      <p class="rl"><b>It is on the record with a name</b>, like every other decision about the agent. A cord pulled by mistake costs a few hours of waiting, never a fact.</p>
+      ${S.pulled ? `<span class="stopped">${I('octagon-pause', 14)} ${MK.lot.rule} · stopped</span>` : ''}
+      <p class="tk">pause = grant.kinds[k].paused { by, at, why } · open to anyone with read access to the work · resume: supervisor only</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-p]').onclick = () => { S.pulled = !S.pulled; render(); };
+}
+function replay() { clearLater(); S.pulled = false; settle(); render(); later(() => { S.pulled = true; render(); }, MOMENT() + ms('--motion-calm')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); return; } if (e.key.toLowerCase() === 'p') { S.pulled = !S.pulled; render(); } });
+replay();
+</script>
+</body>
+</html>

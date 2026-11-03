@@ -64,3 +64,4 @@ turns up a strong concept, the next batch steers on it like any other.
 | [2026-11-03 the catalogue](runs/2026-11-03-the-catalogue/) | data structure people can read | 40 prototypes; six ways to be empty, statements for one record, a sentence of facets over a table of one kind |
 | [2026-11-03 the reference desk](runs/2026-11-03-the-reference-desk/) | asking data a question | 40 prototypes; pencil and ink (a model never enters a count), draft first and ask only what changes, the answer has a base |
 | [2026-11-03 the briefing](runs/2026-11-03-the-briefing/) | from data to a decision | 40 prototypes; same digits at every height, confidence worked out by rule, question not chart |
+| [2026-11-03 the apprentice](runs/2026-11-03-the-apprentice/) | agents that work alongside people | 40 prototypes; works under someone, standby and go (silence is not a go), trust changes the sample not the signature, mistakes have siblings |
