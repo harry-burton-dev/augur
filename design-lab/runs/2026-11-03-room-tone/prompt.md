@@ -8,7 +8,7 @@ concepts: [periphery-channel, dark-when-normal, time-is-matter]
 
 Read `design-lab/brief.md` first; it holds the rules, kit, critique format
 and run shape. When you start, move this file to
-`design-lab/runs/<date>-room-tone/prompt.md`.
+`design-lab/runs/2026-11-03-room-tone/prompt.md`.
 
 ---
 
@@ -18,7 +18,7 @@ things are normal, unmistakable when something needs you, and carrying real
 information (which floor, how urgent, how much) rather than decoration.
 Most software uses sound as a "ding" or not at all. Find out whether a
 small, generated sound language could make AUGUR calmer and faster to read,
-and where it would only annoy. Work in `design-lab/runs/<date>-room-tone/`.
+and where it would only annoy. Work in `design-lab/runs/2026-11-03-room-tone/`.
 
 ## Harry's direction for this run
 - **Every sound pairs with a visible sign.** Sound never carries anything
