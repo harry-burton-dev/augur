@@ -3,10 +3,10 @@
   "apps": {
     "folio": {
       "repo": "harry-burton-dev/augur-folio",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "parts": {
-        "@apps/folio": "0.3.2",
-        "@apps/folio-frontend": "0.7.0"
+        "@apps/folio-frontend": "0.7.1",
+        "@apps/folio": "0.7.1"
       },
       "build": {
         "folio-worker": "worker/Dockerfile"

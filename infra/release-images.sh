@@ -57,9 +57,10 @@ for app in $(jq -r 'keys[]' <<< "$shipped"); do
   service=$(jq -r --arg a "$app" '.[$a].service' <<< "$shipped")
   identity=$(jq -r --arg a "$app" '.[$a].identity' <<< "$shipped")
   echo "$app: $(jq -r --arg a "$app" '.[$a].tag' <<< "$shipped") from $(jq -r --arg a "$app" '.[$a].repo' <<< "$shipped")" >&2
+  unreadable="::error::Couldn't read or check $service. Its repository's images need the PACKAGES_READ_TOKEN secret here (a classic token with read:packages; docs/ship-an-app.md, \"An app in its own repository\")."
   DOCKER_CONFIG=$read_config cosign verify --certificate-identity "$identity" \
-    --certificate-oidc-issuer https://token.actions.githubusercontent.com "$service" > /dev/null
-  container=$(DOCKER_CONFIG=$read_config docker create "$service")
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com "$service" > /dev/null || { echo "$unreadable" >&2; exit 1; }
+  container=$(DOCKER_CONFIG=$read_config docker create "$service") || { echo "$unreadable" >&2; exit 1; }
   docker cp "$container:/app/frontend" ".shipped/frontends/$app"
   docker rm "$container" > /dev/null
 done
