@@ -48,9 +48,9 @@ export function problems({ dir, kit, hash }, pin, sharedModules, read = (f) => r
     }
     if (actual !== expected) out.push(`${file} doesn't match its hash in kit.json`);
   }
-  // The SDK promises apps these; the bundle must serve every one it doesn't leave to /shared/.
+  // The SDK promises apps these, and since SDK 2 the kit is the only thing that serves them.
   const served = new Set(Object.keys(kit.imports ?? {}));
-  for (const s of ['react', 'react-dom', '@augur/kit-common', '@augur/app-kit']) if (!served.has(s)) out.push(`the kit doesn't serve ${s}`);
+  for (const s of sharedModules) if (!served.has(s)) out.push(`the kit doesn't serve ${s}`);
   for (const s of served) if (!sharedModules.includes(s)) out.push(`the kit serves ${s}, which the SDK's sharedModules doesn't list`);
   return out;
 }

@@ -1038,7 +1038,7 @@ function LiveFromMyMachine({ app, busy, onChoose }: { app: PreviewApp; busy: boo
     >
       <label>
         <small>Live from my machine: the address <code>pnpm dev:app {app.app} --live</code> prints</small>
-        <input type="url" value={entry} placeholder="https://your-machine.ts.net/…/entry.ts" onChange={(e) => setEntry(e.currentTarget.value)} />
+        <input type="url" value={entry} placeholder="https://your-machine.ts.net/…/entry.tsx" onChange={(e) => setEntry(e.currentTarget.value)} />
       </label>
       <Button kind="secondary" size="sm" busy={busy} disabled={!entry.trim()} reason="Paste the address first." onPress={() => entry.trim() && onChoose(entry.trim())}>
         Load it

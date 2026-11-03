@@ -131,34 +131,31 @@ When the SDK makes a breaking change it goes to `2.0.0`. Apps keep `^1.0.0` and 
 
 ## The shared kit
 
-Apps don't bundle the UI kit or Lit: the shell serves one copy of each through an import map, and every app on the page uses it (see [platform/frontends](../platform/frontends/README.md#one-kit-for-everyone)). So the kit is part of the contract an app's `sdk` range covers, and it keeps the same promise as the SDK:
+Apps don't bundle React or the kit: the shell serves one copy of each through an import map, and every app on the page uses it (see [platform/frontends](../platform/frontends/README.md#one-kit-for-everyone)). So the kit is part of the contract an app's `sdk` range covers, and it keeps the same promise as the SDK:
 
-- Within SDK 1.x the shell serves `@augur/ui-kit` 1.x and Lit 3.x. A kit minor adds components, attributes or icons; it never removes or renames one, or changes what an existing attribute means.
+- A kit minor adds parts, props or icons; it never removes or renames one, or changes what an existing prop means.
 - A breaking kit change is a kit major, and it ships with an SDK major, so the shell refuses apps that haven't been updated for it instead of breaking them.
-- Moving the shared Lit to a new major is a kit major too.
+- SDK 2 dropped Lit and the Lit kit (`@augur/ui-kit`), which SDK 1.x served frozen: the shell no longer serves them, and an app that imports them doesn't load. `pnpm check:boundaries` fails on any import of them under `platform/` or in the app template.
 - The contract tests in `platform/contract` hold the shell to this: they mount a reference app built against each earlier SDK minor, and fail CI when the shell breaks one.
 
 ### The React kits (ADR 0015)
 
-Every frontend is moving to React. Since SDK 1.10 the shell also serves React 19 (`react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`), Common (`@augur/kit-common`) and Quill, the app kit (`@augur/app-kit`), through the same import map, so a React app's bundle carries none of them. Since ADR 0048 they come as one kit bundle, a signed release of the `augur-kit` repository: an AUGUR release pins its version in `release/kit.json` (written by `pnpm kit:pin`, checked by `pnpm check:kit`), the Release workflow checks its signature before it builds the images (`node scripts/kit.mjs verify`), and the web image serves it at `KIT_URL` ([deploy.md](deploy.md#the-ui-kit)). They keep the same promise:
+Every frontend is React. Since SDK 1.10 the shell serves React 19 (`react`, `react/jsx-runtime`, `react/jsx-dev-runtime`, `react-dom`, `react-dom/client`), Common (`@augur/kit-common`) and Quill, the app kit (`@augur/app-kit`), through the same import map, so a React app's bundle carries none of them. Since ADR 0048 they come as one kit bundle, a signed release of the `augur-kit` repository: an AUGUR release pins its version in `release/kit.json` (written by `pnpm kit:pin`, checked by `pnpm check:kit`), the Release workflow checks its signature before it builds the images (`node scripts/kit.mjs verify`), and the web image serves it at `KIT_URL` ([deploy.md](deploy.md#the-ui-kit)). They keep the same promise:
 
-- Within SDK 1.x the shell serves React 19.x, and Common and Quill on their same major. Moving React to a new major is an SDK major.
+- Within an SDK major the shell serves React on one major (19.x), and Common and Quill on their same major. Moving React to a new major is an SDK major.
 - Aerie, the shell kit (`@augur/shell-kit`), is the shell's own: it is never in the import map and not part of the promise. It is published only for the shell to build with. `pnpm check:boundaries` fails if anything but the shell imports it.
-- Until SDK 2 the Lit kit (`@augur/ui-kit`) and Lit stay served, frozen: fixes only, no new parts. New parts go into Common or Quill. SDK 2 drops Lit and `@augur/ui-kit`, once every frontend has moved.
 - The tokens live in `packages/kit-common/tokens/` in the `augur-kit` repository, and Common's build writes the Tailwind v4 theme from them. An app styles its own layout with `@import 'tailwindcss/utilities' layer(utilities); @import '@augur/app-kit/theme.css';`, and only AUGUR's tokens exist as classes. It leaves out Tailwind's preflight: the shell already sets the page's base.
 
 ## Building an app in its own repository
 
-Apps are moving to their own repositories (ADR 0012), so the libraries in `platform/packages` (the SDK, the Lit kit, service-kit, records and any added there later) are published to GitHub Packages. The React kits (`@augur/kit-common`, `@augur/app-kit`, `@augur/shell-kit`) and the kit bundle (`@augur/kit-bundle`) are published the same way from the `augur-kit` repository (ADR 0046), and AUGUR takes them as packages too, aliased like any app does: a kit change reaches AUGUR as a pull request that bumps them, which Renovate proposes. They are AUGUR release parts like the packages here, at the versions installed. The Release workflow does it once the Version packages PR has merged, with `scripts/publish-packages.mjs`: each package whose version isn't there yet is published, and nothing else. Nobody publishes by hand.
+Apps are moving to their own repositories (ADR 0012), so the libraries in `platform/packages` (the SDK, service-kit, records, app-tools and any added there later) are published to GitHub Packages. The React kits (`@augur/kit-common`, `@augur/app-kit`, `@augur/shell-kit`) and the kit bundle (`@augur/kit-bundle`) are published the same way from the `augur-kit` repository (ADR 0046), and AUGUR takes them as packages too, aliased like any app does: a kit change reaches AUGUR as a pull request that bumps them, which Renovate proposes. They are AUGUR release parts like the packages here, at the versions installed. The Release workflow does it once the Version packages PR has merged, with `scripts/publish-packages.mjs`: each package whose version isn't there yet is published, and nothing else. Nobody publishes by hand.
 
 GitHub's npm registry only takes packages scoped to the repository's owner, so `@augur/<name>` is published as `@<owner>/augur-<name>` (the owner comes from the repository, or `PACKAGE_SCOPE`). An app repository aliases each one back, so its imports stay `@augur/...`:
 
 ```json
 "dependencies": {
-  "@augur/mfe-sdk": "npm:@<owner>/augur-mfe-sdk@^1.9.0"
-},
-"devDependencies": {
-  "@augur/ui-kit": "npm:@<owner>/augur-ui-kit@^1.8.0"
+  "@augur/mfe-sdk": "npm:@<owner>/augur-mfe-sdk@^1.9.0",
+  "@augur/app-kit": "npm:@<owner>/augur-app-kit@^0.3.0"
 }
 ```
 

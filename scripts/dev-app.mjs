@@ -3,8 +3,6 @@
 //   pnpm dev:app <id>                      then open http://localhost:5173/<id>
 //   DEV_ROLES=admin pnpm dev:app <id>      the stand-in person also has these roles
 //   APP_SERVICE_PORT=8091 pnpm dev:app <id>
-//   pnpm dev:app <id> --kit                also rebuilds the Lit kit as you change it, and reloads the page. The React kits
-//                                          (Common, Quill, Aerie) are in the augur-kit repository: work on them in its Storybook
 //   DEV_PREVIEWS=all pnpm dev:app <id>     turns the app's feature previews on (or name them, comma separated)
 //   DEV_HOST=0.0.0.0 pnpm dev:app <id>     open to other machines on the tailnet (*.ts.net), such as your phone
 //   pnpm dev:app <id> --live               Live on the workbench: the workbench's shell loads the app's frontend from
@@ -16,13 +14,19 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const id = process.argv[2];
-const kit = process.argv.includes('--kit');
 const live = process.argv.includes('--live');
 // pnpm is a .cmd shim on Windows, which only runs through a shell.
 const windows = process.platform === 'win32';
 const dir = id && join(root, 'apps', id);
-if (!dir || !existsSync(join(dir, 'manifest.json')) || !existsSync(join(dir, 'frontend/src/entry.ts'))) {
-  console.error(`✗ Usage: pnpm dev:app <id>, where apps/<id> has a manifest.json and frontend/src/entry.ts.`);
+// A React app's entry is entry.tsx; entry.ts is still taken for one with no JSX in it.
+const entry = dir && ['frontend/src/entry.tsx', 'frontend/src/entry.ts'].map((f) => join(dir, f)).find((f) => existsSync(f));
+if (!dir || !existsSync(join(dir, 'manifest.json')) || !entry) {
+  console.error(`✗ Usage: pnpm dev:app <id>, where apps/<id> has a manifest.json and frontend/src/entry.tsx.`);
+  process.exit(1);
+}
+if (process.argv.includes('--kit')) {
+  // The Lit kit it rebuilt went with SDK 2. The kits (Common, Quill, Aerie) are in the augur-kit repository.
+  console.error('✗ --kit is gone: the kits are in the augur-kit repository. Work on them in its Storybook, then bump the kit here.');
   process.exit(1);
 }
 
@@ -46,11 +50,6 @@ if (existsSync(servicePkg)) {
   // No REGISTRY_URL or sign-in: the stand-in shell lists the app itself.
   run(['--filter', name, 'dev'], { PORT: port, REGISTRY_URL: '', SERVICE_CLIENT_SECRET: '' });
 }
-if (kit) {
-  // The Lit kit's TypeScript, then the shared modules the shell serves: each rebuilds when the one before changes.
-  run(['--filter', '@augur/ui-kit', 'exec', 'tsc', '-p', 'tsconfig.json', '--watch', '--preserveWatchOutput']);
-  run(['--filter', '@augur/shell', 'exec', 'vite', 'build', '-c', 'vite.shared.config.ts', '--mode', 'development', '--watch']);
-}
 // Live on the workbench: this machine's name on the tailnet, which `tailscale serve` answers on with https.
 let liveEnv = {};
 if (live) {
@@ -73,11 +72,11 @@ if (live) {
       'Live on the workbench:',
       '  1. Once, in another terminal: tailscale serve --bg 5173',
       `  2. On the workbench, open the shell's Previews, find ${id}, and paste into "Live from my machine":`,
-      `     https://${host}/@fs${join(dir, 'frontend/src/entry.ts')}`,
+      `     https://${host}/@fs${entry}`,
       '  Only you see it, with the real sign-in, floors and data. Save a file and it reloads. Previews, Back to … stops it.',
       '',
     ].join('\n'),
   );
 }
-run(['--filter', '@augur/shell', 'dev'], { DEV_APP: dir, APP_SERVICE_URL: `http://localhost:${port}`, ...(kit ? { DEV_KIT: 'watch' } : {}), ...liveEnv });
+run(['--filter', '@augur/shell', 'dev'], { DEV_APP: dir, APP_SERVICE_URL: `http://localhost:${port}`, ...liveEnv });
 process.on('SIGINT', () => children.forEach((c) => c.kill('SIGINT')));

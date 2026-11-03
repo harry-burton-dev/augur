@@ -1,8 +1,8 @@
-import { createReadStream, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { kitDir, readKit } from '@augur/kit-bundle';
-import { isSharedModule } from '@augur/mfe-sdk/build';
+import { isSharedModule, sharedModules } from '@augur/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
 import { defineConfig, normalizePath, type Plugin, type ProxyOptions } from 'vite';
 
@@ -59,29 +59,23 @@ const serveApps = (): Plugin => ({
 
 /**
  * What the shell and every app share through the import map at the top of index.html (ADR 0003):
+ * React, Common and Quill, all from the kit bundle (@augur/kit-bundle, ADR 0048). The built page
+ * names them under the kit URL as a placeholder, `@KIT_URL@<version>/`, which the web container fills
+ * in from KIT_URL when it starts (infra/deploy/kit-url.envsh), with each file's hash as its integrity.
+ * The build also copies the bundle into kit/<version>/, where KIT_URL points by default (/kit/), and
+ * writes index.html with that default and index.template.html with the placeholder.
  *
- * - React, Common and Quill come from the kit bundle (@augur/kit-bundle, ADR 0048). The built page
- *   names them under the kit URL as a placeholder, `@KIT_URL@<version>/`, which the web container fills
- *   in from KIT_URL when it starts (infra/deploy/kit-url.envsh), with each file's hash as its integrity.
- *   The build also copies the bundle into kit/<version>/, where KIT_URL points by default (/kit/), and
- *   writes index.html with that default and index.template.html with the placeholder.
- * - Lit and the Lit kit come from shared-build/ (built by vite.shared.config.ts), served at /shared/.
- *
- * In dev both are served from where they were built (the kit from its development build), and the
- * shell's own imports of them resolve to those same files rather than to Vite's copies.
+ * In dev the kit is served from its development build, and the shell's own imports of it resolve to
+ * those same files rather than to Vite's copies.
  */
 export const KIT_URL_PLACEHOLDER = '@KIT_URL@';
 const kit = readKit();
+/** Every module the SDK promises apps must come from the kit: since SDK 2 nothing else serves one. */
+const notInKit = sharedModules.filter((s) => !(s in kit.imports));
+if (notInKit.length) throw new Error(`Kit ${kit.version} doesn't serve ${notInKit.join(', ')}, which the SDK promises apps: pin a kit that does (node scripts/kit.mjs pin).`);
 const sharedModulesMap = (): Plugin => {
-  const dir = fileURLToPath(new URL('./shared-build/', import.meta.url));
   let dev = false;
   let outDir = 'dist';
-  const shared = () => {
-    const file = join(dir, 'importmap.json');
-    if (!existsSync(file)) throw new Error('shared-build/ is missing: run `pnpm --filter @augur/shell build:shared` first.');
-    const { imports } = JSON.parse(readFileSync(file, 'utf8')) as { imports: Record<string, string> };
-    return dev ? Object.fromEntries(Object.entries(imports).map(([s, url]) => [s, url.replace(/^\/shared\//, '/shared-build/')])) : imports;
-  };
   const kitBase = () => `${dev ? '/kit/' : KIT_URL_PLACEHOLDER}${kit.version}/`;
   const kitBuild = () => (dev ? kit.dev : kit);
   const importMap = () => {
@@ -91,12 +85,11 @@ const sharedModulesMap = (): Plugin => {
     const integrity = dev
       ? undefined
       : Object.fromEntries(Object.entries(kit.integrity).filter(([file]) => file.endsWith('.js') && !file.startsWith('dev/')).map(([file, hash]) => [`${base}${file}`, hash]));
-    return { imports: { ...shared(), ...kitImports }, ...(integrity ? { integrity } : {}) };
+    return { imports: kitImports, ...(integrity ? { integrity } : {}) };
   };
   return {
     name: 'shared-modules',
     enforce: 'pre',
-    // `pnpm dev:app <id> --kit` rebuilds the Lit kit and shared-build/ as they change: the page reloads with the new import map.
     configureServer(server) {
       // The kit bundle, as the web image serves it at /kit/.
       server.middlewares.use((req, res, next) => {
@@ -110,10 +103,6 @@ const sharedModulesMap = (): Plugin => {
         res.setHeader('content-type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'application/json');
         createReadStream(file).pipe(res);
       });
-      if (process.env.DEV_KIT !== 'watch') return;
-      const map = join(dir, 'importmap.json');
-      server.watcher.add(map);
-      server.watcher.on('change', (file) => file === map && server.ws.send({ type: 'full-reload' }));
     },
     config: (_config, { command }) => {
       dev = command === 'serve';
@@ -129,10 +118,9 @@ const sharedModulesMap = (): Plugin => {
     resolveId(id) {
       if (!dev || !isSharedModule(id)) return;
       const fromKit = kit.dev.imports[id];
-      return fromKit ? join(kitDir, fromKit) : join(dir, shared()[id].slice('/shared-build/'.length));
+      return fromKit ? join(kitDir, fromKit) : undefined;
     },
     generateBundle() {
-      for (const fileName of readdirSync(dir)) this.emitFile({ type: 'asset', fileName: `shared/${fileName}`, source: readFileSync(join(dir, fileName)) });
       // The production bundle, where the default KIT_URL (/kit/) finds it. Its development build stays out.
       for (const file of Object.keys(kit.integrity).filter((f) => !f.startsWith('dev/'))) {
         this.emitFile({ type: 'asset', fileName: `kit/${kit.version}/${file}`, source: readFileSync(join(kitDir, file)) });
@@ -188,7 +176,9 @@ const devApp = (dir: string | undefined) => {
   const previews = ((manifest.previews ?? []) as { id: string }[]).map((p) => p.id);
   const asked = (process.env.DEV_PREVIEWS ?? '').split(',').map((p) => p.trim()).filter(Boolean);
   const previewsOn = asked.includes('all') ? previews : previews.filter((p) => asked.includes(p));
-  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs/${normalizePath(resolve(dir, 'frontend/src/entry.ts')).replace(/^\//, '')}`, ...(previewsOn.length ? { previewsOn } : {}) };
+  // A React app's entry is entry.tsx; entry.ts is still taken for one with no JSX in it.
+  const source = ['frontend/src/entry.tsx', 'frontend/src/entry.ts'].map((f) => resolve(dir, f)).find((f) => existsSync(f)) ?? resolve(dir, 'frontend/src/entry.tsx');
+  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs/${normalizePath(source).replace(/^\//, '')}`, ...(previewsOn.length ? { previewsOn } : {}) };
   const caller = {
     'x-user-id': 'dev-person',
     'x-user-name': encodeURIComponent('Dev Person'),

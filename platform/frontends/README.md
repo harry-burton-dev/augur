@@ -2,7 +2,7 @@
 
 | Folder | What it is |
 | --- | --- |
-| `shell/` | The host (`@augur/shell`, React + Vite). Wraps the UI kit's `ui-shell`, loads the role-filtered manifest from the registry through the gateway, mounts the app the URL points at into the Shell's stage, routes intents to the app that handles them, and turns `ctx.notify()` into notifications on the Shell's stream. |
+| `shell/` | The host (`@augur/shell`, React + Vite). Wraps Aerie's `Shell` (`@augur/shell-kit`), loads the role-filtered manifest from the registry through the gateway, mounts the app the URL points at into the Shell's stage, routes intents to the app that handles them, and turns `ctx.notify()` into notifications on the Shell's stream. |
 | `home/` | Home (`@augur/home`, at `/home`): what needs you, and apps' glance cards. Built as one ES module at `dist/entry.js`. |
 | `admin/` | Admin (`@augur/admin`, at `/admin`, admins only): people, departments and apps. Its screens call identity's `/v1/admin/*` and the registry's `/v1/apps` and `/v1/origins` through the gateway, never Keycloak. |
 | `upgrades/` | Upgrade Centre (`@augur/upgrades`, React, at `/upgrades`, admins only, ADR 0030): what this deployment runs, a page for AUGUR and each app, and the history. Changes still go through Admin's Upgrade Centre page until its change flow ships. See its [README](upgrades/README.md). |
@@ -73,10 +73,7 @@ Apps never import or call each other. They speak in intents, a `type` such as `c
 
 ## One kit for everyone
 
-The shell serves the kits, Lit and React once, and the shell and every app use that copy, through one import map at the top of `index.html`, so a bare `import 'react'` or `import 'lit'` anywhere on the page resolves to the same file:
-
-- **React, Common and Quill** come from the kit bundle (`@augur/kit-bundle`, a release of the `augur-kit` repository), pinned in `release/kit.json` ([ADR 0048](../../docs/decisions/0048-kit-served-from-a-kit-url.md)). The build copies it into `dist/kit/<version>/` and names each file in the import map under the kit URL, with its hash as its integrity. `dist/index.template.html` keeps the kit URL as a placeholder, `@KIT_URL@`, which the web container fills in from `KIT_URL` when it starts (`infra/deploy/kit-url.envsh`); `dist/index.html` has the default, `/kit/`. A small script in the page says so, naming `KIT_URL`, if the kit can't be loaded.
-- **Lit and the Lit kit** are built by `vite.shared.config.ts` into `shared-build/`, served at `/shared/`, until SDK 2.
+The shell serves React and the kits once, and the shell and every app use that copy, through one import map at the top of `index.html`, so a bare `import 'react'` anywhere on the page resolves to the same file. **React, Common and Quill** come from the kit bundle (`@augur/kit-bundle`, a release of the `augur-kit` repository), pinned in `release/kit.json` ([ADR 0048](../../docs/decisions/0048-kit-served-from-a-kit-url.md)). The build copies it into `dist/kit/<version>/` and names each file in the import map under the kit URL, with its hash as its integrity. `dist/index.template.html` keeps the kit URL as a placeholder, `@KIT_URL@`, which the web container fills in from `KIT_URL` when it starts (`infra/deploy/kit-url.envsh`); `dist/index.html` has the default, `/kit/`. A small script in the page says so, naming `KIT_URL`, if the kit can't be loaded. The shell's build stops if the kit doesn't serve every module the SDK promises apps.
 
 After bumping the kit bundle, run `pnpm kit:pin` and commit `release/kit.json`; `pnpm check:kit` fails until you do. An app's build leaves those imports alone:
 
@@ -86,7 +83,9 @@ import { isSharedModule } from '@augur/mfe-sdk/build';
 build: { rollupOptions: { external: isSharedModule } }
 ```
 
-`sharedModules` in `@augur/mfe-sdk` lists exactly what the shell provides: `lit`, its decorators and every directive under `lit/directives/`, and `@augur/ui-kit`; and React 19 (`react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`), Common (`@augur/kit-common`) and Quill (`@augur/app-kit`). Aerie (`@augur/shell-kit`) is the shell's own kit and is bundled into the shell, never shared. Anything else an app imports, it bundles itself. Because every app gets the shell's kit, the kit keeps the SDK's promise: see [Versioning](../../docs/versioning.md#the-shared-kit).
+`sharedModules` in `@augur/mfe-sdk` lists exactly what the shell provides: React 19 (`react`, `react/jsx-runtime`, `react/jsx-dev-runtime`, `react-dom`, `react-dom/client`), Common (`@augur/kit-common`) and Quill (`@augur/app-kit`). Aerie (`@augur/shell-kit`) is the shell's own kit and is bundled into the shell, never shared. Anything else an app imports, it bundles itself. Because every app gets the shell's kit, the kit keeps the SDK's promise: see [Versioning](../../docs/versioning.md#the-shared-kit).
+
+SDK 2 dropped Lit and the Lit kit (`@augur/ui-kit`): the shell no longer builds or serves them, and `pnpm check:boundaries` fails on any import of them under `platform/` or in the app template.
 
 ## Running it locally
 
@@ -97,4 +96,4 @@ pnpm --filter @augur/gateway dev                     # :8080
 pnpm --filter @augur/shell dev                       # :5173, proxies /api to the gateway
 ```
 
-`pnpm --filter @augur/shell dev` builds `shared-build/` first, and serves the kit bundle's development build (React's development copy) at `/kit/<version>/dev/`; run `pnpm --filter @augur/shell build:shared` again after changing the Lit kit. In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=<id>=<dir>,…` adds more. Apps without a service of their own are registered with `SERVICE_CLIENT_SECRET=... pnpm register-app apps/<app>/manifest.json`, using the secret Admin, Apps issues for the app. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.
+`pnpm --filter @augur/shell dev` serves the kit bundle's development build (React's development copy) at `/kit/<version>/dev/`. In development the shell serves `/apps/<id>/` from each app's `dist/`; `APP_DIST=<id>=<dir>,…` adds more. Apps without a service of their own are registered with `SERVICE_CLIENT_SECRET=... pnpm register-app apps/<app>/manifest.json`, using the secret Admin, Apps issues for the app. The shell signs people in with OIDC (`src/host/session.ts`) against the local Keycloak realm unless `VITE_OIDC_AUTHORITY` and `VITE_OIDC_CLIENT_ID` say otherwise; the test users are listed in `infra/keycloak/README.md`.

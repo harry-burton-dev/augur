@@ -15,7 +15,7 @@ body { background: var(--slate-deep); color: var(--ink); font-family: var(--font
   gap: var(--space-5);
 }
 .loading { color: var(--ink-muted); }
-/* A person's own Reduce motion is the kit's: base.css reads data-motion="reduce" on <html>, as it reads the system setting. */
+/* A person's own Reduce motion: preferences.ts puts data-motion="reduce" on <html>. Bringing the motion and travel tokens to nothing under it, and under the system setting, was the Lit kit's base.css; it belongs in Common's tokens, and until a kit release has it only the parts that check it themselves keep still. */
 /* Compact: the larger steps of the spacing scale come down one notch, so more fits on screen. */
 html[data-density='compact'] {
   --space-5: 20px; --space-6: 28px; --space-7: 44px; --space-8: 72px;
