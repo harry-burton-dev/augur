@@ -1,5 +1,6 @@
+# syntax=docker/dockerfile:1
 # Builds any service by package name:
-#   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry .
+#   NODE_AUTH_TOKEN=<read:packages token> docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry .
 # An app's service can carry its built frontend too, at /app/frontend, to give the registry
 # when it starts (service kit's publishFrontend):
 #   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend .
@@ -11,7 +12,8 @@ FROM node:22-alpine AS build
 RUN corepack enable
 WORKDIR /repo
 COPY . .
-RUN pnpm install --frozen-lockfile
+# AUGUR's kit packages come from GitHub Packages (.npmrc): a build secret, so the token stays out of the image.
+RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN pnpm install --frozen-lockfile
 ARG PACKAGE
 ARG FRONTEND=""
 RUN pnpm --filter "${PACKAGE}..." build && pnpm --filter ${PACKAGE} deploy --prod --legacy /out
@@ -37,7 +39,7 @@ USER node
 CMD ["node", "dist/index.js"]
 
 # The registry also checks the release feed's signature with cosign (ADR 0017):
-#   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry --target registry .
+#   NODE_AUTH_TOKEN=<read:packages token> docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry .-target registry .
 FROM node:22-alpine AS registry
 RUN apk add --no-cache cosign
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
