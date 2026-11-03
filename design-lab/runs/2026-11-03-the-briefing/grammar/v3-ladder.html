@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Grammar V3 · The ladder of heights</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens (all mixes of kit tokens; "needs token" in notes.md)
+   --------------------------------------------------------------- */
+:root{
+  /* type for numerals and keys in data; earlier runs asked for it too */
+  --x-proposed-type-micro: .6875rem;
+  /* quiet lines: what was left out, doesn't apply */
+  --x-proposed-quiet: .62;
+  /* the floor the briefing is kept on (Team here): the bottom line's rule */
+  --x-proposed-here: var(--floor-team-high);
+  /* pencil (pencil and ink, reference desk): anything a model wrote, until a person accepts it */
+  --x-proposed-pencil-ink: color-mix(in srgb, var(--info) 42%, var(--ink-muted));
+  --x-proposed-pencil-edge: 1px dotted var(--x-proposed-pencil-ink);
+  /* data ink: history and context quiet, the finding lit (time is matter, light is need) */
+  --x-proposed-data-ink: color-mix(in srgb, var(--ink-muted) 70%, transparent);
+  --x-proposed-data-finding: var(--light);
+  /* an event on a time axis: a dashed hairline */
+  --x-proposed-event: var(--hairline-strong);
+  /* yardstick cells: filled and empty */
+  --x-proposed-yard-on: var(--ink);
+  --x-proposed-yard-off: var(--hairline-strong);
+  /* a tally: the count of records behind a claim, as a small chip */
+  --x-proposed-tally-edge: var(--hairline-strong);
+  /* sources disagree: a warning-tinted edge, never red */
+  --x-proposed-disagree: color-mix(in srgb, var(--warning) 70%, var(--ink));
+  --x-proposed-disagree-wash: color-mix(in srgb, var(--warning) 7%, transparent);
+  /* the lit path (light language) */
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  /* six ways to be empty, from the catalogue run */
+  --x-proposed-hatch: color-mix(in srgb, var(--ink-muted) 34%, transparent);
+  --x-proposed-stale: repeating-linear-gradient(45deg, transparent 0 calc(var(--space-1) - 1px), var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  --x-proposed-gap-tick: var(--space-1);
+}
+:root, .mk-gap{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+h1{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;margin:var(--space-1) 0;color:var(--light)}
+h2{font-weight:300;font-size:var(--type-body);line-height:var(--leading-body);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin:0;color:var(--light)}
+.lede{margin:0;color:var(--ink-muted);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hints .on{color:var(--light)}
+.fh{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0 0 var(--space-1)}
+
+/* two registers: the technical line one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.tech .tk{display:block}
+.tech span.tk{display:inline;margin-left:var(--space-1)}
+
+/* floor colours */
+[data-tier="department"]{--fc:var(--floor-department-high)}
+[data-tier="team"]{--fc:var(--floor-team-high)}
+[data-tier="org"]{--fc:var(--floor-org-high)}
+[data-tier="you"]{--fc:var(--floor-you-high)}
+
+/* ===== bottom line ===== */
+.bl{margin:0;font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);max-width:var(--measure-read);border-left:2px solid var(--x-proposed-here);padding-left:var(--space-3)}
+.bl .so{display:block;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+/* a number in a sentence: ink, always (facts and counts are ink) */
+.n{font-variant-numeric:tabular-nums;font-weight:400;color:var(--light)}
+/* the tally: how many records stand behind a claim; opens them */
+.tally{display:inline-flex;align-items:center;gap:2px;vertical-align:.18em;margin-left:2px;font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);color:var(--ink-muted);border:1px solid var(--x-proposed-tally-edge);border-radius:var(--radius-key);padding:0 var(--space-1);letter-spacing:0}
+button.tally:hover{color:var(--light);border-color:var(--ink-muted)}
+
+/* ===== confidence word: the word, then the yardstick at word size ===== */
+.cw{display:inline-flex;align-items:baseline;gap:var(--space-1);white-space:nowrap;color:var(--ink);font-style:normal;border-bottom:1px solid var(--hairline-strong)}
+.yd{display:inline-grid;grid-auto-flow:column;gap:1px;align-self:center}
+.yd i{display:block;width:var(--space-1);height:calc(var(--space-2) + 2px);background:var(--x-proposed-yard-off);border-radius:1px}
+.yd i.on{background:var(--x-proposed-yard-on)}
+.cw.cant{color:var(--ink-muted);border-bottom-style:dashed}
+.rec-word{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink);border:1px solid var(--hairline-strong);border-radius:2px;padding:0 var(--space-1);vertical-align:.12em}
+
+/* ===== pencil: what a model wrote, until a person accepts it ===== */
+.pencil{color:var(--x-proposed-pencil-ink);font-style:italic;border:var(--x-proposed-pencil-edge);border-radius:var(--radius-key);padding:var(--space-1) var(--space-2)}
+.pencil-lab{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;font-style:normal;color:var(--x-proposed-pencil-ink)}
+.gate-off .pencil-only{display:none!important}
+.gate-only{display:none}
+.gate-off .gate-only{display:inline-flex}
+
+/* ===== workings ===== */
+.wk{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.wk li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-2);align-items:baseline;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.wk .no{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.wk .ct{font:400 var(--type-small)/1 var(--font-mono);color:var(--light);font-variant-numeric:tabular-nums}
+.wk li.out{color:var(--ink-muted)}
+.wk li.out .ct{color:var(--ink-muted)}
+
+/* ===== six ways to be empty (catalogue run) ===== */
+.mk{display:inline-block;vertical-align:middle;flex:none}
+.mk-gap{background:var(--x-proposed-gap);width:var(--space-5);height:var(--space-4)}
+.mk-stale{background:var(--x-proposed-stale);width:var(--space-4);height:var(--space-3);border-radius:2px}
+.mk-break{width:var(--space-5);height:var(--space-3)}
+.mk-break path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.mk-unseen{display:inline-flex;align-items:center;justify-content:center;width:var(--space-4);height:var(--space-3);background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:2px;color:var(--ink-muted)}
+.mk-none{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);border-bottom:1px solid var(--ink-muted);padding:0 1px}
+.mk-na{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.mk-disagree{width:var(--space-4);height:var(--space-3);border-left:2px solid var(--x-proposed-disagree);border-right:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash)}
+.emp{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);align-items:start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.emp .mk{margin-top:1px;justify-self:start}
+.emp b{font-weight:400;color:var(--ink)}
+
+/* ===== pictures ===== */
+svg.chart{display:block;overflow:visible}
+svg.chart text{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);fill:var(--ink-muted)}
+svg.chart .axis{stroke:var(--hairline-strong);stroke-width:1}
+svg.chart .ev{stroke:var(--x-proposed-event);stroke-dasharray:3 3}
+svg.chart .b0{fill:var(--x-proposed-data-ink)}
+svg.chart .b1{fill:var(--x-proposed-data-finding)}
+svg.chart .nr path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.ptitle{margin:0 0 var(--space-2);font-weight:400;font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.psub{margin:0 0 var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+/* isotype: one symbol = N records; a part symbol is cut, never shrunk */
+.iso{display:flex;flex-wrap:wrap;gap:2px;align-items:center}
+.iso .s{display:inline-flex;color:var(--x-proposed-data-ink);overflow:hidden;flex:none}
+.iso .s.f{color:var(--x-proposed-data-finding)}
+/* sparkline at word size */
+.spark{display:inline-block;vertical-align:-2px}
+.spark .b0{fill:var(--x-proposed-data-ink)}
+.spark .b1{fill:var(--x-proposed-data-finding)}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out),filter var(--motion-slow) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+/* rack focus: far plane blurs and desaturates; no black scrim */
+.racked{filter:blur(calc(var(--space-1) / 2)) saturate(.4);opacity:.45}
+@media (prefers-reduced-motion: reduce){.racked{filter:none;opacity:.35}}
+
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr);padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));gap:var(--space-4)}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5)}
+.top .lede{max-width:84ch}
+.body{display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr) calc(var(--measure-drawer) + var(--space-5));gap:var(--space-5);min-height:0}
+/* the ladder */
+.ladder{position:relative;display:flex;flex-direction:column;gap:var(--space-2);min-height:0}
+.rails{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0;flex:1;max-height:calc(var(--measure-decision) + var(--space-5))}
+.rails::before,.rails::after{content:"";position:absolute;top:0;bottom:0;width:0;border-left:1px solid var(--hairline-strong)}
+.rails::before{left:var(--space-2)}.rails::after{left:calc(var(--space-5) + var(--space-1))}
+.rung{position:relative;display:grid;grid-template-columns:calc(var(--space-6) - var(--space-1)) minmax(0,1fr);gap:var(--space-2);align-items:start;padding:var(--space-2) var(--space-2) var(--space-2) 0;border-radius:var(--radius-key);color:var(--ink-muted);transition:color var(--motion-slow)}
+.rung .bar{margin-top:var(--space-3);margin-left:var(--space-2);height:2px;width:calc(var(--space-5) - var(--space-3) + 2px);background:var(--hairline-strong);transition:background var(--motion-slow),box-shadow var(--motion-slow)}
+.rung b{display:block;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.rung small{display:block;font-size:var(--type-small);line-height:var(--leading-small)}
+.rung[aria-current=true]{color:var(--light)}
+.rung[aria-current=true] .bar{background:var(--light);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--light) 40%,transparent)}
+.rung .k{position:absolute;right:0;top:var(--space-2)}
+.parts{display:grid;gap:var(--space-1);border-top:1px solid var(--hairline);padding-top:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.parts div{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2)}
+.parts svg{margin-top:2px}
+.parts b{font-weight:400;color:var(--ink)}
+/* the stage: anchor fixed, the height around it moves */
+.stage{position:relative;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-3);min-height:0;border:1px solid var(--hairline);border-radius:var(--radius-card);background:var(--surface-pane);padding:var(--space-4) var(--space-5);overflow:hidden}
+.anchor{display:flex;align-items:baseline;gap:var(--space-3);border-bottom:1px solid var(--hairline);padding-bottom:var(--space-3)}
+.anchor .big{font-weight:200;font-size:var(--type-display);line-height:var(--leading-display);color:var(--light);font-variant-numeric:tabular-nums}
+.anchor .unit{white-space:nowrap;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.anchor .was{white-space:nowrap;font-size:var(--type-meta);color:var(--ink-muted)}
+.anchor .pin{margin-left:auto;display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink-muted)}
+.view{position:relative;min-height:0}
+.lvl{position:absolute;inset:0;display:flex;flex-direction:column;gap:var(--space-3);transition:opacity var(--motion-slow) var(--ease-out),transform var(--motion-slow) var(--ease-out),filter var(--motion-slow) var(--ease-out)}
+.lvl.above{opacity:0;transform:translateY(calc(var(--travel-near) * -1));filter:blur(calc(var(--space-1) / 2));pointer-events:none}
+.lvl.below{opacity:0;transform:translateY(var(--travel-near));filter:blur(calc(var(--space-1) / 2));pointer-events:none}
+@media (prefers-reduced-motion: reduce){.lvl.above,.lvl.below{transform:none;filter:none}}
+.hl{margin:0;font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light);max-width:28ch}
+.hl .spark{vertical-align:baseline}
+.hl2{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink);max-width:56ch}
+/* unit chart: one cell per record */
+.units{flex:1;min-height:0;display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:var(--space-1);align-items:end;position:relative;border-bottom:1px solid var(--hairline-strong);padding-top:var(--space-4)}
+.wcol{display:flex;flex-direction:row;flex-wrap:wrap-reverse;align-content:flex-start;gap:1px;height:100%;width:calc(var(--k) * (var(--cell) + 1px));justify-self:center;position:relative}
+.u{width:var(--cell);height:var(--cell);border-radius:1px;border:1px solid var(--x-proposed-data-ink)}
+.u.nar{background:var(--x-proposed-data-ink)}
+.u.f{border-color:var(--x-proposed-data-finding)}
+.u.f.nar{background:var(--x-proposed-data-finding)}
+.wcol .nr{position:absolute;bottom:var(--space-2);left:50%;transform:translateX(-50%)}
+.wlabels{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);text-align:center}
+.avg{position:absolute;border-top:1px dashed var(--light);pointer-events:none}
+.avg span{position:absolute;right:0;top:calc(var(--space-5) * -1);font-size:var(--type-small);color:var(--light);white-space:nowrap;background:var(--slate-deep);border-radius:2px;padding:0 var(--space-1)}
+.avg.b{border-top-color:var(--ink-muted)}
+.avg.b span{color:var(--ink-muted);right:auto;left:0}
+.ev{position:absolute;top:0;bottom:0;border-left:1px dashed var(--x-proposed-event)}
+.ev span{position:absolute;top:0;left:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);white-space:nowrap}
+.legend{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.legend span{display:inline-flex;gap:var(--space-1);align-items:center}
+.legend .u{--cell:var(--space-2)}
+/* records */
+.recwrap{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.recs{width:100%;border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small)}
+.recs th{position:sticky;top:0;background:var(--slate-deep);text-align:left;font-weight:400;color:var(--ink-muted);border-bottom:1px solid var(--hairline-strong);padding:var(--space-1) var(--space-2)}
+.recs td{border-bottom:1px solid var(--hairline);padding:2px var(--space-2);color:var(--ink);white-space:nowrap}
+.recs td.m{font-family:var(--font-mono);color:var(--ink-muted)}
+.recs tr.grp td{color:var(--light);background:var(--surface-inset);font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-soft)}
+.recs .nb{display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:1px;background:var(--light);vertical-align:0}
+/* the sum check: every height agrees, to the digit */
+.check{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.check b{font-weight:400;color:var(--light)}
+.check .ok{display:inline-flex;align-items:center;gap:var(--space-1);color:var(--success)}
+.check .cur{color:var(--light);border-bottom:1px solid var(--light)}
+/* grammar for this height */
+.gram{display:flex;flex-direction:column;gap:var(--space-3);min-height:0;overflow:auto;padding-right:var(--space-2);scrollbar-width:thin}
+.gram h2{display:flex;align-items:center;gap:var(--space-2)}
+.gram dl{margin:0;display:grid;gap:var(--space-2)}
+.gram dt{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.gram dd{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.gram dd.rc{font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.gram dd.nv{display:flex;gap:var(--space-2);color:var(--ink)}
+.gram dd.nv svg{flex:none;margin-top:var(--space-1);color:var(--x-proposed-disagree)}
+.gram .emps{display:grid;gap:var(--space-1);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.gram .pen{font-size:var(--type-small);line-height:var(--leading-small)}
+@media (max-width: 1400px){ .anchor .pin{display:none} }
+@media (max-height: 820px){ .parts div:nth-child(n+2){display:none} .parts{display:none} .anchor .big{font-size:var(--type-title);line-height:var(--leading-title)} .gram dd.rc{display:none} .hl{font-size:var(--type-heading);line-height:var(--leading-heading)} }
+</style>
+</head>
+<body>
+<div class="app pre" id="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow" id="eb"></p>
+      <h1>One fact, three heights</h1>
+      <p class="lede" id="lede"></p>
+    </div>
+    <div class="hints">
+      <span><span class="kbd">&uarr;</span><span class="kbd">&darr;</span> climb or step down</span>
+      <span><span class="kbd">1</span>&ndash;<span class="kbd">3</span> a height</span>
+      <span data-key="g"><span class="kbd">G</span> assistant off</span>
+      <span data-key="t"><span class="kbd">T</span> technical words</span>
+      <span><span class="kbd">R</span> replay</span>
+    </div>
+  </header>
+  <div class="body">
+    <nav class="ladder dep" style="--i:0" aria-label="Height">
+      <div class="rails" id="rails"></div>
+      <div class="parts" id="parts"></div>
+    </nav>
+    <section class="stage dep" style="--i:1" aria-live="polite">
+      <div class="anchor" id="anchor"></div>
+      <div class="view" id="view"></div>
+      <div class="check" id="check"></div>
+    </section>
+    <aside class="gram dep" style="--i:2" id="gram"></aside>
+  </div>
+</div>
+<div class="x-cap"><b>Briefing grammar · V3</b> ladder of heights: the number stays pinned · Bret Victor's ladder, unit charts, focal planes</div>
+<script>
+/* ======================================================================
+   Sample data for one deployment (Vale Regional Services). Every name, label, count,
+   sentence and word on this sheet comes from here; in AUGUR it would come
+   from Data Atlas (records, grades, empties), Artifacts and Mandate.
+   Generated by _src/build.js from _src/data.js (fixed seed).
+   ====================================================================== */
+const DATA = {"org":"Vale Regional Services","app":{"artifacts":"Artifacts","mandate":"Mandate","atlas":"Data Atlas"},"today":"3 Nov 2026","viewer":{"name":"Sam Okafor","role":"Operator","floor":"north"},"floors":{"org":{"name":"Vale Regional Services","tier":"org","word":"Org floor"},"waste":{"name":"Waste and streets","tier":"department","word":"Department floor","lead":"Ade Bello, head of Waste and streets"},"north":{"name":"North depot","tier":"team","word":"Team floor","lead":"Marta Kowal, North depot lead","here":true},"finance":{"name":"Finance","tier":"department","word":"Department floor beside yours","ask":"Priya Nair, finance lead","locked":true}},"topic":"Missed collections, North district","area":"the North","span":"27 Jul to 1 Nov","log":"North depot crew logs","reader":"Marta Kowal, North depot lead","event":{"week":36,"date":"31 Aug","label":"Greenway Waste took over the North rounds","doc":"Greenway Waste contract C-114"},"kind":{"one":"missed collection","many":"missed collections","icon":"trash-2","per":"a week"},"weeks":[{"wk":31,"mon":"2026-07-27","count":11,"share":0.27},{"wk":32,"mon":"2026-08-03","count":12,"share":0.33},{"wk":33,"mon":"2026-08-10","count":10,"share":0.3},{"wk":34,"mon":"2026-08-17","count":13,"share":0.31},{"wk":35,"mon":"2026-08-24","count":12,"share":0.25},{"wk":36,"mon":"2026-08-31","count":19,"share":0.58},{"wk":37,"mon":"2026-09-07","count":24,"share":0.63},{"wk":38,"mon":"2026-09-14","count":27,"share":0.67},{"wk":39,"mon":"2026-09-21","count":31,"share":0.68},{"wk":40,"mon":"2026-09-28","count":29,"share":0.69},{"wk":41,"mon":"2026-10-05","count":null,"share":0},{"wk":42,"mon":"2026-10-12","count":33,"share":0.7},{"wk":43,"mon":"2026-10-19","count":30,"share":0.67},{"wk":44,"mon":"2026-10-26","count":34,"share":0.71}],"narrowStreets":["Back Fold","Church Wynd","Tanner’s Yard","Low Gate","Quarry Bank"],"recordFields":["Record","Date","Week","Street","Narrow","Round","Vehicle","Reported by"],"records":[["MC-3105","2026-07-27",31,"Moor View",0,"N1","VX-12","crew"],["MC-3108","2026-07-27",31,"Abbey Close",0,"N4","VX-21","crew"],["MC-3106","2026-07-28",31,"Station Terrace",0,"N1","VX-12","resident"],["MC-3110","2026-07-28",31,"Ferry Road",0,"N3","VX-12","resident"],["MC-3101","2026-07-29",31,"Low Gate",1,"N1","VX-21","resident"],["MC-3102","2026-07-29",31,"Back Fold",1,"N1","VX-17","crew"],["MC-3109","2026-07-29",31,"Station Terrace",0,"N3","VX-17","resident"],["MC-3111","2026-07-29",31,"Abbey Close",0,"N4","VX-21","crew"],["MC-3107","2026-07-30",31,"Hollins Lane",0,"N2","VX-12","crew"],["MC-3103","2026-07-31",31,"Low Gate",1,"N4","VX-17","resident"],["MC-3104","2026-07-31",31,"Station Terrace",0,"N4","VX-12","crew"],["MC-3118","2026-08-03",32,"Moor View",0,"N2","VX-17","resident"],["MC-3119","2026-08-04",32,"Abbey Close",0,"N2","VX-21","resident"],["MC-3121","2026-08-04",32,"Hollins Lane",0,"N3","VX-17","crew"],["MC-3122","2026-08-04",32,"Abbey Close",0,"N1","VX-21","crew"],["MC-3123","2026-08-04",32,"Ferry Road",0,"N2","VX-17","resident"],["MC-3114","2026-08-05",32,"Quarry Bank",1,"N4","VX-12","crew"],["MC-3116","2026-08-05",32,"Moor View",0,"N3","VX-12","crew"],["MC-3117","2026-08-05",32,"Hollins Lane",0,"N4","VX-21","crew"],["MC-3120","2026-08-05",32,"Abbey Close",0,"N3","VX-21","resident"],["MC-3113","2026-08-06",32,"Quarry Bank",1,"N3","VX-12","crew"],["MC-3112","2026-08-07",32,"Back Fold",1,"N1","VX-17","crew"],["MC-3115","2026-08-07",32,"Tanner’s Yard",1,"N2","VX-12","crew"],["MC-3128","2026-08-10",33,"Hollins Lane",0,"N3","VX-17","crew"],["MC-3129","2026-08-10",33,"Hollins Lane",0,"N4","VX-21","crew"],["MC-3124","2026-08-11",33,"Quarry Bank",1,"N3","VX-21","resident"],["MC-3126","2026-08-11",33,"Quarry Bank",1,"N1","VX-12","crew"],["MC-3125","2026-08-12",33,"Low Gate",1,"N1","VX-12","crew"],["MC-3130","2026-08-12",33,"Ferry Road",0,"N1","VX-12","resident"],["MC-3132","2026-08-12",33,"Hollins Lane",0,"N1","VX-21","resident"],["MC-3127","2026-08-13",33,"Moor View",0,"N3","VX-12","resident"],["MC-3131","2026-08-13",33,"Hollins Lane",0,"N2","VX-12","crew"],["MC-3133","2026-08-14",33,"Station Terrace",0,"N3","VX-17","crew"],["MC-3135","2026-08-17",34,"Quarry Bank",1,"N1","VX-21","resident"],["MC-3137","2026-08-17",34,"Church Wynd",1,"N4","VX-12","crew"],["MC-3140","2026-08-17",34,"Kiln Street",0,"N2","VX-21","crew"],["MC-3145","2026-08-17",34,"Mill Row",0,"N2","VX-17","crew"],["MC-3146","2026-08-18",34,"Station Terrace",0,"N3","VX-21","resident"],["MC-3136","2026-08-19",34,"Back Fold",1,"N1","VX-17","crew"],["MC-3138","2026-08-19",34,"Kiln Street",0,"N3","VX-21","resident"],["MC-3141","2026-08-19",34,"Mill Row",0,"N2","VX-17","resident"],["MC-3144","2026-08-19",34,"Abbey Close",0,"N1","VX-21","resident"],["MC-3134","2026-08-20",34,"Tanner’s Yard",1,"N2","VX-12","crew"],["MC-3142","2026-08-20",34,"Station Terrace",0,"N4","VX-12","crew"],["MC-3143","2026-08-20",34,"Station Terrace",0,"N4","VX-17","resident"],["MC-3139","2026-08-21",34,"Hollins Lane",0,"N2","VX-17","crew"],["MC-3151","2026-08-24",35,"Abbey Close",0,"N4","VX-17","crew"],["MC-3147","2026-08-25",35,"Church Wynd",1,"N2","VX-12","resident"],["MC-3156","2026-08-25",35,"Moor View",0,"N1","VX-12","crew"],["MC-3152","2026-08-26",35,"Abbey Close",0,"N1","VX-17","crew"],["MC-3155","2026-08-26",35,"Ferry Road",0,"N4","VX-12","crew"],["MC-3154","2026-08-27",35,"Ferry Road",0,"N1","VX-12","resident"],["MC-3158","2026-08-27",35,"Station Terrace",0,"N2","VX-12","resident"],["MC-3148","2026-08-28",35,"Tanner’s Yard",1,"N1","VX-17","crew"],["MC-3149","2026-08-28",35,"Low Gate",1,"N3","VX-12","resident"],["MC-3150","2026-08-28",35,"Abbey Close",0,"N3","VX-21","crew"],["MC-3153","2026-08-28",35,"Moor View",0,"N4","VX-21","resident"],["MC-3157","2026-08-28",35,"Abbey Close",0,"N2","VX-21","crew"],["MC-3159","2026-08-31",36,"Church Wynd",1,"N1","GW-07","crew"],["MC-3161","2026-08-31",36,"Church Wynd",1,"N1","GW-03","crew"],["MC-3168","2026-08-31",36,"Quarry Bank",1,"N2","GW-09","resident"],["MC-3172","2026-08-31",36,"Hollins Lane",0,"N4","GW-07","resident"],["MC-3160","2026-09-01",36,"Back Fold",1,"N3","GW-09","resident"],["MC-3165","2026-09-01",36,"Low Gate",1,"N2","GW-03","crew"],["MC-3169","2026-09-01",36,"Church Wynd",1,"N3","GW-07","resident"],["MC-3176","2026-09-01",36,"Kiln Street",0,"N4","GW-07","crew"],["MC-3177","2026-09-01",36,"Moor View",0,"N1","GW-09","crew"],["MC-3164","2026-09-02",36,"Church Wynd",1,"N4","GW-09","crew"],["MC-3167","2026-09-02",36,"Low Gate",1,"N3","GW-03","crew"],["MC-3171","2026-09-02",36,"Station Terrace",0,"N3","GW-03","resident"],["MC-3163","2026-09-03",36,"Church Wynd",1,"N4","GW-09","crew"],["MC-3166","2026-09-03",36,"Tanner’s Yard",1,"N1","GW-03","crew"],["MC-3173","2026-09-03",36,"Hollins Lane",0,"N2","GW-07","resident"],["MC-3175","2026-09-03",36,"Hollins Lane",0,"N3","GW-07","crew"],["MC-3162","2026-09-04",36,"Tanner’s Yard",1,"N2","GW-09","crew"],["MC-3170","2026-09-04",36,"Moor View",0,"N1","GW-07","crew"],["MC-3174","2026-09-04",36,"Ferry Road",0,"N1","GW-03","crew"],["MC-3179","2026-09-07",37,"Quarry Bank",1,"N1","GW-09","resident"],["MC-3184","2026-09-07",37,"Quarry Bank",1,"N1","GW-09","resident"],["MC-3188","2026-09-07",37,"Back Fold",1,"N1","GW-09","crew"],["MC-3197","2026-09-07",37,"Mill Row",0,"N1","GW-07","resident"],["MC-3182","2026-09-08",37,"Church Wynd",1,"N4","GW-03","crew"],["MC-3183","2026-09-08",37,"Church Wynd",1,"N2","GW-09","crew"],["MC-3186","2026-09-08",37,"Church Wynd",1,"N4","GW-09","crew"],["MC-3187","2026-09-08",37,"Quarry Bank",1,"N2","GW-03","crew"],["MC-3190","2026-09-08",37,"Back Fold",1,"N4","GW-07","resident"],["MC-3192","2026-09-08",37,"Tanner’s Yard",1,"N1","GW-03","crew"],["MC-3181","2026-09-09",37,"Quarry Bank",1,"N2","GW-03","crew"],["MC-3191","2026-09-09",37,"Tanner’s Yard",1,"N1","GW-03","resident"],["MC-3194","2026-09-09",37,"Ferry Road",0,"N1","GW-07","crew"],["MC-3195","2026-09-09",37,"Kiln Street",0,"N3","GW-03","crew"],["MC-3198","2026-09-09",37,"Abbey Close",0,"N4","GW-09","crew"],["MC-3199","2026-09-09",37,"Ferry Road",0,"N1","GW-07","crew"],["MC-3201","2026-09-09",37,"Station Terrace",0,"N1","GW-03","crew"],["MC-3178","2026-09-10",37,"Low Gate",1,"N2","GW-03","resident"],["MC-3180","2026-09-10",37,"Church Wynd",1,"N3","GW-09","resident"],["MC-3185","2026-09-10",37,"Back Fold",1,"N3","GW-07","crew"],["MC-3200","2026-09-10",37,"Kiln Street",0,"N3","GW-03","crew"],["MC-3189","2026-09-11",37,"Back Fold",1,"N4","GW-09","resident"],["MC-3193","2026-09-11",37,"Hollins Lane",0,"N3","GW-07","crew"],["MC-3196","2026-09-11",37,"Moor View",0,"N1","GW-03","resident"],["MC-3209","2026-09-14",38,"Low Gate",1,"N2","GW-09","crew"],["MC-3213","2026-09-14",38,"Church Wynd",1,"N2","GW-09","crew"],["MC-3215","2026-09-14",38,"Back Fold",1,"N4","GW-09","crew"],["MC-3216","2026-09-14",38,"Tanner’s Yard",1,"N1","GW-09","crew"],["MC-3217","2026-09-14",38,"Quarry Bank",1,"N2","GW-03","resident"],["MC-3218","2026-09-14",38,"Church Wynd",1,"N3","GW-03","resident"],["MC-3221","2026-09-14",38,"Kiln Street",0,"N2","GW-03","crew"],["MC-3224","2026-09-14",38,"Station Terrace",0,"N4","GW-09","crew"],["MC-3205","2026-09-15",38,"Tanner’s Yard",1,"N1","GW-03","crew"],["MC-3206","2026-09-15",38,"Quarry Bank",1,"N2","GW-09","crew"],["MC-3211","2026-09-15",38,"Quarry Bank",1,"N2","GW-03","crew"],["MC-3227","2026-09-15",38,"Ferry Road",0,"N2","GW-07","resident"],["MC-3228","2026-09-15",38,"Kiln Street",0,"N4","GW-07","crew"],["MC-3202","2026-09-16",38,"Church Wynd",1,"N1","GW-03","resident"],["MC-3204","2026-09-16",38,"Church Wynd",1,"N1","GW-03","crew"],["MC-3208","2026-09-16",38,"Quarry Bank",1,"N2","GW-03","resident"],["MC-3223","2026-09-16",38,"Moor View",0,"N3","GW-09","resident"],["MC-3207","2026-09-17",38,"Quarry Bank",1,"N4","GW-07","resident"],["MC-3212","2026-09-17",38,"Low Gate",1,"N3","GW-03","crew"],["MC-3222","2026-09-17",38,"Abbey Close",0,"N1","GW-07","crew"],["MC-3203","2026-09-18",38,"Church Wynd",1,"N2","GW-03","resident"],["MC-3210","2026-09-18",38,"Church Wynd",1,"N2","GW-03","crew"],["MC-3214","2026-09-18",38,"Low Gate",1,"N1","GW-09","crew"],["MC-3219","2026-09-18",38,"Quarry Bank",1,"N2","GW-09","resident"],["MC-3220","2026-09-18",38,"Ferry Road",0,"N1","GW-07","crew"],["MC-3225","2026-09-18",38,"Abbey Close",0,"N1","GW-09","crew"],["MC-3226","2026-09-18",38,"Ferry Road",0,"N2","GW-09","resident"],["MC-3233","2026-09-21",39,"Back Fold",1,"N2","GW-07","crew"],["MC-3235","2026-09-21",39,"Quarry Bank",1,"N4","GW-09","resident"],["MC-3244","2026-09-21",39,"Quarry Bank",1,"N2","GW-09","crew"],["MC-3256","2026-09-21",39,"Mill Row",0,"N1","GW-07","resident"],["MC-3236","2026-09-22",39,"Church Wynd",1,"N3","GW-03","resident"],["MC-3240","2026-09-22",39,"Low Gate",1,"N3","GW-09","crew"],["MC-3252","2026-09-22",39,"Ferry Road",0,"N3","GW-03","crew"],["MC-3253","2026-09-22",39,"Abbey Close",0,"N1","GW-07","crew"],["MC-3258","2026-09-22",39,"Station Terrace",0,"N4","GW-09","resident"],["MC-3231","2026-09-23",39,"Low Gate",1,"N4","GW-03","crew"],["MC-3232","2026-09-23",39,"Low Gate",1,"N2","GW-03","resident"],["MC-3234","2026-09-23",39,"Church Wynd",1,"N3","GW-03","resident"],["MC-3237","2026-09-23",39,"Low Gate",1,"N2","GW-09","resident"],["MC-3239","2026-09-23",39,"Back Fold",1,"N3","GW-07","crew"],["MC-3242","2026-09-23",39,"Back Fold",1,"N4","GW-09","crew"],["MC-3243","2026-09-23",39,"Tanner’s Yard",1,"N1","GW-07","crew"],["MC-3249","2026-09-23",39,"Tanner’s Yard",1,"N4","GW-03","resident"],["MC-3229","2026-09-24",39,"Tanner’s Yard",1,"N3","GW-03","crew"],["MC-3238","2026-09-24",39,"Tanner’s Yard",1,"N1","GW-07","crew"],["MC-3246","2026-09-24",39,"Low Gate",1,"N1","GW-03","crew"],["MC-3247","2026-09-24",39,"Tanner’s Yard",1,"N4","GW-03","resident"],["MC-3248","2026-09-24",39,"Back Fold",1,"N3","GW-03","resident"],["MC-3250","2026-09-24",39,"Station Terrace",0,"N1","GW-09","resident"],["MC-3251","2026-09-24",39,"Ferry Road",0,"N4","GW-09","resident"],["MC-3230","2026-09-25",39,"Quarry Bank",1,"N3","GW-03","crew"],["MC-3241","2026-09-25",39,"Church Wynd",1,"N3","GW-03","resident"],["MC-3245","2026-09-25",39,"Back Fold",1,"N1","GW-07","resident"],["MC-3254","2026-09-25",39,"Moor View",0,"N3","GW-07","crew"],["MC-3255","2026-09-25",39,"Moor View",0,"N1","GW-03","resident"],["MC-3257","2026-09-25",39,"Hollins Lane",0,"N1","GW-09","resident"],["MC-3259","2026-09-25",39,"Mill Row",0,"N1","GW-07","crew"],["MC-3260","2026-09-28",40,"Quarry Bank",1,"N3","GW-09","resident"],["MC-3262","2026-09-28",40,"Low Gate",1,"N1","GW-07","resident"],["MC-3271","2026-09-28",40,"Low Gate",1,"N3","GW-09","crew"],["MC-3276","2026-09-28",40,"Church Wynd",1,"N1","GW-09","crew"],["MC-3277","2026-09-28",40,"Church Wynd",1,"N3","GW-03","resident"],["MC-3266","2026-09-29",40,"Back Fold",1,"N1","GW-03","crew"],["MC-3267","2026-09-29",40,"Low Gate",1,"N1","GW-07","resident"],["MC-3269","2026-09-29",40,"Tanner’s Yard",1,"N2","GW-03","resident"],["MC-3280","2026-09-29",40,"Station Terrace",0,"N4","GW-07","resident"],["MC-3283","2026-09-29",40,"Mill Row",0,"N3","GW-03","crew"],["MC-3264","2026-09-30",40,"Church Wynd",1,"N2","GW-03","resident"],["MC-3273","2026-09-30",40,"Back Fold",1,"N1","GW-03","crew"],["MC-3274","2026-09-30",40,"Tanner’s Yard",1,"N2","GW-07","crew"],["MC-3285","2026-09-30",40,"Ferry Road",0,"N1","GW-07","crew"],["MC-3286","2026-09-30",40,"Mill Row",0,"N4","GW-07","resident"],["MC-3261","2026-10-01",40,"Quarry Bank",1,"N3","GW-09","crew"],["MC-3265","2026-10-01",40,"Quarry Bank",1,"N4","GW-09","crew"],["MC-3268","2026-10-01",40,"Low Gate",1,"N1","GW-07","crew"],["MC-3270","2026-10-01",40,"Quarry Bank",1,"N4","GW-07","resident"],["MC-3278","2026-10-01",40,"Church Wynd",1,"N3","GW-03","crew"],["MC-3281","2026-10-01",40,"Abbey Close",0,"N1","GW-07","crew"],["MC-3263","2026-10-02",40,"Church Wynd",1,"N2","GW-09","crew"],["MC-3272","2026-10-02",40,"Low Gate",1,"N3","GW-07","resident"],["MC-3275","2026-10-02",40,"Tanner’s Yard",1,"N4","GW-09","crew"],["MC-3279","2026-10-02",40,"Low Gate",1,"N1","GW-03","resident"],["MC-3282","2026-10-02",40,"Hollins Lane",0,"N2","GW-07","crew"],["MC-3284","2026-10-02",40,"Abbey Close",0,"N3","GW-07","crew"],["MC-3287","2026-10-02",40,"Abbey Close",0,"N1","GW-09","crew"],["MC-3288","2026-10-02",40,"Kiln Street",0,"N1","GW-09","crew"],["MC-3294","2026-10-12",42,"Back Fold",1,"N3","GW-03","resident"],["MC-3296","2026-10-12",42,"Quarry Bank",1,"N4","GW-03","crew"],["MC-3303","2026-10-12",42,"Quarry Bank",1,"N4","GW-03","resident"],["MC-3305","2026-10-12",42,"Church Wynd",1,"N3","GW-07","crew"],["MC-3316","2026-10-12",42,"Ferry Road",0,"N1","GW-03","crew"],["MC-3291","2026-10-13",42,"Tanner’s Yard",1,"N4","GW-09","resident"],["MC-3292","2026-10-13",42,"Tanner’s Yard",1,"N1","GW-09","resident"],["MC-3295","2026-10-13",42,"Church Wynd",1,"N2","GW-09","crew"],["MC-3299","2026-10-13",42,"Church Wynd",1,"N3","GW-03","crew"],["MC-3300","2026-10-13",42,"Quarry Bank",1,"N1","GW-07","crew"],["MC-3301","2026-10-13",42,"Church Wynd",1,"N4","GW-09","resident"],["MC-3311","2026-10-13",42,"Low Gate",1,"N1","GW-07","crew"],["MC-3313","2026-10-13",42,"Ferry Road",0,"N2","GW-09","resident"],["MC-3315","2026-10-13",42,"Moor View",0,"N4","GW-09","crew"],["MC-3318","2026-10-13",42,"Moor View",0,"N1","GW-09","crew"],["MC-3319","2026-10-13",42,"Abbey Close",0,"N3","GW-07","resident"],["MC-3314","2026-10-14",42,"Moor View",0,"N3","GW-07","crew"],["MC-3298","2026-10-15",42,"Back Fold",1,"N2","GW-09","resident"],["MC-3302","2026-10-15",42,"Quarry Bank",1,"N4","GW-03","resident"],["MC-3307","2026-10-15",42,"Low Gate",1,"N1","GW-03","crew"],["MC-3308","2026-10-15",42,"Low Gate",1,"N1","GW-09","resident"],["MC-3289","2026-10-16",42,"Back Fold",1,"N1","GW-09","resident"],["MC-3290","2026-10-16",42,"Church Wynd",1,"N1","GW-07","crew"],["MC-3293","2026-10-16",42,"Quarry Bank",1,"N4","GW-07","crew"],["MC-3297","2026-10-16",42,"Quarry Bank",1,"N4","GW-03","crew"],["MC-3304","2026-10-16",42,"Tanner’s Yard",1,"N4","GW-03","crew"],["MC-3306","2026-10-16",42,"Back Fold",1,"N1","GW-07","crew"],["MC-3309","2026-10-16",42,"Back Fold",1,"N4","GW-03","resident"],["MC-3310","2026-10-16",42,"Tanner’s Yard",1,"N4","GW-07","crew"],["MC-3312","2026-10-16",42,"Station Terrace",0,"N3","GW-09","resident"],["MC-3317","2026-10-16",42,"Kiln Street",0,"N2","GW-03","crew"],["MC-3320","2026-10-16",42,"Moor View",0,"N4","GW-09","resident"],["MC-3321","2026-10-16",42,"Moor View",0,"N3","GW-03","resident"],["MC-3338","2026-10-19",43,"Tanner’s Yard",1,"N1","GW-09","crew"],["MC-3322","2026-10-20",43,"Low Gate",1,"N4","GW-09","crew"],["MC-3323","2026-10-20",43,"Back Fold",1,"N4","GW-09","crew"],["MC-3328","2026-10-20",43,"Church Wynd",1,"N1","GW-03","crew"],["MC-3331","2026-10-20",43,"Church Wynd",1,"N4","GW-07","crew"],["MC-3337","2026-10-20",43,"Church Wynd",1,"N2","GW-07","crew"],["MC-3342","2026-10-20",43,"Mill Row",0,"N3","GW-03","crew"],["MC-3345","2026-10-20",43,"Ferry Road",0,"N3","GW-07","crew"],["MC-3347","2026-10-20",43,"Abbey Close",0,"N3","GW-07","crew"],["MC-3324","2026-10-21",43,"Back Fold",1,"N3","GW-03","crew"],["MC-3325","2026-10-21",43,"Quarry Bank",1,"N4","GW-07","resident"],["MC-3332","2026-10-21",43,"Church Wynd",1,"N3","GW-09","crew"],["MC-3341","2026-10-21",43,"Back Fold",1,"N1","GW-09","crew"],["MC-3327","2026-10-22",43,"Quarry Bank",1,"N2","GW-09","crew"],["MC-3329","2026-10-22",43,"Back Fold",1,"N1","GW-07","resident"],["MC-3334","2026-10-22",43,"Church Wynd",1,"N2","GW-03","resident"],["MC-3335","2026-10-22",43,"Back Fold",1,"N1","GW-03","crew"],["MC-3340","2026-10-22",43,"Tanner’s Yard",1,"N2","GW-07","crew"],["MC-3344","2026-10-22",43,"Ferry Road",0,"N1","GW-09","crew"],["MC-3349","2026-10-22",43,"Hollins Lane",0,"N3","GW-03","resident"],["MC-3350","2026-10-22",43,"Abbey Close",0,"N1","GW-03","crew"],["MC-3351","2026-10-22",43,"Mill Row",0,"N1","GW-03","crew"],["MC-3326","2026-10-23",43,"Church Wynd",1,"N3","GW-03","resident"],["MC-3330","2026-10-23",43,"Church Wynd",1,"N3","GW-07","crew"],["MC-3333","2026-10-23",43,"Low Gate",1,"N4","GW-09","crew"],["MC-3336","2026-10-23",43,"Back Fold",1,"N4","GW-07","resident"],["MC-3339","2026-10-23",43,"Church Wynd",1,"N4","GW-07","resident"],["MC-3343","2026-10-23",43,"Ferry Road",0,"N2","GW-07","crew"],["MC-3346","2026-10-23",43,"Hollins Lane",0,"N3","GW-07","resident"],["MC-3348","2026-10-23",43,"Station Terrace",0,"N1","GW-07","resident"],["MC-3352","2026-10-26",44,"Low Gate",1,"N3","GW-07","crew"],["MC-3353","2026-10-26",44,"Low Gate",1,"N4","GW-07","resident"],["MC-3355","2026-10-26",44,"Back Fold",1,"N1","GW-03","crew"],["MC-3358","2026-10-26",44,"Back Fold",1,"N4","GW-07","resident"],["MC-3362","2026-10-26",44,"Back Fold",1,"N3","GW-07","crew"],["MC-3379","2026-10-26",44,"Station Terrace",0,"N3","GW-07","crew"],["MC-3382","2026-10-26",44,"Station Terrace",0,"N2","GW-07","resident"],["MC-3384","2026-10-26",44,"Station Terrace",0,"N2","GW-07","crew"],["MC-3366","2026-10-27",44,"Church Wynd",1,"N1","GW-09","resident"],["MC-3370","2026-10-27",44,"Quarry Bank",1,"N4","GW-03","crew"],["MC-3372","2026-10-27",44,"Low Gate",1,"N1","GW-07","crew"],["MC-3373","2026-10-27",44,"Quarry Bank",1,"N2","GW-03","resident"],["MC-3380","2026-10-27",44,"Moor View",0,"N1","GW-03","crew"],["MC-3383","2026-10-27",44,"Abbey Close",0,"N3","GW-09","crew"],["MC-3356","2026-10-28",44,"Quarry Bank",1,"N2","GW-07","crew"],["MC-3357","2026-10-28",44,"Quarry Bank",1,"N3","GW-03","crew"],["MC-3360","2026-10-28",44,"Quarry Bank",1,"N1","GW-03","resident"],["MC-3364","2026-10-28",44,"Quarry Bank",1,"N2","GW-03","resident"],["MC-3367","2026-10-28",44,"Quarry Bank",1,"N4","GW-09","resident"],["MC-3369","2026-10-28",44,"Tanner’s Yard",1,"N1","GW-03","crew"],["MC-3371","2026-10-28",44,"Church Wynd",1,"N4","GW-07","resident"],["MC-3374","2026-10-28",44,"Low Gate",1,"N1","GW-09","crew"],["MC-3363","2026-10-29",44,"Back Fold",1,"N4","GW-07","crew"],["MC-3365","2026-10-29",44,"Back Fold",1,"N4","GW-07","crew"],["MC-3381","2026-10-29",44,"Mill Row",0,"N4","GW-07","crew"],["MC-3354","2026-10-30",44,"Back Fold",1,"N2","GW-07","crew"],["MC-3359","2026-10-30",44,"Back Fold",1,"N1","GW-07","crew"],["MC-3361","2026-10-30",44,"Tanner’s Yard",1,"N4","GW-07","crew"],["MC-3368","2026-10-30",44,"Church Wynd",1,"N4","GW-03","crew"],["MC-3375","2026-10-30",44,"Quarry Bank",1,"N1","GW-07","resident"],["MC-3376","2026-10-30",44,"Mill Row",0,"N3","GW-07","crew"],["MC-3377","2026-10-30",44,"Kiln Street",0,"N4","GW-09","resident"],["MC-3378","2026-10-30",44,"Hollins Lane",0,"N3","GW-09","crew"],["MC-3385","2026-10-30",44,"Abbey Close",0,"N3","GW-03","crew"]],"grades":{"A":{"plain":"From the system that keeps it","short":"kept record","tech":"grade A · system of record"},"B":{"plain":"From a named person or document, checked","short":"checked","tech":"grade B · attributed, verified"},"C":{"plain":"Reported, not checked","short":"reported","tech":"grade C · attributed, unverified"},"P":{"plain":"A guess from the assistant: not graded, never counted","short":"guess","tech":"model gateway proposal · no grade · excluded from counts"}},"evidence":[{"id":"robust","plain":"Strong","rule":"two or more sources, one of them a kept record","tech":"evidence: robust"},{"id":"medium","plain":"Some","rule":"one kept record, or two checked sources","tech":"evidence: medium"},{"id":"limited","plain":"Thin","rule":"one checked source, or only reports","tech":"evidence: limited"}],"agreement":[{"id":"agree","plain":"All agree","tech":"agreement: high"},{"id":"one","plain":"One disagrees","tech":"agreement: medium"},{"id":"split","plain":"Sources split","tech":"agreement: low"}],"yardstick":[{"w":"Remote chance","lo":0,"hi":5},{"w":"Highly unlikely","lo":10,"hi":20},{"w":"Unlikely","lo":25,"hi":35},{"w":"Realistic possibility","lo":40,"hi":50},{"w":"Likely","lo":55,"hi":75},{"w":"Highly likely","lo":80,"hi":90},{"w":"Almost certain","lo":95,"hi":100}],"grid":{"robust":{"agree":"Highly likely","one":"Likely","split":"Realistic possibility"},"medium":{"agree":"Likely","one":"Realistic possibility","split":null},"limited":{"agree":"Realistic possibility","one":null,"split":null}},"cantSay":"We can’t say yet","gridNote":"“Almost certain” needs three kept records that agree. The words below the middle are the same grid read for the opposite claim.","claims":[{"id":"rise","kind":"count","text":"Missed collections in the North rose from {before} to {after} a week after {eventDate}.","sources":[["A","Depot crew logs","agrees"],["B","Resident calls, contact centre","agrees"]],"against":[["C","Greenway monthly report, October","says 18 a week"]]},{"id":"cause","kind":"judgement","text":"The new rounds skip the narrow streets the old crews walked.","sources":[["A","Round maps, before and after","agrees"],["B","Crew notes, North depot","agrees"]],"against":[["C","Greenway monthly report, October","blames bins put out late"]],"evidence":"robust","agreement":"one"},{"id":"target","kind":"judgement","text":"Without a change to the rounds, the North will meet the 15-a-week target by 31 Dec.","sources":[["C","Greenway recovery plan, draft","agrees"]],"against":[["A","Depot crew logs, trend since Sep","no fall in 8 weeks"]],"evidence":"limited","agreement":"one"}],"build":[{"add":["A","Round maps, before and after","agrees"],"evidence":"medium","agreement":"agree"},{"add":["B","Crew notes, North depot","agrees"],"evidence":"robust","agreement":"agree"},{"add":["C","Greenway monthly report, October","disagrees"],"evidence":"robust","agreement":"one"}],"empties":{"norecord":{"plain":"No record","line":"Depot logs were down {gapDates}. That week can’t be counted, and the average leaves it out.","tech":"declared gap · record.gap event, week 41"},"stale":{"plain":"Out of date","line":"The North rounds plan was last checked 14 months ago.","tech":"fact older than its review age (12 months)"},"gap":{"plain":"Not known yet","line":"How many homes each new round covers. Lee Hart, contracts officer, could fill it.","tech":"expected detail, no fact · sh:minCount 1"},"hidden":{"plain":"Not yours to see","line":"Penalties charged to Greenway are kept on the Finance floor. Ask Priya Nair, finance lead.","tech":"403 · kept on finance"},"none":{"plain":"None","line":"Complaints raised by councillors: none. Sam Okafor checked on 2 Nov.","tech":"stated absence"},"na":{"plain":"Doesn’t apply","line":"Garden waste rounds: not run in the North in winter.","tech":"outside the domain this season"}},"gapDates":"5 to 11 Oct","actions":[{"id":"brief","icon":"file-text","verb":"Brief Marta","app":"Artifacts","reach":"North depot floor: 9 people","what":"A briefing in the North depot library"},{"id":"intent","icon":"target","verb":"Feed the intent","app":"Mandate","reach":"Ade Bello and 3 owners","what":"“Keep missed collections under 15 a week”, due 31 Dec"},{"id":"watch","icon":"eye","verb":"Watch for change","app":"Data Atlas","reach":"only you","what":"Tell me if the weekly count moves by 5 or more"}],"minute":{"wpm":200,"pictureSeconds":6,"budget":{"bottom":15,"picture":10,"workings":20,"missing":7,"next":8}},"intent":{"name":"Keep missed collections under 15 a week","owner":"Ade Bello","due":"31 Dec 2026","floor":"waste","target":15},"parts":[{"id":"bottom","name":"Bottom line","icon":"align-left","drawn":"Two sentences at most, before anything else. The first says what changed and by how much; the second what it means for the reader.","recipe":"--type-heading / --leading-heading, weight 300, --light; max --measure-read; a 2px rule in the colour of the floor it is kept on","never":"A number the records don’t hold, a word stronger than its claim allows, or a sentence with no claim behind it."},{"id":"picture","name":"Picture","icon":"chart-column","drawn":"One picture, one claim. Its title is the finding, in words. Counted with repeated symbols or plain bars, from zero.","recipe":"data ink --ink-muted, the finding --light, events a dashed --hairline-strong rule; symbols are Lucide at --space-4, one per N records","never":"A scale that starts above zero, a gap drawn as a dip, a symbol made bigger to mean more, or colour as the only way to tell."},{"id":"workings","name":"Workings","icon":"list-ordered","drawn":"Numbered steps in plain words: which records, which filter, what was left out, and how many each step left.","recipe":"--font-mono numerals in a --space-5 column, --type-meta text, counts right-aligned; left out in --ink-muted with its empty mark","never":"To be complete beyond its sources, or to hide a step that changed the answer."},{"id":"height","name":"Height","icon":"layers","drawn":"The same fact as a headline, a picture or the records. Moving between them keeps the number in place.","recipe":"three rungs in a --measure-rail column; the current rung --light with a --focus-ring edge; others --ink-muted; moves over --motion-slow","never":"Different numbers at different heights. Every headline adds up from its records, to the digit."},{"id":"confidence","name":"Confidence word","icon":"gauge","drawn":"One word from a fixed yardstick, chosen by rule from the grades and agreement of the sources. Counts take no word: they are recorded.","recipe":"the word in --ink, then a seven-cell yardstick at --space-1 per cell, filled --ink, empty --hairline-strong; never italic (italic is pencil)","never":"A percentage, a word on a count, a word stronger than its grid cell, or a word a model chose."}]};
+
+/* ---------- shared helpers (common.js) ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = getComputedStyle(document.documentElement);
+const tok = n => parseFloat(css.getPropertyValue(n)) || 0;
+const ic = (n, s = 16, w = 1.5) => Icons.svg(n, { size: s, stroke: w });
+let TIMERS = [];
+const later = (f, t) => TIMERS.push(setTimeout(f, RM ? Math.min(t, 1) : t));
+const clearTimers = () => { TIMERS.forEach(clearTimeout); TIMERS = []; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const cap = s => s[0].toUpperCase() + s.slice(1);
+
+/* ---------- the numbers every height must agree on ---------- */
+const S0 = (() => {
+  const ev = DATA.event.week;
+  const before = DATA.weeks.filter(w => w.wk < ev && w.count != null);
+  const after = DATA.weeks.filter(w => w.wk >= ev && w.count != null);
+  const last4 = after.slice(-4);
+  const sum = a => a.reduce((t, w) => t + w.count, 0);
+  const recs = DATA.records;
+  const recAfter = recs.filter(r => r[2] >= ev), recBefore = recs.filter(r => r[2] < ev);
+  const recLast4 = recs.filter(r => last4.some(w => w.wk === r[2]));
+  const narrowShare = a => Math.round(100 * a.filter(r => r[4]).length / a.length);
+  return {
+    before: Math.round(sum(before) / before.length), beforeSum: sum(before), beforeN: before.length, beforeExact: sum(before) / before.length,
+    after: Math.round(sum(last4) / last4.length), afterSum: sum(last4), afterN: last4.length, afterExact: sum(last4) / last4.length,
+    total: recs.length, recAfter: recAfter.length, recBefore: recBefore.length, recLast4: recLast4.length,
+    narrowBefore: narrowShare(recBefore), narrowAfter: narrowShare(recAfter),
+    missing: DATA.weeks.filter(w => w.count == null), last4, max: Math.max(...DATA.weeks.map(w => w.count || 0))
+  };
+})();
+const fill = s => s.replace(/\{(\w+)\}/g, (m, k) => k === 'eventDate' ? DATA.event.date : k === 'gapDates' ? DATA.gapDates : (k in S0 ? S0[k] : m));
+
+/* ---------- confidence words ---------- */
+const YI = w => DATA.yardstick.findIndex(y => y.w === w);
+const yard = w => { const i = YI(w); return `<span class="yd" aria-hidden="true">${DATA.yardstick.map((y, j) => `<i class="${j === i ? 'on' : ''}"></i>`).join('')}</span>`; };
+const cw = w => w ? `<span class="cw" title="${esc(w)}: ${DATA.yardstick[YI(w)].lo} to ${DATA.yardstick[YI(w)].hi} in 100 on the yardstick">${esc(w.toLowerCase())}${yard(w)}</span>` : `<span class="cw cant">${esc(DATA.cantSay.toLowerCase())}</span>`;
+const wordFor = (e, a) => DATA.grid[e][a];
+const recWord = () => `<span class="rec-word">${ic('database', 11)}recorded</span>`;
+const tally = (n, label = 'records') => `<button class="tally" title="${n} ${label}: open them">${ic('rows-3', 10)}${n}</button>`;
+const claimWord = c => c.kind === 'count' ? recWord() : cw(wordFor(c.evidence, c.agreement));
+
+/* ---------- marks: the six ways to be empty ---------- */
+const MK = {
+  gap: '<span class="mk mk-gap" aria-hidden="true"></span>',
+  stale: '<span class="mk mk-stale" aria-hidden="true"></span>',
+  norecord: '<svg class="mk mk-break" viewBox="0 0 28 12" aria-hidden="true"><path d="M0 6 q3.5 -5 7 0 t7 0 t7 0 t7 0"/></svg>',
+  hidden: `<span class="mk mk-unseen" aria-hidden="true">${ic('lock', 9)}</span>`,
+  none: '<span class="mk mk-none">none</span>',
+  na: '<span class="mk mk-na">n/a</span>',
+  disagree: '<span class="mk mk-disagree" aria-hidden="true"></span>'
+};
+const emp = k => { const e = DATA.empties[k]; return `<div class="emp">${MK[k]}<span><b>${esc(e.plain)}.</b> ${esc(fill(e.line))}<span class="tk">${esc(e.tech)}</span></span></div>`; };
+
+/* ---------- pictures ---------- */
+/* weekly columns from zero; the week with no record is a wavy break, never a dip */
+function weekChart({ w = 520, h = 160, labels = true, title = '', every = 2 } = {}) {
+  const W = DATA.weeks, n = W.length, pad = labels ? 22 : 2, top = 12;
+  const bw = (w - 2) / n, max = Math.ceil(S0.max / 10) * 10, y = v => top + (h - top - pad) * (1 - v / max);
+  let s = `<svg class="chart" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(title)}">`;
+  if (labels) [0, max / 2, max].forEach(v => { s += `<line class="axis" x1="0" x2="${w}" y1="${y(v)}" y2="${y(v)}" opacity="${v ? .4 : 1}"/><text x="${w + 6}" y="${y(v) + 4}">${v}</text>`; });
+  W.forEach((wk, i) => {
+    const x = 1 + i * bw;
+    if (wk.count == null) s += `<g class="nr"><path d="M${x + bw * .1} ${y(0) - 6} q${bw * .2} -6 ${bw * .4} 0 t${bw * .4} 0"/></g>`;
+    else s += `<rect class="${wk.wk >= DATA.event.week ? 'b1' : 'b0'} bar" data-wk="${wk.wk}" x="${x + bw * .14}" width="${bw * .72}" y="${y(wk.count)}" height="${y(0) - y(wk.count)}" rx="1"/>`;
+    const near = W[i - 1] && W[i - 1].count == null || W[i + 1] && W[i + 1].count == null;
+    if (labels && ((i % every === 0 && !near) || wk.count == null)) s += `<text x="${x + bw / 2}" y="${h - 6}" text-anchor="middle">${wk.count == null ? 'none kept' : 'w' + wk.wk}</text>`;
+  });
+  const ex = 1 + DATA.weeks.findIndex(x => x.wk === DATA.event.week) * bw;
+  s += `<line class="ev" x1="${ex}" x2="${ex}" y1="0" y2="${y(0)}"/>`;
+  if (labels) s += `<text x="${ex + 4}" y="${top - 2}" style="fill:var(--ink)">${esc(DATA.event.date)}</text>`;
+  return s + '</svg>';
+}
+function spark(w = 64, h = 14) {
+  const W = DATA.weeks, bw = w / W.length;
+  let s = `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">`;
+  W.forEach((wk, i) => { if (wk.count != null) { const bh = Math.max(1, h * wk.count / S0.max); s += `<rect class="${wk.wk >= DATA.event.week ? 'b1' : 'b0'}" x="${i * bw + .5}" width="${bw - 1}" y="${h - bh}" height="${bh}"/>`; } });
+  return s + '</svg>';
+}
+/* isotype row: one symbol per `per` records; the last one is cut to its share, never shrunk */
+function iso(count, per, size = 16, finding = false) {
+  let out = '';
+  const full = Math.floor(count / per), part = (count % per) / per;
+  for (let i = 0; i < full; i++) out += `<span class="s${finding ? ' f' : ''}" style="width:${size}px">${ic(DATA.kind.icon, size)}</span>`;
+  if (part > 0) out += `<span class="s${finding ? ' f' : ''}" style="width:${Math.max(2, Math.round(size * part))}px">${ic(DATA.kind.icon, size)}</span>`;
+  return `<span class="iso" role="img" aria-label="${count} ${DATA.kind.many}">${out}</span>`;
+}
+
+/* ---------- sentences: templates filled from the numbers, never typed ---------- */
+const bottomLine = () => ({
+  s1: `${cap(DATA.kind.many)} in ${DATA.area} rose from <span class="n">${S0.before}</span> to <span class="n">${S0.after}</span> ${DATA.kind.per} after ${esc(DATA.event.label)} on ${esc(DATA.event.date)}.`,
+  s2: `That is ${cw(wordFor(DATA.claims[1].evidence, DATA.claims[1].agreement))} because the new rounds skip the narrow streets, and it puts the ${DATA.intent.target}-a-week target out of reach.`
+});
+/* the picture's title is its finding, worded by rule from the ratio */
+const changeWord = () => { const r = S0.afterExact / S0.beforeExact; return r >= 3 ? 'more than tripled' : r >= 2 ? 'more than doubled' : r > 1.1 ? 'rose' : r < .9 ? 'fell' : 'held steady'; };
+const pictureTitle = () => `${cap(DATA.kind.many)} ${changeWord()} after ${esc(DATA.event.date)}`;
+const steps = () => [
+  [`Took every ${DATA.kind.one} in the ${DATA.log}, ${DATA.span}`, S0.total, ''],
+  [`Split them at ${DATA.event.date}, when ${DATA.event.label}`, `${S0.recBefore} | ${S0.recAfter}`, ''],
+  [`Averaged the ${S0.beforeN} weeks before and the last ${S0.afterN} weeks with records`, `${S0.before} → ${S0.after}`, ''],
+  [`Left out week ${S0.missing.map(w => w.wk).join(', ')}: depot logs were down ${DATA.gapDates}`, 'no record', 'out'],
+  ['Counted the share on narrow streets, before and after', `${S0.narrowBefore}% → ${S0.narrowAfter}%`, '']
+];
+const stepsHTML = () => `<ol class="wk">${steps().map((s, i) => `<li class="${s[2]}"><span class="no">${String(i + 1).padStart(2, '0')}</span><span>${esc(s[0])}</span><span class="ct">${s[2] === 'out' ? MK.norecord : esc(s[1])}</span></li>`).join('')}</ol>`;
+function setTech(on) { document.body.classList.toggle('tech', on); $$('[data-key=t]').forEach(e => e.classList.toggle('on', on)); }
+function setGate(off) { document.body.classList.toggle('gate-off', off); $$('[data-key=g]').forEach(e => e.classList.toggle('on', off)); }
+
+const H = [
+  { id: 'headline', name: 'Headline', says: 'The bottom line, with a picture at word size',
+    carries: 'The number, what it is compared with, when it changed, and the confidence word for any judgement.',
+    drawn: 'One sentence at title size, with a sparkline inside it at the height of the words; the second sentence quieter.',
+    recipe: 'h: --type-title-s / 300 / --light; spark: 64 × 14, --x-proposed-data-ink and --x-proposed-data-finding',
+    never: 'A number you can’t reach by stepping down. The sparkline never carries a claim the sentence doesn’t say.' },
+  { id: 'picture', name: 'Picture', says: 'One mark per record, so the picture is the records, drawn small',
+    carries: 'Every record as one cell, grouped by week; the two averages the headline compares; the event; the week with no record.',
+    drawn: 'A unit chart: one square per record, filled when on a narrow street. Averages are dashed lines labelled in words.',
+    recipe: 'cell: --space-2, 1px edge; before --x-proposed-data-ink, since the event --x-proposed-data-finding; event: dashed --x-proposed-event',
+    never: 'A cell that isn’t a record, a week with no record drawn as a low week, or an average over weeks it doesn’t say.' },
+  { id: 'records', name: 'Records', says: 'The rows behind the number, grouped as the picture groups them',
+    carries: 'The rows the headline counted, in the groups the picture drew, each with its id, so anyone can check one.',
+    drawn: 'A plain table, newest group first, a group line with its count; the rest of the records are one step away in Data Atlas.',
+    recipe: 'rows --type-small, ids --font-mono --ink-muted; group lines --surface-inset; sticky head --slate-deep',
+    never: 'Rows the headline didn’t count, or a count in a group line that differs from its rows.' }
+];
+const ST = { h: 0 };
+function render() {
+  $('#eb').textContent = `Briefing sheet · grammar · height · ${DATA.org}`;
+  $('#lede').innerHTML = `A briefing can be read at three heights: the headline, the picture, the records. Moving between them keeps the number pinned where it is, so you never lose your place, and every height must add up to the same digits.`;
+  $('#rails').innerHTML = H.map((h, i) => `<button class="rung" data-h="${i}"><span class="bar"></span><span><b>${h.name}</b><small>${esc(h.says)}</small></span><span class="k kbd">${i + 1}</span></button>`).join('');
+  const where = { bottom: 'is the headline', picture: 'is the middle rung', workings: 'are the steps between picture and records', height: 'is the ladder itself', confidence: 'stays the same at every height' };
+  $('#parts').innerHTML = `<span class="fh">The five parts on the ladder</span>` + DATA.parts.map(p => `<div>${ic(p.icon, 13)}<span><b>${esc(p.name)}</b> ${esc(where[p.id])}</span></div>`).join('');
+  $('#anchor').innerHTML = `<span class="big">${S0.after}</span><span class="unit">${esc(DATA.kind.many)} ${esc(DATA.kind.per)}</span><span class="was">up from ${S0.before} before ${esc(DATA.event.date)}</span><span class="pin">${ic('pin', 11)}pinned at every height</span>`;
+  const b = bottomLine();
+  const weeks = DATA.weeks;
+  $('#view').innerHTML = `
+    <div class="lvl" data-l="0">
+      <p class="hl">${b.s1.replace(`>${S0.after}</span>`, `>${S0.after}</span> ${spark(72, 18)}`)}</p>
+      <p class="hl2">${b.s2}</p>
+      <p class="pencil pencil-only hl2" style="font-size:var(--type-meta);line-height:var(--leading-meta);max-width:60ch"><span class="pencil-lab">${ic('pencil-line', 11)}suggested wording · assistant · not accepted</span><br>The North is missing far more bins since the rounds changed, mostly on the narrow streets.</p>
+      <div class="emps" style="display:grid;gap:var(--space-1);margin-top:auto">${emp('norecord')}</div>
+    </div>
+    <div class="lvl" data-l="1">
+      <p class="ptitle" style="margin:0">${pictureTitle()}, mostly on narrow streets</p>
+      <div class="units" id="units" style="--n:${weeks.length}">${weeks.map(w => `<div class="wcol" data-wk="${w.wk}">${w.count == null ? `<span class="nr">${MK.norecord}</span>` : DATA.records.filter(r => r[2] === w.wk).map(r => `<i class="u ${r[4] ? 'nar' : ''} ${w.wk >= DATA.event.week ? 'f' : ''}" title="${r[0]} · ${esc(r[3])}"></i>`).join('')}</div>`).join('')}</div>
+      <div class="wlabels" style="--n:${weeks.length}">${weeks.map(w => `<span>${w.count == null ? 'none' : 'w' + w.wk}</span>`).join('')}</div>
+      <div class="legend"><span><i class="u f nar"></i>one record, narrow street</span><span><i class="u f"></i>one record, other street</span><span><i class="u nar"></i>before ${esc(DATA.event.date)}</span><span>${MK.norecord} no record, ${esc(DATA.gapDates)}</span></div>
+    </div>
+    <div class="lvl" data-l="2">
+      <div class="recwrap"><table class="recs"><thead><tr>${[0, 1, 3, 5, 6, 7].map(i => `<th>${DATA.recordFields[i]}</th>`).join('')}<th>Narrow</th></tr></thead><tbody>
+      ${S0.last4.slice().reverse().map(w => { const rs = DATA.records.filter(r => r[2] === w.wk).reverse(); return `<tr class="grp"><td colspan="7">WEEK ${w.wk} · ${rs.length} RECORDS · ${rs.filter(r => r[4]).length} ON NARROW STREETS</td></tr>` + rs.map(r => `<tr><td class="m">${r[0]}</td><td>${r[1].slice(5)}</td><td>${esc(r[3])}</td><td>${r[5]}</td><td class="m">${r[6]}</td><td>${r[7]}</td><td>${r[4] ? '<i class="nb" title="narrow street"></i>' : ''}</td></tr>`).join(''); }).join('')}
+      </tbody></table></div>
+    </div>`;
+  Icons.hydrate();
+  $$('.rung').forEach(r => r.onclick = () => go(+r.dataset.h));
+  sizeUnits();
+  update();
+}
+function sizeUnits() {
+  const u = $('#units'); if (!u) return;
+  const lvl = u.closest('.lvl'); const was = lvl.style.cssText; lvl.style.opacity = 0; lvl.classList.remove('above', 'below');
+  const h = u.clientHeight - tok('--space-4'), colW = u.clientWidth / DATA.weeks.length - tok('--space-1');
+  // fit the tallest week: k cells wide, rows bottom-up, so height stays linear in the count
+  let cell = 14, k = 2;
+  for (; cell > 3; cell--) { k = Math.ceil(S0.max / Math.floor(h / (cell + 1))); if (k * (cell + 1) <= colW) break; }
+  u.style.setProperty('--cell', cell + 'px'); u.style.setProperty('--k', k);
+  lvl.style.cssText = was;
+  $$('.avg,.ev', u).forEach(e => e.remove());
+  const yOf = v => u.clientHeight - (v / k) * (cell + 1);
+  const colX = wk => { const c = $(`.wcol[data-wk="${wk}"]`, u); return [c.offsetLeft, c.offsetLeft + c.offsetWidth]; };
+  const a = colX(S0.last4[0].wk)[0], z = colX(S0.last4[S0.last4.length - 1].wk)[1];
+  u.insertAdjacentHTML('beforeend', `<div class="avg" style="left:${a}px;width:${z - a}px;top:${yOf(S0.afterExact)}px"><span>${S0.after} a week, last ${S0.afterN} weeks</span></div>`);
+  const before = DATA.weeks.filter(w => w.wk < DATA.event.week);
+  const b0 = colX(before[0].wk)[0], b1 = colX(before[before.length - 1].wk)[1];
+  u.insertAdjacentHTML('beforeend', `<div class="avg b" style="left:${b0}px;width:${b1 - b0}px;top:${yOf(S0.beforeExact)}px"><span>${S0.before} a week before</span></div>`);
+  const ex = colX(DATA.event.week)[0] - tok('--space-1') / 2;
+  u.insertAdjacentHTML('beforeend', `<div class="ev" style="left:${ex}px"><span>${esc(DATA.event.date)}</span></div>`);
+}
+function update() {
+  $$('.rung').forEach((r, i) => r.setAttribute('aria-current', i === ST.h));
+  $$('.lvl').forEach((l, i) => { l.classList.toggle('above', i < ST.h); l.classList.toggle('below', i > ST.h); l.setAttribute('aria-hidden', i !== ST.h); });
+  const h = H[ST.h];
+  $('#gram').innerHTML = `<h2>${ic(['align-left', 'chart-column', 'rows-3'][ST.h], 16)}At the ${h.name.toLowerCase()} height</h2>
+    <dl><dt>It carries</dt><dd>${esc(h.carries)}</dd><dt>Drawn as</dt><dd>${esc(h.drawn)}</dd><dt>Recipe</dt><dd class="rc">${esc(h.recipe)}</dd><dt>Never claims</dt><dd class="nv">${ic('ban', 13)}<span>${esc(h.never)}</span></dd></dl>
+    <div class="emps"><span class="fh">What stays the same at every height</span>
+      <p style="margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)">The cause keeps its word, ${cw(wordFor(DATA.claims[1].evidence, DATA.claims[1].agreement))}, at every height; at the records height each source also shows its grade.</p>
+      ${emp('norecord')}
+      <p class="pen pencil-only" style="margin:0;color:var(--ink-muted)">A model may suggest how to say the headline (pencil). It never sets the number or the word, and nothing it writes appears below the headline.</p>
+    </div>`;
+  Icons.hydrate($('#gram'));
+  $('#check').innerHTML = `<span>${ic('scale', 12)} same digits:</span>
+    <span class="${ST.h === 0 ? 'cur' : ''}">headline <b>${S0.after}</b></span><span>=</span>
+    <span class="${ST.h === 1 ? 'cur' : ''}">picture <b>${S0.afterSum}</b> cells ÷ ${S0.afterN} weeks = ${S0.afterExact.toFixed(1)}</span><span>=</span>
+    <span class="${ST.h === 2 ? 'cur' : ''}">records <b>${S0.recLast4}</b> rows ÷ ${S0.afterN}</span>
+    <span class="ok">${ic('check', 12)}${S0.afterSum === S0.recLast4 ? 'they agree' : 'they differ'}</span>`;
+  Icons.hydrate($('#check'));
+}
+function go(n) { ST.h = Math.max(0, Math.min(2, n)); update(); }
+function boot() {
+  clearTimers(); setTech(false); setGate(false); ST.h = 0;
+  const w = $('#wrap'); w.classList.add('pre'); render();
+  later(() => w.classList.remove('pre'), tok('--motion-instant'));
+  later(() => go(1), tok('--motion-run'));
+}
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'arrowdown') { e.preventDefault(); clearTimers(); go(ST.h + 1); }
+  else if (k === 'arrowup') { e.preventDefault(); clearTimers(); go(ST.h - 1); }
+  else if (['1', '2', '3'].includes(k)) { clearTimers(); go(+k - 1); }
+  else if (k === 't') setTech(!document.body.classList.contains('tech'));
+  else if (k === 'g') setGate(!document.body.classList.contains('gate-off'));
+  else if (k === 'r') boot();
+});
+addEventListener('resize', sizeUnits);
+boot();
+</script>
+</body>
+</html>

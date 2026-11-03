@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · V3 · The minute meter</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+#wrap{height:100vh;display:flex;flex-direction:column}
+.meter{padding:var(--space-4) var(--edge) var(--space-3);border-bottom:1px solid var(--hairline)}
+.mrow{display:flex;align-items:flex-end;gap:var(--space-5);margin-bottom:var(--space-3)}
+.big{font:200 var(--type-display)/var(--leading-display) var(--font-mono);color:var(--light);transition:color var(--motion-calm) var(--ease-out)}
+.big small{font-size:var(--type-lead);color:var(--ink-muted);margin-left:var(--space-1)}
+.over .big{color:var(--warning)}
+.fits .big{color:var(--x-proposed-lit)}
+.mstat{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);padding-bottom:var(--space-2);max-width:60ch}
+.mstat b{font-weight:400;color:var(--ink)}
+.mrow .legend{margin-left:auto;display:flex;gap:var(--space-4);font-size:var(--type-small);color:var(--ink-muted);padding-bottom:var(--space-2)}
+.legend span{display:inline-flex;align-items:center;gap:var(--space-2);white-space:nowrap}
+.mrow .eyebrow{white-space:nowrap}
+.sw-k{width:var(--space-4);height:var(--space-2);border-radius:1px}
+.k-tpl{background:var(--ink)}
+.k-own{background:var(--ink-muted)}
+.k-pen{border:var(--x-proposed-pencil-edge);background:var(--x-proposed-pencil-wash)}
+.track{position:relative;height:var(--space-5)}
+.segs{position:absolute;inset:var(--space-2) 0 auto 0;height:var(--space-3);display:flex;gap:2px}
+.seg{height:100%;border-radius:1px;transition:width var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out);flex:none}
+.seg.cutting{opacity:.35}
+.seg.past{box-shadow:inset 0 calc(var(--space-1) * -1) 0 var(--warning)}
+.budget{position:absolute;top:0;bottom:calc(var(--space-1) * -1);border-left:1px solid var(--light)}
+.budget span{position:absolute;left:var(--space-1);top:calc(var(--space-1) * -1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--light);white-space:nowrap}
+.ticks{position:relative;height:var(--space-3);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.ticks span{position:absolute;transform:translateX(-50%)}
+.cols{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:var(--space-5);padding:var(--space-3) var(--edge) 0}
+.col{min-height:0;overflow:auto;padding-bottom:var(--space-7);scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.ch{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2)}
+.ch .rd{border-bottom:2px solid var(--x-proposed-reader);color:var(--ink)}
+.ch .acts{margin-left:auto;display:flex;gap:var(--space-2)}
+.sec-h{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:var(--space-3) 0 var(--space-1)}
+.s{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr) var(--space-6);gap:var(--space-3);align-items:start;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);transition:opacity var(--motion-base),background var(--motion-base)}
+.s .km{margin-top:calc(var(--space-2) + 1px);width:var(--space-4);height:var(--space-1);border-radius:1px}
+.s p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.s.pen p{font-style:italic;color:var(--x-proposed-pencil)}
+.s .sec{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);text-align:right}
+.s .why{display:none;margin-top:2px;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.s.prop{background:var(--x-proposed-pencil-wash);outline:var(--x-proposed-pencil-edge)}
+.s.prop p{text-decoration:line-through dotted var(--x-proposed-pencil) 1px;color:var(--ink-muted)}
+.s.prop .why{display:flex}
+.s.prop.unb p{text-decoration:line-through wavy var(--x-proposed-unbacked) 1px;color:var(--x-proposed-unbacked)}
+.s .keep{display:none;margin-top:2px}
+.s.kept .keep{display:inline-flex}
+.mini{height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-2);font-size:var(--x-proposed-type-micro)}
+.down{display:grid;gap:var(--space-2)}
+.down .s{background:var(--surface-inset);border:1px solid var(--hairline)}
+.down .s p{color:var(--ink-muted);text-decoration:none}
+.down .s .from{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);margin-top:2px}
+.empty-down{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding:var(--space-3);border-radius:var(--radius-key)}
+.rules{margin-top:var(--space-4);border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.rules ul{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rules li{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2)}
+.rules li b{font-weight:400;color:var(--ink)}
+.spark{margin-left:var(--space-1)}
+.gapslot{display:inline-block;width:var(--measure-card);height:var(--leading-meta);vertical-align:bottom;font-size:var(--type-small);color:var(--ink-muted);padding:0 var(--space-2)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="band"></div>
+  <section class="meter" id="meter" aria-label="Time to read"></section>
+  <div class="cols">
+    <div class="col" id="left"></div>
+    <div class="col" id="right"></div>
+  </div>
+</div>
+<div id="dr"></div>
+<div class="x-cap"><b>One-minute briefing · V3</b> the minute meter: a reading budget, cuts move one step down, never away · inverted pyramid, broadcast timing sheets</div>
+<script>
+/*DATA*/
+/*COMMON_JS*/
+const T = DATA.topic, D = DATA.draft;
+const SCALE = 2 * DATA.budgetS; /* the track shows two budgets' worth */
+let rows = [], proposed = false;
+function text(r) {
+  if (r.t === 'BOTTOM') return STATE.gw ? D.bottom.filter(p => !p.unsupported).map(p => p.t).join('') : fill(D.template);
+  if (r.t === 'ASK') return fill(D.ask);
+  if (r.claim) return say(r.claim);
+  return fill(r.t);
+}
+function html(r) {
+  if (r.t === 'BOTTOM') return STATE.gw ? D.bottom.filter(p => !p.unsupported).map(p => p.claim ? `<button class="ref" data-claim="${p.claim}">${p.t}</button>` : p.t).join('') : `${fill(D.template)} <span class="gapslot gapbox">your recommendation: you write it</span>`;
+  if (r.claim) return `${say(r.claim)} ${chip(r.claim)}${r.claim === 'k1' && rows.find(x => x.pic && x.down) ? spark(56, 14, { them: true }) : ''}`;
+  return text(r);
+}
+function reset() {
+  rows = D.long.map((r, i) => Object.assign({ i, down: false, prop: false, kept: false }, r));
+  proposed = false;
+  $('#band').innerHTML = band();
+  $('#dr').innerHTML = drawer();
+  draw();
+}
+const sOf = r => r.t === 'BOTTOM' && !STATE.gw ? secs(fill(D.template)) + 3 : secs(text(r));
+const kindOf = r => r.t === 'BOTTOM' && !STATE.gw ? 'own' : r.by;
+function draw() {
+  const live = rows.filter(r => !r.down && !(r.by === 'pen' && r.t !== 'BOTTOM' && !STATE.gw));
+  const total = live.reduce((a, r) => a + sOf(r), 0);
+  const cutting = live.filter(r => r.prop).reduce((a, r) => a + sOf(r), 0);
+  const B = DATA.budgetS;
+  let acc = 0;
+  const segs = live.map(r => { const s = sOf(r); const past = acc + s > B; acc += s;
+    return `<span class="seg k-${kindOf(r)} ${r.prop ? 'cutting' : ''} ${past ? 'past' : ''}" style="width:calc((100% - ${live.length * 2}px) * ${s / SCALE})" title="${r.sec}: ${s} s"></span>`; }).join('');
+  $('#meter').className = 'meter ' + (total > B ? 'over' : 'fits');
+  $('#meter').innerHTML = `<div class="mrow"><div><p class="eyebrow">Time to read · at ${DATA.readWpm} words a minute</p><div class="big">${total}<small>s</small></div></div>
+    <p class="mstat">${total > B
+      ? `<b>${total - B} s over</b> the ${B} s budget for a briefing to ${P(T.reader).name}.${cutting ? ` The proposed cuts would save <b>${cutting} s</b>, leaving ${total - cutting} s.` : ''}`
+      : `<b>Fits in a minute</b>, ${B - total} s to spare. Nothing cut was deleted: it sits one step down, with its records.`}</p>
+    <div class="legend"><span><i class="sw-k k-tpl"></i>from records</span><span><i class="sw-k k-own"></i>your words</span><span><i class="sw-k k-pen"></i>${GW.plain} (pencil)</span></div></div>
+    <div class="track"><div class="segs">${segs}</div><div class="budget" style="left:${B / SCALE * 100}%"><span>${B} s budget</span></div></div>
+    <div class="ticks">${Array.from({ length: SCALE / 10 + 1 }, (_, i) => `<span style="left:${i * 10 / SCALE * 100}%">${i * 10}</span>`).join('')}</div>`;
+  let sec = '';
+  const left = rows.filter(r => !r.down).map(r => {
+    if (r.by === 'pen' && r.t !== 'BOTTOM' && !STATE.gw) return '';
+    let h = '';
+    if (r.sec !== sec) { sec = r.sec; h += `<p class="sec-h">${sec}</p>`; }
+    const k = kindOf(r);
+    return h + `<div class="s ${k === 'pen' ? 'pen' : ''} ${r.prop ? 'prop' : ''} ${r.unbacked ? 'unb' : ''} ${r.kept ? 'kept' : ''}" data-i="${r.i}">
+      <span class="km k-${k}"></span><div><p>${html(r)}</p>
+      ${r.cut ? `<div class="why"><span class="pentag">${ic(r.unbacked ? 'triangle-alert' : 'scissors', 12)} ${GW.plain}: ${r.cut}</span><button class="btn mini" data-keep="${r.i}">Keep</button><button class="btn mini pencil" data-down="${r.i}">Move down</button></div>` : ''}
+      ${r.keep ? `<span class="keep inktag">${ic('lock', 12)} can’t be cut: ${r.keep}</span>` : ''}
+      ${!STATE.gw && r.cut && !r.unbacked ? `<div style="margin-top:2px"><button class="btn mini" data-down="${r.i}">${ic('arrow-down', 12)} Move down</button></div>` : ''}</div>
+      <span class="sec">${sOf(r)} s</span></div>`;
+  }).join('');
+  $('#left').innerHTML = `<div class="ch"><p class="eyebrow">What <span class="rd">${P(T.reader).short}</span> reads</p><div class="acts">${proposed && rows.some(r => r.prop) ? `<button class="btn primary" id="acc">${ic('check', 14)} Move all proposed down <span class="kbd">A</span></button>` : ''}${STATE.gw && !proposed ? `<button class="btn pencil" id="ask">${ic('scissors', 14)} Ask ${GW.plain} to fit it <span class="kbd">F</span></button>` : ''}</div></div>${left}`;
+  const down = rows.filter(r => r.down && !r.unbacked);
+  const struck = rows.filter(r => r.down && r.unbacked);
+  $('#right').innerHTML = `<div class="ch"><p class="eyebrow">One step down · if ${P(T.reader).short} asks</p></div>
+    <div class="down">${down.length ? down.map(r => `<div class="s"><span class="km k-${r.by}"></span><div><p>${text(r)}</p><p class="from">${r.pic ? 'shown instead as a picture inside fact 1' : `kept in the briefing’s workings · ${r.by === 'tpl' ? 'from records' : 'your words'}`}</p></div><span class="sec">${sOf(r)} s</span></div>`).join('') : `<div class="empty-down gapbox">Nothing moved down yet. A sentence you cut lands here, with its records, and stays in the document in ${DATA.apps.artifacts}.</div>`}
+    ${struck.map(r => `<div class="s"><span class="km k-pen"></span><div><p class="unbacked">${text(r)}</p><p class="from" style="color:var(--x-proposed-unbacked)">struck: nothing in the records says this. Not kept.</p></div><span class="sec"></span></div>`).join('')}</div>
+    <div class="rules"><p class="eyebrow" style="margin-bottom:var(--space-2)">What ${GW.plain} may do here</p><ul>
+      <li>${ic('check', 14)}<span><b>Draft the bottom line</b>, in pencil, each phrase tied to a fact.</span></li>
+      <li>${ic('check', 14)}<span><b>Propose cuts and order</b>, with a reason you can read.</span></li>
+      <li>${ic('x', 14)}<span><b>Never change a number or reword a fact</b>: facts are filled from records by template.</span></li>
+      <li>${ic('x', 14)}<span><b>Never cut a gap or a disagreement</b>: the rule keeps them, whatever the budget.</span></li>
+      <li>${ic('circle-dashed', 14)}<span>With ${GW.plain} off (<span class="kbd">G</span>) the meter still runs and you move sentences down yourself.</span></li></ul>
+      <div class="hints" style="margin-top:var(--space-3)"><span><span class="kbd">F</span> fit it</span><span><span class="kbd">A</span> move proposed down</span><span><span class="kbd">G</span> assistant</span><span><span class="kbd">T</span> technical words</span><span><span class="kbd">R</span> replay</span></div></div>`;
+  Icons.hydrate();
+}
+function propose() { if (!STATE.gw || proposed) return; proposed = true; rows.forEach(r => { if (r.cut) r.prop = true; if (r.keep) r.kept = true; }); draw(); }
+function accept() { rows.forEach(r => { if (r.prop) { r.prop = false; r.down = true; } }); draw(); }
+HOOKS.gw.push(() => { if (rows.length) draw(); });
+document.addEventListener('click', e => {
+  if (e.target.closest('#ask')) propose();
+  if (e.target.closest('#acc')) accept();
+  const k = e.target.closest('[data-keep]'); if (k) { const r = rows[+k.dataset.keep]; r.prop = false; r.cut = null; draw(); }
+  const d = e.target.closest('[data-down]'); if (d) { const r = rows[+d.dataset.down]; r.prop = false; r.down = true; draw(); }
+});
+document.addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'f' || e.key === 'F') propose();
+  if (e.key === 'a' || e.key === 'A') accept(); });
+boot(reset, () => { later(propose, ms('--motion-calm')); later(accept, ms('--motion-hold')); });
+</script>
+</body>
+</html>

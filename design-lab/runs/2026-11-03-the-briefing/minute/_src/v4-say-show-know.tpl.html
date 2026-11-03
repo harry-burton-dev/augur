@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · V4 · Say, show, know</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+#wrap{height:100vh;display:flex;flex-direction:column}
+.main{flex:1;min-height:0;overflow:auto;padding:var(--space-4) var(--edge) var(--space-7);scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.head{display:flex;align-items:flex-end;gap:var(--space-4);margin-bottom:var(--space-3)}
+.head h1{margin:var(--space-1) 0 0;font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.head .for{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.head .for b{font-weight:400;color:var(--ink);border-bottom:2px solid var(--x-proposed-reader)}
+.heights{margin-left:auto;display:flex;gap:2px;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px}
+.heights button{height:calc(var(--target-sm) - var(--space-1));padding:0 var(--space-3);border-radius:2px;font-size:var(--type-small);color:var(--ink-muted);display:inline-flex;align-items:center;gap:var(--space-2)}
+.heights button[aria-pressed="true"]{background:var(--surface-raised);color:var(--light)}
+.script{display:grid;grid-template-columns:var(--space-7) minmax(0,1.25fr) minmax(0,1fr) minmax(0,1.1fr);border-top:1px solid var(--hairline-strong)}
+.h2-only .script{grid-template-columns:var(--space-7) minmax(0,1.25fr) minmax(0,1fr)}
+.h1-only .script{grid-template-columns:var(--space-7) minmax(0,1fr)}
+.h2-only .c-know,.h1-only .c-know,.h1-only .c-show{display:none}
+.colh{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline-strong);display:flex;gap:var(--space-2);align-items:center}
+.colh b{font-weight:400;color:var(--ink)}
+.row{display:contents}
+.cell{padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);min-width:0;transition:background var(--motion-base) var(--ease-out),opacity var(--motion-base) var(--ease-out)}
+.cell.c-who{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);padding-left:0;display:flex;flex-direction:column;gap:var(--space-1)}
+.cell.c-who .rn{font-size:var(--type-small);color:var(--ink)}
+.cell.c-say p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.cell.c-say .hd{color:var(--light)}
+.cell.c-show,.cell.c-know{border-left:1px solid var(--hairline)}
+.row.penrow .c-say p{font-style:italic;color:var(--x-proposed-pencil)}
+.row.lit .cell{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.row.lit .c-who .rn{color:var(--x-proposed-lit)}
+.pre .cell{opacity:0}
+.cell{transition-delay:calc(var(--i,0) * var(--motion-instant))}
+.blrow .c-say p{font-size:var(--type-lead);line-height:var(--leading-lead)}
+/* show: small pictures */
+.pic{display:block;width:100%;max-width:calc(var(--measure-card) - var(--space-6));height:auto;overflow:visible}
+.pic text{font:400 var(--x-proposed-type-micro) var(--font-mono);fill:var(--ink-muted)}
+.pic .b{fill:var(--ink)}
+.pic .b.l{fill:var(--light)}
+.pic .hole{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.pic .them{fill:none;stroke:var(--x-proposed-disagree);stroke-width:1.5}
+.pic .them-t{fill:var(--x-proposed-disagree)}
+.pic .ax{stroke:var(--hairline-strong)}
+.pic .end{stroke:var(--light);stroke-dasharray:3 2}
+.pic .nc{fill:var(--x-proposed-disagree-wash);stroke:var(--x-proposed-disagree);stroke-dasharray:3 2}
+.isos{display:flex;flex-wrap:wrap;gap:2px;align-items:center}
+.iso{display:inline-flex;color:var(--ink)}
+.iso.f{color:var(--warning)}
+.iso.g{background:var(--x-proposed-gap);color:transparent}
+.pcap{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:var(--space-1) 0 0}
+/* know */
+.k1l{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.mrec{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);margin-top:var(--space-1)}
+.mrec .id,.mrec .d{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.mrec.dis{border-left:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash);padding-left:var(--space-2)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-1)}
+.split div{border-left:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash);padding:var(--space-1) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.split b{display:block;font:400 var(--type-meta)/var(--leading-meta) var(--font-mono);color:var(--light)}
+.arrows{display:flex;gap:var(--space-2);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.arrows .ref{color:var(--ink)}
+.elist li{font-size:var(--type-small)}
+.foot{display:flex;gap:var(--space-3);align-items:center;margin-top:var(--space-3);flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="band"></div>
+  <main class="main" id="main"></main>
+</div>
+<div id="dr"></div>
+<div class="x-cap"><b>One-minute briefing · V4</b> say, show, know: every line at three heights, side by side · two-column TV scripts, Bret Victor’s ladder, Tufte</div>
+<script>
+/*DATA*/
+/*COMMON_JS*/
+const T = DATA.topic, I = DATA.intent, D = DATA.draft;
+let H = 3, head = -1, inked = false;
+function picK1() {
+  const w = 240, h = 52, n = M.length, max = DATA.months.reduce((a, m) => Math.max(a, m.n), 0), bw = 28, gap = (w - n * bw) / (n - 1);
+  let s = `<line class="ax" x1="0" y1="${h - 10}" x2="${w}" y2="${h - 10}"/>`;
+  M.forEach((m, i) => { const x = i * (bw + gap), bh = (m.n / max) * (h - 16);
+    s += `<rect class="b ${i === n - 1 ? 'l' : ''}" x="${x}" y="${h - 10 - bh}" width="${bw}" height="${bh}" rx="1"/>`;
+    if (m.hole) s += `<rect class="hole" x="${x}" y="${h - 10 - bh - 8}" width="${bw}" height="6"/>`;
+    s += `<text x="${x + bw / 2}" y="${h}" text-anchor="middle">${m.m}</text>`; });
+  const lx = (n - 1) * (bw + gap), ty = h - 10 - (DATA.theirs.n / max) * (h - 16);
+  s += `<line class="them" x1="${lx - 3}" y1="${ty}" x2="${lx + bw + 3}" y2="${ty}"/><text class="them-t" x="${lx - 5}" y="${ty + 3}" text-anchor="end">${DATA.theirs.n}?</text>`;
+  return `<svg class="pic" viewBox="0 0 ${w} ${h}" role="img" aria-label="Missed collections by month">${s}</svg>`;
+}
+function picK3() {
+  const w = 240, h = 52, mx = O.value;
+  return `<svg class="pic" viewBox="0 0 ${w} ${h}" role="img" aria-label="Cost now and offered"><text x="0" y="14">now</text><rect class="b" x="44" y="6" width="${(C.value / mx) * 190}" height="10" rx="1"/><text x="0" y="36">offered</text><rect class="b l" x="44" y="28" width="190" height="10" rx="1"/></svg>`;
+}
+function picK4() {
+  const mo = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May'], w = 240, h = 52, cw = w / mo.length, m = CL('k4').months;
+  let s = mo.map((x, i) => `<text x="${i * cw + cw / 2}" y="${h}" text-anchor="middle">${x}</text>`).join('');
+  s += `<rect class="b" x="0" y="6" width="${3 * cw}" height="8" rx="1"/><rect class="nc" x="${3 * cw}" y="6" width="${(m - 3) * cw}" height="8"/>`;
+  s += `<rect class="b l" x="0" y="24" width="${m * cw}" height="8" rx="1" opacity=".55"/><line class="end" x1="${3 * cw}" y1="0" x2="${3 * cw}" y2="${h - 10}"/>`;
+  return `<svg class="pic" viewBox="0 0 ${w} ${h}" role="img" aria-label="Contract and retender timeline">${s}</svg>`;
+}
+const pics = {
+  k1: () => picK1() + `<p class="pcap">One bar a month; the dashed box marks two lost weeks; the line marks ${DATA.theirs.who}.</p>`,
+  k2: () => `<div class="isos">${V.map(v => `<span class="iso ${v.r === 'fail' ? 'f' : v.r === 'gap' ? 'g' : ''}" title="${v.id}">${ic('truck', 18)}</span>`).join('')}</div><p class="pcap">One truck a vehicle: amber failed, corners not inspected yet.</p>`,
+  k3: () => picK3() + `<p class="pcap">£${C.value}m now, £${O.value}m offered.</p>`,
+  k4: () => picK4() + `<p class="pcap">Top: the contract, then no contract. Under it: six months of retendering.</p>`
+};
+function know(c) {
+  let r = `<div class="k1l">${yard(c.sure)} ${sure(c.sure)} ${chip(c.id)}</div>`;
+  if (c.id === 'k1') {
+    const last = INC.filter(x => x.m === 'Oct').slice(-1)[0];
+    r += `<div class="split"><div><b>${VARS.last}</b>our incident log, ${monthName(DATA.theirs.m)}</div><div><b>${DATA.theirs.n}</b>${DATA.theirs.who}</div></div>`;
+    r += `<div class="mrec"><span class="id">${last.id}</span><span>Missed collection, ${last.street}</span><span class="d">${last.day} Oct</span></div>`;
+  } else if (c.id === 'k2') {
+    V.filter(v => v.r !== 'pass').forEach(v => r += `<div class="mrec"><span class="id">${v.id}</span><span>${v.r === 'fail' ? 'Failed: ' + v.why : `<span class="gapbox" style="display:inline-block;width:var(--space-5);height:var(--space-3);vertical-align:-1px"></span> ${P(v.who).name}, by ${v.by}`}</span><span class="d">Oct</span></div>`);
+  } else {
+    c.src.filter(s => s.doc).forEach(s => r += `<div class="mrec"><span class="id">${s.doc}</span><span>${DATA.docs[s.doc].title}</span><span class="d">${DATA.docs[s.doc].date.slice(0, 6)}</span></div>`);
+  }
+  return r;
+}
+function blText() {
+  if (!STATE.gw) return `${fill(D.template)} <span class="gapbox" style="display:inline-block;width:var(--measure-card);height:var(--leading-lead);vertical-align:bottom;font-size:var(--type-small);color:var(--ink-muted);padding:0 var(--space-2)">your recommendation: you write it</span>`;
+  return D.bottom.filter(p => !p.unsupported).map(p => p.claim ? `<button class="ref" data-claim="${p.claim}">${p.t}</button>` : p.t).join('');
+}
+function render() {
+  $('#band').innerHTML = band();
+  $('#dr').innerHTML = drawer();
+  const rows = [];
+  rows.push({ cls: 'blrow ' + (STATE.gw && !inked ? 'penrow' : ''), who: STATE.gw ? (inked ? `<span class="inktag">${ic('pen-line', 12)} inked by ${P(DATA.me).short}</span><span>drafted by ${GW.plain}</span>` : `<span class="pentag">${ic('pencil', 12)} pencil</span><span>${GW.plain}</span>`) : `<span>template + you</span>`, rn: 'Bottom line',
+    say: `<p>${blText()}</p>`, show: `<div class="arrows">Rests on ${D.bottom.filter(p => p.claim && !p.unsupported).map(p => `<button class="ref" data-row="${p.claim}">fact ${DATA.claims.indexOf(CL(p.claim)) + 1}</button>`).join(' and ')}; a bottom line has no picture of its own.</div>`,
+    know: `<div class="k1l">${STATE.gw ? (inked ? 'Inked: it now reads as yours, and still says who drafted it.' : `Not counted, not sent until inked. One phrase was struck: nothing in the records said it.`) : GW.offWhy}</div>${STATE.gw && !inked ? `<div class="foot" style="margin-top:var(--space-2)"><button class="btn primary" id="bink">${ic('pen-line', 14)} Ink it <span class="kbd">I</span></button></div>` : ''}` });
+  DATA.claims.forEach((c, i) => rows.push({ id: c.id, cls: '', who: `<span>template</span><span>from records</span>`, rn: `Fact ${i + 1}`,
+    say: `<p><span class="hd">${c.head}.</span> ${say(c.id)}</p>`, show: pics[c.id](), know: know(c) }));
+  rows.push({ cls: '', who: `<span>template</span><span>from the gaps</span>`, rn: 'Not known',
+    say: `<p>We can’t yet see ${DATA.empties.filter(e => ['unseen', 'gap', 'ask'].includes(e.id)).length} things that matter here.</p>`,
+    show: `<ul class="elist">${['unseen', 'gap', 'ask'].map(id => emptyLi(EM(id))).join('')}</ul>`,
+    know: `<ul class="elist">${['noRecord', 'stale', 'none'].map(id => emptyLi(EM(id))).join('')}</ul>` });
+  rows.push({ cls: '', who: `<span>template</span><span>from ${DATA.apps.mandate}</span>`, rn: 'Decision',
+    say: `<p class="hd">${fill(D.ask)}</p>`, show: `<div class="k1l">${ic('target', 14)} ${I.title}<span class="tk"> · ${I.id}</span></div><div class="pcap">${DATA.apps.mandate}, owned by ${P(I.owner).name}, due ${I.due} (${I.daysLeft} days)</div>`,
+    know: `<div class="k1l">The recommendation is due ${I.askDue}, in ${I.askDays} days.</div>` });
+  $('#main').innerHTML = `<div class="head"><div><p class="eyebrow">${T.kind} for decision · ${T.written}</p><h1>${T.title}</h1><p class="for">For <b>${P(T.reader).name}</b>, ${P(T.reader).role}, from ${P(T.author).name}</p></div>
+    <div class="heights" role="group" aria-label="How much to show">${[[1, 'Say'], [2, 'Say and show'], [3, 'All three']].map(([n, l]) => `<button aria-pressed="${H === n}" data-h="${n}">${l} <span class="kbd">${n}</span></button>`).join('')}</div></div>
+    <div class="script" id="script"><div class="colh"></div><div class="colh">Say <b>· the sentence ${P(T.reader).short} reads</b></div><div class="colh c-show">Show <b>· the picture</b></div><div class="colh c-know">Know <b>· the records and how sure</b></div>
+    ${rows.map((r, i) => `<div class="row ${r.cls}" data-r="${i}" ${r.id ? `data-rid="${r.id}"` : ''}><div class="cell c-who" style="--i:${i}"><span class="rn">${r.rn}</span>${r.who}</div><div class="cell c-say" style="--i:${i}">${r.say}</div><div class="cell c-show" style="--i:${i + 1}">${r.show}</div><div class="cell c-know" style="--i:${i + 2}">${r.know}</div></div>`).join('')}</div>
+    <div class="foot hints"><span><span class="kbd">↑</span><span class="kbd">↓</span> read head</span><span><span class="kbd">Enter</span> all records for a fact</span><span><span class="kbd">1</span>–<span class="kbd">3</span> how many heights</span><span><span class="kbd">I</span> ink</span><span><span class="kbd">G</span> assistant</span><span><span class="kbd">T</span> technical words</span><span><span class="kbd">R</span> replay</span></div>`;
+  document.body.classList.toggle('h2-only', H === 2); document.body.classList.toggle('h1-only', H === 1);
+  lightRow(head);
+  Icons.hydrate();
+}
+function lightRow(i) { head = i; $$('.row').forEach(r => r.classList.toggle('lit', +r.dataset.r === i)); }
+function setH(n) { H = n; render(); }
+HOOKS.gw.push(() => { if ($('#script')) render(); });
+document.addEventListener('click', e => {
+  const h = e.target.closest('[data-h]'); if (h) setH(+h.dataset.h);
+  if (e.target.closest('#bink')) { inked = true; render(); }
+  const r = e.target.closest('[data-row]'); if (r) { const el = $(`.row[data-rid="${r.dataset.row}"]`); if (el) lightRow(+el.dataset.r); }
+});
+document.addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (['1', '2', '3'].includes(e.key)) setH(+e.key);
+  if (e.key === 'ArrowDown') { e.preventDefault(); lightRow(Math.min(head + 1, $$('.row').length - 1)); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); lightRow(Math.max(head - 1, 0)); }
+  if (e.key === 'Enter') { const el = $(`.row[data-r="${head}"]`); if (el && el.dataset.rid) openRecords(el.dataset.rid); }
+  if (e.key === 'i' || e.key === 'I') { if (STATE.gw && !inked) { inked = true; render(); } } });
+boot(() => { H = 3; head = -1; inked = false; render(); }, () => {
+  const step = ms('--motion-calm') / 2;
+  [0, 1].forEach((r, k) => later(() => lightRow(r), step * (k + 1)));
+});
+</script>
+</body>
+</html>

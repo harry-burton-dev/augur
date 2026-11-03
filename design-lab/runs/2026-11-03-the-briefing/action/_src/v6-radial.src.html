@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Action V6 · Radial with reach</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: the right-click radial on a finding. Fixed directions; the outer ring holds targets; the hub and the card say the reach ---- */
+:root{
+  /* radial geometry, as in the cinematic run's radial (x-radial-*) */
+  --x-proposed-radial-r: calc(var(--space-8) + var(--space-5));
+  --x-proposed-radial-outer: calc(var(--space-8) * 2 + var(--space-4));
+  --x-proposed-radial-hub: calc(var(--space-7) - var(--space-2));
+  /* far focal plane (cinematic focus planes): blur + desaturate, no black scrim */
+  --x-proposed-plane-far-blur: 3px;
+  --x-proposed-plane-far-sat: .35;
+}
+.stage{position:relative;height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,30%);gap:var(--space-5)}
+.far{position:absolute;inset:0;right:calc(30% + var(--space-5));transition:filter var(--motion-slow) var(--ease-out),opacity var(--motion-slow) var(--ease-out)}
+.open .far,.open .card{filter:blur(var(--x-proposed-plane-far-blur)) saturate(var(--x-proposed-plane-far-sat));opacity:.55}
+.tbl{width:100%;border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tbl th{text-align:left;font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline-strong)}
+.tbl td{padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline)}
+.tbl td.od{color:var(--ink)}
+.card{transition:filter var(--motion-slow) var(--ease-out),opacity var(--motion-slow) var(--ease-out);position:absolute;left:var(--space-6);top:var(--space-7);width:var(--measure-glance);z-index:2;padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-card);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));box-shadow:var(--shadow-raised)}
+.card .claims li:nth-child(n+3){display:none}
+.card .fd-h{font-size:var(--type-lead);line-height:var(--leading-lead)}
+.card .hint{margin:var(--space-3) 0 0;font-size:var(--type-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+
+/* the radial */
+.radial{position:fixed;left:0;top:0;width:0;height:0;z-index:var(--layer-overlay);pointer-events:none}
+.ring{position:absolute;left:calc(var(--x-proposed-radial-r) * -1 - var(--space-6));top:calc(var(--x-proposed-radial-r) * -1 - var(--space-6));width:calc((var(--x-proposed-radial-r) + var(--space-6)) * 2);height:calc((var(--x-proposed-radial-r) + var(--space-6)) * 2);border-radius:var(--radius-pill);background:radial-gradient(closest-side,var(--slate-deep) 78%,transparent);opacity:0;transform:scale(.85);transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out)}
+.open .ring{opacity:1;transform:none}
+.hub{position:absolute;left:calc(var(--x-proposed-radial-hub) * -1);top:calc(var(--x-proposed-radial-hub) * -1);width:calc(var(--x-proposed-radial-hub) * 2);height:calc(var(--x-proposed-radial-hub) * 2);border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);background:var(--surface-pane);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;padding:var(--space-3);opacity:0;transition:opacity var(--motion-base) var(--ease-out)}
+.open .hub{opacity:1}
+.hub b{font:400 var(--type-heading)/1 var(--font-mono);color:var(--light)}
+.hub span{font-size:var(--x-proposed-type-micro);line-height:1.3;color:var(--ink-muted)}
+.hub .fw{color:var(--fc)}
+.sl{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:var(--space-1);width:calc(var(--space-7) + var(--space-4));color:var(--ink-muted);font-size:var(--type-small);line-height:1.2;text-align:center;pointer-events:auto;opacity:0;transition:opacity var(--motion-base) var(--ease-out),color var(--motion-instant)}
+.open .sl{opacity:1;transition-delay:calc(var(--k) * var(--motion-instant) / 2)}
+.sl .ic{display:flex;align-items:center;justify-content:center;width:var(--target-md);height:var(--target-md);border-radius:var(--radius-pill);border:1px solid var(--hairline);background:var(--surface-pane);transition:border-color var(--motion-quick),background var(--motion-quick)}
+.sl.on{color:var(--light)}
+.sl.on .ic{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--green) 35%,transparent)}
+.sl.new .ic{border-style:dashed}
+.sl.danger.on .ic{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent);box-shadow:none}
+.sl .kbd{opacity:var(--x-proposed-quiet)}
+.tg{position:absolute;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);background:var(--surface-overlay);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap;pointer-events:auto;animation:tgin var(--motion-base) var(--ease-out) both;animation-delay:calc(var(--k) * var(--motion-instant))}
+@keyframes tgin{from{opacity:0;transform:translate(-50%,-50%) scale(.9)}}
+.tg::before{content:"";width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--fc)}
+.tg.on{border-color:var(--fc);color:var(--light);box-shadow:0 0 0 var(--focus-ring) var(--fc)}
+.tg .lk{color:var(--ink-muted);display:inline-flex}
+
+/* the consequence card */
+.conseq{grid-column:2;align-self:start;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);opacity:.35;transition:opacity var(--motion-base)}
+.open .conseq{opacity:1}
+.conseq h2{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.conseq p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.conseq p.m{color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.fbars{display:grid;gap:var(--space-1)}
+.fbar{display:grid;grid-template-columns:calc(var(--space-7) + var(--space-3)) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.fbar .w{color:var(--fc)}
+.fbar .track{height:var(--space-2);border-radius:1px;background:var(--hairline);overflow:hidden;display:flex}
+.fbar .track i{height:100%;background:var(--fc)}
+.fbar .track i.no{background:var(--x-proposed-unseen)}
+.fbar .n{font-family:var(--font-mono);color:var(--ink);min-width:var(--space-6);text-align:right}
+.fbar.off{opacity:.45}
+.explain{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.explain b{font-weight:400;color:var(--ink)}
+.conseq .acts{display:flex;gap:var(--space-2);justify-content:flex-end}
+@media (max-width:1400px){.card{width:var(--measure-decision);left:var(--space-4)}.card .claims{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Action · V6</b> the radial on a finding: fixed directions, targets on the outer ring, reach in the hub · cinematic radial + consequence preview, marking menus</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* the radial's direction contract (cinematic run): slot 0 is 12 o'clock, clockwise.
+   A finding reuses the document slots: Publish keeps 2, Feed takes Move's slot 3 (put it somewhere), Watch takes Pin's slot 7 */
+const SLOTS = [
+  { k: 0, id: 'open', plain: 'Open the records', icon: 'book-open' },
+  { k: 1, id: 'share', plain: 'Share', icon: 'user-plus' },
+  { k: 2, id: 'publish', plain: 'Publish as a briefing', icon: 'send', isNew: false },
+  { k: 3, id: 'feed', plain: 'Feed an intent', icon: 'target', isNew: true },
+  { k: 4, id: 'discard', plain: 'Discard', icon: 'trash-2', danger: true },
+  { k: 5, id: 'history', plain: 'History', icon: 'history' },
+  { k: 6, id: 'edit', plain: 'Edit words', icon: 'pencil' },
+  { k: 7, id: 'watch', plain: 'Watch for change', icon: 'binoculars', isNew: true }
+];
+const R = { open: false, x: 0, y: 0, slot: null, target: null };
+const TG = {
+  publish: () => DATA.libraries.map(l => ({ id: l.id, w: l.name, floor: l.floor, lock: !!l.approval })),
+  feed: () => DATA.intents.map(t => ({ id: t.id, w: t.title, floor: t.floor })),
+  watch: () => DATA.watch.presets.map(p => ({ id: p.id, w: 'Tell me ' + p.plain + (p.n !== undefined ? ' ' + p.n : ''), floor: DATA.myFloor }))
+};
+const own = f => { const i = RANK[f], below = DATA.floorOrder[i + 1]; return F(f).reach - (below ? F(below).reach : 0); };
+/* resolve a length token (custom properties hold calc() unresolved) */
+const px = v => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;visibility:hidden;width:var(' + v + ')'; document.body.appendChild(d); const w = d.getBoundingClientRect().width; d.remove(); return w; };
+
+function farHTML() {
+  const vans = Array.from({ length: DATA.watch.max }, (_, i) => ({ id: 'NV-' + String(i + 1).padStart(2, '0'), od: i % 18 < DATA.watch.now }));
+  return `<div class="far" aria-hidden="${R.open}"><table class="tbl"><thead><tr><th>Van</th><th>Kept on</th><th>Next inspection</th><th>Keeper</th></tr></thead><tbody>
+    ${vans.map((v, i) => `<tr><td>${v.id}</td><td>${i < DATA.groups[0].kept.department ? F('department').word : F('team').word}</td><td class="${v.od ? 'od' : ''}">${v.od ? 'past its date' : 'in date'}</td><td>${P(DATA.groups[0].keeper).name}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function reachFor() {
+  const s = R.slot && SLOTS.find(x => x.k === R.slot);
+  if (!s || !TG[s.id]) return null;
+  const t = TG[s.id]().find(x => x.id === R.target) || TG[s.id]()[0];
+  if (s.id === 'publish') { const l = DATA.libraries.find(x => x.id === t.id); return { s, t, l, people: F(l.floor).reach, floors: DATA.floorOrder.filter(f => RANK[f] >= RANK[l.floor]), low: l.floor }; }
+  if (s.id === 'feed') { const it = DATA.intents.find(x => x.id === t.id); return { s, t, it, people: it.followers + 1, floors: [it.floor], low: it.floor }; }
+  return { s, t, people: 1, floors: [DATA.myFloor], low: DATA.myFloor };
+}
+function hubHTML() {
+  const r = reachFor();
+  if (!r) return `<div class="hub"><span>Pick a direction</span></div>`;
+  return `<div class="hub" data-tier="${r.low}"><b>${fmt(r.people)}</b><span>${r.people === 1 ? 'just you' : 'can read it'}</span><span class="fw">${r.floors.map(f => F(f).word).join(' · ')}</span></div>`;
+}
+function radialHTML() {
+  const rr = px('--x-proposed-radial-r'), ro = px('--x-proposed-radial-outer');
+  const at = (k, rad) => { const a = (k * 45 - 90) * Math.PI / 180; return [Math.cos(a) * rad, Math.sin(a) * rad]; };
+  const slots = SLOTS.map(s => { const [x, y] = at(s.k, rr); return `<button class="sl ${R.slot === s.k ? 'on' : ''} ${s.danger ? 'danger' : ''} ${s.isNew ? 'new' : ''}" style="left:${x}px;top:${y}px;--k:${s.k}" data-k="${s.k}"><span class="ic">${I(s.icon, 18)}</span>${s.plain}<span class="kbd">${s.k + 1}</span></button>`; }).join('');
+  let tgs = '';
+  const s = R.slot !== null && SLOTS.find(x => x.k === R.slot);
+  if (s && TG[s.id]) {
+    const list = TG[s.id]();
+    tgs = list.map((t, i) => { const [x, y] = at(s.k + (i - (list.length - 1) / 2) * .62, ro); return `<button class="tg ${R.target === t.id ? 'on' : ''}" data-tier="${t.floor}" data-t="${t.id}" style="left:${x}px;top:${y}px;--k:${i}">${t.w}${t.lock ? `<span class="lk">${I('lock', 12)}</span>` : ''}</button>`; }).join('');
+  }
+  return `<div class="radial" style="left:${R.x}px;top:${R.y}px" role="menu" aria-label="Do something with this finding"><div class="ring"></div>${hubHTML()}${slots}${tgs}</div>`;
+}
+function conseqHTML() {
+  const r = reachFor();
+  if (!r) return `<aside class="conseq"><h2>What will happen</h2><p class="m">Right-click the finding, or press Space, to see what each choice would reach before you choose it.</p></aside>`;
+  const t = allTotal();
+  const bars = DATA.floorOrder.map(f => {
+    const n = r.floors.includes(f) ? (r.s.id === 'publish' ? own(f) : r.people) : 0, o = openN ? allOpen(f) : 0;
+    return `<div class="fbar ${n ? '' : 'off'}" data-tier="${f}"><span class="w">${F(f).word}</span><span class="track" title="opens ${o} of ${t}"><i style="width:${n ? o / t * 100 : 0}%"></i><i class="no" style="width:${n ? (t - o) / t * 100 : 0}%"></i></span><span class="n">${n ? fmt(n) : '—'}</span></div>`;
+  }).join('');
+  let head, body, act;
+  if (r.s.id === 'publish') {
+    head = `Publish to ${r.l.name}`;
+    body = `<p>${fmt(r.people)} people on the ${F(r.l.floor).word} floor${r.l.floor === 'org' ? '' : ' and under it'} can read it. Some can open only <b class="lite">${allOpen(r.l.floor)} of ${t}</b> records behind it.</p>`;
+    act = r.l.approval ? `<div class="explain">${I('lock', 14)}<span><b>You can’t publish here yourself.</b> ${r.l.approvalWhy} Choosing it sends ${P(r.l.approval).name} a request with this preview.</span></div><div class="acts"><button class="btn">${I('user-round', 14)} Ask ${P(r.l.approval).name} <span class="kbd">Enter</span></button></div>` : `<div class="acts"><button class="btn go">${I('send', 14)} Publish <span class="kbd">Enter</span></button></div>`;
+  } else if (r.s.id === 'feed') {
+    head = `Feed “${r.it.title}”`;
+    body = `<p>${P(r.it.owner).name} and ${r.it.followers} followers see it as evidence; ${P(r.it.owner).name.split(" ")[0]} can open <b class="lite">${allOpen(r.it.floor)} of ${t}</b> records behind it. It doesn’t change the intent’s state.</p>`;
+    act = `<div class="acts"><button class="btn go">${I('target', 14)} Feed it <span class="kbd">Enter</span></button></div>`;
+  } else {
+    head = `Watch: ${r.t.w.toLowerCase()}`;
+    body = `<p>Only you are told. It counts only what you can open.</p>`;
+    act = `<div class="acts"><button class="btn go">${I('binoculars', 14)} Watch <span class="kbd">Enter</span></button></div>`;
+  }
+  return `<aside class="conseq"><p class="eyebrow">Before you choose</p><p class="m">${headlineHTML()} ${spark(72, 16)}</p><h2>${head}</h2>${body}<div class="fbars">${bars}</div><p class="m">Bar: share of the ${t} records behind it that readers on that floor can open; hatched, what they can’t. Their copy says whom to ask.</p><p class="tk">reach = Σ people(floor ≥ ${r.low}) · resolvable = records kept on floor ≤ reader</p>${act}</aside>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.finding.subject],
+    [['Space', 'menu'], ['1–8', 'direction'], ['Tab', 'target'], ['Enter', 'do it'], ['Esc', 'close'], ['T', 'admin words', 'h-t'], ['G', 'model off', 'h-g'], ['R', 'replay']]) +
+    `<main class="main ${R.open ? 'open' : ''}" id="main"><div class="stage">${farHTML()}<article class="card" id="card" tabindex="0" aria-label="Finding">${findingHTML()}<p class="hint">${I('mouse-pointer-click', 14)} Right-click or Space for what to do with it</p></article><div></div>${conseqHTML()}</div>${R.open ? radialHTML() : ''}</main>`;
+  Icons.hydrate($('#app'));
+  $('#card').oncontextmenu = e => { e.preventDefault(); openAt(e.clientX, e.clientY); };
+  $$('.sl').forEach(b => { b.onmouseenter = () => pickSlot(+b.dataset.k); b.onclick = () => pickSlot(+b.dataset.k); });
+  $$('.tg').forEach(b => { b.onmouseenter = () => { R.target = b.dataset.t; render(); }; b.onclick = () => { R.target = b.dataset.t; render(); }; });
+}
+window.__rerender = render;
+function openAt(x, y) {
+  const rr = px('--x-proposed-radial-outer') + px('--space-5');
+  const stage = $('.stage').getBoundingClientRect(), right = stage.right - stage.width * .3 - px('--space-5');
+  R.x = Math.max(stage.left + rr * .62, Math.min(x, right - rr * .62)); R.y = Math.max(stage.top + rr * .55, Math.min(y, innerHeight - rr * .7)); R.open = true; render();
+}
+function pickSlot(k) { if (R.slot === k) return; R.slot = k; const s = SLOTS.find(x => x.k === k); R.target = TG[s.id] ? TG[s.id]()[0].id : null; render(); }
+function centre() { const c = $('#card').getBoundingClientRect(); return [c.left + c.width / 2, c.top + c.height / 2]; }
+
+function replay() {
+  clearLater();
+  Object.assign(R, { open: false, slot: null, target: null }); STATE.accepted = false;
+  document.body.classList.add('pre'); render();
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre')));
+  /* the moment: right-click on the finding; Publish lights; the targets fan out; the pointer rests on the locked one */
+  const t = ms('--motion-run'), step = ms('--motion-calm');
+  later(() => { const [x, y] = centre(); openAt(x, y); }, t);
+  later(() => pickSlot(2), t + step);
+  later(() => { R.target = 'L2'; render(); }, t + step * 2);
+  later(() => { R.target = 'L3'; render(); }, t + step * 3);
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && R.open) { Object.assign(R, { open: false, slot: null, target: null }); render(); return; }
+  if (e.key === ' ' && !R.open) { e.preventDefault(); const [x, y] = centre(); openAt(x, y); return; }
+  if (R.open && /^[1-8]$/.test(e.key)) { pickSlot(+e.key - 1); return; }
+  if (R.open && e.key === 'Tab') { e.preventDefault(); const s = SLOTS.find(x => x.k === R.slot); if (s && TG[s.id]) { const l = TG[s.id](); const i = l.findIndex(x => x.id === R.target); R.target = l[(i + (e.shiftKey ? -1 : 1) + l.length) % l.length].id; render(); } return; }
+  if (R.open && e.key.startsWith('Arrow')) { e.preventDefault(); const d = { ArrowUp: 0, ArrowRight: 2, ArrowDown: 4, ArrowLeft: 6 }[e.key]; pickSlot(d); return; }
+  commonKeys(e, render, replay);
+});
+addEventListener('resize', () => { if (R.open) { const [x, y] = centre(); openAt(x, y); } });
+replay();
+</script>
+</body>
+</html>

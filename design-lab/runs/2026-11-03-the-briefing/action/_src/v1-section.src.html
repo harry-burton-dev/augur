@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Action V1 · The section</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: a building section. The thing is placed on a floor; its light falls through the floors under it ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(340px,30%) minmax(0,1fr);gap:var(--space-5)}
+.left{min-height:0;padding-right:var(--space-2)}
+.right{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.verbs{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.verb{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted);font-size:var(--type-meta)}
+.verb[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+.targets{display:flex;gap:var(--space-2);flex-wrap:wrap;min-height:var(--target-sm)}
+.tg{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-pill);border:1px solid var(--hairline);font-size:var(--type-small);color:var(--ink-muted)}
+.tg::before{content:"";width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--fc)}
+.tg[aria-pressed="true"]{color:var(--light);border-color:var(--fc);background:color-mix(in srgb,var(--fc) 10%,transparent)}
+.tg .kbd{margin-left:var(--space-1)}
+
+.section{flex:0 1 auto;min-height:0;overflow:auto;scrollbar-width:thin;display:grid;grid-auto-rows:minmax(0,auto);align-content:start;gap:0;border-top:1px solid var(--hairline-strong);position:relative}
+.slab{position:relative;display:grid;grid-template-columns:calc(var(--measure-rail) - var(--space-6)) minmax(0,1fr) minmax(0,1.15fr);gap:var(--space-4);padding:var(--space-3) var(--space-3) var(--space-3) var(--space-4);border-bottom:1px solid var(--hairline-strong);transition:background var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+.slab::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--fc);opacity:var(--x-proposed-quiet)}
+/* the slab's floor line, like the cut floor plate in a section */
+.slab::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,var(--fc),transparent);opacity:.5}
+.slab.dark{opacity:.5}
+.slab.lit{background:linear-gradient(180deg,color-mix(in srgb,var(--fc) var(--x-proposed-reach-wash),transparent),color-mix(in srgb,var(--fc) calc(var(--x-proposed-reach-wash) / 3),transparent))}
+.slab.src{box-shadow:inset 0 2px 0 var(--fc)}
+.slab .who h3{margin:0;font-weight:300;font-size:var(--type-body);line-height:var(--leading-body);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.slab .who p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.slab .who .state{margin-top:var(--space-2);color:var(--ink)}
+.slab .who .state b{font-weight:400;color:var(--fc)}
+.slab .people{min-width:0}
+.slab .people .figs{color:var(--ink-muted)}
+.slab.lit .people .figs{color:var(--light)}
+.slab .people .n{font:400 var(--type-lead)/var(--leading-lead) var(--font-mono);color:var(--light)}
+.slab .people .n small{font:400 var(--type-small)/1 var(--font-sans);color:var(--ink-muted);margin-left:var(--space-2)}
+.slab .recs{min-width:0}
+.rgrid{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);margin-top:var(--space-1)}
+.rg{display:flex;flex-direction:column;gap:2px}
+.rg .cells{display:flex;flex-wrap:wrap;gap:2px;max-width:calc(var(--space-8) + var(--space-5))}
+.cell{width:var(--space-2);height:var(--space-2);border-radius:1px;background:var(--ink)}
+.cell.no{background:var(--x-proposed-unseen);outline:1px solid var(--hairline);outline-offset:-1px}
+.rg .lab{display:flex;align-items:center;gap:var(--space-1);font-size:var(--x-proposed-type-micro);line-height:1.3;color:var(--ink-muted);max-width:calc(var(--space-8) + var(--space-5))}
+.rs{display:flex;align-items:center;gap:var(--space-1);font-size:var(--x-proposed-type-micro);line-height:1.3;color:var(--ink-muted);flex-basis:45%;min-width:0;white-space:nowrap}
+.rs .cell{margin-right:var(--space-1)}
+.recs .sum{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0}
+.recs .sum b{font-weight:400;color:var(--ink)}
+.slab.dark .recs .cells{filter:saturate(0)}
+.legend{margin-bottom:auto;display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:var(--space-2)}
+
+.verdict{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.verdict p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.verdict p.big{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.verdict p.big b{font-weight:400}
+.verdict .warn{color:var(--x-proposed-disagree)}
+.left .eyebrow + .fd-h{font-size:var(--type-lead);line-height:var(--leading-lead)}
+@media (max-width:1400px){.slab{grid-template-columns:calc(var(--measure-rail) - var(--space-7)) minmax(0,.8fr) minmax(0,1.2fr)}.left .claims li:nth-child(n+4){display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Action · V1</b> the section: placed on a floor, its light falls through the floors under it · architectural section, Isotype</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const V = { verb: 'publish', target: { publish: 'L1', feed: 'I1', watch: 'any' } };
+const VERBS = [
+  { id: 'publish', key: 'P', plain: 'Publish as a briefing', icon: 'send', app: 'Artifacts' },
+  { id: 'feed', key: 'F', plain: 'Feed an intent', icon: 'target', app: 'Mandate' },
+  { id: 'watch', key: 'W', plain: 'Watch for change', icon: 'binoculars', app: 'Data Atlas' }
+];
+/* people on each floor who are not already counted on a floor under it */
+const own = f => { const i = RANK[f], below = DATA.floorOrder[i + 1]; return F(f).reach - (below ? F(below).reach : 0); };
+
+function targets() {
+  if (V.verb === 'publish') return DATA.libraries.map(l => ({ id: l.id, label: l.name, floor: l.floor }));
+  if (V.verb === 'feed') return DATA.intents.map(t => ({ id: t.id, label: t.title, floor: t.floor }));
+  return DATA.watch.presets.map(p => ({ id: p.id, label: 'Tell me ' + p.plain + (p.n !== undefined ? ' ' + p.n : ''), floor: DATA.myFloor }));
+}
+/* which floor the thing is kept on, and who on each floor gets it */
+function plan() {
+  const t = V.target[V.verb];
+  if (V.verb === 'publish') {
+    const l = DATA.libraries.find(x => x.id === t);
+    return { kept: l.floor, place: l, readers: f => RANK[f] >= RANK[l.floor] ? own(f) : 0 };
+  }
+  if (V.verb === 'feed') {
+    const it = DATA.intents.find(x => x.id === t);
+    /* an intent's readers: its owner and followers, on the intent's floor */
+    return { kept: it.floor, place: it, readers: f => f === it.floor ? it.followers + 1 : 0 };
+  }
+  return { kept: DATA.myFloor, place: null, readers: f => f === DATA.myFloor ? 1 : 0 };
+}
+
+function slabHTML(f, p) {
+  const n = p.readers(f), lit = n > 0, fl = F(f);
+  const reader = f;
+  const groups = DATA.groups.map(g => {
+    const o = lit ? openN(g, reader) : 0, tt = total(g);
+    if (tt === 1) return `<div class="rs"><i class="cell ${o ? '' : 'no'}"></i>${I(g.icon, 11)}${g.label}</div>`;
+    return `<div class="rg"><span class="cells">${Array.from({ length: tt }, (_, i) => `<i class="cell ${i < o ? '' : 'no'}"></i>`).join('')}</span><span class="lab">${I(g.icon, 11)}${g.label}</span></div>`;
+  }).join('');
+  const o = allOpen(reader), tt = allTotal();
+  const fig = figures(n || own(f), { size: 13 });
+  let state;
+  if (p.kept === f) state = `<p class="state">${I('map-pin', 12)} <b>Kept here</b></p>`;
+  else if (lit) state = `<p class="state">Reads it from ${F(p.kept).word === fl.word ? 'here' : 'the ' + F(p.kept).word + ' floor'}</p>`;
+  else state = `<p class="state muted">${RANK[f] < RANK[p.kept] ? 'Above where it’s kept: won’t see it' : 'Not told'}</p>`;
+  let sum;
+  if (!lit) sum = `<p class="sum">Nobody here gets it.</p>`;
+  else {
+    const hidden = DATA.groups.filter(g => openN(g, reader) < total(g));
+    const who = [...new Set(hidden.map(askFor))].join(' or ');
+    sum = `<p class="sum">They can open <b>${o} of ${tt}</b> records behind it.${o < tt ? ` In their copy the rest show as locked, “ask ${who}”.` : ''}</p>`;
+  }
+  return `<section class="slab dep ${lit ? 'lit' : 'dark'} ${p.kept === f ? 'src' : ''}" data-tier="${f}" style="--i:${RANK[f]}">
+    <div class="who"><h3>${fl.word}</h3><p>${fl.name}</p>${state}</div>
+    <div class="people"><div class="n">${lit ? fmt(n) : '0'}<small>${lit ? (V.verb === 'watch' ? 'just you' : 'can read it') : 'of ' + fmt(own(f)) + ' here'}</small></div>${lit ? fig.html : ''}<p class="tk">${lit ? fig.key : ''}${lit ? ` · reader floor ≥ ${p.kept}` : ''}</p></div>
+    <div class="recs">${sum}<div class="rgrid">${groups}</div></div></section>`;
+}
+
+function verdictHTML(p) {
+  let big, small, btn;
+  const sumReach = DATA.floorOrder.reduce((a, f) => a + p.readers(f), 0);
+  if (V.verb === 'publish') {
+    const l = p.place;
+    const minOpen = allOpen(l.floor);
+    big = `Publish to <b>${l.name}</b>: <b>${fmt(sumReach)}</b> ${sumReach === 1 ? 'person' : 'people'} can read it. Some of them can open only <b>${minOpen} of ${allTotal()}</b> records behind it.`;
+    small = minOpen < allTotal() / 2 ? `<span class="warn">${I('triangle-alert', 12)} Your sentences carry numbers from records most of them can’t open. Publishing tells them anyway.</span>` : 'Every claim keeps its link to the records; readers who can’t open one see whom to ask.';
+    btn = l.approval ? `<button class="btn" aria-disabled="false">${I('user-round', 14)} Ask ${P(l.approval).name} to approve</button>` : `<button class="btn go">${I('send', 14)} Publish</button>`;
+    if (l.approval) small += `<br>${l.approvalWhy}`;
+  } else if (V.verb === 'feed') {
+    const it = p.place;
+    big = `Feed <b>${it.title}</b>: ${P(it.owner).name} and ${it.followers} followers see this finding as evidence.`;
+    small = `It does not change the intent’s state; ${P(it.owner).name} decides that. Due ${it.due}.`;
+    btn = `<button class="btn go">${I('target', 14)} Feed it</button>`;
+  } else {
+    big = `Only <b>you</b> are told, and nobody else can see the watch.`;
+    small = `The watch counts only what you can open: ${allOpen(DATA.myFloor)} of ${allTotal()} records.`;
+    btn = `<button class="btn go">${I('binoculars', 14)} Watch</button>`;
+  }
+  return `<div class="verdict dep" style="--i:4"><div><p class="big">${big}</p><p>${small}</p></div>${btn}</div>`;
+}
+
+function render() {
+  const p = plan();
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.finding.subject, 'Finding ' + DATA.finding.id],
+    [['P', 'publish'], ['F', 'feed'], ['W', 'watch'], ['1–3', 'where'], ['A', 'accept'], ['T', 'admin words', 'h-t'], ['G', 'model off', 'h-g'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div class="left scroll">${findingHTML()}</div>
+      <div class="right">
+        <div class="verbs" role="group" aria-label="What to do with it">${VERBS.map(v => `<button class="verb" data-verb="${v.id}" aria-pressed="${V.verb === v.id}">${I(v.icon, 14)} ${v.plain} <span class="kbd">${v.key}</span><span class="tk">&nbsp;${v.app}</span></button>`).join('')}</div>
+        <div class="targets" role="group" aria-label="Where">${targets().map((t, i) => `<button class="tg" data-tier="${t.floor}" data-t="${t.id}" aria-pressed="${V.target[V.verb] === t.id}">${t.label}<span class="kbd">${i + 1}</span></button>`).join('')}</div>
+        <div class="section" aria-label="Who will see it, floor by floor">${DATA.floorOrder.map(f => slabHTML(f, p)).join('')}</div>
+        <div class="legend"><span><i class="cell"></i> a record they can open</span><span><i class="cell no"></i> one they can’t (kept on a floor below, or restricted)</span><span>${I('user-round', 13)} one person</span></div>
+        ${verdictHTML(p)}
+      </div></div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.verb').forEach(b => b.onclick = () => { V.verb = b.dataset.verb; render(); });
+  $$('.tg').forEach(b => b.onclick = () => { V.target[V.verb] = b.dataset.t; render(); });
+}
+window.__rerender = render;
+
+function replay() {
+  clearLater();
+  Object.assign(V, { verb: 'publish', target: { publish: 'L1', feed: 'I1', watch: 'any' } });
+  STATE.accepted = false;
+  document.body.classList.add('pre'); render();
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre')));
+  /* the moment: the briefing moves up a floor, and its light falls through two floors */
+  later(() => { V.target.publish = 'L2'; render(); }, ms('--motion-run'));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const k = e.key.toLowerCase();
+  const v = VERBS.find(x => x.key.toLowerCase() === k);
+  if (v) { V.verb = v.id; render(); return; }
+  const ts = targets(); const n = parseInt(k, 10);
+  if (n >= 1 && n <= ts.length) { V.target[V.verb] = ts[n - 1].id; render(); }
+});
+replay();
+</script>
+</body>
+</html>
