@@ -108,24 +108,6 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: augur-app-kit
-  title: "@augur/app-kit"
-  description: "Quill: the React kit apps build with, on Common. Served to every app through the shell's import map, under the SDK promise."
-  annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/app-kit/
-    augur.dev/package: "@augur/app-kit"
-    augur.dev/version: 0.3.0
-    augur.dev/release-unit: augur
-spec:
-  type: library
-  lifecycle: experimental
-  owner: group:default/augur-core
-  system: augur-platform
----
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
   name: augur-app-tools
   title: "@augur/app-tools"
   description: "The release steps every AUGUR app shares: dev builds, previews, signed bundles and the app-release.json a deployment installs from, as the augur-app command for an app in its own repository."
@@ -133,24 +115,6 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/app-tools/
     augur.dev/package: "@augur/app-tools"
-    augur.dev/version: 0.2.0
-    augur.dev/release-unit: augur
-spec:
-  type: library
-  lifecycle: experimental
-  owner: group:default/augur-core
-  system: augur-platform
----
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
-  name: augur-kit-common
-  title: "@augur/kit-common"
-  description: "Common: AUGUR's tokens, the Tailwind theme built from them, and the parts both kits (Aerie for the shell, Quill for apps) share."
-  annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/kit-common/
-    augur.dev/package: "@augur/kit-common"
     augur.dev/version: 0.2.0
     augur.dev/release-unit: augur
 spec:
@@ -206,24 +170,6 @@ metadata:
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/service-kit/
     augur.dev/package: "@augur/service-kit"
     augur.dev/version: 0.11.0
-    augur.dev/release-unit: augur
-spec:
-  type: library
-  lifecycle: experimental
-  owner: group:default/augur-core
-  system: augur-platform
----
-apiVersion: backstage.io/v1alpha1
-kind: Component
-metadata:
-  name: augur-shell-kit
-  title: "@augur/shell-kit"
-  description: "Aerie: the shell's own React kit, on Common. Only the shell uses it: it is not in the import map, not published for apps and not part of the SDK promise."
-  annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/shell-kit/
-    augur.dev/package: "@augur/shell-kit"
-    augur.dev/version: 0.3.0
     augur.dev/release-unit: augur
 spec:
   type: library

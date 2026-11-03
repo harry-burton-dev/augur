@@ -10,7 +10,7 @@ The decisions behind it: trunk-based `main` and tags ([ADR 0011](decisions/0011-
 versions and releases ([ADR 0013](decisions/0013-versions-and-releases.md)), signed feeds
 ([ADR 0017](decisions/0017-signed-release-feed.md)), rollout gates ([ADR 0018](decisions/0018-rollout-gates.md)),
 Renovate ([ADR 0033](decisions/0033-renovate-for-dependency-updates.md)), lint and scans
-([ADR 0043](decisions/0043-ci-lint-and-scans.md)) and Chromatic ([ADR 0016](decisions/0016-storybook-on-chromatic.md)).
+([ADR 0043](decisions/0043-ci-lint-and-scans.md)). The kit's Storybook and Chromatic ([ADR 0016](decisions/0016-storybook-on-chromatic.md)) run in the `augur-kit` repository (ADR 0046).
 
 ## The rule: scarce but effective
 
@@ -34,7 +34,7 @@ minute per job**. So:
 | Push to a pull request | **CI** | `changes`, `build-test`, `scan`, then only what the change needs | 4–6 (docs or a service), up to ~20 (shell, kits and images) |
 | | **App previews** | `preview` for an app in `apps/` that doesn't ship with AUGUR | 2 per app changed |
 | | **Renovate changeset** | adds a changeset to a Renovate pull request | under 1 |
-| Merge into `main` | **CI** | `changes`, `build-test` (refills the turbo cache), `storybook` if a kit changed | 3–5 |
+| Merge into `main` | **CI** | `changes`, `build-test` (refills the turbo cache) | 3–5 |
 | | **Release** | keeps the Version packages pull request up to date | 1 |
 | | **AUGUR dev builds** | builds, signs and releases every image as `augur@x.y.z-dev.N` for the workbench | 8–10 |
 | | **App dev builds** | the same for each separately released app the merge changed | 2 per app |
@@ -67,7 +67,6 @@ everything.
 |---|---|---|---|
 | `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, script tests, the hotfix rule, a changeset, build, manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
 | `scan` | always | never | gitleaks on the pull request's commits; OSV-Scanner, failing only on vulnerabilities the pull request brings in (ADR 0043) |
-| `storybook` | the kits' code, tokens or stories | the same | publishes the Storybook to Chromatic; `main`'s build is the baseline |
 | `contract` | `platform/frontends` (not Admin or the Upgrade Centre), `platform/packages`, `platform/contract`, `apps/folio`, the root `package.json` or the lockfile | never | the reference app, today's build and frozen ones from earlier SDK releases, mounted by the real shell in Chromium, with Folio on and off |
 | `folio-worker` | `apps/folio` | never | the Python worker's tests against Postgres with real PDFs; its image too when `apps/folio/worker` changed |
 | `app-scaffold` | the app template, `create-app`, the shared packages, the registry, or the scripts that check apps | never | `pnpm create-app` still makes an app that builds, passes its tests and is accepted |
@@ -151,7 +150,6 @@ Every job runs on GitHub's hosted Linux runners unless repository variables say 
 |---|---|---|
 | `CI_RUNNER` | variable | JSON runner labels for every job, such as `["self-hosted","augur-ci"]` or a runner provider's label |
 | `RELEASE_RUNNER` | variable | x86-64 labels for the jobs that build images, if `CI_RUNNER` names Arm runners |
-| `CHROMATIC_PROJECT_TOKEN` | secret | publishes the Storybook; without it the job says so and publishes nothing |
 | `PACKAGES_READ_TOKEN` | secret | a classic token with `read:packages`, for installing the kit's packages from GitHub Packages (`.npmrc`, ADR 0046), in every workflow and image build; without it each run uses its own `GITHUB_TOKEN`, which reads only packages that grant this repository access |
 | `RELEASE_TOKEN` | secret | pushes the Version packages pull request and the Lockfile workflow's commit, so CI runs on them |
 | `RENOVATE_CHANGESET_KEY` | secret | the deploy key Renovate changeset pushes with, so CI runs on its commit |

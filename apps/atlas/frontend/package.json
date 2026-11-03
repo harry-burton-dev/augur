@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@augur/app-kit": "workspace:*",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.3.0",
     "@augur/mfe-sdk": "workspace:*",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",

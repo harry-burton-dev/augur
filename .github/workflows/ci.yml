@@ -11,8 +11,8 @@ on:
 
 # A new push to a pull request stops its last run.
 # What each run does, and what it costs, is in docs/ci-cd.md. In short: a pull request runs only the
-# jobs its change needs (scripts/ci-changes.sh); the push that merges it runs only build-test and the
-# Storybook, because the pull request already ran the rest on the same code.
+# jobs its change needs (scripts/ci-changes.sh); the push that merges it runs only build-test, because
+# the pull request already ran the rest on the same code. The kit's Storybook is published from augur-kit.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -30,7 +30,6 @@ jobs:
   changes:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     outputs:
-      storybook: ${{ steps.changes.outputs.storybook }}
       contract: ${{ steps.changes.outputs.contract }}
       contract_frozen: ${{ steps.changes.outputs.contract_frozen }}
       images: ${{ steps.changes.outputs.images }}
@@ -135,52 +134,6 @@ jobs:
       - run: pnpm test --concurrency=${{ steps.fit.outputs.tests }}
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
-
-  # The kits' Storybook, published to Chromatic (ADR 0016), only when a kit's code, tokens or stories
-  # change: on a pull request, or on the push to main that brings the change in. Chromatic hosts each build, links it from the pull request, and shows
-  # what looks different there to accept or deny. TurboSnap (--only-changed) snapshots only the
-  # stories whose code changed, to stay inside the free tier.
-  storybook:
-    needs: changes
-    if: needs.changes.outputs.storybook == 'true'
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
-    steps:
-      - name: Can the Storybook be published?
-        id: kits
-        run: |
-          if [ -z "$CHROMATIC_PROJECT_TOKEN" ]; then
-            echo "::notice title=Storybook not published::The CHROMATIC_PROJECT_TOKEN repository secret isn't set, so nothing goes to Chromatic. A repository admin adds it in Settings, Secrets and variables, Actions (ADR 0016)."
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-      - if: steps.kits.outputs.run == 'true'
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - if: steps.kits.outputs.run == 'true'
-        uses: pnpm/action-setup@v4
-      - if: steps.kits.outputs.run == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - if: steps.kits.outputs.run == 'true'
-        run: pnpm install --frozen-lockfile
-      - if: steps.kits.outputs.run == 'true'
-        run: pnpm turbo run build --filter=@augur/storybook^...
-      # One Storybook: the React kits, with the frozen Lit kit's built into it under lit/.
-      # --stats-json tells TurboSnap which stories each changed file reaches.
-      - if: steps.kits.outputs.run == 'true'
-        run: pnpm --filter @augur/storybook build-all
-      # A pull request's visual changes are accepted or denied in Chromatic, on its own check;
-      # this job only fails if the build can't be published. Main's build is the new baseline.
-      - if: steps.kits.outputs.run == 'true'
-        working-directory: platform/storybook
-        run: pnpm exec chromatic --storybook-build-dir storybook-static --only-changed --exit-zero-on-changes --auto-accept-changes main
-        env:
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
 
   # Folio's rendition worker, in Python: its tests against a real Postgres with Folio's
   # schema, PDFs included (Docling fetches its models once; they're cached), and its image

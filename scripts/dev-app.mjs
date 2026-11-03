@@ -3,7 +3,8 @@
 //   pnpm dev:app <id>                      then open http://localhost:5173/<id>
 //   DEV_ROLES=admin pnpm dev:app <id>      the stand-in person also has these roles
 //   APP_SERVICE_PORT=8091 pnpm dev:app <id>
-//   pnpm dev:app <id> --kit                also rebuilds the UI kit and its tokens as you change them, and reloads the page
+//   pnpm dev:app <id> --kit                also rebuilds the Lit kit as you change it, and reloads the page. The React kits
+//                                          (Common, Quill, Aerie) are in the augur-kit repository: work on them in its Storybook
 //   DEV_PREVIEWS=all pnpm dev:app <id>     turns the app's feature previews on (or name them, comma separated)
 //   DEV_HOST=0.0.0.0 pnpm dev:app <id>     open to other machines on the tailnet (*.ts.net), such as your phone
 //   pnpm dev:app <id> --live               Live on the workbench: the workbench's shell loads the app's frontend from
@@ -46,8 +47,7 @@ if (existsSync(servicePkg)) {
   run(['--filter', name, 'dev'], { PORT: port, REGISTRY_URL: '', SERVICE_CLIENT_SECRET: '' });
 }
 if (kit) {
-  // Tokens, then the kit's TypeScript, then the shared modules the shell serves: each rebuilds when the one before changes.
-  run(['--filter', '@augur/kit-common', 'exec', 'node', '--watch-path=tokens', 'scripts/build-tokens.mjs']);
+  // The Lit kit's TypeScript, then the shared modules the shell serves: each rebuilds when the one before changes.
   run(['--filter', '@augur/ui-kit', 'exec', 'tsc', '-p', 'tsconfig.json', '--watch', '--preserveWatchOutput']);
   run(['--filter', '@augur/shell', 'exec', 'vite', 'build', '-c', 'vite.shared.config.ts', '--mode', 'development', '--watch']);
 }

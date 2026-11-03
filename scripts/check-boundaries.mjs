@@ -1,8 +1,8 @@
 // Separation of concerns, enforced: nothing under platform/ may depend on an app,
 // and apps may not depend on each other. Apps reach the platform only through
 // @augur/* packages, the gateway, the registry manifest and events. Aerie
-// (@augur/shell-kit) is the shell's own kit: only the shell, the kit itself and the
-// shared Storybook may import it (ADR 0015); everything else builds with Quill (@augur/app-kit).
+// (@augur/shell-kit, from the augur-kit repository) is the shell's own kit: only the shell
+// may import it (ADR 0015); everything else builds with Quill (@augur/app-kit).
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
@@ -10,7 +10,7 @@ const root = new URL('..', import.meta.url).pathname;
 const skip = new Set(['node_modules', 'dist', 'storybook-static', '.turbo', 'coverage']);
 const problems = [];
 const SHELL_KIT = '@augur/shell-kit';
-const mayUseShellKit = ['platform/frontends/shell/', 'platform/packages/shell-kit/', 'platform/storybook/'];
+const mayUseShellKit = ['platform/frontends/shell/'];
 
 const walk = (dir, visit) => {
   for (const name of readdirSync(dir)) {

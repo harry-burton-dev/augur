@@ -1,5 +1,0 @@
-/* Quill's Tailwind theme: Common's tokens and the app set, and nothing of Tailwind's own.
-   An app's stylesheet: @import 'tailwindcss/utilities' layer(utilities); @import '@augur/app-kit/theme.css';
-   (no preflight: apps draw inside the shell, which already sets the page's base). */
-@import '@augur/kit-common/theme.css';
-@import '@augur/kit-common/theme-app.css';
