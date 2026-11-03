@@ -12,7 +12,7 @@ const reference = (page: Page) => page.locator('[data-app="reference"]').first()
 const check = (page: Page, name: string) => reference(page).locator(`[data-check="${name}"]`);
 const press = (page: Page, action: string) => reference(page).locator(`[data-action="${action}"]`).click();
 const notifications = (page: Page) =>
-  page.evaluate(() => (document.querySelector('ui-shell') as unknown as { notifications: { title: string }[] }).notifications.map((n) => n.title));
+  page.evaluate(() => ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { notifications: { title: string }[] }).notifications.map((n) => n.title));
 
 test.beforeEach(async ({ page }) => {
   page.on('pageerror', (err) => {
@@ -39,17 +39,17 @@ test.describe('with Folio on', () => {
   test('Folio (Artifacts) opens straight in with its own menu, keeps Esc, and the band goes to Title or Home', async ({ page }) => {
     await page.goto('/@me/folio');
     await expect(artifacts(page)).toHaveCount(1);
-    await expect(page.locator('ui-centre-menu')).toHaveCount(0);
+    await expect(page.locator('.aerie-centre')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/\/@me\/folio$/);
-    const band = page.locator('ui-shell');
+    const band = page.locator('.aerie-shell');
     await band.getByRole('button', { name: 'All apps', exact: true }).click();
     await expect(page).toHaveURL(/\/@me$/);
-    const title = page.locator('ui-centre-menu[variant="title"]');
+    const title = page.locator('.aerie-centre[data-variant="title"]');
     await expect(title).toBeVisible();
     // into an app from Title, then straight out to Home: the way out works after any way in
-    await title.evaluate((menu: HTMLElement & { categories: { id?: string }[]; setCategory(i: number): void }) =>
-      menu.setCategory(menu.categories.findIndex((c) => c.id === 'folio')),
+    await title.evaluate((el: HTMLElement & { menu: { categories: { id?: string }[]; setCategory(i: number): void } }) =>
+      el.menu.setCategory(el.menu.categories.findIndex((c) => c.id === 'folio')),
     );
     await page.keyboard.press('Enter');
     await expect(artifacts(page)).toHaveCount(1);
@@ -60,10 +60,10 @@ test.describe('with Folio on', () => {
 
   test('Title shows Folio (Artifacts), which has no areas, as itself, and choosing it opens it', async ({ page }) => {
     await page.goto('/');
-    const title = page.locator('ui-centre-menu[variant="title"]');
+    const title = page.locator('.aerie-centre[data-variant="title"]');
     await expect(title).toBeVisible();
-    await title.evaluate((menu: HTMLElement & { categories: { id?: string }[]; setCategory(i: number): void }) =>
-      menu.setCategory(menu.categories.findIndex((c) => c.id === 'folio')),
+    await title.evaluate((el: HTMLElement & { menu: { categories: { id?: string }[]; setCategory(i: number): void } }) =>
+      el.menu.setCategory(el.menu.categories.findIndex((c) => c.id === 'folio')),
     );
     await expect(title.locator('.catlabel')).toContainText('Artifacts');
     await expect(title.locator('.item')).toHaveCount(0);
@@ -85,7 +85,7 @@ test.describe('with Folio on', () => {
     since('1.3');
     await page.goto('/reference');
     await press(page, 'pick-document');
-    const picker = page.locator('ui-dialog [data-app="folio"] [data-folio-picker]');
+    const picker = page.locator('.augur-dialog [data-app="folio"] [data-folio-picker]');
     await expect(picker).toBeVisible();
     await picker.getByRole('button', { name: 'Cancel' }).click();
     await expect(check(page, 'picked')).toHaveText('cancelled');

@@ -1,5 +1,5 @@
 import type { AppManifestEntry, ManifestSurface, MicroFrontend, MountContext, Surface, Workspace } from '@augur/mfe-sdk';
-import type { ShellNotification } from '@augur/ui-kit';
+import type { ShellNotification } from '@augur/shell-kit';
 import { incompatibility } from './manifest.js';
 import type { ImportEntry } from './mount.js';
 import { importEntry } from './mount.js';

@@ -1,6 +1,6 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it } from 'vitest';
-import type { MenuCategory } from '@augur/ui-kit';
+import type { MenuCategory } from '@augur/shell-kit';
 import { areaOf, backFrom, navsFor, navTarget, escapeIsFree, findPages, orbitIndexOf, orbitMenu, screenFor, titleFor, titleMenu, titleTarget, upFrom } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
