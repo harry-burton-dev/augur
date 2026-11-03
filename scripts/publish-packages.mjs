@@ -87,15 +87,26 @@ function isPublished(name, version, npmrc, registry) {
   }
 }
 
+/** The subpaths a package exports that are stylesheets, such as "./tokens.css". */
+export function cssEntrypoints(pkg) {
+  const exp = pkg.exports;
+  if (!exp || typeof exp !== 'object') return [];
+  return Object.keys(exp).filter((k) => k.startsWith('.') && k.endsWith('.css'));
+}
+
 /**
  * Checks one packed package directory, throwing with what's wrong. ESM only: our packages have no
  * CommonJS build, so Are the Types Wrong leaves out the CommonJS resolutions (its esm-only profile).
  */
 export function checkPacked(dir, bin = join(process.cwd(), 'node_modules', '.bin')) {
   const problems = [];
+  // Stylesheets a package exports have no types to check.
+  const styles = cssEntrypoints(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')));
+  const attw = ['--pack', dir, '--profile', 'esm-only', '--no-color', '--format', 'ascii'];
+  if (styles.length) attw.push('--exclude-entrypoints', ...styles);
   for (const [tool, args] of [
     ['publint', ['run', dir, '--strict', '--level', 'warning']],
-    ['attw', ['--pack', dir, '--profile', 'esm-only', '--no-color', '--format', 'ascii']],
+    ['attw', attw],
   ]) {
     try {
       run(join(bin, tool), args, { cwd: dir });
