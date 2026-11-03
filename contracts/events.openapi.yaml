@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.7.0
+  version: 1.8.0
   description: "Notifications for the Shell's stream, and the platform's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -576,6 +576,37 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /domain-events/stream:
+    get:
+      summary: Domain events on the caller's floor, as server-sent events (people, for the shell)
+      description: 'Each domain event on the topics asked for, published on the floor the caller stands on (x-workspace-id, checked by the gateway), as it is published. Events on no floor or on another floor never reach it. Events are named "domain-event" and carry a DomainEvent as JSON. It is a hint to refresh what is on screen, not a record: there is no catching up, so after a reconnect load fresh. Comment lines are keep-alives. Read with fetch so the sign-in token can be sent.'
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 4000
+          in: query
+          name: topics
+          required: true
+          description: Comma separated topics, or families such as folio.*; at most 100
+      responses:
+        "200":
+          description: An open event stream
+          content:
+            text/event-stream:
+              schema: {}
+        "400":
+          description: A topic that is not a topic, too many topics, or no floor named
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
           content:
             application/problem+json:
               schema:

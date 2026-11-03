@@ -118,6 +118,12 @@ The front door (`web`) holds every caller to a few limits, set in `.env` and app
 - **Requests a second from one address.** The API takes `API_RATE_PER_SECOND` (30), with `API_RATE_BURST` (200) let through at once, since a page fires many calls together; sign-in takes `SSO_RATE_PER_SECOND` (10) with `SSO_RATE_BURST` (50). Past them the answer is 429, *Too Many Requests*. The address is the one the proxy in front saw (Tailscale, or a load balancer), passed on in `X-Forwarded-For` and only believed from private addresses.
 - **The largest upload**, `MAX_UPLOAD_MB` (2048). Each app has its own lower limit under it.
 
+### Logs, memory and health
+
+- **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES` in `.env`), so they can't fill the disk. `pc logs` reads them as before. For anything longer, turn on the observability profile ([Traces, metrics and logs](#traces-metrics-and-logs)).
+- **Memory limits** on the containers that can take a lot: Keycloak (`KEYCLOAK_MEM_LIMIT`, 2g; it sizes its Java heap from it), Artifacts' rendition worker (`FOLIO_WORKER_MEM_LIMIT`, 4g; reading a large upload is what needs it) and the observability stack (`OTEL_LGTM_MEM_LIMIT`, 2g). A container that goes over is stopped and started again by Docker, and `pc ps` shows it restarting. Raise the limit in `.env` and `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
+- **Health**: every AUGUR service, the front door, Postgres, Keycloak and Garage have a healthcheck, and `pc ps` shows each as `healthy`. Keycloak's is its own readiness check on its management port, which isn't reachable from outside the container. The front door, identity and the realm job wait for Keycloak to be healthy, and the storage job for Garage. Keycloak's first start after an upgrade can take a few minutes while it migrates its database; Compose waits up to five.
+
 ### The UI kit
 
 The shell and every app share one copy of the UI kit (React, Common and Quill), the version this AUGUR release pinned in `release/kit.json` ([ADR 0048](decisions/0048-kit-served-from-a-kit-url.md)). The front door serves it at `PLATFORM_URL/kit/<version>/`, and `KIT_URL` in `.env` says where browsers load it from:

@@ -50,6 +50,12 @@ followEvents({
 
 Events come in the order they were committed, never with a gap: an event is only handed out once every transaction that started before it has finished. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` on the events service), so a follower that's been off for longer starts from what's left.
 
+## In the browser
+
+People's screens hear domain events too, so what an app shows can refresh when it changes instead of polling. The events service serves `GET /v1/domain-events/stream?topics=…` to signed-in people: server-sent events named `domain-event`, each one a domain event on the topics asked for, **on the floor the person stands on** (`X-Workspace-Id`, which the gateway checks they're on). Events on no floor, or on another floor, never reach it, and nothing else is added: the browser hears what services hear, ids and a little context.
+
+It's a hint, not a record. There's no `after` and no catching up: a screen that was away loads fresh. Across instances it rides Postgres `LISTEN/NOTIFY` (channel `events_domain_event`), like notifications.
+
 ## The platform's topics
 
 The events service publishes these as identity and the registry record the change in the audit log, so the two always agree:

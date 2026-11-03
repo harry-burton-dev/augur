@@ -3,6 +3,7 @@
   "description": "Dependency updates for AUGUR: weekly, grouped, never merged by Renovate. See docs/decisions/0033-renovate-for-dependency-updates.md.",
   "extends": [
     "config:recommended",
+    "helpers:pinGitHubActionDigests",
     ":dependencyDashboard",
     ":disableRateLimiting"
   ],
