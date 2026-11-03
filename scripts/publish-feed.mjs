@@ -152,7 +152,8 @@ const main = async (args) => {
   };
   const releases = await releasesOf(REPO);
   const own = appRepos(JSON.parse(readFileSync(new URL('../release/app-repos.json', import.meta.url), 'utf8')));
-  const appToken = process.env.APP_RELEASES_TOKEN;
+  // Trimmed: a secret pasted through a shell can carry a line ending, which breaks the header.
+  const appToken = process.env.APP_RELEASES_TOKEN?.trim();
   if (Object.keys(own).length && !appToken) throw new Error('release/app-repos.json lists apps in their own repositories, but APP_RELEASES_TOKEN isn’t set to read their releases (docs/ship-an-app.md, "An app in its own repository").');
   // An app that moved out is listed from its own repository only; its older releases here are left out.
   const here = releases.filter((r) => !(APP_TAG.exec(r.tag_name ?? '')?.[1] in own));
