@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Three readers, one briefing</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Round 2, designer a. Shared by v1-three-readers and
+   v4-the-decision-sets-the-bar. Proposed tokens are mixes of kit
+   tokens, carried from round 1 unless marked NEW; all are listed in
+   the notes as "needs token".
+   --------------------------------------------------------------- */
+:root{
+  --x-proposed-type-micro: .6875rem;
+  --x-proposed-quiet: .62;
+  /* six ways to be empty (catalogue shortlist) */
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  --x-proposed-gap-tick: var(--space-2);
+  --x-proposed-hatch: color-mix(in srgb, var(--ink-muted) 34%, transparent);
+  --x-proposed-stale: repeating-linear-gradient(45deg, transparent 0 calc(var(--space-1) - 1px), var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  /* sources disagree: warning-tinted edge, never red */
+  --x-proposed-disagree: color-mix(in srgb, var(--warning) 70%, var(--ink));
+  --x-proposed-disagree-wash: color-mix(in srgb, var(--warning) 7%, transparent);
+  /* overdue is the one lit state of a count: softened danger */
+  --x-proposed-overdue: color-mix(in srgb, var(--danger) 78%, var(--ink));
+  --x-proposed-overdue-wash: color-mix(in srgb, var(--danger) 9%, transparent);
+  --x-proposed-settled: color-mix(in srgb, var(--ink-muted) 58%, transparent);
+  /* pencil: what a model wrote, until a person accepts it */
+  --x-proposed-pencil: color-mix(in srgb, var(--info) 30%, var(--ink-muted));
+  --x-proposed-pencil-edge: color-mix(in srgb, var(--info) 45%, transparent);
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--info) 6%, transparent);
+  --x-proposed-unbacked: color-mix(in srgb, var(--danger) 60%, var(--ink-muted));
+  /* the lit thing (light language) and the bar line */
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  /* the isotype unit: one inspection */
+  --x-proposed-unit: calc(var(--space-3) + var(--space-1));
+  /* the word-size yardstick cell */
+  --x-proposed-stick-cell: var(--space-2);
+  /* NEW: the reader's floor colour, set per column from the floor tokens */
+  --x-proposed-reader: var(--floor-you-high);
+}
+:root, .mk-gap, .u.gap, .slot, .card.k-gap{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center;font-style:normal}
+.hints{display:flex;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints > span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+
+/* two registers: plain on top, technical one step down (T) */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* top band */
+.top{flex:none;display:flex;align-items:center;gap:var(--space-3);height:var(--band-top);padding:0 var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--surface-bar) 70%,transparent)}
+.top .brand{font-weight:300;letter-spacing:var(--tracking-title);color:var(--light);font-size:var(--type-meta)}
+.top .crumb{flex:1 1 0;display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-meta);color:var(--ink-muted);min-width:0;white-space:nowrap;overflow:hidden}
+.top .crumb b{font-weight:400;color:var(--light)}
+.top .crumb svg{opacity:var(--x-proposed-quiet);flex:none}
+.fchip{flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-1) var(--space-3);border:1px solid color-mix(in srgb,var(--fc, var(--x-proposed-reader)) 45%,transparent);border-radius:var(--radius-pill)}
+.fchip i{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--fc, var(--x-proposed-reader))}
+.tgl{display:inline-flex;gap:var(--space-1);align-items:center;padding:var(--space-1) var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono)}
+.tgl[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+
+/* the confidence word, with its word-size yardstick */
+.cw{display:inline-flex;align-items:center;gap:var(--space-2);font:400 var(--type-small)/var(--leading-small) var(--font-sans);letter-spacing:var(--tracking-soft);text-transform:uppercase;white-space:nowrap;color:var(--ink)}
+.stick{display:inline-flex;gap:2px;align-items:center}
+.st-c{width:var(--x-proposed-stick-cell);height:var(--space-2);border-radius:1px;background:var(--hairline)}
+.st-c.on{background:currentColor}
+.recorded{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:0 var(--space-1)}
+
+/* marks: six ways to be empty, plus sources disagree */
+.mk-gap{display:inline-block;background:var(--x-proposed-gap);--x-proposed-gap-tick:var(--space-1);padding:0 var(--space-2);color:var(--ink-muted);line-height:1.35}
+.mk-unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);line-height:1.35;white-space:nowrap}
+.mk-stale{background:var(--x-proposed-stale);padding:0 var(--space-1);border-radius:2px}
+.mk-norec{text-decoration:underline wavy var(--ink-muted) 1px;text-underline-offset:3px;color:var(--ink-muted)}
+.mk-two{display:inline-flex;gap:var(--space-1);align-items:center;color:var(--x-proposed-disagree);border-left:2px solid var(--x-proposed-disagree);padding-left:var(--space-2)}
+
+/* access chips: what this reader can open behind a claim */
+.op{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:0 var(--space-1);white-space:nowrap}
+.op.lk{color:var(--ink-muted);background:var(--x-proposed-unseen);border-color:var(--hairline)}
+.op svg{flex:none}
+
+/* pencil and ink */
+.pen-lane{display:flex;gap:var(--space-1);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--x-proposed-pencil)}
+.pencil{font-style:italic;color:var(--x-proposed-pencil)}
+.unbacked{text-decoration:line-through wavy var(--x-proposed-unbacked) 1px;color:var(--x-proposed-unbacked)}
+.prov{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.prov b{font-weight:400;color:var(--ink)}
+.h{border-bottom:1px dotted var(--hairline-strong);cursor:default}
+.h.lit{border-bottom-color:var(--x-proposed-lit);color:var(--light)}
+
+/* deposit once, on load and on R */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-quick))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){
+  .pre .dep{transform:none}
+  .dep{transition:opacity var(--motion-base) linear;transition-delay:0ms}
+  *{animation:none!important}
+}
+
+.app{height:100vh;display:flex;flex-direction:column}
+.head{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-5);align-items:end;padding:var(--space-3) var(--edge) var(--space-3)}
+.head h1{font-weight:200;font-size:var(--type-heading);line-height:var(--leading-heading);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin:var(--space-1) 0 2px;color:var(--light)}
+.qline{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);max-width:var(--measure-wide)}
+.qline b{font-weight:400;color:var(--ink)}
+.views{display:flex;gap:2px}
+.views button{display:flex;flex-direction:column;gap:2px;padding:var(--space-1) var(--space-3);border:1px solid var(--hairline);background:var(--surface-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);min-width:calc(var(--space-8) + var(--space-3));transition:background var(--motion-base),color var(--motion-base),border-color var(--motion-base)}
+.views button:first-child{border-radius:var(--radius-key) 0 0 var(--radius-key)}
+.views button:last-child{border-radius:0 var(--radius-key) var(--radius-key) 0;min-width:0}
+.views button span{display:flex;gap:var(--space-1);align-items:center;color:var(--ink)}
+.views button[aria-pressed="true"]{color:var(--light);background:var(--surface-raised);box-shadow:inset 0 -2px 0 var(--fc, var(--x-proposed-lit))}
+
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);padding:0 var(--edge);transition:grid-template-columns var(--motion-slow) var(--ease-standard)}
+.stage.f-op{grid-template-columns:minmax(0,2.1fr) minmax(0,1fr) minmax(0,1fr)}
+.stage.f-lead{grid-template-columns:minmax(0,1fr) minmax(0,2.1fr) minmax(0,1fr)}
+.stage.f-org{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,2.1fr)}
+.reader{min-height:0;display:flex;flex-direction:column;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);border-top:2px solid color-mix(in srgb,var(--x-proposed-reader) 70%,transparent)}
+.reader.near{border-color:var(--hairline-strong);border-top-color:var(--x-proposed-reader)}
+.rh{flex:none;display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline)}
+.rh .who{display:flex;flex-direction:column;min-width:0}
+.rh .who b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta);display:flex;align-items:center;gap:var(--space-2)}
+.rh .who b i{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--x-proposed-reader);flex:none}
+.rh .who span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rh .ht{text-align:right;flex:none}
+.rh .ht .eyebrow{color:var(--ink)}
+.budget{display:flex;align-items:center;justify-content:flex-end;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted)}
+.bmeter{display:inline-block;width:var(--space-7);height:var(--space-1);border-radius:var(--radius-pill);background:var(--hairline);position:relative;overflow:hidden}
+.bmeter i{position:absolute;inset:0 auto 0 0;background:var(--ink-muted);border-radius:var(--radius-pill)}
+.rb{flex:1;min-height:0;padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-3)}
+.rf{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-2);padding:var(--space-2) var(--space-3);border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rf b{font-weight:400;color:var(--ink)}
+.omtr{display:inline-flex;height:var(--space-2);width:calc(var(--space-8) - var(--space-4));border-radius:2px;overflow:hidden;background:var(--x-proposed-unseen);border:1px solid var(--hairline)}
+.omtr i{background:var(--ink-muted)}
+.far .deep{display:none!important}
+.tech .qline .tk,.tech .tline .tk{display:block}
+.more{display:none!important}
+.near .more{display:revert!important}
+
+/* records height */
+.tline{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.n{font-family:var(--font-mono);color:var(--light)}
+.n.lit{color:var(--light);box-shadow:inset 0 -2px 0 var(--x-proposed-lit)}
+.grp{display:flex;flex-direction:column;gap:2px}
+.grp > .eyebrow{display:flex;justify-content:space-between;padding-bottom:2px;border-bottom:1px solid var(--hairline);margin-bottom:2px}
+.row{display:grid;grid-template-columns:var(--x-proposed-unit) minmax(0,1fr) auto;gap:var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small);padding:2px 0}
+.near .row{grid-template-columns:var(--x-proposed-unit) minmax(0,1fr) minmax(0,1.1fr) auto}
+.row b{font-weight:400;color:var(--ink)}
+.row .site{color:var(--ink-muted)}
+.row .meta{font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);white-space:nowrap;text-align:right}
+.row .sub{grid-column:2 / -1;color:var(--ink-muted);display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);align-items:center}
+.near .row .sub{grid-column:2 / -1}
+.row .src{display:none;color:var(--ink-muted)}
+.near .row .src{display:block}
+.row.done{opacity:.8}
+.row.done b{color:var(--ink-muted)}
+.askb{display:inline-flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);font-size:var(--type-small);line-height:1.5}
+
+/* the unit: one inspection, counted, never scaled */
+.u{display:inline-block;width:var(--x-proposed-unit);height:var(--x-proposed-unit);border-radius:2px;flex:none;vertical-align:middle;position:relative}
+.u.overdue{background:var(--x-proposed-overdue)}
+.u.done{border:1px solid var(--x-proposed-settled)}
+.u.disputed{background:linear-gradient(90deg,transparent 50%,var(--x-proposed-disagree-wash) 50%);border:1px solid var(--x-proposed-disagree);transform:translateY(calc(var(--space-1) * -1))}
+.u.disputed::after{content:"";position:absolute;left:50%;top:-1px;bottom:-1px;border-left:1px solid var(--x-proposed-disagree)}
+.u.gap{background:var(--x-proposed-gap);--x-proposed-gap-tick:var(--space-1)}
+.u.norecord{border-bottom:1px solid transparent;background:radial-gradient(circle at 50% 100%,transparent 35%,var(--ink-muted) 36% 46%,transparent 47%) 0 50% / var(--space-1) var(--space-2) repeat-x}
+.u.hidden{background:var(--x-proposed-unseen);border:1px solid var(--hairline-strong)}
+.row .u{align-self:center}
+
+/* the minute */
+.bl{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.bl.pencil{color:var(--x-proposed-pencil)}
+.blwrap{border-left:2px solid var(--hairline-strong);padding-left:var(--space-3);display:flex;flex-direction:column;gap:var(--space-1)}
+.blwrap.pen{border-left:2px dotted var(--x-proposed-pencil-edge)}
+.pic{display:flex;flex-direction:column;gap:var(--space-1)}
+.pic h3{margin:0;font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.prow{display:grid;grid-template-columns:minmax(0,10.5em) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);min-height:calc(var(--x-proposed-unit) + var(--space-1))}
+.prow .nm{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .us{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+.prow .ct{font:400 var(--type-small)/1 var(--font-mono);color:var(--light);min-width:2ch;text-align:right}
+.prow.lk .nm{color:var(--ink-muted)}
+.key{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);font-size:var(--x-proposed-type-micro);line-height:1.5;color:var(--ink-muted)}
+.key span{display:inline-flex;gap:var(--space-1);align-items:center}
+.key .u{width:var(--space-2);height:var(--space-2);transform:none}
+.cant{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cant b{font-weight:400;color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.qs{display:flex;flex-direction:column;border-top:1px solid var(--hairline)}
+.qq{border-bottom:1px solid var(--hairline)}
+.qq > button{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-2);align-items:center;width:100%;padding:var(--space-1) 0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.qq > button .by{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.qq.pen > button{font-style:italic;color:var(--x-proposed-pencil)}
+.qq.pen > button .by{color:var(--x-proposed-pencil)}
+.qa{display:none;padding:0 0 var(--space-2) calc(var(--space-4) + var(--space-1));font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.qa b{font-weight:400;color:var(--ink)}
+.qq.open .qa{display:block}
+.qq.open > button svg:last-child{transform:rotate(90deg)}
+
+/* the headline */
+.hl{margin:0;font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.hl-sub{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.bars{display:flex;flex-direction:column;gap:0}
+.brow{display:grid;grid-template-columns:minmax(0,8.5em) minmax(0,1fr);gap:var(--space-2);align-items:stretch;font-size:var(--type-small);line-height:var(--leading-small)}
+.brow .bn{color:var(--ink);text-align:right;align-self:center;padding:var(--space-1) 0}
+.brow .b{border-left:1px solid var(--ink-muted);padding:var(--space-1) 0 var(--space-1) 3px;display:flex;flex-wrap:wrap;align-items:center;gap:3px}
+.bars .b .lab{margin-left:var(--space-2);color:var(--ink-muted)}
+.bars .b .lab b{font-weight:400;color:var(--light);font-family:var(--font-mono)}
+.someb{display:inline-flex;max-width:100%;overflow:hidden;text-overflow:ellipsis;align-items:center;gap:var(--space-1);height:var(--x-proposed-unit);padding:0 var(--space-2);background:var(--x-proposed-unseen);border:1px dashed var(--hairline-strong);border-radius:2px;color:var(--ink-muted);font-size:var(--x-proposed-type-micro);white-space:nowrap}
+.never{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:flex-start}
+.never s{color:var(--ink)}
+.stamp{display:none;align-self:flex-start;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--x-proposed-disagree);border:1px solid var(--x-proposed-disagree);border-radius:var(--radius-key);padding:0 var(--space-1);margin-top:2px}
+.stalecopy .stamp{display:inline-flex}
+
+/* same digits check */
+.check{flex:none;margin:var(--space-3) var(--edge) calc(var(--space-6) - var(--space-2));display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,3fr);gap:var(--space-4);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.verdict{display:flex;flex-direction:column;justify-content:center;gap:2px}
+.verdict .v{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);font-weight:400}
+.verdict .v svg{flex:none}
+.verdict.ok .v{color:var(--light)}
+.verdict.ok .v svg{color:var(--x-proposed-lit)}
+.verdict.bad .v svg{color:var(--x-proposed-disagree)}
+.verdict p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ctab{display:grid;grid-template-columns:minmax(0,.9fr) repeat(3,minmax(0,1fr)) minmax(0,1.25fr);font-size:var(--x-proposed-type-micro);line-height:1.6;color:var(--ink-muted);align-items:baseline}
+.ctab > span{padding:0 var(--space-2) 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctab .hd{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:var(--tracking-soft);color:var(--ink-muted);border-bottom:1px solid var(--hairline)}
+.ctab .lb{color:var(--ink)}
+.ctab .d{font-family:var(--font-mono);color:var(--ink)}
+.ctab .r{display:flex;gap:var(--space-1);align-items:center;opacity:0;transition:opacity var(--motion-base)}
+.ctab .r.on{opacity:1}
+.ctab .r.ok svg{color:var(--x-proposed-lit)}
+.ctab .r.bad{color:var(--x-proposed-disagree)}
+@media (max-width:1400px){
+  .views button{min-width:calc(var(--space-8) - var(--space-3))}
+  .prow{grid-template-columns:minmax(0,7.5em) minmax(0,1fr) auto}
+  .brow{grid-template-columns:minmax(0,7em) minmax(0,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="app pre" id="app">
+  <header class="top">
+    <span class="brand">AUGUR</span>
+    <span class="crumb" id="crumb"></span>
+    <span class="fchip" id="fchip"></span>
+    <div class="hints" id="hints"></div>
+  </header>
+  <section class="head dep" style="--i:0">
+    <div>
+      <p class="eyebrow" id="eyebrow"></p>
+      <h1 id="title"></h1>
+      <p class="qline" id="qline"></p>
+    </div>
+    <div class="views" id="views" role="group" aria-label="Which reader"></div>
+  </section>
+  <main class="stage dep" style="--i:1" id="stage"></main>
+  <section class="check dep" style="--i:2" id="check" aria-live="polite"></section>
+</div>
+<div class="x-cap"><b>Briefing · Combined V1</b> one briefing, three readers, same digits at every height · BLUF, Isotype, ladder of abstraction, printer’s proofs</div>
+<script>
+/* ======================================================================
+   One sample deployment (Vale Regional Services), shared by both of
+   designer a's round-2 screens. Every name, label, date, floor, sentence
+   part and reason comes from here; every count is worked out from
+   DATA.inspections by one query (q() in lib.js), so the heights can't
+   differ. In AUGUR: inspections and visits from Data Atlas, briefings
+   and sources from Artifacts, intents and decision kinds from Mandate.
+   ====================================================================== */
+const DATA = {
+  org: 'Vale Regional Services',
+  today: '2026-11-03',
+  period: { from: '2026-10-01', plain: 'this quarter', span: '1 Oct to 3 Nov 2026' },
+  readWpm: 200,            /* reading speed, a deployment setting */
+  pictureSeconds: 8,       /* fixed reading time for one picture */
+  author: { name: 'Sam Okafor', floor: 'sam' },
+
+  /* floors: a floor shows what's kept on it and on the floors above (docs/atlas.md) */
+  floors: {
+    org:   { name: 'Vale Regional Services', tier: 'org', word: 'Org floor', people: 1180 },
+    fac:   { name: 'Facilities', tier: 'department', parent: 'org', word: 'Department floor', who: 'Dana Whitfield, Head of Facilities', people: 34 },
+    ws:    { name: 'Waste and Streets', tier: 'department', parent: 'org', word: 'Department floor', who: 'Morgan Hale, Head of Waste and Streets' },
+    hou:   { name: 'Housing', tier: 'department', parent: 'org', word: 'Department floor', who: 'Leah Grant, Head of Housing' },
+    parks: { name: 'Parks and Leisure', tier: 'department', parent: 'org', word: 'Department floor', who: 'Tom Ashby, Head of Parks' },
+    sc:    { name: 'Site compliance', tier: 'team', parent: 'fac', word: 'Team floor', who: 'Priya Nair, team lead', people: 7 },
+    depot: { name: 'Depot operations', tier: 'team', parent: 'fac', word: 'Team floor', who: 'Marta Kowal, depot lead' },
+    sam:   { name: 'Sam Okafor', tier: 'you', parent: 'sc', word: 'own notes', who: 'Sam Okafor' }
+  },
+
+  /* the three readers of one briefing, each at its own height */
+  readers: [
+    { id: 'op',   key: '1', name: 'Sam Okafor',   role: 'operator, you',            floor: 'sam', height: 'The records',  heightTech: 'height 3 · rows', budget: null },
+    { id: 'lead', key: '2', name: 'Priya Nair',   role: 'team lead, Site compliance', floor: 'sc',  height: 'The minute',   heightTech: 'height 2 · picture + bottom line', budget: 60 },
+    { id: 'org',  key: '3', name: 'The Org floor', role: '1,180 people',             floor: 'org', height: 'The headline', heightTech: 'height 1 · headline + one picture', budget: 20 }
+  ],
+
+  sites: {
+    ng: 'Northgate Depot', hl: 'Hilltop Recycling Centre', ef: 'Eastfield Yard',
+    rv: 'Riverside Offices', ms: 'Market Street Hub', sm: 'Southmoor Depot'
+  },
+
+  /* where what's behind the briefing is kept; n = records */
+  sources: {
+    visits:  { plain: 'Inspection visit records', keptOn: 'fac', n: 13 },
+    regime:  { plain: 'Site inspection register', keptOn: 'fac', n: 1 },
+    ascent:  { plain: 'Ascent Lifting report, 28 Oct', keptOn: 'fac', n: 1 },
+    sitelog: { plain: 'Northgate site log', keptOn: 'fac', n: 1 },
+    note:    { plain: 'Sam’s site walk note, Eastfield, 31 Oct', keptOn: 'sam', n: 1 },
+    lift:    { plain: 'Northgate lift records', keptOn: 'depot', n: 2 },
+    southmoor: { plain: 'Southmoor inspection records', keptOn: 'depot', n: 9 },
+    intent:  { plain: 'Intent M-118, keep every site’s inspections in date', keptOn: 'org', n: 1 },
+    parks:   { plain: 'Parks and Leisure inspections briefing, 30 Oct', keptOn: 'org', n: 1 },
+    ws:      { plain: 'Waste and Streets inspection records', keptOn: 'ws', n: 40 },
+    hou:     { plain: 'Housing inspection records', keptOn: 'hou', n: 61 }
+  },
+
+  /* the one query's rows: inspections that fell due this quarter at Facilities sites */
+  query: {
+    plain: 'Inspections that fell due at Facilities sites since 1 Oct, and what has been recorded for each.',
+    tech: 'atlas.query(kind=InspectionDue, site.keptOn⊆fac, due∈[2026-10-01, today]) → state per row; one query feeds all three heights'
+  },
+  inspections: [
+    { id: 'ng-ext',   site: 'ng', name: 'Fire extinguishers', due: '2026-10-05', state: 'overdue', last: 'INS-2207', src: ['visits','regime'] },
+    { id: 'ng-elt',   site: 'ng', name: 'Emergency lighting', due: '2026-10-02', state: 'overdue', last: 'INS-2410', src: ['visits','regime'] },
+    { id: 'ng-door',  site: 'ng', name: 'Fire doors', due: '2026-10-25', state: 'overdue', last: 'INS-2384', src: ['visits','regime'] },
+    { id: 'ng-hoist', site: 'ng', name: 'Workshop hoists', due: '2026-10-20', state: 'disputed', src: ['ascent','sitelog'],
+      sides: [ { says: 'done 28 Oct', from: 'Ascent Lifting report' }, { says: 'no visit since 20 Apr', from: 'Lee Brennan, site log' } ], decides: 'Priya Nair' },
+    { id: 'ng-roof',  site: 'ng', name: 'Roof anchors', due: null, state: 'gap', fill: 'Ade Bello, estates officer', why: 'the register expects one a year; none has ever been recorded', src: ['regime'] },
+    { id: 'ng-lift',  site: 'ng', name: 'Passenger lift', state: 'hidden', keptOn: 'depot', ask: 'Marta Kowal', src: ['lift'] },
+    { id: 'hl-leg',   site: 'hl', name: 'Water (legionella)', due: '2026-10-14', state: 'overdue', last: 'INS-2361', src: ['visits','regime'] },
+    { id: 'hl-ext',   site: 'hl', name: 'Fire extinguishers', due: '2026-10-22', state: 'overdue', last: 'INS-2228', src: ['visits','regime'] },
+    { id: 'hl-alarm', site: 'hl', name: 'Fire alarm', due: '2026-10-08', state: 'done', done: '2026-10-07', rec: 'INS-2452', src: ['visits'] },
+    { id: 'ef-alarm', site: 'ef', name: 'Fire alarm', due: '2026-10-30', state: 'overdue', last: 'INS-2412', src: ['visits','regime','note'] },
+    { id: 'ef-door',  site: 'ef', name: 'Fire doors', due: '2026-10-11', state: 'done', done: '2026-10-19', rec: 'INS-2458', src: ['visits'] },
+    { id: 'rv-elt',   site: 'rv', name: 'Emergency lighting', due: '2026-10-03', state: 'done', done: '2026-10-01', rec: 'INS-2449', src: ['visits'] },
+    { id: 'rv-alarm', site: 'rv', name: 'Fire alarm', due: '2026-10-15', state: 'norecord', fill: 'Lena Fry, Riverside site manager', why: 'the site log didn’t sync from 8 to 21 Oct; the paper log may hold it', src: ['regime'] },
+    { id: 'ms-leg',   site: 'ms', name: 'Water (legionella)', due: '2026-10-20', state: 'done', done: '2026-10-20', rec: 'INS-2463', src: ['visits'] },
+    { id: 'ms-door',  site: 'ms', name: 'Fire doors', due: '2026-10-28', state: 'done', done: '2026-10-27', rec: 'INS-2470', src: ['visits'] },
+    { id: 'sm-all',   site: 'sm', name: 'All inspections', state: 'hidden', some: true, keptOn: 'depot', ask: 'Marta Kowal', src: ['southmoor'] }
+  ],
+  /* how other departments' counts reach the Org floor */
+  departments: [
+    { floor: 'fac', from: 'this briefing' },
+    { floor: 'parks', none: true, checked: 'Tom Ashby', on: '2026-10-30', src: 'parks' },
+    { floor: 'ws', some: true, src: 'ws' },
+    { floor: 'hou', some: true, src: 'hou' }
+  ],
+  /* the Org copy published last week, used by D: a copy whose heights no longer agree */
+  stale: { published: '2026-10-27', reason: 'A date passed', why: 'Eastfield’s fire alarm test fell due on 30 Oct. AUGUR can’t notice a date passing yet, so it showed when the query ran again today.' },
+  lastQuarter: { asOf: '3 Aug', overdue: 2 },
+
+  /* the model's one pencil slot: the bottom line. Each phrase points at a fact (ref) */
+  bottomLine: {
+    parts: [
+      { t: 'Six inspections are overdue', ref: 'overdue' }, { t: ' at three of our five sites, ' },
+      { t: 'half of them at Northgate', ref: 'ng' }, { t: '. ' },
+      { t: 'One more there has two answers', ref: 'disputed' }, { t: ', and ' },
+      { t: 'two we can’t say yet', ref: 'cantsay' }, { t: '.' }
+    ],
+    drafted: 'the assistant', inked: 'Sam Okafor', on: '3 Nov'
+  },
+  /* the yardstick: fixed words, chosen by rule, a person may only lower */
+  yardstick: ['Remote', 'Highly unlikely', 'Unlikely', 'A realistic possibility', 'Likely', 'Highly likely', 'Almost certain'],
+  yardTech: ['≤5%', '10–20%', '25–35%', '40–50%', '55–75%', '80–90%', '≥95%'],
+  grades: { A: { w: 3, plain: 'a kept record' }, B: { w: 2, plain: 'checked' }, C: { w: 1, plain: 'reported' }, U: { w: 1, plain: 'not graded' } },
+
+  /* v4: a briefing that feeds a decision in Mandate */
+  decision: {
+    intent: { id: 'M-361', title: 'Decide whether to close Northgate Depot', owner: 'Dana Whitfield', floor: 'fac', due: '2026-12-15' },
+    question: 'Close Northgate Depot?',
+    kind: 'Close or open a site',
+    bar: 5,
+    barProposed: 'Mandate has no standard of proof yet. Here it is set per kind of decision, and only the kind’s owner could change it. New: needs Harry’s decision.',
+    claims: [
+      { id: 'count', kind: 'count', say: 'At least {n} of Northgate’s inspections are overdue, the most of the five Facilities sites.', of: 'ng', ask: null },
+      { id: 'contract', say: 'Brigade Fire’s servicing contract (C-0412) ended on 31 Aug and has not been renewed.',
+        src: [ { g: 'A', from: 'Contract register, C-0412' }, { g: 'B', from: 'Brigade Fire’s letter, 2 Sep' } ] },
+      { id: 'roof', say: 'Northgate’s workshop roof needs replacing within two years.',
+        src: [ { g: 'B', from: 'Estates condition survey, Mar 2024' }, { g: 'C', from: 'Roofline Ltd quote, Sep 2026' } ] },
+      { id: 'north', say: 'Most of Northgate’s rounds start in the north of the district.',
+        src: [ { g: 'B', from: 'Route planner, Oct 2026' } ] },
+      { id: 'room', say: 'Eastfield Yard has room for Northgate’s 14 vehicles.',
+        src: [ { g: 'U', from: 'Sam’s phone note: Eastfield site manager, 29 Oct', keptOn: 'sam' } ] },
+      { id: 'travel', say: 'From Eastfield, each morning run to the north takes longer by', kind: 'dispute',
+        sides: [ { says: '12 minutes', from: 'Route planner estimate', g: 'B', alone: 4 }, { says: '35 minutes', from: 'Marta Kowal’s timed test runs', g: 'A', alone: 5 } ],
+        who: 'Dana Whitfield', act: 'Ask to decide' },
+      { id: 'cost', say: 'Northgate costs', blank: 'a sum', after: ' a year to run.', kind: 'gap', who: 'Jo Reyes, finance business partner', act: 'Ask', why: 'Nobody has recorded a running cost for the site.' },
+      { id: 'lease', say: 'Northgate’s lease runs to March 2029.', kind: 'stale', was: 5, checked: 'Jun 2021', every: '2 years', who: 'Ade Bello, estates officer', act: 'Ask' },
+      { id: 'southmoor', keptOnAll: 'depot', say: 'Southmoor Depot could take', blank: 'some vehicles', after: ' as well.', kind: 'hidden', keptOn: 'depot', who: 'Marta Kowal, depot lead', act: 'Ask' }
+    ],
+    /* the pencil bottom line: its word slot is filled by rule, from the weakest claim it points at */
+    pencil: [
+      { t: 'It is ' }, { slot: 'word' }, { t: ' that closing Northgate and moving its crews to Eastfield Yard is the better course: ' },
+      { t: 'its roof needs replacing soon', ref: 'roof' }, { t: ', ' },
+      { t: 'Eastfield has room', ref: 'room' }, { t: ', and ' },
+      { t: 'the move would save money', ref: 'cost' }, { t: '.' }
+    ],
+    lower: { claim: 'roof', to: 4, by: 'Sam Okafor', on: '3 Nov',
+      reason: 'The survey is from before the 2025 patch repairs, and the quote comes from a firm that wants the job.' },
+    reach: { readers: 'Dana Whitfield and 4 people who follow the intent', floor: 'fac' }
+  }
+};
+
+/* Shared helpers for designer a's round-2 screens. No numbers live here:
+   they all come from DATA through q() and word(). */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ic = (n, s = 14) => Icons.svg(n, { size: s, stroke: 1.5 });
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const day = iso => { if (!iso) return ''; const [y, m, d] = iso.split('-').map(Number); return d + ' ' + MON[m - 1]; };
+const dayY = iso => day(iso) + ' ' + iso.slice(0, 4);
+const WORDS = ['none','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve'];
+const word = n => WORDS[n] ?? String(n);
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ms = n => { const v = cssVar(n); return v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000; };
+
+/* ---- floors: a floor shows what's kept on it and on the floors above ---- */
+function above(f) { const out = []; while (f) { out.push(f); f = DATA.floors[f].parent; } return out; }
+function canOpen(readerFloor, keptOn) { return above(readerFloor).includes(keptOn); }
+function floorColour(f) { const t = DATA.floors[f].tier; return `var(--floor-${t === 'you' ? 'you' : t}-high)`; }
+
+/* ---- the one query: every height reads its rows, so they can't differ ---- */
+function q(asOf = DATA.today) {
+  return DATA.inspections.map(r => {
+    let s = r.state;
+    if (s === 'done') s = r.done <= asOf ? 'done' : (r.due < asOf ? 'overdue' : 'notdue');
+    else if (s === 'overdue') s = r.due < asOf ? 'overdue' : 'notdue';
+    else if (s === 'disputed' && r.due >= asOf) s = 'notdue';
+    return { ...r, s };
+  }).filter(r => r.s !== 'notdue');
+}
+function tally(rows) {
+  const t = { overdue: 0, disputed: 0, gap: 0, norecord: 0, hidden: 0, some: 0, done: 0, late: 0 };
+  rows.forEach(r => { if (r.some) t.some++; else t[r.s]++; if (r.s === 'done' && r.done > r.due) t.late++; });
+  t.cantsay = t.gap + t.norecord;
+  t.sitesOver = new Set(rows.filter(r => r.s === 'overdue').map(r => r.site)).size;
+  t.sitesOpen = new Set(rows.filter(r => !r.some).map(r => r.site)).size;
+  t.rows = rows.filter(r => !r.some).length;
+  return t;
+}
+
+/* ---- the yardstick: the word is a rule over grades and agreement ---- */
+function wordOf(src) {
+  const w = src.map(s => DATA.grades[s.g].w), best = Math.max(...w), n = w.length;
+  if (best === 3 && n >= 2) return 6;
+  if ((best >= 2 && n >= 2) || best === 3) return 5;
+  if (best === 2 || n >= 2) return 4;
+  return 3;
+}
+function stick(i, bar) {
+  return `<span class="stick" aria-hidden="true">${DATA.yardstick.map((_, k) => `<span class="st-c${k <= i ? ' on' : ''}${k === bar ? ' bar' : ''}"></span>`).join('')}</span>`;
+}
+
+/* ---- reading time: words at the deployment's speed, plus a fixed time per picture ---- */
+const secs = (text, pics = 0) => Math.round(text.trim().split(/\s+/).filter(Boolean).length / DATA.readWpm * 60 + pics * DATA.pictureSeconds);
+
+/* ---- keys, hints, replay ---- */
+function hints(el, list) {
+  el.innerHTML = list.map(([k, t]) => `<span>${k.split(' ').map(x => `<span class="kbd">${x}</span>`).join('')} ${t}</span>`).join('');
+}
+function onKeys(map) {
+  addEventListener('keydown', e => {
+    if (e.target.closest('textarea,input') || e.metaKey || e.ctrlKey || e.altKey) return;
+    const f = map[e.key] || map[e.key.toLowerCase()];
+    if (f) { e.preventDefault(); f(e); }
+  });
+}
+let timers = [];
+const later = (fn, t) => timers.push(setTimeout(fn, t));
+const clearLater = () => { timers.forEach(clearTimeout); timers = []; };
+
+
+const st = { view: 'all', tech: false, gw: true, stale: false };
+const app = $('#app');
+const READ = Object.fromEntries(DATA.readers.map(r => [r.id, r]));
+
+/* ---------- header ---------- */
+function head() {
+  const me = DATA.floors[DATA.author.floor], team = DATA.floors[me.parent];
+  $('#crumb').innerHTML = `${ic('library', 14)} Artifacts ${ic('chevron-right', 12)} ${esc(team.name)} briefings ${ic('chevron-right', 12)} <b>Overdue site inspections</b>`;
+  const fc = $('#fchip'); fc.style.setProperty('--fc', floorColour(me.parent)); fc.innerHTML = `<i></i>${esc(team.name)} · ${esc(team.word)}`;
+  $('#eyebrow').textContent = `One briefing, three readers · ${DATA.period.span}`;
+  $('#title').textContent = `Overdue site inspections, ${DATA.period.plain}`;
+  $('#qline').innerHTML = `<b>One query:</b> ${esc(DATA.query.plain)} Each reader gets their own height of it, and their own copy of what’s behind it.<span class="tk">${esc(DATA.query.tech)}</span>`;
+  $('#views').innerHTML = DATA.readers.map(r => `<button data-v="${r.id}" style="--fc:${floorColour(r.floor)}" aria-pressed="false"><span><span class="kbd">${r.key}</span>${esc(r.name.split(' ')[0] === 'The' ? 'The Org' : r.name.split(' ')[0])}</span>${esc(r.height)}</button>`).join('')
+    + `<button data-v="all" aria-pressed="true"><span><span class="kbd">S</span>All three</span>side by side</button>`;
+  $$('#views button').forEach(b => b.onclick = () => view(b.dataset.v));
+  hints($('#hints'), [['1 2 3', 'one reader'], ['S', 'side by side'], ['D', 'an old copy'], ['T', 'technical words'], ['G', 'assistant off'], ['R', 'replay']]);
+}
+
+/* ---------- what a reader can open behind a set of sources ---------- */
+function opens(reader, keys) {
+  let all = 0, open = 0; const locked = [];
+  keys.forEach(k => { const s = DATA.sources[k]; all += s.n; if (canOpen(reader.floor, s.keptOn)) open += s.n; else locked.push(s); });
+  return { all, open, locked };
+}
+function askOf(s) { const f = DATA.floors[s.keptOn]; return f.tier === 'you' ? f.who.split(' ')[0] : f.who.split(',')[0]; }
+function chip(reader, label, keys, someOnly) {
+  const o = opens(reader, keys);
+  if (!o.locked.length) return `<span class="op">${ic('lock-open', 11)}${esc(label)} · opens ${someOnly ? 'all' : 'all ' + o.open + ' records'}</span>`;
+  const who = [...new Set(o.locked.map(askOf))].join(' or ');
+  if (o.open === 0) return `<span class="op lk">${ic('lock', 11)}${esc(label)} · ask ${esc(who)}</span>`;
+  return `<span class="op">${ic('lock-open', 11)}${esc(label)} · opens ${o.open}, some more locked, ask ${esc(who)}</span>`;
+}
+function srcKeys(rows) { return [...new Set(rows.flatMap(r => r.src))]; }
+
+function readerShell(r) {
+  const f = DATA.floors[r.floor];
+  return `<section class="reader" data-r="${r.id}" style="--x-proposed-reader:${floorColour(r.floor)}" aria-label="${esc(r.name)}'s copy">
+    <header class="rh"><div class="who"><b><i></i>${esc(r.name)}</b><span>${esc(r.role)} · reads on ${esc(f.tier === 'you' ? 'their own floor' : 'the ' + f.word)}</span></div>
+    <div class="ht"><p class="eyebrow">${esc(r.height)}</p><span class="tk">${esc(r.heightTech)}</span><span class="budget" data-budget></span></div></header>
+    <div class="rb scroll"></div><footer class="rf"></footer></section>`;
+}
+function budget(el, s, of) {
+  el.innerHTML = of ? `≈ ${s} s of ${of} <span class="bmeter"><i style="width:${Math.min(100, s / of * 100)}%"></i></span>` : `no budget · read as needed`;
+}
+function foot(sec, r, keys, note) {
+  const o = opens(r, keys);
+  sec.querySelector('.rf').innerHTML = `<span class="omtr" aria-hidden="true"><i style="width:${o.open / o.all * 100}%"></i></span><span>Can open <b>${o.open}</b> of <b>${o.all}</b> records behind it.</span><span>${note}</span>`;
+}
+const unit = (s, title) => `<span class="u ${s}" title="${esc(title)}"></span>`;
+const STATE_WORD = { overdue: 'overdue', done: 'done', disputed: 'two answers', gap: 'not known yet', norecord: 'no record', hidden: 'not yours to see' };
+
+/* ---------- 1. the records, for the operator ---------- */
+function opCopy(sec, rows) {
+  const r = READ.op, t = tally(rows), rb = sec.querySelector('.rb');
+  const days = d => Math.round((new Date(DATA.today) - new Date(d)) / 864e5);
+  const line = x => {
+    const site = DATA.sites[x.site];
+    if (x.s === 'overdue') return `<div class="row" data-s="overdue">${unit('overdue', 'overdue')}<span><b>${esc(x.name)}</b> <span class="site">· ${esc(site)}</span></span><span class="src">last visit ${esc(x.last)}${x.src.includes('note') ? ' · and your site note' : ''}</span><span class="meta">due ${day(x.due)} · ${days(x.due)} d</span></div>`;
+    if (x.s === 'done') return `<div class="row done" data-s="done">${unit('done', 'done')}<span><b>${esc(x.name)}</b> <span class="site">· ${esc(site)}</span></span><span class="src">${esc(x.rec)}</span><span class="meta">${x.done > x.due ? `done ${day(x.done)}, ${days(x.due) - days(x.done)} d late` : `done ${day(x.done)}`}</span></div>`;
+    if (x.s === 'disputed') return `<div class="row" data-s="disputed">${unit('disputed', 'two answers')}<span><b>${esc(x.name)}</b> <span class="site">· ${esc(site)}</span></span><span class="src">no word: two answers stay apart</span><span class="meta">due ${day(x.due)}</span>
+      <span class="sub">${x.sides.map(s => `<span class="mk-two">${esc(s.says)} <span class="muted">· ${esc(s.from)}</span></span>`).join('')}<span>${esc(x.decides)} decides</span></span></div>`;
+    if (x.s === 'gap') return `<div class="row" data-s="gap">${unit('gap', 'not known yet')}<span><b>${esc(x.name)}</b> <span class="site">· ${esc(site)}</span></span><span class="src">${esc(x.why)}</span><span class="meta"><span class="mk-gap">not known yet</span></span>
+      <span class="sub">${esc(x.fill.split(',')[0])} could fill it <button class="askb">${ic('send', 11)} Ask</button></span></div>`;
+    if (x.s === 'norecord') return `<div class="row" data-s="norecord">${unit('norecord', 'no record')}<span><b>${esc(x.name)}</b> <span class="site">· ${esc(site)}</span></span><span class="src">${esc(x.why)}</span><span class="meta"><span class="mk-norec">no record</span> · due ${day(x.due)}</span>
+      <span class="sub">${esc(x.fill.split(',')[0])} could check the paper log <button class="askb">${ic('send', 11)} Ask</button></span></div>`;
+    if (x.s === 'hidden') return `<div class="row" data-s="hidden">${unit('hidden', 'not yours to see')}<span><b>${esc(x.name)}</b> <span class="site">· ${esc(site)}</span></span><span class="src">kept on ${esc(DATA.floors[x.keptOn].name)}</span><span class="meta"><span class="mk-unseen">${ic('lock', 10)} ${x.some ? 'some' : 'not yours'}</span></span>
+      <span class="sub">Kept on ${esc(DATA.floors[x.keptOn].name)} · ask ${esc(x.ask)} <button class="askb">${ic('send', 11)} Ask</button></span></div>`;
+  };
+  const grp = (label, s, list, cls = '') => list.length ? `<div class="grp ${cls}"><p class="eyebrow"><span>${label}</span><span>${[list.filter(x => !x.some).length || '', list.some(x => x.some) ? 'some' : ''].filter(Boolean).join(' + ')}</span></p>${list.map(line).join('')}</div>` : '';
+  const by = s => rows.filter(x => x.s === s);
+  rb.innerHTML = `<p class="tline"><span class="n" data-n="rows">${t.rows}</span> inspections fell due at the ${t.sitesOpen} sites you can open. <span class="n" data-n="overdue">${t.overdue}</span> are overdue.<span class="tk">rows = q(today) · grouped by state · every gap names who could fill it</span></p>`
+    + grp('Overdue', 'overdue', by('overdue'))
+    + grp('Two answers', 'disputed', by('disputed'))
+    + grp('We can’t say yet', 'cant', [...by('gap'), ...by('norecord')])
+    + grp('Not yours to see', 'hidden', by('hidden'))
+    + grp('Done', 'done', by('done'), 'deep');
+  budget(sec.querySelector('[data-budget]'), 0, null);
+  foot(sec, r, srcKeys(rows), 'You see exact counts; your readers’ copies say “some”.');
+}
+
+/* ---------- 2. the minute, for the team lead ---------- */
+function picRows(rows) {
+  const sites = Object.keys(DATA.sites).map(id => ({ id, name: DATA.sites[id], rows: rows.filter(r => r.site === id) })).filter(s => s.rows.length);
+  const order = { overdue: 0, disputed: 1, gap: 2, norecord: 3, hidden: 4, done: 5 };
+  sites.forEach(s => { s.n = s.rows.filter(r => r.s === 'overdue').length; s.some = s.rows.some(r => r.some); s.rows.sort((a, b) => order[a.s] - order[b.s]); });
+  return sites.sort((a, b) => (a.some - b.some) || (b.n - a.n));
+}
+function finding(t, sites) {
+  const top = sites[0]; if (!t.overdue) return 'None of the inspections that fell due is overdue';
+  const share = top.n * 2 === t.overdue ? 'half' : top.n === t.overdue ? 'all' : `${top.n} of ${t.overdue}`;
+  return `${top.name.split(' ')[0]} has ${share} of the overdue inspections`;
+}
+function leadCopy(sec, rows) {
+  const r = READ.lead, t = tally(rows), rb = sec.querySelector('.rb'), sites = picRows(rows);
+  const bl = DATA.bottomLine;
+  const refs = { overdue: t.overdue, ng: sites.find(s => s.id === 'ng').n, disputed: t.disputed, cantsay: t.cantsay };
+  const blText = st.gw
+    ? bl.parts.map(p => p.ref ? `<span class="h" data-ref="${p.ref}">${esc(p.t)}</span>` : esc(p.t)).join('')
+    : `<span class="h" data-ref="overdue"><span data-n="overdue">${t.overdue}</span> inspections are overdue</span> at ${t.sitesOver} of ${t.sitesOpen} sites. <span class="h" data-ref="disputed">${t.disputed} more has two answers</span>; <span class="h" data-ref="cantsay">${t.cantsay} can’t be said yet</span>.`;
+  const prov = st.gw ? `Drafted by ${esc(bl.drafted)} · inked by <b>${esc(bl.inked)}</b>, ${esc(bl.on)} · every phrase points at a fact below`
+    : `From the template: the assistant is off. No number changed.`;
+  const ctr = s => s.some ? `<span class="someb">${ic('lock', 10)} some · ask ${esc(s.rows[0].ask)}</span>` : s.rows.map(x => unit(x.s, `${x.name}: ${STATE_WORD[x.s]}`)).join('');
+  const pic = `<div class="pic"><h3 data-n-title>${esc(finding(t, sites))}</h3><span class="tk">question “Which sites, and how many?” → count with symbols · one symbol = one inspection · sites by overdue, longest first</span>
+    ${sites.map(s => `<div class="prow${s.some ? ' lk' : ''}"><span class="nm">${esc(s.name)}</span><span class="us">${ctr(s)}</span><span class="ct">${s.some ? '' : s.n}</span></div>`).join('')}
+    <div class="key"><span>${unit('overdue', '')} overdue</span><span>${unit('disputed', '')} two answers</span><span>${unit('gap', '')} not known yet</span><span>${unit('norecord', '')} no record</span><span>${unit('done', '')} done</span><span>one square is one inspection</span></div></div>`;
+  const gapRows = rows.filter(x => x.s === 'gap' || x.s === 'norecord');
+  const cant = `<p class="cant">We can’t say yet: ${gapRows.map(x => `<b>${esc(DATA.sites[x.site].split(' ')[0])} ${esc(x.name.toLowerCase())}</b> (${x.s === 'gap' ? 'not known yet' : 'no record'}; ${esc(x.fill.split(',')[0])} could ${x.s === 'gap' ? 'fill it' : 'check'})`).join(' and ')}.</p>`;
+  const over = rows.filter(x => x.s === 'overdue');
+  const qs = [
+    { q: 'Which ones?', by: 'Sam', a: `${sites.filter(s => s.n).map(s => `<b>${esc(s.name.split(' ')[0])}</b>: ${s.rows.filter(x => x.s === 'overdue').map(x => esc(x.name.toLowerCase())).join(', ')}`).join(' · ')}. <span class="chips">${chip(r, `${over.length} visit records`, srcKeys(over))}</span>` },
+    { q: 'Is that unusual?', by: 'Sam', a: `At this point last quarter (${esc(DATA.lastQuarter.asOf)}), <b>${DATA.lastQuarter.overdue}</b> were overdue. Same query, run then.` },
+    { q: 'Why is Northgate behind?', by: 'suggested by the assistant', pen: true, a: `Nothing in the records answers why. One record sits near it: Brigade Fire’s servicing contract ended on 31 Aug (C-0412). <b>Sam Okafor</b> could find out. The assistant suggested the question; it may not answer it.` },
+    { q: 'What about Southmoor?', by: 'Sam', a: `Some, kept on Depot operations. Ask <b>Marta Kowal</b>. Nobody on this floor can count it.` }
+  ].filter(x => st.gw || !x.pen);
+  rb.innerHTML = `<div class="blwrap"><p class="eyebrow">Bottom line</p><p class="bl" id="bl">${blText}</p><p class="prov">${prov}</p><span class="tk">pencil slot: the bottom line only · each phrase → a fact (data-ref) · a phrase with no fact is struck and blocks inking</span></div>
+    ${pic}${cant}
+    <div class="chips deep">${chip(r, `${t.overdue} overdue`, ['visits', 'regime'])}${chip(r, 'Eastfield alarm', ['note'])}${chip(r, 'lift, Southmoor', ['lift', 'southmoor'])}</div>
+    <div class="qs deep"><p class="eyebrow" style="padding:var(--space-1) 0">If Priya asks · not in the minute</p>${qs.map((x, i) => `<div class="qq${x.pen ? ' pen' : ''}${sec.classList.contains('near') && i < 2 ? ' open' : ''}"><button aria-expanded="false">${ic(x.pen ? 'pencil' : 'circle-help', 14)}<span>${esc(x.q)}</span><span class="by">${esc(x.by)} ${ic('chevron-right', 12)}</span></button><div class="qa">${x.a}</div></div>`).join('')}</div>`;
+  $$('.qq > button', rb).forEach(b => b.onclick = () => { const q = b.parentNode; q.classList.toggle('open'); b.setAttribute('aria-expanded', q.classList.contains('open')); });
+  const words = $('#bl', rb).textContent + ' ' + $('.pic h3', rb).textContent + ' ' + $('.cant', rb).textContent;
+  budget(sec.querySelector('[data-budget]'), secs(words, 1), r.budget);
+  foot(sec, r, srcKeys(rows), 'Sam’s own note isn’t on her floor.');
+  // light the fact a phrase points at
+  $$('.h', rb).forEach(h => {
+    const go = on => { const k = h.dataset.ref; h.classList.toggle('lit', on); $$(`[data-r] .u`).forEach(u => { if (!on) return u.style.outline = ''; const t = u.title; const m = k === 'overdue' ? / overdue$/ : k === 'disputed' ? /two answers/ : k === 'cantsay' ? /not known yet|no record/ : null; if ((m && m.test(t)) || (k === 'ng' && u.closest('.prow') && u.closest('.prow').querySelector('.nm').textContent.startsWith('Northgate') && / overdue$/.test(t))) u.style.outline = `1px solid ${cssVar('--x-proposed-lit')}`; }); };
+    h.onmouseenter = () => go(true); h.onmouseleave = () => go(false);
+  });
+}
+
+/* ---------- 3. the headline, for the Org ---------- */
+function orgCopy(sec, rows) {
+  const r = READ.org, t = tally(rows), rb = sec.querySelector('.rb');
+  const fac = DATA.floors.fac;
+  const depts = DATA.departments.map(d => ({ ...d, name: DATA.floors[d.floor].name, who: DATA.floors[d.floor].who.split(',')[0], n: d.floor === 'fac' ? t.overdue : 0 }));
+  depts.sort((a, b) => (!!a.some - !!b.some) || (b.n - a.n));
+  const someN = depts.filter(d => d.some).length;
+  const hl = `At least <span class="n" data-n="overdue">${t.overdue}</span> site inspections are overdue ${esc(DATA.period.plain)}, all of them at ${esc(fac.name)} sites.`;
+  const sub = `${cap(word(someN))} departments keep theirs on their own floors, so the Org can’t count them.`;
+  const bar = d => {
+    if (d.some) return `<span class="b"><span class="someb">${ic('lock', 10)} some · ask ${esc(d.who)}</span></span>`;
+    if (d.none) return `<span class="b"><span class="lab"><b>0</b> · none, checked by ${esc(d.checked)}, ${day(d.on)}</span></span>`;
+    return `<span class="b">${Array.from({ length: d.n }, () => unit('overdue', 'overdue')).join('')}${t.disputed ? unit('disputed', 'two answers') : ''}<span class="lab"><b>${d.n}</b>${t.disputed ? ` · and ${t.disputed} with two answers` : ''}</span></span>`;
+  };
+  const title = `Of the departments the Org can count, ${fac.name} has ${t.overdue ? 'all ' + t.overdue : 'none'}`;
+  rb.innerHTML = `<div class="blwrap"><p class="eyebrow">Headline</p><p class="hl">${hl}</p><p class="hl-sub">${sub}</p><span class="stamp">${ic('history', 11)} copy published ${day(DATA.stale.published)}</span><span class="tk">template: “At least {n} … all of them at {dept} sites.” · “at least” because two departments’ counts are not ours to give</span></div>
+    <div class="pic"><h3>${esc(title)}</h3><span class="tk">question “Which is biggest?” → bars, longest first, from zero · hidden last and hatched</span>
+      <div class="bars">${depts.map(d => `<div class="brow"><span class="bn">${esc(d.name)}</span>${bar(d)}</div>`).join('')}</div></div>
+    <p class="never deep">${ic('ban', 14)}<span><s>A map shaded by totals</s> isn’t offered: big sites would win, and two departments would show as empty when they are only out of sight.</span></p>
+    <div class="chips deep">${chip(r, `${t.overdue} overdue`, ['visits', 'regime'])}${chip(r, 'Parks: none', ['parks'], true)}${chip(r, 'Intent M-118', ['intent'], true)}</div>`;
+  const words = $('.hl', rb).textContent + ' ' + $('.hl-sub', rb).textContent + ' ' + title;
+  budget(sec.querySelector('[data-budget]'), secs(words, 1), r.budget);
+  foot(sec, r, [...srcKeys(rows), 'intent', 'parks', 'ws', 'hou'], `Their copy says “some”, and names ${esc(fac.who.split(',')[0])}.`);
+}
+
+/* ---------- the check: same digits at every height ---------- */
+function check(animate) {
+  const c = $('#check');
+  const n = (r, sel) => $$(`[data-r="${r}"] ${sel}`).length;
+  const op = { o: n('op', '.row[data-s="overdue"]'), d: n('op', '.row[data-s="disputed"]'), c: n('op', '.row[data-s="gap"],[data-r="op"] .row[data-s="norecord"]'), h: n('op', '.row[data-s="hidden"]') };
+  const ld = { o: n('lead', '.prow .u.overdue'), d: n('lead', '.prow .u.disputed'), c: n('lead', '.prow .u.gap') + n('lead', '.prow .u.norecord'), h: n('lead', '.prow .someb') + n('lead', '.prow .u.hidden') };
+  const blWord = ($('[data-r="lead"] #bl').textContent.toLowerCase().match(new RegExp('\\b(' + WORDS.join('|') + '|\\d+)\\b inspections')) || [])[1];
+  const og = { o: n('org', '.bars .u.overdue'), d: n('org', '.bars .u.disputed'), h: n('org', '.someb') };
+  const txt = { op: +$('[data-r="op"] [data-n="overdue"]').textContent, org: +$('[data-r="org"] [data-n="overdue"]').textContent };
+  const ok1 = op.o === ld.o && ld.o === og.o && txt.op === op.o && txt.org === og.o && (blWord === word(ld.o) || +blWord === ld.o);
+  const ok2 = op.d === ld.d && ld.d === og.d;
+  const rowsHTML = [
+    ['Overdue', `${op.o} rows`, `${ld.o} squares · “${blWord}”`, `${og.o} squares · “at least ${txt.org}”`, ok1, ok1 ? 'the same digits' : `${og.o} ≠ ${op.o}: can’t be published`],
+    ['Two answers', `${op.d} row, both sides`, `${ld.d} split square`, `${og.d} split square`, ok2, 'shown at every height, counted in none'],
+    ['We can’t say yet', `${op.c} rows, who could fill`, `${ld.c} marked squares`, `inside “at least”`, true, 'named, never counted as done'],
+    ['Not yours to see', `${op.h} rows, whom to ask`, `“some” · ${ld.h} hatched`, `“some” · ${og.h} departments`, true, 'never a number to a reader']
+  ];
+  const all = ok1 && ok2;
+  c.innerHTML = `<div class="verdict ${all ? 'ok' : 'bad'}"><span class="v">${ic(all ? 'circle-check' : 'triangle-alert', 18)} ${all ? 'Same digits at every height.' : 'The heights don’t agree.'}</span>
+    <p>${all ? 'It can go to all three readers. Each gets their own copy, and the proof is that copy.' : `The Org copy of ${day(DATA.stale.published)} says ${og.o}; the records hold ${op.o}. ${esc(DATA.stale.reason)}: ${esc(DATA.stale.why)} It can’t go out again until the heights agree.`}</p></div>
+    <div class="ctab"><span class="hd">Checked</span><span class="hd">Sam · records</span><span class="hd">Priya · the minute</span><span class="hd">Org · headline</span><span class="hd">Result</span>
+    ${rowsHTML.map(([l, a, b, d, ok, why], i) => `<span class="lb">${l}</span><span class="d">${a}</span><span class="d">${b}</span><span class="d">${d}</span><span class="r ${ok ? 'ok' : 'bad'}" data-i="${i}">${ic(ok ? 'check' : 'triangle-alert', 12)} ${why}</span>`).join('')}</div>`;
+  $$('.r', c).forEach((el, i) => animate ? later(() => el.classList.add('on'), i * ms('--motion-slow')) : el.classList.add('on'));
+  $$('[data-n="overdue"]').forEach(el => el.classList.toggle('lit', true));
+  Icons.hydrate(c);
+}
+
+/* ---------- render ---------- */
+function render(animate) {
+  const stage = $('#stage');
+  stage.innerHTML = DATA.readers.map(readerShell).join('');
+  stage.className = 'stage' + (st.view === 'all' ? '' : ' f-' + st.view);
+  $$('.reader', stage).forEach(s => { if (st.view !== 'all') s.classList.add(s.dataset.r === st.view ? 'near' : 'far'); });
+  const rows = q(), old = q(DATA.stale.published);
+  opCopy($('[data-r="op"]'), rows);
+  leadCopy($('[data-r="lead"]'), rows);
+  orgCopy($('[data-r="org"]'), st.stale ? old : rows);
+  $('[data-r="org"]').classList.toggle('stalecopy', st.stale);
+  $$('#views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === st.view));
+  Icons.hydrate(document.body);
+  if (animate) { $('#check').innerHTML = ''; later(() => check(true), 1200); } else check(false);
+}
+function view(v) { st.view = st.view === v ? 'all' : v; render(false); }
+function replay() {
+  clearLater(); Object.assign(st, { view: 'all', stale: false });
+  app.classList.add('pre'); render(true);
+  requestAnimationFrame(() => requestAnimationFrame(() => app.classList.remove('pre')));
+}
+head();
+onKeys({
+  '1': () => view('op'), '2': () => view('lead'), '3': () => view('org'), s: () => { st.view = 'all'; render(false); },
+  d: () => { st.stale = !st.stale; render(false); },
+  t: () => { st.tech = !st.tech; document.body.classList.toggle('tech', st.tech); },
+  g: () => { st.gw = !st.gw; render(false); },
+  r: replay
+});
+replay();
+</script>
+</body>
+</html>

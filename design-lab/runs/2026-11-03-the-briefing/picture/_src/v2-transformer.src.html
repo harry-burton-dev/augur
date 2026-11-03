@@ -1,0 +1,182 @@
+@@title
+Picture · V2 · The transformer's table
+@@css
+.app{height:100vh;display:grid;grid-template-columns:minmax(0,16rem) minmax(0,22rem) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-3) var(--space-5);padding:var(--space-5) var(--edge) calc(var(--space-6) + var(--space-2))}
+.top{grid-column:1/-1}
+.colh{display:flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);border-bottom:1px solid var(--hairline);padding-bottom:var(--space-2)}
+.colh .no{color:var(--light)}
+.colh .ar{margin-left:auto;opacity:var(--x-proposed-quiet)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.set{display:flex;gap:var(--space-1);flex-wrap:wrap}
+.set button{padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline);font-size:var(--type-small);color:var(--ink-muted)}
+.set button[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+.rl{flex:1;min-height:0}
+.rl table.rec td{padding:2px var(--space-2)}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-3)}
+.st{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-1) var(--space-2);transition:opacity var(--motion-calm) var(--ease-out)}
+.st .ck{width:var(--space-5);height:var(--space-5);border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);display:flex;align-items:center;justify-content:center;color:var(--ink-muted);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);transition:background var(--motion-base),color var(--motion-base),border-color var(--motion-base)}
+.st.done .ck{background:var(--ink);border-color:var(--ink);color:var(--slate-deep)}
+.st.now .ck{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--green) 40%,transparent)}
+.st .q{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);margin:2px 0 0}
+.st .a{grid-column:2;font-size:var(--type-body);line-height:var(--leading-body);color:var(--light);margin:0}
+.st .a .muted{font-size:var(--type-small)}
+.st.wait .a{opacity:0}
+.st .opts{grid-column:2;display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.st .opts .chip.off{color:var(--ink-muted);border-style:dashed;text-decoration:line-through;text-decoration-color:var(--ink-muted)}
+.rules{grid-column:2;list-style:none;margin:0;padding:0;display:grid;gap:2px;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.rules li{display:flex;gap:var(--space-2);align-items:flex-start}
+.rules svg{flex:none;margin-top:2px;color:var(--ink-muted)}
+.plate{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4) var(--space-5)}
+.plate .key{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.plate .key span{display:inline-flex;align-items:center;gap:var(--space-1)}
+.plate .key .sym{opacity:1;transform:none}
+.plate .iso{gap:var(--space-3)}
+.plate .ir{grid-template-columns:minmax(0,14rem) minmax(0,1fr) var(--space-6)}
+.plate .ir .in{white-space:nowrap}
+.ir.na{opacity:var(--x-proposed-quiet)}
+.ir.na .is{font-size:var(--type-small);color:var(--ink-muted)}
+.ir.unseen .is{flex-wrap:nowrap;background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:2px;padding:var(--space-1) var(--space-2);font-size:var(--type-small);color:var(--ink-muted);align-items:center;gap:var(--space-1)}
+.foot{display:block}
+.ghost{display:none;border:1px dashed var(--hairline-strong);border-radius:var(--radius-key);padding:var(--space-4);gap:var(--space-5);align-items:flex-end;background:var(--surface-inset)}
+.scaled .ghost{display:flex}
+.scaled #pic,.scaled #key{display:none}
+.ghost .big{display:flex;align-items:flex-end;gap:var(--space-5);opacity:var(--x-proposed-quiet)}
+.ghost .big span{display:inline-flex;flex-direction:column;align-items:center;gap:var(--space-1);font-size:var(--type-small);color:var(--ink-muted)}
+.ghost p{margin:0;max-width:40ch;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.ghost p b{display:block;font-weight:400;color:var(--light)}
+.note{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-height:820px){.app{padding-top:var(--space-4);gap:var(--space-2) var(--space-4)}.lede{display:none}.plate{padding:var(--space-3) var(--space-4)}.plate .iso{gap:var(--space-2)}}
+@@body
+<div class="app" id="app">
+  <header class="top">
+    <p class="eyebrow" id="eb"></p>
+    <h1>The transformer's table</h1>
+    <p class="lede">Otto Neurath's teams had a "transformer": the person between the statistician and the public who decided what a picture should say. Here you are the transformer. Answer four questions and the records become a picture you can count.</p>
+  </header>
+  <div class="colh"><span class="no">1</span> The records <i class="ar" data-lucide="arrow-right" data-size="14"></i></div>
+  <div class="colh"><span class="no">2</span> The transformer: you <i class="ar" data-lucide="arrow-right" data-size="14"></i></div>
+  <div class="colh"><span class="no">3</span> The picture <span class="tk" style="margin-left:auto">isotype · 1 symbol = 1 record · rows sorted</span></div>
+  <section class="col">
+    <div class="set" id="sets"></div>
+    <p class="note" id="setnote"></p>
+    <div class="rl scroll" id="rl"></div>
+  </section>
+  <section class="col scroll">
+    <ol class="steps" id="steps"></ol>
+    <div id="lane"></div>
+  </section>
+  <section class="plate pane" id="plate">
+    <p class="inkmark" id="ink"></p>
+    <h2 class="finding" id="title"></h2>
+    <p class="sub" id="sub"></p>
+    <div id="pic"></div>
+    <div class="ghost" id="ghost"></div>
+    <div class="key" id="key"></div>
+    <div class="foot">
+      <div class="notes" id="notes"></div>
+    </div>
+  </section>
+</div>
+<div class="x-cap"><b>Picture · V2</b> the transformer's table: count with symbols, never scale them · Neurath, Isotype</div>
+@@js
+const RS = DATA.recordSet, VS = DATA.vehicleStatus;
+U.$('#eb').innerHTML = U.floorLine() + '<span>· Data Atlas</span>';
+const SETS = {
+  veh: { word: 'Vehicles today', one: 'vehicle', icon: 'truck' },
+  inc: { word: RS.word + ', last three months', one: RS.one, icon: 'circle-dot' }
+};
+let set = 'veh';
+function vehRows() {
+  const rows = DATA.vehicles.map(v => {
+    const s = U.site(v.site), out = v.status.filter(x => x !== 'in').length;
+    const order = { off: 0, shop: 1, in: 2 };
+    const items = [...v.status].sort((a, b) => order[a] - order[b]).map(x => ({ cls: x === 'off' ? 'hot' : x === 'shop' ? 'mid' : '', icon: x === 'shop' ? 'truck' : 'truck', title: VS[x] }));
+    const age = v.checked ? Math.round((new Date(DATA.today) - new Date(v.checked)) / 864e5) : 0;
+    return { s, out, n: v.status.length, label: s.short, items, note: out + ' of ' + v.status.length, stale: age > 30 ? 'checked ' + age + ' days ago' : null };
+  }).sort((a, b) => b.out - a.out || b.n - a.n);
+  return rows;
+}
+function vehAnswer() {
+  const rows = vehRows(), N = U.sum(rows.map(r => r.n)), n = U.sum(rows.map(r => r.out)), top = rows[0];
+  const stale = rows.find(r => r.stale);
+  return {
+    title: U.fill(DATA.templates.many, { n, N, k: top.out, site: top.s.short }) + '.',
+    sub: 'Each symbol is one vehicle. Lit: off the road. Half lit: in the workshop.',
+    n: N,
+    pic: () => U.count(rows, 'truck', { size: 22 }) + `<div class="iso">${DATA.noFleet.sites.map(id => `<div class="ir na"><span class="il">${U.esc(U.site(id).short)}</span><span class="is">doesn't apply: ${U.esc(DATA.noFleet.why)}</span><span class="in"></span></div>`).join('')}${U.unseen().map(s => `<div class="ir unseen"><span class="il">${U.esc(s.short)}</span><span class="is">${Icons.svg('lock', { size: 12 })} some vehicles, kept by ${U.esc(s.unseen.keptBy)} · ask ${U.esc(s.unseen.ask)}</span><span class="in"></span></div>`).join('')}</div>`,
+    key: [['hot', VS.off], ['mid', VS.shop], ['', VS.in]].map(([c, w]) => `<span><span class="sym ${c}">${Icons.svg('truck', { size: 18 })}</span>${U.esc(w)}</span>`).join('') + `<span class="muted">One symbol = one vehicle</span>`,
+    notes: stale ? [`<span class="age" style="margin:0">${U.esc(stale.stale)}</span> ${U.esc(stale.s.short)}'s vehicles are shown as able to go out, but nobody has checked since ${U.esc(DATA.vehicles.find(v => v.checked).checked)}.`] : [],
+    takeaway: 'How many vehicles can’t go out, and where',
+    alt: ['Which depot has the most vehicles', 'Every vehicle’s status'],
+    big: rows.slice(0, 3).map(r => ({ label: r.s.short, v: r.out }))
+  };
+}
+function incAnswer() {
+  const recs = U.records().filter(r => U.M.indexOf(r.month) >= U.N - 3);
+  const rows = U.seen().map(s => {
+    const rs = recs.filter(r => r.site === s);
+    return { s, label: s.short, items: rs.map(r => ({ icon: DATA.incidentKinds.find(k => k.id === r.kind).icon, cls: r.kind === 'slip' ? 'hot' : '', title: r.id })), note: rs.length };
+  }).sort((a, b) => b.items.length - a.items.length);
+  const a = A.get('big');
+  return {
+    title: a.title, sub: 'Each symbol is one incident, drawn as what happened. Lit: slips or trips.', n: recs.length,
+    pic: () => U.count(rows, 'circle', { size: 20 }) + `<div class="iso">${U.unseen().map(s => `<div class="ir unseen"><span class="il">${U.esc(s.short)}</span><span class="is">${Icons.svg('lock', { size: 12 })} some ${RS.lower}, kept by ${U.esc(s.unseen.keptBy)} · ask ${U.esc(s.unseen.ask)}</span><span class="in"></span></div>`).join('')}</div>`,
+    key: DATA.incidentKinds.map(k => `<span><span class="sym ${k.id === 'slip' ? 'hot' : ''}">${Icons.svg(k.icon, { size: 16 })}</span>${U.esc(k.word)}</span>`).join('') + `<span class="muted">One symbol = one ${RS.one}</span>`,
+    notes: [], takeaway: 'Which depot had the most, and what kind', alt: ['How many in total', 'When they happened'],
+    big: rows.slice(0, 3).map(r => ({ label: r.s.short, v: r.items.length }))
+  };
+}
+U.$('#sets').innerHTML = Object.entries(SETS).map(([k, v], i) => `<button type="button" data-set="${k}" aria-pressed="${k === set}">${U.esc(v.word)}</button>`).join('');
+U.$('#sets').onclick = e => { const b = e.target.closest('button'); if (b) { set = b.dataset.set; run(); } };
+function records() {
+  if (set === 'veh') {
+    const r = vehRows().flatMap(x => x.items.map((it, i) => ({ s: x.s, i, st: it.title })));
+    return U.table(r, [{ h: 'Vehicle', f: x => `<span class="mono">${x.s.id.toUpperCase()}-${String(x.i + 1).padStart(2, '0')}</span>` }, { h: 'Depot', f: x => U.esc(x.s.short) }, { h: 'Status', f: x => U.esc(x.st) }]);
+  }
+  return U.table(U.records().filter(r => U.M.indexOf(r.month) >= U.N - 3), [{ h: 'Record', f: r => `<span class="mono">${r.id}</span>` }, { h: 'Site', f: r => U.esc(r.site.short) }, { h: 'What', f: r => U.esc(U.kindWord(r.kind)) }]);
+}
+function steps(a) {
+  const S = SETS[set];
+  return [
+    { q: 'Who will read it?', a: `${U.esc(DATA.reader.name)} <span class="muted">${U.esc(DATA.reader.role)}, ${U.esc(DATA.reader.when)}</span>` },
+    { q: 'What should they take away?', a: U.esc(a.takeaway), opts: a.alt.map(x => `<span class="chip">${U.esc(x)}</span>`).join('') },
+    { q: 'One symbol stands for', a: `one ${U.esc(S.one)}`, opts: `<span class="chip off" title="Fewer than a hundred: one each stays countable">five ${U.esc(S.one)}s</span><span class="tk">scale unit 1 · max row ${Math.max(...a.big.map(b => b.v))}</span>` },
+    { q: 'Check the picture against the rules', rules: ['Count, never scale: more means more symbols, never a bigger one', 'Every symbol the same size, in every row', 'One row per depot, the most first', 'A key under the picture', 'The title says what it shows'] }
+  ];
+}
+let A_;
+function run() {
+  U.clear();
+  U.$$('#sets button').forEach(b => b.setAttribute('aria-pressed', b.dataset.set === set ? 'true' : 'false'));
+  A_ = set === 'veh' ? vehAnswer() : incAnswer();
+  U.$('#setnote').textContent = (set === 'veh' ? U.sum(DATA.vehicles.map(v => v.status.length)) + ' vehicles at ' + DATA.vehicles.length + ' depots' : A_.n + ' records from ' + RS.from) + '.';
+  U.$('#rl').innerHTML = records();
+  const st = steps(A_);
+  U.$('#steps').innerHTML = st.map((s, i) => `<li class="st wait" data-i="${i}"><span class="ck">${i + 1}</span><p class="q">${s.q}</p>${s.rules ? `<ul class="rules a">${s.rules.map(r => `<li>${Icons.svg('check', { size: 14 })}<span>${U.esc(r)}</span></li>`).join('')}</ul>` : `<p class="a">${s.a}</p>`}${s.opts ? `<div class="opts">${s.opts}</div>` : ''}</li>`).join('');
+  U.$('#lane').innerHTML = U.pencil({ body: set === 'veh' ? `${U.esc(DATA.reader.name)} usually asks whether Monday's rounds can be covered. Kettle Lane has five vehicles that can go out; worth a second line.` : `Most of Northgate's are slips on the night rounds; the picture could split day and night.`, links: '<a href="#">from 2 earlier briefings</a>' });
+  U.wirePencils(U.$('#lane'));
+  U.$('#title').textContent = ''; U.$('#sub').textContent = ''; U.$('#pic').innerHTML = ''; U.$('#key').innerHTML = ''; U.$('#notes').innerHTML = '';
+  U.$('#ink').innerHTML = '';
+  U.$('#ghost').innerHTML = `<div class="big">${A_.big.map((b, i) => `<span>${Icons.svg(SETS[set].icon, { size: Math.max(16, Math.round(96 * b.v / Math.max(...A_.big.map(x => x.v)))), stroke: 1 })}${U.esc(b.label)}</span>`).join('')}</div><p><b>Never offered: ${U.esc(DATA.never.find(n => n.icon === 'circle').word.toLowerCase())}</b>${U.esc(DATA.never.find(n => n.icon === 'circle').why)} Press B to go back.</p>`;
+  const step = U.ms('--motion-base');
+  st.forEach((s, i) => U.later(U.ms('--motion-run') + i * step, () => {
+    U.$$('.st').forEach(el => { const j = +el.dataset.i; el.classList.toggle('done', j < i); el.classList.toggle('now', j === i); if (j <= i) el.classList.remove('wait'); });
+  }));
+  U.later(U.ms('--motion-run') + st.length * step, () => {
+    U.$$('.st').forEach(el => { el.classList.add('done'); el.classList.remove('now'); });
+    document.body.classList.add('pre');
+    U.$('#ink').innerHTML = Icons.svg('pen-tool', { size: 12 }) + ' Finding · ink: filled from a fixed sentence, from ' + A_.n + ' records';
+    U.$('#pic').innerHTML = A_.pic(); U.$('#key').innerHTML = A_.key; U.$('#sub').textContent = A_.sub;
+    U.$('#notes').innerHTML = A_.notes.map(n => `<p class="note">${n}</p>`).join('');
+    requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre')));
+    U.type(U.$('#title'), A_.title);
+  });
+}
+U.keys(k => {
+  if (k === 's') { set = set === 'veh' ? 'inc' : 'veh'; run(); }
+  if (k === 'b') U.$('#app').classList.toggle('scaled');
+});
+document.body.insertAdjacentHTML('beforeend', U.hints([['S', 'other records'], ['B', 'try bigger symbols']]));
+window.replay = run;
+Icons.hydrate();
+run();

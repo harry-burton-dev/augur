@@ -9,4 +9,6 @@ Anything a model proposes is drawn in pencil (dotted edge, italic, its own lane)
 
 First found in: [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-reference-desk/) (ask V5, example V2 and V6, workings V6, cant V5, grammar V3 and V6, combined).
 
+Used in [`2026-11-03-the-briefing`](../runs/2026-11-03-the-briefing/): the model gets one pencil slot, the bottom line, and each phrase must point at a fact on the page.
+
 Could steer: The apprentice (Q), the briefing (M), Mandate drafting, every place the model gateway writes.

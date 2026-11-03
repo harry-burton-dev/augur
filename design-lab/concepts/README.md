@@ -34,6 +34,14 @@ app pattern took it), **dropped** (say why in the file).
 | [The empty knows its errand](the-empty-knows-its-errand.md) | explored | 2026-11-03-the-reference-desk |
 | [The question is the record](the-question-is-the-record.md) | explored | 2026-11-03-the-reference-desk |
 | [The workings show](the-workings-show.md) | explored | batch 3 research |
+| [Confidence is worked out](confidence-is-worked-out.md) | explored | 2026-11-03-the-briefing |
+| [Question, not chart](question-not-chart.md) | explored | 2026-11-03-the-briefing |
+| [Reach before act](reach-before-act.md) | explored | 2026-11-03-the-briefing |
+| [Same digits at every height](same-digits-at-every-height.md) | explored | 2026-11-03-the-briefing |
+| [The decision sets the bar](the-decision-sets-the-bar.md) | explored | 2026-11-03-the-briefing |
+| [The reader's minute](the-readers-minute.md) | explored | 2026-11-03-the-briefing |
+| [Watches say what they can't see](watches-say-what-they-cant-see.md) | explored | 2026-11-03-the-briefing |
+| [The overview rung](overview-rung.md) | explored | 2026-11-02-wear-and-time |
 | [Answer, don't announce](answer-not-announce.md) | to explore | 2026-11-03-room-tone |
 | [Attention as wear](attention-as-wear.md) | to explore | 2026-11-02-wear-and-time |
 | [Care is scheduled](care-is-scheduled.md) | to explore | batch 3 research |
@@ -44,7 +52,6 @@ app pattern took it), **dropped** (say why in the file).
 | [Hear the reach](hear-the-reach.md) | to explore | 2026-11-03-room-tone |
 | [Mine versus ours](mine-versus-ours.md) | to explore | 2026-11-02-wear-and-time |
 | [One now](one-now.md) | to explore | 2026-11-02-wear-and-time |
-| [The overview rung](overview-rung.md) | to explore | 2026-11-02-wear-and-time |
 | [The past under water](past-under-water.md) | to explore | 2026-11-02-wear-and-time |
 | [Question and answer](question-and-answer.md) | to explore | 2026-11-03-room-tone |
 | [The recipe is the record](the-recipe-is-the-record.md) | to explore | batch 3 research |

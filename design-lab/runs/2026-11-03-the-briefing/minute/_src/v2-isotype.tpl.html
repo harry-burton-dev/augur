@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · V2 · Counted in pictures</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+#wrap{height:100vh;display:flex;flex-direction:column}
+.main{flex:1;min-height:0;overflow:auto;padding:var(--space-4) var(--edge) var(--space-7);scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-5);align-items:end;margin-bottom:var(--space-4)}
+.bl{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);margin:var(--space-1) 0 0;max-width:62ch;color:var(--light)}
+.bl.pencil{font-style:italic;color:var(--x-proposed-pencil)}
+.bl .ref{text-decoration-color:currentColor}
+.bl .slot{display:inline-block;width:calc(var(--measure-card) - var(--space-6));height:var(--leading-heading);vertical-align:bottom;font-size:var(--type-small);line-height:var(--leading-heading);color:var(--ink-muted);padding:0 var(--space-2)}
+.blmeta{display:flex;gap:var(--space-3);align-items:center;margin-top:var(--space-1);flex-wrap:wrap}
+.who{text-align:right;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.who b{font-weight:400;color:var(--ink)}
+.who .rd{border-bottom:2px solid var(--x-proposed-reader)}
+.grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:var(--space-3)}
+.grid .pan:first-child{grid-row:1 / span 3}
+.pan{background:var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-2);min-width:0}
+.pan h2{margin:0;font-weight:400;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.pan .cap{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.pan .foot{margin-top:auto;display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.pan .foot .key{display:inline-flex;align-items:center;gap:var(--space-1)}
+.pan .foot .tr{margin-left:auto;font-style:italic}
+/* isotype rows */
+.rows{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr) var(--space-5);gap:var(--space-2) var(--space-2);align-items:center}
+.rows .ml{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.rows .n{font:400 var(--type-small)/1 var(--font-mono);color:var(--light);text-align:right}
+.rows .n.them{color:var(--x-proposed-disagree)}
+.sym{display:flex;flex-wrap:nowrap;align-items:center;gap:2px;min-width:0}
+.iso{display:inline-flex;color:var(--ink);transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out);transition-delay:calc(var(--j, 0) * var(--x-proposed-tick))}
+.pre .iso,.hold .iso{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.iso{transition-delay:0ms}.pre .iso,.hold .iso{transform:none}}
+.iso.them{color:var(--x-proposed-disagree);opacity:.75}
+.iso.f{color:var(--warning)}
+.iso.g{background:var(--x-proposed-gap);color:transparent}
+.iso.lt{color:var(--light)}
+.iso.part{overflow:hidden;justify-content:flex-start}
+.iso.late{color:var(--warning)}
+.hole{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);margin:0 var(--space-1);white-space:nowrap}
+.hole .mk-break{width:var(--space-5)}
+.dis{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--x-proposed-disagree)}
+.fleet{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-2) var(--space-2)}
+.veh{display:flex;flex-direction:column;align-items:center;gap:2px;font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);color:var(--ink-muted);text-align:center}
+.veh .iso{padding:2px}
+.veh.f span.w{color:var(--warning)}
+.tl{display:grid;grid-template-columns:var(--space-6) repeat(8,minmax(0,1fr));gap:var(--space-1) 2px;align-items:center;position:relative}
+.tl .mh{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);text-align:center;letter-spacing:var(--tracking-caps)}
+.tl .rl{font-size:var(--type-small);color:var(--ink-muted)}
+.tl .cell{display:flex;justify-content:center}
+.tl .bar{height:var(--space-2);background:var(--ink);border-radius:1px;align-self:center}
+.tl .end{grid-row:1 / span 3;border-left:1px dashed var(--light);position:relative;align-self:stretch;width:0;justify-self:end}
+.tl .endl{font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);color:var(--light);white-space:nowrap}
+.tl .nogap{background:var(--x-proposed-disagree-wash);border:1px dashed var(--x-proposed-disagree);height:var(--space-4);border-radius:2px;align-self:center}
+.tl .newc{border-top:1px dashed var(--ink-muted);align-self:center}
+.hints{margin-top:var(--space-3)}
+.nones{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:var(--space-3)}
+.nones span{display:inline-flex;gap:var(--space-2);align-items:center}
+.nones b{font-weight:400;color:var(--ink)}
+:root{
+  /* the step between one counted symbol and the next as they are set down; a quarter of --motion-instant */
+  --x-proposed-tick: calc(var(--motion-instant) / 4);
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="band"></div>
+  <main class="main" id="main"></main>
+</div>
+<div id="dr"></div>
+<div class="x-cap"><b>One-minute briefing · V2</b> counted in pictures: one symbol is one thing, the title is the finding · Neurath’s Isotype and the transformer, Rosling</div>
+<script>
+/*DATA*/
+/*COMMON_JS*/
+const T = DATA.topic, I = DATA.intent, D = DATA.draft;
+let inked = false;
+function bl() {
+  if (!STATE.gw) return `<p class="bl">${fill(D.template)} <span class="slot gapbox">your recommendation: you write it</span></p><div class="blmeta"><span class="inktag">${ic('pen-line', 12)} ink · from the template</span><span class="inktag">${GW.offWhy}</span></div>`;
+  const txt = D.bottom.filter(p => !p.unsupported).map(p => p.claim ? `<button class="ref" data-claim="${p.claim}">${p.t}</button>` : p.t).join('');
+  return `<p class="bl ${inked ? '' : 'pencil'}">${txt}</p><div class="blmeta">${inked
+    ? `<span class="inktag">${ic('pen-line', 12)} Inked by ${P(DATA.me).name}, ${DATA.today} · drafted by ${GW.plain}</span>`
+    : `<span class="pentag">${ic('pencil', 12)} pencil · drafted by ${GW.plain}, not inked</span><button class="btn pencil" id="bink">${ic('pen-line', 14)} Ink it <span class="kbd">I</span></button>`}<span class="inktag">Each underlined phrase opens the picture it rests on.</span></div>`;
+}
+function panelK1() {
+  let j = 0;
+  const row = m => {
+    let s = '';
+    const recs = INC.filter(r => r.m === m.m);
+    recs.forEach((r, i) => {
+      if (m.hole && r.day > 21 && !s.includes('class="hole"')) s += `<span class="hole">${wavy(28)}${m.hole}</span>`;
+      s += `<span class="iso" style="--j:${j++}" title="${r.id} · ${r.street}, ${r.day} ${m.m}">${ic('trash-2', 16)}</span>`;
+    });
+    return `<span class="ml">${m.m}</span><span class="sym">${s}</span><span class="n">${m.n}</span>`;
+  };
+  const them = `<span class="ml" style="color:var(--x-proposed-disagree)">${DATA.theirs.m}*</span><span class="sym">${Array.from({ length: DATA.theirs.n }, () => `<span class="iso them" style="--j:${j++}">${ic('trash-2', 16)}</span>`).join('')}<span class="hole" style="color:var(--x-proposed-disagree)">${DATA.theirs.who}</span></span><span class="n them">${DATA.theirs.n}</span>`;
+  const c = CL('k1');
+  return `<section class="pan dep" style="--i:1;grid-row:span 3"><p class="eyebrow">1 · ${sure(c.sure)}</p><h2>${c.head} since ${monthName(M[0].m)}</h2><p class="cap">${say('k1')}</p>
+    <div class="rows">${M.map(row).join('')}${them}</div>
+    <div class="dis">${mark('dis')}<span>Two sources disagree about ${monthName(DATA.theirs.m)}: our incident log counts ${VARS.last}, ${DATA.theirs.who} counts ${DATA.theirs.n}. Both are shown; neither is averaged.</span></div>
+    <ul class="elist">${['noRecord', 'unseen', 'na', 'ask', 'stale'].map(id => emptyLi(EM(id))).join('')}</ul>
+    <div class="foot"><span class="key">${ic('trash-2', 14)} = one missed collection, one record</span>${chip('k1')}<span class="tr">Picture by ${P(DATA.me).name} from ${VARS.total} records</span></div></section>`;
+}
+function panelK2() {
+  const c = CL('k2');
+  return `<section class="pan dep" style="--i:2"><p class="eyebrow">2 · ${sure(c.sure)}</p><h2>${VARS.fail} of ${VARS.all} vehicles failed inspection</h2>
+    <div class="fleet">${V.map((v, i) => `<div class="veh ${v.r === 'fail' ? 'f' : ''}"><span class="iso ${v.r === 'fail' ? 'f' : v.r === 'gap' ? 'g' : ''}" style="--j:${i * 3}">${ic('truck', 22)}</span><span>${v.id}</span><span class="w">${v.r === 'fail' ? v.why : v.r === 'gap' ? `${P(v.who).short}, ${v.by}` : ''}</span></div>`).join('')}</div>
+    <div class="foot"><span class="key">${ic('truck', 14)} = one vehicle</span><span class="key"><span class="mk mk-gap" style="width:var(--space-4)"></span> not inspected yet</span><span class="key">${mark('none')} safety incidents, checked by ${P(DATA.safety.checkedBy).short}</span>${chip('k2')}</div></section>`;
+}
+function panelK3K4() {
+  const per = 0.1, full = n => Math.floor(n / per + 1e-9), part = n => +(n / per - full(n)).toFixed(2);
+  const coins = (n, extraFrom, base) => { let s = ''; for (let i = 0; i < full(n); i++) s += `<span class="iso ${extraFrom != null && i >= extraFrom ? 'lt' : ''}" style="--j:${base + i}">${ic('pound-sterling', 16)}</span>`;
+    const p = part(n); if (p) s += `<span class="iso part ${extraFrom != null ? 'lt' : ''}" style="width:calc(var(--space-4) * ${p});--j:${base + full(n)}">${ic('pound-sterling', 16)}</span>`; return s; };
+  const c3 = CL('k3'), c4 = CL('k4');
+  const mo = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+  const endIdx = 2;
+  const ret = mo.map((m, i) => `<span class="cell"><span class="iso ${i < c4.months ? (i > endIdx ? 'late' : '') : ''}" style="--j:${i * 4};${i < c4.months ? '' : 'visibility:hidden'}">${ic('calendar', 16)}</span></span>`).join('');
+  return `<section class="pan dep" style="--i:3"><p class="eyebrow">3 · ${sure(c3.sure)}</p><h2>The offer costs £${Math.round((O.value - C.value) * 1000)}k more a year</h2>
+    <div class="rows" style="grid-template-columns:var(--space-7) minmax(0,1fr) var(--space-6)"><span class="ml">Now</span><span class="sym">${coins(C.value, null, 0)}</span><span class="n">£${C.value}m</span><span class="ml">Offered</span><span class="sym">${coins(O.value, full(C.value), 4)}</span><span class="n">£${O.value}m</span></div>
+    <div class="foot"><span class="key">${ic('pound-sterling', 14)} = £100k a year · a cut symbol is part of one</span>${chip('k3')}</div></section>
+  <section class="pan dep" style="--i:4"><p class="eyebrow">4 · ${sure(c4.sure)}</p><h2>A retender would run ${c4.months - endIdx - 1} months past the contract’s end</h2>
+    <div class="tl"><span></span>${mo.map(m => `<span class="mh">${m}</span>`).join('')}
+      <span class="rl">Contract</span><span class="bar" style="grid-column:span ${endIdx + 1}"></span><span class="nogap" style="grid-column:span ${c4.months - endIdx - 1}" title="no contract"></span><span class="newc" style="grid-column:span ${mo.length - c4.months}"></span>
+      <span class="rl">Retender</span>${ret}</div>
+    <div class="foot"><span class="key">${ic('calendar', 14)} = one month of retendering, from the guide</span><span class="key"><span class="mk" style="width:var(--space-5);height:var(--space-3);border:1px dashed var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash)"></span> no contract in place</span><span class="endl">┆ ${C.ends}</span>${chip('k4')}</div></section>`;
+}
+function render() {
+  $('#band').innerHTML = band();
+  $('#dr').innerHTML = drawer();
+  $('#main').innerHTML = `<div class="top dep" style="--i:0"><div><p class="eyebrow">Bottom line · ${T.kind} for decision</p><div id="bl">${bl()}</div></div>
+      <div class="who">For <b class="rd">${P(T.reader).name}</b>, ${P(T.reader).role}<br>from ${P(T.author).name} · ${T.written}<br>${ic('target', 12)} ${I.title}, due <b>${I.due}</b><div class="hints" style="justify-content:flex-end;margin-top:var(--space-2)"><span><span class="kbd">I</span> ink</span><span><span class="kbd">1</span>–<span class="kbd">4</span> records</span><span>hover a symbol</span><span><span class="kbd">G</span> assistant</span><span><span class="kbd">T</span> technical</span><span><span class="kbd">R</span> replay</span></div></div></div>
+    <div class="grid">${panelK1()}${panelK2()}${panelK3K4()}</div>
+`;
+  $('#main').classList.add('hold');
+}
+function redrawBL() { const b = $('#bl'); if (b) { b.innerHTML = bl(); Icons.hydrate(b); } }
+function ink() { if (inked || !STATE.gw) return; inked = true; redrawBL(); }
+HOOKS.gw.push(redrawBL);
+document.addEventListener('click', e => { if (e.target.closest('#bink')) ink(); });
+document.addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'i' || e.key === 'I') ink();
+  const n = +e.key; if (n >= 1 && n <= DATA.claims.length) openRecords(DATA.claims[n - 1].id); });
+boot(() => { inked = false; render(); }, () => { later(() => $('#main').classList.remove('hold'), ms('--motion-base')); });
+</script>
+</body>
+</html>
