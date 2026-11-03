@@ -420,12 +420,21 @@ importers:
       '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
+      '@fastify/swagger':
+        specifier: ^9.9.0
+        version: 9.9.3
+      '@fastify/type-provider-typebox':
+        specifier: ^6.3.0
+        version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      typebox:
+        specifier: ^1.4.0
+        version: 1.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -451,12 +460,21 @@ importers:
       '@fastify/reply-from':
         specifier: ^12.7.1
         version: 12.7.1
+      '@fastify/swagger':
+        specifier: ^9.9.0
+        version: 9.9.3
+      '@fastify/type-provider-typebox':
+        specifier: ^6.3.0
+        version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
       jose:
         specifier: ^6.2.12
         version: 6.2.12
+      typebox:
+        specifier: ^1.4.0
+        version: 1.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -473,12 +491,21 @@ importers:
       '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
+      '@fastify/swagger':
+        specifier: ^9.9.0
+        version: 9.9.3
+      '@fastify/type-provider-typebox':
+        specifier: ^6.3.0
+        version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      typebox:
+        specifier: ^1.4.0
+        version: 1.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -498,12 +525,21 @@ importers:
       '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
+      '@fastify/swagger':
+        specifier: ^9.9.0
+        version: 9.9.3
+      '@fastify/type-provider-typebox':
+        specifier: ^6.3.0
+        version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      typebox:
+        specifier: ^1.4.0
+        version: 1.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -529,6 +565,12 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1156.0
         version: 3.1156.0
+      '@fastify/swagger':
+        specifier: ^9.9.0
+        version: 9.9.3
+      '@fastify/type-provider-typebox':
+        specifier: ^6.3.0
+        version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
         specifier: ^5.6.0
         version: 5.12.7
@@ -538,6 +580,9 @@ importers:
       semver:
         specifier: ^7.8.5
         version: 7.8.5
+      typebox:
+        specifier: ^1.4.0
+        version: 1.4.3
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -1079,6 +1124,15 @@ packages:
 
   '@fastify/reply-from@12.7.1':
     resolution: {integrity: sha512-F26CIcy6PKqyhsTwQI7p5UwH5vrv2yz7BOqAnkHTmNVSU9J+vmRh8CNfOk/ZD8AjcKbiyRkNl6Lb3AuJdxIADQ==}
+
+  '@fastify/swagger@9.9.3':
+    resolution: {integrity: sha512-1whjjguZlh4VV6OP2SD7w7ZNXXuLPwLcxbKIu7GckhHGgCyIYwtOyBskc3TLZa7LsaRmZZRiB1nz/JTaCI5grQ==}
+
+  '@fastify/type-provider-typebox@6.3.0':
+    resolution: {integrity: sha512-zsaoyyAdNvkuf2HOMJvf7vykRTFA/1M9J3HC0vHNtFhxNhwL36iDJl/2Tpl0XzMR0f0aATSeDV20ChH720wXYQ==}
+    peerDependencies:
+      ajv-formats: ^3.0.1
+      typebox: ^1.1.14
 
   '@fontsource/jost@5.2.8':
     resolution: {integrity: sha512-PEK7oGJL8r+YZm6BriWhmCql9DhVYTMt0iEQbZHo8mqfIPIZo67Tm68xEIaRA0yB3wsHA7Tm66yMQDIxq3Bjqw==}
@@ -2982,6 +3036,10 @@ packages:
   json-schema-ref-resolver@3.0.1:
     resolution: {integrity: sha512-w+HwgljXpVwZ3IidoUR1qPZxSOQ+NRQWuVe6a5pe8XbHsNZE4UAwVPUvzZagn7yBKbJtt6UJnRFYbNTRPZI45Q==}
 
+  json-schema-resolver@3.0.0:
+    resolution: {integrity: sha512-HqMnbz0tz2DaEJ3ntsqtx3ezzZyDE7G56A/pPY/NGmrPu76UzsWquOpHFRAf5beTNXoH2LU5cQePVvRli1nchA==}
+    engines: {node: '>=20'}
+
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
 
@@ -3242,6 +3300,9 @@ packages:
   open@10.2.0:
     resolution: {integrity: sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA==}
     engines: {node: '>=18'}
+
+  openapi-types@12.1.3:
+    resolution: {integrity: sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw==}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -3810,6 +3871,9 @@ packages:
   type-fest@5.10.0:
     resolution: {integrity: sha512-NoSdpq/WEiAg5sjmBkmV/hfxv6HJH4NqPNrqjtSO5CwRmpsDfaf4begxW34KdJykH/l1yHtwBWQkCRdoXO8mPA==}
     engines: {node: '>=20'}
+
+  typebox@1.4.3:
+    resolution: {integrity: sha512-u3nyf7ZciAv1GOijVpI0TDt9At5wmEi7lSHSlRrnjuThv1DcB7fgGBqqrz+fGZ54jAfTpOOX0JXwxSIg3pnxQA==}
 
   typescript-eslint@8.72.1:
     resolution: {integrity: sha512-3Li9FfPmQp45nxEtFD1ZCrYFI3cYK5kpyNtmm1H7lMagm8u9sy6PTjy3ytwQZs7KNukOyKFHAZ6z6GjYFeaeXw==}
@@ -4689,6 +4753,21 @@ snapshots:
       fastify-plugin: 6.0.1
       toad-cache: 3.7.4
       undici: 7.30.1
+
+  '@fastify/swagger@9.9.3':
+    dependencies:
+      fastify-plugin: 6.0.1
+      json-schema-resolver: 3.0.0
+      openapi-types: 12.1.3
+      rfdc: 1.4.1
+      yaml: 2.9.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@fastify/type-provider-typebox@6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)':
+    dependencies:
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      typebox: 1.4.3
 
   '@fontsource/jost@5.2.8': {}
 
@@ -6586,6 +6665,14 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
+  json-schema-resolver@3.0.0:
+    dependencies:
+      debug: 4.4.3
+      fast-uri: 3.1.8
+      rfdc: 1.4.1
+    transitivePeerDependencies:
+      - supports-color
+
   json-schema-traverse@0.4.1: {}
 
   json-schema-traverse@1.0.0: {}
@@ -6836,6 +6923,8 @@ snapshots:
       define-lazy-prop: 3.0.0
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
+
+  openapi-types@12.1.3: {}
 
   optionator@0.9.4:
     dependencies:
@@ -7430,6 +7519,8 @@ snapshots:
   type-fest@5.10.0:
     dependencies:
       tagged-tag: 1.0.0
+
+  typebox@1.4.3: {}
 
   typescript-eslint@8.72.1(eslint@10.14.0(jiti@2.7.0))(typescript@5.9.3):
     dependencies:
