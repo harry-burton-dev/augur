@@ -65,3 +65,5 @@ jobs:
     needs: promote
     if: needs.promote.outputs.promoted != ''
     uses: ./.github/workflows/feed.yml
+    # A called workflow gets no secrets unless passed: the feed reads the app repositories with APP_RELEASES_TOKEN.
+    secrets: inherit

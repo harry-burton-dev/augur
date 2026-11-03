@@ -76,3 +76,5 @@ jobs:
     needs: dev
     if: needs.dev.outputs.changed != '[]'
     uses: ./.github/workflows/feed.yml
+    # A called workflow gets no secrets unless passed: the feed reads the app repositories with APP_RELEASES_TOKEN.
+    secrets: inherit
