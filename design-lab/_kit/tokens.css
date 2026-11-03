@@ -150,7 +150,7 @@
   --motion-toast: 6000ms;
   --measure-rail: 240px;
   --measure-drawer: 320px;
-  /* Not a token yet: the MVP from Claude Design uses IBM Plex Mono for eyebrows and numerals.
+  /* Not a token yet: the MVP mockup uses IBM Plex Mono for eyebrows and numerals.
      Explorations use it as --font-mono; adopting it needs a token (and an ADR, it is a new dependency). */
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }

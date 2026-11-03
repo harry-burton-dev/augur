@@ -1,6 +1,6 @@
 ---
 name: history-as-material
-status: exploring
+status: explored
 ---
 
 # History as a material

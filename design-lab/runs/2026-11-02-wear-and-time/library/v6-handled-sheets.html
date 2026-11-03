@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Library · V6 Handled sheets</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ===== Proposed tokens shared by every library variant (all "needs token" in notes.md) ===== */
+:root{
+  --x-wear-min: 6%;            /* proposed --wear-min: an untouched object still shows a trace */
+  --x-wear-max: 62%;           /* proposed --wear-max: the most-used object, never as bright as "now" */
+  --x-hatch-gap: var(--space-2);                                   /* proposed --hatch-gap (cinematic gap, still open) */
+  --x-hatch-ink: color-mix(in srgb, var(--ink) 13%, transparent);  /* proposed --hatch-ink */
+  --x-seam: color-mix(in srgb, var(--light) 62%, transparent);     /* proposed --seam: a repair stays visible */
+  --x-now: var(--green);                                           /* proposed --now-line (Open MCT) */
+  --x-past-dim: .56;           /* proposed --past-dim: the oldest thing is this much quieter than now */
+  --x-tide: color-mix(in srgb, var(--ink-muted) 70%, transparent); /* proposed --tide-line: a missed date, quiet */
+  --x-travel: color-mix(in srgb, var(--info) 60%, transparent);    /* proposed --travel: distance to a known future */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input{font:inherit;color:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.lucide{flex:none}
+[hidden]{display:none!important}
+.kbd{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1)}
+.water{position:fixed;inset:0;pointer-events:none;background:radial-gradient(70% 45% at 55% 110%, color-mix(in srgb, var(--navy) 42%, transparent), transparent 70%)}
+.horizon{position:fixed;left:0;right:0;bottom:0;height:50%;pointer-events:none;background:radial-gradient(55% 70% at 58% 100%, color-mix(in srgb, var(--floor-department-low) 22%, transparent), transparent 75%)}
+
+/* ===== app frame: rail · main ===== */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.app.with-side{grid-template-columns:var(--measure-rail) minmax(0,1fr) var(--measure-drawer)}
+.rail{display:flex;flex-direction:column;gap:var(--space-1);padding:var(--edge-tight) var(--edge-tight) var(--space-5);background:color-mix(in srgb, var(--slate-deep) 70%, transparent);border-right:1px solid var(--hairline);min-width:0;overflow:hidden}
+.tile{display:flex;height:var(--space-7);border-radius:var(--radius-key);background:var(--surface-raised);overflow:hidden;box-shadow:inset 3px 0 0 var(--floor-department-high);margin-bottom:var(--space-4);flex:none}
+.tile-icon{width:var(--space-7);flex:none;display:grid;place-items:center;background:color-mix(in srgb, var(--ink) 78%, transparent);color:var(--slate-deep)}
+.tile-text{display:flex;flex-direction:column;justify-content:center;padding:0 var(--space-3);min-width:0}
+.tile-name{font-size:var(--type-meta);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.tile-owner{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav{display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);color:var(--ink-muted);font-size:var(--type-meta);white-space:nowrap;flex:none;text-align:left}
+.nav:hover{background:var(--surface-inset);color:var(--ink)}
+.nav.lit{background:var(--surface-raised);color:var(--light)} .nav.lit .lucide{color:var(--green)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail-section{margin:var(--space-4) var(--space-3) var(--space-1)}
+.rail-note{margin-top:auto;padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rail-note b{color:var(--ink);font-weight:400}
+
+.main{position:relative;min-width:0;display:flex;flex-direction:column;padding:var(--space-4) var(--space-5) 0;overflow:hidden}
+.mast{text-align:center;flex:none}
+.mast-owner{display:inline-flex;align-items:center;gap:var(--space-3)}
+.mast-owner::before,.mast-owner::after{content:"";width:var(--space-5);height:1px;background:var(--hairline-strong)}
+.mast-title{font-size:var(--type-title-s);line-height:var(--leading-title-s);font-weight:300;letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0}
+.toolbar{display:flex;gap:var(--space-2);align-items:center;margin:var(--space-3) 0 var(--space-3);flex:none}
+.search{flex:1;display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-4);background:var(--surface-raised);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted);min-width:0;font-size:var(--type-meta)}
+.chip{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);background:var(--surface-inset);border:1px solid var(--hairline);color:var(--ink-muted);font-size:var(--type-meta);white-space:nowrap}
+.chip:hover{color:var(--ink);background:var(--surface-raised)}
+.chip[aria-pressed="true"]{color:var(--light);border-color:var(--hairline-strong);background:var(--surface-raised)}
+
+/* ===== legend of marks (names match the grammar sheet) ===== */
+.legend{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-5);align-items:center;font:400 var(--type-small)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);flex:none;margin-bottom:var(--space-3)}
+.legend span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.lg{display:inline-block;width:var(--space-5);height:var(--space-3);border-radius:2px}
+.lg.wear{background:linear-gradient(90deg,color-mix(in srgb,var(--ink) var(--x-wear-min),transparent),color-mix(in srgb,var(--ink) var(--x-wear-max),transparent))}
+.lg.hatch{background:repeating-linear-gradient(135deg,var(--x-hatch-ink) 0 1px,transparent 1px var(--space-1));border:1px solid var(--hairline)}
+.lg.seam{height:1px;background:var(--x-seam);box-shadow:0 0 0 0 transparent}
+.lg.now{width:2px;background:var(--x-now);box-shadow:0 0 var(--space-2) var(--x-now)}
+.lg.unc{height:var(--space-2);background:repeating-linear-gradient(90deg,var(--hairline-strong) 0 3px,transparent 3px 6px);border-block:1px solid var(--hairline-strong)}
+.lg.tide{height:0;border-top:1px dashed var(--x-tide)}
+.lg.travel{height:0;border-top:1px dotted var(--x-travel)}
+.lg.ring{width:var(--space-3);border-radius:50%;border:1px solid var(--ink-muted);box-shadow:inset 0 0 0 2px var(--slate-deep),inset 0 0 0 3px var(--hairline-strong)}
+
+/* stale hatch: a state, always with words */
+.hatch{background-image:repeating-linear-gradient(135deg,var(--x-hatch-ink) 0 1px,transparent 1px var(--x-hatch-gap))}
+
+/* ===== "why are you like this, and since when?" (in place) ===== */
+.why{position:fixed;z-index:var(--layer-overlay);width:var(--measure-card);padding:var(--space-4);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));-webkit-backdrop-filter:blur(var(--surface-blur));border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);box-shadow:var(--shadow-overlay);opacity:0;transform:translateY(var(--space-1));pointer-events:none;transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-out)}
+.why.on{opacity:1;transform:none;pointer-events:auto}
+.why h4{margin:0 0 var(--space-3);font-weight:400;font-size:var(--type-meta);color:var(--light)}
+.why dl{display:grid;grid-template-columns:auto 1fr;gap:var(--space-1) var(--space-3);margin:0;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.why dt{font:400 var(--type-label)/var(--leading-meta) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.why dd{margin:0;color:var(--ink)}
+.why .act{margin-top:var(--space-3);display:flex;gap:var(--space-2)}
+.why .act button{height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);display:inline-flex;align-items:center;gap:var(--space-2)}
+.why .act button.unavail{color:var(--ink-muted);border-style:dashed;cursor:not-allowed}
+
+/* needs you: the cinematic beacon, one sweep, never a loop */
+.needs{color:var(--warning)}
+.beacon{position:absolute;inset:0;border-radius:inherit;border:1px solid var(--warning);pointer-events:none;animation:beacon var(--motion-ping) var(--ease-ping) 2 both}
+@keyframes beacon{from{transform:scale(1);opacity:.8}to{transform:scale(1.02,1.35);opacity:0}}
+
+.keys{position:fixed;right:var(--edge-tight);bottom:var(--edge-tight);z-index:var(--layer-chrome);display:flex;flex-direction:column;align-items:flex-end;gap:var(--space-1);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-soft);background:var(--scrim);padding:var(--space-2);border-radius:var(--radius-key)}
+.keys div{display:flex;gap:var(--space-2);align-items:center}
+.scroll{scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+@media (prefers-reduced-motion: reduce){.beacon{animation:none;opacity:.8}}
+
+/* ===== V6: each document a sheet that shows handling. Your fold, everyone's thumb, foxing for age ===== */
+:root{
+  --x-fold: var(--space-5);    /* proposed --fold-size: your dog-ear */
+}
+.grid{flex:1;overflow:auto;padding:var(--space-2) var(--space-1) var(--space-8);display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--space-8) * 1.3),1fr));gap:var(--space-5) var(--space-4);align-content:start}
+.item{position:relative;display:flex;flex-direction:column;gap:var(--space-2);min-width:0}
+.sheet{--w:0;position:relative;aspect-ratio:3/3.6;border-radius:var(--radius-key);overflow:hidden;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--ink) 11%,var(--slate)),color-mix(in srgb,var(--ink) 6%,var(--slate)));
+  box-shadow:var(--shadow-raised);clip-path:polygon(0 0,100% 0,100% 100%,0 100%);transition:clip-path var(--motion-calm) var(--ease-standard),transform var(--motion-base) var(--ease-out)}
+.item:hover .sheet,.item:focus-within .sheet{transform:translateY(calc(var(--space-1) * -1))}
+/* your dog-ear: the corner you folded when you read this version */
+.sheet.folded{clip-path:polygon(0 0,calc(100% - var(--x-fold)) 0,100% var(--x-fold),100% 100%,0 100%)}
+.fold{position:absolute;right:0;top:0;width:var(--x-fold);height:var(--x-fold);background:linear-gradient(225deg,transparent 50%,color-mix(in srgb,var(--ink) 30%,var(--slate)) 50%);opacity:0;transition:opacity var(--motion-calm);z-index:2;pointer-events:auto;border-radius:0 0 0 2px}
+.folded + .fold,.item .fold.on{opacity:1}
+.crease{position:absolute;right:0;top:0;width:var(--x-fold);height:var(--x-fold);background:linear-gradient(to top right,transparent calc(50% - 1px),var(--x-seam) 50%,transparent calc(50% + 1px));opacity:0;z-index:2;pointer-events:none;transition:opacity var(--motion-calm)}
+.item.unfolded .crease{opacity:.8}
+.newer{position:absolute;right:calc(var(--x-fold) + var(--space-1));top:var(--space-2);z-index:3;font:400 var(--type-label)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-now);opacity:0;transition:opacity var(--motion-calm)}
+.item.unfolded .newer{opacity:1}
+/* faux text, foxing and thumb wear drawn in one SVG per sheet */
+.sheet svg{position:absolute;inset:0;width:100%;height:100%}
+.sheet .ln{fill:color-mix(in srgb,var(--slate-deep) 55%,transparent)}
+.sheet .fox{fill:color-mix(in srgb,var(--ink-muted) 60%,var(--slate-deep))}
+.sheet .thumb{position:absolute;right:0;bottom:0;width:65%;height:45%;background:radial-gradient(70% 70% at 100% 100%,color-mix(in srgb,var(--light) calc(var(--w) * 30%),transparent),transparent 70%);pointer-events:auto}
+.sheet .seam{fill:none;stroke:var(--light);stroke-width:1.5;filter:drop-shadow(0 0 1px var(--light))}
+.sheet.stale::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--slate-deep) 45%,transparent) 0 1px,transparent 1px var(--x-hatch-gap));pointer-events:none}
+.tag{position:absolute;left:var(--space-2);bottom:var(--space-2);z-index:3;display:inline-flex;align-items:center;gap:var(--space-1);padding:2px var(--space-2);border-radius:var(--radius-key);background:var(--slate-deep);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink);max-width:calc(100% - var(--space-4));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag.yours{color:var(--warning)}
+.open{position:absolute;inset:0;z-index:1;border-radius:var(--radius-key)}
+.cap .name{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cap .own{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item.needs-you .sheet{box-shadow:var(--shadow-raised),0 0 0 1px var(--warning)}
+.item .beacon{border-radius:var(--radius-key);bottom:auto;aspect-ratio:3/3.6;height:auto}
+.legend .lg.fold{width:var(--space-3);background:linear-gradient(225deg,transparent 50%,var(--ink-muted) 50%)}
+.legend .lg.fox{width:var(--space-5);background:radial-gradient(circle at 20% 40%,color-mix(in srgb,var(--ink-muted) 35%,var(--slate-deep)) 1.5px,transparent 2px),radial-gradient(circle at 60% 70%,color-mix(in srgb,var(--ink-muted) 35%,var(--slate-deep)) 1px,transparent 1.5px),radial-gradient(circle at 85% 30%,color-mix(in srgb,var(--ink-muted) 35%,var(--slate-deep)) 1.5px,transparent 2px),var(--surface-raised)}
+.legend .lg.thumb{width:var(--space-5);background:radial-gradient(80% 120% at 100% 100%,color-mix(in srgb,var(--light) 30%,transparent),transparent 70%),var(--surface-raised)}
+</style></head>
+<body>
+<div class="water"></div><div class="horizon"></div>
+<div class="app">
+  <nav class="rail" aria-label="Artifacts"></nav>
+  <main class="main">
+    <header class="mast"></header>
+    <div class="toolbar">
+      <div class="search"><i data-lucide="search"></i><span>Find a document in this collection</span></div>
+      <button class="chip" aria-pressed="true"><i data-lucide="layout-grid"></i>Sheets</button>
+      <span class="chip" id="since" style="cursor:default"></span>
+    </div>
+    <div class="legend">
+      <span><i class="lg fold"></i>Your fold · you read this version</span>
+      <span><i class="lg seam"></i>Crease · changed since you read</span>
+      <span><i class="lg thumb"></i>Thumb wear · readers last month</span>
+      <span><i class="lg fox"></i>Foxing · years untouched</span>
+      <span><i class="lg hatch"></i>Stale hatch</span>
+    </div>
+    <div class="grid scroll" id="grid" role="list"></div>
+  </main>
+</div>
+<div class="keys"><div>point at a fold, thumb or tag <span class="kbd">?</span> why</div><div><span class="kbd">R</span> replay</div></div>
+<div class="x-cap"><b>Library · V6</b> handled sheets: your fold, everyone's thumb, foxing for age · dog-ears and foxing, conservators' visible repair, Hill and Hollan read wear</div>
+<script>
+/* ===== Sample data: every name, label, count and date on this page comes from here ===== */
+const DATA = {
+  now: '2026-11-02',
+  viewer: { name: 'Harry Burton', lastVisit: '2026-10-19' },
+  app: { name: 'Artifacts', owner: 'Harry Burton' },
+  library: { name: 'Policies', owner: 'Security & Risk', floor: 'department', audience: 42,
+             collection: 'Access and identity', gap: { from:'2023-06-01', to:'2023-09-30', why:'The library was read-only while it moved to AUGUR. No changes or reads were recorded.' },
+             collections: [['Access and identity', 14], ['Incident and continuity', 9], ['Suppliers', 11], ['Archive', 212]] },
+  privacy: { minReaders: 5, rule: 'Counts only, never names. Below 5 readers the count is withheld.' },
+  months: ['Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'],
+  /* v: [date, author, words changed, kind?]  kind: fix = a correction (seam), back = a rollback (scar)
+     reads: distinct readers per month, oldest first (Dec 2025 .. Nov 2026)
+     review: when it must be looked at again and who can do it
+     gap: a stretch with no record (an unconformity), and why */
+  docs: [
+    { id:'acs', title:'Access control standard', owner:'Ana Sousa', created:'2023-02-10',
+      v:[['2023-02-10','Ana Sousa',2400],['2023-09-04','Ana Sousa',300],['2024-03-11','Tom Reyes',820],['2024-11-20','Ana Sousa',140],['2025-06-02','Ana Sousa',510],['2026-04-14','Sam Okafor',260],['2026-10-31','Ana Sousa',380]],
+      reads:[22,30,28,31,26,24,27,25,29,33,38,12], review:{ next:'2027-03-01', by:'Ana Sousa' }, you:'2026-09-02' },
+    { id:'pwd', title:'Password and passkey policy', owner:'Tom Reyes', created:'2022-05-18',
+      v:[['2022-05-18','Tom Reyes',1600],['2023-01-09','Tom Reyes',200],['2024-02-26','Tom Reyes',420],['2025-08-12','Lena Park',900],['2026-10-12','Tom Reyes',40,'fix']],
+      reads:[18,20,19,24,40,52,61,44,30,26,29,9], review:{ next:'2027-05-01', by:'Tom Reyes' }, you:'2026-10-14',
+      fix:{ v:5, what:'Rotation period corrected from 30 to 90 days', by:'Tom Reyes', on:'2026-10-12' } },
+    { id:'jml', title:'Joiner, mover, leaver checklist', owner:'Harry Burton', created:'2024-01-15',
+      v:[['2024-01-15','Harry Burton',700],['2024-07-01','Harry Burton',120],['2025-04-22','Ana Sousa',90]],
+      reads:[14,15,13,16,15,17,19,22,24,27,31,11], review:{ next:'2026-10-01', by:'Harry Burton' }, you:'2025-04-22', needsYou:true,
+      needsWhy:'Review overdue, and it is yours. Readers are rising: 31 last month.' },
+    { id:'irp', title:'Incident response plan', owner:'Tom Reyes', created:'2021-11-03',
+      v:[['2021-11-03','Tom Reyes',3100],['2022-06-14','Tom Reyes',600],['2023-05-30','Sam Okafor',450],['2025-02-10','Tom Reyes',210]],
+      reads:[9,8,11,10,7,9,12,8,10,9,13,4], review:{ next:'2026-08-15', by:'Tom Reyes' }, you:'2025-03-01' },
+    { id:'pap', title:'Privileged access procedure', owner:'Sam Okafor', created:'2019-04-01',
+      v:[['2019-04-01','Imported',0],['2024-01-22','Sam Okafor',640],['2024-09-09','Sam Okafor',180],['2026-02-03','Sam Okafor',220]],
+      gap:{ from:'2019-04-01', to:'2024-01-22', why:'Moved from the old intranet in Jan 2024 without its versions.' },
+      reads:[6,7,5,6,8,6,5,7,6,6,7,2], review:{ next:'2027-02-03', by:'Sam Okafor' }, you:'2026-02-10' },
+    { id:'rwg', title:'Remote working security guide', owner:'Lena Park', created:'2023-08-21',
+      v:[['2023-08-21','Lena Park',1900],['2024-05-13','Lena Park',300],['2025-10-06','Lena Park',260]],
+      reads:[11,9,10,12,9,13,15,10,9,8,10,3], review:{ next:'2026-12-06', by:'Lena Park' }, you:'2025-10-08' },
+    { id:'dcs', title:'Data classification scheme', owner:'Ana Sousa', created:'2020-02-12',
+      v:[['2020-02-12','Ana Sousa',2800],['2020-09-01','Ana Sousa',1500],['2021-06-07','Ana Sousa',900],['2022-08-15','Tom Reyes',260],['2024-04-02','Ana Sousa',90]],
+      reads:[34,36,31,38,35,33,37,36,35,39,41,15], review:{ next:'2027-04-02', by:'Ana Sousa' }, you:'2026-06-30' },
+    { id:'ekm', title:'Encryption key management', owner:'Sam Okafor', created:'2022-10-10',
+      v:[['2022-10-10','Sam Okafor',2000],['2023-07-17','Sam Okafor',400],['2024-08-05','Lena Park',700],['2024-08-07','Sam Okafor',700,'back'],['2025-12-01','Sam Okafor',330]],
+      back:{ v:4, what:'Rolled back v3 two days after: it named a retired key vault', by:'Sam Okafor', on:'2024-08-07' },
+      reads:[8,10,9,8,7,9,8,6,7,9,8,3], review:{ next:'2026-12-01', by:'Sam Okafor' }, you:'2025-12-03' },
+    { id:'tpa', title:'Third-party access request form', owner:'Lena Park', created:'2024-06-03',
+      v:[['2024-06-03','Lena Park',380]],
+      reads:[29,33,30,35,31,36,34,30,38,40,44,17], review:{ next:'2027-06-03', by:'Lena Park' }, you:'2026-10-21' },
+    { id:'sad', title:'Security awareness 2025 deck', owner:'Lena Park', created:'2025-01-20', status:'superseded',
+      v:[['2025-01-20','Lena Park',1100],['2025-03-03','Lena Park',140]],
+      reads:[2,1,1,0,1,0,0,1,0,0,1,0], review:{ next:'2026-01-20', by:'Lena Park' }, archive:'2026-12-13', you:'2025-03-04' },
+    { id:'lms', title:'Logging and monitoring standard', owner:'Sam Okafor', created:'2026-10-24', status:'draft',
+      v:[['2026-10-24','Sam Okafor',1400],['2026-10-30','Sam Okafor',300]],
+      reads:[0,0,0,0,0,0,0,0,0,0,3,1], review:{ next:'2026-11-20', by:'Sam Okafor', what:'First approval' }, you:null },
+    { id:'mdp', title:'Mobile device policy', owner:'Former owner', created:'2021-03-15', ownerLeft:true,
+      v:[['2021-03-15','R. Haines',1200],['2022-04-11','R. Haines',300],['2023-03-27','R. Haines',90]],
+      reads:[4,3,5,3,4,4,6,5,4,3,4,1], review:{ next:'2026-04-06', by:'Security & Risk admins' }, you:'2023-04-01' },
+    { id:'vds', title:'Vulnerability disclosure statement', owner:'Ana Sousa', created:'2023-11-06', published:'org',
+      v:[['2023-11-06','Ana Sousa',600],['2025-05-19','Ana Sousa',80]],
+      reads:[120,140,133,151,128,160,170,149,138,150,162,58], review:{ next:'2026-11-19', by:'Ana Sousa' }, you:'2025-05-20' },
+    { id:'bga', title:'Break-glass account procedure', owner:'Tom Reyes', created:'2022-12-05',
+      v:[['2022-12-05','Tom Reyes',900],['2023-12-04','Tom Reyes',60],['2024-12-02','Tom Reyes',40],['2025-11-24','Tom Reyes',50]],
+      reads:[1,0,2,1,0,1,0,3,1,0,2,0], review:{ next:'2026-11-24', by:'Tom Reyes' }, you:'2025-11-25' }
+  ]
+};
+
+/* ===== shared helpers (time, wear, staleness, the "why" card, demo + replay) ===== */
+const NOW = new Date(DATA.now + 'T12:00:00');
+const DAY = 864e5;
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = getComputedStyle(document.documentElement);
+const T = n => parseFloat(css.getPropertyValue('--motion-' + n)) || 0;   /* durations only from motion tokens */
+const px = n => parseFloat(css.getPropertyValue(n)) || 0;
+const dt = s => new Date(s + 'T12:00:00');
+const daysSince = s => Math.round((NOW - dt(s)) / DAY);
+const daysUntil = s => Math.round((dt(s) - NOW) / DAY);
+function span(n){ n = Math.abs(n);
+  if (n < 1) return 'today'; if (n < 14) return n + (n === 1 ? ' day' : ' days');
+  if (n < 63) return Math.round(n / 7) + ' weeks'; if (n < 730) return Math.round(n / 30.4) + ' months';
+  return (n / 365).toFixed(n < 1460 ? 1 : 0).replace('.0', '') + ' years'; }
+const fmt = s => dt(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const lastV = d => d.v[d.v.length - 1];
+const lastEdit = d => lastV(d)[0];
+const pastDays = d => d.review ? -daysUntil(d.review.next) : -1;    /* > 0 = stale for this many days */
+const isStale = d => pastDays(d) > 0;
+const LASTM = DATA.months[DATA.months.length - 2];
+const recentReads = d => d.reads[d.reads.length - 2];  /* readers in the last full month */
+const MAXR = Math.max(...DATA.docs.map(recentReads));
+/* wear is relative and compressed (sqrt) so one very popular doc does not flatten the rest */
+const wear = d => Math.sqrt(recentReads(d) / MAXR);
+const readerText = n => n < DATA.privacy.minReaders ? (n === 0 ? 'no readers' : 'fewer than ' + DATA.privacy.minReaders + ' readers') : n + ' readers';
+const changedSinceYou = d => d.you && dt(lastEdit(d)) > dt(d.you);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const byId = id => DATA.docs.find(d => d.id === id);
+
+/* ---- shell: rail and masthead from DATA ---- */
+function mountShell(){
+  const L = DATA.library;
+  document.querySelector('.rail').innerHTML = `
+    <div class="tile"><div class="tile-icon"><i data-lucide="library-big"></i></div>
+      <div class="tile-text"><div class="tile-name">${esc(DATA.app.name)}</div><div class="tile-owner">${esc(L.owner)}</div></div></div>
+    <button class="nav"><i data-lucide="folder"></i>Your collections</button>
+    <button class="nav lit"><i data-lucide="library"></i>${esc(L.name)}<span class="n">${L.collections.reduce((a,c)=>a+c[1],0)}</span></button>
+    <div class="rail-section eyebrow">Collections</div>
+    ${L.collections.map((c,i)=>`<button class="nav${i===0?' lit':''}"><i data-lucide="${i===L.collections.length-1?'archive':'folder-open'}"></i>${esc(c[0])}<span class="n">${c[1]}</span></button>`).join('')}
+    <div class="rail-note" id="railNote"></div>`;
+  const m = document.querySelector('.mast');
+  if (m) m.innerHTML = `<div class="mast-owner eyebrow">${esc(L.owner)} · ${esc(L.name)}</div><h1 class="mast-title">${esc(L.collection)}</h1>`;
+  const n = document.getElementById('railNote');
+  if (n) n.innerHTML = `<b>Read wear</b> ${esc(DATA.privacy.rule)} <span class="mono">Audience ${L.audience}</span>`;
+}
+
+/* ---- "why are you like this, and since when?" ---- */
+const Why = (() => {
+  let el, cur = null;
+  function ensure(){ if (!el){ el = document.createElement('div'); el.className = 'why'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-live', 'polite'); document.body.appendChild(el); } }
+  function show(anchor, info){
+    ensure(); cur = anchor;
+    el.innerHTML = `<h4>${info.title}</h4><dl>${info.rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('')}</dl>` +
+      (info.actions ? `<div class="act">${info.actions.map(a => `<button ${a.unavail ? `class="unavail" aria-disabled="true" title="${esc(a.unavail)}"` : ''}>${Icons.svg(a.icon, { size: 16 })}${esc(a.label)}</button>`).join('')}</div>` : '');
+    const r = anchor.getBoundingClientRect(), w = px('--measure-card'), g = px('--space-3');
+    let x = r.right + g, y = r.top - g;
+    if (x + w > innerWidth - g) x = Math.max(g, r.left - w - g);
+    if (x < g) x = Math.min(innerWidth - w - g, Math.max(g, r.left));
+    el.style.left = x + 'px'; el.style.top = '0px'; el.classList.add('on');
+    const h = el.offsetHeight; y = Math.min(Math.max(g, y), innerHeight - h - px('--space-7'));
+    el.style.top = y + 'px';
+  }
+  function hide(){ if (el) el.classList.remove('on'); cur = null; }
+  return { show, hide, get anchor(){ return cur; } };
+})();
+
+/* standard explanations for each mark, used by every variant */
+function explain(d, mark, extra){
+  const who = d.review ? d.review.by : d.owner;
+  const refresh = d.ownerLeft ? [{ label: 'Ask ' + who, icon: 'message-square' }] : (who === DATA.viewer.name ? [{ label: 'Review now', icon: 'check' }] : [{ label: 'Review now', icon: 'lock', unavail: 'Only ' + who + ' can review this' }, { label: 'Ask ' + who, icon: 'message-square' }]);
+  const base = { title: esc(d.title), rows: [] };
+  switch (mark){
+    case 'wear': base.rows = [['Wear', readerText(recentReads(d)) + ' in ' + LASTM], ['Since', 'Read wear counts from ' + DATA.months[0] + ' (12 months kept)'], ['Peak', readerText(Math.max(...d.reads)) + ' in ' + DATA.months[d.reads.indexOf(Math.max(...d.reads))]], ['Why', 'Brighter edge = handled more. Counts only, never names.']]; break;
+    case 'age': base.rows = [['Age', span(daysSince(d.created)) + ' (' + fmt(d.created) + ')'], ['Last change', span(daysSince(lastEdit(d))) + ' ago by ' + esc(lastV(d)[1])], ['Versions', d.v.length], ['Why', 'Older and untouched reads quieter. Nothing is wrong with quiet.']]; break;
+    case 'stale': base.rows = [['Stale', span(pastDays(d)) + ', review was due ' + fmt(d.review.next)], ['Last change', span(daysSince(lastEdit(d))) + ' ago'], ['Who', esc(who) + (d.ownerLeft ? ' (the owner has left)' : '')], ['Still read', readerText(recentReads(d)) + ' in ' + LASTM]]; base.actions = refresh; break;
+    case 'due': { const n = daysUntil(d.review.next); base.rows = [[d.review.what || 'Review', n >= 0 ? 'in ' + span(n) + ', ' + fmt(d.review.next) : span(-n) + ' overdue'], ['Who', esc(who)], ['Why', 'Future dates are distance to travel: they do not light up until they are yours and close.']]; break; }
+    case 'seam': { const f = d.fix || d.back; base.rows = [[d.fix ? 'Correction' : 'Rollback', esc(f.what)], ['When', fmt(f.on) + ', v' + f.v], ['By', esc(f.by)], ['Why', 'A repair stays visible as a seam (reversible and visible).']]; base.actions = [{ label: 'Compare', icon: 'git-compare-arrows' }]; break; }
+    case 'gap': base.rows = [['No record', fmt(d.gap.from) + ' to ' + fmt(d.gap.to)], ['Why', esc(d.gap.why)], ['Means', 'Not "nothing happened": we do not know.']]; break;
+    case 'you': base.rows = d.you ? [['You read', fmt(d.you) + (changedSinceYou(d) ? '' : ', the current version')], ['Since then', changedSinceYou(d) ? (d.v.filter(v => dt(v[0]) > dt(d.you)).length + ' change(s), latest ' + span(daysSince(lastEdit(d))) + ' ago') : 'No changes']] : [['You', 'Have not opened this yet']]; break;
+    case 'needs': base.title = '<span class="needs">Needs you</span> · ' + esc(d.title); base.rows = [['Why', esc(d.needsWhy)], ['Since', 'Review due ' + fmt(d.review.next) + ', ' + span(pastDays(d)) + ' ago'], ['Who', 'You (' + esc(DATA.viewer.name) + ')']]; base.actions = refresh; break;
+    case 'archive': base.rows = [['Superseded', 'Archives itself in ' + span(daysUntil(d.archive)) + ', ' + fmt(d.archive)], ['Who can stop it', esc(d.owner)], ['Still read', readerText(recentReads(d)) + ' in ' + LASTM]]; break;
+  }
+  if (extra) base.rows.push(...extra);
+  return base;
+}
+function bindWhy(root, resolve){
+  const open = e => { const t = e.target.closest('[data-why]'); if (!t || !root.contains(t)) return; const [id, mark, x] = t.dataset.why.split(':'); Why.show(t, resolve ? resolve(byId(id), mark, x, t) : explain(byId(id), mark)); };
+  root.addEventListener('mouseover', open); root.addEventListener('focusin', open);
+  root.addEventListener('mouseleave', () => Why.hide()); root.addEventListener('focusout', () => Why.hide());
+  addEventListener('keydown', e => { if (e.key === 'Escape') Why.hide(); });
+}
+
+/* ---- demo: show the moment after ~1.2 s, R replays ---- */
+const Demo = (() => { let timers = [];
+  function play(reset, steps){ timers.forEach(clearTimeout); timers = []; Why.hide(); reset();
+    let t = 0; steps.forEach(([wait, fn]) => { t += wait; timers.push(setTimeout(fn, t)); }); }
+  function wire(reset, steps){ const go = () => play(reset, steps);
+    addEventListener('keydown', e => { if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey && document.activeElement.tagName !== 'INPUT') go(); });
+    go(); }
+  return { wire };
+})();
+
+mountShell();
+document.getElementById('since').innerHTML = `${Icons.svg('history', { size: 16 })}Since you were here · ${fmt(DATA.viewer.lastVisit)}`;
+const grid = document.getElementById('grid');
+const hash = s => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+function sheetSvg(d){
+  let seed = hash(d.id); const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let s = `<svg viewBox="0 0 100 120" preserveAspectRatio="none" aria-hidden="true">`;
+  /* faux text: a heading and paragraphs */
+  s += `<rect class="ln" x="10" y="12" width="${40 + r() * 30}" height="4" rx="1"/>`;
+  let y = 24; while (y < 108){ const n = 2 + Math.floor(r() * 4); for (let k = 0; k < n && y < 108; k++, y += 5) s += `<rect class="ln" x="10" y="${y}" width="${k === n - 1 ? 25 + r() * 40 : 76 + r() * 4}" height="2" rx="1" opacity=".7"/>`; y += 5; }
+  /* foxing: specks grow with years since the last change */
+  const yrs = daysSince(lastEdit(d)) / 365, n = Math.floor(yrs * yrs * 7);
+  for (let k = 0; k < n; k++) s += `<circle class="fox" cx="${(r() * 96 + 2).toFixed(1)}" cy="${(r() * 116 + 2).toFixed(1)}" r="${(.5 + r() * 1.4).toFixed(2)}" opacity="${(.25 + r() * .45).toFixed(2)}"/>`;
+  /* a correction or rollback stays as a mended seam across the sheet */
+  if (d.fix || d.back){ const y1 = 30 + r() * 50; s += `<path class="seam" d="M0 ${y1.toFixed(1)}L22 ${(y1 + 5).toFixed(1)}L40 ${(y1 - 2).toFixed(1)}L63 ${(y1 + 7).toFixed(1)}L100 ${(y1 + 3).toFixed(1)}" vector-effect="non-scaling-stroke" ${d.back ? 'stroke-dasharray="3 2"' : ''}/>`; }
+  return s + `</svg>`;
+}
+const youRead = d => d.you && !changedSinceYou(d);
+const changedWhileAway = d => (changedSinceYou(d) || !d.you) && dt(lastEdit(d)) > dt(DATA.viewer.lastVisit);
+function tag(d){
+  if (d.needsYou) return `<span class="tag yours" data-why="${d.id}:needs">${Icons.svg('hand', { size: 12 })}overdue · yours</span>`;
+  if (isStale(d)) return `<span class="tag" data-why="${d.id}:stale">${Icons.svg('hourglass', { size: 12 })}stale ${span(pastDays(d))}</span>`;
+  if (d.status) return `<span class="tag" data-why="${d.id}:${d.archive ? 'archive' : 'due'}">${d.status}</span>`;
+  return '';
+}
+function render(away){
+  grid.innerHTML = [...DATA.docs].sort((a, b) => dt(lastEdit(b)) - dt(lastEdit(a))).map(d => {
+    const folded = youRead(d) || (changedSinceYou(d) && !away);   /* before the demo: as you left them */
+    return `<div class="item${d.needsYou ? ' needs-you' : ''}" role="listitem" id="s-${d.id}">
+      <div class="sheet${folded ? ' folded' : ''}${isStale(d) ? ' stale' : ''}" style="--w:${wear(d).toFixed(3)}">${sheetSvg(d)}<span class="thumb" data-why="${d.id}:wear"></span>
+        ${(d.fix || d.back) ? `<span style="position:absolute;left:0;right:0;top:30%;height:45%;z-index:2" data-why="${d.id}:seam"></span>` : ''}</div>
+      <span class="fold${folded ? ' on' : ''}" data-why="${d.id}:you"></span>${d.you ? '<i class="crease"></i>' : ''}<span class="newer">${d.you ? 'changed' : 'new'}</span>
+      ${tag(d)}
+      <button class="open" aria-label="Open ${esc(d.title)}"></button>
+      <div class="cap"><div class="name">${esc(d.title)}</div><div class="own">${esc(d.owner)} · ${span(daysSince(lastEdit(d)))} ago</div></div>
+      ${d.needsYou ? '<i class="beacon"></i>' : ''}
+    </div>`; }).join('');
+  /* tags and fold sit over the sheet, positioned from the sheet box */
+  grid.querySelectorAll('.item').forEach(it => { const sh = it.querySelector('.sheet'), h = sh.offsetHeight;
+    it.querySelectorAll('.tag').forEach(t => t.style.bottom = (it.offsetHeight - h + px('--space-2')) + 'px');
+    it.querySelector('.beacon') && (it.querySelector('.beacon').style.height = h + 'px'); });
+}
+render(false);
+bindWhy(grid);
+addEventListener('keydown', e => { if (e.key === '?'){ const it = document.activeElement.closest('.item'); if (it){ const m = it.querySelector('.tag') || it.querySelector('.fold'); const [id, mark] = m.dataset.why.split(':'); Why.show(m, explain(byId(id), mark)); } } });
+/* demo: you come back. Everything changed while you were away unfolds, leaving a crease; the rest keeps your fold */
+Demo.wire(() => render(false), [
+  [T('run'), () => DATA.docs.filter(changedWhileAway).forEach(d => { const it = document.getElementById('s-' + d.id); it.classList.add('unfolded'); it.querySelector('.sheet').classList.remove('folded'); it.querySelector('.fold').classList.remove('on'); })],
+  [T('calm') * 2, () => { const f = document.querySelector('#s-pwd .fold'); Why.show(f, explain(byId('pwd'), 'you', [['Seam', esc(byId('pwd').fix.what)]])); }],
+  [T('hold'), () => Why.hide()]
+]);
+</script>
+</body></html>

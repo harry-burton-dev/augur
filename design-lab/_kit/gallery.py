@@ -6,11 +6,12 @@
 import sys,os,re,subprocess,glob,html,json
 import markdown
 from PIL import Image
-src,out=sys.argv[1],sys.argv[2]
+src,out=os.path.abspath(sys.argv[1]),os.path.abspath(sys.argv[2])
 K=os.path.dirname(os.path.abspath(__file__))
 subprocess.run(['python3',os.path.join(K,'build.py'),src,out],check=True)
-SH=os.path.join(os.path.dirname(src),'shots'); os.makedirs(SH,exist_ok=True)
-ORDER=['grammar','home','floors','alerts','radial','telemetry','focus']
+SH=out.rstrip('/')+'-shots'; os.makedirs(SH,exist_ok=True)
+CFG=json.load(open(os.path.join(src,'gallery.json'))) if os.path.exists(os.path.join(src,'gallery.json')) else {}
+ORDER=CFG.get('order',['grammar','home','floors','alerts','radial','telemetry','focus'])
 surfaces=[d for d in ORDER if os.path.isdir(os.path.join(src,d))]+sorted(d for d in os.listdir(src) if os.path.isdir(os.path.join(src,d)) and d not in ORDER and not d.startswith(('_','.')))
 files=[f for s in surfaces for f in sorted(glob.glob(os.path.join(src,s,'v*.html')))]
 if '--noshots' not in sys.argv:
@@ -54,7 +55,7 @@ def md(p):
     if re.match(r'\s*([-*]|\d+\.) ',l) and o and o[-1].strip() and not re.match(r'\s*([-*]|\d+\.) ',o[-1]) and not o[-1].startswith(('  ','|')): o.append('')
     o.append(l)
   return markdown.markdown('\n'.join(o),extensions=['tables','fenced_code','sane_lists'])
-NAMES={'grammar':'Grammar · camera moves and light','combined':'Round 2 · combined screens','home':'Home · what needs you','floors':'Floor picker and travel','alerts':'Alerts and escalation','radial':'Right-click radial menu','telemetry':'Telemetry ribbons','focus':'Depth and focus system'}
+NAMES=CFG.get('names') or {'grammar':'Grammar · camera moves and light','combined':'Round 2 · combined screens','home':'Home · what needs you','floors':'Floor picker and travel','alerts':'Alerts and escalation','radial':'Right-click radial menu','telemetry':'Telemetry ribbons','focus':'Depth and focus system'}
 sections=[]
 for s in surfaces:
   os.makedirs(os.path.join(out,s,'thumbs'),exist_ok=True)
@@ -69,12 +70,12 @@ for s in surfaces:
     no=n.split('-')[0].upper()
     cards.append(f'<a class="frame" href="{s}/{n}.html"><div class="img"><img loading="lazy" src="{s}/thumbs/{n}.webp" alt=""><span class="no">{no}</span></div><div class="t">{html.escape(tt)}</div><div class="c">{html.escape(capt)}</div></a>')
   nb=md(os.path.join(src,s,'notes.md'))
-  if nb: open(os.path.join(out,s,'notes.html'),'w').write(page(NAMES.get(s,s)+' · critique',f'<div class="eyebrow"><a href="../index.html">Explorations</a> / {html.escape(NAMES.get(s,s))}</div><div class="md">{nb}</div>'))
+  if nb: open(os.path.join(out,s,'notes.html'),'w').write(page(NAMES.get(s,s)+' · critique',f'<div class="eyebrow"><a href="../index.html">Gallery</a> / {html.escape(NAMES.get(s,s))}</div><div class="md">{nb}</div>'))
   sections.append(f'<section id="{s}"><h2>{html.escape(NAMES.get(s,s))}</h2><div class="rule"></div><p><a href="{s}/notes.html">Read the critique →</a></p><div class="sheet">{"".join(cards)}</div></section>')
 intro=md(os.path.join(src,'README.md')); short=md(os.path.join(src,'SHORTLIST.md'))
 nav='<nav class="nav">'+''.join(f'<a href="#{s}">{html.escape(NAMES.get(s,s))}</a>' for s in surfaces)+('<a href="#shortlist">Shortlist</a>' if short else '')+'</nav>'
-body=f'<div class="eyebrow">AUGUR · design explorations · {len(files)} prototypes</div><h1>Cinematic UI</h1><div class="md lede">{intro}</div>{nav}'
+body=f'<div class="eyebrow">AUGUR · design lab · {len(files)} prototypes</div><h1>{html.escape(CFG.get('title','Cinematic UI'))}</h1><div class="md lede">{intro}</div>{nav}'
 if short: body+=f'<section id="shortlist"><h2>Ranked shortlist</h2><div class="rule"></div><div class="md">{short}</div></section>'
 body+=''.join(sections)
-open(os.path.join(out,'index.html'),'w').write(page('Cinematic UI explorations',body))
+open(os.path.join(out,'index.html'),'w').write(page(CFG.get('title','Cinematic UI')+' explorations',body))
 print('gallery',len(files))
