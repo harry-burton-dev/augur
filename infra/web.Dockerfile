@@ -1,6 +1,8 @@
 # The web front door: the shell and the apps' frontends (the platform's own, and the apps that ship
 # with AUGUR) as static files, with /api sent to the gateway and /sso to Keycloak, so everything is one origin.
 #   docker build -f infra/web.Dockerfile .
+# The shipped apps' frontends come from their releases (ADR 0049): infra/release-images.sh puts each in
+# .shipped/frontends/<id> first. Without that folder the image has the platform's own frontends only.
 # The first five lines are the same in infra/service.Dockerfile, so the services' images reuse this
 # install (see there). Keep them identical.
 FROM node:22-alpine AS build
@@ -10,15 +12,13 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 # A path: the shell signs in against Keycloak on whatever address it is served from.
 ENV VITE_OIDC_AUTHORITY=/sso/realms/platform
-RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/admin..." --filter "@augur/upgrades..." --filter "@apps/folio-frontend..." --filter "@apps/auspex-frontend..." --filter "@apps/atlas-frontend..." build \
+RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/admin..." --filter "@augur/upgrades..." build \
  && mkdir -p /site/apps \
  && cp -r platform/frontends/shell/dist/. /site/ \
  && cp -r platform/frontends/home/dist /site/apps/home \
  && cp -r platform/frontends/admin/dist /site/apps/admin \
  && cp -r platform/frontends/upgrades/dist /site/apps/upgrades \
- && cp -r apps/folio/frontend/dist /site/apps/folio \
- && cp -r apps/auspex/frontend/dist /site/apps/auspex \
- && cp -r apps/atlas/frontend/dist /site/apps/atlas \
+ && if [ -d .shipped/frontends ]; then cp -r .shipped/frontends/. /site/apps/; fi \
  && node infra/deploy/csp.mjs /site/index.html infra/deploy/nginx.conf > /default.conf.template
 
 # nginx as an unprivileged user, listening on 8080 rather than 80.

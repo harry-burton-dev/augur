@@ -1,5 +1,5 @@
 name: AUGUR dev builds
-# Every merge into main that changes AUGUR (the platform, the apps that ship with it, or how it is
+# Every merge into main that changes AUGUR (the platform, the pins of the apps that ship with it, or how it is
 # deployed) gets a dev build: every image, built, pushed and signed as the Release workflow does,
 # with the version <next patch>-dev.<run>, released as the pre-release augur@<that version>. What it
 # changes and its notes come from the changesets waiting. Only the workbench (SERVER_RING=dev) takes
@@ -10,9 +10,6 @@ on:
     branches: [main]
     paths:
       - 'platform/**'
-      - 'apps/folio/**'
-      - 'apps/auspex/**'
-      - 'apps/atlas/**'
       - 'infra/**'
       - 'release/**'
       # Nothing that goes into an image: notes, the contract tests and the Storybook.
@@ -58,6 +55,10 @@ jobs:
       - uses: sigstore/cosign-installer@v3
       - name: Build, push and sign the images
         run: infra/release-images.sh "${{ steps.build.outputs.version }}" dev > "$RUNNER_TEMP/images.json"
+        env:
+          # The shipped apps' releases, source and images, in their own repositories (ADR 0049).
+          APP_RELEASES_TOKEN: ${{ secrets.APP_RELEASES_TOKEN }}
+          PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       - name: Release the dev build
         run: |
           node scripts/augur-release.mjs publish "$RUNNER_TEMP/images.json"

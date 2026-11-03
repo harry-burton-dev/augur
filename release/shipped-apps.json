@@ -1,0 +1,32 @@
+{
+  "$comment": "The apps that ship with AUGUR (pillar apps): app id -> the repository it lives in and the release of it this AUGUR release ships (ADR 0049). The release takes that release's signed service image, which carries its frontend, and signs it again as AUGUR's; `build` names images built from the app's source at that release's tag instead (Artifacts' rendition worker). Move a pin with: node scripts/shipped-apps.mjs pin <id> <version>",
+  "apps": {
+    "folio": {
+      "repo": "harry-burton-dev/augur-folio",
+      "version": "0.7.0",
+      "parts": {
+        "@apps/folio": "0.3.2",
+        "@apps/folio-frontend": "0.7.0"
+      },
+      "build": {
+        "folio-worker": "worker/Dockerfile"
+      }
+    },
+    "auspex": {
+      "repo": "harry-burton-dev/augur-auspex",
+      "version": "0.3.2",
+      "parts": {
+        "@apps/auspex-frontend": "0.3.2",
+        "@apps/auspex": "0.3.2"
+      }
+    },
+    "atlas": {
+      "repo": "harry-burton-dev/augur-atlas",
+      "version": "0.2.2",
+      "parts": {
+        "@apps/atlas-frontend": "0.2.2",
+        "@apps/atlas": "0.2.2"
+      }
+    }
+  }
+}
