@@ -189,6 +189,12 @@ const running = async (server: Server, service: string) => {
   if (code !== undefined) throw new StepFailed(`${service} stopped (exit code ${code}); its logs say why.`);
 };
 
+/** What's wrong with AUGUR's calls in the last `minutes`, when enough of them failed to judge by; else nothing. */
+const tooManyErrors = (calls: { requests: number; serverErrors: number }, minutes: number) =>
+  calls.requests >= MIN_CALLS && calls.serverErrors / calls.requests > ERROR_RATE
+    ? `${calls.serverErrors} of the ${calls.requests} calls to AUGUR’s services in the last ${minutes} minute${minutes === 1 ? '' : 's'} failed, more than ${ERROR_RATE * 100}%.`
+    : undefined;
+
 /**
  * Watches the new release for WATCH_MS: sign-in must keep working, every part must stay ready, and
  * AUGUR's own calls through the gateway must mostly succeed. Throws StepFailed with what it saw when
@@ -206,9 +212,8 @@ const watch = async (server: Server, services: readonly string[], versionOf: (se
     // The gateway restarted in the upgrade, so everything it counted is since then.
     const minutes = Math.min(10, Math.ceil(watched / 60_000));
     const calls = await server.traffic(minutes).catch(() => undefined);
-    if (calls && calls.requests >= MIN_CALLS && calls.serverErrors / calls.requests > ERROR_RATE) {
-      throw new StepFailed(`${calls.serverErrors} of the ${calls.requests} calls to AUGUR’s services in the last ${minutes} minute${minutes === 1 ? '' : 's'} failed, more than ${ERROR_RATE * 100}%.`);
-    }
+    const failing = calls && tooManyErrors(calls, minutes);
+    if (failing) throw new StepFailed(failing);
     if (calls) judged = calls.requests;
     // Every part must stay up, not only be up at the start: a part that falls over meanwhile is seen.
     if (watched % (2 * 60_000) === 0) await ready(server, services, versionOf);
@@ -240,6 +245,50 @@ export const lookAfterWatch = async (look: AfterWatchLook, server: Pick<Server, 
   const calls = await server.traffic(look.minutes).catch(() => undefined);
   const signInProblem = await server.signInProblem().catch((err) => reason(err));
   return { id: look.id, calls: calls?.requests ?? 0, serverErrors: calls?.serverErrors ?? 0, ...(signInProblem ? { signInProblem } : {}) };
+};
+
+/** What a part's look found now: nothing when it's ready, else why not. Nothing is waited for. */
+const partProblem = async (server: Pick<Server, 'health' | 'exitCode'>, service: string) => {
+  if (JOBS.has(service) || WORKERS.has(service)) {
+    // A job still running, or one Compose doesn't know of here, isn't a problem yet; a worker must not have stopped.
+    const code = await server.exitCode(service).catch(() => undefined);
+    if (code === undefined || (JOBS.has(service) && code === 0)) return undefined;
+    return `${service} stopped${JOBS.has(service) ? ' with an error' : ''} (exit code ${code}); its logs say why.`;
+  }
+  const health = await server.health(service).catch(() => undefined);
+  return health ? undefined : `${service} doesn’t answer.`;
+};
+
+/** What one look found: whether all was well, what was looked at, and each problem in a sentence. */
+export interface CheckResult {
+  ok: boolean;
+  checked: { signIn: true; parts: string[]; calls: { minutes: number; requests: number; serverErrors: number } | null };
+  problems: string[];
+}
+
+/**
+ * One look of the watch after an upgrade, on demand (`node dist/index.js check`): sign-in works, each
+ * of `services` is ready now, and AUGUR's own calls through the gateway in the last `minutes` mostly
+ * succeeded. The watch lets sign-in miss once and waits for parts to come back; one look doesn't, so
+ * anything wrong now is a problem. The deploy test breaks AUGUR on purpose and needs this to see it
+ * (docs/deploy-test.md).
+ */
+export const checkOnce = async (server: Pick<Server, 'signInProblem' | 'traffic' | 'health' | 'exitCode'>, services: readonly string[], minutes = WATCH_MS / 60_000): Promise<CheckResult> => {
+  const problems: string[] = [];
+  const signIn = await server.signInProblem().catch((err) => reason(err));
+  if (signIn) problems.push(`Signing in doesn’t work: ${signIn}`);
+  const calls = await server.traffic(minutes).catch(() => undefined);
+  const failing = calls && tooManyErrors(calls, minutes);
+  if (failing) problems.push(failing);
+  for (const service of services) {
+    const problem = await partProblem(server, service);
+    if (problem) problems.push(problem);
+  }
+  return {
+    ok: !problems.length,
+    checked: { signIn: true, parts: [...services], calls: calls ? { minutes, requests: calls.requests, serverErrors: calls.serverErrors } : null },
+    problems,
+  };
 };
 
 /** What went wrong, for the page: a message we wrote, or the first line of anything else. */
