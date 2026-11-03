@@ -1,6 +1,6 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { devHome, devUser, standInFetch } from './standin.js';
+import { DEV_EVENT, devHome, devUser, standInFetch } from './standin.js';
 
 const app: AppManifestEntry = { id: 'hello', name: 'Hello', route: '/hello', entry: '/@fs/apps/hello/frontend/src/entry.ts', version: '0.0.0', sdk: '^1.0.0', requiredRole: 'editor' };
 
@@ -34,6 +34,21 @@ describe('the stand-in platform', () => {
     const read = res.body!.getReader().read();
     stop.abort();
     await expect(read).rejects.toThrow('Aborted');
+  });
+
+  it('streams a domain event sent from the page, on the topics and floor asked for', async () => {
+    const stop = new AbortController();
+    const res = await standInFetch(app)('/api/events/v1/domain-events/stream?topics=hello.*', { headers: { 'x-workspace-id': 'dev-me' }, signal: stop.signal });
+    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+    expect((await reader.read()).value).toContain(': connected');
+    const send = (detail: object) => window.dispatchEvent(new CustomEvent(DEV_EVENT, { detail }));
+    send({ topic: 'other.thing.changed' });
+    send({ topic: 'hello.greeting.changed', workspace: 'dev-org' });
+    send({ topic: 'hello.greeting.changed', payload: { greeting: 'g1' } });
+    const text = (await reader.read()).value!;
+    expect(text).toContain('event: domain-event');
+    expect(JSON.parse(text.split('data: ')[1])).toMatchObject({ topic: 'hello.greeting.changed', publisher: 'hello', workspace: { id: 'dev-me' }, payload: { greeting: 'g1' } });
+    stop.abort();
   });
 
   it("sends anything else on, such as the app's own service", async () => {

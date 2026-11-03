@@ -36,6 +36,7 @@ Nothing else of the platform runs, so the shell stands in for it:
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
 - The catalogue is Home and your app. Home (`/@me/home`) shows what your app's `ctx.notify({ needsYou: true })` sends, and your glance card if you have one. `ctx.raise` and `ctx.request` reach your app when it `handles` the intent, and otherwise fail the way they do when no app handles one.
 - Notifications from `ctx.notify` appear in the stream. Ones your service sends with `notify` from the service kit don't, because there's no events service.
+- Nor do the domain events your service publishes. To try your `refreshOn`, send one from the browser console: `dispatchEvent(new CustomEvent('augur:dev-domain-event', { detail: { topic: 'expenses.claim.approved', payload: { claim: 'c1' } } }))`. It reaches your app on the floor you're on (`workspace` names another).
 
 To try your app with the rest of the platform, use the full local stack (see the [README](../README.md)) and register it as in step 7.
 
@@ -71,7 +72,7 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
 | `ctx.request(intent)` | Ask whichever app handles an intent for an answer; it opens over yours. Rejects with `isIntentCancelled(err)` when the person closes it |
 | `ctx.intent`, `ctx.reply` | Present when your app was opened to handle an intent, or to answer a request (`reply.respond(result)`) |
-| `ctx.bus` | Events within the page |
+| `ctx.bus` | Events within the page. The shell also puts every domain event on your floor from the apps the person has there, and the platform's, on it under its topic: `ctx.bus.on('folio.document.published', …)`, or `useData(…, { refreshOn: [topic] })` in the app kit ([domain-events.md](domain-events.md#in-the-browser)) |
 
 **What your app can reach.** Your app runs in the shell's own window with the signed-in person's session, so it can call anything that person can, admin routes included. That's why only apps the deployment's own team wrote or reviewed are installed this way ([ADR 0024](decisions/0024-apps-are-trusted-code.md)). Apps from anyone else will run sandboxed, with a token limited to their own upstreams. Your service still only gets the scopes the registry granted it, and the gateway still applies floor rules on every call.
 
