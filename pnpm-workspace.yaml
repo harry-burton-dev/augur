@@ -6,3 +6,7 @@ packages:
   - "apps/*/*"
 onlyBuiltDependencies:
   - esbuild
+# API Extractor pins minimatch to a release with a known vulnerability (GHSA-g3hv-75wg-m249); take the
+# patched release the rest of the tree already uses. Drop this once API Extractor moves past it.
+overrides:
+  "@microsoft/api-extractor>minimatch": 10.2.6
