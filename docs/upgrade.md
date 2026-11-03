@@ -54,6 +54,34 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Keycloak 26.8 and the realm job
+
+This release moves Keycloak from 26.0.8 to 26.8.1 and keeps the realm as code (ADRs 0037, 0038 and 0057). Keycloak migrates its database on its first start on 26.8, and **that can't be undone**: going back to the release before means restoring Keycloak's database from the backup you take first. Take this release by hand, with the steps above, rather than leaving it to an upgrade window.
+
+1. Take a backup and test it (step 4 above). Keep the file name: `infra/deploy/backups/platform-<date>.sql.gz`.
+2. Check `KEYCLOAK_ADMIN_PASSWORD` in `.env` is still Keycloak's master admin password. If you changed it in the console, put the current one in `.env`: the realm job signs in with it on every `up`.
+3. Upgrade as usual. A new container, `keycloak-config`, runs once Keycloak is up, sets the realm up and stops; identity starts after it. Keycloak's first start on 26.8 takes a minute or two longer while it migrates.
+4. Check: `pc logs keycloak-config` ends with "The platform realm is up to date" and lists what it changed, and `pc ps -a keycloak-config` shows it exited with 0.
+
+What changes for people:
+
+- Passwords need 15 characters or more, and can't be the username, the email or a known breached password. Nobody is made to change a password they already have; the rule applies to the next one they choose.
+- Admins and deployment admins are asked to set up a code app at their next sign-in, unless they sign in with a passkey. Anyone can add a passkey or a code app.
+- Sessions end after 8 hours unused or 10 hours at most.
+- Identity no longer holds `manage-realm`: it can't change sign-in settings, and `infra/deploy/identity-repair.yml` is gone. If identity's log says it lacks rights, `pc up -d keycloak-config identity`.
+
+**Going back** is a restore of the backup from step 1, which puts Keycloak's database back as it was before 26.8 (anything changed since is lost): set `PLATFORM_VERSION` back, check out that release's deploy files, then
+
+```sh
+pc stop tailscale web gateway identity registry events keycloak backup
+gunzip -c infra/deploy/backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
+pc up -d --remove-orphans
+```
+
+### Sample data, where you allow it
+
+`pnpm seed` (docs/seed.md) fills a deployment with synthetic sample people, floors, documents and entities, and only where `.env` sets `SEED_ALLOWED=true`; nothing changes on a server that doesn't. To use it on a server that already exists, also add its sign-in client, which Keycloak doesn't import into an existing realm: open the Keycloak admin console (`KEYCLOAK_CONSOLE=open`, deploy.md), choose the `platform` realm, **Clients → Import client**, and import the `platform-cli` entry from `infra/deploy/keycloak/platform-realm.json`. Then close the console again.
+
 ### AUGUR's repository gets a new name
 
 AUGUR's repository is being renamed from `im-platform` (Linear PER-244). Every release is signed by the repository's workflows, so from this release the updater and registry take AUGUR's releases, dev builds and feed signed under either name. A server must run this release **before** the rename, or it refuses everything released after it.
@@ -126,7 +154,7 @@ A release its publisher **halted** (the Halt rollout workflow, [release-channels
 
 ### Installing a halted release to test going back
 
-On a **dev or preview** server only, a deployment admin can install a halted release on purpose, to prove AUGUR goes back by itself from a broken one ([ADR 0051](decisions/0051-install-a-halted-release-on-request.md)). They name the exact version and say why, after entering their password again (`PUT /v1/platform/upgrade/halted` with `version` and `reason`). The release must be newer than the one the server runs, able to upgrade from it, and have no breaking release in between, because going back by itself is the point. The watch then judges it like any other upgrade. A production server (`SERVER_RING=production`) always refuses, and every request, allowed or refused, is in the audit log (`platform.halted-install-requested`, `platform.halted-install-refused`). Automatic policies never take a halted release, so it doesn't come back after the server went back.
+On a **dev or preview** server only, a deployment admin can install a halted release on purpose, to prove AUGUR goes back by itself from a broken one ([ADR 0051](decisions/0051-install-a-halted-release-on-request.md)). In the Upgrade Centre, open AUGUR and choose **Install … for a test** beside the halted release; it asks for the reason and may ask for your password again (the API is `PUT /v1/platform/upgrade/halted` with `version` and `reason`). On a production server the action stays visible but can't be used, and says why. The release must be newer than the one the server runs, able to upgrade from it, and have no breaking release in between, because going back by itself is the point. The watch then judges it like any other upgrade. A production server (`SERVER_RING=production`) always refuses, and every request, allowed or refused, is in the audit log (`platform.halted-install-requested`, `platform.halted-install-refused`). Automatic policies never take a halted release, so it doesn't come back after the server went back.
 
 ### The read key
 
@@ -228,9 +256,11 @@ It drives Docker, which can start any container, so it has the run of the server
    ```
 2. It runs as user 1000 and writes `.env` and the deploy files, so user 1000 has to be able to write `infra/deploy`. On most servers that's the first account, so if `id -u` prints 1000 and you own the folder there's nothing to do; otherwise `sudo setfacl -R -m u:1000:rwX -m d:u:1000:rwX infra/deploy`.
 3. For private images, the deployment's [read key](#the-read-key), which the updater signs in with. (Before read keys: the read:packages token the server pulls with, as `infra/deploy/secrets/image-pull-token`, owned by user 1000, with `IMAGE_PULL_USER=<its GitHub username>` in `.env`.)
-4. `pc up -d`. Identity makes the updater's sign-in, and an upgrade you ask for starts within half a minute.
+4. `pc up -d`. The realm job makes the updater's sign-in, and an upgrade you ask for starts within half a minute.
 
 Docker must be listening on `/var/run/docker.sock` (rootless Docker isn't). From then on, upgrade from the page, or by hand as above; both work. An upgrade waiting on the page while you upgrade by hand is best cancelled first.
+
+To see what the watch after an upgrade would see right now, after an upgrade by hand say, run one look of it: `pc exec -T updater node dist/index.js check`. It signs in as the updater, reads AUGUR's calls at the gateway for the last 10 minutes and asks every part whether it's ready, then prints one line of JSON: `ok`, what it looked at, and each problem in a sentence. It exits 1 when there's any. Unlike the watch, it doesn't let sign-in miss once or wait for a part to come back.
 
 ### The app runner
 

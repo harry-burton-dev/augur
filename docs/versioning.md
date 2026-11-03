@@ -64,7 +64,7 @@ The Upgrade Centre reads these releases. The registry knows which release it shi
 
 Two GitHub settings the workflow needs: Settings → Actions → General → Workflow permissions must allow **Read and write**, and **Allow GitHub Actions to create and approve pull requests** must be on. GitHub doesn't start other workflows from anything done with the workflow's built-in token, so the Release workflow uses a `RELEASE_TOKEN` secret instead; with it, CI runs on the Version packages PR by itself. To set it up, create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) for this repository only, with **Contents: Read and write** and **Pull requests: Read and write**, and save it under Settings → Secrets and variables → Actions as `RELEASE_TOKEN`. Renew it before it expires. Without the secret the workflow falls back to the built-in token, and CI on the Version packages PR only starts once you push a commit to its branch.
 
-When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @augur/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)).
+When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @augur/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)). A build byte-for-byte the newest kept one isn't kept: `freeze` says so, and that folder stands for both minors. At SDK 2.0, a major that 1.x apps don't run on, the 1.x builds retire from the contract tests, and each 2.x minor is frozen from then on.
 
 To do the same by hand: `pnpm version-packages`, review, commit, merge, then let the Release workflow make the AUGUR and app releases.
 
@@ -128,6 +128,16 @@ Each service serves its API under its major version: the registry's manifest is 
 The registry refuses a manifest without a semver `version` and a valid `sdk` range. The shell compares the range with the SDK it was built with (`SDK_VERSION`) and won't open an app outside it: it says the app was made for an older platform, or needs a newer one, instead of mounting it with a context it doesn't expect.
 
 When the SDK makes a breaking change it goes to `2.0.0`. Apps keep `^1.0.0` and the new shell refuses them until each app's team updates the app and widens its range (`^1.0.0 || ^2.0.0` while it works with both). `pnpm check:versions` fails if any app in this repo has a range the current SDK doesn't satisfy, so a breaking SDK change and the apps' updates land together here.
+
+### The API report (ADR 0052)
+
+What the SDK exports is written down, by API Extractor, in `platform/packages/mfe-sdk/etc/*.api.md`: one report per entry point (`@augur/mfe-sdk` and `@augur/mfe-sdk/build`). The reports are committed, so a reviewer sees every change to the contract as a diff. `pnpm check:api`, in CI's `build-test`, fails when:
+
+- a report doesn't match the built types: run `pnpm build && pnpm api:update` and commit the report with the change;
+- a report names a type from another package: the SDK wraps third-party libraries in its own types, so their next major never forces an SDK major;
+- a pull request changes a report without a changeset of the right size for the package: a minor for additions, a major for anything removed or changed. When a change only looks breaking (a widened type, say), a minor changeset with a line starting `Not breaking:` that says why will do.
+
+A library joins by adding an `api-extractor*.json` beside its `package.json`. Before any library is published, and on every pull request that touches `platform/packages`, `scripts/publish-packages.mjs --check` packs each one and runs publint and Are the Types Wrong on it.
 
 ## The shared kit
 

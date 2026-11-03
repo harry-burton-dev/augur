@@ -4,14 +4,23 @@
 #   NODE_AUTH_TOKEN=<read:packages token> docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/web.Dockerfile .
 # The shipped apps' frontends come from their releases (ADR 0049): infra/release-images.sh puts each in
 # .shipped/frontends/<id> first. Without that folder the image has the platform's own frontends only.
-# The first five lines are the same in infra/service.Dockerfile, so the services' images reuse this
-# install (see there). Keep them identical.
-FROM node:22-alpine AS build
-RUN corepack enable
+# Everything up to the build stage's `COPY . .` is the same in infra/service.Dockerfile, so the services'
+# images reuse this install (see there). Keep it identical.
+FROM node:22-alpine AS manifests
 WORKDIR /repo
 COPY . .
+# Only what pnpm install reads: every package.json, the lockfile, the workspace and .npmrc. The install
+# below starts from these alone, so it is cached until the dependencies change, not on every change.
+RUN rm -rf .shipped && find . -type f ! -name package.json ! -name pnpm-lock.yaml ! -name pnpm-workspace.yaml ! -name .npmrc -delete \
+ && find . -mindepth 1 -type d -empty -delete
+FROM node:22-alpine AS deps
+RUN corepack enable
+WORKDIR /repo
+COPY --from=manifests /repo .
 # AUGUR's kit packages come from GitHub Packages (.npmrc): a build secret, so the token stays out of the image.
 RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN pnpm install --frozen-lockfile
+FROM deps AS build
+COPY . .
 # A path: the shell signs in against Keycloak on whatever address it is served from.
 ENV VITE_OIDC_AUTHORITY=/sso/realms/platform
 RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/admin..." --filter "@augur/upgrades..." build \

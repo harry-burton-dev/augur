@@ -7,9 +7,12 @@ import { DEFAULT_LEVELS, MAX_LEVEL_NAME, MAX_TEAM_DEPTH, type WorkspaceStore } f
 /** Easy to read out or type: no 0/O, 1/l/I. */
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
-/** A one-time password the person replaces at first sign-in, like "k7mq-3xrt-p9wd". */
+/**
+ * A one-time password the person replaces at first sign-in, like "k7mq-3xrt-p9wd-h4nc": 19 characters,
+ * so it meets the realm's 15-character floor (ADR 0038).
+ */
 export const temporaryPassword = () =>
-  Array.from({ length: 3 }, () => Array.from({ length: 4 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('')).join('-');
+  Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('')).join('-');
 
 const name = { type: 'string', minLength: 1, maxLength: 80, pattern: '\\S' } as const;
 const email = { type: 'string', minLength: 3, maxLength: 254, pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$' } as const;
