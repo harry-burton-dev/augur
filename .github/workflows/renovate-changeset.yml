@@ -29,13 +29,13 @@ jobs:
         env:
           KEY: ${{ secrets.RENOVATE_CHANGESET_KEY }}
       - if: steps.key.outputs.set == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
           ssh-key: ${{ secrets.RENOVATE_CHANGESET_KEY }}
       - if: steps.key.outputs.set == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - if: steps.key.outputs.set == 'true'
         name: Add the changeset
         run: |
