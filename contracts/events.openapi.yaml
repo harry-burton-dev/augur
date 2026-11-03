@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.7.0
+  version: 1.8.0
   description: >
     Notifications for the Shell's stream, and the platform's audit log.
     People reach it through the gateway, which passes the caller in x-user-*
@@ -200,6 +200,27 @@ paths:
                   events: { type: array, items: { $ref: "#/components/schemas/DomainEvent" } }
                   next: { type: string }
         "403": { description: "Not a service, or no events:subscribe scope" }
+  /domain-events/stream:
+    get:
+      summary: Domain events on the caller's floor, as server-sent events (people, for the shell)
+      description: >
+        Each domain event on the topics asked for, published on the floor the
+        caller stands on (x-workspace-id, checked by the gateway), as it is
+        published. Events on no floor or on another floor never reach it.
+        Events are named "domain-event" and carry a DomainEvent as JSON: ids
+        and a little context, as every event does. It is a hint to refresh
+        what is on screen, not a record: there is no catching up, so after a
+        reconnect load fresh. Comment lines are keep-alives. Read with fetch so
+        the sign-in token can be sent.
+      parameters:
+        - { name: topics, in: query, required: true, schema: { type: string, maxLength: 4000 }, description: "Comma separated topics, or families such as folio.*; at most 100" }
+      responses:
+        "200":
+          description: An open event stream
+          content:
+            text/event-stream: {}
+        "400": { description: "No floor named, or a topic that isn't one" }
+        "401": { description: Not signed in }
 components:
   schemas:
     NewNotification:
