@@ -90,6 +90,8 @@ export interface GatewayOptions {
   backupDir?: string;
   /** What infra/deploy/public.sh writes (PUBLIC_ACCESS_FILE). Without it Status says nothing about the internet. */
   publicAccessFile?: string;
+  /** Whether this deployment lets an admin fill it with synthetic sample data (SEED_ALLOWED, ADR 0056). Off unless set. */
+  seedAllowed?: boolean;
   /** Which floors a caller is on. Defaults to asking the identity upstream. */
   floors?: FloorLookup;
   /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY, or a new key each start. */
@@ -115,7 +117,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, signer = callerSignerFromEnv(), access, apps, traffic = new Traffic() }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic() }: GatewayOptions = {}) => {
   const appUpstreams = apps ?? (upstreams.registry ? registryUpstreams({ registryUrl: upstreams.registry, signer }) : undefined);
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
@@ -182,6 +184,10 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       components: statusMonitor.snapshot({ version, api: API_VERSION }),
       ...(backupDir ? { backups: await backupStatus(backupDir) } : {}),
       ...(publicAccessFile ? { publicAccess: await publicAccess(publicAccessFile) } : {}),
+      // Whether `pnpm seed` may add synthetic people and content here, and who can change that.
+      seeding: seedAllowed
+        ? { allowed: true }
+        : { allowed: false, why: 'This deployment doesn’t allow sample data.', whoCanChange: 'A deployment admin, by setting SEED_ALLOWED=true in its .env.' },
     };
   });
 

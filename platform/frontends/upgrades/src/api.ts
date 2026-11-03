@@ -49,6 +49,8 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     checkNow: () => call<PlatformUpdates>('POST', '/platform/updates/check'),
     upgrade: (version: string, settings: Record<string, string> = {}) =>
       call<PlatformUpdates>('PUT', '/platform/upgrade', Object.keys(settings).length ? { version, settings } : { version }),
+    /** Installs a halted release on a dev or preview server, only to test going back (ADR 0051). */
+    installHalted: (version: string, reason: string) => call<PlatformUpdates>('PUT', '/platform/upgrade/halted', { version, reason }),
     goBack: (version: string) => call<PlatformUpdates>('PUT', '/platform/go-back', { version }),
     cancel: () => call<PlatformUpdates>('DELETE', '/platform/upgrade'),
     installs: () => call<AppInstalls>('GET', '/app-runner/apps'),
