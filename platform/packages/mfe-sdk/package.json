@@ -2,6 +2,7 @@
   "name": "@augur/mfe-sdk",
   "version": "1.10.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "The contract between the shell and micro frontends: registration, mount context, event bus and intents.",
   "exports": {
