@@ -67,7 +67,7 @@ export function Apps({ api }: { api: AdminApi }) {
           danger
           eyebrow={issuing.name}
           heading="Issue a new sign-in?"
-          summary="The app’s service signs in to the platform with a secret. A new one stops the old one working straight away, so the service can’t register, notify or write to the log until it’s given the new one."
+          summary="The app’s service signs in to AUGUR with a secret. A new one stops the old one working straight away, so the service can’t register, notify or write to the log until it’s given the new one."
           actionLabel="Issue a new sign-in"
           busyLabel="Issuing…"
           cancelLabel="Keep the old one"
@@ -121,7 +121,7 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
       open
       light
       size="read"
-      eyebrow={app.platform ? 'Part of the platform' : app.pillar ? 'Ships with AUGUR' : `Registered by ${app.registeredBy ?? 'its service'}`}
+      eyebrow={app.platform ? 'Part of AUGUR' : app.pillar ? 'Ships with AUGUR' : `Registered by ${app.registeredBy ?? 'its service'}`}
       heading={app.name}
       summary={app.description ?? ''}
       cancelLabel="Close"
@@ -372,7 +372,7 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
       size="glance"
       eyebrow="Apps"
       heading="Where apps load from"
-      summary="Apps on the platform’s own address can always load. An app whose entry is on another site can only register, and only open, if that site is here."
+      summary="Apps on AUGUR’s own address can always load. An app whose entry is on another site can only register, and only open, if that site is here."
       actionLabel="Allow"
       busyLabel="Allowing…"
       cancelLabel="Done"
@@ -408,10 +408,10 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
             </Line>
           ))
         ) : (
-          <p>No other sites yet, so apps can only load from the platform itself.</p>
+          <p>No other sites yet, so apps can only load from AUGUR’s own address.</p>
         )}
       </div>
-      <p>The server must allow a site too, so the browser will run its code; see Deploy in the platform’s guides.</p>
+      <p>The server must allow a site too, so the browser will run its code; see Deploy in AUGUR’s guides.</p>
     </Dialog>
   );
 }
