@@ -24,6 +24,7 @@ nav:
   - Notifications: notifications.md
   - Observability: observability.md
   - "Release channels: one branch, three rings": release-channels.md
+  - Sample data (`pnpm seed`): seed.md
   - Shell principles: shell-principles.md
   - Ship an app: ship-an-app.md
   - Signed caller: signed-caller.md
@@ -83,3 +84,4 @@ nav:
       - 0050. Alpha is proved by a build gate and a 48-hour run on staging: decisions/0050-alpha-proving-run.md
       - 0051. A deployment admin can install a halted release on request, on dev and preview servers only: decisions/0051-install-a-halted-release-on-request.md
       - 0054. App frontends load data with TanStack Query, route with TanStack Router and call APIs with openapi-fetch, all wrapped by the app kit: decisions/0054-app-frontend-starter-libraries.md
+      - 0056. Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal: decisions/0056-seed-through-public-apis.md

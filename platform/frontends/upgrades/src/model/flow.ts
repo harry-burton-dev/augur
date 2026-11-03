@@ -67,9 +67,9 @@ export const endingOf = (up: Upgrade, running: string): Ending | undefined => {
 };
 
 /** What the step-up return address carries, so the page asks again where it left off. */
-export type Resume = { kind: 'upgrade' | 'go-back'; version: string } | { kind: 'install'; app: string; version: string } | { kind: 'settings'; unit: string };
+export type Resume = { kind: 'upgrade' | 'go-back' | 'halted'; version: string } | { kind: 'install'; app: string; version: string } | { kind: 'settings'; unit: string };
 
-const PARAMS = { upgrade: 'upgrade', 'go-back': 'go-back', install: 'install', settings: 'settings' } as const;
+const PARAMS = { upgrade: 'upgrade', 'go-back': 'go-back', halted: 'halted', install: 'install', settings: 'settings' } as const;
 
 /** The address to come back to after entering the password again. */
 export const returnTo = (path: string, r: Resume): string =>
@@ -83,6 +83,7 @@ export const resumeFrom = (search: string): { resume?: Resume; rest: string } =>
   const params = new URLSearchParams(search);
   const upgrade = params.get(PARAMS.upgrade);
   const back = params.get(PARAMS['go-back']);
+  const halted = params.get(PARAMS.halted);
   const install = params.get(PARAMS.install);
   const settings = params.get(PARAMS.settings);
   Object.values(PARAMS).forEach((p) => params.delete(p));
@@ -92,11 +93,13 @@ export const resumeFrom = (search: string): { resume?: Resume; rest: string } =>
     ? { kind: 'upgrade', version: upgrade }
     : back
       ? { kind: 'go-back', version: back }
-      : install && at > 0
-        ? { kind: 'install', app: install.slice(0, at), version: install.slice(at + 1) }
-        : settings
-          ? { kind: 'settings', unit: settings }
-          : undefined;
+      : halted
+        ? { kind: 'halted', version: halted }
+        : install && at > 0
+          ? { kind: 'install', app: install.slice(0, at), version: install.slice(at + 1) }
+          : settings
+            ? { kind: 'settings', unit: settings }
+            : undefined;
   return { ...(resume ? { resume } : {}), rest: rest ? `?${rest}` : '' };
 };
 
@@ -139,5 +142,28 @@ export const takeDraft = <T>(unit: string): T | undefined => {
     return kept?.unit === unit ? kept.draft : undefined;
   } catch {
     return undefined;
+  }
+};
+
+/**
+ * The reason typed for installing a halted release, kept for this tab while the person enters the
+ * password again, so the question opens with it on the way back. Only read back for the same version.
+ */
+const REASON_KEY = 'augur.halted-reason';
+export const keepReason = (version: string, reason: string) => {
+  try {
+    sessionStorage.setItem(REASON_KEY, JSON.stringify({ version, reason }));
+  } catch {
+    // Private browsing: it's typed again.
+  }
+};
+export const takeReason = (version: string): string => {
+  try {
+    const text = sessionStorage.getItem(REASON_KEY);
+    sessionStorage.removeItem(REASON_KEY);
+    const kept = text ? (JSON.parse(text) as { version?: string; reason?: string }) : undefined;
+    return kept?.version === version ? (kept.reason ?? '') : '';
+  } catch {
+    return '';
   }
 };

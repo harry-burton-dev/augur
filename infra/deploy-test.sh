@@ -4,6 +4,7 @@
 #
 #   infra/deploy-test.sh fresh                    # a new server on the images built from this checkout
 #   infra/deploy-test.sh upgrade <from-version>   # that release first, with data, then this checkout, then back
+#   infra/deploy-test.sh broken                   # a fresh install with the updater, broken on purpose: its check must see it
 #
 # The release under test is PLATFORM_VERSION=$LOCAL_TAG: a published release's version, whose images
 # are pulled, or (default "ci") images built from this checkout first, which BUILD=1 does. Tailscale isn't started: the front door is published on
@@ -11,7 +12,7 @@
 set -euo pipefail
 export LC_ALL=C
 
-mode=${1:?usage: infra/deploy-test.sh fresh | upgrade <from-version>}
+mode=${1:?usage: infra/deploy-test.sh fresh | upgrade <from-version> | broken}
 from=${2:-}
 here=$(cd "$(dirname "$0")" && pwd)
 deploy="$here/deploy"
@@ -69,6 +70,13 @@ cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_de
   esac
   echo "$key=$value"
 done > "$deploy/.env"
+
+# Broken mode runs the updater too (its profile), which reads the deploy folder at its path here and
+# signs in with its own secret, as on a server that turned it on (docs/upgrade.md, "The updater").
+if [ "$mode" = broken ]; then
+  export COMPOSE_PROFILES=updater
+  printf 'COMPOSE_PROFILES=updater\nPLATFORM_DIR=%s\nUPDATER_CLIENT_SECRET=%s\n' "$deploy" "$(openssl rand -hex 32)" >> "$deploy/.env"
+fi
 
 cat > "$work/compose.test.yml" <<EOF
 services:
@@ -161,6 +169,46 @@ kept() {
 
 up() { pc up -d --no-build --remove-orphans $(services) >&2; }
 
+# One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
+# wanted: `pass`, or `fail <part>`, which must be named among the problems. Its exit code must agree.
+check_until() {
+  local label=$1 want=$2 part=${3:-} deadline=$((SECONDS + timeout)) said='' status
+  while (( SECONDS < deadline )); do
+    status=0
+    said=$(pc exec -T updater node dist/index.js check 2>/dev/null | tail -n1) || status=$?
+    if jq -e --argjson code "$status" --arg want "$want" --arg part "$part" '
+        if $want == "pass" then .ok and $code == 0
+        else (.ok | not) and $code == 1 and any(.problems[]; startswith($part + " ")) end' <<<"$said" >/dev/null 2>&1; then
+      echo "$label: the updater's check says $said" >&2
+      return 0
+    fi
+    sleep 5
+  done
+  echo "$label: the updater's check didn't $want${part:+ on $part} within ${timeout}s. It said: ${said:-nothing}" >&2
+  return 1
+}
+
+# The gateway's own count of calls (GET /traffic, reached only inside the network), as the watch reads it.
+traffic() {
+  pc exec -T gateway node -e 'fetch("http://localhost:8080/traffic?minutes=15").then((r) => r.text()).then(console.log)'
+}
+
+# An app's calls are counted apart from AUGUR's own, so an app answering errors can't send AUGUR back:
+# calls to an app's API through the front door land under apps, not platform. Without a signed-in
+# person the gateway answers them itself (401), which is enough to see where they're counted.
+counted_apart() {
+  local before after app=folio calls=10
+  before=$(traffic)
+  for _ in $(seq "$calls"); do curl -s -o /dev/null "http://localhost:$port/api/$app/healthz" || true; done
+  after=$(traffic)
+  if ! jq -en --argjson b "$before" --argjson a "$after" --argjson n "$calls" \
+      '($a.apps.requests - $b.apps.requests) >= $n and ($a.platform.requests - $b.platform.requests) < $n' >/dev/null; then
+    echo "Calls to /api/$app weren't counted as an app's. Before: $before After: $after" >&2
+    return 1
+  fi
+  echo "The gateway counted $calls calls to /api/$app under apps, not platform." >&2
+}
+
 if [ "${BUILD:-}" = 1 ]; then
   pc build $(services | grep -vx -e postgres -e backup -e garage -e keycloak -e docker-proxy) >&2
   # The build cache isn't needed again, and on a CI runner its space is.
@@ -203,6 +251,26 @@ case "$mode" in
     tables > "$work/back"
     kept "$work/after" "$work/back"
     ;;
-  *) echo "usage: infra/deploy-test.sh fresh | upgrade <from-version>" >&2; exit 2 ;;
+  broken)
+    use "$local_tag"
+    up
+    wait_ready "Fresh install of this checkout, with the updater" >/dev/null
+    no_restarts
+    on_version "$local_tag"
+    # A release from before the check command can't be broken this way: said, not failed.
+    if ! pc run --rm --no-deps -T --entrypoint node updater -e 'process.exit(require("fs").readFileSync("dist/upgrade.js", "utf8").includes("checkOnce") ? 0 : 3)' >/dev/null 2>&1; then
+      echo "This release's updater has no check command (node dist/index.js check), so broken mode was skipped." >&2
+      exit 0
+    fi
+    check_until "As installed" pass
+    # What an upgrade can leave behind: a part that doesn't come back.
+    pc stop identity >&2
+    check_until "With identity stopped" fail identity
+    counted_apart
+    pc start identity >&2
+    check_until "With identity back" pass
+    no_restarts
+    ;;
+  *) echo "usage: infra/deploy-test.sh fresh | upgrade <from-version> | broken" >&2; exit 2 ;;
 esac
 echo "Deploy test ($mode) passed." >&2
