@@ -12,16 +12,41 @@ components:
     Refusal:
       type: object
       required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
         - error
         - message
       properties:
-        error:
+        type:
           type: string
-          examples:
-            - forbidden
-        message:
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
           type: string
           description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
     NewNotification:
       type: object
       required:
@@ -303,19 +328,19 @@ paths:
         "400":
           description: Invalid notification, an unknown floor, or toTeam not on a team
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a signed-in service, not granted this, or team notices are off
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors, grants or an audience can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     get:
@@ -333,7 +358,7 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /team-notices/{workspace}:
@@ -356,7 +381,7 @@ paths:
         "403":
           description: Not a lead standing on that team, nor an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     put:
@@ -390,7 +415,7 @@ paths:
         "403":
           description: Not a lead standing on that team, nor an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /notifications/{id}/read:
@@ -408,7 +433,7 @@ paths:
         "404":
           description: The caller has no such notification
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     delete:
@@ -425,7 +450,7 @@ paths:
         "404":
           description: The caller has no such notification
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /notifications/stream:
@@ -477,19 +502,19 @@ paths:
         "400":
           description: A topic outside the publisher's, an unknown floor, or a payload over 16 KB
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a service, not this publisher's topics, or no events:publish scope
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors or grants can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     get:
@@ -540,19 +565,19 @@ paths:
         "400":
           description: A topic that is not a topic, nor a family such as folio.*
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a service, or no events:subscribe scope
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Grants can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /audit:
@@ -574,19 +599,19 @@ paths:
         "400":
           description: Invalid entry, or an unknown floor
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a signed-in service, or not granted this
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors or grants can't be checked right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     get:
@@ -653,7 +678,7 @@ paths:
         "403":
           description: Not an admin, nor a lead asking for their own floor
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
 servers:

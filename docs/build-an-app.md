@@ -128,6 +128,28 @@ app.get('/claims', async (req, reply) => {
 
 From the service kit, `notify` puts a notification on someone's stream (see [Notifications](notifications.md)) and `recordAudit` writes to the platform's audit log (each entry also keeps which service wrote it, from its signed token, so an entry that names someone as the actor still shows it came from your app); see [apps/README](../apps/README.md). A breaking API change goes under `/v2` beside `/v1`, as in [Versioning](versioning.md#http-apis).
 
+### Errors
+
+Every AUGUR service answers an error as an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details body (`application/problem+json`): `type`, `title`, `status`, `detail`, and AUGUR's own `reason` and `whoCanChange`. `reason` is a stable code a client can switch on (`forbidden`, `not_found`, `conflict`, `unavailable`, `bad_request`, `internal`, …). `whoCanChange` says in plain words who can fix it, when someone can, so a screen can say why something can't be done and who to ask. `type` is `about:blank` unless a problem has its own page, so `title` is the status's phrase and the meaning is in `reason`. Each body also carries `error` (the same as `reason`) and `message` (the same as `detail`), which SDK 1.x clients read.
+
+Register the service kit's `problemDetails()` first, before any routes, and throw or send a `Problem`:
+
+```ts
+import { Problem, problemDetails, sendProblem, serviceFastifyOptions } from '@augur/service-kit';
+
+const app = Fastify(serviceFastifyOptions());
+await app.register(problemDetails());
+
+app.get('/claims/:id', async (req, reply) => {
+  const claim = await claims.get(req.params.id);
+  if (!claim) throw new Problem(404, 'not_found', 'That claim no longer exists.');
+  if (!canSee(caller, claim)) return sendProblem(reply, 403, 'forbidden', 'Only the claim’s team can see it.', { whoCanChange: 'A lead of the claim’s team.' });
+  return claim;
+});
+```
+
+With it, a request that fails its schema is a 400 `bad_request` saying what was wrong; an error whose class ends in `Unavailable` (`PeopleUnavailable`, `ServiceAuthUnavailable`) is a 503 `unavailable` saying which part can't be reached; Fastify's other client errors (a body too large, a media type it doesn't take) keep their status; an unknown route is a 404 `not_found`; and anything else is a 500 `internal`, with the error in the service's log and never in the answer. A handler's `reply.code(403).send({ error, message })` still works: it is answered as a problem with those fields kept.
+
 A frontend-only app can delete `service/`; it is then registered with `pnpm register-app` (step 7).
 
 ## 5. The manifest

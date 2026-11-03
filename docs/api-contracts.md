@@ -8,7 +8,8 @@ and the contract in `contracts/<service>.openapi.yaml` all come from them.
 
 1. Change the route's schema in the service (`src/schemas.ts` for named shapes, the route's `schema` for
    the rest). Give each route a `summary`, and a `description` where there is more to say. Name every
-   response the route sends, refusals included (`refused('when')`).
+   response the route sends, refusals included (`refused('when')`: an RFC 9457 problem as
+   `application/problem+json`, which `problemDetails()` in `@augur/service-kit` makes of every error).
 2. Bump `info.version` in the service's `src/contract.ts` as [versioning.md](versioning.md) says: a new
    endpoint or optional field is a minor, a removed or renamed one a major.
 3. `pnpm build && pnpm contracts`, and commit the contract it writes.
