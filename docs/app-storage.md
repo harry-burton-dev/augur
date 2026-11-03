@@ -7,6 +7,7 @@ An app can keep its own data on the platform: a **database schema** in the platf
 | | What it is | The app's service reads |
 | --- | --- | --- |
 | Database | A login `app_<id>` that owns the schema `<id>` (dashes become `_`), with that schema first on its search path. Postgres has [pgvector](https://github.com/pgvector/pgvector), so the app can `create table … (embedding vector(1024))`, and [pg_trgm](https://www.postgresql.org/docs/16/pgtrgm.html), for names spelt nearly alike (`similarity(label, $1)`, and `gin (label gin_trgm_ops)` indexes). | `DATABASE_URL` |
+| Jobs | A second schema, `<id>_jobs`, owned by the same login, where the service kit keeps the app's background and scheduled jobs ([jobs.md](jobs.md)). | `DATABASE_URL` |
 | Bucket | A bucket named `<id>` on [Garage](https://garagehq.deuxfleurs.fr/), an S3-compatible store, and a key that can read and write only that bucket. | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
 
 `appStorageFromEnv()` from `@augur/service-kit` reads them, ready for `pg` and an S3 client:

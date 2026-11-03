@@ -128,6 +128,8 @@ app.get('/claims', async (req, reply) => {
 
 From the service kit, `notify` puts a notification on someone's stream (see [Notifications](notifications.md)) and `recordAudit` writes to the platform's audit log (each entry also keeps which service wrote it, from its signed token, so an entry that names someone as the actor still shows it came from your app); see [apps/README](../apps/README.md). A breaking API change goes under `/v2` beside `/v1`, as in [Versioning](versioning.md#http-apis).
 
+Background and scheduled work goes through the service kit's `createJobs`: durable, run once across instances, and recorded in the audit log ([Jobs](jobs.md)). Don't use `setInterval`.
+
 A frontend-only app can delete `service/`; it is then registered with `pnpm register-app` (step 7).
 
 ## 5. The manifest
