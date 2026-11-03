@@ -154,7 +154,7 @@ on_version() {
   local want=$1 wrong
   # A build from this checkout runs the shipped apps' images of a release, not ones built here.
   local skip='[]'
-  if [ "${BUILD:-}" = 1 ] && [ "$want" = "$local_tag" ]; then skip='["folio","folio-worker","auspex","atlas"]'; fi
+  if [ "${BUILD:-}" = 1 ] && [ "$want" = "$local_tag" ]; then skip=$(jq -c '[.apps | to_entries[] | .key, (.value.build // {} | keys[])]' "$here/../release/shipped-apps.json"); fi
   wrong=$(pc ps --format json | jq -rs --arg want ":$want" --argjson skip "$skip" 'flatten | map(select(.Image | startswith("ghcr.io/")) | select(.Service as $s | $skip | index($s) | not) | select(.Image | endswith($want) | not)) | map("\(.Service) runs \(.Image)") | .[]')
   if [ -n "$wrong" ]; then echo "Not on $want:"$'\n'"$wrong" >&2; return 1; fi
 }
