@@ -79,9 +79,10 @@ export interface Jobs {
   /**
    * A job another process runs, in any language that has DBOS (the Artifacts worker's renditions, in
    * Python), from the queue `<app>.<name>`. Its input goes as portable JSON, as one argument. This
-   * process queues it and never runs it.
+   * process queues it and never runs it. `workerConcurrency` is how many runs each of those
+   * processes takes at once.
    */
-  elsewhere<Input>(name: string, options?: { concurrency?: number }): Job<Input>;
+  elsewhere<Input>(name: string, options?: { concurrency?: number; workerConcurrency?: number }): Job<Input>;
   /** Queues a run and returns its id. Given an `id`, starting it again returns the same run. */
   start<Input>(job: Job<Input>, input: Input, options?: { id?: string }): Promise<string>;
   /** Stops a run that hasn't finished. It stops at its next step. */
@@ -151,7 +152,7 @@ const durableJobs = ({ app, databaseUrl, schema = jobsSchemaFor(app), log = cons
   const record = recorder(app, log, audit);
   const workflows = new Map<string, (input: unknown) => Promise<void>>();
   const queues = new Map<string, number | undefined>();
-  const remote = new Map<string, number | undefined>();
+  const remote = new Map<string, { concurrency?: number; workerConcurrency?: number }>();
   const schedules: { name: string; cron: string; workflow: (at: Date) => Promise<void> }[] = [];
   let launching: Promise<void> | undefined;
   const queueOf = (name: string) => (queues.get(name) === undefined ? app : `${app}.${name}`);
@@ -198,10 +199,10 @@ const durableJobs = ({ app, databaseUrl, schema = jobsSchemaFor(app), log = cons
       return { name } as Job<never>;
     },
 
-    elsewhere(name, { concurrency } = {}) {
+    elsewhere(name, limits = {}) {
       if (launching) throw new Error(`The job ${name} must be defined before the jobs are launched.`);
       if (workflows.has(name) || remote.has(name)) throw new Error(`There's already a job called ${name}.`);
-      remote.set(name, concurrency);
+      remote.set(name, limits);
       return { name };
     },
 
@@ -256,7 +257,8 @@ const durableJobs = ({ app, databaseUrl, schema = jobsSchemaFor(app), log = cons
         }
         await DBOS.registerQueue(app);
         for (const [name, concurrency] of queues) if (concurrency !== undefined) await DBOS.registerQueue(`${app}.${name}`, { concurrency });
-        for (const [name, concurrency] of remote) await DBOS.registerQueue(`${app}.${name}`, concurrency === undefined ? {} : { concurrency });
+        // The limits are kept with the queue, so the other process's workers keep to them too.
+        for (const [name, limits] of remote) await DBOS.registerQueue(`${app}.${name}`, limits);
         await DBOS.applySchedules(schedules.map(({ name, cron, workflow }) => ({ scheduleName: name, workflowFn: workflow, schedule: cron })));
         // A schedule whose job is gone stops with it.
         const ours = new Set(schedules.map((s) => s.name));

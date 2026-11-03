@@ -106,7 +106,7 @@ describe.runIf(process.env.DATABASE_URL)('jobs on Postgres', () => {
     await opened;
     await step('after', async () => {});
   });
-  const render = jobs.elsewhere<{ version: string }>('render');
+  const render = jobs.elsewhere<{ version: string }>('render', { workerConcurrency: 1 });
   jobs.schedule('every-second', '* * * * * *', async () => {
     calls.ticks++;
   });
