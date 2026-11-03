@@ -25,4 +25,6 @@ Building every image takes ten minutes or more, so try a change to the compose f
 
 It runs in its own compose project (`augur-deploy-test`) and removes it, volumes too, when it ends. A real `infra/deploy/.env` in the checkout is put aside while it runs and put back after. `WEB_PORT`, `READY_TIMEOUT` and `LOCAL_TAG` change the port, how long it waits for each start (300 s) and the tag of the local images (`ci`, for images built here).
 
+On GitHub-hosted runners the workflow first deletes toolchains it never uses (.NET, Android, GHC, CodeQL): two releases' images, the Artifacts worker with its models among them, don't fit the runner's free disk otherwise.
+
 When it fails, the workflow log shows `ps` and the last lines of every container's log.
