@@ -97,6 +97,9 @@ try {
   }
 } catch (err) {
   fail(`stopped: ${err.message.split('\n')[0]}`);
+  // What was on screen, so a failure in CI can be read from its log alone.
+  const seen = await page.locator('body').innerText().catch(() => '');
+  console.error(`  at ${page.url()} ("${await page.title().catch(() => '')}"): ${seen.replace(/\s+/g, ' ').trim().slice(0, 400)}`);
   await shot('stopped').catch(() => {});
 } finally {
   await browser.close();
