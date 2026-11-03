@@ -243,6 +243,8 @@ services:
       BACKUP_DIR: /backups
       # And whether AUGUR is open to the internet, and until when, from what infra/deploy/public.sh wrote.
       PUBLIC_ACCESS_FILE: /run/augur/tailscale/public-until
+      # Whether an admin may fill this deployment with synthetic sample data (pnpm seed, ADR 0056). Off unless set.
+      SEED_ALLOWED: ${SEED_ALLOWED:-false}
       # Each app's service, name=url: the apps that ship with AUGUR.
       APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086
     volumes:
