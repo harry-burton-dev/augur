@@ -53,5 +53,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0045](0045-promote-asks-portal-over-tailscale.md) | Promote to stable asks the portal for bake time over Tailscale | Accepted | 2026-11-02 |
 | [0046](0046-ui-kit-in-its-own-repository.md) | The UI kit lives in its own repository, and the shell serves the version it pins | Accepted | 2026-11-02 |
 | [0047](0047-app-repositories-in-augurs-feed.md) | Apps in their own repositories release there, and AUGUR's feed lists them | Accepted | 2026-11-02 |
+| [0048](0048-kit-served-from-a-kit-url.md) | Apps load the UI kit from a kit URL that the deployment serves | Accepted | 2026-11-03 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

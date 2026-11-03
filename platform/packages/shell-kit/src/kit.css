@@ -4,6 +4,8 @@
 @import 'tailwindcss/utilities' layer(utilities) source(none);
 @import '@augur/kit-common/theme.css';
 @import '@augur/kit-common/theme-shell.css';
+@import './shell.css' layer(components);
+@import './centre-menu.css' layer(components);
 @source './';
 @source not './**/*.test.tsx';
 @source not './**/*.stories.tsx';

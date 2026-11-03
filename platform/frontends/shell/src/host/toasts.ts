@@ -1,4 +1,4 @@
-import type { ShellNotification } from '@augur/ui-kit';
+import type { ShellNotification } from '@augur/shell-kit';
 
 /** How many toasts show at once; an older one goes when a new one comes. They all stay in the stream. */
 export const MAX_TOASTS = 3;

@@ -3,7 +3,6 @@ import '@augur/kit-common/kit.css';
 import '@augur/app-kit/kit.css';
 import '@augur/shell-kit/kit.css';
 import '@augur/ui-kit/base.css';
-import '@augur/ui-kit';
 import './shell.css';
 import { UserManager } from 'oidc-client-ts';
 import { createRoot } from 'react-dom/client';
