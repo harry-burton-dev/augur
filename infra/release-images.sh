@@ -17,6 +17,11 @@ channel=$2
 repo=${IMAGE_REPO:-ghcr.io/${GITHUB_REPOSITORY,,}}
 out=$(mktemp -d)
 
+# The web image serves the UI kit bundle pinned in release/kit.json (ADR 0048). Before anything is
+# built: its kit.json is signed by augur-kit's Release workflow, and release/kit.json names that very
+# file. The image's build then checks every file it copies against kit.json's hashes.
+node scripts/kit.mjs verify >&2
+
 # Builds an image from this checkout, or from another folder: build <name> [--context <dir>] <docker args>...
 build() {
   local name=$1 context=.

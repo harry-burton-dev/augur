@@ -1,0 +1,10 @@
+{
+  "version": "0.0.0",
+  "packages": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@augur/kit-common": "0.2.0",
+    "@augur/app-kit": "0.3.0"
+  },
+  "kitJson": "sha384-8LPj8LENnQf2b4k+Rj2W+9AwhO9SPg2oL+bN+kcJ8WwS9jaVRBRvJWQDDB6uOdj7"
+}

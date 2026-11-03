@@ -126,6 +126,8 @@ jobs:
       - run: pnpm build --concurrency=${{ steps.fit.outputs.tasks }}
       # Every app's manifest, against the registry's own rules.
       - run: pnpm check:manifest
+      # The kit bundle the shell serves is the one release/kit.json pins, whole, and serves what the SDK says.
+      - run: pnpm check:kit
       - run: pnpm check:migrations
         env:
           # Into main, a migration already on main is frozen too: dev builds have run it on the workbench.
@@ -339,17 +341,44 @@ jobs:
             -e APP_ORIGINS=https://apps.example.org -p 8088:8080 platform-web
           for i in $(seq 1 20); do curl -fsI http://localhost:8088/admin > /tmp/headers && break; sleep 1; done
           cat /tmp/headers
-          grep -iE "^content-security-policy: default-src 'self'; script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https://apps.example.org ?;" /tmp/headers
+          grep -iE "^content-security-policy: default-src 'self'; script-src 'self' ('sha256-[A-Za-z0-9+/=]+' ){2} +https://apps.example.org ?;" /tmp/headers
           # Anywhere but the workbench, nothing on the tailnet may run in the shell.
           ! grep -i "ts.net" /tmp/headers
           # The apps that ship with AUGUR: the front door serves their frontends too.
           curl -fsI http://localhost:8088/apps/shipped-probe/entry.js
           docker rm -f web
+      - name: The kit is served at /kit/ by default, or from KIT_URL, held to its hashes
+        run: |
+          v=$(jq -r .version release/kit.json)
+          docker run -d --name web-kit --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -p 8087:8080 platform-web
+          for i in $(seq 1 20); do curl -fs http://localhost:8087/ > /tmp/page && break; sleep 1; done
+          grep -q "\"react\":\"/kit/$v/react.js\"" /tmp/page
+          grep -q '"integrity":{' /tmp/page
+          curl -fsI "http://localhost:8087/kit/$v/react.js" | grep -i "cache-control: public, max-age=31536000, immutable"
+          # The hashes the CSP allows are the page's own inline scripts, as the browser computes them.
+          curl -fsI http://localhost:8087/ > /tmp/headers-kit
+          node -e '
+            const c = require("node:crypto"), fs = require("node:fs");
+            const page = fs.readFileSync("/tmp/page", "utf8"), csp = fs.readFileSync("/tmp/headers-kit", "utf8");
+            const bodies = [...page.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+            if (bodies.length !== 2) throw new Error(`expected 2 inline scripts, found ${bodies.length}`);
+            for (const b of bodies) {
+              const h = `sha256-${c.createHash("sha256").update(b, "utf8").digest("base64")}`;
+              if (!csp.includes(h)) throw new Error(`the CSP does not allow ${h}`);
+            }'
+          docker rm -f web-kit
+          docker run -d --name web-cdn --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -e KIT_URL=https://cdn.example.org/augur/kit/ -p 8086:8080 platform-web
+          for i in $(seq 1 20); do curl -fs http://localhost:8086/ > /tmp/page-cdn && break; sleep 1; done
+          curl -fsI http://localhost:8086/ > /tmp/headers-cdn
+          grep -q "\"react\":\"https://cdn.example.org/augur/kit/$v/react.js\"" /tmp/page-cdn
+          grep -iE "script-src 'self' ('sha256-[A-Za-z0-9+/=]+' ){2}https://cdn\.example\.org " /tmp/headers-cdn
+          grep -iE "style-src 'self' 'unsafe-inline' https://cdn\.example\.org " /tmp/headers-cdn
+          docker rm -f web-cdn
       - name: On the workbench, the shell may load an app from a machine on its own tailnet
         run: |
           docker run -d --name web-dev --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -e SERVER_RING=dev -e PLATFORM_URL=https://augur.tail1234.ts.net -p 8089:8080 platform-web
           for i in $(seq 1 20); do curl -fsI http://localhost:8089/admin > /tmp/headers-dev && break; sleep 1; done
-          grep -iE "^content-security-policy: .*script-src 'self' 'sha256-[A-Za-z0-9+/=]+'  https://\*\.tail1234\.ts\.net wss://\*\.tail1234\.ts\.net;" /tmp/headers-dev
+          grep -iE "^content-security-policy: .*script-src 'self' ('sha256-[A-Za-z0-9+/=]+' ){2} +https://\*\.tail1234\.ts\.net wss://\*\.tail1234\.ts\.net;" /tmp/headers-dev
           # Never every Tailscale user's machines.
           ! grep -iE "[ /]\*\.ts\.net" /tmp/headers-dev
           docker rm -f web-dev

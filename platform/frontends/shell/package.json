@@ -25,6 +25,7 @@
     "semver": "^7.8.5"
   },
   "devDependencies": {
+    "@augur/kit-bundle": "npm:@harry-burton-dev/augur-kit-bundle@0.1.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

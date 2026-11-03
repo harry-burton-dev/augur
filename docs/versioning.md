@@ -140,7 +140,7 @@ Apps don't bundle the UI kit or Lit: the shell serves one copy of each through a
 
 ### The React kits (ADR 0015)
 
-Every frontend is moving to React. Since SDK 1.10 the shell also serves React 19 (`react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`), Common (`@augur/kit-common`) and Quill, the app kit (`@augur/app-kit`), through the same import map, so a React app's bundle carries none of them. They keep the same promise:
+Every frontend is moving to React. Since SDK 1.10 the shell also serves React 19 (`react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`), Common (`@augur/kit-common`) and Quill, the app kit (`@augur/app-kit`), through the same import map, so a React app's bundle carries none of them. Since ADR 0048 they come as one kit bundle, a signed release of the `augur-kit` repository: an AUGUR release pins its version in `release/kit.json` (written by `pnpm kit:pin`, checked by `pnpm check:kit`), the Release workflow checks its signature before it builds the images (`node scripts/kit.mjs verify`), and the web image serves it at `KIT_URL` ([deploy.md](deploy.md#the-ui-kit)). They keep the same promise:
 
 - Within SDK 1.x the shell serves React 19.x, and Common and Quill on their same major. Moving React to a new major is an SDK major.
 - Aerie, the shell kit (`@augur/shell-kit`), is the shell's own: it is never in the import map and not part of the promise. It is published only for the shell to build with. `pnpm check:boundaries` fails if anything but the shell imports it.

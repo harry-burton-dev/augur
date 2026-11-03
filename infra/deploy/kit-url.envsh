@@ -1,0 +1,70 @@
+#!/bin/sh
+# Where the shell and every app load the UI kit from (ADR 0048): KIT_URL, which defaults to /kit/ on
+# this front door. nginx's entrypoint sources this before it fills in default.conf.template, so the
+# ${SCRIPT_HASHES} and ${KIT_ORIGIN} it exports reach the Content Security Policy.
+#
+#   KIT_URL=/kit/                         the default: the kit bundle in this image
+#   KIT_URL=https://cdn.example.org/kit/  any host that serves the same files at the same paths, with
+#                                         CORS (Access-Control-Allow-Origin) for this site
+#
+# The page's import map names each kit file under KIT_URL with its hash, so the browser refuses a file
+# that isn't the kit this release pinned, wherever it comes from.
+template=/usr/share/nginx/index.template.html
+page=/usr/share/nginx/html/index.html
+
+KIT_URL="${KIT_URL:-/kit/}"
+# A path on this site (but not //host, which is another site), or an https address, ending in /.
+case "$KIT_URL" in
+  //*) ok=no ;;
+  /*/ | https://*/) ok=yes ;;
+  *) ok=no ;;
+esac
+if [ "$ok" = yes ] && ! printf '%s' "$KIT_URL" | grep -qE '^[A-Za-z0-9._~:/-]+$'; then ok=no; fi
+if [ "$ok" = no ]; then
+  echo "kit-url: KIT_URL ($KIT_URL) must be a path such as /kit/ or an https:// address, ending in /. Using /kit/." >&2
+  KIT_URL=/kit/
+fi
+export KIT_URL
+
+# The kit's site, for script-src and style-src: none when it is on this one.
+export KIT_ORIGIN=""
+case "$KIT_URL" in https://*) KIT_ORIGIN=$(printf '%s' "$KIT_URL" | sed -E 's#^(https://[^/]+).*$#\1#') ;; esac
+
+sed "s#@KIT_URL@#${KIT_URL}#g" "$template" > "$page"
+
+# The hash of each inline script in the page (the import map, and the note shown if the kit can't be
+# loaded), as the CSP takes it: base64 of the sha256 of its exact text. busybox has sha256sum but no
+# base64 of binary input, so awk turns the hex into base64.
+hex_to_base64() {
+  awk '{
+    b = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    h = "0123456789abcdef"; n = length($0) / 2; out = ""
+    for (i = 0; i < n; i++) v[i] = (index(h, substr($0, 2 * i + 1, 1)) - 1) * 16 + index(h, substr($0, 2 * i + 2, 1)) - 1
+    for (i = 0; i < n; i += 3) {
+      x = v[i] * 65536 + (i + 1 < n ? v[i + 1] : 0) * 256 + (i + 2 < n ? v[i + 2] : 0)
+      out = out substr(b, int(x / 262144) % 64 + 1, 1) substr(b, int(x / 4096) % 64 + 1, 1)
+      out = out (i + 1 < n ? substr(b, int(x / 64) % 64 + 1, 1) : "=") (i + 2 < n ? substr(b, x % 64 + 1, 1) : "=")
+    }
+    print out
+  }'
+}
+work=$(mktemp -d)
+# Each inline <script> (one with no src) is on one line of the built page: write each body to a file.
+awk -v dir="$work" '{
+  line = $0
+  while (match(line, /<script[^>]*>/)) {
+    tag = substr(line, RSTART, RLENGTH); rest = substr(line, RSTART + RLENGTH)
+    end = index(rest, "</script>")
+    if (end == 0) break
+    if (tag !~ / src=/) { n++; f = dir "/" n; printf "%s", substr(rest, 1, end - 1) > f; close(f) }
+    line = substr(rest, end + 9)
+  }
+}' "$page"
+SCRIPT_HASHES=""
+for f in "$work"/*; do
+  [ -f "$f" ] || continue
+  SCRIPT_HASHES="$SCRIPT_HASHES 'sha256-$(sha256sum "$f" | cut -d' ' -f1 | hex_to_base64)'"
+done
+rm -rf "$work"
+export SCRIPT_HASHES="${SCRIPT_HASHES# }"
+if [ -z "$SCRIPT_HASHES" ]; then echo "kit-url: $page has no inline scripts; expected the import map." >&2; fi
