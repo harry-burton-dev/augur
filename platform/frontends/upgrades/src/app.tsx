@@ -3,11 +3,12 @@ import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { upgradesApi } from './api.js';
 import { useUpgrades, type UpgradesData } from './data.js';
-import { AppJobLine, Following, GoBackDialog, InstallDialog, UpgradeDialog } from './change.js';
+import { AppJobLine, Following, GoBackDialog, HaltedInstallDialog, InstallDialog, UpgradeDialog } from './change.js';
 import { SettingsEditor, type Draft } from './editor.js';
 import { History } from './history.js';
 import { Reporting } from './reporting.js';
-import { resumeFrom, takeDraft, takeEntered, type Resume } from './model/flow.js';
+import { resumeFrom, takeDraft, takeEntered, takeReason, type Resume } from './model/flow.js';
+import { haltedInstallWhyNot } from './model/halted.js';
 import { Facts, Muted, Section, StateMark, Version, When } from './look.js';
 import { needsYou } from './model/needs-you.js';
 import { canChange } from './model/roles.js';
@@ -398,6 +399,7 @@ const Unit = (p: {
   /** The dialog open now, if any: back from entering the password, it opens again by itself. */
   const [asking, setAsking] = useState<Resume | undefined>(() => (p.resume && p.resume.kind !== 'settings' && (p.resume.kind === 'install' ? p.resume.app === p.unit : p.unit === AUGUR) ? p.resume : undefined));
   const [entered] = useState(() => (asking?.kind === 'upgrade' ? takeEntered() : {}));
+  const [keptReason] = useState(() => (asking?.kind === 'halted' ? takeReason(asking.version) : ''));
   useEffect(() => {
     if ((asking && asking === p.resume) || back) p.resumed();
   }, []);
@@ -436,6 +438,8 @@ const Unit = (p: {
               : augurBusy
                 ? 'Wait for the upgrade under way to finish.'
                 : undefined;
+  const haltedWhyNot = isAugur ? haltedInstallWhyNot(u, p.gate) : undefined;
+  const haltedAsked = asking?.kind === 'halted' ? u.newer.find((r) => r.version === asking.version && r.halted) : undefined;
   const ask = (version: string) => setAsking(isAugur ? { kind: 'upgrade', version } : { kind: 'install', app: p.unit, version });
 
   return (
@@ -503,7 +507,16 @@ const Unit = (p: {
                   </span>
                 </span>
                 {r.halted ? (
-                  <span className="text-danger">Halted: {r.halted.reason}. It isn't offered.</span>
+                  <>
+                    <span className="text-danger">Halted: {r.halted.reason}. It isn't offered.</span>
+                    {isAugur && (
+                      <span>
+                        <Button kind="tertiary" size="sm" disabled={Boolean(haltedWhyNot)} reason={haltedWhyNot} onPress={() => setAsking({ kind: 'halted', version: r.version })}>
+                          Install {r.version} for a test
+                        </Button>
+                      </span>
+                    )}
+                  </>
                 ) : (
                   <span>
                     <Button kind="primary" size="sm" disabled={Boolean(whyNot(r.version))} reason={whyNot(r.version)} onPress={() => ask(r.version)}>
@@ -555,6 +568,17 @@ const Unit = (p: {
 
       {asking?.kind === 'upgrade' && u.next === asking.version && (
         <UpgradeDialog updates={u} api={p.api} entered={entered} took={p.tookUpdates} onClose={() => setAsking(undefined)} />
+      )}
+      {asking?.kind === 'halted' && haltedAsked?.halted && (
+        <HaltedInstallDialog
+          updates={u}
+          version={haltedAsked.version}
+          halted={haltedAsked.halted}
+          api={p.api}
+          reason={keptReason}
+          took={p.tookUpdates}
+          onClose={() => setAsking(undefined)}
+        />
       )}
       {asking?.kind === 'go-back' && <GoBackDialog updates={u} version={asking.version} api={p.api} took={p.tookUpdates} onClose={() => setAsking(undefined)} />}
       {asking?.kind === 'install' && app && (

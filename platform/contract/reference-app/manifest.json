@@ -9,5 +9,9 @@
   "icon": "apps",
   "handles": ["reference.show", "reference.answer"],
   "search": true,
-  "surfaces": [{ "floor": "personal", "slot": "card", "module": "./Glance" }]
+  "surfaces": [{ "floor": "personal", "slot": "card", "module": "./Glance" }],
+  "previews": [
+    { "id": "turned-on", "name": "Turned on", "detail": "On for the stand-in person in the contract tests" },
+    { "id": "left-off", "name": "Left off", "detail": "Off for everyone in the contract tests" }
+  ]
 }
