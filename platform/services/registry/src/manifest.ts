@@ -145,28 +145,36 @@ export const appEntrySchema = Type.Object(
       Type.Array(Type.String({ pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 }), { maxItems: 50, description: 'Intent types this app handles, such as document.open' }),
     ),
     ai: Type.Optional(Type.Boolean({ description: 'The app is an AI; the menus draw it as a bubble' })),
-    search: Type.Optional(Type.Boolean({ description: "The app's service answers GET /v1/search?q=, and the shell's Find asks it" })),
+    search: Type.Optional(
+      Type.Boolean({
+        description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it",
+      }),
+    ),
     storage: Type.Optional(
       Type.Object(
         { database: Type.Optional(Type.Boolean()), bucket: Type.Optional(Type.Boolean()) },
-        { additionalProperties: false, description: 'The storage the app keeps on the platform: its own database schema, its own bucket. See docs/app-storage.md' },
+        {
+          additionalProperties: false,
+          description:
+            'The storage the app keeps on the platform: its own database schema, its own bucket. An admin adds the app to APP_STORAGE and its service gets DATABASE_URL (a login owning one schema) and S3_* (its own bucket). See docs/app-storage.md.',
+        },
       ),
     ),
     maxUpload: Type.Optional(
       Type.Integer({
         minimum: 1,
         maximum: MAX_UPLOAD_MB,
-        description: `The largest request body, in MB, the gateway lets through to the app's service; ${DEFAULT_UPLOAD_MB} without it. An admin can lower it.`,
+        description: `The largest request body, in MB, the gateway lets through to the app's service; ${DEFAULT_UPLOAD_MB} without it. An admin can lower it. In the manifest the registry serves, always present: what the app asks, or less where an admin lowered it.`,
       }),
     ),
     previews: Type.Optional(
       Type.Array(featurePreviewSchema, {
         maxItems: MAX_FEATURE_PREVIEWS,
-        description: "Features the app has ready to try before they're everyone's (SDK 1.7): admins say who gets each, people opt in, and the app asks ctx.previewOn(id)",
+        description: "Features the app is trying before they're everyone's (SDK 1.7): admins say who gets each, people turn opt-in ones on in the shell's Previews, and the app asks ctx.previewOn(id)",
       }),
     ),
     settings: Type.Optional(
-      Type.Array(appSettingSchema, { maxItems: MAX_SETTINGS, description: 'Settings the app offers admins in Admin, Apps; its service reads them from the registry' }),
+      Type.Array(appSettingSchema, { maxItems: MAX_SETTINGS, description: "Settings the app offers admins in Admin, Apps; its service reads them from the registry's /apps/{id}/settings" }),
     ),
     scopes: Type.Optional(
       Type.Array(Type.Enum([...SCOPES]), {
@@ -184,19 +192,33 @@ export const appEntrySchema = Type.Object(
       }),
     ),
     surfaces: Type.Optional(
-      Type.Array(surfaceSchema, { maxItems: 30, description: "What the app shows on each kind of floor, for the shell to place. Each surface's floor must be in floors." }),
+      Type.Array(surfaceSchema, {
+        maxItems: 30,
+        description:
+          "What the app shows on each kind of floor, for the shell to place. When several match, the most specific floor wins, then a role condition, then manifest order. Each surface's floor must be in floors.",
+      }),
     ),
-    orbit: Type.Optional(Type.Boolean({ description: 'false: the app keeps its own menu inside it and the shell never shows its Orbit' })),
+    orbit: Type.Optional(
+      Type.Boolean({
+        description:
+          "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus",
+      }),
+    ),
     sameOnEveryFloor: Type.Optional(
-      Type.Boolean({ description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why (SDK 1.6)" }),
+      Type.Boolean({
+        description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)",
+      }),
     ),
     focus: Type.Optional(
-      Type.Boolean({ description: 'true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029)' }),
+      Type.Boolean({
+        description: 'true: the app can narrow what it shows to a working context inside the floor, from ctx.focus (SDK 1.10). Reserved: the shell offers none yet (ADR 0029)',
+      }),
     ),
     areas: Type.Optional(
       Type.Array(appAreaSchema, {
         maxItems: 6,
-        description: 'The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See docs/shell-principles.md',
+        description:
+          "The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. With fewer than two, Title shows the app alone. Nothing repeats its parent: the registry warns when an area's label or icon matches the app's, a group's its area's, or an item's its group's, and accepts the manifest. See docs/shell-principles.md",
       }),
     ),
     menu: Type.Optional(

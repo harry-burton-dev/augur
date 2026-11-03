@@ -84,7 +84,7 @@
     },
     "search": {
       "type": "boolean",
-      "description": "The app's service answers GET /v1/search?q=, and the shell's Find asks it"
+      "description": "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it"
     },
     "storage": {
       "type": "object",
@@ -97,13 +97,13 @@
         }
       },
       "additionalProperties": false,
-      "description": "The storage the app keeps on the platform: its own database schema, its own bucket. See docs/app-storage.md"
+      "description": "The storage the app keeps on the platform: its own database schema, its own bucket. An admin adds the app to APP_STORAGE and its service gets DATABASE_URL (a login owning one schema) and S3_* (its own bucket). See docs/app-storage.md."
     },
     "maxUpload": {
       "type": "integer",
       "minimum": 1,
       "maximum": 2048,
-      "description": "The largest request body, in MB, the gateway lets through to the app's service; 10 without it. An admin can lower it."
+      "description": "The largest request body, in MB, the gateway lets through to the app's service; 10 without it. An admin can lower it. In the manifest the registry serves, always present: what the app asks, or less where an admin lowered it."
     },
     "previews": {
       "type": "array",
@@ -138,7 +138,7 @@
         "additionalProperties": false
       },
       "maxItems": 8,
-      "description": "Features the app has ready to try before they're everyone's (SDK 1.7): admins say who gets each, people opt in, and the app asks ctx.previewOn(id)"
+      "description": "Features the app is trying before they're everyone's (SDK 1.7): admins say who gets each, people turn opt-in ones on in the shell's Previews, and the app asks ctx.previewOn(id)"
     },
     "settings": {
       "type": "array",
@@ -192,7 +192,7 @@
         "additionalProperties": false
       },
       "maxItems": 10,
-      "description": "Settings the app offers admins in Admin, Apps; its service reads them from the registry"
+      "description": "Settings the app offers admins in Admin, Apps; its service reads them from the registry's /apps/{id}/settings"
     },
     "scopes": {
       "type": "array",
@@ -272,19 +272,19 @@
         "additionalProperties": false
       },
       "maxItems": 30,
-      "description": "What the app shows on each kind of floor, for the shell to place. Each surface's floor must be in floors."
+      "description": "What the app shows on each kind of floor, for the shell to place. When several match, the most specific floor wins, then a role condition, then manifest order. Each surface's floor must be in floors."
     },
     "orbit": {
       "type": "boolean",
-      "description": "false: the app keeps its own menu inside it and the shell never shows its Orbit"
+      "description": "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus"
     },
     "sameOnEveryFloor": {
       "type": "boolean",
-      "description": "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why (SDK 1.6)"
+      "description": "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)"
     },
     "focus": {
       "type": "boolean",
-      "description": "true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029)"
+      "description": "true: the app can narrow what it shows to a working context inside the floor, from ctx.focus (SDK 1.10). Reserved: the shell offers none yet (ADR 0029)"
     },
     "areas": {
       "type": "array",
@@ -318,7 +318,7 @@
         "additionalProperties": false
       },
       "maxItems": 6,
-      "description": "The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See docs/shell-principles.md"
+      "description": "The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. With fewer than two, Title shows the app alone. Nothing repeats its parent: the registry warns when an area's label or icon matches the app's, a group's its area's, or an item's its group's, and accepts the manifest. See docs/shell-principles.md"
     },
     "menu": {
       "type": "array",

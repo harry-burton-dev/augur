@@ -12,16 +12,41 @@ components:
     Refusal:
       type: object
       required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
         - error
         - message
       properties:
-        error:
+        type:
           type: string
-          examples:
-            - forbidden
-        message:
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
           type: string
           description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
     AppInstalls:
       type: object
       required:
@@ -483,7 +508,6 @@ components:
           format: date-time
     AppSetting:
       type: object
-      additionalProperties: false
       required:
         - id
         - label
@@ -495,7 +519,7 @@ components:
         id:
           type: string
           pattern: ^[a-z][a-zA-Z0-9]{0,39}$
-          description: How the app's service names it, e.g. retentionDays
+          description: "How the app's service names it: \"retentionDays\""
         label:
           type: string
           minLength: 1
@@ -503,13 +527,14 @@ components:
         detail:
           type: string
           maxLength: 200
+          description: A sentence on what it changes
         type:
           enum:
             - integer
         unit:
           type: string
           maxLength: 20
-          description: What the number counts, e.g. days
+          description: 'What the number counts, shown after it: "days"'
         min:
           type: integer
         max:
@@ -517,6 +542,7 @@ components:
         default:
           type: integer
           description: Between min and max
+      additionalProperties: false
     AppSettings:
       type: object
       required:
@@ -1509,7 +1535,6 @@ components:
           format: date-time
     FeaturePreview:
       type: object
-      additionalProperties: false
       required:
         - id
         - name
@@ -1517,6 +1542,7 @@ components:
         id:
           type: string
           pattern: ^[a-z][a-z0-9-]{0,39}$
+          description: 'How the app names it: "board-view"'
         name:
           type: string
           minLength: 1
@@ -1524,10 +1550,12 @@ components:
         detail:
           type: string
           maxLength: 200
+          description: A sentence on what it changes, for the person choosing it
         until:
           type: string
           pattern: ^\d{4}-\d{2}-\d{2}$
-          description: Its last day; after it, it's off for everyone
+          description: Its last day, YYYY-MM-DD; after it, it's off for everyone and Admin says the app should drop it or ship it
+      additionalProperties: false
     FeaturePreviewMode:
       enum:
         - off
@@ -1573,7 +1601,6 @@ components:
                     description: How many people turned it on
     AppManifestEntry:
       type: object
-      additionalProperties: false
       required:
         - id
         - name
@@ -1582,13 +1609,19 @@ components:
         - version
         - sdk
       properties:
+        $schema:
+          type: string
+          maxLength: 500
+          description: "Where editors find this schema, contracts/manifest.schema.json: a path or an address. The registry doesn't use it."
         id:
           type: string
           pattern: ^[a-z][a-z0-9-]{1,39}$
+          description: The app's id, such as "board"; its route, client and storage are named after it
         name:
           type: string
           minLength: 1
           maxLength: 60
+          description: What people call the app
         route:
           type: string
           pattern: ^/[a-z0-9][a-z0-9/-]*$
@@ -1612,7 +1645,7 @@ components:
         description:
           type: string
           maxLength: 140
-          description: One line shown under the app name in the Shell
+          description: One line shown under the app name in the shell
         icon:
           type: string
           maxLength: 40
@@ -1620,14 +1653,15 @@ components:
         requiredRole:
           type: string
           maxLength: 60
+          description: Only people with this role can open it
         handles:
           type: array
-          maxItems: 50
           items:
             type: string
             pattern: ^[a-z][a-z0-9.-]*$
             maxLength: 80
-          description: Intent types this app handles, e.g. document.open
+          maxItems: 50
+          description: Intent types this app handles, such as document.open
         ai:
           type: boolean
           description: The app is an AI; the menus draw it as a bubble
@@ -1636,50 +1670,50 @@ components:
           description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it"
         storage:
           type: object
-          additionalProperties: false
           properties:
             database:
               type: boolean
             bucket:
               type: boolean
-          description: The storage the app keeps on the platform. An admin adds the app to APP_STORAGE and its service gets DATABASE_URL (a login owning one schema) and S3_* (its own bucket). See docs/app-storage.md.
+          additionalProperties: false
+          description: "The storage the app keeps on the platform: its own database schema, its own bucket. An admin adds the app to APP_STORAGE and its service gets DATABASE_URL (a login owning one schema) and S3_* (its own bucket). See docs/app-storage.md."
         maxUpload:
           type: integer
           minimum: 1
           maximum: 2048
-          description: "The largest request, in MB, the gateway lets through to the app's service; 10 without it. In the manifest the registry serves, always present: what the app asks, or less where an admin lowered it."
+          description: "The largest request body, in MB, the gateway lets through to the app's service; 10 without it. An admin can lower it. In the manifest the registry serves, always present: what the app asks, or less where an admin lowered it."
         previews:
           type: array
-          maxItems: 8
           items:
             $ref: "#/components/schemas/FeaturePreview"
+          maxItems: 8
           description: "Features the app is trying before they're everyone's (SDK 1.7): admins say who gets each, people turn opt-in ones on in the shell's Previews, and the app asks ctx.previewOn(id)"
         settings:
           type: array
-          maxItems: 10
           items:
             $ref: "#/components/schemas/AppSetting"
-          description: Settings the app offers admins (Admin, Apps); its service reads them from /apps/{id}/settings.
+          maxItems: 10
+          description: Settings the app offers admins in Admin, Apps; its service reads them from the registry's /apps/{id}/settings
         scopes:
           type: array
-          uniqueItems: true
-          maxItems: 6
           items:
             $ref: "#/components/schemas/Scope"
-          description: What the app's service asks to do on the platform. An app may always register itself.
+          uniqueItems: true
+          maxItems: 6
+          description: What the app's service asks to do on the platform, such as "notifications:send". An app may always register itself.
         floors:
           type: array
+          items:
+            $ref: "#/components/schemas/FloorKind"
           minItems: 1
           uniqueItems: true
           maxItems: 3
-          items:
-            $ref: "#/components/schemas/FloorKind"
-          description: The kinds of floor the app works on; every kind when absent
+          description: The kinds of floor the app works on; every kind without it
         surfaces:
           type: array
-          maxItems: 30
           items:
             $ref: "#/components/schemas/Surface"
+          maxItems: 30
           description: What the app shows on each kind of floor, for the shell to place. When several match, the most specific floor wins, then a role condition, then manifest order. Each surface's floor must be in floors.
         orbit:
           type: boolean
@@ -1692,16 +1726,17 @@ components:
           description: "true: the app can narrow what it shows to a working context inside the floor, from ctx.focus (SDK 1.10). Reserved: the shell offers none yet (ADR 0029)"
         areas:
           type: array
-          maxItems: 6
           items:
             $ref: "#/components/schemas/AppArea"
-          description: "The broad parts of what the app covers, which Title lists under it (SDK 1.5). With fewer than two, Title shows the app alone. Nothing repeats its parent: the registry warns when an area's label or icon matches the app's, a group's its area's, or an item's its group's, and accepts the manifest. See docs/shell-principles.md"
+          maxItems: 6
+          description: "The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. With fewer than two, Title shows the app alone. Nothing repeats its parent: the registry warns when an area's label or icon matches the app's, a group's its area's, or an item's its group's, and accepts the manifest. See docs/shell-principles.md"
         menu:
           type: array
-          maxItems: 8
           items:
             $ref: "#/components/schemas/AppMenuCategory"
+          maxItems: 8
           description: The app's menu, shown by the shell as Orbit at the app's root. A group with one item opens it directly
+      additionalProperties: false
     FloorKind:
       enum:
         - personal
@@ -1710,7 +1745,6 @@ components:
       description: team means any team, at any depth
     Surface:
       type: object
-      additionalProperties: false
       required:
         - floor
         - slot
@@ -1737,7 +1771,8 @@ components:
           description: Only for people with this role on the floor
         rollup:
           type: boolean
-          description: Shows the floor and the teams below it the person is on (identity's roll-up)
+          description: Shows this floor and the teams below it that the person is on, using the platform's roll-up
+      additionalProperties: false
     Scope:
       enum:
         - notifications:send
@@ -1749,7 +1784,6 @@ components:
       description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing."
     AppMenuCategory:
       type: object
-      additionalProperties: false
       required:
         - label
         - items
@@ -1773,13 +1807,13 @@ components:
           description: The id of the app's area the group belongs to (SDK 1.5)
         items:
           type: array
-          minItems: 1
-          maxItems: 12
           items:
             $ref: "#/components/schemas/AppMenuItem"
+          minItems: 1
+          maxItems: 12
+      additionalProperties: false
     AppArea:
       type: object
-      additionalProperties: false
       required:
         - id
         - label
@@ -1799,9 +1833,9 @@ components:
           type: string
           maxLength: 60
           description: One line on what's in it
+      additionalProperties: false
     AppMenuItem:
       type: object
-      additionalProperties: false
       required:
         - label
         - path
@@ -1816,6 +1850,7 @@ components:
         icon:
           type: string
           maxLength: 40
+          description: A UI kit icon name
         detail:
           type: string
           maxLength: 60
@@ -1831,6 +1866,7 @@ components:
           pattern: ^/.+
           maxLength: 200
           description: Where in the app it opens, below the app's route
+      additionalProperties: false
 paths:
   /manifest:
     get:
@@ -1865,19 +1901,19 @@ paths:
         "403":
           description: The workspace isn't the floor the gateway checked
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such floor
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors can't be looked up right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /me/apps:
@@ -1964,25 +2000,25 @@ paths:
         "401":
           description: No signed-in caller
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not the floor the gateway checked
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such floor
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors can't be looked up right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps:
@@ -2002,7 +2038,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/versions:
@@ -2045,13 +2081,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/pin:
@@ -2088,19 +2124,19 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app, or no such version kept
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: A platform app or one that ships with AUGUR, or another app now has that version's route
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     delete:
@@ -2122,19 +2158,19 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: A platform app or one that ships with AUGUR
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/grants:
@@ -2177,19 +2213,19 @@ paths:
         "403":
           description: Not a platform service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app is registered
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors, or the sign-in service that checks the caller's token, can't be reached right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /feature-previews:
@@ -2239,7 +2275,7 @@ paths:
         "401":
           description: Not signed in
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /feature-previews/{app}/{preview}:
@@ -2274,19 +2310,19 @@ paths:
         "401":
           description: Not signed in
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app or preview, or the caller can't open the app
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: It isn't opt-in (error not_opt_in), or it has ended (ended)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/feature-previews:
@@ -2308,13 +2344,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app is registered
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/feature-previews/{preview}:
@@ -2356,13 +2392,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app, or it offers no such preview
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/feature-previews/people/{person}:
@@ -2397,19 +2433,19 @@ paths:
         "403":
           description: Neither the app's own service nor an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app is registered
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the caller's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /app-runner/apps/{id}/developers:
@@ -2450,19 +2486,19 @@ paths:
         "401":
           description: "sign_in_again: enter the password again first"
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a deployment admin (the refusal names the requiredRole)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: The app runner hasn't installed that app
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /previews:
@@ -2512,7 +2548,7 @@ paths:
         "401":
           description: Not signed in
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /previews/{id}:
@@ -2546,19 +2582,19 @@ paths:
         "401":
           description: Not signed in
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not one of the app's developers
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No preview of that pull request is running
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /previews/{id}/live:
@@ -2593,25 +2629,25 @@ paths:
         "400":
           description: Not an app entry on a machine on the tailnet
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: Not signed in
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not one of the app's developers
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: This server isn't the workbench
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /app-runner/apps:
@@ -2627,7 +2663,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /app-runner/check:
@@ -2643,7 +2679,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /app-runner/apps/{id}/follow:
@@ -2687,25 +2723,25 @@ paths:
         "401":
           description: "sign_in_again: enter the password again first"
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a deployment admin (the refusal names the requiredRole)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: The app runner hasn't installed that app
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: "This is a production server: it follows stable releases only (error production_server)"
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /app-runner/jobs:
@@ -2739,7 +2775,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
@@ -2805,31 +2841,31 @@ paths:
         "400":
           description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's or dev build it can't take, or a bad manifest"
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: "sign_in_again: enter the password again first"
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a deployment admin (the refusal names the requiredRole)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: The app feed has no release file for that app and version
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: The app ships with AUGUR, its publisher halted that release, or it already has a job waiting or under way
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /app-runner/jobs/{id}:
@@ -2848,19 +2884,19 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such job is waiting
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: It has started; it finishes by itself
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /app-runner/next:
@@ -2879,13 +2915,13 @@ paths:
         "403":
           description: Not the app runner
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the app runner's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /app-runner/jobs/{id}/progress:
@@ -2937,25 +2973,25 @@ paths:
         "400":
           description: "`upstream` isn't an address a preview's service can be at"
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not the app runner
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: The job isn't open
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the app runner's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/overview:
@@ -2972,7 +3008,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/units/{unit}/desired-state:
@@ -3001,31 +3037,31 @@ paths:
         "400":
           description: A bad pin, time zone or window, with how to write it
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: "sign_in_again: enter the password again first"
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a deployment admin (the refusal names the requiredRole)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: This server runs no such unit
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: AUGUR's channel is set in .env, or a production server's apps follow stable only
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/units/{unit}/desired-state/history:
@@ -3058,13 +3094,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: This server runs no such unit
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/results/{kind}/{id}/seen:
@@ -3095,13 +3131,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No finished upgrade or job with that id
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/reporting:
@@ -3118,7 +3154,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/reporting/export:
@@ -3135,13 +3171,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: Reporting is off, with why (error reporting_off)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}:
@@ -3176,25 +3212,25 @@ paths:
         "400":
           description: The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Neither the app itself, a platform service nor an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: The id belongs to a platform app, or the route is taken
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the app's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     patch:
@@ -3228,19 +3264,19 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: A platform app, which is always on
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     delete:
@@ -3258,19 +3294,19 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: An app that ships with AUGUR (pillar), which is turned off instead
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/versions/{version}/frontend:
@@ -3313,37 +3349,37 @@ paths:
         "400":
           description: Not a semver version, or not a usable tarball (links, odd paths, too big)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Another app, or not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: One of the platform's own apps
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "415":
           description: Not sent as application/gzip
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "501":
           description: This deployment doesn't keep frontends by version (FRONTENDS_BUCKET_SECRET isn't set)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the app's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /upstreams:
@@ -3375,7 +3411,7 @@ paths:
         "403":
           description: Neither the gateway nor an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/upstream:
@@ -3413,31 +3449,31 @@ paths:
         "400":
           description: Not an address an app's service can be at
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a platform service or an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: One of the platform's own apps
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the caller's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/floors:
@@ -3462,13 +3498,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app is registered
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/floors/{workspace}:
@@ -3544,31 +3580,31 @@ paths:
         "400":
           description: Someone's own floor
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app or floor
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: A platform app, which is on everywhere
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors can't be looked up right now
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/scopes:
@@ -3607,13 +3643,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app is registered
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/upload-limit:
@@ -3652,19 +3688,19 @@ paths:
         "400":
           description: More than the app's manifest asks for
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app is registered
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/settings:
@@ -3687,19 +3723,19 @@ paths:
         "403":
           description: Neither an admin nor the app's own service
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app is registered
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the caller's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/settings/{setting}:
@@ -3741,19 +3777,19 @@ paths:
         "400":
           description: Outside the setting's min and max
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app, or it offers no such setting
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /origins:
@@ -3772,7 +3808,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
@@ -3804,13 +3840,13 @@ paths:
         "400":
           description: Not an HTTPS origin, or has a path
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /origins/{origin}:
@@ -3830,13 +3866,13 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: Not an allowed origin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/updates:
@@ -3853,7 +3889,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/updates/check:
@@ -3870,7 +3906,7 @@ paths:
         "403":
           description: Not an admin
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/upgrade:
@@ -3911,25 +3947,25 @@ paths:
         "400":
           description: A setting the release doesn't have, or a value over more than one line
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "401":
           description: "sign_in_again: enter the password again first"
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a deployment admin (the refusal names the requiredRole)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: Not the next release, its release file names no images, or an upgrade is already waiting or under way
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     delete:
@@ -3945,21 +3981,46 @@ paths:
         "403":
           description: Not a deployment admin (the refusal names the requiredRole)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No upgrade is waiting
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: It has started; it finishes or rolls back by itself
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /platform/upgrade/halted:
+    put:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - version
+                - reason
+              properties:
+                version:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                reason:
+                  type: string
+                  minLength: 10
+                  maxLength: 500
+                  pattern: ^[^\r\n]*$
+      responses:
+        "200":
+          description: Default Response
   /platform/go-back:
     put:
       summary: Go back to an earlier AUGUR release (deployment admins who just entered their password)
@@ -3988,19 +4049,19 @@ paths:
         "401":
           description: Enter your password again (error sign_in_again)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not a deployment admin (the refusal names the requiredRole)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: Not a release it can go back to, with why; or an upgrade is already open
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/upgrade/target:
@@ -4068,13 +4129,13 @@ paths:
         "403":
           description: Not the updater
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the updater's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/upgrade/progress:
@@ -4125,19 +4186,19 @@ paths:
         "403":
           description: Not the updater
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: Not the open upgrade
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the updater's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /platform/upgrade/after-watch:
@@ -4170,13 +4231,13 @@ paths:
         "403":
           description: Not the updater
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the updater's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
@@ -4252,19 +4313,19 @@ paths:
         "403":
           description: Not the updater
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: That upgrade isn't being watched
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service can't be reached to check the updater's token
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
 servers:
