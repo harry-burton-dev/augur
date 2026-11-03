@@ -111,6 +111,14 @@ export interface PlatformUpdates {
   updaterSeenAt?: string;
   portalUrl?: string;
   feedTrust?: FeedTrust;
+  /** Whether a halted release may be installed here for a test (ADR 0051), and why not. Absent from an older registry. */
+  haltedInstall?: HaltedInstall;
+}
+
+/** Only dev and preview servers install a halted release, on request, to test going back (ADR 0051). */
+export interface HaltedInstall {
+  allowed: boolean;
+  why?: string;
 }
 
 export interface Window {

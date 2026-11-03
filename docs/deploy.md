@@ -168,6 +168,10 @@ The policy reaches the machine within a minute, with no restart. `public.sh on` 
 
 Each service can send OpenTelemetry to a collector: the `observability` profile's Grafana stack on the server, or your organisation's own. It's off until `OTEL_EXPORTER_OTLP_ENDPOINT` is set. See [observability.md](observability.md).
 
+## Sample data
+
+A dev, staging or demo server can be filled with synthetic people, floors, documents and entities by `pnpm seed` (docs/seed.md). It works only where `.env` sets `SEED_ALLOWED=true`, and Admin's Status says whether it is allowed. Never set it where real people work.
+
 ## Upgrading
 
 See [upgrade.md](upgrade.md) for moving from one release to the next.
