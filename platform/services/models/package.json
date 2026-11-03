@@ -2,6 +2,7 @@
   "name": "@augur/models",
   "version": "0.3.2",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
