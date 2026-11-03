@@ -447,6 +447,16 @@ describe('gateway', () => {
     ]);
   });
 
+  it('says whether sample data may be seeded here, and is off unless the deployment allows it', async () => {
+    const ask = async (seedAllowed?: boolean) => {
+      const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }), ...(seedAllowed === undefined ? {} : { seedAllowed }) });
+      return (await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${await sign(ada)}` } })).json().seeding;
+    };
+    expect(await ask(true)).toEqual({ allowed: true });
+    expect(await ask(false)).toMatchObject({ allowed: false, whoCanChange: expect.stringContaining('SEED_ALLOWED') });
+    expect((await ask()).allowed).toBe(false);
+  });
+
   it('keeps the platform’s status from people who aren’t admins, and from nobody signed in', async () => {
     const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }) });
     const sam = await sign({ ...ada, sub: 'u-2', roles: [] });

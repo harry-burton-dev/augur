@@ -75,6 +75,42 @@
           "config": { "claim.name": "departments", "full.path": "false", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" }
         }
       ]
+    },
+    {
+      "clientId": "platform-cli",
+      "name": "AUGUR command line",
+      "description": "Signs a person in from a terminal with a one-time code (device grant), for pnpm seed. ADR 0052.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "true",
+        "oauth2.device.code.lifespan": "300",
+        "oauth2.device.polling.interval": "5"
+      },
+      "defaultClientScopes": ["basic", "profile", "email", "web-origins", "acr"],
+      "protocolMappers": [
+        {
+          "name": "platform-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.custom.audience": "platform-api", "access.token.claim": "true", "id.token.claim": "false" }
+        },
+        {
+          "name": "roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" }
+        },
+        {
+          "name": "departments",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": { "claim.name": "departments", "full.path": "false", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" }
+        }
+      ]
     }
   ]
 }
