@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facets · V4 · Live sliders</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+/* ---- V4: dynamic queries, every slider shows what it leaves ---- */
+.body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) calc(var(--measure-decision) - var(--space-5));gap:var(--space-5)}
+.field{position:relative;min-height:0;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:color-mix(in srgb,var(--slate-deep) 60%,transparent);overflow:hidden}
+.field > svg{position:absolute;inset:0;width:100%;height:100%}
+.dot{transition:opacity var(--motion-slow) var(--ease-standard),r var(--motion-slow) var(--ease-standard)}
+.dot.on{fill:var(--x-proposed-floor);opacity:.9}
+.dot.off{fill:var(--ink-muted);opacity:.18}
+.dot.hov{fill:var(--light);opacity:1}
+.ax{font:400 var(--x-proposed-type-micro) var(--font-mono);fill:var(--ink-muted);letter-spacing:var(--tracking-caps)}
+.ax-t{font:400 var(--type-small) var(--font-sans);fill:var(--ink-muted)}
+.grid{stroke:var(--hairline)}
+.nowl{stroke:color-mix(in srgb,var(--light) 60%,transparent);stroke-dasharray:2 3}
+.band{fill:color-mix(in srgb,var(--x-proposed-floor) 7%,transparent);stroke:color-mix(in srgb,var(--x-proposed-floor) 40%,transparent);transition:x var(--motion-slow) var(--ease-out),width var(--motion-slow) var(--ease-out),y var(--motion-slow) var(--ease-out),height var(--motion-slow) var(--ease-out)}
+.strip-gap{fill:url(#hatch)}
+.strip-na{fill:url(#rule)}
+.strip-lb{font:400 var(--x-proposed-type-micro) var(--font-mono);fill:var(--ink);letter-spacing:var(--tracking-caps)}
+.tip{position:absolute;pointer-events:none;padding:var(--space-1) var(--space-2);background:var(--surface-overlay);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);white-space:nowrap;opacity:0;transition:opacity var(--motion-quick) var(--ease-standard)}
+.tip.in{opacity:1}
+.fempty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:var(--measure-glance);padding:var(--space-3) var(--space-4);background:var(--surface-overlay);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset)}
+/* the controls */
+.ctl{display:flex;flex-direction:column;gap:var(--space-4);min-height:0;overflow:auto}
+.big{display:flex;align-items:baseline;gap:var(--space-3)}
+.big .n{font:200 var(--type-display)/1 var(--font-sans);color:var(--light);font-variant-numeric:tabular-nums}
+.big .t{font-size:var(--type-meta);color:var(--ink-muted);line-height:var(--leading-meta)}
+.big .t b{color:var(--ink);font-weight:400}
+.sl{display:flex;flex-direction:column;gap:var(--space-1)}
+.sl .top{display:flex;justify-content:space-between;align-items:baseline;font-size:var(--type-meta)}
+.sl .top b{font-weight:400;color:var(--ink)}
+.sl .top span{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.hist{position:relative;height:var(--space-5);display:flex;align-items:flex-end;gap:1px}
+.hist i{flex:1;position:relative;height:100%}
+.hist i::before,.hist i::after{content:"";position:absolute;left:0;right:0;bottom:0;border-radius:1px 1px 0 0;transition:height var(--motion-slow) var(--ease-out),background var(--motion-base) var(--ease-standard)}
+.hist i::before{height:var(--all);background:var(--x-proposed-bar-ghost)}
+.hist i::after{height:var(--now);background:var(--x-proposed-bar)}
+.hist i.out::after{background:color-mix(in srgb,var(--ink-muted) 30%,transparent)}
+.track{position:relative;height:var(--target-sm);touch-action:none;cursor:pointer}
+.track::before{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:var(--hairline-strong);border-radius:1px}
+.track .fill{position:absolute;top:50%;height:2px;margin-top:-1px;background:var(--x-proposed-floor);transition:left var(--motion-slow) var(--ease-out),width var(--motion-slow) var(--ease-out)}
+.hd{position:absolute;top:50%;width:var(--space-4);height:var(--space-4);margin:calc(var(--space-2) * -1) 0 0 calc(var(--space-2) * -1);border-radius:var(--radius-pill);background:var(--slate-deep);border:2px solid var(--x-proposed-floor);transition:left var(--motion-slow) var(--ease-out)}
+.hd .lv{display:none;position:absolute;top:calc(var(--space-5) - var(--space-1));left:50%;transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);white-space:nowrap}
+.track.drag .hd,.track.drag .fill{transition:none}
+.ghost{position:absolute;top:50%;width:var(--space-3);height:var(--space-3);margin:calc(var(--space-3) / -2) 0 0 calc(var(--space-3) / -2);border-radius:var(--radius-pill);border:1px dashed var(--ink);opacity:0;pointer-events:none;transition:opacity var(--motion-quick) var(--ease-standard)}
+.ghost.in{opacity:1}
+.ghost .lv{position:absolute;bottom:calc(var(--space-4) + 2px);left:50%;transform:translateX(-50%);padding:2px var(--space-1);border-radius:var(--radius-key);background:var(--surface-overlay);border:1px solid var(--hairline-strong);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--light);white-space:nowrap}
+.sl .set{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:var(--space-2)}
+.kinds{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.kc{display:inline-flex;align-items:center;gap:var(--space-1);height:var(--target-sm);padding:0 var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink-muted)}
+.kc[aria-pressed="true"]{color:var(--light);border-color:color-mix(in srgb,var(--x-proposed-floor) 60%,transparent);background:var(--x-proposed-floor-soft)}
+.kc .c{font-family:var(--font-mono)}
+.aside{position:absolute;right:var(--space-4);bottom:calc(var(--space-7) - var(--space-2));width:var(--measure-card);padding:var(--space-2) var(--space-3);background:var(--surface-overlay);border:1px solid var(--hairline);border-radius:var(--radius-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);z-index:1}
+.aside:empty{display:none}
+.aside .why{font-size:var(--type-small);line-height:var(--leading-small)}
+@media (max-height:840px){.hist{height:var(--space-5)}.ctl{gap:var(--space-3)}.big .n{font-size:var(--type-title)}}
+</style>
+</head>
+<body class="admin-off">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Facets · V4</b> sliders with live counts; a ghost handle shows what a drag would leave · Shneiderman dynamic queries (HomeFinder, FilmFinder)</div>
+<script>
+/*@DATA*/
+/*@ENGINE*/
+const app = document.getElementById('app');
+const Y0 = DATA.year - 3, Y1 = DATA.year + 3, NM = (Y1 - Y0 + 1) * 12; // months shown on the date slider
+const mIdx = d => (+d.slice(0, 4) - Y0) * 12 + (+d.slice(5, 7) - 1);
+const mLab = i => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][((i % 12) + 12) % 12] + ' ' + (Y0 + Math.floor(i / 12));
+const nowM = mIdx(DATA.today);
+const R = F.recs.filter(F.visible).map(r => Object.assign({}, r, { m: r.date ? Math.max(0, Math.min(NM - 1, mIdx(r.date))) : null, fill: 1 - r.missing.length / F.KIND[r.kind].expects.length, use: r.intents + r.docs }));
+const S = { date: [0, NM - 1], fill: [0, 10], use: [0, 12], kinds: new Set(DATA.kinds.map(k => k.id)) };
+const SL = [
+  { id: 'date', plain: 'Key date', q: 'When its key date falls', tech: 'per kind: ' + DATA.kinds.filter(k => k.date).map(k => k.date).join(', '), min: 0, max: NM - 1, two: true, fmt: mLab, of: r => r.m, bins: (Y1 - Y0 + 1) * 4 },
+  { id: 'fill', plain: 'How complete', q: 'Share of expected details filled in', tech: '1 − gaps / expected properties', min: 0, max: 10, two: false, fmt: v => v * 10 + '%', of: r => Math.round(r.fill * 10), bins: 11 },
+  { id: 'use', plain: 'How much it’s used', q: 'Intents and documents that point at it', tech: 'Mandate bindings + Artifacts sources', min: 0, max: 12, two: false, fmt: v => v + '+', of: r => Math.min(12, r.use), bins: 13 },
+];
+const dateFull = () => S.date[0] === 0 && S.date[1] === NM - 1;
+function pass(r, skip, alt) {
+  const s = Object.assign({}, S, alt || {});
+  if (!s.kinds.has(r.kind)) return false;
+  for (const d of SL) {
+    if (d.id === skip) continue; const v = d.of(r), rg = s[d.id];
+    if (d.id === 'date') { if (v == null) { if (!(rg[0] === 0 && rg[1] === NM - 1)) return false; continue; } }
+    if (v < rg[0] || v > (d.two ? rg[1] : d.max)) return false;
+  }
+  return true;
+}
+const left = alt => R.filter(r => pass(r, null, alt));
+app.innerHTML = frame() + '<main class="main"><div class="head"><div><div class="eyebrow">' + DATA.app + ' · ' + DATA.floor.name + '</div><h1>Narrow down</h1><div class="sub">Drag a slider and watch what stays lit. Point along a slider first: <b>a ghost handle shows what a drag would leave</b>.</div></div><button class="btn" id="tbtn">' + Icons.svg('code', { size: 16 }) + 'Technical names <span class="kbd">T</span></button></div><div class="body"><div class="field" id="field"></div><div class="ctl" id="ctl"></div></div></main>' +
+  keys([['tab', 'to a handle'], ['← →', 'move it'], ['1-6', 'kinds on or off'], ['esc', 'reset'], ['T', 'technical names'], ['R', 'replay']]);
+const C = document.getElementById('ctl');
+C.innerHTML = '<div class="big"><span class="n" id="num">0</span><span class="t" id="numt"></span></div><div class="sl"><div class="top"><b>What kind</b><span class="tech">rdf:type</span></div><div class="kinds" id="kinds"></div></div>' +
+  SL.map(d => '<div class="sl" data-s="' + d.id + '"><div class="top"><b>' + d.plain + '</b><span id="rd-' + d.id + '"></span></div><div class="set">' + d.q + '<span class="tech"> · ' + d.tech + '</span></div><div class="hist" id="h-' + d.id + '">' + Array.from({ length: d.bins }, () => '<i></i>').join('') + '</div><div class="track" id="t-' + d.id + '"><span class="fill"></span>' + (d.two ? '<button class="hd" data-i="0" role="slider" aria-label="' + d.plain + ' from"><span class="lv"></span></button>' : '') + '<button class="hd" data-i="' + (d.two ? 1 : 0) + '" role="slider" aria-label="' + d.plain + (d.two ? ' to' : ' at least') + '"><span class="lv"></span></button><span class="ghost"><span class="lv"></span></span></div></div>').join('') ;
+function pct(d, v) { return (v - d.min) / (d.max - d.min) * 100; }
+function render() {
+  const res = left(); const n = res.length;
+  const big = document.getElementById('num'); big.textContent = n;
+  document.getElementById('numt').innerHTML = 'of <b>' + R.length + '</b> lit<br>' + F.elsewhereTotal() + ' more kept on floors below';
+  document.getElementById('kinds').innerHTML = DATA.kinds.map((k, i) => { const c = R.filter(r => r.kind === k.id && pass(r, null, { kinds: new Set([k.id]) })).length; return '<button class="kc" data-k="' + k.id + '" aria-pressed="' + S.kinds.has(k.id) + '">' + Icons.svg(k.icon, { size: 14 }) + F.cap(k.many) + ' <span class="c">' + c + '</span></button>'; }).join('');
+  SL.forEach(d => {
+    const rg = S[d.id]; const T = document.getElementById('t-' + d.id);
+    const hs = T.querySelectorAll('.hd'); const lo = d.two ? rg[0] : rg[0], hi = d.two ? rg[1] : d.max;
+    if (d.two) { hs[0].style.left = pct(d, rg[0]) + '%'; hs[1].style.left = pct(d, rg[1]) + '%'; hs[0].querySelector('.lv').textContent = d.fmt(rg[0]); hs[1].querySelector('.lv').textContent = d.fmt(rg[1]); hs[0].setAttribute('aria-valuetext', d.fmt(rg[0])); hs[1].setAttribute('aria-valuetext', d.fmt(rg[1])); }
+    else { hs[0].style.left = pct(d, rg[0]) + '%'; hs[0].querySelector('.lv').textContent = 'at least ' + d.fmt(rg[0]); hs[0].setAttribute('aria-valuetext', d.fmt(rg[0])); }
+    const fl = T.querySelector('.fill'); fl.style.left = pct(d, lo) + '%'; fl.style.width = (pct(d, hi) - pct(d, lo)) + '%';
+    // histogram: faint = all kept, filled = what the other sliders leave, grey = outside this slider
+    const H = document.getElementById('h-' + d.id).children; const allB = new Array(d.bins).fill(0), nowB = new Array(d.bins).fill(0);
+    const bin = v => Math.min(d.bins - 1, Math.floor((v - d.min) / (d.max - d.min + 1) * d.bins));
+    R.forEach(r => { const v = d.of(r); if (v == null) return; allB[bin(v)]++; if (pass(r, d.id)) nowB[bin(v)]++; });
+    const mx = Math.max(1, ...allB);
+    [...H].forEach((h, i) => { h.style.setProperty('--all', allB[i] / mx * 100 + '%'); h.style.setProperty('--now', nowB[i] / mx * 100 + '%'); const v0 = d.min + i * (d.max - d.min + 1) / d.bins; h.classList.toggle('out', v0 + (d.max - d.min + 1) / d.bins - 1 < lo || v0 > hi); });
+    document.getElementById('rd-' + d.id).textContent = d.two ? (dateFull() ? 'any time' : d.fmt(rg[0]) + ' – ' + d.fmt(rg[1])) : (rg[0] === d.min ? 'any' : 'at least ' + d.fmt(rg[0]));
+  });
+  // set-aside notes: never silently drop the undated
+  const und = R.filter(r => r.m == null && S.kinds.has(r.kind) && pass(r, 'date'));
+  const gapN = und.filter(r => F.KIND[r.kind].date).length, naN = und.length - gapN;
+  let a = '';
+  if (!dateFull() && und.length) a += '<div class="why w-gap"><span class="wi">' + Icons.svg('circle-dashed', { size: 16 }) + '</span><div><b>' + und.length + ' set aside while you narrow by date</b><span>' + (gapN ? gapN + ' have no date recorded yet. ' : '') + (naN ? naN + ' are kinds with no key date (' + F.join([...new Set(und.filter(r => !F.KIND[r.kind].date).map(r => F.KIND[r.kind].many))]) + '). ' : '') + 'Widen the date slider to both ends to bring them back.</span></div></div>';
+  asideHtml = a;
+  plot(res);
+}
+let dims = null, asideHtml = '';
+function plot(res) {
+  const Fd = document.getElementById('field'); const w = Fd.clientWidth, h = Fd.clientHeight; const sp = F.ms('--space-6'), sp2 = F.ms('--space-7') + F.ms('--space-3');
+  const Rr = w - F.ms('--space-4'), T = F.ms('--space-6'), B = h - sp;
+  const fmin = Math.max(0, Math.floor(Math.min(...R.map(r => r.fill)) * 10) / 10 - .1);
+  const stripW = F.ms('--space-7');
+  const xGap = [F.ms('--space-4'), F.ms('--space-4') + stripW], xNa = [xGap[1] + F.ms('--space-1'), xGap[1] + F.ms('--space-1') + stripW];
+  const x0 = xNa[1] + F.ms('--space-4');
+  const X = m => x0 + m / (NM - 1) * (Rr - x0), Yf = f => B - (f - fmin) / (1 - fmin) * (B - T);
+  dims = { X, Yf };
+  const on = new Set(res.map(r => r.id));
+  const jit = id => ((id * 9301 + 49297) % 233280) / 233280 - .5;
+  let s = '<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="none"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--x-proposed-hatch)" stroke-width="1.5"/></pattern><pattern id="rule" width="8" height="8" patternUnits="userSpaceOnUse"><line x1="0" y1="0" x2="0" y2="8" stroke="var(--hairline-strong)"/></pattern></defs>';
+  for (let y = Y0; y <= Y1; y++) { const x = X((y - Y0) * 12); s += '<line class="grid" x1="' + x + '" x2="' + x + '" y1="' + T + '" y2="' + B + '"/><text class="ax" x="' + (x + 4) + '" y="' + (B + 16) + '">' + y + '</text>'; }
+  [fmin, (fmin + 1) / 2, 1].forEach(f => s += '<line class="grid" x1="' + x0 + '" x2="' + Rr + '" y1="' + Yf(f) + '" y2="' + Yf(f) + '"/><text class="ax" x="' + (x0 - 6) + '" y="' + (Yf(f) + 4) + '" text-anchor="end">' + Math.round(f * 100) + '%</text>');
+  s += '<text class="ax-t" x="' + x0 + '" y="' + (B + 36) + '">key date →</text><text class="ax-t" x="' + (x0 - 6) + '" y="' + (T - 16) + '" text-anchor="end">how complete ↑</text>';
+  s += '<line class="nowl" x1="' + X(nowM) + '" x2="' + X(nowM) + '" y1="' + T + '" y2="' + B + '"/><text class="ax" x="' + (X(nowM) + 4) + '" y="' + (T + 10) + '" style="fill:var(--ink)">TODAY</text>';
+  s += '<rect class="strip-gap" x="' + xGap[0] + '" y="' + T + '" width="' + stripW + '" height="' + (B - T) + '" rx="4"/><text class="strip-lb" x="' + (xGap[0] + stripW / 2) + '" y="' + (B + 16) + '" text-anchor="middle">NO DATE</text><text class="ax" x="' + (xGap[0] + stripW / 2) + '" y="' + (B + 28) + '" text-anchor="middle">yet</text>';
+  s += '<rect class="strip-na" x="' + xNa[0] + '" y="' + T + '" width="' + stripW + '" height="' + (B - T) + '" rx="4"/><text class="strip-lb" x="' + (xNa[0] + stripW / 2) + '" y="' + (B + 16) + '" text-anchor="middle">NO KEY</text><text class="ax" x="' + (xNa[0] + stripW / 2) + '" y="' + (B + 28) + '" text-anchor="middle">date</text>';
+  const fr = S.fill, dr = S.date;
+  s += '<rect class="band" x="' + X(dr[0]) + '" y="' + T + '" width="' + Math.max(1, X(dr[1]) - X(dr[0])) + '" height="' + (Yf(fr[0] / 10) - T) + '"/>';
+  R.forEach(r => {
+    let x; if (r.m != null) x = X(r.m) + jit(r.id) * F.ms('--space-2'); else if (F.KIND[r.kind].date) x = xGap[0] + stripW / 2 + jit(r.id) * (stripW - 12); else x = xNa[0] + stripW / 2 + jit(r.id) * (stripW - 12);
+    const y = Yf(r.fill) + jit(r.id * 7) * F.ms('--space-5');
+    s += '<circle class="dot ' + (on.has(r.id) ? 'on' : 'off') + '" data-id="' + r.id + '" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (on.has(r.id) ? 4 : 3) + '"/>';
+  });
+  let extra = '';
+  if (!res.length) {
+    const near = R.filter(r => pass(r, 'date') && r.m != null).sort((a, b) => Math.min(Math.abs(a.m - S.date[0]), Math.abs(a.m - S.date[1])) - Math.min(Math.abs(b.m - S.date[0]), Math.abs(b.m - S.date[1])))[0];
+    extra = '<div class="fempty">' + F.reasons([{ type: 'none', icon: 'search-x', head: 'Nothing is lit', text: near ? 'The nearest match is ' + near.name + ' (' + F.fmtDate(near) + '). Widen the key date to reach it.' : 'Lower “how complete” or “how much it’s used” to bring things back.' }]) + '</div>';
+  }
+  Fd.innerHTML = '<svg role="img" aria-label="' + res.length + ' lit of ' + R.length + '">' + s + '</svg><div class="tip" id="tip"></div>' + extra + (asideHtml ? '<div class="aside">' + asideHtml + '</div>' : '');
+}
+// sliders: drag, keys and the ghost handle that shows a drag before you make it
+function valAt(d, T, cx) { const b = T.getBoundingClientRect(); return Math.round(d.min + Math.max(0, Math.min(1, (cx - b.left) / b.width)) * (d.max - d.min)); }
+function setV(d, i, v) { const rg = S[d.id].slice(); rg[i] = v; if (d.two) { if (i === 0) rg[0] = Math.min(v, rg[1]); else rg[1] = Math.max(v, rg[0]); } S[d.id] = rg; render(); }
+SL.forEach(d => {
+  const T = document.getElementById('t-' + d.id), G = T.querySelector('.ghost');
+  let drag = null;
+  const near = v => d.two ? (Math.abs(v - S[d.id][0]) <= Math.abs(v - S[d.id][1]) ? 0 : 1) : 0;
+  T.addEventListener('pointerdown', e => { const v = valAt(d, T, e.clientX); drag = near(v); T.classList.add('drag'); T.setPointerCapture(e.pointerId); setV(d, drag, v); });
+  T.addEventListener('pointermove', e => {
+    const v = valAt(d, T, e.clientX);
+    if (drag != null) { setV(d, drag, v); G.classList.remove('in'); return; }
+    const i = near(v); const rg = S[d.id].slice(); rg[i] = v; if (d.two && rg[0] > rg[1]) return;
+    G.style.left = pct(d, v) + '%'; G.querySelector('.lv').textContent = d.fmt(v) + ' → leaves ' + left({ [d.id]: rg }).length; G.classList.add('in');
+  });
+  T.addEventListener('pointerup', () => { drag = null; T.classList.remove('drag'); });
+  T.addEventListener('pointerleave', () => G.classList.remove('in'));
+  T.addEventListener('keydown', e => { const h = e.target.closest('.hd'); if (!h) return; const i = +h.dataset.i; const st = e.shiftKey ? (d.id === 'date' ? 12 : 3) : 1; if (e.key === 'ArrowRight') { setV(d, i, Math.min(d.max, S[d.id][i] + st)); e.preventDefault(); } if (e.key === 'ArrowLeft') { setV(d, i, Math.max(d.min, S[d.id][i] - st)); e.preventDefault(); } T.querySelectorAll('.hd')[d.two ? i : 0].focus(); });
+});
+C.addEventListener('click', e => { const k = e.target.closest('.kc'); if (!k) return; S.kinds.has(k.dataset.k) ? S.kinds.delete(k.dataset.k) : S.kinds.add(k.dataset.k); render(); });
+document.getElementById('field').addEventListener('mousemove', e => {
+  const c = e.target.closest('circle.dot'); const tip = document.getElementById('tip'); if (!tip) return;
+  if (!c) { tip.classList.remove('in'); return; }
+  const r = R.find(x => x.id === +c.dataset.id); const b = e.currentTarget.getBoundingClientRect();
+  const d = F.fmtDate(r);
+  tip.innerHTML = '<b style="font-weight:400;color:var(--light)">' + F.esc(r.name) + '</b><br>' + F.KIND[r.kind].one + ' · ' + (d === '' ? 'no key date' : d || F.KIND[r.kind].date + ' not recorded') + ' · ' + Math.round(r.fill * 100) + '% complete';
+  tip.style.left = (e.clientX - b.left + 12) + 'px'; tip.style.top = (e.clientY - b.top + 12) + 'px'; tip.classList.add('in');
+});
+document.getElementById('tbtn').onclick = () => document.body.classList.toggle('admin-off');
+addEventListener('resize', render);
+let run = 0;
+async function demo() {
+  const me = ++run; S.date = [0, NM - 1]; S.fill = [0, 10]; S.use = [0, 12]; S.kinds = new Set(DATA.kinds.map(k => k.id)); render();
+  await F.wait(F.ms('--motion-run'));
+  const st = F.ms('--motion-slow');
+  for (let k = 1; k <= 6; k++) { if (me !== run) return; S.date = [Math.round(36 * k / 6), Math.round(NM - 1 - (NM - 1 - 47) * k / 6)]; render(); await F.wait(st / 2); }
+  if (me !== run) return; S.fill = [7, 10]; render();
+  await F.wait(st * 2); if (me !== run) return;
+  const d = SL[0], T = document.getElementById('t-date'), G = T.querySelector('.ghost'); const v = 53; const rg = S.date.slice(); rg[1] = v;
+  G.style.left = pct(d, v) + '%'; G.querySelector('.lv').textContent = d.fmt(v) + ' → leaves ' + left({ date: rg }).length; G.classList.add('in');
+}
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') demo();
+  else if (e.key === 't' || e.key === 'T') document.body.classList.toggle('admin-off');
+  else if (e.key === 'Escape') { S.date = [0, NM - 1]; S.fill = [0, 10]; S.use = [0, 12]; S.kinds = new Set(DATA.kinds.map(k => k.id)); render(); }
+  else if (/^[1-6]$/.test(e.key) && DATA.kinds[+e.key - 1]) { const k = DATA.kinds[+e.key - 1].id; S.kinds.has(k) ? S.kinds.delete(k) : S.kinds.add(k); render(); }
+});
+demo();
+</script>
+</body>
+</html>

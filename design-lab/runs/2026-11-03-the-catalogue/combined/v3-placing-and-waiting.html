@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catalogue · Combined V3 · Placing and waiting</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ======================================================================
+   Proposed tokens (all combinations of kit tokens; listed in notes-vN.md).
+   ====================================================================== */
+:root{
+  --x-proposed-type-micro:.6875rem;                                        /* --type-micro: mono numerals and eyebrows inside data (also asked for by wear and time) */
+  /* --mark-gap (grammar sheet): four 1px corner ticks of the slot, empty inside */
+  --x-proposed-gap-ink:color-mix(in srgb,var(--ink-muted) 78%,transparent);
+  --x-proposed-gap-tick:var(--space-2);
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+  /* --mark-stale-hatch (wear and time, 45°) and the shadow (light language, 135°) */
+  --x-proposed-hatch:color-mix(in srgb,var(--ink-muted) 34%,transparent);
+  --x-proposed-stale:repeating-linear-gradient(45deg,transparent 0 var(--space-1),var(--x-proposed-hatch) var(--space-1) calc(var(--space-1) + 1px));
+  --x-proposed-unseen:repeating-linear-gradient(135deg,transparent 0 var(--space-2),var(--hairline-strong) var(--space-2) calc(var(--space-2) + 1px));
+  /* --mark-waiting: a thing waiting on a person; never alarming */
+  --x-proposed-wait:color-mix(in srgb,var(--warning) 70%,var(--ink));
+  /* --mark-predicted: a slot the table predicts; dotted, quiet */
+  --x-proposed-predicted:color-mix(in srgb,var(--ink-muted) 60%,transparent);
+  /* --mark-structure-new and the seam it leaves once read */
+  --x-proposed-new:color-mix(in srgb,var(--green) 70%,var(--ink));
+  --x-proposed-new-wash:color-mix(in srgb,var(--green) 10%,transparent);
+  --x-proposed-seam:color-mix(in srgb,var(--ink-muted) 55%,transparent);
+  /* --surface-slip: the notice slip, the one light surface; toned down from round 1 */
+  --x-proposed-paper:color-mix(in srgb,var(--ink) 84%,var(--warning));
+  --x-proposed-paper-ink:var(--slate-deep);
+  /* --dim-far: the far plane while one thing is in focus */
+  --x-proposed-far:.38;
+  /* the current floor's accent as one alias; set per page from DATA */
+  --x-accent:var(--floor-team-high);
+  --x-accent-soft:color-mix(in srgb,var(--x-accent) 14%,transparent);
+  --x-accent-edge:color-mix(in srgb,var(--x-accent) 46%,transparent);
+  --x-side:calc(var(--measure-card) + var(--space-5));                     /* layout: the right-hand column */
+}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.micro{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);padding:calc(var(--space-1) / 2) var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);letter-spacing:0;text-transform:none;min-width:var(--space-4);text-align:center}
+.x-cap{max-width:calc(50% - var(--space-6))}
+.keys{position:fixed;right:var(--edge-tight);bottom:var(--edge-tight);z-index:var(--layer-chrome);display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-1) var(--space-3);max-width:calc(50% - var(--space-6));font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);background:var(--scrim);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key)}
+.keys span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.muted{color:var(--ink-muted)}
+b,strong{font-weight:400;color:var(--light)}
+
+/* two registers: the technical word one step down, only with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:0;color:var(--ink-muted);text-transform:none}
+body.tech .tk{display:block}
+body.tech span.tk,body.tech i.tk{display:inline;margin-left:var(--space-1);font-style:normal}
+
+/* ---- app frame ---- */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:color-mix(in srgb,var(--slate-deep) 70%,transparent);border-right:1px solid var(--hairline);padding:var(--edge) var(--edge-tight);display:flex;flex-direction:column;gap:var(--space-1);min-height:0}
+.rail .an{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--light);padding:var(--space-2);margin-bottom:var(--space-3)}
+.nav{display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav svg{width:var(--space-4);height:var(--space-4);flex:none}
+.nav.on{background:var(--surface-raised);color:var(--ink);box-shadow:inset 2px 0 0 var(--x-accent)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail .foot{margin-top:auto;margin-bottom:var(--space-6);padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.who-am{display:grid;grid-template-columns:var(--space-2) minmax(0,1fr);gap:0 var(--space-2);align-items:baseline;padding:var(--space-2);margin-bottom:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.who-am .dot{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--fc,var(--x-accent));transform:translateY(-1px)}
+.who-am b{color:var(--ink)}
+.main{position:relative;padding:var(--edge) var(--space-6) var(--space-7);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-5);margin-bottom:var(--space-4);flex:none}
+.head h1{margin:var(--space-2) 0 var(--space-1);font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.head .eyebrow{white-space:nowrap}
+.head .sub{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);max-width:var(--measure-wide)}
+.head .sub b{color:var(--ink)}
+.work{position:relative;flex:1;min-height:0}
+
+/* who is looking: the viewer switch (A / K / O) */
+.viewers{display:flex;gap:var(--space-1);flex:none;padding:var(--space-1);border:1px solid var(--hairline);border-radius:var(--radius-pill)}
+.viewers button{display:inline-flex;align-items:center;gap:var(--space-2);height:calc(var(--space-5) + var(--space-1));padding:0 var(--space-3);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted);white-space:nowrap;transition:background var(--motion-base) var(--ease-standard),color var(--motion-base) var(--ease-standard)}
+.viewers button .dot{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--fc)}
+.viewers button.on{background:var(--surface-raised);color:var(--light)}
+
+/* floors */
+[data-tier="department"]{--fc:var(--floor-department-high)}
+[data-tier="team"]{--fc:var(--floor-team-high)}
+[data-tier="org"]{--fc:var(--floor-org-high)}
+[data-tier="you"]{--fc:var(--floor-you-high)}
+.fl{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.fl::before{content:"";width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--fc)}
+
+/* kind chip */
+.kind{display:inline-flex;align-items:center;gap:var(--space-2);color:var(--ink);white-space:nowrap}
+.kind svg{width:var(--space-4);height:var(--space-4);flex:none;color:var(--ink-muted)}
+.kind .c{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);background:var(--surface-inset);white-space:nowrap;color:var(--ink);transition:background var(--motion-quick) var(--ease-standard),border-color var(--motion-quick) var(--ease-standard)}
+.btn svg{width:var(--space-4);height:var(--space-4)}
+.btn:hover{background:var(--surface-raised)}
+.btn.go{border-color:var(--x-accent-edge);color:var(--light);background:var(--x-accent-soft)}
+.btn.quiet{border-color:var(--hairline)}
+.btn.press{background:var(--surface-raised);border-color:var(--x-accent)}
+.btn[aria-disabled="true"]{color:var(--ink-muted);border-style:dashed;cursor:help}
+.btn .kbd{margin-left:var(--space-1)}
+.btn.sm{height:calc(var(--space-5) + var(--space-1));font-size:var(--type-small)}
+
+/* ======================================================================
+   The six ways to be empty. One mark and one sentence each.
+   ====================================================================== */
+.e{display:flex;flex-direction:column;gap:0;min-width:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.e .w{color:var(--ink)}
+.e.gap{background:var(--x-proposed-gap);padding:var(--space-1) var(--space-2)}
+.e.gap b{color:var(--ink)}
+.e.none .w{color:var(--ink)}
+.e.na{color:var(--ink-muted);opacity:.8}
+.e.na .w{color:var(--ink-muted)}
+.age{display:inline-block;margin-left:var(--space-2);padding:0 var(--space-1);border-radius:var(--radius-key);background:var(--x-proposed-stale);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.e.unseen{flex-direction:row;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--x-proposed-unseen),var(--surface-inset)}
+.e.unseen svg{width:var(--space-3);height:var(--space-3);flex:none;color:var(--ink-muted)}
+.e.wait{color:var(--x-proposed-wait)}
+/* the key: six marks in a row, each with its sentence */
+.ekey{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--hairline)}
+.ekey > div{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+.ekey .m{height:var(--space-5);display:flex;align-items:center;padding:0 var(--space-2);font-size:var(--type-small);color:var(--ink)}
+.ekey .m.gap{background:var(--x-proposed-gap)}
+.ekey .m.stale span{background:var(--x-proposed-stale);padding:0 var(--space-1);border-radius:var(--radius-key);font-family:var(--font-mono);color:var(--ink-muted)}
+.ekey .m.unseen{background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-key);gap:var(--space-2);color:var(--ink-muted)}
+.ekey .m.unseen svg{width:var(--space-3);height:var(--space-3)}
+.ekey .m.na{color:var(--ink-muted)}
+.ekey .m svg.wave{width:100%;height:var(--space-4)}
+.ekey .s{font-size:var(--x-proposed-type-micro);line-height:var(--leading-small);color:var(--ink-muted)}
+.ekey .s b{color:var(--ink)}
+.ekey.on-these > div:not(.here){opacity:var(--x-proposed-far)}
+.ekey.v{grid-template-columns:minmax(0,1fr);gap:var(--space-2)}
+.ekey.v > div{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-3)) minmax(0,1fr);align-items:center;gap:var(--space-3)}
+.ekey.v .m{height:var(--space-5)}
+
+/* record rows (statements) */
+.rec{display:grid;grid-template-columns:minmax(0,.42fr) minmax(0,1fr);gap:0 var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.rec > .k,.rec > .v{padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);min-width:0}
+.rec > .k{color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-meta)}
+.rec > .v{color:var(--ink)}
+.rec .lk{color:var(--light);text-decoration:underline;text-decoration-color:var(--hairline-strong);text-underline-offset:3px}
+.rec .src{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+
+.fade{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.fade.pre{opacity:0;transform:translateY(var(--space-2))}
+@media (prefers-reduced-motion: reduce){.fade{transition:opacity var(--motion-base) linear!important}.fade.pre{transform:none}}
+@media (max-height:840px){.main{padding-top:var(--edge-tight)}.head{margin-bottom:var(--space-3)}.head h1{font-size:var(--type-heading);line-height:var(--leading-heading)}}
+
+/* ====================== V3: Placing and waiting ====================== */
+/* ---------- operator: placing ---------- */
+.op{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) var(--x-side);gap:var(--space-5)}
+.left{display:flex;flex-direction:column;gap:var(--space-4);min-height:0;min-width:0}
+.said{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;padding-bottom:var(--space-3);border-bottom:1px solid var(--hairline)}
+.said .w{font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.said .n{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.said svg{width:var(--space-3);height:var(--space-3);vertical-align:-1px;margin-right:var(--space-1)}
+.sent{font:200 var(--type-title-s)/calc(var(--leading-title-s) + var(--space-4)) var(--font-sans);color:var(--ink-muted);letter-spacing:var(--tracking-tight);padding-top:var(--space-3)}
+.sent .subj{color:var(--light)}
+.slot{position:relative;display:inline-block;min-width:calc(var(--space-7) + var(--space-6));padding:0 var(--space-1);border-bottom:2px dashed var(--hairline-strong);color:var(--ink-muted);transition:color var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.slot.set{border-bottom:2px solid var(--x-accent-edge);color:var(--light)}
+.slot.fresh{background:var(--x-accent-soft)}
+.slot.wait{border-bottom:2px dashed var(--x-proposed-wait);color:var(--x-proposed-wait)}
+.slot .lab{position:absolute;left:var(--space-1);top:calc(var(--space-3) * -1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.slot .lab .tk{display:none}
+body.tech .slot .lab .tk{display:inline}
+/* the question */
+.qbox{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-3) var(--space-4)}
+.qbox .q{font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light);margin:var(--space-1) 0 var(--space-1)}
+.qbox .split{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-bottom:var(--space-3)}
+.qbox .acts{display:flex;gap:var(--space-2)}
+.trail{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.trail span{padding:0 var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-pill)}
+.trail span b{color:var(--ink)}
+.poss{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.poss .pk{display:inline-flex;flex-direction:column;gap:0;padding:var(--space-1) var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-calm)}
+.poss .pk .kind svg{width:var(--space-3);height:var(--space-3)}
+.poss .pk .r{font-size:var(--x-proposed-type-micro);color:var(--ink-muted)}
+.poss .pk.out{opacity:var(--x-proposed-far)}
+.poss .pk.left1{border-color:var(--x-accent-edge);background:var(--x-accent-soft)}
+.poss .pk.pred{border-style:dotted;border-color:var(--x-proposed-predicted);color:var(--ink-muted)}
+.poss .pk.pred.hit{border-color:var(--x-proposed-wait);color:var(--x-proposed-wait)}
+/* near matches, said as sentences */
+.right{display:flex;flex-direction:column;gap:var(--space-2);min-height:0;overflow:auto;scrollbar-width:thin}
+.right h3,.res h3{margin:0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.right .why{margin:0 0 var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ss{border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);padding:var(--space-2) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out)}
+.ss .nm{color:var(--light)}
+.ss .fit{color:var(--ink)}
+.ss .meta{display:block;margin-top:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.ss .meta .y{color:var(--ink)}
+.ss .meta svg{width:var(--space-3);height:var(--space-3);vertical-align:-2px;margin-right:var(--space-1)}
+.ss .badge{display:inline-flex;align-items:center;gap:var(--space-1);margin-bottom:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-wait)}
+.ss .badge svg{width:var(--space-3);height:var(--space-3)}
+.ss.dup{border-color:color-mix(in srgb,var(--x-proposed-wait) 45%,transparent);background:var(--surface-raised)}
+.ss.out{opacity:var(--x-proposed-far)}
+.ss.out .why-out{color:var(--ink)}
+.ss .acts{display:flex;gap:var(--space-2);margin-top:var(--space-2);flex-wrap:wrap}
+/* results */
+.res{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-2);min-height:0;overflow:auto;scrollbar-width:thin}
+.stamp{display:inline-flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-accent)}
+.stamp svg{width:var(--space-3);height:var(--space-3)}
+.res.waiting .stamp{color:var(--x-proposed-wait)}
+.res.waiting{border-color:color-mix(in srgb,var(--x-proposed-wait) 40%,transparent)}
+.res .row{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.res p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.res p.m{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.res .rec{margin:0;font-size:var(--type-small);line-height:var(--leading-small)}
+.res .rec > .k,.res .rec > .v{padding:var(--space-1) 0}
+.rec .src.in{display:inline;margin-left:var(--space-2)}
+.sent.done{font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-5))}
+.res .rec .e{padding-top:var(--space-1);padding-bottom:var(--space-1)}
+.whoL{display:grid;align-content:start;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.whoL svg{width:var(--space-4);height:var(--space-4);color:var(--ink)}
+.whoL b{color:var(--ink)}
+.kept{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-2) 0;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline)}
+.kept dt{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.kept dd{margin:0;color:var(--ink)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)}
+
+/* ---------- admin: the table of kinds, with what waits ---------- */
+.adm{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) var(--x-side);gap:var(--space-5)}
+.tbl{display:grid;grid-template-columns:calc(var(--space-7) + var(--space-6)) repeat(5,minmax(0,1fr));gap:var(--space-2);align-content:start;min-width:0}
+.tbl .fh{font-size:var(--type-meta);color:var(--ink);padding-bottom:var(--space-1);border-bottom:1px solid var(--hairline-strong)}
+.tbl .fh .tk{font-size:var(--x-proposed-type-micro)}
+body.tech .tbl .fh .tk,body.tech .who-am .tk{display:block;margin-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl .rh{display:flex;flex-direction:column;justify-content:center;align-items:flex-end;text-align:right;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding-right:var(--space-2);border-right:2px solid var(--fc,var(--hairline))}
+.tbl .rh b{color:var(--ink)}
+.tbl .rh.pr{border-right:2px dotted var(--x-proposed-predicted)}
+.cell{display:flex;flex-direction:column;gap:var(--space-2);min-width:0}
+.tile{position:relative;display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--surface-inset);min-width:0;transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.tile .t{display:flex;align-items:center;gap:var(--space-2);color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta);min-width:0}
+.tile .t span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .t svg{width:var(--space-4);height:var(--space-4);flex:none;color:var(--ink-muted)}
+.tile .c{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.bar{display:flex;height:var(--space-1);border-radius:var(--radius-pill);overflow:hidden;background:var(--hairline)}
+.bar i{display:block;background:color-mix(in srgb,var(--ink) 60%,transparent);transition:flex-grow var(--motion-calm) var(--ease-out)}
+.tile.pred{border:1px dotted var(--x-proposed-predicted);background:transparent}
+.tile.pred .t{color:var(--ink-muted)}
+.tile.pred .c{color:var(--x-proposed-wait)}
+.tile.pred.empty .c{color:var(--ink-muted)}
+.tile .gath{display:flex;flex-direction:column;gap:2px;margin-top:var(--space-1)}
+.tile .gath span{display:block;padding:0 var(--space-1);border-left:2px solid var(--x-proposed-wait);font-size:var(--x-proposed-type-micro);line-height:var(--leading-small);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile.sel{border-color:var(--x-accent);border-style:solid;background:var(--x-accent-soft)}
+.tile.made{border-style:solid;border-color:var(--x-accent-edge);background:var(--surface-raised)}
+.tile.made .t{color:var(--light)}
+.tile.made .gath span{border-left-color:var(--x-accent)}
+.adm.focus .tile:not(.sel):not(.made){opacity:var(--x-proposed-far)}
+.adm.focus .tbl .note{opacity:var(--x-proposed-far)}
+.tbl .note{grid-column:2 / -1;align-self:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding:var(--space-2) var(--space-3);border:1px dashed var(--hairline);border-radius:var(--radius-key)}
+.margin{grid-column:2 / -1;display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-2)}
+.margin .tile{flex-direction:column}
+.margin .tile .w{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+/* the drawer: one slot, its waiting things, and the kind made from a sentence */
+.drawer{display:flex;flex-direction:column;gap:var(--space-3);min-height:0;overflow:auto;scrollbar-width:thin;padding-right:var(--space-1)}
+.drawer h2{margin:0;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.drawer .lede{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.wt{padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.wt .nm{color:var(--light)}
+.wt .by{display:block;font-size:var(--type-small);line-height:var(--leading-small)}
+.wt.src{background:var(--x-accent-soft);margin:0 calc(var(--space-2) * -1);padding:var(--space-2);border-radius:var(--radius-key);border-bottom-color:transparent}
+.mk{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-3) var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)}
+.mk .fm{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.mk .fm dt{color:var(--ink-muted)}
+.mk .fm dd{margin:0;color:var(--ink)}
+.mk .fm dd .from{color:var(--ink-muted)}
+.mk .fm dd .in{color:var(--light);border-bottom:1px solid var(--x-accent-edge)}
+.mk .det{display:flex;flex-direction:column;gap:2px}
+.mk .det span{display:flex;justify-content:space-between;gap:var(--space-2)}
+.mk .det i{font-style:normal;color:var(--ink-muted)}
+.mk .det .exp::before{content:"";display:inline-block;width:2px;height:var(--space-3);background:var(--ink);margin-right:var(--space-2);vertical-align:-1px}
+.mk .det .can::before{content:"";display:inline-block;width:2px;margin-right:var(--space-2)}
+.mk .acts{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+.mk .acts .m{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.mk.done{border-color:var(--x-accent-edge)}
+@media (max-width:1400px){:root{--x-side:calc(var(--measure-card) - var(--space-4))}.sent{font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-4))}.tbl{grid-template-columns:calc(var(--space-7) + var(--space-3)) repeat(5,minmax(0,1fr))}.tile .gath span:nth-child(n+3){display:none}}
+@media (max-width:1400px){.tile .t svg{display:none}}
+@media (max-height:840px){.drawer .lede{display:none}.wt{padding:var(--space-1) 0;font-size:var(--type-small);line-height:var(--leading-small)}.fm .opt{display:none}.left{gap:var(--space-3)}.res .rec > .k,.res .rec > .v{padding:var(--space-1) 0}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" id="rail" aria-label="Data Atlas"></nav>
+  <main class="main">
+    <div class="head">
+      <div><div class="eyebrow" id="crumb"></div><h1 id="h1"></h1><div class="sub" id="sub"></div></div>
+      <div id="headR"></div>
+    </div>
+    <div class="work" id="work">
+<section class="op" id="op">
+  <div class="left" id="left">
+    <div class="said" id="said"></div>
+    <div class="sent" id="sent" aria-live="polite"></div>
+    <div id="ask"></div>
+  </div>
+  <aside class="right" id="right" aria-live="polite"></aside>
+</section>
+<section class="adm" id="adm" hidden>
+  <div id="tblwrap" style="min-width:0;overflow:auto;scrollbar-width:thin"></div>
+  <aside class="drawer" id="drawer" aria-live="polite"></aside>
+</section>
+    </div>
+  </main>
+</div>
+<div class="keys" id="keys" aria-label="Keyboard"></div>
+<div class="x-cap"><b>Catalogue · combined V3</b> placing and waiting: questions fill a sentence; what fits nothing waits on a predicted slot · twenty questions, genus and differentia, Mendeleev</div>
+<script>
+/* ======================================================================
+   Sample data, shared by both b-screens (v3 placing, v4 structure change).
+   Every name, word, count and question on the page comes from here. In
+   AUGUR it comes from Data Atlas: the ontology (kinds, their details and
+   links, each with a plain word and a technical word), counts per kind per
+   floor, Triage, rounds, and the people who decide.
+   A regional services deployment; nothing is drawn for one domain.
+   ====================================================================== */
+const DATA = {
+  app: 'Data Atlas',
+  floors: {
+    org:     { kind: 'Org',        name: 'Northvale Regional Services', tier: 'org' },
+    dept:    { kind: 'Department', name: 'Highways and Depots',         tier: 'department' },
+    team:    { kind: 'Team',       name: 'Ashby Road Crew',             tier: 'team' },
+    sibling: { kind: 'Team',       name: 'Retford Crew',                tier: 'team', ask: 'Jo Marsh' },
+    finance: { kind: 'Department', name: 'Finance',                     tier: 'department', ask: 'Priya Nair' }
+  },
+  people: {
+    operator: { name: 'Dee Okafor',      role: 'Crew coordinator',         floor: 'team' },
+    steward:  { name: 'Priya Natarajan', role: 'Data steward',             floor: 'dept' },
+    admin:    { name: 'Tom Rees',        role: 'looks after the kinds of thing', tech: 'Data Atlas admin', floor: 'org' },
+    keeper:   { name: 'Sam Whitlock',    role: 'Depot manager, Ashby depot', floor: 'team' }
+  },
+  /* plain word first, technical word one step down (T) */
+  words: {
+    kind: ['kind of thing', 'class'], detail: ['detail', 'datatype property'], link: ['link', 'object property'],
+    family: ['family', 'upper-level class (BFO / CCO)'], near: ['is it one of these?', 'candidate match (entity resolution)'],
+    triage: ['Triage', 'proposal queue'], waiting: ['Waiting in Triage', 'unplaced individual · triage state "unplaced"'],
+    predicted: ['a kind the table predicts', 'unpopulated class slot (family × shape)'], ask: ['ask', 'ontology change request'],
+    expected: ['should have', 'sh:minCount 1 (advisory)'], round: ['round of small jobs', 'batch of triage proposals, grouped by keeper × site'],
+    keeper: ['keeper', 'steward for a site'], seam: ['seam', 'structure-change event joined to this record']
+  },
+  /* the six ways to be empty: one mark, one sentence each (grammar sheet) */
+  empty: [
+    { id: 'gap',   plain: 'Not known yet', say: 'Should be here; nobody has said it yet. Names who could fill it. Can close.', tech: 'missing value · sh:minCount 1 not met' },
+    { id: 'none',  plain: 'None',          say: 'Someone checked and there is none. Says who and when.', tech: 'stated absence (a fact whose value is none)' },
+    { id: 'na',    plain: 'Doesn’t apply', say: 'Not expected for this kind of thing.', tech: 'property not in the class’s profile' },
+    { id: 'stale', plain: 'Stale',         say: 'Known, but old. The hatch sits on the age, never on the value.', tech: 'review age exceeded' },
+    { id: 'norec', plain: 'No record',     say: 'Time the system lost. Nobody can fill it; it can’t close.', tech: 'declared record gap (events)' },
+    { id: 'unseen',plain: 'Not yours to see', say: 'It exists, kept where you can’t read it. Says whom to ask.', tech: '403 reason: kept elsewhere' }
+  ],
+  /* the families across the table (what a thing is: the genus) */
+  families: [
+    { id: 'someone',   word: 'Someone',   a: 'someone',                 tech: 'cco:Agent' },
+    { id: 'place',     word: 'Place',     a: 'a place',                 tech: 'bfo:Site' },
+    { id: 'thing',     word: 'Thing',     a: 'a thing',                 tech: 'bfo:MaterialEntity' },
+    { id: 'agreement', word: 'Agreement', a: 'an agreement',            tech: 'cco:DirectiveICE' },
+    { id: 'happening', word: 'Happening', a: 'an event',                tech: 'bfo:Process' }
+  ],
+  /* floors down the table: where each kind is looked after */
+  rows: ['org', 'dept', 'team'],
+  rowNote: { team: 'Ashby Road Crew keeps records of kinds looked after above. It has no kinds of its own, so this row is empty on purpose.' },
+  kinds: [
+    { id: 'person',    word: 'Person',    plural: 'People',    tech: 'cco:Person',           icon: 'user',           n: 1930, known: 81, family: 'someone',   floor: 'org',  diff: 'is one person' },
+    { id: 'supplier',  word: 'Supplier',  plural: 'Suppliers', tech: 'cco:Organization',     icon: 'handshake',      n: 212,  known: 74, family: 'someone',   floor: 'org',  diff: 'is a company we buy or hire from' },
+    { id: 'site',      word: 'Site',      plural: 'Sites',     tech: 'cco:Facility',         icon: 'building-2',     n: 38,   known: 91, family: 'place',     floor: 'org',  diff: 'has an address people go to' },
+    { id: 'vehicle',   word: 'Vehicle',   plural: 'Vehicles',  tech: 'cco:GroundVehicle',    icon: 'truck',          n: 164,  known: 74, family: 'thing',     floor: 'dept', diff: 'moves under its own power' },
+    { id: 'equipment', word: 'Equipment', plural: 'Equipment', tech: 'cco:MaterialArtifact', icon: 'package',        n: 702,  known: 68, family: 'thing',     floor: 'dept', diff: 'gets carried, towed or set up' },
+    { id: 'contract',  word: 'Contract',  plural: 'Contracts', tech: 'cco:Agreement',        icon: 'file-signature', n: 446,  known: 83, family: 'agreement', floor: 'dept', diff: 'sets out who does what, and until when' },
+    { id: 'incident',  word: 'Incident',  plural: 'Incidents', tech: 'cco:Act',              icon: 'siren',          n: 1105, known: 78, family: 'happening', floor: 'dept', diff: 'happened at a time and place' }
+  ],
+  /* the yes/no questions; each kind and predicted slot says which it answers yes to */
+  questions: [
+    { id: 'touch',   q: 'Could you touch it, stand on it or drive it?' },
+    { id: 'stays',   q: 'Does it stay in one place?' },
+    { id: 'self',    q: 'Does it move under its own power?' },
+    { id: 'address', q: 'Does it have an address people go to?' },
+    { id: 'line',    q: 'Does it run along a line, or cover an area, on the map?' }
+  ],
+  traits: {
+    site: { touch: 1, stays: 1, address: 1, self: 0, line: 0 }, vehicle: { touch: 1, stays: 0, self: 1 }, equipment: { touch: 1, stays: 0, self: 0 },
+    person: { touch: 0 }, supplier: { touch: 0 }, contract: { touch: 0 }, incident: { touch: 0 }
+  },
+  /* slots the table predicts, with the things waiting on them and how often each was asked for */
+  predicted: [
+    { id: 'route', family: 'place', word: 'Route or area', diff: 'runs along a line, or covers an area, on the map', traits: { touch: 1, stays: 1, address: 0, line: 1 }, asks: 4,
+      details: [['Looked after by', 'link → Someone', 3], ['From and to', 'two places', 2], ['Length', 'a distance', 1], ['Worked on under', 'link → Contract', 1]],
+      waiting: [
+        { name: 'A614, Ollerton to Blyth', by: 'Dee Okafor', floor: 'team', on: 'today', said: 'runs along a line on the map', note: 'The 9 km stretch we resurface this winter.' },
+        { name: 'Gritting route N3', by: 'Sam Whitlock', floor: 'team', on: '28 Oct', said: 'runs along roads we grit in order', note: 'Ashby to Ollerton, 14 stops.' },
+        { name: 'A57 Worksop bypass verges', by: 'Lena Fry', floor: 'dept', on: '12 Sep', said: 'covers an area beside the road', note: 'Cut twice a year.' }
+      ] },
+    { id: 'estate', family: 'place', word: 'Estate', diff: 'is a group of places run together', asks: 0, waiting: [] },
+    { id: 'network', family: 'thing', word: 'Network', diff: 'runs between places: drains, cables, pipes', asks: 1,
+      waiting: [{ name: 'Ashby surface-water drains', by: 'the contract feed', floor: 'dept', on: '2 Oct', said: 'runs under the depot yard' }] },
+    { id: 'fleet', family: 'thing', word: 'Fleet or set', diff: 'is many things looked after as one', asks: 2,
+      waiting: [{ name: 'Gritter fleet North', by: 'Lena Fry', floor: 'dept', on: '20 Oct', said: 'is six gritters run as one' }] },
+    { id: 'programme', family: 'happening', word: 'Programme of works', diff: 'goes on for weeks, in stages', asks: 1,
+      waiting: [{ name: 'Winter resurfacing 2026/27', by: 'Lena Fry', floor: 'dept', on: '30 Oct', said: 'goes on all winter, in four phases' }] }
+  ],
+  /* waiting things that fall on no predicted slot */
+  noSlot: [{ name: 'Salt stock, Ashby depot', by: 'Sam Whitlock', floor: 'team', on: '1 Nov', said: 'is an amount we keep topped up' }],
+  hiddenWaiting: { floor: 'finance' },
+
+  matching: 'Matched by name, spelling and keys. Matching by meaning is off on this deployment.',
+  /* the two things the operator adds */
+  things: {
+    fits: {
+      said: 'Welfare cabin WU-07', note: 'Towed cabin with a toilet and a kettle, hired for the A614 resurfacing.', from: 'From a hire confirmation email, typed in by Dee',
+      answers: [['touch', 1], ['stays', 0], ['self', 0]], kind: 'equipment',
+      record: [
+        { d: 'Asset tag', v: 'WU-07', src: 'hire confirmation' },
+        { d: 'Owned by', v: 'Hallam Plant Hire', link: 1, src: 'hire confirmation' },
+        { d: 'Kept at', v: 'Ashby depot', link: 1, src: 'Dee Okafor' },
+        { d: 'Serial number', gap: 'Hallam Plant Hire, on the hire contract' },
+        { d: 'Last inspected', gap: 'Hallam Plant Hire, or Sam Whitlock at Ashby depot' },
+        { d: 'Fuel store', none: ['Dee Okafor', 'today'] },
+        { d: 'Registration', na: 'Equipment isn’t registered; that’s a Vehicle detail' }
+      ],
+      links: [['is kept at', 'Ashby depot'], ['is owned by', 'Hallam Plant Hire']]
+    },
+    misfit: {
+      said: 'A614, Ollerton to Blyth', note: 'The 9 km stretch of road we are resurfacing this winter.', from: 'Typed in by Dee',
+      answers: [['touch', 1], ['stays', 1], ['address', 0], ['line', 1]], kind: null, slot: 'route', closest: 'site',
+      links: [['is looked after by', 'Ashby Road Crew'], ['is worked on under', 'Resurfacing 2026/09']]
+    }
+  },
+  /* existing records the matcher finds; `rule` = answers that would set it apart */
+  near: {
+    fits: [
+      { name: 'Welfare unit WU-7', kind: 'equipment', state: 'triage', where: 'Waiting in Triage since 14 Oct · proposed by the hire contract feed', dup: true,
+        same: ['owned by Hallam Plant Hire', 'tag WU-7, one character from WU-07'], diff: 'kept at Retford depot, not Ashby' },
+      { name: 'Welfare unit WU-03', kind: 'equipment', where: 'Kept on Highways and Depots · since March', same: ['owned by Hallam Plant Hire'], diff: 'tag WU-03' },
+      { name: 'Trailer TR-12', kind: 'vehicle', where: 'Kept on Ashby Road Crew · since 2024', same: ['kept at Ashby depot'], diff: 'has a registration', out: ['self', 0] }
+    ],
+    misfit: [
+      { name: 'Ashby depot', kind: 'site', where: 'Kept on Ashby Road Crew', same: ['stays in one place'], diff: 'has an address people go to', out: ['address', 0] },
+      { name: 'A614 works, phase 1', kind: 'incident', where: 'Kept on Highways and Depots', same: ['names the A614'], diff: 'happened on one day', out: ['touch', 1] }
+    ]
+  },
+
+  /* ---------------- v4: the structure changes ---------------- */
+  change: {
+    when: '17 Nov', kind: 'equipment',
+    detail: { word: 'Next inspection date', type: 'a date', tech: 'vrs:nextInspectionDue · xsd:date', expected: 'Every piece of equipment should hold it. Missing ones show as Not known yet; nothing is blocked.' },
+    why: 'The winter safety plan asks every piece of equipment to show when it is next inspected.',
+    intent: 'Every hired welfare unit inspected before 1 December',
+    byFloor: [{ floor: 'dept', n: 482 }, { floor: 'team', n: 120 }, { floor: 'sibling', n: 100 }],
+    split: { known: 0, doc: 264, keeper: 417, nobody: 21 },
+    keepers: 14, sites: 29, questions: 31,
+    apps: [
+      { app: 'Data Atlas', icon: 'map', what: 'Equipment list and every equipment record', change: 'Gain a row for the new detail, drawn as Not known yet until filled.' },
+      { app: 'Mandate', icon: 'target', what: 'Intent “Every hired welfare unit inspected before 1 December”', change: 'Can now count against this detail. Today it counts by hand.' },
+      { app: 'Artifacts', icon: 'file-text', what: 'Collection “Inspection certificates”', change: '264 documents become sources inside the rounds. Nothing in them changes.' },
+      { app: 'Explorer', icon: 'compass', what: 'Saved view “Equipment by depot”', change: 'Unchanged. Its owner can add the new detail as a column.' }
+    ],
+    wont: ['No value is removed or rewritten.', '“Last inspected” stays; the new detail sits beside it, it doesn’t replace it.', 'An empty Next inspection date never stops anyone saving.'],
+    similar: [['Vehicles', 'Next MOT'], ['Sites', 'Fire-safety check due']],
+    rounds: [
+      { name: 'Ashby round', who: 'Sam Whitlock', floor: 'team', q: 3, items: 15, mine: true },
+      { name: 'Highways depots round', who: 'Lena Fry', floor: 'dept', q: 9, items: 214 },
+      { name: 'Ollerton and Blyth round', who: 'Kofi Mensah', floor: 'dept', q: 6, items: 168 },
+      { name: '10 more keepers’ rounds', who: 'site keepers', floor: 'dept', q: 9, items: 284 },
+      { name: 'Retford round', who: 'Jo Marsh', floor: 'sibling', q: 2, items: 0, hidden: true },
+      { name: 'Name a keeper', who: 'Priya Natarajan', floor: 'dept', q: 2, items: 21, lead: true }
+    ],
+    /* answers arriving from other rounds after the save (demo only): round index, documents confirmed, keeper-typed, nobody→keeper */
+    arrivals: [{ r: 1, doc: 24, keeper: 7, q: 2 }, { r: 2, doc: 9, keeper: 3, q: 1 }, { r: 5, named: 11, q: 1 }],
+    /* Sam's round: one question per site */
+    myRound: [
+      { site: 'Ashby depot', n: 9, rows: [
+        { item: 'Welfare cabin WU-07', sug: '14 Jan 2027', src: 'Hallam hire pack, p. 3', rec: true },
+        { item: 'Generator G-112', sug: '2 Feb 2027', src: 'Inspection certificate, Aug 2026' },
+        { item: 'Generator G-118', sug: '2 Feb 2027', src: 'Inspection certificate, Aug 2026' },
+        { item: 'Lighting tower LT-4', sug: '19 Dec 2026', src: 'Inspection certificate, Jun 2026' },
+        { item: 'Pressure washer PW-2', sug: '5 Mar 2027', src: 'Inspection certificate, Sep 2026' },
+        { item: 'Sign trailer ST-9', sug: '30 Nov 2026', src: 'Inspection certificate, May 2026' },
+        { item: 'Road plate set RP-3', type: '11 Jan 2027' },
+        { item: 'Compressor C-21', type: '24 Feb 2027' },
+        { item: 'Barrier set B-40', cant: 'On loan to Retford; the hire company would know' }
+      ] },
+      { site: 'Ollerton yard', n: 4 },
+      { site: 'Blyth compound', n: 2 }
+    ],
+    /* the operator's record (WU-07, now kept as Equipment on Ashby Road Crew) */
+    record: {
+      name: 'Welfare cabin WU-07', kind: 'equipment', floor: 'team', added: '3 Nov, by Dee Okafor',
+      rows: [
+        { d: 'Asset tag', v: 'WU-07' },
+        { d: 'Owned by', v: 'Hallam Plant Hire', link: 1 },
+        { d: 'Kept at', v: 'Ashby depot', link: 1 },
+        { d: 'Serial number', gap: 'Hallam Plant Hire, on the hire contract' },
+        { d: 'Last inspected', v: '2 Apr 2026', age: '7 months', stale: 'review after 6 months' },
+        { d: 'Next inspection date', isNew: true },
+        { d: 'Fuel store', none: ['Dee Okafor', '3 Nov'] },
+        { d: 'Registration', na: 'Equipment isn’t registered' },
+        { d: 'Hire cost', unseen: 'finance' }
+      ],
+      history: { from: '14 Oct', to: '29 Oct', why: 'the hire feed was down' }
+    }
+  }
+};
+
+/* ---- helpers shared by both b-screens ---- */
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ms = t => { const v = getComputedStyle(document.documentElement).getPropertyValue(t).trim(); return v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000; };
+let timers = [];
+/* reduced motion: the same steps in the same order, ten times quicker; transitions crossfade */
+const later = (fn, d) => timers.push(setTimeout(fn, RM ? d / 10 : d));
+const clearLater = () => { timers.forEach(clearTimeout); timers = []; };
+const K = id => DATA.kinds.find(k => k.id === id);
+const F = id => DATA.families.find(f => f.id === id);
+const FL = id => DATA.floors[id];
+const P = id => DATA.predicted.find(p => p.id === id);
+const Q = id => DATA.questions.find(q => q.id === id);
+const ic = (n, s = 16) => Icons.svg(n, { size: s, stroke: 1.5 });
+const tk = w => `<span class="tk">${w}</span>`;
+const W = k => DATA.words[k];
+const fmt = n => n.toLocaleString('en-GB');
+const flName = id => { const f = FL(id); return `<span class="fl" data-tier="${f.tier}" title="${f.kind}">${f.name}</span>`; };
+const flChip = id => { const f = FL(id); return `<span class="fl" data-tier="${f.tier}">${f.kind} · ${f.name}</span>`; };
+
+/* ---- the six ways to be empty: one renderer each ---- */
+const E = {
+  gap: (who, extra) => `<span class="e gap"><span class="w">Not known yet</span><span>${who ? `<b>${who}</b> could fill it` : 'Nobody named yet'}${extra ? ` · ${extra}` : ''}</span>${tk('missing value · sh:minCount 1 not met')}</span>`,
+  none: (who, when) => `<span class="e none"><span class="w">None</span><span>${who} checked, ${when}</span>${tk('stated absence')}</span>`,
+  na: why => `<span class="e na"><span class="w">Doesn’t apply</span><span>${why}</span>${tk('not in the class’s profile')}</span>`,
+  stale: (v, age, rule) => `<span class="e"><span class="w">${v}<span class="age" title="Stale: ${rule}">${age}</span></span><span>Stale: ${rule}</span>${tk('review age exceeded')}</span>`,
+  unseen: (floor, what) => { const f = FL(floor); return `<span class="e unseen">${ic('lock', 12)}<span><span class="w" style="color:var(--ink-muted)">Not yours to see</span> · ${what || `kept on ${f.name}`}, ask <b>${f.ask}</b>${tk('403 · reason: kept elsewhere')}</span></span>`; },
+  wave: (from, to, why, w = 220) => `<svg class="wave" viewBox="0 0 ${w} 16" preserveAspectRatio="none" aria-label="No record ${from} to ${to}">
+      <path d="M0 8 ${Array.from({ length: Math.floor(w / 8) }, (_, i) => `Q${i * 8 + 2} ${i % 2 ? 13 : 3} ${i * 8 + 4} 8 T${i * 8 + 8} 8`).join(' ')}" style="fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2"/></svg>`
+};
+/* the key strip, every screen; `here` lists the marks shown on this view */
+function emptyKey(here, v) {
+  const m = {
+    gap: `<div class="m gap">Not known yet</div>`, none: `<div class="m">None</div>`, na: `<div class="m na">Doesn’t apply</div>`,
+    stale: `<div class="m stale">2 Apr&nbsp;<span>7 months</span></div>`, norec: `<div class="m">${E.wave('', '', '', 120)}</div>`,
+    unseen: `<div class="m unseen">${ic('lock', 12)}Not yours to see</div>`
+  };
+  return `${v ? `<div class="micro">Six ways to be empty${tk('the blank family')}</div>` : ''}<div class="ekey${here ? ' on-these' : ''}${v ? ' v' : ''}" aria-label="Six ways to be empty">${DATA.empty.map(e => `<div class="${!here || here.includes(e.id) ? 'here' : ''}">${m[e.id]}<div class="s"><b>${e.plain}.</b> ${e.say}${tk(e.tech)}</div></div>`).join('')}</div>`;
+}
+function keys(list) { $('#keys').innerHTML = list.map(([k, l]) => `<span><span class="kbd">${k}</span>${l}</span>`).join(''); }
+function reveal(el) { if (!el) return; el.classList.add('fade', 'pre'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('pre'))); }
+function techFoot() {
+  const on = document.body.classList.contains('tech');
+  const el = $('#railfoot'); if (!el) return;
+  el.innerHTML = on ? `<b>Technical words are on.</b> Each plain word shows the name admins use, one step down. <span class="kbd">T</span> hides them.`
+    : `Plain words only. Anyone can show the <b>technical words</b> underneath with <span class="kbd">T</span>.`;
+}
+function boot(V) {
+  const go = () => { clearLater(); V.reset(); later(() => V.demo(), ms('--motion-run')); };
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'r') { go(); return; }
+    if (k === 't') { document.body.classList.toggle('tech'); techFoot(); if (V.onTech) V.onTech(); return; }
+    if (V.key && V.key(e)) e.preventDefault();
+  });
+  if (location.hash.includes('tech')) document.body.classList.add('tech');
+  go();
+}
+
+/* ====================== V3: Placing and waiting ====================== */
+const S = { mode: 'fits', view: 'op', ans: [], result: undefined, sel: 'route', made: false };
+const T = () => DATA.things[S.mode];
+const val = (k, q) => (DATA.traits[k] || {})[q];
+const answered = q => { const a = S.ans.find(x => x[0] === q); return a ? a[1] : undefined; };
+/* a kind stays possible while no answer contradicts its traits ("not sure" contradicts nothing) */
+const fitsAns = tr => S.ans.every(([q, a]) => a === null || tr[q] === undefined || tr[q] === a);
+const left = () => DATA.kinds.filter(k => fitsAns(DATA.traits[k.id] || {}));
+const ruledBy = tr => { const i = S.ans.findIndex(([q, a]) => a !== null && tr[q] !== undefined && tr[q] !== a); return i < 0 ? null : i; };
+const predLeft = () => DATA.predicted.filter(p => p.traits && fitsAns(p.traits) && S.ans.length >= 3);
+const accent = v => document.documentElement.style.setProperty('--x-accent', v === 'admin' ? 'var(--floor-org-high)' : 'var(--floor-team-high)');
+
+function rail() {
+  const op = S.view === 'op', p = op ? DATA.people.operator : DATA.people.admin;
+  const nav = op
+    ? [['Things we keep', 'boxes', 4597], ['Kinds of thing', 'shapes', 7], ['Add a thing', 'message-square-plus', null, 1], ['Triage', 'inbox', 7]]
+    : [['Kinds of thing', 'shapes', 7, 1], ['Waiting for a kind', 'hourglass', 7], ['Kinds of link', 'waypoints', 12], ['Changes', 'history', 41]];
+  $('#rail').innerHTML = `<div class="an">${DATA.app}${op ? '' : ' · Studio'}</div>
+    <div class="who-am" data-tier="${FL(p.floor).tier}"><span class="dot"></span><span><b>${p.name}</b><br>${p.role}${p.tech ? tk(p.tech) : ''}<br>${FL(p.floor).kind} · ${FL(p.floor).name}</span></div>
+    ${nav.map(([l, i, n, on]) => `<div class="nav${on ? ' on' : ''}">${ic(i)}<span>${l}</span>${n != null ? `<span class="n">${fmt(n)}</span>` : ''}</div>`).join('')}
+    <div class="foot" id="railfoot"></div>`;
+  techFoot();
+}
+function head() {
+  const op = S.view === 'op';
+  $('#crumb').textContent = op ? `${DATA.floors.team.name} · ${DATA.app} · Add a thing` : `${DATA.app} · Studio · Kinds of thing`;
+  $('#h1').textContent = op ? 'Add a thing' : 'What waits for a kind';
+  $('#sub').innerHTML = op
+    ? `Answer a few questions; your answers fill in the sentence <i>it’s a ___ that ___</i>, and the sentence names its kind. Things we already keep that sound the same appear as it fills. <b>Nothing skips Triage.</b>`
+    : `The table of kinds, families across and floors down. Its dotted slots are kinds it predicts; things nobody could place <b>wait on the slot their answers point to</b>, with how often each was asked for.`;
+  $('#headR').innerHTML = `<div class="viewers" role="group" aria-label="Who is looking">
+    <button data-v="op" class="${op ? 'on' : ''}" data-tier="team"><span class="dot"></span>${DATA.people.operator.name}, operator <span class="kbd">O</span></button>
+    <button data-v="admin" class="${op ? '' : 'on'}" data-tier="org"><span class="dot"></span>${DATA.people.admin.name}, admin <span class="kbd">A</span></button></div>`;
+}
+
+/* ---------------- operator ---------------- */
+function drawSaid() {
+  const t = T();
+  $('#said').innerHTML = `<span class="micro">In your words</span><span class="w">${t.said}</span><span class="n">${t.note}</span><span class="n">${ic('pencil-line')}${t.from}</span>`;
+  Icons.hydrate($('#said'));
+}
+function family() {
+  const L = left(); const fams = [...new Set(L.map(k => k.family))];
+  if (fams.length === 1) return fams[0];
+  if (!L.length) { const p = predLeft()[0] || DATA.predicted.find(x => x.id === T().slot); return answered('touch') === 1 && answered('stays') === 1 ? 'place' : p ? p.family : null; }
+  return null;
+}
+function drawSent(fresh) {
+  const t = T(), fam = family(), L = left(), done = S.result !== undefined;
+  let diff = '', cls = '';
+  if (L.length === 1 && done) { diff = L[0].diff; cls = ' set'; }
+  else if (!L.length) {
+    const p = S.ans.some(([q]) => q === 'line') && predLeft()[0];
+    if (p) { diff = `${p.diff}`; cls = S.made && S.sel === p.id ? ' set' : ' wait'; } else { diff = 'no kind we keep fits'; cls = ' wait'; }
+  }
+  const lab = (w, t2) => `<span class="lab">${w}${tk(t2)}</span>`;
+  let h = `<span class="subj">${t.said}</span> is <span class="slot${fam ? ' set' : ''}${fresh === 0 ? ' fresh' : ''}">${lab('what it is', W('family')[1])}${fam ? F(fam).a : '&nbsp;'}</span> that <span class="slot${cls}${fresh === 1 ? ' fresh' : ''}">${lab(cls === ' wait' ? 'no kind yet' : 'what sets it apart', 'differentia')}${diff || '&nbsp;'}</span>`;
+  if (done && S.result) h += t.links.slice(0, 1).map(l => `, and <span class="slot set">${lab('link', W('link')[1])}${l[0]} ${l[1]}</span>`).join('');
+  $('#sent').innerHTML = h;
+  $('#sent').classList.toggle('done', done);
+  if (fresh != null) later(() => $$('#sent .fresh').forEach(s => s.classList.remove('fresh')), ms('--motion-hold') / 4);
+}
+function nextQ() {
+  const L = left(), asked = S.ans.map(a => a[0]);
+  if (L.length === 1) { const tr = DATA.traits[L[0].id] || {}; const q = Object.keys(tr).find(q => tr[q] === 1 && !asked.includes(q)); return q ? Q(q) : null; }
+  if (!L.length) { const p = DATA.predicted.filter(p => p.traits && fitsAns(p.traits)); const q = p.length && Object.keys(p[0].traits).find(q => !asked.includes(q)); return q ? Q(q) : null; }
+  /* the question that best halves what's left */
+  let best = null, bs = -1;
+  for (const q of DATA.questions) { if (asked.includes(q.id)) continue;
+    const y = L.filter(k => val(k.id, q.id) === 1).length, n = L.filter(k => val(k.id, q.id) === 0).length;
+    const s = Math.min(y, n) + (y + n ? .1 : 0); if (y + n && s > bs) { bs = s; best = q; } }
+  if (!best && L.length > 1) best = DATA.questions.find(q => !asked.includes(q.id) && L.some(k => val(k.id, q.id) === 1));
+  return best || DATA.questions.find(q => !asked.includes(q.id));
+}
+function splitText(q) {
+  const L = left();
+  if (!L.length) { const p = DATA.predicted.find(p => p.traits && fitsAns(p.traits)); return `None of the ${DATA.kinds.length} kinds we keep fits your answers. If yes, it points to <b>${p.word}</b>, a kind the table predicts but nobody keeps yet.`; }
+  const y = L.filter(k => val(k.id, q.id) === 1), n = L.filter(k => val(k.id, q.id) === 0);
+  if (L.length === 1) return `One kind is left, ${L[0].plural}. This checks it: a no means nothing we keep fits.`;
+  const name = a => a.map(k => k.plural).join(', ');
+  return `It splits the ${L.length} left: yes leaves ${y.length ? name(y) : 'none we keep'}; no leaves ${n.length ? name(n) : 'none we keep'}.`;
+}
+function drawAsk() {
+  const el = $('#ask'), q = nextQ(), L = left();
+  const trail = S.ans.length ? `<div class="trail" aria-label="Your answers">${S.ans.map(([q, a], i) => `<span>${i + 1} · ${Q(q).q.replace(/\?$/, '')}? <b>${a === 1 ? 'Yes' : a === 0 ? 'No' : 'Not sure'}</b></span>`).join('')}</div>` : '';
+  const poss = `<div><div class="micro" style="margin-bottom:var(--space-1)">Still possible ${tk('candidate classes')}</div><div class="poss">${DATA.kinds.map(k => { const r = ruledBy(DATA.traits[k.id] || {});
+      return `<span class="pk${r != null ? ' out' : ''}${L.length === 1 && L[0] === k ? ' left1' : ''}"><span class="kind">${ic(k.icon)}${k.word}</span><span class="r">${r != null ? `ruled out by answer ${r + 1}` : 'still possible'}</span></span>`; }).join('')}
+      ${!L.length ? DATA.predicted.filter(p => p.traits && fitsAns(p.traits)).map(p => `<span class="pk pred${S.ans.some(a => a[0] === 'line') ? ' hit' : ''}"><span>${p.word}</span><span class="r">predicted · nobody keeps it yet</span></span>`).join('') : ''}</div></div>`;
+  if (S.result !== undefined) return;
+  el.innerHTML = q ? `<div style="display:flex;flex-direction:column;gap:var(--space-3)"><div class="qbox"><div class="micro">Question ${S.ans.length + 1} · ${L.length || 'no'} kind${L.length === 1 ? '' : 's'} still possible</div>
+      <div class="q">${q.q}</div><div class="split">${splitText(q)}</div>
+      <div class="acts"><button class="btn go" data-a="1">Yes <span class="kbd">Y</span></button><button class="btn" data-a="0">No <span class="kbd">N</span></button><button class="btn quiet" data-a="null">Not sure <span class="kbd">U</span></button></div></div>${trail}${poss}</div>` : `${trail}${poss}`;
+  Icons.hydrate(el);
+}
+function nearSentence(n) { const k = K(n.kind); return `<span class="nm">${n.name}</span> is ${F(k.family).a} that <span class="fit">${k.diff}</span>.`; }
+function drawNear() {
+  const list = DATA.near[S.mode], t = T();
+  const outOf = n => n.out && answered(n.out[0]) === n.out[1];
+  const live = list.filter(n => !outOf(n)).length;
+  const head = S.mode === 'fits' || live ? 'Is it one of these?' : 'Closest we already keep';
+  const why = S.ans.length === 0 ? `Found by name before any answer. ${DATA.matching}` : `${list.length} found by name; ${live} still fit${live === 1 ? 's' : ''} your answers. ${DATA.matching}`;
+  const decide = S.result !== undefined && S.result && !S.decided;
+  $('#right').innerHTML = `<h3>${head}${tk(W('near')[1])}</h3><p class="why">${why}</p>
+    ${list.map(n => { const o = outOf(n), i = o ? S.ans.findIndex(a => a[0] === n.out[0]) : -1;
+      return `<div class="ss${n.dup && !o ? ' dup' : ''}${o ? ' out' : ''}">${n.dup && !o ? `<div class="badge">${ic('copy', 12)}Likely the same thing · waiting in Triage</div>` : ''}
+        ${nearSentence(n)}
+        <span class="meta">${o ? `<span class="why-out">Not yours: it ${n.diff}; your answer ${i + 1} says otherwise.</span>` : `${n.same.map(s => `<span class="y">${ic('check', 12)}${s}</span>`).join('<br>')}<br>${ic('x', 12)}${n.diff}`}</span>
+        <span class="meta">${n.where}</span>
+        ${n.dup && decide && !o ? `<div class="acts"><button class="btn sm" data-same>Same thing: add to it</button><button class="btn sm go" data-new>Different: it’s new <span class="kbd">Enter</span></button></div>` : ''}</div>`; }).join('')}`;
+  Icons.hydrate($('#right'));
+}
+function answer(a) {
+  if (S.view !== 'op' || S.result !== undefined) return;
+  const q = nextQ(); if (!q) return;
+  S.ans.push([q.id, a]);
+  const L = left(), famNow = family();
+  const nq = nextQ();
+  if (L.length === 1 && !nq) S.result = L[0].id;
+  if (!L.length && !nq) S.result = null;
+  drawSent(famNow && S.ans.length && !S.famShown ? 0 : (L.length <= 1 ? 1 : null)); if (famNow) S.famShown = true;
+  drawAsk(); drawNear();
+  if (S.result === null) later(waitSlip, ms('--motion-calm'));
+  if (S.result) later(() => { drawSent(); drawNear(); $('#ask').innerHTML = `<p class="muted" style="font-size:var(--type-meta);margin:0">Your answers name it <b>${K(S.result).word}</b>. One thing we keep sounds very like it: is it the same?</p>`; }, ms('--motion-slow'));
+}
+function landRecord(same) {
+  if (!S.result || S.decided) return; S.decided = true;
+  const t = T(), k = K(S.result), dup = DATA.near.fits.find(n => n.dup), st = DATA.people.steward;
+  drawNear();
+  $('#said').style.display = 'none';
+  if (same) {
+    $('#ask').innerHTML = `<div class="res"><span class="stamp">${ic('inbox', 12)}Sent to Triage, as an addition</span><h3>Add to ${dup.name}</h3>
+      <p>What you know is proposed as details of the thing already waiting. Where you differ (${dup.diff}), both show side by side until <b>${st.name}</b> decides.</p></div>`;
+  } else {
+    $('#ask').innerHTML = `<div class="res"><div class="row"><span class="stamp">${ic('inbox', 12)}A new ${k.word} · in Triage${tk('proposal · rdf:type ' + k.tech)}</span><span class="micro">every detail it could hold</span></div>
+      <div class="rec">${t.record.map(r => `<div class="k">${r.d}</div><div class="v">${r.v ? `<span class="${r.link ? 'lk' : ''}">${r.v}</span><span class="src in">from ${r.src}</span>` : r.gap ? E.gap(r.gap) : r.none ? E.none(...r.none) : E.na(r.na)}</div>`).join('')}</div>
+      <div class="whoL">${ic('user-round-check')}<span><b>${st.name}</b>, ${st.role} (${FL(st.floor).name}), checks it before it’s kept. You can use it now; it shows as “in Triage” until then.</span>
+      ${ic('copy')}<span>You said it’s different from <b>${dup.name}</b>. ${st.name.split(' ')[0]} still sees both side by side, because the tags are one character apart.</span></div>
+</div>`;
+  }
+  if (!same) { $('#right').insertAdjacentHTML('beforeend', `<div style="margin-top:var(--space-3)">${emptyKey(['gap', 'none', 'na'], true)}</div>`); }
+  Icons.hydrate($('#ask')); reveal($('#ask').firstElementChild);
+}
+function waitSlip() {
+  const t = T(), p = P(t.slot), a = DATA.people.admin, others = p.waiting.filter(w => w.name !== t.said);
+  $('#said').style.display = 'none';
+  if (S.made && S.sel === t.slot) {
+    drawSent();
+    $('#ask').innerHTML = `<div class="res"><span class="stamp">${ic('check', 12)}Placed · a ${p.word}, in Triage</span><p><b>${a.name}</b> made the kind <b>${p.word}</b> from your sentence. ${t.said} is now a ${p.word} record: everything you said came with it, and <b>Length</b> shows as Not known yet, which ${DATA.floors.team.name} could fill.</p>
+      <p class="m">Your answers are kept with the record, so anyone can see why it was placed there.</p></div>`;
+    Icons.hydrate($('#ask')); reveal($('#ask').firstElementChild); return;
+  }
+  $('#ask').innerHTML = `<div class="res waiting"><div class="row"><span class="stamp">${ic('hourglass', 12)}${W('waiting')[0]}${tk(W('waiting')[1])}</span><span class="micro">nothing is lost</span></div>
+    <p>No kind we keep fits it yet, so it isn’t placed. It waits in Triage, on the slot your answers point to: <b>${p.word}</b>, a kind the table predicts but nobody keeps yet.</p>
+    <div class="two"><div class="whoL">${ic('user-round-check')}<span><b>${a.name}</b>, who ${a.role} (${FL(a.floor).kind}), decides. ${tk(a.tech)}</span>
+      ${ic('users')}<span>Asked for ${p.asks} times; ${others.length} other things wait there too (${others.map(o => o.name).join(', ')}).</span></div>
+    <dl class="kept"><dt>Kept</dt><dd>Your sentence, your ${S.ans.length} answers, the note, where it came from</dd><dt>Links</dt><dd>${t.links.map(l => `${l[0]} ${l[1]}`).join('; ')}: proposed, kept with it</dd>
+      <dt>Still works</dt><dd>Find it by name; attach the documents it came from</dd><dt>Not yet</dt><dd>Linking other things to it; it shows in no kind’s list</dd></dl></div>
+    <p class="m">Closest kind: ${K(t.closest).word}. Putting it there would leave Address as a gap nobody can ever fill, so it isn’t offered as the answer.</p>
+    <div style="display:flex;gap:var(--space-2);flex-wrap:wrap"><button class="btn sm" aria-disabled="true" title="Possible, but ${DATA.people.steward.name} would see you weren’t sure">Put it under ${K(t.closest).word} anyway</button><button class="btn sm go" data-v="admin">See it as ${a.name} does <span class="kbd">A</span></button></div></div>`;
+  Icons.hydrate($('#ask')); reveal($('#ask').firstElementChild);
+}
+
+/* ---------------- admin ---------------- */
+function drawTable() {
+  const rows = DATA.rows, made = S.made;
+  const kTile = k => `<div class="tile" data-tier="${FL(k.floor).tier}" style="box-shadow:inset 2px 0 0 var(--fc)"><div class="t">${ic(k.icon)}<span>${k.plural}</span></div>
+      <span class="c" title="${fmt(k.n)} kept, ${k.known}% of their details known">${fmt(k.n)} · ${k.known}%</span><div class="bar" aria-hidden="true"><i style="flex-grow:${k.known}"></i><i style="flex-grow:${100 - k.known};background:transparent"></i></div>${tk(k.tech)}</div>`;
+  const pTile = p => { const m = made && p.id === S.sel;
+    if (m) return `<div class="tile made" data-tier="department" style="box-shadow:inset 2px 0 0 var(--fc)"><div class="t">${ic('route')}<span>${p.word}</span></div><span class="c">${p.waiting.length} · 41% known</span>
+      <div class="bar"><i style="flex-grow:41"></i><i style="flex-grow:59;background:transparent"></i></div><div class="gath">${p.waiting.map(w => `<span>${w.name}</span>`).join('')}</div></div>`;
+    return `<button class="tile pred${p.waiting.length ? '' : ' empty'}${S.sel === p.id ? ' sel' : ''}" data-slot="${p.id}"><div class="t"><span>${p.word}</span></div>
+      <span class="c">${p.waiting.length ? `${p.waiting.length} waiting · ${p.asks} ask${p.asks === 1 ? '' : 's'}` : 'nobody has asked'}</span>
+      ${p.waiting.length ? `<div class="gath">${p.waiting.map(w => `<span title="${w.name}">${w.name}</span>`).join('')}</div>` : ''}${tk('empty class slot')}</button>`; };
+  let h = `<div class="tbl"><div></div>${DATA.families.map(f => `<div class="fh">${f.word}${tk(f.tech)}</div>`).join('')}`;
+  for (const r of rows) {
+    const f = FL(r), ks = DATA.kinds.filter(k => k.floor === r);
+    h += `<div class="rh" data-tier="${f.tier}"><b>${f.name}</b><span>${f.kind}</span></div>`;
+    if (!ks.length && DATA.rowNote[r]) { h += `<div class="note">${DATA.rowNote[r]}</div>`; continue; }
+    h += DATA.families.map(fm => `<div class="cell">${ks.filter(k => k.family === fm.id).map(kTile).join('')}</div>`).join('');
+  }
+  h += `<div class="rh pr"><b>Not kept yet</b><span>predicted slots</span></div>`;
+  h += DATA.families.map(fm => `<div class="cell">${DATA.predicted.filter(p => p.family === fm.id).map(pTile).join('')}</div>`).join('');
+  const ns = DATA.noSlot[0], hf = FL(DATA.hiddenWaiting.floor);
+  h += `<div class="rh pr" style="border-right-color:transparent"><b>Waiting elsewhere</b></div><div class="margin">
+    <div class="tile"><div class="t"><span>${ns.name}</span></div><span class="w">Fits no slot the table predicts. ${ns.by}, ${FL(ns.floor).name}, ${ns.on}: “it ${ns.said}”. Draw a slot for it, or answer ${ns.by.split(' ')[0]}.</span></div>
+    <div class="tile">${E.unseen(DATA.hiddenWaiting.floor, `some things wait in ${hf.name}’s own Triage`)}<span class="w">Shown as “some”, never a number, so the count doesn’t leak. Exact counts here are a decision for Harry.</span></div></div></div>`;
+  $('#tblwrap').innerHTML = h; Icons.hydrate($('#tblwrap'));
+  $('#adm').classList.toggle('focus', !!S.sel);
+}
+function drawDrawer() {
+  const p = P(S.sel), a = DATA.people.admin, src = p.waiting.find(w => w.name === DATA.things.misfit.said) || p.waiting[0];
+  const fam = F(p.family);
+  if (!p.waiting.length) { $('#drawer').innerHTML = `<div class="micro">Predicted slot · ${fam.word}</div><h2>${p.word}</h2><p class="lede">A thing that ${p.diff}. Nobody has asked for it and nothing waits here. It stays on the table so the next person who needs it sees it’s foreseen.</p>`; return; }
+  const waitHTML = `<div>${p.waiting.map(w => `<div class="wt${w === src ? ' src' : ''}"><span class="nm">${w.name}</span> is ${fam.a} that ${w.said}.<span class="by">${w.by} · ${FL(w.floor).name} · ${w.on}</span></div>`).join('')}</div>`;
+  if (S.made) {
+    const r = DATA.things.misfit, op = DATA.people.operator;
+    $('#drawer').innerHTML = `<div class="micro">Kind of thing · ${fam.word} · ${FL('dept').name}${tk('class · rdfs:subClassOf ' + fam.tech)}</div><h2>${p.word}</h2>
+      <p class="lede">Made from ${src.by.split(' ')[0]}’s sentence. The ${p.waiting.length} things that waited are now ${p.word} records, each with its gaps marked, still checked in Triage. ${op.name}, ${p.waiting.filter(w => w.by !== op.name && w.by.includes(' ')).map(w => w.by).join(' and ')} are told.</p>
+      <div class="mk done"><span class="stamp">${ic('check', 12)}${r.said} · placed</span>
+        <div class="rec" style="font-size:var(--type-small)"><div class="k">Looked after by</div><div class="v"><span class="lk">${DATA.floors.team.name}</span></div>
+        <div class="k">From and to</div><div class="v">Ollerton, Blyth</div>
+        <div class="k">Length</div><div class="v">${E.gap(DATA.floors.team.name)}</div>
+        <div class="k">Worked on under</div><div class="v"><span class="lk">Resurfacing 2026/09</span></div></div>
+</div>${emptyKey(['gap'], true)}`;
+    Icons.hydrate($('#drawer')); return;
+  }
+  $('#drawer').innerHTML = `<div class="micro">Predicted slot · ${fam.word} · ${p.asks} asks${tk(W('predicted')[1])}</div><h2>${p.word}</h2>
+    <p class="lede">${p.waiting.length} things wait here, placed by their answers. Each kept everything its person said.</p>${waitHTML}
+    <div class="mk"><div class="micro">Make it a kind, from ${src.by.split(' ')[0]}’s sentence</div>
+      <dl class="fm"><dt>Called</dt><dd><span class="in">${p.word}</span> <span class="from">· the slot’s name; rename freely</span>${tk('rdfs:label · vrs:RouteOrArea')}</dd>
+        <dt>What it is</dt><dd><span class="in">${fam.a}</span> <span class="from">· from “is ${fam.a}”</span>${tk('rdfs:subClassOf ' + fam.tech)}</dd>
+        <dt>Sets it apart</dt><dd><span class="in">${p.diff}</span> <span class="from">· from “${src.said}”</span>${tk('skos:definition')}</dd>
+        <dt class="opt">Its question</dt><dd class="opt">${Q('line').q} <span class="from">· already asked, so placing finds it</span></dd>
+        <dt>Details</dt><dd><div class="det">${p.details.map(([d, t, n], i) => `<span><span class="${i ? 'can' : 'exp'}">${d}</span><i>${t} · ${n} said it</i></span>`).join('')}</div>${tk('first is sh:minCount 1; the rest optional')}</dd>
+        <dt>Kept on</dt><dd>${flChip('dept')} <span class="from">· most asks came from there</span></dd></dl>
+      <div class="acts"><button class="btn go" data-make>Make the kind <span class="kbd">Enter</span></button><span class="m">Places the ${p.waiting.length} waiting things as records, with gaps marked. Each is still checked in Triage.</span></div></div>`;
+  Icons.hydrate($('#drawer'));
+}
+function make() { if (S.view !== 'admin' || S.made || !P(S.sel).waiting.length) return; S.made = true; drawTable(); drawDrawer(); reveal($('#drawer').firstElementChild); }
+
+/* ---------------- views and demo ---------------- */
+function setView(v) {
+  S.view = v; accent(v); rail(); head();
+  $('#op').hidden = v !== 'op'; $('#adm').hidden = v !== 'admin';
+  if (v === 'admin') { drawTable(); drawDrawer(); reveal($('#adm')); }
+  keys(v === 'op'
+    ? [['Y', 'yes'], ['N', 'no'], ['U', 'not sure'], ['Enter', 'it’s new'], ['1', 'a thing that fits'], ['2', 'one that fits nothing'], ['A', 'admin'], ['T', 'technical words'], ['R', 'replay']]
+    : [['←→', 'slot'], ['Enter', 'make the kind'], ['O', 'operator'], ['T', 'technical words'], ['R', 'replay']]);
+}
+function startOp(mode) {
+  clearLater(); S.mode = mode; S.ans = []; S.result = undefined; S.decided = false; S.famShown = false;
+  $('#said').style.display = ''; drawSaid(); drawSent(); drawAsk(); drawNear();
+  const t = T(), g = ms('--motion-calm') + ms('--motion-base');
+  t.answers.forEach(([q, a], i) => later(() => answer(a), ms('--motion-run') + g * i));
+  if (mode === 'fits') later(() => landRecord(false), ms('--motion-run') + g * t.answers.length + ms('--motion-run'));
+}
+const V = {
+  reset() {
+    S.made = false; S.sel = 'route';
+    const h = location.hash;
+    if (h.includes('admin')) { S.mode = 'misfit'; setView('admin'); if (h.includes('made')) { S.made = true; drawTable(); drawDrawer(); } return; }
+    setView('op'); S.mode = h.includes('misfit') ? 'misfit' : 'fits'; S.ans = []; S.result = undefined; S.decided = false;
+    $('#said').style.display = ''; drawSaid(); drawSent(); drawAsk(); drawNear();
+  },
+  demo() { if (S.view === 'op') startOp(S.mode); },
+  onTech() { if (S.view === 'admin') { drawTable(); drawDrawer(); } },
+  key(e) {
+    const k = e.key.toLowerCase();
+    if (k === 'a') { setView('admin'); return true; }
+    if (k === 'o') { setView('op'); if (!S.ans.length) startOp(S.mode); else if (S.result === null) waitSlip(); return true; }
+    if (S.view === 'op') {
+      if (k === '1') { setView('op'); startOp('fits'); return true; }
+      if (k === '2') { setView('op'); startOp('misfit'); return true; }
+      if (k === 'y') { if (S.result && !S.decided) landRecord(true); else { clearLater(); answer(1); } return true; }
+      if (k === 'n') { clearLater(); answer(0); return true; }
+      if (k === 'u') { clearLater(); answer(null); return true; }
+      if (e.key === 'Enter' && S.result) { clearLater(); landRecord(false); return true; }
+    } else {
+      if (e.key === 'Enter') { make(); return true; }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const ids = DATA.predicted.map(p => p.id); let i = ids.indexOf(S.sel) + (e.key === 'ArrowRight' ? 1 : -1); S.sel = ids[(i + ids.length) % ids.length]; S.made = false; drawTable(); drawDrawer(); return true; }
+    }
+  }
+};
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-a]'), v = e.target.closest('[data-v]'), s = e.target.closest('[data-slot]');
+  if (a) { clearLater(); answer(a.dataset.a === 'null' ? null : +a.dataset.a); }
+  if (v) { setView(v.dataset.v); if (v.dataset.v === 'op' && S.result === null) waitSlip(); }
+  if (s) { S.sel = s.dataset.slot; S.made = false; drawTable(); drawDrawer(); }
+  if (e.target.closest('[data-new]')) { clearLater(); landRecord(false); }
+  if (e.target.closest('[data-same]')) { clearLater(); landRecord(true); }
+  if (e.target.closest('[data-make]')) make();
+});
+boot(V);
+</script>
+</body>
+</html>

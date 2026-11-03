@@ -1,0 +1,118 @@
+title: Shape · V2 Table of kinds
+<!--css-->
+/* ===== V2: a periodic table of kinds. Columns are families, rows are floors; the layout predicts the gaps ===== */
+.table{flex:1;min-height:0;display:grid;gap:var(--space-2);align-content:start;margin-bottom:var(--space-7);position:relative}
+.colh{align-self:end;padding:0 var(--space-1) var(--space-1);border-bottom:1px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);min-width:0}
+.colh .tech{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.colh b{display:block;color:var(--ink);font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rowh{display:flex;flex-direction:column;justify-content:center;gap:2px;padding-right:var(--space-2);border-right:2px solid var(--c);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:right}
+.rowh b{color:var(--ink);font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.rowh.out{border-right-style:dashed}
+.el{position:relative;display:grid;grid-template-rows:auto 1fr auto auto;padding:var(--space-2) var(--space-2) var(--space-2);border-radius:var(--radius-key);background:color-mix(in srgb,var(--c) calc(var(--k) * 16%),var(--slate-deep));border:1px solid color-mix(in srgb,var(--c) 30%,transparent);min-height:0;min-width:0;transition:border-color var(--motion-base),opacity var(--motion-base),filter var(--motion-base),transform var(--motion-base) var(--ease-out)}
+.el:hover{border-color:var(--c)}
+.el .top{display:flex;justify-content:space-between;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.el .sym{font-size:var(--type-title);line-height:var(--leading-title);font-weight:200;letter-spacing:var(--tracking-soft);color:color-mix(in srgb,var(--light) calc(40% + var(--k) * 60%),var(--ink-muted));align-self:center}
+.el .nm{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ticks{display:flex;gap:2px;height:var(--space-4);margin-top:var(--space-1)}
+.ticks i{flex:1;border-radius:1px;box-shadow:inset 0 0 0 1px var(--x-proposed-gap-ink);background:linear-gradient(to top,var(--x-proposed-known) calc(var(--p) * 1%),var(--x-proposed-gap-fill) calc(var(--p) * 1%))}
+.bond{display:none;font-size:var(--type-small);line-height:var(--leading-small);color:var(--light);margin-top:var(--space-1)}
+.table.focus .el:not(.lit):not(.near){opacity:.35;filter:saturate(.3)}
+.table.focus .el.near .bond{display:block}
+.table.focus .el.near .ticks{display:none}
+.el.lit{border-color:var(--light);transform:translateY(calc(var(--space-1) * -1))}
+.el.out{background:transparent;border-style:dashed}
+.el.out .sym{color:var(--ink-muted)}
+.el.out .nm{color:var(--ink)}
+.gapnote{align-self:center;padding:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px dotted var(--hairline-strong);border-bottom:1px dotted var(--hairline-strong);max-width:var(--measure-read)}
+.el.out .note,.el.pred .note{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.el.pred{background:transparent;border:1px dashed var(--x-proposed-gap-ink);--c:var(--ink-muted)}
+.el.pred .sym{color:var(--ink-muted)}
+.el.pred .top .q{color:var(--ink)}
+/* the key: where the periodic table puts its legend, in the empty space of the first row */
+.key{display:grid;grid-template-columns:auto 1fr;gap:var(--space-3);align-items:center;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);min-width:0}
+.key .el{width:calc(var(--space-8) + var(--space-3));pointer-events:none}
+.key ul{list-style:none;margin:0;padding:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:grid;gap:var(--space-1)}
+.key li b{color:var(--ink);font-weight:400}
+.sec{grid-column:1 / -1;display:flex;gap:var(--space-3);align-items:baseline;margin-top:var(--space-2)}
+<!--html-->
+<div class="app">
+  <nav class="rail" aria-label="Data Atlas"></nav>
+  <main class="main">
+    <div class="head"><h1>What we keep</h1><div class="sum" id="sum"></div></div>
+    <div class="floors" id="floors"></div>
+    <div class="table" id="tbl"></div>
+  </main>
+  <aside class="drawer" aria-label="Kind of thing"><div class="drawer-in scroll"></div></aside>
+</div>
+<div class="x-cap"><b>Shape · V2</b> table of kinds: families across, floors down, the gaps are predicted · Mendeleev, Ranganathan, Isotype</div>
+<!--js-->
+const tbl = document.getElementById('tbl');
+/* rows: this floor and every floor above (top = Org), then floors out of reach, then kinds not kept yet */
+const rowsDef = [
+  ...visibleFloors.slice().reverse().map(id => ({ id, f: F(id), list: SEEN.filter(k => k.floor === id) })),
+  { id: 'out', out: true, list: OUT },
+  { id: 'pred', pred: true, list: DATA.unadopted }
+];
+/* each family gets as many columns as its fullest row */
+const cols = DATA.groups.map(g => ({ g, n: Math.max(1, ...rowsDef.map(r => r.list.filter(k => k.group === g.id).length)) }));
+const nCols = cols.reduce((a, c) => a + c.n, 0);
+function cell(k, row){
+  if (row.pred) return '<button class="el pred" data-id="' + k.id + '"><span class="top"><span class="q">?</span><span>' + (k.asked ? '×' + k.asked : '0') + '</span></span><span class="sym">' + esc(k.sym) + '</span><span class="nm">' + esc(k.plain) + '</span><span class="note">' + (k.asked ? 'a word sources asked for' : 'room in the ontology') + '</span></button>';
+  if (row.out){ const f = F(k.floor); return '<button class="el out" data-id="' + k.id + '" style="--c:' + floorColor(f) + '"><span class="top"><span>–</span><i data-lucide="lock" data-size="12"></i></span><span class="sym">' + esc(k.sym) + '</span><span class="nm">' + esc(k.plain) + '</span><span class="note">' + esc(f.name) + ' · ask ' + esc(k.ask.split(' ')[0]) + '</span></button>'; }
+  const p = known(k);
+  return '<button class="el" data-id="' + k.id + '" style="--c:' + floorColor(F(k.floor)) + ';--k:' + (p / 100).toFixed(2) + '" aria-label="' + esc(k.plain) + ', ' + k.count + ' kept, ' + p + '% known">' +
+    '<span class="top"><span>' + nf(k.count) + '</span><span>' + p + '%</span></span><span class="sym">' + esc(k.sym) + '</span><span class="nm">' + esc(k.plain) + '</span>' +
+    '<span class="ticks">' + k.details.map(d => '<i style="--p:' + d[1] + '" title="' + esc(d[0]) + ' ' + d[1] + '%"></i>').join('') + '</span><span class="bond"></span></button>';
+}
+function render(){
+  tbl.style.gridTemplateColumns = 'minmax(0,auto) repeat(' + nCols + ', minmax(0,1fr))';
+  const rowH = 'minmax(0,1fr)';
+  tbl.style.gridTemplateRows = 'auto ' + rowsDef.map(() => rowH).join(' ');
+  let h = '<div></div>' + cols.map(c => '<div class="colh" style="grid-column:span ' + c.n + '"><b>' + esc(c.g.plain) + '</b><span class="tech">' + c.g.tech + '</span></div>').join('');
+  rowsDef.forEach((r, ri) => {
+    if (r.f) h += '<div class="rowh" style="grid-row:' + (ri + 2) + ';grid-column:1;--c:' + floorColor(r.f) + '"><b>' + esc(r.f.name) + '</b>' + floorWord(r.f) + (r.id === DATA.here ? ' · you are here' : ' · above') + '</div>';
+    else if (r.out) h += '<div class="rowh out" style="grid-row:' + (ri + 2) + ';grid-column:1;--c:var(--ink-muted)"><b>Out of reach</b>other floors</div>';
+    else h += '<div class="rowh out" style="grid-row:' + (ri + 2) + ';grid-column:1;--c:var(--x-proposed-gap-ink)"><b>Not kept yet</b>gaps in what we keep</div>';
+    /* place each kind in its family's first free column; remember what's empty */
+    const occ = new Array(nCols).fill(false); let start = 0;
+    cols.forEach(c => {
+      r.list.filter(k => k.group === c.g.id).forEach((k, i) => { occ[start + i] = true;
+        h += '<div style="grid-row:' + (ri + 2) + ';grid-column:' + (start + i + 2) + ';display:grid">' + cell(k, r) + '</div>'; });
+      start += c.n;
+    });
+    /* the key sits in the first row's longest empty run, like the periodic table's legend */
+    if (ri === 0){ let best = [0, 0], run = 0;
+      occ.forEach((o, i) => { run = o ? 0 : run + 1; if (run > best[1]) best = [i - run + 1, run]; });
+      if (best[1] >= 2) h += '<div class="key" style="grid-row:2;grid-column:' + (best[0] + 2) + ' / span ' + best[1] + '">' + keyCell() + '</div>'; }
+    else if (r.f){ /* say why a floor's row is empty in a family: it's kept above, not missing */
+      const none = cols.filter(c => !r.list.some(k => k.group === c.g.id) && SEEN.some(k => k.group === c.g.id));
+      let best = [0, 0], run = 0; occ.forEach((o, i) => { run = o ? 0 : run + 1; if (run > best[1]) best = [i - run + 1, run]; });
+      if (none.length && best[1] >= 2) h += '<div class="gapnote" style="grid-row:' + (ri + 2) + ';grid-column:' + (best[0] + 2) + ' / span ' + best[1] + '">No ' + none.map(c => c.g.plain.toLowerCase()).join(' or ') + ' are kept on ' + esc(r.f.name) + '. They are kept once, for everyone, on the floor above, so this row is empty on purpose.</div>'; }
+  });
+  tbl.innerHTML = h; Icons.hydrate(tbl);
+  tbl.querySelectorAll('.el[data-id]').forEach(b => b.onclick = () => select(b.dataset.id));
+}
+function keyCell(){
+  /* a made-up example square, so the key never reads as one of the real kinds */
+  return '<div class="el" style="--c:var(--ink-muted);--k:.8" aria-hidden="true"><span class="top"><span>123</span><span>80%</span></span><span class="sym">Ab</span><span class="nm">A kind</span><span class="ticks">' + [100, 90, 70, 40].map(p => '<i style="--p:' + p + '"></i>').join('') + '</span></div>' +
+    '<ul><li><b>How to read a square</b></li><li><b>Top left</b> how many are kept</li><li><b>Top right</b> how much is known about them</li><li><b>Brighter</b> = better known</li><li><b>Each bar</b> is one detail; the empty part is the records still missing it</li><li><b>Dashed</b> = kept elsewhere, or not kept yet</li></ul>';
+}
+let cur = null;
+function light(id){
+  cur = id; tbl.classList.toggle('focus', !!id);
+  const ls = id ? linksOf(id) : [];
+  tbl.querySelectorAll('.el[data-id]').forEach(e => {
+    const l = ls.find(l => (l.from === id && l.to === e.dataset.id) || (l.to === id && l.from === e.dataset.id));
+    e.classList.toggle('lit', e.dataset.id === id); e.classList.toggle('near', !!l);
+    const b = e.querySelector('.bond');
+    if (b && l) b.textContent = (l.from === id ? '← ' : '→ ') + l.verb + (l.cover ? ' · ' + l.cover + '%' : '');
+  });
+}
+function select(id){ light(id); openKind(id); }
+onDrawer = id => { if (!id) light(null); };
+const thinKinds = SEEN.filter(k => isThin(known(k))).length;
+document.getElementById('sum').innerHTML = '<b>' + SEEN.length + '</b> kinds of thing in ' + DATA.groups.length + ' families · <b>' + nf(totalSeen) + '</b> kept · <b>' + thinKinds + '</b> thinly known · <b>' + DATA.unadopted.length + '</b> gaps predicted';
+document.getElementById('floors').innerHTML = floorStrip();
+mountShell('shape'); Icons.hydrate(document.body);
+keys(['click a square · <span class="kbd">Tab</span> <span class="kbd">Enter</span>', '<span class="kbd">T</span> ontology words · <span class="kbd">Esc</span> close', '<span class="kbd">R</span> replay']);
+boot(() => { render(); light(null); }, () => select('vehicle'));

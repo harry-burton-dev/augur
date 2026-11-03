@@ -1,0 +1,147 @@
+title: Shape · V3 Readers' diagram
+<!--css-->
+/* ===== V3: an ER diagram drawn for readers. Chen's boxes and verbs, Bertin's variables, every line reads as a sentence ===== */
+.dia{position:relative;flex:1;min-height:0}
+.dia #svg{position:absolute;inset:0;width:100%;height:100%}
+.node{cursor:pointer}
+.node rect.box{stroke-width:1;transition:opacity var(--motion-base),stroke var(--motion-base)}
+.node text{font-family:var(--font-sans);pointer-events:none}
+.node .nm{font-size:15px;fill:var(--light)}
+.node .ct{font:400 12px var(--font-mono);fill:var(--ink-muted)}
+.node.out rect.box{stroke-dasharray:4 4}
+.node.out .nm{fill:var(--ink)}
+.node:focus{outline:none}
+.node:focus-visible rect.box,.node.lit rect.box{stroke:var(--light);stroke-width:1.5}
+.edge path{fill:none;stroke:var(--ink-muted);stroke-linecap:round;transition:opacity var(--motion-base),stroke var(--motion-base)}
+.edge.thin path{stroke-dasharray:1 5}
+.edge.out path{stroke-dasharray:2 6;opacity:.5}
+.edge.lab.out{opacity:.6}
+.edge .vb{font:400 12px var(--font-sans);fill:var(--ink);letter-spacing:.01em}
+.edge .vbbg{fill:var(--slate-deep);opacity:.88}
+.edge .pc{font:400 11px var(--font-mono);fill:var(--ink-muted);opacity:0}
+.edge.on .pc{opacity:1}
+.edge .dm{fill:var(--slate-deep);stroke:var(--ink-muted)}
+.dia.focus .node:not(.lit):not(.near){opacity:.3}
+.dia.focus .edge:not(.on){opacity:.12}
+.edge.on path{stroke:var(--light)}
+.edge.on .vb{fill:var(--light)}
+.edge.on .pc{fill:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-5);align-items:center;padding:var(--space-3) 0 var(--space-7);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);flex:none;border-top:1px solid var(--hairline)}
+.legend span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.legend b{color:var(--ink);font-weight:400}
+.lg{display:inline-block;width:var(--space-5);height:var(--space-3);border-radius:2px}
+.lg.size{width:var(--space-3);height:var(--space-3);border:1px solid var(--ink-muted);box-shadow:var(--space-1) var(--space-1) 0 calc(var(--space-1) * -1) var(--ink-muted)}
+.lg.val{background:linear-gradient(90deg,color-mix(in srgb,var(--x-here) 8%,var(--slate-deep)),color-mix(in srgb,var(--x-here) 45%,var(--slate-deep)))}
+.lg.dash{border:1px dashed var(--ink-muted)}
+.lg.w{height:0;border-top:3px solid var(--ink-muted)}
+.lg.dot{height:0;border-top:2px dotted var(--ink-muted)}
+.ghosts{position:absolute;right:0;top:0;display:flex;flex-direction:column;gap:var(--space-1);align-items:flex-end;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);max-width:var(--measure-card)}
+.ghost{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--space-5);padding:0 var(--space-3);border:1px dashed var(--x-proposed-gap-ink);border-radius:var(--radius-key)}
+.ghost:hover{border-color:var(--ink-muted);color:var(--ink)}
+<!--html-->
+<div class="app">
+  <nav class="rail" aria-label="Data Atlas"></nav>
+  <main class="main">
+    <div class="head"><h1>What we keep</h1><div class="sum" id="sum"></div></div>
+    <div class="floors" id="floors"></div>
+    <div class="dia" id="dia"><svg id="svg" role="group" aria-label="Kinds of thing and how they connect"></svg><div class="ghosts" id="ghosts"></div></div>
+    <div class="legend" id="legend"></div>
+  </main>
+  <aside class="drawer" aria-label="Kind of thing"><div class="drawer-in scroll"></div></aside>
+</div>
+<div class="x-cap"><b>Shape · V3</b> readers' diagram: boxes are kinds, lines are sentences · Peter Chen (1976) drawn for readers, Jacques Bertin's visual variables</div>
+<!--js-->
+const dia = document.getElementById('dia'), svg = document.getElementById('svg');
+const NS = 'http://www.w3.org/2000/svg';
+const el = (t, a, p) => { const n = document.createElementNS(NS, t); for (const k in a){ if ((k === 'fill' || k === 'stroke') && String(a[k]).includes('var(')) n.style[k] = a[k]; else n.setAttribute(k, a[k]); } (p || svg).appendChild(n); return n; };
+const NODES = DATA.kinds.map(k => ({ k, id: k.id }));
+const EDGES = DATA.links.filter(l => K(l.from) && K(l.to));
+const maxCount = Math.max(...SEEN.map(k => k.count));
+/* Bertin: size = how many (area), value = how much is known, hue = which floor, texture = elsewhere */
+const boxW = k => k.count ? 100 + 70 * Math.sqrt(k.count / maxCount) : 170;
+const boxH = k => k.count ? 40 + 26 * Math.sqrt(k.count / maxCount) : 44;
+/* layout: the most-linked kind sits in the middle (Chen's hub), every other kind on a ring around it, grouped by family.
+   Deterministic for the same ontology; no hand placement. */
+function settle(W, H){
+  const deg = id => EDGES.filter(e => e.from === id || e.to === id).length;
+  const hub = NODES.slice().sort((a, b) => deg(b.id) - deg(a.id))[0];
+  const gi = n => DATA.groups.findIndex(g => g.id === n.k.group);
+  const ring = NODES.filter(n => n !== hub).sort((a, b) => gi(a) - gi(b) || (seen(b.k) - seen(a.k)));
+  const P = { [hub.id]: { x: W / 2, y: H / 2, hub: true } };
+  const rx = W / 2 - 110, ry = H / 2 - 56;
+  ring.forEach((n, i) => { const a = -Math.PI / 2 + (i + 0.5) / ring.length * Math.PI * 2; P[n.id] = { x: W / 2 + Math.cos(a) * rx, y: H / 2 + Math.sin(a) * ry }; });
+  return P;
+}
+function edgePoint(p, k, tx, ty){ /* where the line from p's centre toward (tx,ty) leaves p's box */
+  const w = boxW(k) / 2, h = boxH(k) / 2, dx = tx - p.x, dy = ty - p.y;
+  const s = Math.min(w / Math.abs(dx || 1e-6), h / Math.abs(dy || 1e-6)); return { x: p.x + dx * s, y: p.y + dy * s };
+}
+function render(){
+  svg.innerHTML = '';
+  const W = dia.clientWidth - 210, H = dia.clientHeight;
+  const P = settle(W, H), maxL = Math.max(...EDGES.filter(e => e.count).map(e => e.count));
+  const gE = el('g', {}), gN = el('g', {}), gL = el('g', {});
+  EDGES.forEach(e => {
+    const a = P[e.from], b = P[e.to], ka = K(e.from), kb = K(e.to), out = !visibleLink(e);
+    let s, t, d, mx, my;
+    if (a.hub || b.hub){ /* spokes are straight */
+      s = edgePoint(a, ka, b.x, b.y); t = edgePoint(b, kb, a.x, a.y); d = 'M' + s.x + ' ' + s.y + ' L' + t.x + ' ' + t.y;
+    } else { /* rim to rim: bow toward the middle so it never runs under a box */
+      const W2 = dia.clientWidth - 210, H2 = dia.clientHeight, cx = (a.x + b.x) / 2 * 0.75 + W2 / 2 * 0.25, cy = (a.y + b.y) / 2 * 0.75 + H2 / 2 * 0.25;
+      s = edgePoint(a, ka, cx, cy); t = edgePoint(b, kb, cx, cy); d = 'M' + s.x + ' ' + s.y + ' Q' + cx + ' ' + cy + ' ' + t.x + ' ' + t.y;
+    }
+    const g = el('g', { class: 'edge' + (out ? ' out' : isThin(e.cover) ? ' thin' : '') }, gE); g.dataset.from = e.from; g.dataset.to = e.to;
+    const path = el('path', { d, 'stroke-width': out ? 1 : 1 + 3.5 * Math.sqrt(e.count / maxL) }, g);
+    const L = path.getTotalLength(), m = path.getPointAtLength(L * (a.hub ? 0.66 : b.hub ? 0.34 : 0.5)); mx = m.x; my = m.y;
+    /* arrowhead as a small chevron, so the sentence has a direction */
+    const end = path.getPointAtLength(L), pre = path.getPointAtLength(L - 6), ang = Math.atan2(end.y - pre.y, end.x - pre.x), ah = 7;
+    el('path', { d: 'M' + (end.x - ah * Math.cos(ang - .45)) + ' ' + (end.y - ah * Math.sin(ang - .45)) + ' L' + end.x + ' ' + end.y + ' L' + (end.x - ah * Math.cos(ang + .45)) + ' ' + (end.y - ah * Math.sin(ang + .45)), 'stroke-width': 1.2 }, g);
+    const gl = el('g', { class: 'edge lab' + (out ? ' out' : '') }, gL); gl.dataset.from = e.from; gl.dataset.to = e.to;
+    const bg = el('rect', { class: 'vbbg', rx: 3 }, gl);
+    const tx = el('text', { class: 'vb', x: mx, y: my + 4, 'text-anchor': 'middle' }, gl); tx.textContent = e.verb;
+    let pc = null;
+    if (!out){ pc = el('text', { class: 'pc', x: mx, y: my + 18, 'text-anchor': 'middle' }, gl); pc.textContent = e.cover + '% of ' + ka.plain.toLowerCase() + ' say'; }
+    else { pc = el('text', { class: 'pc', x: mx, y: my + 18, 'text-anchor': 'middle' }, gl); pc.textContent = 'kept elsewhere'; }
+    const bb = tx.getBBox(), bp = pc.getBBox(), x0 = Math.min(bb.x, bp.x), x1 = Math.max(bb.x + bb.width, bp.x + bp.width);
+    gl._small = [bb.x - 5, bb.y - 3, bb.width + 10, bb.height + 6]; gl._big = [x0 - 5, bb.y - 3, x1 - x0 + 10, bp.y + bp.height - bb.y + 6]; gl._bg = bg;
+    sizeBg(gl, false);
+  });
+  NODES.forEach(n => {
+    const k = n.k, p = P[n.id], w = boxW(k), h = boxH(k), r = reach(k), f = F(k.floor);
+    const g = el('g', { class: 'node' + (seen(k) ? '' : ' out'), tabindex: 0, role: 'button', 'aria-label': k.plain + (seen(k) ? ', ' + k.count + ' kept, ' + known(k) + '% known' : ', ' + reachWords(k)) }, gN); g.dataset.id = k.id;
+    const val = seen(k) ? known(k) : 0;
+    el('rect', { class: 'box', x: p.x - w / 2, y: p.y - h / 2, width: w, height: h, rx: 4,
+      fill: seen(k) ? 'color-mix(in srgb,' + floorColor(f) + ' ' + Math.round(6 + val * 0.4) + '%,var(--slate-deep))' : 'var(--slate-deep)',
+      stroke: 'color-mix(in srgb,' + floorColor(f) + ' 60%,transparent)' }, g);
+    if (seen(k)){ /* the gap: a socket along the bottom edge, filled to how much is known */
+      el('rect', { x: p.x - w / 2 + 6, y: p.y + h / 2 - 7, width: w - 12, height: 3, rx: 1, fill: 'var(--x-proposed-gap-fill)', stroke: 'var(--x-proposed-gap-ink)', 'stroke-width': .6 }, g);
+      el('rect', { x: p.x - w / 2 + 6, y: p.y + h / 2 - 7, width: (w - 12) * val / 100, height: 3, rx: 1, fill: 'var(--x-proposed-known)' }, g);
+    }
+    const t = el('text', { class: 'nm', x: p.x, y: p.y - (seen(k) ? 2 : 0), 'text-anchor': 'middle' }, g); t.textContent = k.plain;
+    const c = el('text', { class: 'ct', x: p.x, y: p.y + 13, 'text-anchor': 'middle' }, g);
+    c.textContent = seen(k) ? nf(k.count) + ' · ' + known(k) + '% known' : F(k.floor).name + ' · ask ' + k.ask.split(' ')[0];
+    if (!seen(k)) c.setAttribute('y', p.y + 16);
+    g.addEventListener('click', () => select(k.id));
+    g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); select(k.id); } });
+  });
+  if (cur) light(cur);
+}
+let cur = null;
+function sizeBg(g, big){ const r = big ? g._big : g._small; ['x', 'y', 'width', 'height'].forEach((a, i) => g._bg.setAttribute(a, r[i])); }
+function light(id){
+  cur = id; dia.classList.toggle('focus', !!id);
+  const near = new Set(id ? linksOf(id).flatMap(l => [l.from, l.to]) : []);
+  svg.querySelectorAll('.node').forEach(n => { n.classList.toggle('lit', n.dataset.id === id); n.classList.toggle('near', near.has(n.dataset.id)); });
+  svg.querySelectorAll('.edge').forEach(e => { const on = !!id && (e.dataset.from === id || e.dataset.to === id); e.classList.toggle('on', on); if (e._bg) sizeBg(e, on); if (on) e.parentNode.appendChild(e); });
+}
+function select(id){ light(id); openKind(id); }
+onDrawer = id => { if (!id) light(null); setTimeout(render, T('calm') + T('quick')); };
+document.getElementById('ghosts').innerHTML = '<span class="eyebrow">Not kept yet</span>' + DATA.unadopted.map(k => '<button class="ghost" data-id="' + k.id + '"><i data-lucide="' + ICON[k.id] + '" data-size="12"></i>' + esc(k.plain) + (k.asked ? ' · asked ×' + k.asked : '') + '</button>').join('');
+document.querySelectorAll('.ghost').forEach(b => b.onclick = () => select(b.dataset.id));
+document.getElementById('legend').innerHTML = '<span><b>How to read it</b></span><span><i class="lg size"></i>Bigger box · more kept</span><span><i class="lg val"></i>Brighter box, fuller bar · more is known</span><span><i class="lg w"></i>Heavier line · more links</span><span><i class="lg dot"></i>Dotted line · fewer than ' + DATA.thin + '% say</span><span><i class="lg dash"></i>Dashed · kept on a floor you can\'t see</span><span>Read each line as a sentence: <b>a vehicle is based at a site</b></span>';
+document.getElementById('sum').innerHTML = '<b>' + SEEN.length + '</b> kinds of thing · <b>' + nf(totalSeen) + '</b> kept · <b>' + DATA.links.filter(visibleLink).length + '</b> kinds of link';
+document.getElementById('floors').innerHTML = floorStrip();
+mountShell('shape'); Icons.hydrate(document.body);
+keys(['click or <span class="kbd">Tab</span> to a box · <span class="kbd">Enter</span>', '<span class="kbd">T</span> ontology words · <span class="kbd">Esc</span> close', '<span class="kbd">R</span> replay']);
+addEventListener('resize', render);
+boot(() => { render(); light(null); }, () => select('vehicle'));
