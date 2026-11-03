@@ -35,14 +35,11 @@ if touches platform/packages/ui-kit/src platform/packages/ui-kit/.storybook \
 else
   say storybook false
 fi
-# What the shell, Home, the shared packages and Folio (which the tests mount) are built from.
-pr_only contract platform/frontends platform/packages platform/contract apps/folio \
+# What the shell, Home and the shared packages are built from, and the Folio release the tests mount.
+pr_only contract platform/frontends platform/packages platform/contract release/shipped-apps.json infra/shipped-app.sh \
   ':!platform/frontends/admin' ':!platform/frontends/upgrades' ':!**/*.md' package.json pnpm-lock.yaml
 # What goes into the images beyond the code build-test builds: Dockerfiles, deploy files, dependencies.
 pr_only images infra .dockerignore pnpm-lock.yaml pnpm-workspace.yaml package.json '*/package.json' '**/package.json'
-# Folio's worker, or the service whose tables it works on.
-pr_only folio apps/folio
-pr_only worker apps/folio/worker
 # What a new app is made from and checked against.
 pr_only scaffold scripts/create-app.mjs scripts/templates platform/packages platform/services/registry \
   scripts/check-manifests.mjs scripts/check-boundaries.mjs scripts/versions.mjs package.json pnpm-lock.yaml ':!**/*.md'

@@ -148,42 +148,39 @@ services:
     depends_on: [postgres]
 
   # ---- apps ----
-  # Folio, the document libraries. Its frontend runs with Vite: pnpm dev:app folio.
+  # The apps that ship with AUGUR live in their own repositories (ADR 0049). Here they run from AUGUR's
+  # images of them: the newest beta release's, or SHIPPED_APPS_VERSION's (docker login ghcr.io first).
+  # To work on one, run it from its own repository instead.
+  # Folio, the document libraries.
   folio:
     <<: *service
-    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/folio" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio:${SHIPPED_APPS_VERSION:-beta}
     environment:
       <<: [*internal, *folio-storage]
       PORT: 8083
       SERVICE_CLIENT_SECRET: platform-local-only-folio
-      APP_MANIFEST: /app/manifest.json
-    volumes: ["../apps/folio/manifest.json:/app/manifest.json:ro"]
     depends_on:
       storage: { condition: service_completed_successfully }
 
-  # Auspex, where you are on AUGUR. It keeps nothing of its own. Its frontend runs with Vite: pnpm dev:app auspex.
+  # Auspex (Explorer), where you are on AUGUR. It keeps nothing of its own.
   auspex:
     <<: *service
-    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/auspex" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${SHIPPED_APPS_VERSION:-beta}
     environment:
       <<: *internal
       PORT: 8090
       SERVICE_CLIENT_SECRET: platform-local-only-auspex
-      APP_MANIFEST: /app/manifest.json
-    volumes: ["../apps/auspex/manifest.json:/app/manifest.json:ro"]
     depends_on: [identity, registry, events]
 
-  # Data Atlas, the org's entities and how they connect. Its frontend runs with Vite: pnpm dev:app atlas.
+  # Data Atlas, the org's entities and how they connect.
   atlas:
     <<: *service
-    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@apps/atlas" } }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${SHIPPED_APPS_VERSION:-beta}
     environment:
       <<: *internal
       PORT: 8086
       DATABASE_URL: postgres://app_atlas:platform-local-only-atlas@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-atlas
-      APP_MANIFEST: /app/manifest.json
-    volumes: ["../apps/atlas/manifest.json:/app/manifest.json:ro"]
     depends_on:
       storage: { condition: service_completed_successfully }
 
@@ -191,7 +188,7 @@ services:
   # It works on the tables Folio's service makes, so it waits for the service to start.
   folio-worker:
     <<: *service
-    build: { context: .., dockerfile: apps/folio/worker/Dockerfile }
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${SHIPPED_APPS_VERSION:-beta}
     environment:
       <<: *folio-storage
     depends_on: [folio]

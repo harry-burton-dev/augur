@@ -9,7 +9,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
     # The apps that ship with AUGUR go out in its dev builds and releases, not as previews.
-    paths: ['apps/**', '!apps/folio/**', '!apps/auspex/**', '!apps/atlas/**', '!apps/*.md']
+    paths: ['apps/**', '!apps/*.md']
 concurrency:
   group: app-preview-${{ github.event.pull_request.number }}
   cancel-in-progress: true

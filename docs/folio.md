@@ -2,7 +2,7 @@
 
 Artifacts is AUGUR's document libraries. (Its code name is Folio, which is still the name of its containers, its database schema and its address, `/folio`.) Every deployment runs it. It keeps a floor's documents in one place with the same shape everywhere, shows each one as a page you can read, and publishes them up the floors to the people who need them, in the states you choose.
 
-The first half of this guide is for everyone who uses it. The second half is for admins. How Artifacts is built, and its API, are in [its README](../apps/folio/README.md).
+The first half of this guide is for everyone who uses it. The second half is for admins. Artifacts lives in its own repository, [augur-folio](https://github.com/harry-burton-dev/augur-folio), which builds, signs and releases it; how it's built, and its API, are in its README there. Every AUGUR release ships the release of it that `release/shipped-apps.json` pins ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)).
 
 - [Using Artifacts](#using-artifacts)
   - [Getting around](#getting-around)
@@ -36,7 +36,7 @@ What Artifacts shows is always the floor you're on. The floor gauge at the right
 
 Artifacts is built on Quill, AUGUR's React kit for apps, with depth and focus (PDR-010):
 
-- **The front page** is a title card with three reels: **Actions** (drafts waiting on you as a lead, and series issues that are late), **New** (put out to you since you last looked) and **Upcoming** (the next issue each series expects). Actions and New pull their cards in one at a time behind a light; press the light, or a card to bring it forward, and again to open it. The page is built from a config (`ARTIFACTS_FRONT` in `apps/folio/frontend/src/quill/front.ts`), the same one any app can use.
+- **The front page** is a title card with three reels: **Actions** (drafts waiting on you as a lead, and series issues that are late), **New** (put out to you since you last looked) and **Upcoming** (the next issue each series expects). Actions and New pull their cards in one at a time behind a light; press the light, or a card to bring it forward, and again to open it. The page is built from a config (`ARTIFACTS_FRONT` in `frontend/src/quill/front.ts` in augur-folio, ``), the same one any app can use.
 - **The rail** keeps your collections, Shared libraries, Published to you and From below. Inside a collection, the tree opens only along the path you took and lights it; everything beside the path dims.
 - **Everything is a tile you walk into**, shaped by its kind: a collection is a block, a folder has a tab, a series is a stack, a document is a page. A document in review that's yours to move on has a ribbon.
 - **Every action is in its radial menu.** Right-click (or long-press, or the context-menu key, or Shift+F10) any tile, any row in the tree, a card on the front page, or the empty space between tiles. What you can't do stays in the ring, greyed, and says why. While the ring is open the rest of the app goes out of focus in place, with the thing you chose kept sharp.
