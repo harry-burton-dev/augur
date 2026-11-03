@@ -270,12 +270,25 @@ jobs:
           COMPOSE_PROFILES=updater docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
       # The apps that ship with AUGUR come from their own repositories' releases (ADR 0049), which the
       # release puts in .shipped/frontends; one made up here shows the web image serves what's put there.
-      - run: |
+      # The workspace's install as the last dev build left it (augur-dev.yml saves it, with the same key):
+      # read only, so a change to infra or the deploy files doesn't install every package again. A change
+      # to the dependencies misses it and installs, as before.
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/buildx-deps
+          key: buildx-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'package.json', 'platform/*/*/package.json', 'platform/contract/package.json', 'apps/*/*/package.json', 'scripts/templates/*/*/package.json', 'infra/*.Dockerfile') }}
+          restore-keys: buildx-deps-${{ runner.os }}-
+      - name: Build the images
+        run: |
+          cache=()
+          [ -f "$RUNNER_TEMP/buildx-deps/index.json" ] && cache=(--cache-from "type=local,src=$RUNNER_TEMP/buildx-deps")
+          build() { docker buildx build --load --secret id=node_auth_token,env=NODE_AUTH_TOKEN "${cache[@]}" "$@" .; }
           mkdir -p .shipped/frontends/shipped-probe && echo 'export {};' > .shipped/frontends/shipped-probe/entry.js
-          docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/web.Dockerfile --target web -t platform-web .
-      - run: docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity --target service -t platform-identity .
-      - run: docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage --target service -t platform-storage .
-      - run: docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater -t platform-updater .
+          build -f infra/web.Dockerfile --target web -t platform-web
+          build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity --target service -t platform-identity
+          build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage --target service -t platform-storage
+          build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater -t platform-updater
       - name: The updater has the tools it drives
         run: docker run --rm --entrypoint sh platform-updater -c 'docker --version && docker compose version && cosign version'
       - name: The images don't run as root

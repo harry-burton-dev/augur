@@ -25,6 +25,7 @@
     "check:reasons": "node scripts/check-reasons.mjs",
     "catalog": "node scripts/catalog.mjs",
     "check:catalog": "node scripts/catalog.mjs check",
+    "seed": "node scripts/seed.mjs",
     "lint": "eslint .",
     "check:kit": "node scripts/kit.mjs check",
     "kit:pin": "node scripts/kit.mjs pin",

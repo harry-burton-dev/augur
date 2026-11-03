@@ -22,6 +22,21 @@ out=$(mktemp -d)
 # file. The image's build then checks every file it copies against kit.json's hashes.
 node scripts/kit.mjs verify >&2
 
+# The workspace's install (the Dockerfiles' deps stage) kept between runs. BUILDX_CACHE names a folder the
+# workflow keeps in GitHub's cache, keyed by the dependencies: every image's build reads the install from it,
+# and only when the dependencies changed (BUILDX_CACHE_SAVE=true) is the install exported to it again. Only
+# that stage is kept, so nothing that should be fresh in a release (base image, Alpine's fixes) comes from it.
+cache=()
+if [ -n "${BUILDX_CACHE:-}" ]; then
+  [ -f "$BUILDX_CACHE/index.json" ] && cache=(--cache-from "type=local,src=$BUILDX_CACHE")
+  if [ "${BUILDX_CACHE_SAVE:-}" = true ]; then
+    docker buildx build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --target deps \
+      "${cache[@]}" --cache-to "type=local,dest=$BUILDX_CACHE.new,mode=max" . >&2
+    rm -rf "$BUILDX_CACHE" && mv "$BUILDX_CACHE.new" "$BUILDX_CACHE"
+    cache=(--cache-from "type=local,src=$BUILDX_CACHE")
+  fi
+fi
+
 # Builds an image from this checkout, or from another folder: build <name> [--context <dir>] <docker args>...
 build() {
   local name=$1 context=.
@@ -30,7 +45,7 @@ build() {
   docker buildx build --push --provenance=true --sbom=true --secret id=node_auth_token,env=NODE_AUTH_TOKEN \
     --label "org.opencontainers.image.version=$version" \
     -t "$repo/$name:$version" -t "$repo/$name:$channel" \
-    --metadata-file "$out/$name.json" "$@" "$context" >&2
+    --metadata-file "$out/$name.json" "${cache[@]}" "$@" "$context" >&2
   local digest
   digest=$(jq -r '."containerimage.digest"' "$out/$name.json")
   cosign sign --yes "$repo/$name@$digest" >&2

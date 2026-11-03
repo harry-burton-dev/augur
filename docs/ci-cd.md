@@ -104,7 +104,8 @@ newest waiting one runs.
 **App dev builds (`app-dev.yml`)** and **App previews (`app-preview.yml`)** do the same for apps
 in `apps/` that are released on their own (not Folio, Explorer or Data Atlas, which go out with
 AUGUR): a dev build per merge, and a preview per pull request that deployments can switch to
-([app-previews.md](app-previews.md)). Closing the pull request deletes its previews.
+([app-previews.md](app-previews.md)). Closing the pull request deletes its previews. The release feed
+is signed again only when a preview was released or deleted, not after every push to the pull request.
 
 **How the images are built.** `infra/release-images.sh` builds the platform's images with one Buildx
 builder, each with provenance and an SBOM, pushes them to `ghcr.io/<repo>/<name>`, and signs each by
@@ -114,9 +115,14 @@ it, copies its service image under AUGUR's images by digest and signs it again, 
 that image carries into the web image (`.shipped/frontends/<id>`). Reading the app repositories takes
 the `APP_RELEASES_TOKEN` and `PACKAGES_READ_TOKEN` secrets. Two things keep it short:
 
-- `infra/service.Dockerfile` and `infra/web.Dockerfile` start with the same five lines (copy the
-  repository, `pnpm install`), before any build argument, so the workspace is installed once and every
-  later image reuses that layer. Keep those lines identical.
+- `infra/service.Dockerfile` and `infra/web.Dockerfile` start the same way, up to the build stage's
+  `COPY . .` and before any build argument, so the workspace is installed once and every later image
+  reuses that layer. Keep that part identical.
+- The install (the `deps` stage) starts from the workspace's manifests alone (every `package.json`,
+  the lockfile, `pnpm-workspace.yaml`, `.npmrc`), so it changes only when the dependencies do. The dev
+  build keeps it in GitHub's cache between runs (`BUILDX_CACHE`, keyed by those files and the
+  Dockerfiles), saved again only when they change, and CI's `deploy-images` job reads the same entry.
+  Only that stage is kept, so a release's base image and Alpine fixes are always fresh.
 - Artifacts' worker (Torch and Docling's models, about six minutes) isn't in its app release, so it's
   built from augur-folio at the pinned release's tag, and also tagged `src-<git tree of worker/>`. A
   dev build whose worker folder is unchanged reuses that image, tags it for the new build and signs it
