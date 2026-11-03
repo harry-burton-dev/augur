@@ -1,8 +1,9 @@
 name: Lockfile
-# Brings pnpm-lock.yaml up to date on a pull request's branch and pushes it there. For a change that
-# adds or bumps a package from GitHub Packages (the kit, ADR 0046) made where no read token is set, such
-# as a cloud session: Actions → Lockfile → Run workflow, with the branch. It pushes with RELEASE_TOKEN,
-# so CI runs on the new commit. Never on main.
+# Brings pnpm-lock.yaml up to date on a pull request's branch, and release/kit.json with it once the kit
+# bundle is pinned there (scripts/kit.mjs), and pushes them. For a change that adds or bumps a package from
+# GitHub Packages (the kit, ADR 0046) made where no read token is set, such as a cloud session:
+# Actions → Lockfile → Run workflow, with the branch. It pushes with RELEASE_TOKEN, so CI runs on the new
+# commit. Never on main.
 on:
   workflow_dispatch:
     inputs:
@@ -28,16 +29,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - run: pnpm install --lockfile-only
-      - name: Push it, if it changed
+      - run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Pin the kit bundle installed
+        run: if [ -f scripts/kit.mjs ]; then node scripts/kit.mjs pin; fi
+      - name: Push them, if they changed
         run: |
-          if [ -z "$(git status --porcelain pnpm-lock.yaml)" ]; then
-            echo "pnpm-lock.yaml is already up to date" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$(git status --porcelain pnpm-lock.yaml release/kit.json)" ]; then
+            echo "pnpm-lock.yaml and release/kit.json are already up to date" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Update pnpm-lock.yaml" pnpm-lock.yaml
+          git add pnpm-lock.yaml
+          [ -f release/kit.json ] && git add release/kit.json
+          git commit -m "Update pnpm-lock.yaml and the kit pin"
           git push origin "HEAD:$BRANCH"
         env:
           BRANCH: ${{ inputs.branch }}
