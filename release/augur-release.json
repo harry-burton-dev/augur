@@ -1,13 +1,11 @@
 {
-  "version": "0.16.0",
+  "version": "0.16.1",
   "name": "Curlew",
   "channel": "beta",
   "released": "2026-11-03",
   "upgradeFrom": ">=0.1.0",
   "changed": [
-    "@augur/shell-kit",
-    "@augur/shell",
-    "@apps/folio-frontend"
+    "@augur/shell"
   ],
   "breaking": [],
   "settings": {
@@ -173,7 +171,7 @@
       "version": "0.3.1"
     },
     "@augur/shell": {
-      "version": "0.13.0"
+      "version": "0.13.1"
     },
     "@augur/upgrades": {
       "version": "0.1.1"
