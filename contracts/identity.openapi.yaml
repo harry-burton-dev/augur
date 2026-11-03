@@ -1,15 +1,868 @@
+# Generated from platform/services/identity: its routes' TypeBox schemas and src/contract.ts (ADR 0055).
+# Change those, then run pnpm contracts. CI fails when this file is out of step.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
 openapi: 3.1.0
 info:
   title: Identity
   version: 1.14.0
-  description: >
-    Who people are. Reached through the gateway, which verifies the caller's
-    sign-in token and passes the caller on in x-user-* headers.
-# Paths below are relative to the server: the major of info.version is the path prefix.
-# A breaking change bumps the major and is served under /v2 beside /v1.
-servers:
-  - url: /v1
+  description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
+components:
+  schemas:
+    Refusal:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          examples:
+            - forbidden
+        message:
+          type: string
+          description: Says why, and what would change it
+    TeamLevels:
+      type: object
+      required:
+        - levels
+        - max
+      properties:
+        levels:
+          type: array
+          items:
+            type: string
+          description: Default ["Department", "Team"]
+        max:
+          type: integer
+          description: How many levels departments can nest
+    WorkspaceRef:
+      type: object
+      required:
+        - id
+        - kind
+        - name
+        - slug
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - personal
+            - team
+            - org
+        name:
+          type: string
+          description: '"You" for your own floor'
+        slug:
+          type: string
+          description: The word in links, /@finance/…; your own floor is always "me"
+        level:
+          type: string
+          description: 'Teams only: the name of the level the team sits at, "Department" right below the org and "Team" below that unless an admin renamed them (GET /admin/levels). The kind stays team.'
+    Floor:
+      allOf:
+        - $ref: "#/components/schemas/WorkspaceRef"
+        - type: object
+          required:
+            - path
+            - role
+            - direct
+          properties:
+            path:
+              type: array
+              items:
+                $ref: "#/components/schemas/WorkspaceRef"
+              description: From the org down to this floor, itself included. Your own floor is alone on its path.
+            role:
+              type: string
+              enum:
+                - member
+                - lead
+              description: lead on your own floor and on teams you lead
+            direct:
+              type: boolean
+              description: False when you're on it only through a team below it
+    MapPerson:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    FloorReason:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - own
+            - org
+            - member
+            - inside
+            - leads-above
+            - admin
+        role:
+          type: string
+          enum:
+            - member
+            - lead
+        via:
+          $ref: "#/components/schemas/MapPerson"
+        team:
+          $ref: "#/components/schemas/MapPerson"
+      description: "Why the caller can come in: own (their own floor), org (everyone is), member (with role), inside (on a team inside it, `via`), leads-above (leads `team`, which this sits inside), admin."
+    PersonMap:
+      type: object
+      required:
+        - floors
+        - closed
+        - principals
+      properties:
+        floors:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - kind
+              - name
+              - slug
+              - depth
+              - open
+              - why
+              - people
+              - leads
+            properties:
+              id:
+                type: string
+              kind:
+                type: string
+                enum:
+                  - org
+                  - personal
+                  - team
+              name:
+                type: string
+              slug:
+                type: string
+              parentId:
+                type: string
+              depth:
+                type: integer
+                minimum: 0
+                maximum: 5
+              open:
+                type: boolean
+                description: False for a team the caller sees into without standing on it
+              why:
+                $ref: "#/components/schemas/FloorReason"
+              people:
+                type: integer
+                description: Everyone who can stand on it
+              leads:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MapPerson"
+              members:
+                type: array
+                items:
+                  allOf:
+                    - $ref: "#/components/schemas/MapPerson"
+                    - type: object
+                      required:
+                        - role
+                      properties:
+                        role:
+                          type: string
+                          enum:
+                            - member
+                            - lead
+                description: Who is on a team directly, leads first
+        closed:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+              - depth
+              - leads
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              parentId:
+                type: string
+              depth:
+                type: integer
+                minimum: 1
+                maximum: 5
+              leads:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MapPerson"
+        principals:
+          type: array
+          items:
+            type: string
+    Role:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    Person:
+      type: object
+      required:
+        - id
+        - username
+        - firstName
+        - lastName
+        - enabled
+        - invited
+        - roles
+        - departments
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        enabled:
+          type: boolean
+          description: False when their sign-in is turned off
+        invited:
+          type: boolean
+          description: Still has to choose their own password
+        roles:
+          type: array
+          items:
+            type: string
+        departments:
+          type: array
+          items:
+            type: string
+          description: Department ids
+        createdAt:
+          type: string
+          format: date-time
+    NewPerson:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+      properties:
+        username:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9._-]{1,59}$
+          description: Defaults to the part of the email before the @
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: \S
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: \S
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          pattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
+        roles:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 50
+          uniqueItems: true
+        departments:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 50
+          uniqueItems: true
+      additionalProperties: false
+    PersonChanges:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: \S
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: \S
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          pattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
+        enabled:
+          type: boolean
+        roles:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 50
+          uniqueItems: true
+        departments:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 50
+          uniqueItems: true
+      additionalProperties: false
+      minProperties: 1
+    Department:
+      type: object
+      required:
+        - id
+        - name
+        - members
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        parentId:
+          type: string
+          description: The department it sits inside; absent at the top
+        members:
+          type: array
+          items:
+            type: string
+          description: Ids of its own members
+    Caller:
+      type: object
+      required:
+        - id
+        - name
+        - departments
+        - roles
+      properties:
+        id:
+          type: string
+          description: Stable id from the sign-in provider
+        name:
+          type: string
+        email:
+          type: string
+        departments:
+          type: array
+          items:
+            type: string
+        roles:
+          type: array
+          items:
+            type: string
+        signedInAt:
+          type: string
+          format: date-time
+          description: When they last entered their password, when the gateway said
+        workspace:
+          type: object
+          required:
+            - id
+            - kind
+            - role
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - personal
+                - team
+                - org
+            role:
+              type: string
+              enum:
+                - member
+                - lead
+          description: The floor the request is for, when it named one (x-workspace-id) and the gateway checked the caller is on it
+    Preferences:
+      type: object
+      properties:
+        reduceMotion:
+          type: boolean
+        density:
+          type: string
+          enum:
+            - comfortable
+            - compact
+        areaTitles:
+          type: boolean
+          description: Area title cards on arriving at a floor or opening an app; on unless false
+        toasts:
+          type: boolean
+          description: Each new notification also said once as a toast; off unless true
+        away:
+          type: boolean
+        recent:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 12
+          description: App ids, most recent first
+        muted:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 100
+          uniqueItems: true
+          description: App ids whose notifications land in the stream silently and never on Home
+      additionalProperties: false
+      description: Every field is optional; what's missing takes the shell's default.
 paths:
+  /workspaces/{id}:
+    get:
+      summary: Where a floor sits (platform services only)
+      description: For the platform's services, signed in as themselves, which store only a floor's id. Archived teams are still found, so old records resolve. "org" in place of an id names the organisation's own floor.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The floor's place in the tree
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                  - kind
+                  - path
+                  - org
+                properties:
+                  id:
+                    type: string
+                  kind:
+                    type: string
+                    enum:
+                      - org
+                      - personal
+                      - team
+                  path:
+                    type: array
+                    items:
+                      type: string
+                    description: Ids from the floor's root down to it; a personal floor is alone on its path
+                  org:
+                    type: string
+                    description: The org's id, which every rule starts from
+                  archivedAt:
+                    type: string
+                    format: date-time
+                description: The floor's place in the tree
+        "403":
+          description: Not a platform service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /workspaces/{id}/people:
+    get:
+      summary: Everyone who can stand on a team (platform services only)
+      description: Its members and those of the teams below it. Events asks this as each team notice is sent.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Person ids, sorted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - workspace
+                  - people
+                properties:
+                  workspace:
+                    type: string
+                  people:
+                    type: array
+                    items:
+                      type: string
+                description: Person ids, sorted
+        "403":
+          description: Not a platform service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such team
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /people/{id}/principals:
+    get:
+      summary: Who a person stands for (platform services, and apps with people:read)
+      description: "The principals an app matches against who may see something: person:<id>; team:<id> for each team they're on; tree:<id> for each of those teams and every team above it (shared with a team and the teams below it); and org, which everyone is in. Archived teams don't count. Apps keep each answer for 30 seconds (identityPrincipals in the service kit)."
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Their principals
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - person
+                  - principals
+                properties:
+                  person:
+                    type: string
+                  principals:
+                    type: array
+                    items:
+                      type: string
+                description: Their principals
+        "400":
+          description: An id longer than 100 characters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a platform service, or an app without people:read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token or the app's grants can't be checked right now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /directory:
+    get:
+      summary: Find people and teams (platform services, and apps with people:read)
+      description: "For sharing: people whose name, email or username has `q` in it, and teams whose name does, each sorted by name, first `limit` of each. With `ids` instead, the people and teams with those ids, so an app can name who it has shared with. People whose sign-in is turned off aren't listed."
+      parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: q
+          required: false
+        - schema:
+            type: string
+            maxLength: 4000
+          in: query
+          name: ids
+          required: false
+          description: Comma-separated person and team ids
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: People and teams
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                  - teams
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        email:
+                          type: string
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - within
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        within:
+                          type: array
+                          items:
+                            type: string
+                          description: Names of the teams it sits in, from the top down
+                        path:
+                          type: array
+                          items:
+                            type: string
+                          description: The ids of those teams, then its own (1.9)
+                description: People and teams
+        "400":
+          description: A query it does not know, or a value out of range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a platform service, or an app without people:read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token or the app's grants can't be checked right now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /members:
+    get:
+      summary: Who an audience reaches (platform services, and apps with people:read)
+      description: "The ids of everyone who stands for at least one of the principals (person:, team:, tree: or org), so an app can tell an audience that something was published to it. People whose sign-in is turned off aren't listed. Since 1.9. Platform services may also name role:<realm role>, such as role:deployment-admin (1.14, ADR 0044); an app that does is refused with 403."
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 4000
+          in: query
+          name: principals
+          required: true
+          description: Comma-separated principals
+      responses:
+        "200":
+          description: Person ids, sorted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: string
+                description: Person ids, sorted
+        "400":
+          description: No principals, or a query it does not know
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a platform service, or an app without people:read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token or the app's grants can't be checked right now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/apps/{id}/credential:
+    put:
+      summary: Set an app's sign-in to a given secret (the app runner only)
+      description: The app runner (platform-updater) sets the sign-in of an app it installs to the secret it works out from APP_SECRETS_KEY, making the client if it's missing. Audited as app.credential-set, without the secret.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - secret
+              properties:
+                secret:
+                  type: string
+                  pattern: ^[0-9a-f]{64}$
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app's client
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - clientId
+                properties:
+                  clientId:
+                    type: string
+                    examples:
+                      - app-notes
+                description: The app's client
+        "400":
+          description: Not an app id, or not 64 hex characters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the app runner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The sign-in service refused the change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now, or identity isn't connected to the sign-in service or can't reach it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Issue an app's own sign-in, or replace its secret (admins only)
+      description: "Makes the app's Keycloak client (app-<id>: client credentials only, 5-minute tokens for the platform-services audience), or gives it a new secret, after which the old one stops working. The secret is in this answer only; the app's service is given it as SERVICE_CLIENT_SECRET. Audited as app.credential-issued, without the secret."
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: id
+          required: true
+      responses:
+        "201":
+          description: The app's client and its secret
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - clientId
+                  - secret
+                properties:
+                  clientId:
+                    type: string
+                    examples:
+                      - app-library
+                  secret:
+                    type: string
+                description: The app's client and its secret
+        "400":
+          description: Not an app id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The sign-in service refused the change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service, or can't reach it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /me:
     get:
       summary: The signed-in caller
@@ -18,9 +871,14 @@ paths:
           description: Who is calling, with their departments and roles
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Caller" }
+              schema:
+                $ref: "#/components/schemas/Caller"
         "401":
           description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /me/preferences:
     get:
       summary: What the caller has chosen for the shell
@@ -29,33 +887,45 @@ paths:
           description: Their preferences; empty when they have chosen nothing
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Preferences" }
+              schema:
+                $ref: "#/components/schemas/Preferences"
         "401":
           description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     put:
       summary: Replace the caller's preferences
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/Preferences" }
+            schema:
+              $ref: "#/components/schemas/Preferences"
       responses:
         "200":
           description: Saved, as sent
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Preferences" }
+              schema:
+                $ref: "#/components/schemas/Preferences"
         "400":
           description: A field it doesn't know, or a value out of range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /me/workspaces:
     get:
       summary: Every floor the caller can stand on
-      description: >
-        Their own floor (made the first time they ask), the org, each team they
-        are on, and every team above those. Being on a team doesn't put you on
-        the teams below it. Ordered own floor, org, then teams in tree order.
+      description: Their own floor (made the first time they ask), the org, each team they are on, and every team above those. Being on a team doesn't put you on the teams below it. Ordered own floor, org, then teams in tree order.
       responses:
         "200":
           description: The caller's floors
@@ -63,37 +933,47 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [workspaces]
+                required:
+                  - workspaces
                 properties:
-                  workspaces: { type: array, items: { $ref: "#/components/schemas/Floor" } }
+                  workspaces:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Floor"
+                description: The caller's floors
         "401":
           description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /me/map:
     get:
       summary: The caller's map of the org
-      description: >
-        For Auspex. Every floor the caller can stand on, with who is there and
-        why they can come in; the teams inside ones they lead (and, for admins,
-        every team) to see into without standing on; and every other team as a
-        closed door that names only itself, where it sits and its leads, so the
-        caller knows who can add them. Nothing inside a closed team is said:
-        not its people, how many, or what it uses. Floors are the org, then
-        teams depth first, then the caller's own floor.
+      description: "For Auspex. Every floor the caller can stand on, with who is there and why they can come in; the teams inside ones they lead (and, for admins, every team) to see into without standing on; and every other team as a closed door that names only itself, where it sits and its leads, so the caller knows who can add them. Nothing inside a closed team is said: not its people, how many, or what it uses. Floors are the org, then teams depth first, then the caller's own floor."
       responses:
         "200":
           description: The caller's map
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PersonMap" }
-        "401": { description: No signed-in caller }
+              schema:
+                $ref: "#/components/schemas/PersonMap"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /me/workspaces/{id}/rollup:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       summary: A floor and every team below it the caller is on
-      description: >
-        What an app rolls up when someone asks to include sub-teams. Access
-        flows down only, so a team below appears only if the caller is on it.
+      description: What an app rolls up when someone asks to include sub-teams. Access flows down only, so a team below appears only if the caller is on it.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
       responses:
         "200":
           description: The floor first, then the teams below it in tree order
@@ -101,150 +981,29 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [workspace, workspaces]
+                required:
+                  - workspace
+                  - workspaces
                 properties:
-                  workspace: { type: string }
-                  workspaces: { type: array, items: { $ref: "#/components/schemas/Floor" } }
-        "401": { description: No signed-in caller }
-        "404": { description: The caller isn't on that floor }
-  /workspaces/{id}:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
-    get:
-      summary: Where a floor sits (platform services only)
-      description: >
-        For the platform's services, signed in as themselves, which store only
-        a floor's id. Archived teams are still found, so old records resolve.
-      responses:
-        "200":
-          description: The floor's place in the tree
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [id, kind, path, org]
-                properties:
-                  id: { type: string }
-                  kind: { type: string, enum: [org, personal, team] }
-                  path: { type: array, items: { type: string }, description: Ids from the floor's root down to it; a personal floor is alone on its path }
-                  org: { type: string, description: The org's id, which every rule starts from }
-                  archivedAt: { type: string, format: date-time }
-        "403": { description: Not a platform service }
-        "404": { description: No such floor }
-        "503": { description: The caller's token can't be checked right now }
-  /workspaces/{id}/people:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
-    get:
-      summary: Everyone who can stand on a team (platform services only)
-      description: Its members and those of the teams below it. Events asks this as each team notice is sent.
-      responses:
-        "200":
-          description: Person ids, sorted
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [workspace, people]
-                properties:
-                  workspace: { type: string }
-                  people: { type: array, items: { type: string } }
-        "403": { description: Not a platform service }
-        "404": { description: No such team }
-  /people/{id}/principals:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 100 } }
-    get:
-      summary: Who a person stands for (platform services, and apps with people:read)
-      description: >
-        The principals an app matches against who may see something: person:<id>;
-        team:<id> for each team they're on; tree:<id> for each of those teams and
-        every team above it (shared with a team and the teams below it); and org,
-        which everyone is in. Archived teams don't count. Apps keep each answer
-        for 30 seconds (identityPrincipals in the service kit).
-      responses:
-        "200":
-          description: Their principals
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [person, principals]
-                properties:
-                  person: { type: string }
-                  principals: { type: array, items: { type: string } }
-        "403": { description: Not a platform service, or an app without people:read }
-        "503": { description: The caller's token or the app's grants can't be checked right now }
-  /directory:
-    get:
-      summary: Find people and teams (platform services, and apps with people:read)
-      description: >
-        For sharing: people whose name, email or username has `q` in it, and teams
-        whose name does, each sorted by name, first `limit` of each. With `ids`
-        instead, the people and teams with those ids, so an app can name who it
-        has shared with. People whose sign-in is turned off aren't listed.
-      parameters:
-        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
-        - { name: ids, in: query, description: Comma-separated person and team ids, schema: { type: string, maxLength: 4000 } }
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
-      responses:
-        "200":
-          description: People and teams
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [people, teams]
-                properties:
-                  people:
+                  workspace:
+                    type: string
+                  workspaces:
                     type: array
                     items:
-                      type: object
-                      required: [id, name]
-                      properties:
-                        id: { type: string }
-                        name: { type: string }
-                        email: { type: string }
-                  teams:
-                    type: array
-                    items:
-                      type: object
-                      required: [id, name, within]
-                      properties:
-                        id: { type: string }
-                        name: { type: string }
-                        within: { type: array, description: Names of the teams it sits in, from the top down, items: { type: string } }
-                        path: { type: array, description: "The ids of those teams, then its own (1.9)", items: { type: string } }
-        "403": { description: Not a platform service, or an app without people:read }
-        "503": { description: The caller's token or the app's grants can't be checked right now }
-  /members:
-    get:
-      summary: Who an audience reaches (platform services, and apps with people:read)
-      description: >
-        The ids of everyone who stands for at least one of the principals
-        (person:, team:, tree: or org), so an app can tell an audience that
-        something was published to it. People whose sign-in is turned off
-        aren't listed. Since 1.9. Platform services may also name
-        role:<realm role>, such as role:deployment-admin (1.14, ADR 0044); an
-        app that does is refused with 403.
-      parameters:
-        - { name: principals, in: query, required: true, description: Comma-separated principals, schema: { type: string, minLength: 1, maxLength: 4000 } }
-      responses:
-        "200":
-          description: Person ids, sorted
+                      $ref: "#/components/schemas/Floor"
+                description: The floor first, then the teams below it in tree order
+        "401":
+          description: No signed-in caller
           content:
             application/json:
               schema:
-                type: object
-                required: [people]
-                properties:
-                  people: { type: array, items: { type: string } }
-        "403": { description: Not a platform service, or an app without people:read }
-        "503": { description: The caller's token or the app's grants can't be checked right now }
-  # Admin: people and roles, kept in the sign-in provider (Keycloak), and departments,
-  # which are identity's own teams (copied in once from the provider's groups).
-  # Every /admin path answers 403 to a caller without the admin role, and 503 when
-  # identity isn't connected to the provider. Changes are audited, never a password.
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The caller isn't on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/roles:
     get:
       summary: The roles an admin can give people
@@ -253,52 +1012,29 @@ paths:
           description: Roles
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/Role" } }
-  /admin/apps/{id}/credential:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9-]{1,39}$" } }
-    post:
-      summary: Issue an app's own sign-in, or replace its secret (admins only)
-      description: >
-        Makes the app's Keycloak client (app-<id>: client credentials only,
-        5-minute tokens for the platform-services audience), or gives it a new
-        secret, after which the old one stops working. The secret is in this
-        answer only; the app's service is given it as SERVICE_CLIENT_SECRET.
-        Audited as app.credential-issued, without the secret.
-      responses:
-        "201":
-          description: The app's client and its secret
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+                description: Roles
+        "401":
+          description: No signed-in caller
           content:
             application/json:
               schema:
-                type: object
-                required: [clientId, secret]
-                properties:
-                  clientId: { type: string, example: app-library }
-                  secret: { type: string }
-        "400": { description: Not an app id }
-        "403": { description: Not an admin }
-        "503": { description: Identity isn't connected to the sign-in service }
-    put:
-      summary: Set an app's sign-in to a given secret (the app runner only)
-      description: >
-        The app runner (platform-updater) sets the sign-in of an app it
-        installs to the secret it works out from APP_SECRETS_KEY, making the
-        client if it's missing. Audited as app.credential-set, without the secret.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { type: object, additionalProperties: false, required: [secret], properties: { secret: { type: string, pattern: "^[0-9a-f]{64}$" } } }
-      responses:
-        "200":
-          description: The app's client
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
           content:
             application/json:
-              schema: { type: object, required: [clientId], properties: { clientId: { type: string, example: app-notes } } }
-        "400": { description: Not an app id, or not 64 hex characters }
-        "403": { description: Not the app runner }
-        "503": { description: Identity isn't connected to the sign-in service }
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/people:
     get:
       summary: Everyone in the directory
@@ -307,14 +1043,37 @@ paths:
           description: People
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/Person" } }
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Person"
+                description: People
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     post:
       summary: Add someone, with a one-time password they replace at first sign-in
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/NewPerson" }
+            schema:
+              $ref: "#/components/schemas/NewPerson"
       responses:
         "201":
           description: Added. The password is returned once and kept nowhere it can be read again.
@@ -322,48 +1081,152 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [person, temporaryPassword]
+                required:
+                  - person
+                  - temporaryPassword
                 properties:
-                  person: { $ref: "#/components/schemas/Person" }
-                  temporaryPassword: { type: string }
-        "400": { description: A field is missing or wrong, or a role or department doesn't exist }
-        "409": { description: The username or email is taken }
+                  person:
+                    $ref: "#/components/schemas/Person"
+                  temporaryPassword:
+                    type: string
+                description: Added. The password is returned once and kept nowhere it can be read again.
+        "400":
+          description: A field is missing or wrong, or a role or department doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The username or email is taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/people/{id}:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       summary: One person
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
       responses:
         "200":
           description: The person
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Person" }
-        "404": { description: No such person }
+              schema:
+                $ref: "#/components/schemas/Person"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     patch:
       summary: Change someone's name, email, roles, departments or sign-in
-      description: >
-        Only the fields sent change. roles and departments replace the whole list.
-        An admin can't turn off their own sign-in or remove their own admin role (409).
+      description: Only the fields sent change. roles and departments replace the whole list. An admin can't turn off their own sign-in or remove their own admin role (409).
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/PersonChanges" }
+            schema:
+              $ref: "#/components/schemas/PersonChanges"
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
       responses:
         "200":
           description: The person as they now are
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Person" }
-        "400": { description: A field is wrong, or a role or department doesn't exist }
-        "404": { description: No such person }
-        "409": { description: The change would lock the caller out, or the email is taken }
+              schema:
+                $ref: "#/components/schemas/Person"
+        "400":
+          description: A field is wrong, or a role or department doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The change would lock the caller out, or the email is taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/people/{id}/password:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       summary: Give someone a new one-time password
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
       responses:
         "200":
           description: The new password, returned once
@@ -371,10 +1234,36 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [temporaryPassword]
+                required:
+                  - temporaryPassword
                 properties:
-                  temporaryPassword: { type: string }
-        "404": { description: No such person }
+                  temporaryPassword:
+                    type: string
+                description: The new password, returned once
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the person is one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/departments:
     get:
       summary: Every department, nested ones included
@@ -383,7 +1272,29 @@ paths:
           description: Departments
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/Department" } }
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Department"
+                description: Departments
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     post:
       summary: Add a department, at the top or inside another
       requestBody:
@@ -392,19 +1303,57 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: false
-              required: [name]
+              required:
+                - name
               properties:
-                name: { type: string, minLength: 1, maxLength: 60, description: "No /" }
-                parentId: { type: string }
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 60
+                  pattern: ^[^/]*[^/\s][^/]*$
+                  description: No /
+                parentId:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+              additionalProperties: false
       responses:
         "201":
           description: Added
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Department" }
-        "400": { description: "The name is empty or has a /, the parent doesn't exist, or it would sit more than 5 deep" }
-        "409": { description: A department beside it already has that name }
+              schema:
+                $ref: "#/components/schemas/Department"
+        "400":
+          description: The name is empty or has a /, the parent doesn't exist, or it would sit more than 5 deep
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A department beside it already has that name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/levels:
     get:
       summary: What each level of department is called, from the top
@@ -413,7 +1362,26 @@ paths:
           description: The names, the first for departments right below the org; a level deeper than the names takes the last one
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TeamLevels" }
+              schema:
+                $ref: "#/components/schemas/TeamLevels"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     put:
       summary: Rename the levels, audited as levels.renamed
       requestBody:
@@ -422,20 +1390,50 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: false
-              required: [levels]
+              required:
+                - levels
               properties:
-                levels: { type: array, minItems: 1, maxItems: 5, items: { type: string, minLength: 1, maxLength: 40 } }
+                levels:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                  minItems: 1
+                  maxItems: 5
+              additionalProperties: false
       responses:
         "200":
           description: Renamed
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TeamLevels" }
-        "400": { description: "No names, more than 5, an empty or too-long name, or two levels with the same name" }
+              schema:
+                $ref: "#/components/schemas/TeamLevels"
+        "400":
+          description: No names, more than 5, an empty or too-long name, or two levels with the same name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/departments/{id}:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
     patch:
       summary: Rename a department
       requestBody:
@@ -444,195 +1442,145 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: false
-              required: [name]
+              required:
+                - name
               properties:
-                name: { type: string, minLength: 1, maxLength: 60 }
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 60
+                  pattern: ^[^/]*[^/\s][^/]*$
+                  description: No /
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
       responses:
         "200":
           description: Renamed
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Department" }
-        "404": { description: No such department }
-        "409": { description: A department beside it already has that name }
+              schema:
+                $ref: "#/components/schemas/Department"
+        "400":
+          description: The name is empty or has a /
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such department
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A department beside it already has that name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/departments/{id}/members/{person}:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
-      - { name: person, in: path, required: true, schema: { type: string } }
     put:
       summary: Put someone in a department
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: person
+          required: true
       responses:
-        "204": { description: They're in it }
-        "404": { description: No such person or department }
+        "204":
+          description: They're in it
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person or department
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     delete:
       summary: Take someone out of a department
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: person
+          required: true
       responses:
-        "204": { description: They're out of it }
-        "404": { description: No such person or department }
-components:
-  schemas:
-    TeamLevels:
-      type: object
-      required: [levels, max]
-      properties:
-        levels: { type: array, items: { type: string }, description: 'Default ["Department", "Team"]' }
-        max: { type: integer, description: How many levels departments can nest }
-    WorkspaceRef:
-      type: object
-      required: [id, kind, name, slug]
-      properties:
-        id: { type: string }
-        kind: { type: string, enum: [personal, team, org] }
-        name: { type: string, description: '"You" for your own floor' }
-        slug: { type: string, description: 'The word in links, /@finance/…; your own floor is always "me"' }
-        level: { type: string, description: 'Teams only: the name of the level the team sits at, "Department" right below the org and "Team" below that unless an admin renamed them (GET /admin/levels). The kind stays team.' }
-    Floor:
-      allOf:
-        - { $ref: "#/components/schemas/WorkspaceRef" }
-        - type: object
-          required: [path, role, direct]
-          properties:
-            path:
-              type: array
-              description: From the org down to this floor, itself included. Your own floor is alone on its path.
-              items: { $ref: "#/components/schemas/WorkspaceRef" }
-            role: { type: string, enum: [member, lead], description: "lead on your own floor and on teams you lead" }
-            direct:
-              type: boolean
-              description: False when you're on it only through a team below it
-    MapPerson:
-      type: object
-      required: [id, name]
-      properties: { id: { type: string }, name: { type: string } }
-    FloorReason:
-      type: object
-      required: [kind]
-      description: >
-        Why the caller can come in: own (their own floor), org (everyone is),
-        member (with role), inside (on a team inside it, `via`), leads-above
-        (leads `team`, which this sits inside), admin.
-      properties:
-        kind: { type: string, enum: [own, org, member, inside, leads-above, admin] }
-        role: { type: string, enum: [member, lead] }
-        via: { $ref: "#/components/schemas/MapPerson" }
-        team: { $ref: "#/components/schemas/MapPerson" }
-    PersonMap:
-      type: object
-      required: [floors, closed, principals]
-      properties:
-        floors:
-          type: array
-          items:
-            type: object
-            required: [id, kind, name, slug, depth, open, why, people, leads]
-            properties:
-              id: { type: string }
-              kind: { type: string, enum: [org, personal, team] }
-              name: { type: string }
-              slug: { type: string }
-              parentId: { type: string }
-              depth: { type: integer, minimum: 0, maximum: 5 }
-              open: { type: boolean, description: "False for a team the caller sees into without standing on it" }
-              why: { $ref: "#/components/schemas/FloorReason" }
-              people: { type: integer, description: Everyone who can stand on it }
-              leads: { type: array, items: { $ref: "#/components/schemas/MapPerson" } }
-              members:
-                type: array
-                description: Who is on a team directly, leads first
-                items:
-                  allOf:
-                    - { $ref: "#/components/schemas/MapPerson" }
-                    - { type: object, required: [role], properties: { role: { type: string, enum: [member, lead] } } }
-        closed:
-          type: array
-          items:
-            type: object
-            required: [id, name, depth, leads]
-            properties:
-              id: { type: string }
-              name: { type: string }
-              parentId: { type: string }
-              depth: { type: integer, minimum: 1, maximum: 5 }
-              leads: { type: array, items: { $ref: "#/components/schemas/MapPerson" } }
-        principals: { type: array, items: { type: string } }
-    Role:
-      type: object
-      required: [name]
-      properties:
-        name: { type: string }
-        description: { type: string }
-    Person:
-      type: object
-      required: [id, username, firstName, lastName, enabled, invited, roles, departments]
-      properties:
-        id: { type: string }
-        username: { type: string }
-        firstName: { type: string }
-        lastName: { type: string }
-        email: { type: string }
-        enabled: { type: boolean, description: False when their sign-in is turned off }
-        invited: { type: boolean, description: Still has to choose their own password }
-        roles: { type: array, items: { type: string } }
-        departments: { type: array, items: { type: string }, description: Department ids }
-        createdAt: { type: string, format: date-time }
-    NewPerson:
-      type: object
-      additionalProperties: false
-      required: [firstName, lastName, email]
-      properties:
-        username: { type: string, description: "Defaults to the part of the email before the @" }
-        firstName: { type: string }
-        lastName: { type: string }
-        email: { type: string }
-        roles: { type: array, items: { type: string } }
-        departments: { type: array, items: { type: string } }
-    PersonChanges:
-      type: object
-      additionalProperties: false
-      minProperties: 1
-      properties:
-        firstName: { type: string }
-        lastName: { type: string }
-        email: { type: string }
-        enabled: { type: boolean }
-        roles: { type: array, items: { type: string } }
-        departments: { type: array, items: { type: string } }
-    Department:
-      type: object
-      required: [id, name, members]
-      properties:
-        id: { type: string }
-        name: { type: string }
-        parentId: { type: string, description: The department it sits inside; absent at the top }
-        members: { type: array, items: { type: string }, description: Ids of its own members }
-    Caller:
-      type: object
-      required: [id, name, departments, roles]
-      properties:
-        id: { type: string, description: Stable id from the sign-in provider }
-        name: { type: string }
-        email: { type: string }
-        departments: { type: array, items: { type: string } }
-        roles: { type: array, items: { type: string } }
-    Preferences:
-      type: object
-      additionalProperties: false
-      description: Every field is optional; what's missing takes the shell's default.
-      properties:
-        reduceMotion: { type: boolean }
-        density: { type: string, enum: [comfortable, compact] }
-        areaTitles: { type: boolean, description: "Area title cards on arriving at a floor or opening an app; on unless false" }
-        toasts: { type: boolean, description: "Each new notification also said once as a toast; off unless true" }
-        away: { type: boolean }
-        recent:
-          type: array
-          maxItems: 12
-          description: App ids, most recent first
-          items: { type: string, minLength: 1, maxLength: 64 }
-        muted:
-          type: array
-          maxItems: 100
-          uniqueItems: true
-          description: App ids whose notifications land in the stream silently and never on Home
-          items: { type: string, minLength: 1, maxLength: 64 }
+        "204":
+          description: They're out of it
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person or department
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+servers:
+  - url: /v1
