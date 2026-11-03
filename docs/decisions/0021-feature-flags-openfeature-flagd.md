@@ -23,7 +23,12 @@ Option 1. The registry writes the flag file from manifests' `previews` and Admin
 - New dependencies: the OpenFeature web and server SDKs and the flagd provider.
 - Feature previews move onto flags without changing the manifest format.
 
+## Amended 2026-11-03
+
+For the alpha, flags stay AUGUR's feature previews, with floor targeting added: Admin can turn a preview on for chosen floors as well as off, opt-in or everyone, without a release. OpenFeature and flagd are deferred to beta, so no new dependency or service lands now. Apps keep the same API (`ctx.previewOn` and the service kit), so the later move to OpenFeature changes nothing for them.
+
 ## Links
 
 - Linear PER-177
 - docs/release-channels.md (feature previews)
+- Linear PER-245, PER-278 (alpha milestone spec and its Step 0 records)
