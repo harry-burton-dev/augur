@@ -131,6 +131,16 @@ The registry refuses a manifest without a semver `version` and a valid `sdk` ran
 
 When the SDK makes a breaking change it goes to `2.0.0`. Apps keep `^1.0.0` and the new shell refuses them until each app's team updates the app and widens its range (`^1.0.0 || ^2.0.0` while it works with both). `pnpm check:versions` fails if any app in this repo has a range the current SDK doesn't satisfy, so a breaking SDK change and the apps' updates land together here.
 
+### The API report (ADR 0052)
+
+What the SDK exports is written down, by API Extractor, in `platform/packages/mfe-sdk/etc/*.api.md`: one report per entry point (`@augur/mfe-sdk` and `@augur/mfe-sdk/build`). The reports are committed, so a reviewer sees every change to the contract as a diff. `pnpm check:api`, in CI's `build-test`, fails when:
+
+- a report doesn't match the built types: run `pnpm build && pnpm api:update` and commit the report with the change;
+- a report names a type from another package: the SDK wraps third-party libraries in its own types, so their next major never forces an SDK major;
+- a pull request changes a report without a changeset of the right size for the package: a minor for additions, a major for anything removed or changed. When a change only looks breaking (a widened type, say), a minor changeset with a line starting `Not breaking:` that says why will do.
+
+A library joins by adding an `api-extractor*.json` beside its `package.json`. Before any library is published, and on every pull request that touches `platform/packages`, `scripts/publish-packages.mjs --check` packs each one and runs publint and Are the Types Wrong on it.
+
 ## The shared kit
 
 Apps don't bundle the UI kit or Lit: the shell serves one copy of each through an import map, and every app on the page uses it (see [platform/frontends](../platform/frontends/README.md#one-kit-for-everyone)). So the kit is part of the contract an app's `sdk` range covers, and it keeps the same promise as the SDK:

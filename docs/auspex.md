@@ -52,7 +52,7 @@ The app sends who it lets in, as it already shows them; Explorer adds what it kn
 
 ## Running it
 
-In a deployment it's the `auspex` container, with one setting: `AUSPEX_CLIENT_SECRET`, its sign-in, which identity makes in Keycloak. It needs the `people:read` and `events:subscribe` scopes, which pillar apps are given. It lives in its own repository, [augur-auspex](https://github.com/harry-burton-dev/augur-auspex), and every AUGUR release ships the release of it `release/shipped-apps.json` pins ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)); run it locally from there.
+In a deployment it's the `auspex` container, with one setting: `AUSPEX_CLIENT_SECRET`, its sign-in, which the realm job makes in Keycloak. It needs the `people:read` and `events:subscribe` scopes, which pillar apps are given. It lives in its own repository, [augur-auspex](https://github.com/harry-burton-dev/augur-auspex), and every AUGUR release ships the release of it `release/shipped-apps.json` pins ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)); run it locally from there.
 
 ## Next
 

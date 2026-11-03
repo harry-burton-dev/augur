@@ -1,0 +1,21 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  // The SDK build entry (@augur/mfe-sdk/build): its public surface, written to etc/ and checked in CI (ADR 0052, scripts/check-api.mjs).
+  // A change to the report is a change to what apps build against: it needs a changeset of the right size.
+  "mainEntryPointFilePath": "<projectFolder>/dist/build.d.ts",
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "mfe-sdk-build",
+    "reportFolder": "<projectFolder>/etc/",
+    "reportTempFolder": "<projectFolder>/dist/api/"
+  },
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+  "messages": {
+    "extractorMessageReporting": {
+      // The whole export is the surface; we don't tag @public/@beta per symbol.
+      "ae-missing-release-tag": { "logLevel": "none" }
+    }
+  }
+}

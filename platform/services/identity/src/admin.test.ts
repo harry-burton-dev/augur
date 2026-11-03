@@ -62,7 +62,7 @@ describe('admin: people', () => {
     expect(res.statusCode).toBe(201);
     const { person, temporaryPassword: password } = res.json();
     expect(person).toMatchObject({ username: 'jo.smith', enabled: true, invited: true, roles: ['editor'], departments: [dept.id] });
-    expect(password).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
+    expect(password).toMatch(/^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
     const entry = audit.mock.calls.map(([e]) => e).find((e) => e.action === 'person.added')!;
     expect(entry).toMatchObject({ actor: { id: 'admin-1', kind: 'user' }, app: 'identity', target: person.id });
     expect(JSON.stringify(entry)).not.toContain(password);
@@ -106,7 +106,7 @@ describe('admin: people', () => {
     const { call, audit } = await setup();
     const { person } = (await call('POST', '/people', { firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org' })).json();
     const res = await call('POST', `/people/${person.id}/password`);
-    expect(res.json().temporaryPassword).toMatch(/^\w{4}-\w{4}-\w{4}$/);
+    expect(res.json().temporaryPassword).toMatch(/^\w{4}-\w{4}-\w{4}-\w{4}$/);
     expect(audit.mock.calls.map(([e]) => e.action)).toContain('person.password-reset');
     expect((await call('POST', '/people/nobody/password')).statusCode).toBe(404);
   });
