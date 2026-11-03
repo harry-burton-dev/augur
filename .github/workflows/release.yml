@@ -122,6 +122,8 @@ jobs:
     needs: release
     if: needs.release.outputs.released == 'true'
     uses: ./.github/workflows/feed.yml
+    # A called workflow gets no secrets unless passed: the feed reads the app repositories with APP_RELEASES_TOKEN.
+    secrets: inherit
   # A new AUGUR release is installed fresh, upgraded to from the release before, and gone back
   # from, with the images just pushed (docs/deploy-test.md). Once per release, nothing rebuilt.
   deploy-test:
