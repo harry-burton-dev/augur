@@ -1,6 +1,6 @@
 ---
 name: periphery-channel
-status: to explore
+status: explored
 ---
 
 # The periphery channel
@@ -10,3 +10,5 @@ Information that lives at the edge of attention (sound, ambient motion, room ton
 Proposed by batch 1 research; not run yet.
 
 Could steer: B.
+
+Explored in [`2026-11-03-room-tone`](../runs/2026-11-03-room-tone/): ambient sound fails the open-plan test; see `answer-not-announce`.

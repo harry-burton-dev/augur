@@ -8,6 +8,7 @@ into the product through the usual path: a Proposed record or an entry in
 ```
 design-lab/
   brief.md        rules every run follows (read first)
+  keywords.md     keyword bank: fields, search terms and seed sources for new prompts
   _kit/           tokens.css (from the repo tokens), Lucide icons, screenshot and gallery scripts
   concepts/       high-level concepts found by runs; README.md is the index
   prompts/        the ready queue: prompts waiting to be run
@@ -32,7 +33,9 @@ design-lab/
 5. **Refill the queue:** keep at least four prompts in `prompts/`. When it
    drops below four, write the next **batch**: three or more steered prompts,
    each naming the concepts it pushes, plus **one wildcard** (see below).
-   Number batches in each prompt's front matter.
+   Number batches in each prompt's front matter. Find fields and search
+   terms in `keywords.md`, mark the rows you use, and add new rows the
+   research turns up.
 6. **Report**: one summary to Harry with the gallery, the shortlist and the
    new concepts.
 
@@ -57,3 +60,4 @@ turns up a strong concept, the next batch steers on it like any other.
 |---|---|---|
 | [2026-11-02 cinematic](runs/2026-11-02-cinematic/) | cinematic and instrument-panel UI | 42 prototypes; shortlist led by the light language, focal planes, radial menu, urgent path |
 | [2026-11-02 wear and time](runs/2026-11-02-wear-and-time/) | history as a material | 42 prototypes; shortlist led by one time scale and now line, visible repairs (seams), "why, and since when?" in place, back after two weeks |
+| [2026-11-03 room tone](runs/2026-11-03-room-tone/) | sound as a calm second channel | 39 prototypes; silent by default, answer rather than announce: 33 sounds in a 76-event day, urgent as an open question, hear the reach before you publish |
