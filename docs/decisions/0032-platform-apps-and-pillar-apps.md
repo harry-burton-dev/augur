@@ -1,7 +1,7 @@
 # 0032. Apps that ship with AUGUR are platform apps or pillar apps
 
-- **Status:** Proposed
-- **Date:** 2026-11-01
+- **Status:** Accepted
+- **Date:** 2026-11-01 (proposed), 2026-11-03 (accepted)
 - **Decided by:** Harry
 - **Replaces:** none (amends the pillar list in [0012](0012-apps-in-own-repositories.md), and narrows "platform apps" in the handbook's PDR-008)
 
@@ -38,3 +38,4 @@ Auspex is shown to people as **Explorer**. Like Folio shown as Artifacts, its co
 
 - Linear PER-179
 - docs/auspex.md (Explorer's guide)
+- Linear PER-245, PER-278 (alpha milestone spec and its Step 0 records)
