@@ -1,5 +1,17 @@
 # @augur/shell
 
+## 0.14.0
+
+### Minor Changes
+
+- 35547f6: The shell and every app load the UI kit (React, Common and Quill) from the kit bundle this release pins in release/kit.json, served at KIT_URL: by default /kit/ on the front door, or any host that mirrors it, such as a CDN (ADR 0048). Each kit file is held to its hash, Settings shows the kit and where it comes from, and the page says so, naming KIT_URL, if the kit can't be loaded.
+
+### Patch Changes
+
+- 35547f6: The React kits (Common, Quill and Aerie) now come from the augur-kit repository as packages (ADR 0046), and are AUGUR release parts at the versions installed. Their Storybook and Chromatic run there.
+- Updated dependencies [35547f6]
+  - @augur/ui-kit@1.9.1
+
 ## 0.13.1
 
 ### Patch Changes
