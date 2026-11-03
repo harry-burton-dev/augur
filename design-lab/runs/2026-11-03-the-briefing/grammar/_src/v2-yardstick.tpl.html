@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Grammar V2 · The yardstick</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@COMMON_CSS*/
+.app{height:100vh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));gap:var(--space-4)}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5)}
+.top .lede{max-width:84ch}
+/* the ruler */
+.rulerwrap{display:grid;grid-template-columns:calc(var(--measure-rail) - var(--space-4)) minmax(0,1fr);gap:var(--space-5);align-items:stretch}
+.countbox{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.countbox b{font-weight:400;color:var(--ink)}
+.ruler{position:relative;height:calc(var(--space-8) + var(--space-1))}
+.rail{position:absolute;left:0;right:0;top:calc(var(--space-6) + var(--space-4));height:var(--space-4);border-top:1px solid var(--hairline-strong);border-bottom:1px solid var(--hairline-strong)}
+.tick{position:absolute;top:0;transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.tick::after{content:"";position:absolute;left:50%;top:calc(var(--space-6) + var(--space-4));height:var(--space-4);border-left:1px dotted var(--hairline-strong)}
+.band{position:absolute;top:calc(var(--space-6) + var(--space-4));height:var(--space-4);background:color-mix(in srgb,var(--ink) 16%,transparent);border-radius:1px;transition:background var(--motion-slow) var(--ease-out),box-shadow var(--motion-slow)}
+.band.on{background:var(--light);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--light) 30%,transparent)}
+.bw{position:absolute;top:var(--space-4);transform:translateX(-50%);text-align:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap;transition:color var(--motion-slow)}
+.bw.alt{top:calc(var(--space-5) + var(--space-3))}
+.bw.edge0{transform:none}
+.bw.edge1{transform:translateX(-100%)}
+.bw.on{color:var(--light)}
+.gapnote{position:absolute;top:calc(var(--space-7) + var(--space-4));font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-1);align-items:center}
+.pointer{position:absolute;top:calc(var(--space-7) + var(--space-1));height:var(--space-2);border:1px solid var(--light);border-top:0;transition:left var(--motion-calm) var(--ease-out),width var(--motion-calm) var(--ease-out),opacity var(--motion-base)}
+.pointer span{position:absolute;left:50%;top:var(--space-2);transform:translateX(-50%);white-space:nowrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--light);padding-top:var(--space-1)}
+/* lower half */
+.low{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,1fr);gap:var(--space-6);min-height:0}
+.gridbox{display:flex;flex-direction:column;gap:var(--space-2);min-height:0;overflow:auto;scrollbar-width:thin}
+.g3{display:grid;grid-template-columns:minmax(0,.9fr) repeat(3,minmax(0,1fr));gap:2px;font-size:var(--type-small);line-height:var(--leading-small)}
+.g3 .h{color:var(--ink-muted);padding:var(--space-1) var(--space-2)}
+.g3 .h b{display:block;font-weight:400;color:var(--ink)}
+.g3 .rh{color:var(--ink-muted);padding:var(--space-2);max-width:calc(var(--measure-rail) - var(--space-5))}
+.g3 .rh b{display:block;font-weight:400;color:var(--ink)}
+.cell{display:flex;flex-direction:column;justify-content:center;gap:var(--space-1);padding:var(--space-2) var(--space-3);background:var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-key);transition:border-color var(--motion-slow),background var(--motion-slow)}
+.cell .cw{border-bottom:0;font-size:var(--type-meta);white-space:normal;flex-wrap:wrap;row-gap:2px}
+.cell.on{border-color:var(--light);background:var(--surface-raised)}
+.cell.was{border-color:var(--hairline-strong);border-style:dashed}
+.rule{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2)}
+.rule svg{flex:none;margin-top:2px}
+.rule b{font-weight:400;color:var(--ink)}
+.claimbox{display:flex;flex-direction:column;gap:var(--space-2);min-height:0;overflow:auto;scrollbar-width:thin}
+.claim{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);margin:0}
+.srcs{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
+.src{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-2);align-items:baseline;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);font-size:var(--type-meta);line-height:var(--leading-meta);transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.src.hid{opacity:0;transform:translateY(var(--space-1))}
+.src .gr{font:400 var(--type-small)/1 var(--font-mono);color:var(--light);border:1px solid var(--hairline-strong);border-radius:2px;text-align:center;padding:2px 0}
+.src .st{font-size:var(--type-small);color:var(--ink-muted);white-space:nowrap}
+.src.dis{border-left:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash)}
+.src.dis .st{color:var(--x-proposed-disagree)}
+.src .gw{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.src.pen{border:var(--x-proposed-pencil-edge);color:var(--x-proposed-pencil-ink);font-style:italic}
+.src.pen .gr{border-style:dotted;color:var(--x-proposed-pencil-ink);font-style:normal}
+.src.pen .st,.src.pen .gw{color:var(--x-proposed-pencil-ink)}
+.verdict{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.verdict .cw{font-size:var(--type-lead);color:var(--light)}
+.lowerbtn{display:inline-flex;align-items:center;gap:var(--space-1);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink-muted);margin-left:auto}
+.lowerbtn:hover{color:var(--light)}
+.never{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-4);border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.never div{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.never b{display:flex;align-items:center;gap:var(--space-1);font-weight:400;color:var(--ink);margin-bottom:2px}
+.never .x{display:block;margin-top:2px}
+.never .x em{font-style:normal;color:var(--ink)}
+@media (max-height: 820px){ .g3 .rh .tk,.src .tk{display:none!important} .never .dr{display:none} .app{gap:var(--space-3)} .countbox{padding:var(--space-2)} }
+</style>
+</head>
+<body>
+<div class="app pre" id="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow" id="eb"></p>
+      <h1>How sure, in one word</h1>
+      <p class="lede" id="lede"></p>
+    </div>
+    <div class="hints">
+      <span><span class="kbd">&rarr;</span> add the next source</span>
+      <span><span class="kbd">&larr;</span> take one away</span>
+      <span><span class="kbd">L</span> lower the word</span>
+      <span data-key="g"><span class="kbd">G</span> assistant off</span>
+      <span data-key="t"><span class="kbd">T</span> technical words</span>
+      <span><span class="kbd">R</span> replay</span>
+    </div>
+  </header>
+  <div class="rulerwrap dep" style="--i:0">
+    <div class="countbox" id="countbox"></div>
+    <div class="ruler" id="ruler"></div>
+  </div>
+  <div class="low">
+    <section class="gridbox dep" style="--i:2" id="gridbox"></section>
+    <section class="claimbox dep" style="--i:3" id="claimbox"></section>
+  </div>
+  <div class="never dep" style="--i:4" id="never"></div>
+</div>
+<div class="x-cap"><b>Briefing grammar · V2</b> the yardstick: seven fixed words, chosen by rule from grades and agreement · UK probability yardstick (PHIA), IPCC evidence × agreement</div>
+<script>
+/*@DATA*/
+const C = DATA.claims[1];
+const PEN_SRC = ['P', 'Bin-lift sensor pattern, matched by meaning', 'agrees'];
+const ST = { step: 0, lowered: false };
+function stateAt(step) {
+  if (step === 0) return { evidence: null, agreement: null, word: null };
+  const b = DATA.build[Math.min(step, DATA.build.length) - 1];
+  return { evidence: b.evidence, agreement: b.agreement, word: wordFor(b.evidence, b.agreement) };
+}
+function shown() { const s = stateAt(ST.step); let w = s.word; if (ST.lowered && w) { const i = YI(w); w = DATA.yardstick[Math.max(0, i - 1)].w; } return { ...s, word: w }; }
+function render() {
+  $('#eb').textContent = `Briefing sheet · grammar · confidence · ${DATA.org}`;
+  $('#lede').innerHTML = `Seven words, always the same, each a band and never a point. ${esc(DATA.app.atlas)} picks the strongest word the sources allow, from their grades and whether they agree. A person may lower it; raising it takes another source. Counts take no word at all.`;
+  $('#countbox').innerHTML = `<span class="fh">Counts take no word</span>
+    <span>${recWord()}</span>
+    <span><b>${S0.after} ${esc(DATA.kind.many)} a week</b> is what the records say. It is never “likely”.</span>
+    <span>What a count needs instead is its coverage: ${MK.norecord} <b>week ${S0.missing.map(w => w.wk).join(', ')} has no record.</b></span>`;
+  // ruler
+  const pct = v => `${v}%`;
+  let r = '<div class="rail"></div>';
+  DATA.yardstick.forEach((y, i) => {
+    const w = Math.max(y.hi - y.lo, 1.2);
+    r += `<div class="band" data-w="${esc(y.w)}" style="left:${pct(y.lo)};width:${pct(w)}"></div>`;
+    r += `<div class="bw ${i % 2 ? 'alt' : ''} ${i === 0 ? 'edge0' : i === DATA.yardstick.length - 1 ? 'edge1' : ''}" data-w="${esc(y.w)}" style="left:${pct(i === 0 ? y.lo : i === DATA.yardstick.length - 1 ? y.hi : y.lo + w / 2)}">${esc(y.w)}<span class="tk">${y.lo}–${y.hi} in 100</span></div>`;
+  });
+  [0, 25, 50, 75, 100].forEach(v => { r += `<span class="tick" style="left:${pct(v)}">${v}</span>`; });
+  r += `<div class="pointer" id="ptr"><span></span></div>`;
+  r += `<div class="gapnote" style="left:${pct(5.4)}">${ic('move-horizontal', 12)} The gaps between bands are on purpose: no word claims them, so no one argues 74 against 76.</div>`;
+  $('#ruler').innerHTML = r;
+  // grid
+  $('#gridbox').innerHTML = `<p class="fh">Which word: evidence from grades, against agreement</p>
+    <div class="g3">
+      <span></span>${DATA.agreement.map(a => `<span class="h"><b>${esc(a.plain)}</b><span class="tk">${esc(a.tech)}</span></span>`).join('')}
+      ${DATA.evidence.map(e => `<span class="rh"><b>${esc(e.plain)} evidence</b>${esc(e.rule)}<span class="tk">${esc(e.tech)}</span></span>${DATA.agreement.map(a => `<div class="cell" data-e="${e.id}" data-a="${a.id}">${cw(wordFor(e.id, a.id))}</div>`).join('')}`).join('')}
+    </div>
+    <p class="rule">${ic('info', 13)}<span>Grades: <b>A</b> ${esc(DATA.grades.A.plain.toLowerCase())} · <b>B</b> ${esc(DATA.grades.B.plain.toLowerCase())} · <b>C</b> ${esc(DATA.grades.C.plain.toLowerCase())}. <span class="pencil-only">A guess from the assistant has no grade and never counts.</span> ${esc(DATA.gridNote)}</span></p>`;
+  // claim
+  $('#claimbox').innerHTML = `<p class="fh">One claim from the briefing, gathering its sources</p>
+    <p class="claim">${esc(C.text)}</p>
+    <ul class="srcs">${DATA.build.map((b, i) => `<li class="src ${b.add[2] === 'disagrees' ? 'dis' : ''} hid" data-i="${i + 1}"><span class="gr">${b.add[0]}</span><span>${esc(b.add[1])}<span class="gw">${esc(DATA.grades[b.add[0]].plain)}</span><span class="tk">${esc(DATA.grades[b.add[0]].tech)}</span></span><span class="st">${esc(b.add[2])}</span></li>`).join('')}
+      <li class="src pen pencil-only hid" data-i="${DATA.build.length + 1}"><span class="gr">?</span><span>${esc(PEN_SRC[1])}<span class="gw">${esc(DATA.grades.P.plain)}</span><span class="tk">${esc(DATA.grades.P.tech)}</span></span><span class="st">${esc(PEN_SRC[2])}, not counted</span></li>
+    </ul>
+    <div class="verdict" id="verdict"></div>`;
+  // never strip: the other four parts and how the word lives in each
+  const how = {
+    bottom: 'The word sits inside the sentence, next to the claim it qualifies, never in a footnote.',
+    picture: 'A picture shows counts, so it carries no word; a judgement drawn on it says its word in the legend.',
+    workings: 'The last line names the cell: “strong evidence, one disagrees, so likely”.',
+    height: 'The same word at every height. Records show each source’s grade instead.',
+    confidence: 'One of seven words, set in ink, never italic, with its yardstick.'
+  };
+  $('#never').innerHTML = DATA.parts.map(p => `<div><b>${ic(p.icon, 13)}${esc(p.name)}</b><span class="dr">${esc(how[p.id])}</span><span class="x"><em>Never claims:</em> ${esc(p.never)}</span></div>`).join('');
+  Icons.hydrate();
+  $('#lowerbtn') && ($('#lowerbtn').onclick = lower);
+  update();
+}
+function update() {
+  const s = shown();
+  $$('.src').forEach(li => li.classList.toggle('hid', +li.dataset.i > ST.step + (ST.step >= DATA.build.length ? 1 : 0)));
+  $$('.band').forEach(b => b.classList.toggle('on', b.dataset.w === s.word));
+  $$('.bw').forEach(b => b.classList.toggle('on', b.dataset.w === s.word));
+  $$('.cell').forEach(c => { c.classList.toggle('on', c.dataset.e === s.evidence && c.dataset.a === s.agreement); });
+  const p = $('#ptr');
+  if (s.word) { const y = DATA.yardstick[YI(s.word)], w = Math.max(y.hi - y.lo, 1.2); p.style.opacity = 1; p.style.left = y.lo + '%'; p.style.width = w + '%'; p.firstChild.textContent = 'the claim: ' + s.word.toLowerCase(); }
+  else { p.style.opacity = 0; }
+  const ev = s.evidence && DATA.evidence.find(e => e.id === s.evidence), ag = s.agreement && DATA.agreement.find(a => a.id === s.agreement);
+  $('#verdict').innerHTML = s.word
+    ? `<span>${esc(ev.plain)} evidence, ${esc(ag.plain.toLowerCase())}: at most</span>${cw(stateAt(ST.step).word)}${ST.lowered ? `<span>lowered by ${esc(DATA.viewer.name)} to</span>${cw(s.word)}` : ''}<button class="lowerbtn" id="lowerbtn">${ic('arrow-down', 13)}${ST.lowered ? 'Undo' : 'Lower the word'}</button>`
+    : `<span>No sources yet: </span>${cw(null)}`;
+  Icons.hydrate($('#verdict'));
+  const lb = $('#lowerbtn'); if (lb) lb.onclick = lower;
+}
+function lower() { ST.lowered = !ST.lowered; update(); }
+function go(n) { ST.step = Math.max(0, Math.min(DATA.build.length, n)); ST.lowered = false; update(); }
+function boot() {
+  clearTimers(); setTech(false); setGate(false); ST.step = 0; ST.lowered = false;
+  const w = $('#wrap'); w.classList.add('pre'); render();
+  later(() => w.classList.remove('pre'), tok('--motion-instant'));
+  let t = tok('--motion-run');
+  for (let i = 1; i <= DATA.build.length; i++) { later(() => go(i), t); t += tok('--motion-spin') + tok('--motion-slow'); }
+}
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'arrowright') { clearTimers(); go(ST.step + 1); }
+  else if (k === 'arrowleft') { clearTimers(); go(ST.step - 1); }
+  else if (k === 'l') lower();
+  else if (k === 't') setTech(!document.body.classList.contains('tech'));
+  else if (k === 'g') setGate(!document.body.classList.contains('gate-off'));
+  else if (k === 'r') boot();
+});
+boot();
+</script>
+</body>
+</html>

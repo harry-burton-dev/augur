@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask by example · V3 · Like these, not that</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*COMMON_CSS*/
+/* ---- V3: examples and a counter-example; the rule that separates them is written out ---- */
+.trays{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:var(--space-4);margin-bottom:var(--space-4)}
+.tray{border:1px dashed var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-2) var(--space-3) var(--space-3);min-height:calc(var(--target-md) * 2)}
+.tray h3{margin:0 0 var(--space-2);display:flex;align-items:center;gap:var(--space-2);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.tray.yes{border-color:color-mix(in srgb,var(--x-proposed-lit) 40%,transparent)}
+.tray.yes h3{color:var(--x-proposed-lit)}
+.chips{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.chip{display:flex;flex-direction:column;padding:var(--space-1) var(--space-3);border-radius:var(--radius-inset);background:var(--surface-raised);border:1px solid var(--hairline-strong);min-width:calc(var(--space-8) + var(--space-6));animation:drop var(--motion-slow) var(--ease-out) both}
+@keyframes drop{from{opacity:0;transform:translateY(calc(var(--space-2) * -1))}}
+.chip b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.chip span{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.tray.no .chip b{text-decoration:line-through;text-decoration-color:var(--ink-muted)}
+.hint{font-size:var(--type-small);color:var(--ink-muted);align-self:center}
+.cols{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:var(--space-6);flex:1;min-height:0}
+.rule h2,.ans h2{margin:0 0 var(--space-2);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.cl{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);animation:drop var(--motion-slow) var(--ease-out) both}
+.cl .ix{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.cl .t{font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.cl .t .kept{color:var(--light);border-bottom:2px solid var(--x-proposed-here)}
+.cl .e{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cl .e b{font-weight:400;color:var(--ink)}
+.cl.split .ix{color:var(--x-proposed-lit)}
+.cl.drop .t{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--hairline-strong)}
+.cl.g .t{color:var(--x-proposed-guess);font-style:italic}
+.cl.ask{background:var(--surface-inset);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-2) var(--space-3);margin:var(--space-2) 0}
+.cl .yn{display:flex;gap:var(--space-2);margin-top:var(--space-2);flex-wrap:wrap}
+.tag{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;padding:0 var(--space-1);border-radius:var(--radius-key);margin-left:var(--space-2);vertical-align:2px}
+.tag.s{color:var(--x-proposed-lit);border:1px solid color-mix(in srgb,var(--x-proposed-lit) 40%,transparent)}
+.tag.c{color:var(--ink-muted);border:1px solid var(--hairline-strong)}
+.ans .r{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);align-items:center;min-height:var(--target-sm);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);animation:drop var(--motion-slow) var(--ease-out) both}
+.ans .r .w{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.ans .r.new{box-shadow:inset 2px 0 0 var(--x-proposed-lit);padding-left:var(--space-2)}
+.ans .r.new .w{color:var(--x-proposed-lit)}
+.ans .r.gs{box-shadow:inset 2px 0 0 var(--x-proposed-guess);padding-left:var(--space-2);color:var(--x-proposed-guess);font-style:italic}
+.ans .r.gs .w{color:var(--x-proposed-guess)}
+.ans .r.ex{color:var(--ink-muted)}
+.ans .r.unk .w{background:var(--x-proposed-gap);padding:var(--space-1)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:var(--space-4);margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--hairline)}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Ask by example · V3</b> a few yes and one no; the rule between them is written out · identification keys, Twenty Questions, QBE</div>
+<script>
+/*DATA*/
+/*COMMON_JS*/
+let yes, no, amount, spring, takeGuess;
+function reset() { yes = []; no = []; amount = null; spring = null; takeGuess = false; draw(); }
+const chip = s => `<div class="chip"><b>${esc(s.name)}</b><span>${D.kinds[s.kind]} · ${s.region} · ${money(s.value)} · ${s.lastHeard ? 'heard ' + fdate(s.lastHeard) : 'heard: not known'}</span></div>`;
+/* the rule, found without a model: for each detail, do the yeses agree, and does it split them from the no? */
+function rule() {
+  const Y = yes.map(byId), N = no.map(byId), out = [];
+  if (!Y.length) return out;
+  const kinds = [...new Set(Y.map(s => s.kind))];
+  if (kinds.length === 1) out.push({ k: 'kind', test: s => s.kind === kinds[0], t: 'They do <span class="kept">' + D.kinds[kinds[0]] + '</span>', e: (Y.length === 2 ? 'Both of yours do. ' : 'All ' + Y.length + ' of yours do. ') + (N.length && N.every(s => s.kind === kinds[0]) ? 'So does <b>' + esc(N[0].name) + '</b>, so this alone doesn’t tell them apart.' : ''), split: N.length && N.some(s => s.kind !== kinds[0]) });
+  if (Y.length > 1) {
+    const regs = [...new Set(Y.map(s => s.region))];
+    if (regs.length > 1) out.push({ k: 'region', drop: true, t: 'Where they work', e: 'Yours differ (' + Y.map(s => s.region).join(', ') + '), so where doesn’t matter.' });
+  }
+  if (Y.length > 1 && N.length) {
+    const lastYes = Y.map(s => s.lastHeard).sort().pop(), firstNo = N.map(s => s.lastHeard).filter(Boolean).sort()[0];
+    if (lastYes && firstNo && lastYes < firstNo) {
+      const line = spring ? spring.date : null;
+      out.push({ k: 'lastHeard', split: true, test: line ? s => s.lastHeard && s.lastHeard < line : null, t: 'Not heard from since <span class="kept">' + (spring ? fdate(spring.date) : 'somewhere between ' + fdate(lastYes) + ' and ' + fdate(firstNo)) + '</span>', e: 'This is what tells them apart: yours went quiet by <b>' + fdate(lastYes) + '</b>; <b>' + esc(N[0].name) + '</b> was heard from on <b>' + fdate(firstNo) + '</b>.', ask: !spring });
+    }
+    const vals = Y.map(s => s.value);
+    if (Math.max(...vals) > 100 && Math.min(...vals) < 100) out.push({ k: 'value', askAmount: amount === null, drop: amount === false, t: amount ? 'Worth over <span class="kept">' + money(100) + '</span> a year' : 'How much they’re worth', e: amount === false ? 'You said the amount doesn’t matter.' : vals.filter(v => v > 100).length + ' of yours ' + (vals.filter(v => v > 100).length > 1 ? 'are' : 'is') + ' worth over ' + money(100) + ', ' + vals.filter(v => v <= 100).length + ' not.', test: amount ? s => s.value > 100 : null });
+  }
+  return out;
+}
+function draw() {
+  const R = rule(), tests = R.filter(c => c.test && !c.drop).map(c => c.test);
+  const ready = yes.length > 1 && no.length && spring;
+  const ans = ready ? D.suppliers.filter(s => tests.every(t => t(s))) : [];
+  const unk = ready ? D.suppliers.filter(s => !s.lastHeard && R.find(c => c.k === 'kind').test(s)) : [];
+  const guesses = ready && S.model && takeGuess ? D.suppliers.filter(s => s.meaning >= .8 && !ans.includes(s) && s.kind !== 'waste' && s.lastHeard && s.lastHeard < spring.date) : [];
+  const gclause = ready && S.model ? `<div class="cl g"><span class="ix">${ic('bot', 14)}</span><div><div class="t">Maybe also anyone whose own words sound like waste collection ${gtag()}</div><div class="e">The model read their own words. It would add <b class="guess">Riverbank Compost</b> (“green waste collection”), which the record files under grounds. <div class="yn"><button class="opt${takeGuess ? ' on' : ''}" data-g="1">Add it, marked as a guess <span class="kbd">G</span></button></div></div></div></div>` : ready ? '<div class="cl"><span class="ix">' + ic('bot', 14) + '</span><div><div class="e">Reading their own words for meaning needs the model gateway. ' + esc(D.model.whoCan) + ' The rule above works without it.</div></div></div>' : '';
+  $('#app').innerHTML = rail('Ask') + `<main class="main">
+    <header class="head"><div><div class="eyebrow">${esc(D.app)} · ask by example</div><h1>Like these, not that</h1>
+      <div class="sub">Show a few ${esc(D.kind.many)} that are what you mean, and one that isn't. ${esc(D.app)} writes out <b>what sets them apart</b>, asks only where your examples can't decide, and you correct any line.</div></div>
+      <div class="tools"><button class="btn" id="tbtn">${ic('code-xml')} Technical words <span class="kbd">T</span></button></div></header>
+    <div class="trays">
+      <div class="tray yes"><h3>${ic('thumbs-up', 14)} like these <span class="kbd">Y</span></h3><div class="chips">${yes.map(id => chip(byId(id))).join('') || '<span class="hint">Open any supplier and press Y. Two or three is enough.</span>'}</div></div>
+      <div class="tray no"><h3>${ic('thumbs-down', 14)} not like this <span class="kbd">N</span></h3><div class="chips">${no.map(id => chip(byId(id))).join('') || '<span class="hint">One that looks close but isn’t what you mean.</span>'}</div></div>
+    </div>
+    <div class="cols">
+      <section class="rule"><h2>what your examples share, read from the record</h2>
+        ${R.map((c, i) => `<div class="cl ${c.split ? 'split' : ''} ${c.drop ? 'drop' : ''}"><span class="ix">${i + 1}</span><div><div class="t">${c.t}${c.split ? '<span class="tag s">tells them apart</span>' : c.drop ? '<span class="tag c">left out</span>' : '<span class="tag c">shared</span>'}<span class="tk">${esc(det(c.k).tech)}</span></div><div class="e">${c.e}</div>
+          ${c.ask ? '<div class="yn"><span class="clar"><span class="q">Your examples can’t say where the line is.</span></span>' + D.spring.map((o, j) => '<button class="opt" data-spring="' + o.id + '">' + o.long + ' <span class="kbd">' + (j + 1) + '</span></button>').join('') + '</div>' : ''}
+          ${c.askAmount ? '<div class="yn"><span class="clar"><span class="q">Does the amount matter?</span></span><button class="opt" data-amt="1">Yes, over ' + money(100) + '</button><button class="opt" data-amt="0">No, leave it out</button></div>' : ''}</div></div>`).join('') || '<div class="cl"><span class="ix">·</span><div class="e">Add two or three examples and the shared details appear here, one line each.</div></div>'}
+        ${gclause}
+      </section>
+      <section class="ans"><h2>${ready ? 'the answer' : 'the answer appears when the rule can decide'}</h2>
+        ${ready ? `<div class="count" style="margin-bottom:var(--space-2)"><span class="n" id="n">${ans.length + guesses.length}</span><span class="l"><b>${esc(D.kind.many)}</b><br>${ans.length - yes.length} you didn’t name${guesses.length ? ', ' + guesses.length + ' a guess' : ''}</span></div>
+          ${ans.map(s => '<div class="r ' + (yes.includes(s.id) ? 'ex' : 'new') + '"><span>' + esc(s.name) + '</span><span class="w">' + (yes.includes(s.id) ? 'your example' : 'new · heard ' + fdate(s.lastHeard)) + '</span></div>').join('')}
+          ${guesses.map(s => '<div class="r gs"><span>' + esc(s.name) + '</span><span class="w">model’s guess</span></div>').join('')}
+          ${unk.map(s => '<div class="r unk"><span>' + esc(s.name) + '</span><span class="w">can’t tell</span></div><div class="e" style="font-size:var(--type-small);color:var(--ink-muted);padding:var(--space-1) 0">Last heard from is not known yet. ' + esc(s.gapWho) + ' could fill it.</div>').join('')}
+          <div class="unseen" style="margin-top:var(--space-3)">${ic('lock', 14)}<span>Some ${esc(D.hidden.what)} are on <b>${esc(D.hidden.floor)}</b> and weren’t checked. Ask <b>${esc(D.hidden.ask)}</b>.</span></div>` : ''}
+      </section>
+    </div>
+    <div class="foot"><div class="work"><span class="micro">workings</span><span class="st">${ic('database')}compared ${yes.length + no.length} examples on ${Object.keys(D.details).length - 1} details</span><span class="st">${ic('list-checks')}kept a detail only if all yeses agree</span>${takeGuess && S.model ? '<span class="st g">' + ic('bot') + 'read their own words</span>' : ''}</div><div class="asof">asked ${nowText()} · <span class="kbd">S</span> save</div></div>
+  </main>`;
+  Icons.hydrate($('#app')); keys([['Y / N', 'like / not like'], ['1 2', 'where the line is'], ['G', 'add the guess']]); gwbox();
+  $$('[data-spring]').forEach(b => b.addEventListener('click', () => { spring = D.spring.find(o => o.id === b.dataset.spring); draw(); }));
+  $$('[data-amt]').forEach(b => b.addEventListener('click', () => { amount = b.dataset.amt === '1'; draw(); }));
+  $$('[data-g]').forEach(b => b.addEventListener('click', () => { takeGuess = !takeGuess; draw(); }));
+}
+function demo() {
+  const step = ms('--motion-slow');
+  ['s1', 's4'].forEach((id, i) => later(step * i, () => { yes.push(id); draw(); }));
+  later(step * 2, () => { no.push('s5'); draw(); });
+  later(step * 2 + ms('--motion-calm'), () => { amount = false; draw(); });
+  later(step * 2 + ms('--motion-calm') * 2, () => { spring = D.spring[0]; draw(); $('#n') && $('#n').classList.add('pulse'); });
+}
+boot({ reset, demo, render: draw, key: k => { if (k === '1' || k === '2') { spring = D.spring[+k - 1]; draw(); } if (k === 'g') { takeGuess = !takeGuess; draw(); } } });
+</script>
+</body>
+</html>

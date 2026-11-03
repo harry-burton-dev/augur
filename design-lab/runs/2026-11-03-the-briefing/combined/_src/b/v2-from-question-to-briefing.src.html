@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Briefing · Combined V2 · From question to briefing</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: the briefing is built by answering the lead's questions in order ---- */
+.main{display:grid;grid-template-columns:minmax(208px,15%) minmax(0,1fr) minmax(320px,27%);gap:var(--space-5)}
+/* rail: the questions, and the minute */
+.rail{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.qs{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.qs button{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;width:100%;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.qs button:hover{background:var(--surface-raised)}
+.qs button.done{color:var(--ink)}
+.qs button.sel{background:var(--x-proposed-lit-wash);color:var(--light)}
+.qs .n{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.qs .s{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.qs .s.over{color:var(--x-proposed-disagree)}
+.meter{border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.meter .big{display:flex;align-items:baseline;gap:var(--space-2);margin:var(--space-1) 0 var(--space-2)}
+.meter .big b{font:300 var(--type-title-s)/1 var(--font-mono);color:var(--light)}
+.meter .big span{font-size:var(--type-small);color:var(--ink-muted)}
+.bar{position:relative;display:flex;height:var(--space-2);gap:1px;background:var(--surface-inset);border-radius:1px}
+.bar i{display:block;height:100%;background:var(--ink-muted);transition:flex-basis var(--motion-calm) var(--ease-out)}
+.bar i.bl{background:var(--light)}
+.bar i.pen{background:none;border:1px dotted var(--x-proposed-pencil)}
+.bar i.cut{background:var(--x-proposed-lit)}
+.bar .lim{position:absolute;top:calc(var(--space-1) * -1);bottom:calc(var(--space-1) * -1);width:1px;background:var(--light)}
+.meter p{margin:var(--space-2) 0 0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.keys{margin-top:auto;display:grid;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+/* the sheet */
+.sheet{min-height:0;display:flex;flex-direction:column;background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-4) var(--space-5) var(--space-3);overflow:auto}
+.sh-h{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;border-bottom:1px solid var(--hairline);padding-bottom:var(--space-2)}
+.sh-h h1{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.sh-h p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sh-h p b{font-weight:400;color:var(--ink);border-bottom:2px solid var(--fc)}
+.row{display:grid;grid-template-columns:calc(var(--space-8) - var(--space-2)) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0 calc(var(--space-2) - 2px);border-bottom:1px solid var(--hairline);position:relative}
+.row .sd{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding-top:2px}
+.row .sd b{display:block;font-weight:400;color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.row .sd .t{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono)}
+.row .sd .t.over{color:var(--x-proposed-disagree)}
+.row.sel::before{content:"";position:absolute;left:calc(var(--space-3) * -1);top:var(--space-2);bottom:var(--space-2);width:2px;background:var(--x-proposed-lit)}
+.row .body{font-size:var(--type-meta);line-height:calc(var(--leading-meta) + 2px);color:var(--ink);margin:0}
+.row .body .ln{transition:opacity var(--motion-calm) var(--ease-out)}
+.row .body .ln.going{opacity:0}
+.row .body .kp{display:inline-flex;vertical-align:-1px;margin-left:2px;color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.row.wait .body{color:var(--ink-muted)}
+.row .ans{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.row.wait .ans{display:none}
+.row:not(.wait) .waiting{display:none}
+.row.fresh .ans{animation:dep var(--motion-calm) var(--ease-out)}
+@keyframes dep{from{opacity:0;transform:translateY(var(--space-1))}}
+@media (prefers-reduced-motion: reduce){.row.fresh .ans{animation-name:fade}@keyframes fade{from{opacity:0}}}
+.row .num{font-family:var(--font-mono);font-size:calc(var(--type-meta) * .95);color:var(--light)}
+/* bottom line block */
+.bl{padding:var(--space-2) 0 var(--space-2);border-bottom:1px solid var(--hairline-strong)}
+.bl .eh{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.bl .eh .t{margin-left:auto;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.bl .txt{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.bl .pencil .txt{font-style:italic;color:var(--ink)}
+.bl .pencil.inked .txt{font-style:normal;color:var(--light)}
+.ph{transition:opacity var(--motion-calm) var(--ease-out)}
+.ph sup{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);font-style:normal;color:var(--ink-muted);margin-left:2px;padding:0 3px;border:1px solid var(--hairline-strong);border-radius:var(--radius-pill)}
+.ph.unbacked sup{border-color:var(--x-proposed-unbacked);color:var(--x-proposed-unbacked);text-decoration:none}
+.inked .ph sup{display:none}
+.bl .why{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);margin-top:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.bl .why .bad{color:var(--x-proposed-unbacked);font-family:var(--font-mono);font-size:var(--x-proposed-type-micro)}
+.bl .acts{display:flex;gap:var(--space-2);margin-left:auto}
+.pencil .empty{display:flex;align-items:center;gap:var(--space-2);color:var(--ink-muted);font-size:var(--type-meta)}
+/* if asked */
+.ifa{padding-top:var(--space-2)}
+.ifa ul{list-style:none;margin:var(--space-1) 0 0;padding:0;display:grid;gap:2px}
+.ifa li{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2);white-space:nowrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ifa li>span{overflow:hidden;text-overflow:ellipsis}
+.ifa li b{font-weight:400;color:var(--ink)}
+.ifa li.landed{animation:dep var(--motion-calm) var(--ease-out)}
+.ifa li.pq b{font-style:italic}
+.ifa .none{font-size:var(--type-small);color:var(--ink-muted);margin:var(--space-1) 0 0}
+.check{margin-top:auto;padding-top:var(--space-2);display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted)}
+.check .ok{color:var(--x-proposed-lit)}
+/* margin: the selected question's picture, at full size */
+.margin{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);overflow:auto;padding-right:var(--space-1)}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.chain b{font-weight:400;color:var(--light)}
+.chain u{text-decoration-color:var(--ink-muted);text-underline-offset:var(--focus-gap);color:var(--ink)}
+.m-title{margin:0;font-weight:300;font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.fig-box{padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--surface-inset)}
+.m-note{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.m-note b{font-weight:400;color:var(--ink)}
+.m-note s{color:var(--ink)}
+.m-sec{border-top:1px solid var(--hairline);padding-top:var(--space-2);display:grid;gap:var(--space-1)}
+.m-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.m-list li{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.m-list li .r{display:block;color:var(--ink-muted)}
+.m-list li.bad{color:var(--x-proposed-unbacked)}
+.toast{position:fixed;right:var(--edge);bottom:calc(var(--edge) + var(--space-5));padding:var(--space-2) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-overlay);font-size:var(--type-small);color:var(--ink);opacity:0;transition:opacity var(--motion-base) var(--ease-out);pointer-events:none}
+.toast.on{opacity:1}
+@media (max-width:1400px){
+  .main{grid-template-columns:minmax(188px,15%) minmax(0,1fr) minmax(296px,27%);gap:var(--space-4)}
+  .bl .txt{font-size:var(--type-body);line-height:var(--leading-body)}
+  .sheet{padding:var(--space-3) var(--space-4) var(--space-2)}
+  .row{grid-template-columns:var(--space-7) minmax(0,1fr)}
+  .row .body{line-height:var(--leading-meta)}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div class="toast" id="toast" role="status"></div>
+<div class="x-cap"><b>Briefing · Combined V2</b> from question to briefing · BLUF, the lead’s questions, Tufte, the minute meter</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* ---- state ---- */
+const S = { answered: 0, cutDone: false, draft: false, struck: false, inked: false, sel: null, records: false, landed: new Set() };
+const Q = DATA.questions;
+
+
+/* ---- bottom line ---- */
+const QI = id => Q.findIndex(q => q.id === id);
+function draftPhrases() { return DATA.draft.filter(p => !(S.struck && p.ref === null)); }
+function blText() { return draftPhrases().map(p => p.ref === 'punct' ? p.t : `<span class="ph ${p.ref ? '' : 'unbacked'}">${numWrap(fill(p.t))}<sup>${p.ref ? QI(p.ref) + 1 : '∅'}</sup></span>`).join(''); }
+const blPlain = () => draftPhrases().map(p => fill(p.t)).join('');
+function blHTML() {
+  const t = secs(blPlain(), false);
+  const head = (lab, ic) => `<div class="eh"><p class="eyebrow">Bottom line</p><span class="lock">${I(ic, 12)} ${lab}</span><span class="t">${S.inked || !STATE.gateway ? r1(t) + ' s of ' + DATA.bottomBudget : 'not timed until inked'}</span></div>`;
+  if (!STATE.gateway) {
+    const tt = fill(DATA.templateBottom);
+    return `<div class="bl">${head('model gateway off · from the template, ink', 'file-text')}<p class="txt">${numWrap(tt)}</p>
+      <div class="why">${mkGap()} Your recommendation: not written yet. You write it; the model can’t while the gateway is off.</div></div>`;
+  }
+  if (!S.draft) return `<div class="bl">${head('one pencil slot, for the model', 'pencil')}<div class="pencil off"><p class="empty">${mkGap()} Waiting for the answers. The model drafts only this, and only from them.</p></div></div>`;
+  const bad = draftPhrases().filter(p => p.ref === null);
+  const nPh = draftPhrases().filter(p => p.ref !== 'punct').length;
+  const why = S.inked
+    ? `<span>Inked by ${P(DATA.me).name}, ${dayStr(D(DATA.today))} · drafted by the model · no surer than its weakest claim: ${DATA.yardstick[weakest()].toLowerCase()}</span>`
+    : bad.length
+      ? `<span>${nPh - bad.length} of ${nPh} phrases point at a fact.</span><span class="bad">“${fill(bad[0].t).replace(/^[,;\s]+/, '')}” points at nothing: no record says this.</span>
+         <span class="acts"><button class="btn" data-act="strike">${I('scissors', 14)} Strike it <span class="kbd">S</span></button><button class="btn" aria-disabled="true" title="A phrase points at nothing: strike it first">${I('pen-line', 14)} Ink it <span class="kbd">I</span></button></span>`
+      : `<span>Every phrase points at a fact. No surer than its weakest claim: ${DATA.yardstick[weakest()].toLowerCase()}.</span>${S.struck ? `<span class="bad" style="color:var(--ink-muted)">Struck by ${P(DATA.me).name}: not kept.</span>` : ''}
+         <span class="acts"><button class="btn go" data-act="ink">${I('pen-line', 14)} Ink it <span class="kbd">I</span></button></span>`;
+  return `<div class="bl">${head(S.inked ? 'ink' : 'pencil · drafted by the model, from the answers below', S.inked ? 'pen-line' : 'pencil')}
+    <div class="pencil ${S.inked ? 'inked' : ''}"><p class="txt">${blText()}</p></div><div class="why">${why}</div></div>`;
+}
+
+/* ---- render ---- */
+function render() {
+  A = answer();
+  const PL = PLANS();
+  const used = Q.slice(0, S.answered).reduce((a, q) => a + (S.cutDone ? PL[q.id].now : PL[q.id].full), 0);
+  const blS = (S.inked || !STATE.gateway) ? secs(STATE.gateway ? blPlain() : fill(DATA.templateBottom), false) : 0;
+  const penS = S.draft && !S.inked && STATE.gateway ? secs(blPlain(), false) : 0;
+  const tot = used + blS;
+  const reader = P(DATA.reader), me = P(DATA.me);
+  const sel = S.sel;
+  const rows = Q.map((q, i) => {
+    const p = PL[q.id], on = i < S.answered;
+    const shown = S.cutDone ? p.kept : p.lines;
+    const t = S.cutDone ? p.now : p.full;
+    return `<section class="row ${on ? '' : 'wait'} ${sel === q.id ? 'sel' : ''} ${S.fresh === q.id ? 'fresh' : ''}" data-q="${q.id}" aria-label="${q.q}">
+      <div class="sd"><b>${q.q}</b>${on ? `<span class="t ${r1(t) > q.budget ? 'over' : ''}">${r1(t)} s of ${q.budget}</span>` : `<span class="t">${q.budget} s</span>`}</div>
+      <p class="body"><span class="waiting">${mkGap()} Not answered yet.</span><span class="ans">${shown.map(l => `<span class="ln ${S.going && l.cut && p.cut.includes(l) ? 'going' : ''}">${l.html}${l.keep ? `<span class="kp" title="Kept whatever the time: ${DATA.keepWhy[l.keep]}">${I('pin', 11)}</span>` : ''}</span>`).join(' ')}</span></p></section>`;
+  }).join('');
+  const cuts = S.cutDone ? Q.flatMap(q => PL[q.id].cut.map(l => ({ q, l }))) : [];
+  const ifa = `<div class="ifa"><p class="eyebrow">If asked · one step down</p>${cuts.length || (S.draft && STATE.gateway) ? `<ul>
+      ${cuts.map(({ q, l }) => `<li class="${S.landed.has(l.tpl) ? '' : 'landed'}">${I('corner-down-right', 14)}<span><b>${fill(l.cut, slotsAll())}</b> ${l.html} <span class="lock">· moved from ${q.q}</span></span></li>`).join('')}
+      ${S.draft && STATE.gateway ? DATA.suggested.map(s => `<li class="pq">${I('pencil', 14)}<span><b>${s.q}</b> ${mkGap()} Not known yet. ${P(s.who).name} could find out. <span class="lock">· suggested by the model; it may not answer</span></span></li>`).join('') : ''}
+    </ul>` : `<p class="none">Nothing yet. What a part can’t fit in its time moves here, never away.</p>`}</div>`;
+  cuts.forEach(({ l }) => S.landed.add(l.tpl));
+  /* same digits at every height */
+  const lit = A.overdue.length, recs = A.vans.filter(v => v.late > 0).length;
+  const agree = lit === A.overdueN && recs === A.overdueN && seriesNow().at(-1).v === A.overdueN;
+  const nums = (() => { const d = document.createElement('div'); d.innerHTML = rows; return $$('.num', d).length; })();
+  const segs = Q.map((q, i) => i < S.answered ? `<i style="flex:0 0 ${(S.cutDone ? PL[q.id].now : PL[q.id].full) / Math.max(tot + penS, DATA.budget) * 100}%"></i>` : '').join('');
+  const cutS = S.cutDone ? Q.reduce((a, q) => a + PL[q.id].full - PL[q.id].now, 0) : 0;
+
+  $('#app').innerHTML = topHTML(['Artifacts', DATA.libraries[0].name, 'Draft: ' + DATA.subject],
+    [['1–6', 'question'], ['S', 'strike'], ['I', 'ink'], ['T', 'admin words', 'h-t'], ['G', 'model off', 'h-g'], ['R', 'replay']]) +
+  `<main class="main">
+    <aside class="rail" aria-label="The lead's questions">
+      <p class="eyebrow">${reader.name}’s questions, in order</p>
+      <ol class="qs">${Q.map((q, i) => { const p = PL[q.id], t = S.cutDone ? p.now : p.full, on = i < S.answered;
+        return `<li><button class="${on ? 'done' : ''} ${sel === q.id ? 'sel' : ''}" data-sel="${q.id}"><span class="n">${i + 1}</span><span>${q.q}</span><span class="s ${on && r1(t) > q.budget ? 'over' : ''}">${on ? r1(t) + ' s' : '·'}</span></button></li>`; }).join('')}
+        <li><button class="${S.draft ? 'done' : ''} ${sel === 'bl' ? 'sel' : ''}" data-sel="bl"><span class="n">B</span><span>Bottom line</span><span class="s">${S.inked ? r1(blS) + ' s' : S.draft ? 'pencil' : '·'}</span></button></li></ol>
+      <div class="meter"><p class="eyebrow" style="margin:0">Reading time</p>
+        <div class="big"><b>${r1(tot)}</b><span>s of ${DATA.budget} s for ${reader.name.split(' ')[0]}</span></div>
+        <div class="bar" aria-hidden="true">${blS ? `<i class="bl" style="flex:0 0 ${blS / Math.max(tot + penS, DATA.budget) * 100}%"></i>` : ''}${segs}${penS ? `<i class="pen" style="flex:0 0 ${penS / Math.max(tot + penS, DATA.budget) * 100}%"></i>` : ''}<span class="lim" style="left:${Math.min(100, DATA.budget / Math.max(tot + penS, DATA.budget) * 100)}%"></span></div>
+        <p>${cutS ? `${r1(cutS)} s moved into <b style="font-weight:400;color:var(--ink)">If asked</b>, not deleted.` : 'Each part has its own seconds.'} ${penS ? `The pencil line (${r1(penS)} s) counts once it is inked.` : ''} A gap, a disagreement or what readers can’t see is never cut.</p>
+        <p class="tk">${DATA.readWpm} words a minute · +${DATA.pictureSec} s per word-size picture · budget is an org setting</p></div>
+      <div class="keys"><span><span class="kbd">1</span>–<span class="kbd">6</span> picture · <span class="kbd">B</span> bottom line</span><span><span class="kbd">V</span> records</span><span><span class="kbd">S</span> strike · <span class="kbd">I</span> ink</span><span><span class="kbd">G</span> model gateway ${STATE.gateway ? 'on' : 'off'}</span></div>
+    </aside>
+    <article class="sheet" aria-label="The briefing">
+      <header class="sh-h" data-tier="${P(DATA.reader).floor}"><h1>${DATA.subject}</h1><p>Briefing for <b>${reader.name}</b>, ${reader.role} · from ${me.name} · ${dayStr(D(DATA.today))}</p></header>
+      ${blHTML()}
+      ${rows}
+      ${ifa}
+      <div class="check"><span class="${agree ? 'ok' : ''}">${I(agree ? 'check' : 'x', 12)} Same digits at every height: headline ${A.overdueN} · picture ${lit} lit · records ${recs} rows</span><span>Numbers in the answers: ${nums}${STATE.gateway ? '' : ' (unchanged with the model off)'}</span><span class="tk">one query: ${DATA.recipe.tech}</span></div>
+    </article>
+    <aside class="margin" aria-label="The picture">${marginHTML(PL)}</aside>
+  </main>`;
+  document.body.classList.toggle('tech', STATE.tech);
+  $('#h-t')?.classList.toggle('on', STATE.tech);
+  $('#h-g')?.classList.toggle('on', !STATE.gateway);
+  S.fresh = null;
+}
+function marginHTML(PL) {
+  if (S.sel === 'bl') {
+    if (!STATE.gateway) return `<p class="eyebrow">Bottom line · model gateway off</p><p class="m-title">The pencil slot is empty, and nothing else moved.</p><p class="m-note">The bottom line falls back to its template, filled from the same answers. Every number, word and picture on the sheet is the same as with the model on.</p>`;
+    if (!S.draft) return `<p class="eyebrow">Bottom line</p><p class="m-note">The model drafts it once the six answers are in. It may only point at them.</p>`;
+    const ph = draftPhrases().filter(p => p.ref !== 'punct');
+    return `<p class="eyebrow">Bottom line · what each phrase points at</p>
+      <p class="m-title">${S.inked ? 'Inked.' : ph.some(p => p.ref === null) ? 'One phrase points at nothing, so it can’t be inked yet.' : 'Every phrase points at a fact.'}</p>
+      <ul class="m-list">${ph.map(p => `<li class="${p.ref ? '' : 'bad'}">${I(p.ref ? 'corner-down-right' : 'x', 14)}<span>“${fill(p.t).replace(/^[,;\s]+/, '')}”<span class="r">${p.ref ? '→ ' + Q[QI(p.ref)].q + ' · ' + textOf(PL[p.ref].lines[p.line].html) : '→ nothing. No record says this. Strike it, or add a record that says so.'}</span></span></li>`).join('')}</ul>
+      <div class="m-sec"><p class="m-note">The model may write only this line, and only from the answers. It chose no number, no word and no picture: those are ink, from templates. It may suggest what ${P(DATA.reader).name.split(' ')[0]} will ask (in <b>If asked</b>), never answer it.</p></div>`;
+  }
+  const q = Q.find(x => x.id === S.sel);
+  if (!q) return `<p class="eyebrow">The picture</p><p class="m-note">Each answer gets the picture its question asks for. Nobody picks a chart.</p>`;
+  const f = DATA.forms[q.form], nv = DATA.never[q.never], p = PL[q.id];
+  const others = Object.entries(DATA.forms).filter(([k]) => !['none', 'records'].includes(k)).map(([, v]) => v.name);
+  return `<p class="eyebrow">${q.q} · the picture</p>
+    <div class="chain"><u>${q.q.replace('?', '')}</u> ${I('arrow-right', 12)} asks ${q.asks} ${I('arrow-right', 12)} <b>${f.name}</b></div>
+    <p class="m-title">${textOf(p.kept[0].html)}</p>
+    ${q.form === 'none' ? `<div class="fig-box">${picNone(true)}</div>` : `<div class="fig-box">${picture(q.form, true)}</div>`}
+    <p class="m-note"><b>Why this picture.</b> ${f.plain}.<span class="tk">${f.tech}</span></p>
+    <p class="m-note"><b>Not offered for this question.</b> <s>${nv.name}</s>: ${nv.why}.</p>
+    <div class="m-sec"><p class="m-note"><b>This part.</b> ${r1(p.full)} s as written, ${r1(p.now)} s after cuts, of ${q.budget} s. ${p.cut.length ? `Moved into If asked: “${textOf(p.cut[0].html).slice(0, 60)}…”` : 'Nothing cut.'} ${p.kept.some(l => l.keep) ? `Kept whatever the time: ${p.kept.filter(l => l.keep).map(l => DATA.keepWhy[l.keep]).join('; ')}.` : ''}</p></div>
+    <div class="m-sec"><p class="m-note"><b>The records.</b> From ${DATA.basis[q.id].map(id => `${fmt(total(Gp(id)))} ${Gp(id).label}`).join(', ')}. <span class="kbd">V</span> ${S.records ? 'hides' : 'opens'} them here.</p>
+    ${S.records ? `<table class="rt"><thead><tr><th>Van</th><th>Due</th><th>State</th></tr></thead><tbody>${A.vans.slice().sort((a, b) => b.late - a.late).slice(0, 9).map(v => `<tr class="${v.late > 0 ? 'on' : ''}"><td>${v.id}</td><td>${dayStr(D(v.due))}</td><td>${v.late > 0 ? v.late + ' days late' : 'in ' + (-v.late) + ' days'}</td></tr>`).join('')}</tbody></table>` : ''}</div>
+    <p class="m-note tk">offered: ${others.join(' · ')} · no picture · the records</p>`;
+}
+
+/* ---- the moment ---- */
+function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('on'), 2400); }
+function play() {
+  clearLater();
+  Object.assign(S, { answered: 0, cutDone: false, going: false, draft: false, struck: false, inked: false, sel: null, records: false, landed: new Set() });
+  render();
+  Q.forEach((q, i) => later(() => { S.answered = i + 1; S.sel = q.id; S.fresh = q.id; render(); }, 1200 + i * 280));
+  later(() => { S.sel = 'worse'; S.going = true; render(); }, 1200 + 6 * 280);
+  later(() => { S.going = false; S.cutDone = true; render(); }, 1200 + 6 * 280 + 380);
+  later(() => { S.draft = true; render(); }, 3250);
+  later(() => { S.sel = 'bl'; render(); }, 3500);
+}
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'r') { STATE.gateway = true; play(); return; }
+  if (/^[1-6]$/.test(k)) { S.sel = Q[+k - 1].id; render(); return; }
+  if (k === 'b') { S.sel = 'bl'; render(); return; }
+  if (k === 'v') { S.records = !S.records; if (S.sel === 'bl' || !S.sel) S.sel = 'what'; render(); return; }
+  if (k === 't') { STATE.tech = !STATE.tech; render(); return; }
+  if (k === 'g') { STATE.gateway = !STATE.gateway; S.sel = 'bl'; render(); toast(STATE.gateway ? 'Model gateway on: the pencil slot is back.' : 'Model gateway off: the draft is gone. No number changed.'); return; }
+  if (k === 's') act('strike');
+  if (k === 'i') act('ink');
+});
+function act(a) {
+  if (!S.draft || !STATE.gateway) return;
+  if (a === 'strike' && !S.struck) { S.struck = true; S.sel = 'bl'; render(); }
+  if (a === 'ink') {
+    if (!S.struck && DATA.draft.some(p => p.ref === null)) { toast('One phrase points at nothing. Strike it first (S).'); return; }
+    S.inked = true; S.sel = 'bl'; render();
+  }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-sel]'); if (b) { S.sel = b.dataset.sel; render(); return; }
+  const a = e.target.closest('[data-act]'); if (a) act(a.dataset.act);
+  const r = e.target.closest('.row[data-q]'); if (r && !e.target.closest('button')) { S.sel = r.dataset.q; render(); }
+});
+play();
+</script>
+</body>
+</html>

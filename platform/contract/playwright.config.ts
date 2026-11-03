@@ -9,8 +9,10 @@ import { defineConfig } from '@playwright/test';
  */
 const port = Number(process.env.CONTRACT_PORT ?? 5180);
 // With CONTRACT_FOLIO=on, Folio (which ships with AUGUR) is in the catalogue too: its built frontend,
-// and its service on this port, keeping everything in memory.
+// and its service on this port, keeping everything in memory. Both come from the release AUGUR ships,
+// laid out by infra/shipped-app.sh in CONTRACT_FOLIO_DIR (ADR 0049).
 const folioPort = process.env.CONTRACT_FOLIO === 'on' ? Number(process.env.CONTRACT_FOLIO_PORT ?? 8190) : undefined;
+const folioDir = resolve(process.env.CONTRACT_FOLIO_DIR ?? '../../.shipped/apps/folio');
 export default defineConfig({
   testDir: 'tests',
   outputDir: `test-results/${process.env.CONTRACT_TARGET ?? 'source'}${folioPort ? '-folio' : ''}`,
@@ -30,12 +32,12 @@ export default defineConfig({
       timeout: 120_000,
       stdout: 'ignore',
       stderr: 'pipe',
-      env: { ...(process.env as Record<string, string>), ...(folioPort ? { DEV_ALSO: `${resolve('../../apps/folio')}=http://localhost:${folioPort}` } : {}) },
+      env: { ...(process.env as Record<string, string>), ...(folioPort ? { DEV_ALSO: `${folioDir}=http://localhost:${folioPort}` } : {}) },
     },
     ...(folioPort
       ? [
           {
-            command: 'node ../../apps/folio/service/dist/index.js',
+            command: `node ${resolve(folioDir, 'service/dist/index.js')}`,
             url: `http://localhost:${folioPort}/healthz`,
             reuseExistingServer: false,
             timeout: 60_000,

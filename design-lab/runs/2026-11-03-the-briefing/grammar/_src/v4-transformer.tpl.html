@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Grammar V4 · The transformer's sheet</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@COMMON_CSS*/
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));gap:var(--space-4)}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5)}
+.top .lede{max-width:84ch}
+.body{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:var(--space-6);min-height:0}
+/* the transformation */
+.tf{display:flex;flex-direction:column;gap:var(--space-2);min-height:0}
+.tf .ptitle{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);margin:0}
+.key{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.key b{font-weight:400;color:var(--ink)}
+.key .s{color:var(--light);display:inline-flex}
+.rows{display:grid;grid-template-columns:calc(var(--space-6) + var(--space-2)) var(--symw) calc(var(--space-6) + var(--space-1)) minmax(0,1fr);gap:var(--row-gap,3px) var(--space-3);align-items:center;flex:1;align-content:center;min-height:0}
+.rows .wl{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);text-align:right}
+.rows .wn{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.rows .wn.f{color:var(--light)}
+.cellbox{position:relative;height:var(--sym);display:flex;align-items:center}
+.dots,.syms{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;transition:opacity var(--motion-calm) var(--ease-out)}
+.dots{gap:2px;flex-wrap:nowrap}
+.dots i{display:block;width:calc(var(--space-1) + 1px);height:calc(var(--space-1) + 1px);border-radius:var(--radius-pill);background:var(--x-proposed-data-ink);transition:transform var(--motion-calm) var(--ease-out),opacity var(--motion-calm)}
+.dots i.f{background:var(--x-proposed-data-finding)}
+.syms{gap:2px;opacity:0}
+.syms .s{transition:opacity var(--motion-base) var(--ease-out);transition-delay:calc(var(--j) * var(--motion-instant) / 2)}
+.done .dots{opacity:0}
+.done .dots i{transform:scale(.4)}
+.done .syms{opacity:1}
+.pre2 .syms .s{opacity:0}
+.evrow{grid-column:1 / -1;display:flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);letter-spacing:var(--tracking-soft)}
+.evrow::before,.evrow::after{content:"";flex:1;border-top:1px dashed var(--x-proposed-event)}
+.evrow::before{flex:0 0 var(--space-6)}
+.nrrow{grid-column:span 2;white-space:nowrap;display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.tline{display:flex;gap:var(--space-2);align-items:flex-start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.tline svg{flex:none;margin-top:2px}
+.tline b{font-weight:400;color:var(--ink)}
+/* the offer: by question, with the never twin */
+.offer{display:flex;flex-direction:column;gap:var(--space-2);min-height:0}
+.q{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr);gap:var(--space-4);align-items:center;padding:var(--space-2) 0;border-bottom:1px solid var(--hairline)}
+.q:last-of-type{border-bottom:0}
+.q .ask{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.q .ask small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.q .good,.q .bad{display:flex;flex-direction:column;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);min-width:0}
+.q .good .lab{display:inline-flex;gap:var(--space-1);align-items:center;color:var(--ink)}
+.q .good .lab svg{color:var(--success)}
+.q .bad{position:relative}
+.q .bad .lab{display:inline-flex;gap:var(--space-1);align-items:center;color:var(--ink-muted)}
+.q .bad .lab svg{color:var(--x-proposed-disagree)}
+.q .bad .pic{opacity:var(--x-proposed-quiet);position:relative}
+.q .bad .pic::after{content:"";position:absolute;inset:0;background:linear-gradient(to top right,transparent calc(50% - 1px),var(--x-proposed-disagree) 50%,transparent calc(50% + 1px))}
+.pic{min-height:var(--space-6);display:flex;align-items:center}
+.mini text{font-family:var(--font-mono);font-size:calc(var(--x-proposed-type-micro) * .85);fill:var(--ink-muted)}
+.mini .b0{fill:var(--x-proposed-data-ink)}.mini .b1{fill:var(--x-proposed-data-finding)}
+.mini .ax{stroke:var(--hairline-strong)}.mini .ev{stroke:var(--x-proposed-event);stroke-dasharray:3 3}
+.mini .ln{fill:none;stroke:var(--x-proposed-data-finding);stroke-width:1.5}
+.hund{display:grid;grid-template-columns:repeat(20,var(--space-1));gap:1px}
+.hund i{width:var(--space-1);height:var(--space-1);background:var(--x-proposed-data-ink);border-radius:1px}
+.hund i.f{background:var(--x-proposed-data-finding)}
+.spark-line{font-size:var(--type-small);color:var(--ink)}
+.neverall{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:flex-start;padding-top:var(--space-1)}
+.neverall svg{flex:none;margin-top:2px;color:var(--x-proposed-disagree)}
+.neverall b{font-weight:400;color:var(--ink)}
+.strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-4);border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.strip div{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.strip b{display:flex;align-items:center;gap:var(--space-1);font-weight:400;color:var(--ink);margin-bottom:2px}
+.strip .rc{display:block;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);margin-top:2px;opacity:var(--x-proposed-quiet)}
+@media (max-height: 820px){ .strip .rc{display:none} .q{padding:2px 0} .pic{min-height:var(--space-5)} .app{gap:var(--space-3)} .tline{display:none} .tf .ptitle{font-size:var(--type-lead);line-height:var(--leading-lead)} }
+</style>
+</head>
+<body>
+<div class="app pre" id="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow" id="eb"></p>
+      <h1>The transformer’s sheet</h1>
+      <p class="lede" id="lede"></p>
+    </div>
+    <div class="hints">
+      <span><span class="kbd">space</span> records ↔ symbols</span>
+      <span><span class="kbd">5</span><span class="kbd">10</span> symbol size: <b id="perlab" style="font-weight:400;color:var(--ink)"></b></span>
+      <span data-key="t"><span class="kbd">T</span> technical words</span>
+      <span><span class="kbd">R</span> replay</span>
+    </div>
+  </header>
+  <div class="body">
+    <section class="tf dep" style="--i:0" id="tf"></section>
+    <section class="offer dep" style="--i:2" id="offer"></section>
+  </div>
+  <div class="strip dep" style="--i:4" id="strip"></div>
+</div>
+<div class="x-cap"><b>Briefing grammar · V4</b> the transformer’s sheet: records counted into symbols, pictures offered by question · Isotype, Rosling, Tufte</div>
+<script>
+/*@DATA*/
+const ST = { per: 5, sym: false };
+function rowsHTML() {
+  const sz = Math.max(12, Math.min(24, Math.floor((innerHeight - 560) / 13)));
+  document.documentElement.style.setProperty('--sym', sz + 'px');
+  document.documentElement.style.setProperty('--symw', (Math.ceil(S0.max / ST.per) * (sz + 2) + tok('--space-5')) + 'px');
+  let out = '';
+  DATA.weeks.forEach((w, i) => {
+    if (w.wk === DATA.event.week) out += `<div class="evrow">${esc(DATA.event.date)} · ${esc(DATA.event.label)}</div>`;
+    const f = w.wk >= DATA.event.week;
+    out += `<span class="wl">${+w.mon.slice(8)} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+w.mon.slice(5, 7) - 1]}<span class="tk">w${w.wk}</span></span>`;
+    if (w.count == null) out += `<span class="nrrow">${MK.norecord} no record: depot logs were down. Not drawn as a short row.</span><span></span>`;
+    else {
+      const dots = DATA.records.filter(r => r[2] === w.wk).map(() => `<i class="${f ? 'f' : ''}"></i>`).join('');
+      out += `<span class="cellbox"><span class="dots">${dots}</span><span class="syms">${iso(w.count, ST.per, sz, f)}</span></span><span class="wn ${f ? 'f' : ''}">${w.count}</span><span></span>`;
+    }
+  });
+  return out;
+}
+function render() {
+  $('#eb').textContent = `Briefing sheet · grammar · the picture · ${DATA.org}`;
+  $('#lede').innerHTML = `Isotype’s transformer turned tables into pictures anyone could count. In AUGUR the operator is the transformer: ${esc(DATA.app.atlas)} offers only the pictures that answer their question honestly, the title says the finding, and every symbol is a fixed number of records.`;
+  $('#perlab').textContent = `1 = ${ST.per}`;
+  $('#tf').innerHTML = `<p class="fh">The picture, from ${S0.total} records</p>
+    <p class="ptitle">${pictureTitle()}</p>
+    <div class="key"><span class="s">${ic(DATA.kind.icon, 16)}</span><span><b>one symbol = ${ST.per} ${esc(DATA.kind.many)}</b> in a week · a part symbol is cut, never shrunk · rows from the same edge</span></div>
+    <div class="rows ${ST.sym ? 'done' : ''}" id="rows">${rowsHTML()}</div>
+    <div class="tline">${ic('wand-sparkles', 13)}<span><b>The transformer’s checks</b>, run before the picture is offered: counted from zero · one symbol size on the whole picture · weeks with no record shown as such · the title’s claim is true of the rows below it <span class="tk">unit = ${ST.per} · rows = ${DATA.weeks.length} · missing = ${S0.missing.length}</span></span></div>`;
+  $$('#rows .syms').forEach(sy => $$('.s', sy).forEach((s, j) => s.style.setProperty('--j', j)));
+  const streets = {}; DATA.records.filter(r => r[2] >= DATA.event.week).forEach(r => { streets[r[3]] = (streets[r[3]] || 0) + 1; });
+  const top = Object.entries(streets).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const hund = n => `<span class="hund" role="img" aria-label="${n} in 100">${Array.from({ length: 100 }, (_, i) => `<i class="${i < n ? 'f' : ''}"></i>`).join('')}</span>`;
+  const bars = top.map((t, i) => `<rect class="b1" x="64" y="${i * 11}" height="8" width="${t[1] / top[0][1] * 70}"/><text x="0" y="${i * 11 + 7}">${esc(t[0].slice(0, 11))}</text>`).join('');
+  const pie = `<svg class="mini" width="44" height="44" viewBox="-22 -22 44 44"><circle r="20" class="b0"/><path d="M0 0 L0 -20 A20 20 0 0 1 19 6 Z" class="b1"/><path d="M0 0 L19 6 A20 20 0 0 1 -6 19 Z" fill="var(--ink-muted)"/></svg>`;
+  const ofs = `<svg class="mini" width="120" height="44"><line class="ax" x1="0" x2="120" y1="43" y2="43"/>${DATA.weeks.map((w, i) => w.count == null ? '' : `<rect class="${w.wk >= DATA.event.week ? 'b1' : 'b0'}" x="${i * 8.5}" width="6" y="${43 - (w.count - 9) * 1.6}" height="${(w.count - 9) * 1.6}"/>`).join('')}<text x="0" y="8">axis from 9</text></svg>`;
+  const cols = `<svg class="mini" width="120" height="44"><line class="ax" x1="0" x2="120" y1="43" y2="43"/>${DATA.weeks.map((w, i) => w.count == null ? `<path d="M${i * 8.5} 40 q2 -3 4 0" stroke="var(--ink-muted)" fill="none" stroke-dasharray="2 2"/>` : `<rect class="${w.wk >= DATA.event.week ? 'b1' : 'b0'}" x="${i * 8.5}" width="6" y="${43 - w.count * 1.2}" height="${w.count * 1.2}"/>`).join('')}<line class="ev" x1="${5 * 8.5 - 1.5}" x2="${5 * 8.5 - 1.5}" y1="0" y2="43"/></svg>`;
+  const line = `<svg class="mini" width="120" height="44"><line class="ax" x1="0" x2="120" y1="43" y2="43"/><polyline class="ln" points="${DATA.weeks.map((w, i) => `${i * 8.5 + 3},${43 - (w.count == null ? 18 : w.count) * 1.2}`).join(' ')}"/><text x="${10 * 8.5 - 6}" y="44">filled</text></svg>`;
+  const bigsym = `<span style="display:flex;align-items:flex-end;gap:var(--space-2);color:var(--ink-muted)">${ic(DATA.kind.icon, 14)}<span style="color:var(--light)">${ic(DATA.kind.icon, 38, 1)}</span></span>`;
+  $('#offer').innerHTML = `<p class="fh">What an operator is offered, by the question they ask</p>
+    ${[
+      ['How many?', 'a count, now or before', `<span class="pic">${iso(S0.after, ST.per, 14, true)}</span>`, 'symbols, repeated', bigsym, 'one symbol scaled up: area lies'],
+      ['Has it changed?', 'since a date, or week on week', `<span class="pic">${cols}</span>`, 'columns from zero, the event marked', `<span class="pic">${ofs}</span>`, 'an axis that starts above zero'],
+      ['Which is most?', 'streets, rounds, suppliers', `<span class="pic"><svg class="mini" width="150" height="44">${bars}</svg></span>`, 'sorted bars, named in full', `<span class="pic">${pie}</span>`, 'a pie with more than two slices'],
+      ['What share?', 'part of a whole', `<span class="pic">${hund(S0.narrowAfter)}</span>`, `${S0.narrowAfter} in 100 on narrow streets`, `<span class="pic">${line}</span>`, 'a line drawn through a week with no record'],
+      ['Say it in a sentence', 'inside the bottom line', `<span class="spark-line">rose to <b style="font-weight:400;color:var(--light)">${S0.after}</b> ${spark(56, 12)} a week</span>`, 'a sparkline at word size', `<span class="spark-line">${spark(56, 12)}</span>`, 'a sparkline with no sentence: no claim']
+    ].map(q => `<div class="q"><span class="ask">${esc(q[0])}<small>${esc(q[1])}</small></span><span class="good">${q[2]}<span class="lab">${ic('check', 12)}${q[3]}</span></span><span class="bad"><span class="pic">${q[4]}</span><span class="lab">${ic('ban', 12)}${esc(q[5])}</span></span></div>`).join('')}
+    <p class="neverall">${ic('ban', 13)}<span><b>Never offered to an operator:</b> two scales on one picture, stacked areas, maps shaded by totals, gauges and dials, trend lines into the future without a confidence word, colour as the only difference.</span></p>`;
+  $('#strip').innerHTML = DATA.parts.map(p => `<div><b>${ic(p.icon, 13)}${esc(p.name)}</b>${esc(p.never)}<span class="rc">${esc(p.recipe)}</span></div>`).join('');
+  Icons.hydrate();
+}
+function setSym(on) { ST.sym = on; $('#rows').classList.toggle('done', on); }
+function boot() {
+  clearTimers(); setTech(false); ST.sym = false;
+  const w = $('#wrap'); w.classList.add('pre'); render();
+  later(() => w.classList.remove('pre'), tok('--motion-instant'));
+  later(() => setSym(true), tok('--motion-run'));
+}
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ') { e.preventDefault(); clearTimers(); setSym(!ST.sym); }
+  else if (k === '5' || k === '1' || k === '0') { ST.per = k === '5' ? 5 : 10; const s = ST.sym; render(); setSym(s); }
+  else if (k === 't') setTech(!document.body.classList.contains('tech'));
+  else if (k === 'r') boot();
+});
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Action V3 · Proofs</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: pull a proof for each reader before it goes. You pick the proof, not the setting ---- */
+.wrap{height:100%;display:flex;flex-direction:column;gap:var(--space-3)}
+.head{display:flex;align-items:flex-end;gap:var(--space-5);flex-wrap:wrap}
+.head h1{margin:0;font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.head .lede{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);max-width:70ch}
+.verbs{display:flex;gap:var(--space-2);margin-left:auto}
+.verb{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted);font-size:var(--type-meta)}
+.verb[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+.proofs{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4)}
+.proof{position:relative;min-height:0;display:flex;flex-direction:column;text-align:left;border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);overflow:hidden;transition:box-shadow var(--motion-base) var(--ease-out),border-color var(--motion-base) var(--ease-out),opacity var(--motion-base)}
+.proof[aria-checked="true"]{border-color:var(--fc);box-shadow:0 0 0 var(--focus-ring) var(--fc),0 0 var(--glow-blur) color-mix(in srgb,var(--fc) 30%,transparent)}
+.proof .pf{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--fc) 10%,transparent)}
+.proof .pf b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.proof .pf .n{margin-left:auto;font:400 var(--type-meta)/1 var(--font-mono);color:var(--light)}
+.proof .pf .n small{font:400 var(--type-small)/1 var(--font-sans);color:var(--ink-muted);margin-left:var(--space-1)}
+.proof .pf .kbd{margin-left:var(--space-2)}
+.pb{flex:1;min-height:0;padding:var(--space-3) var(--space-4)}
+.pb .h{margin:0 0 var(--space-2);font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.pb .figs{color:var(--ink-muted);margin:0 0 var(--space-1)}
+.fkey{margin:0 0 var(--space-2);font-size:var(--x-proposed-type-micro);line-height:1.4;color:var(--ink-muted)}
+.pb ul{list-style:none;margin:var(--space-2) 0 0;padding:0;display:grid;gap:var(--space-2)}
+.pb li{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.pb li .t{display:block;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.links{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:2px}
+.lk{display:inline-flex;align-items:center;gap:var(--space-1);border-bottom:1px solid var(--hairline-strong);color:var(--ink);font-size:var(--type-small);line-height:var(--leading-small)}
+.lk.some{border-bottom-style:dashed}
+.lk.some em{font-style:normal;color:var(--ink-muted)}
+.waits{display:flex;gap:var(--space-2);align-items:center;padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);
+  --t:var(--space-2);
+  background:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--t) no-repeat}
+.bline{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.proof .pfoot{padding:var(--space-2) var(--space-3);border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.proof .pfoot b{font-weight:400;color:var(--ink)}
+.meter{flex:none;display:inline-flex;width:calc(var(--space-8) - var(--space-4));height:var(--space-2);border-radius:1px;overflow:hidden;background:var(--x-proposed-unseen);outline:1px solid var(--hairline);outline-offset:-1px}
+.meter i{background:var(--ink);transition:width var(--motion-calm) var(--ease-out)}
+.pre .meter i{width:0!important}
+.diff{box-shadow:inset 2px 0 0 var(--x-proposed-disagree);padding-left:var(--space-2);margin-left:calc(var(--space-2) * -1)}
+.ghost{opacity:var(--x-proposed-quiet)}
+.ibtns{display:flex;gap:var(--space-1);margin-top:var(--space-2)}
+.ibtns span{display:inline-flex;align-items:center;gap:var(--space-1);height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted);font-size:var(--type-small)}
+.go-bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.go-bar p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.go-bar p.big{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+@media (max-width:1400px){.head .lede{display:none}.pb li .t{font-size:var(--type-small);line-height:var(--leading-small)}.pb .h{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Action · V3</b> proofs: what each reader will see, before it goes · printer’s proofs, “view as”</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const V = { verb: 'publish', pick: { publish: 'L2', feed: 'I1', watch: 'above' }, shown: false };
+const VERBS = [
+  { id: 'publish', key: 'P', plain: 'Publish as a briefing', icon: 'send' },
+  { id: 'feed', key: 'F', plain: 'Feed an intent', icon: 'target' },
+  { id: 'watch', key: 'W', plain: 'Watch for change', icon: 'binoculars' }
+];
+
+/* a record link, as this reader will see it */
+function linkFor(g, reader) {
+  const o = openN(g, reader), t = total(g);
+  if (o === t) return `<span class="lk">${I(g.icon, 12)}${t > 1 ? t + ' ' : ''}${g.label}</span>`;
+  /* the reader is not told how many they can't open: "some" */
+  if (o > 0) return `<span class="lk some">${I(g.icon, 12)}${o} ${g.label} <em>· some more locked, ask ${askFor(g)}</em></span>`;
+  return `<span class="unseen">${I('lock', 11)} ${g.label} · ask ${askFor(g)}</span>`;
+}
+function bottomLineProof() {
+  if (!STATE.gateway) return `<p class="bline">${fill(DATA.finding.bottomLine.template, DATA.finding.headline)}</p>`;
+  if (STATE.accepted) return `<p class="bline">${DATA.finding.bottomLine.model}</p>`;
+  return `<div class="waits">${I('pencil', 14)} The bottom line is still in pencil. It won’t go out until ${P(DATA.me).name} accepts it.</div>`;
+}
+function readerProof(reader, title, sub, n, idx, id, extra = '') {
+  const o = allOpen(reader), t = allTotal();
+  const f = figures(n, { size: 11 });
+  return `<section role="radio" tabindex="0" class="proof dep" data-tier="${reader}" data-id="${id}" aria-checked="${V.pick[V.verb] === id}" style="--i:${idx}">
+    <div class="pf"><b>${title}</b><span class="muted" style="font-size:var(--type-small)">${sub}</span><span class="n">${fmt(n)}<small>${n === 1 ? 'reader' : 'readers'}</small></span><span class="kbd">${idx + 1}</span></div>
+    <div class="pb scroll">${n > 1 ? f.html : ''}<p class="fkey">${n > 1 ? f.key : ""}</p><p class="tk">reader floor: ${reader}</p>${extra}
+      <p class="h">${headlineHTML()}</p>${bottomLineProof()}
+      <ul>${DATA.claims.map(c => {
+        const k = checkable(c, reader);
+        return `<li class="${k !== 'all' ? 'diff' : ''}"><span class="t">${c.text} ${c.kind === 'judge' ? cw(c.word) : ''}</span><span class="links">${c.basis.map(G).map(g => linkFor(g, reader)).join('')}</span></li>`;
+      }).join('')}</ul></div>
+    <div class="pfoot"><span class="meter" aria-hidden="true"><i style="width:${o / t * 100}%"></i></span><span>Can open <b>${o} of ${t}</b> records behind it</span></div></section>`;
+}
+function intentProof(it, idx) {
+  const ow = P(it.owner);
+  const extra = `<p class="eyebrow">${I('target', 11)} Intent · due ${it.due} · ${it.state}</p><p class="bline" style="margin:var(--space-1) 0 var(--space-2);color:var(--light)">${it.title}</p><p class="eyebrow" style="margin-bottom:var(--space-1)">New evidence from ${P(DATA.me).name}</p>`;
+  const html = readerProof(it.floor, ow.name, it.title.length > 26 ? it.title.slice(0, 24) + '…' : it.title, it.followers + 1, idx, it.id, extra);
+  return html.replace('</ul></div>', `</ul><div class="ibtns ghost" aria-label="What ${ow.name} can do">${'<span>Mark at risk</span><span>Not relevant</span><span>Ask a question</span>'}</div><p class="tk">${ow.name} decides; feeding never changes an intent’s state</p></div>`);
+}
+function watchProof(p, idx) {
+  const why = { any: ['8 overdue, up from 7.', 'A due date passed overnight (NV-03).'], above: ['9 overdue: above your mark of 8.', 'Two due dates passed overnight on 21 Nov.'], zero: ['None overdue.', 'Kestrel’s visit was recorded for all 7 vans.'] }[p.id];
+  return `<section role="radio" tabindex="0" class="proof dep" data-tier="${DATA.myFloor}" data-id="${p.id}" aria-checked="${V.pick.watch === p.id}" style="--i:${idx}">
+    <div class="pf"><b>Tell me ${p.plain}${p.n !== undefined ? ' ' + p.n : ''}</b><span class="n">1<small>just you</small></span><span class="kbd">${idx + 1}</span></div>
+    <div class="pb"><p class="eyebrow">What you’d get · an example</p>
+      <p class="h" style="margin-top:var(--space-2)">${DATA.finding.subject}: ${why[0]}</p>
+      <p class="bline"><b style="font-weight:400;color:var(--light)">Why it moved:</b> ${why[1]}</p>
+      <p class="bline muted" style="margin-top:var(--space-2)">A notice always names one reason: something happened, a date passed, a source was withdrawn, a disagreement was settled, or what you can see changed.</p>
+      <p class="tk">fires on: ${DATA.watch.triggers.map(t => t.tech).join(' | ')}</p>
+      <p class="bline muted" style="margin-top:var(--space-2)">Nobody else is told, and nobody else can see this watch.</p></div>
+    <div class="pfoot"><span>Counts only what you can open: <b>${allOpen(DATA.myFloor)} of ${allTotal()}</b></span></div></section>`;
+}
+function goBar() {
+  if (V.verb === 'publish') {
+    const l = DATA.libraries.find(x => x.id === V.pick.publish);
+    const any = DATA.claims.filter(c => checkable(c, l.floor) !== 'all').length;
+    return `<div class="go-bar"><div><p class="big">Publish to ${l.name}: ${fmt(F(l.floor).reach)} readers on the ${F(l.floor).word} floor and under it.</p><p class="muted">${any} of ${DATA.claims.length} claims point to records some of them can’t open (marked at the edge). ${l.approval ? l.approvalWhy : ''}</p></div>
+      ${l.approval ? `<button class="btn">${I('user-round', 14)} Ask ${P(l.approval).name} to approve</button>` : `<button class="btn go">${I('send', 14)} Publish this proof</button>`}</div>`;
+  }
+  if (V.verb === 'feed') {
+    const it = DATA.intents.find(x => x.id === V.pick.feed);
+    return `<div class="go-bar"><div><p class="big">Feed “${it.title}”: ${P(it.owner).name} and ${it.followers} followers see it as evidence.</p><p class="muted">It never changes the intent’s state by itself.</p></div><button class="btn go">${I('target', 14)} Feed it</button></div>`;
+  }
+  return `<div class="go-bar"><div><p class="big">Watch: only you are told.</p><p class="muted">You can stop it from your watches list, and it ends by itself when the finding is archived.</p></div><button class="btn go">${I('binoculars', 14)} Watch</button></div>`;
+}
+
+function render() {
+  let proofs;
+  if (V.verb === 'publish') proofs = DATA.libraries.map((l, i) => readerProof(l.floor, l.name, F(l.floor).word + ' floor', F(l.floor).reach, i, l.id));
+  else if (V.verb === 'feed') proofs = DATA.intents.map((it, i) => intentProof(it, i));
+  else proofs = DATA.watch.presets.map((p, i) => watchProof(p, i));
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.finding.subject, 'Finding ' + DATA.finding.id],
+    [['P F W', 'what to do'], ['1–3', 'pick a proof'], ['A', 'accept'], ['T', 'admin words', 'h-t'], ['G', 'model off', 'h-g'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div class="head"><div><p class="eyebrow">Before it goes</p><h1>Proofs</h1></div><p class="lede">${V.verb === 'publish' ? 'The same briefing, as each library’s readers will see it. Pick the proof you mean to publish.' : V.verb === 'feed' ? 'The same finding, as each intent’s owner will see it.' : 'What each kind of watch would tell you, and when.'}</p>
+      <div class="verbs">${VERBS.map(v => `<button class="verb" data-verb="${v.id}" aria-pressed="${V.verb === v.id}">${I(v.icon, 14)} ${v.plain} <span class="kbd">${v.key}</span></button>`).join('')}</div></div>
+      <div class="proofs" role="radiogroup" aria-label="Proofs">${proofs.join('')}</div>
+      ${goBar()}</div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.verb').forEach(b => b.onclick = () => { V.verb = b.dataset.verb; render(); });
+  $$('.proof').forEach(b => { b.onclick = () => { V.pick[V.verb] = b.dataset.id; render(); }; b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.click(); } }; });
+}
+window.__rerender = render;
+function replay() {
+  clearLater();
+  Object.assign(V, { verb: 'publish', pick: { publish: 'L1', feed: 'I1', watch: 'above' } });
+  STATE.accepted = false;
+  document.body.classList.add('pre'); render();
+  /* the moment: three proofs are pulled side by side, then the pick moves to the Department proof */
+  later(() => document.body.classList.remove('pre'), ms('--motion-run'));
+  later(() => { V.pick.publish = 'L2'; render(); }, ms('--motion-run') + ms('--motion-calm') * 2);
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const k = e.key.toLowerCase();
+  const v = VERBS.find(x => x.key.toLowerCase() === k);
+  if (v) { V.verb = v.id; render(); return; }
+  const n = parseInt(k, 10);
+  const list = V.verb === 'publish' ? DATA.libraries : V.verb === 'feed' ? DATA.intents : DATA.watch.presets;
+  if (n >= 1 && n <= list.length) { V.pick[V.verb] = list[n - 1].id; render(); }
+});
+replay();
+</script>
+</body>
+</html>

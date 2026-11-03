@@ -35,8 +35,4 @@ await notify({ eventsUrl, credentials, workspace, notification: {
 } });
 ```
 
-| App | What it is |
-| --- | --- |
-| `folio/` | Folio, the first pillar app: document libraries on your own floor, a team's or the org's, published for people to read in a readable reader view. |
-| `atlas/` | Data Atlas, a pillar app: the entities the organisation keeps track of, fenced by floor, on an ontology from the Common Core Ontologies. |
-| `auspex/` | Explorer (code name Auspex), a platform app: where you are on AUGUR, who's on each floor, and why you can or can't use each app. |
+The apps that ship with AUGUR live in their own repositories: Artifacts in [augur-folio](https://github.com/harry-burton-dev/augur-folio), Explorer in [augur-auspex](https://github.com/harry-burton-dev/augur-auspex) and Data Atlas in [augur-atlas](https://github.com/harry-burton-dev/augur-atlas). AUGUR's releases ship the release of each that `release/shipped-apps.json` pins ([ADR 0049](../docs/decisions/0049-pillar-apps-shipped-from-their-releases.md)).

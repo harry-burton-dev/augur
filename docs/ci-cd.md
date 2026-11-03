@@ -67,10 +67,9 @@ everything.
 |---|---|---|---|
 | `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, script tests, the hotfix rule, a changeset, build, manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
 | `scan` | always | never | gitleaks on the pull request's commits; OSV-Scanner, failing only on vulnerabilities the pull request brings in (ADR 0043) |
-| `contract` | `platform/frontends` (not Admin or the Upgrade Centre), `platform/packages`, `platform/contract`, `apps/folio`, the root `package.json` or the lockfile | never | the reference app, today's build and frozen ones from earlier SDK releases, mounted by the real shell in Chromium, with Folio on and off |
-| `folio-worker` | `apps/folio` | never | the Python worker's tests against Postgres with real PDFs; its image too when `apps/folio/worker` changed |
+| `contract` | `platform/frontends` (not Admin or the Upgrade Centre), `platform/packages`, `platform/contract`, the Folio pin (`release/shipped-apps.json`, `infra/shipped-app.sh`), the root `package.json` or the lockfile | never | the reference app, today's build and frozen ones from earlier SDK releases, mounted by the real shell in Chromium, with Folio (from the release AUGUR ships) on and off |
 | `app-scaffold` | the app template, `create-app`, the shared packages, the registry, or the scripts that check apps | never | `pnpm create-app` still makes an app that builds, passes its tests and is accepted |
-| `deploy-images` | `infra`, `.dockerignore`, any `package.json`, the workspace file or the lockfile | never | the compose files are valid; the seven main images build, carry their manifests and frontends and don't run as root; nginx and its Content Security Policy; the backup and restore scripts |
+| `deploy-images` | `infra`, `.dockerignore`, any `package.json`, the workspace file or the lockfile | never | the compose files are valid; the four main images build, the web image serves the shipped apps' frontends, and none runs as root; nginx and its Content Security Policy; the backup and restore scripts |
 
 **The contract tests' frozen builds.** `platform/contract/frozen/` holds a build of the reference app
 from each SDK minor. An ordinary pull request runs today's build (Folio on and off) and only the

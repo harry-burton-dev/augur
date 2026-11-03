@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The ask · V3 · Situation, gap, use</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ======================================================================
+   Proposed tokens (all mixes of kit tokens; listed as "needs token" in notes.md)
+   ====================================================================== */
+:root{
+  --x-proposed-type-micro:.6875rem;                                              /* mono numerals in data; wear-and-time and the catalogue asked too */
+  --x-proposed-here:var(--floor-department-high);                                 /* the floor this page sits on (Department) */
+  --x-proposed-here-soft:color-mix(in srgb,var(--floor-department-high) 14%,transparent);
+  --x-proposed-quiet:.62;                                                         /* quiet lines (catalogue) */
+  /* a model's guess: pencil, not ink. Dotted edge in a cool tint, never the floor colour, never solid */
+  --x-proposed-guess:color-mix(in srgb,var(--info) 62%,var(--ink));
+  --x-proposed-guess-wash:color-mix(in srgb,var(--info) 8%,transparent);
+  /* a loose word: still the person's own words, waiting to be sharpened */
+  --x-proposed-loose:color-mix(in srgb,var(--warning) 55%,var(--ink));
+  /* the six ways to be empty (from the catalogue) */
+  --x-proposed-gap-ink:color-mix(in srgb,var(--ink-muted) 78%,transparent);
+  --x-proposed-gap-tick:var(--space-1);
+  --x-proposed-hatch:color-mix(in srgb,var(--ink-muted) 34%,transparent);
+  --x-proposed-unseen:repeating-linear-gradient(135deg,transparent 0 calc(var(--space-1) - 1px),var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-lit:color-mix(in srgb,var(--green) 80%,var(--light));             /* the lit path (light language) */
+  --x-proposed-lit-wash:color-mix(in srgb,var(--green) 9%,transparent);
+}
+:root,.mk-gap{
+  --x-proposed-gap:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--x-proposed-gap-tick) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--x-proposed-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--x-proposed-gap-tick) no-repeat;
+}
+button,input,textarea{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.micro{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.muted{color:var(--ink-muted)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);padding:2px var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);min-width:1.6em;text-align:center;letter-spacing:0}
+
+/* ---- app frame ---- */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr)}
+.rail{background:var(--surface-bar);border-right:1px solid var(--hairline);padding:var(--space-5) var(--space-4);display:flex;flex-direction:column;gap:var(--space-1);min-height:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0 0 var(--space-4) var(--space-2)}
+.nav{text-decoration:none;display:flex;align-items:center;gap:var(--space-3);height:var(--target-sm);padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-meta);border-radius:var(--radius-key)}
+.nav.on{background:var(--surface-raised);color:var(--ink)}
+.nav .n{margin-left:auto;font:400 var(--type-small)/1 var(--font-mono)}
+.rail .foot{margin-top:auto;margin-bottom:calc(var(--space-8) + var(--space-6));padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rail .foot b{font-weight:400;color:var(--ink)}
+.rail .foot .fl{display:block;width:var(--space-5);height:2px;border-radius:1px;background:var(--x-proposed-here);margin-bottom:var(--space-2);box-shadow:0 0 var(--glow-blur) var(--x-proposed-here)}
+.main{position:relative;padding:var(--space-5) var(--space-6) var(--space-6);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4)}
+.top h1{margin:var(--space-1) 0 0;font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);white-space:nowrap}
+.contents{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);font-size:var(--type-small);color:var(--ink-muted);opacity:var(--x-proposed-quiet)}
+.contents b{font-weight:400;margin-left:var(--space-1);color:var(--ink)}
+
+/* keys, bottom left over the rail */
+.keys{position:fixed;left:var(--edge-tight);bottom:calc(var(--space-6) + var(--space-1));width:calc(var(--measure-rail) - var(--edge-tight) * 2);z-index:var(--layer-chrome);display:flex;flex-direction:column;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.keys > span{display:flex;align-items:center;gap:var(--space-2)}
+
+/* the gateway line: which steps used a model, said in words */
+.gw{display:inline-flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-soft)}
+.gw.on svg{color:var(--x-proposed-guess)}
+.gw.off{opacity:.9}
+.gw.off svg{opacity:.5}
+/* where a step came from */
+.via{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);white-space:nowrap;padding:0 var(--space-1);border-radius:2px;border:1px solid var(--hairline)}
+.via.v-model{color:var(--x-proposed-guess);border-style:dashed;border-color:color-mix(in srgb,var(--info) 40%,transparent);background:var(--x-proposed-guess-wash)}
+.via.v-rule{color:var(--ink)}
+.via.v-you{color:var(--x-proposed-here);border-color:color-mix(in srgb,var(--floor-department-high) 30%,transparent)}
+
+/* the question's words: loose (yours, waiting), guess (the model's pencil), set (ink) */
+.ph{border-radius:2px;transition:color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.ph.loose{color:var(--x-proposed-loose);text-decoration:underline wavy color-mix(in srgb,var(--warning) 45%,transparent);text-decoration-thickness:1px;text-underline-offset:.22em}
+.ph.guess{color:var(--x-proposed-guess);background:var(--x-proposed-guess-wash);outline:1px dashed color-mix(in srgb,var(--info) 45%,transparent);outline-offset:1px;font-style:italic}
+.ph.set{color:var(--light);border-bottom:1px solid var(--x-proposed-here)}
+.ph.fresh{animation:fresh var(--motion-calm) var(--ease-out)}
+@keyframes fresh{from{color:var(--x-proposed-here);text-shadow:0 0 var(--glow-blur) var(--x-proposed-here)}}
+/* a model guess block: always labelled, always needs a yes */
+.guessbox{border:1px dashed color-mix(in srgb,var(--info) 45%,transparent);background:var(--x-proposed-guess-wash);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--x-proposed-guess);font-style:italic}
+.guessbox b{font-style:normal;font-weight:400;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-right:var(--space-2)}
+
+/* a choice with the count it would leave */
+.opt{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;align-items:center;gap:var(--space-2);width:100%;min-height:var(--target-sm);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);border:1px solid transparent;color:var(--ink)}
+.opt:hover{background:var(--surface-raised)}
+.opt .k{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);width:calc(var(--space-4) + var(--space-1));height:calc(var(--space-4) + var(--space-1));display:grid;place-items:center}
+.opt .l{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.opt .l small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.opt .c{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.opt[aria-pressed="true"]{border-color:var(--hairline-strong);background:var(--surface-raised)}
+.opt[aria-pressed="true"] .k{background:var(--x-proposed-here);border-color:var(--x-proposed-here);color:var(--slate-deep)}
+.opt[aria-pressed="true"] .c{color:var(--light)}
+.opt.guessed{border:1px dashed color-mix(in srgb,var(--info) 40%,transparent);background:var(--x-proposed-guess-wash)}
+
+/* ---- the six ways to be empty, as used here ---- */
+.mk{display:inline-block;vertical-align:middle;flex:none}
+.mk-gap{background:var(--x-proposed-gap);width:calc(var(--space-6) + var(--space-4));height:calc(var(--space-4) + var(--space-1))}
+.mk-gap.mk-sm{width:calc(var(--space-5) - var(--space-1));height:var(--space-4);vertical-align:-2px}
+.mk-break{width:var(--space-5);height:var(--space-3);vertical-align:-1px}
+.mk-break path{fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2}
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);vertical-align:1px}
+
+/* answer rows */
+.rows{list-style:none;margin:0;padding:0}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:center;min-height:var(--target-sm);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);padding:0 var(--space-1)}
+.row .d{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap;display:flex;gap:var(--space-2);align-items:center}
+.row.never .d{color:var(--ink)}
+
+/* two registers: T shows the technical line one step down */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:var(--space-1) 0 0;overflow-wrap:anywhere}
+body.tech .tk{display:block}
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);font-size:var(--type-meta);background:var(--surface-inset);white-space:nowrap;color:var(--ink)}
+.btn:hover{background:var(--surface-raised)}
+.btn.primary{border-color:var(--x-proposed-here);color:var(--light)}
+.btn[disabled]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.pre{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre{transform:none}.ph.fresh{animation:none}}
+
+/* ---- V3: Dervin's sense-making bridge. Ask what it's for first; the loose words are planks across the gap ---- */
+.askline{display:flex;align-items:center;gap:var(--space-3);border-bottom:1px solid var(--hairline-strong);padding:0 0 var(--space-2);margin-bottom:var(--space-4)}
+.askline input{flex:1;background:none;border:0;outline:0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light);min-width:0}
+.bridge{position:relative;height:calc(var(--space-8) + var(--space-7));margin-bottom:var(--space-4)}
+.bridge > svg{position:absolute;left:22%;right:22%;top:0;width:56%;height:100%;overflow:visible}
+.bridge .arch{fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
+.bridge .arch.loose{stroke:var(--x-proposed-loose);stroke-dasharray:4 5;opacity:.7}
+.bridge .arch.set{stroke:var(--x-proposed-here);filter:drop-shadow(0 0 var(--space-1) var(--x-proposed-here))}
+.bridge .arch.kept{stroke:var(--ink-muted);stroke-dasharray:1 4}
+.bridge .water{fill:none;stroke:var(--hairline);vector-effect:non-scaling-stroke}
+.bank{position:absolute;top:0;bottom:0;width:calc(22% - var(--space-3));padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);display:flex;flex-direction:column;gap:var(--space-1);overflow:hidden}
+.bank.l{left:0}.bank.r{right:0}
+.bank .b.you{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bank > *{flex:none}
+.bank .b{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.bank .b.you{color:var(--light)}
+.bank > textarea{flex:1 1 auto;min-height:var(--space-6);background:var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-key);resize:none;padding:var(--space-1) var(--space-2);font:300 var(--type-meta)/var(--leading-meta) var(--font-sans);color:var(--light);}
+.bank .guessbox{font-size:var(--type-small);line-height:var(--leading-small)}
+.bank .yn{display:flex;gap:var(--space-2);margin-top:var(--space-1)}
+.bank .yn .btn{height:calc(var(--target-sm) - var(--space-2));font-size:var(--type-small)}
+.uses{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.uses button{font-size:var(--type-small);padding:var(--space-1) var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);color:var(--ink)}
+.uses button[aria-pressed="true"]{border-color:var(--x-proposed-here);color:var(--light);background:var(--x-proposed-here-soft)}
+.plank{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;max-width:13%;text-align:center}
+.plank button{font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);background:var(--surface-bar);border:1px solid var(--hairline-strong);color:var(--x-proposed-loose)}
+.plank.set button{color:var(--light);border-color:var(--x-proposed-here)}
+.plank.kept button{color:var(--ink-muted);border-style:dotted}
+.plank.now button{box-shadow:0 0 var(--glow-blur) var(--x-proposed-here-soft);border-color:var(--light)}
+.plank small{font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);color:var(--ink-muted)}
+.lowerg{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,min(calc(var(--measure-glance) - var(--space-5)),40%));gap:var(--space-6)}
+.cur .ask{margin:0;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.cur .why{margin:var(--space-1) 0 var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cur .tie{display:flex;gap:var(--space-2);align-items:center;margin:0 0 var(--space-3);font-size:var(--type-small);color:var(--ink)}
+.cur .opts{display:grid;gap:2px;max-width:var(--measure-read)}
+.cur .neutral{margin-top:var(--space-2);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.out{display:flex;flex-direction:column;gap:var(--space-3);border-left:1px solid var(--hairline);padding-left:var(--space-5)}
+.out .s{margin:0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--ink-muted)}
+.out .n{display:flex;align-items:baseline;gap:var(--space-3)}
+.out .n b{font:200 var(--type-display)/1 var(--font-sans);color:var(--light)}
+.out .n span{font-size:var(--type-meta);color:var(--ink-muted)}
+.out ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.out li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2)}
+.out .acts{display:flex;gap:var(--space-2);margin-top:auto}
+@media (max-height:840px){.out .n b{font-size:var(--type-title)}.cur .opt small{display:none}.cur .why{margin-bottom:var(--space-2)}}
+</style>
+</head>
+<body>
+<div class="app"><div id="rail"></div><main class="main" id="main"></main></div>
+<div id="keys"></div>
+<div class="x-cap"><b>The ask · V3</b> situation, gap, use: what it is for, then loose words as planks · Dervin's sense-making bridge</div>
+<script>
+/* Sample data for ONE deployment: a regional services organisation.
+   Swap this object and every name, date, count and reason on the page follows. */
+const DATA = {
+  app: 'Data Atlas',
+  today: '2026-11-03',
+  floor: { type: 'department', name: 'Regional Services', lead: 'Priya Shah' },
+  me: { name: 'Sam Okafor', teams: ['North waters team'] },
+  /* floors you can't open still say they exist and whom to ask */
+  elsewhere: [{ name: 'Coast works crew', type: 'team', ask: 'Dee Harper' }],
+  gateway: { on: true, used: 37, limit: 500, admin: 'Lena Brandt' },
+  /* the deployment's calendar words; a model is not needed to read them */
+  calendar: {
+    fyStart: '04-01', fyName: 'financial year',
+    seasons: { spring: ['03-01', '05-31'], summer: ['06-01', '08-31'] }
+  },
+  question: 'which suppliers have we not heard from since spring?',
+  /* kinds on this floor (the front page's contents) */
+  kinds: [
+    { id: 'site', many: 'sites', n: 42 }, { id: 'supplier', many: 'suppliers', n: 20, one: 'supplier' },
+    { id: 'contract', many: 'contracts', n: 64 }, { id: 'person', many: 'people', n: 118 },
+    { id: 'vehicle', many: 'vehicles', n: 37 }, { id: 'incident', many: 'incidents', n: 211 }
+  ],
+  /* what in the record can count as "hearing from" a supplier.
+     src: where it lives (Artifacts library or Data Atlas link); tech: the register one step down */
+  contacts: [
+    { id: 'invoice', word: 'invoice', label: 'an invoice', short: 'invoices', src: 'Artifacts · Accounts payable', tech: 'doc[type=invoice].issuer' },
+    { id: 'delivery', word: 'delivery note', label: 'a delivery note', short: 'delivery notes', src: 'Artifacts · Stores', tech: 'doc[type=delivery-note].supplier' },
+    { id: 'letter', word: 'filed letter', label: 'a filed letter or email', short: 'letters and emails filed', src: 'Artifacts · Correspondence', tech: 'doc[type=correspondence].from' },
+    { id: 'incident', word: 'mention in an incident', label: 'being named in an incident', short: 'incidents naming them', src: 'Data Atlas · Incidents', tech: 'atlas:Incident.involves' },
+    /* far: dated, but the model judged them not "hearing from" (shown, never dropped) */
+    { id: 'contract', word: 'contract change', label: 'a contract change', short: 'contract changes', src: 'Data Atlas · Contracts', tech: 'atlas:Contract.amendedOn', far: true },
+    { id: 'visit', word: 'site visit', label: 'a site visit logged', short: 'site visits', src: 'Data Atlas · Sites', tech: 'atlas:SiteVisit.by', far: true }
+  ],
+  /* what is NOT in the record at all: said, never skipped */
+  notRecorded: [
+    { what: 'Phone calls', why: 'No call log is kept in AUGUR.', who: 'Priya Shah', how: 'keeps the procurement call sheet and could load it as a source' },
+    { what: 'Inboxes', why: 'Only emails someone files in Artifacts count.', who: 'anyone', how: 'can file an email to Correspondence' }
+  ],
+  /* dated things in the record whose NAME mentions a word in the question (found by name, no model) */
+  named: [
+    { word: 'spring', label: 'the Spring supplier review', date: '2026-04-14', where: 'Mandate · intent by Priya Shah' }
+  ],
+  /* suppliers. floor: here | org | team:<name>. contract: live | ended:<date> | none */
+  suppliers: [
+    ['Northgate Fuels', 'here', 'live', [['invoice', '2026-10-02']]],
+    ['Harbour Tyres', 'here', 'live', [['invoice', '2026-02-14'], ['letter', '2026-03-20']]],
+    ['Fenwick Grounds Care', 'here', 'live', [['delivery', '2026-03-28']]],
+    ['Calder Waste Services', 'here', 'live', [['invoice', '2026-01-22'], ['incident', '2026-06-11']]],
+    ['Brightwater Labs', 'here', 'live', [['invoice', '2026-01-30'], ['visit', '2026-05-12']]],
+    ['Kestrel Uniforms', 'here', 'live', []],
+    ['Marsh & Pike Printing', 'here', 'ended:2026-05-31', [['invoice', '2026-05-02']]],
+    ['Oakline Plant Hire', 'here', 'live', [['delivery', '2026-09-19'], ['invoice', '2026-09-30']]],
+    ['Tarn Valley Salt', 'here', 'live', [['letter', '2026-03-11']]],
+    ['Pennant Software', 'org', 'live', [['invoice', '2026-10-20']]],
+    ['Sefton Signs', 'here', 'live', [['invoice', '2025-11-30'], ['contract', '2026-06-01']]],
+    ['Rowan Catering', 'here', 'none', [['invoice', '2026-02-02']]],
+    ['Lindqvist Pumps', 'org', 'live', [['delivery', '2026-04-08']]],
+    ['Greyfriars Security', 'here', 'live', [['letter', '2026-08-01']]],
+    ['Ashby Electrical', 'team:Coast works crew', 'live', [['invoice', '2026-02-11']]],
+    ['Dunmore Aggregates', 'team:Coast works crew', 'live', [['invoice', '2026-07-09']]],
+    ['Moorland Couriers', 'here', 'live', [['invoice', '2026-01-10'], ['incident', '2026-07-03']]],
+    ['Vale Office Supplies', 'org', 'live', []],
+    ['Quayside Fencing', 'team:North waters team', 'live', [['invoice', '2026-03-05']]],
+    ['Hollins Fleet Parts', 'here', 'live', [['invoice', '2026-04-02']]]
+  ],
+  /* who could fill a supplier with no contact recorded */
+  filler: { who: 'Priya Shah', role: 'keeps Accounts payable' },
+  saved: [
+    { q: 'Contracts ending this year with no renewal intent', by: 'Priya Shah', changed: '2026-10-28' },
+    { q: 'Sites with an incident since the last inspection', by: 'Ivo Rask', changed: '2026-11-01' }
+  ]
+};
+
+/* ---- The ask: shared engine (inlined into every variant at build) ----
+   A question is four loose words, each set by a choice:
+     kind  "suppliers"   all | live | since
+     who   "we"          here | mine | all
+     via   "heard from"  a set of contact kinds
+     since "since spring" a date
+   Everything counted here is counted from the record, never by a model. */
+const Q = (() => {
+  const D = DATA;
+  const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const year = +D.today.slice(0, 4);
+  const day = (md) => `${year}-${md}`;
+  const fmt = (iso, short) => { if (!iso) return ''; const [y, m, d] = iso.split('-').map(Number); return short ? `${d} ${MON[m - 1].slice(0, 3)}` : `${d} ${MON[m - 1]} ${y}`; };
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const C = Object.fromEntries(D.contacts.map(c => [c.id, c]));
+  const S = D.suppliers.map(([name, floor, contract, contacts], i) => ({ id: 's' + i, name, floor, contract, contacts }));
+  const myTeam = (f) => f.startsWith('team:') && D.me.teams.includes(f.slice(5));
+  const unseen = (s) => s.floor.startsWith('team:') && !myTeam(s.floor);
+  const floorName = (s) => s.floor === 'here' ? D.floor.name : s.floor === 'org' ? 'the Org' : s.floor.slice(5);
+  const floorTier = (s) => s.floor === 'here' ? 'department' : s.floor === 'org' ? 'org' : 'team';
+
+  /* the choices for each loose word; order is the record's order (by date, by size), never a ranking */
+  const spring = D.calendar.seasons.spring;
+  const named = D.named.find(n => n.word === 'spring');
+  const WORDS = {
+    since: {
+      word: 'since spring', ask: 'When you say spring, which day should it start from?',
+      why: 'Spring can start on different days. These are the ones this deployment knows, in date order.',
+      opts: [
+        { id: day(spring[0]), label: fmt(day(spring[0])), sub: 'spring, by the calendar', via: 'rule' },
+        { id: day(D.calendar.fyStart), label: fmt(day(D.calendar.fyStart)), sub: `start of the ${D.calendar.fyName}`, via: 'rule' },
+        { id: named.date, label: fmt(named.date), sub: `${named.label}, found by name in ${named.where.split(' · ')[0]}`, via: 'record' }
+      ]
+    },
+    via: {
+      word: 'heard from', ask: 'What counts as hearing from a supplier?', multi: true,
+      why: 'Every dated thing in the record that names a supplier. Tick any; none is ticked for you.',
+      opts: D.contacts.map(c => ({ id: c.id, label: c.label[0].toUpperCase() + c.label.slice(1), sub: c.src, via: 'record', far: !!c.far }))
+    },
+    kind: {
+      word: 'suppliers', ask: 'Which suppliers should be in it?',
+      why: '"Suppliers" matched the kind Supplier by name. These are the ways the record can narrow it.',
+      opts: [
+        { id: 'all', label: 'Every supplier on record', via: 'record' },
+        { id: 'live', label: 'With a contract live today', via: 'record' },
+        { id: 'since', label: 'With a contract live at any time since then', via: 'record' }
+      ]
+    },
+    who: {
+      word: 'we', ask: 'Who is “we”?',
+      why: `The floors you can see from ${D.floor.name}, smallest first.`,
+      opts: [
+        { id: 'here', label: D.floor.name, sub: 'this floor', via: 'record' },
+        { id: 'mine', label: `${D.floor.name} and ${D.me.teams.join(', ')}`, sub: 'and the teams you are on', via: 'record' },
+        { id: 'all', label: 'Everything you can see', sub: 'including what the Org keeps', via: 'record' }
+      ]
+    }
+  };
+  const ORDER = ['since', 'via', 'kind', 'who'];
+  /* the model's reading, shown as a guess until the person says yes */
+  const GUESS = { via: { ids: ['invoice', 'delivery', 'letter'], text: 'they sent you something: an invoice, a delivery note or a letter' } };
+
+  function inScope(s, who) {
+    if (unseen(s)) return false;
+    if (who === 'here') return s.floor === 'here';
+    if (who === 'mine') return s.floor === 'here' || myTeam(s.floor);
+    return true;
+  }
+  function kindOk(s, kind, since) {
+    if (!kind || kind === 'all') return true;
+    if (s.contract === 'live') return true;
+    if (kind === 'since' && s.contract.startsWith('ended:')) return s.contract.slice(6) >= since;
+    return false;
+  }
+  const last = (s, via) => s.contacts.filter(([k]) => !via || via.has(k)).map(([, d]) => d).sort().pop() || null;
+  /* defaults stand in for a loose word only to COUNT; the sentence still shows it loose */
+  function full(c) {
+    return { since: c.since || WORDS.since.opts[0].id, via: c.via && c.via.size ? c.via : new Set(D.contacts.map(x => x.id)), kind: c.kind || 'all', who: c.who || 'all' };
+  }
+  function run(c) {
+    const f = full(c);
+    const pool = S.filter(s => inScope(s, f.who) && kindOk(s, f.kind, f.since));
+    const rows = pool.map(s => ({ s, last: last(s, f.via), any: last(s, null) }));
+    const quiet = rows.filter(r => !r.last || r.last < f.since).sort((a, b) => (a.last || '') < (b.last || '') ? -1 : 1);
+    return {
+      pool: pool.length, quiet, heard: rows.length - quiet.length,
+      never: quiet.filter(r => !r.any), unseen: S.some(s => unseen(s) && (f.who === 'all')),
+      unseenAsk: D.elsewhere.map(e => `${e.name} (ask ${e.ask})`).join(', ')
+    };
+  }
+  const count = (c) => run(c).quiet.length;
+  /* what picking this option would leave, before you pick it (consequence preview) */
+  function countIf(c, word, id) {
+    const n = Object.assign({}, c);
+    if (word === 'via') { const v = new Set(c.via || []); v.has(id) ? v.delete(id) : v.add(id); n.via = v; } else n[word] = id;
+    return count(n);
+  }
+  const isSet = (c, w) => w === 'via' ? !!(c.via && c.via.size) : !!c[w];
+
+  const join = (a, w) => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' ' + (w || 'or') + ' ' + a[a.length - 1];
+  /* each loose word as words in the sharp sentence */
+  function phrase(c, w) {
+    if (w === 'kind') return c.kind === 'live' ? 'Suppliers with a contract live today' : c.kind === 'since' ? 'Suppliers with a contract live since then' : 'Every supplier';
+    if (w === 'who') return c.who === 'here' ? `kept on ${D.floor.name}` : c.who === 'mine' ? `on ${D.floor.name} or ${D.me.teams.join(', ')}` : 'that you can see';
+    if (w === 'via') return 'no ' + join([...c.via].map(id => C[id].word), 'or');
+    if (w === 'since') return 'since ' + fmt(c.since);
+    return '';
+  }
+  /* the sentence as segments: loose words stay in the person's own words until set */
+  function segments(c, guess) {
+    const slot = (w) => {
+      if (isSet(c, w)) return { slot: w, state: 'set', text: phrase(c, w) };
+      if (guess && guess[w]) return { slot: w, state: 'guess', text: phrase(Object.assign({}, c, { [w]: new Set(GUESS[w].ids) }), w) };
+      return { slot: w, state: 'loose', text: w === 'kind' ? 'Suppliers' : WORDS[w].word };
+    };
+    const via = slot('via'), who = slot('who'), kind = slot('kind');
+    const wl = who.state === 'loose', vl = via.state === 'loose';
+    const g = [kind];
+    if (!wl) g.push({ text: ' ' }, who);
+    if (!vl) g.push({ text: ' with ' }, via);
+    else if (wl) g.push({ text: ' ' }, who, { text: ' have not ' }, via);
+    else g.push({ text: ', not ' }, via);
+    g.push({ text: ' ' }, slot('since'));
+    if (wl && !vl) g.push({ text: ' (' }, Object.assign(who, { text: '“we”: whose?' }), { text: ')' });
+    g.push({ text: '.' });
+    return g;
+  }
+  function sentenceHtml(c, guess, cls) {
+    return segments(c, guess).map(g => g.slot ? `<span class="${cls || 'ph'} ${g.state}" data-w="${g.slot}">${esc(g.text)}</span>` : esc(g.text)).join('');
+  }
+  /* the register one step down (T) */
+  function tech(c) {
+    const f = full(c);
+    const fl = { here: '{regional-services}', mine: '{regional-services, north-waters}', all: 'visible(me)' }[f.who];
+    const k = { all: '', live: ' ∧ contract.state = live', since: ` ∧ contract.live_during([${f.since}, today])` }[f.kind];
+    return `atlas:Supplier ∣ floor ∈ ${fl}${k} ∧ max(contact.date ∣ kind ∈ {${[...f.via].join(', ')}}) < ${f.since}`;
+  }
+  return { D, WORDS, ORDER, GUESS, S, run, count, countIf, isSet, phrase, segments, sentenceHtml, tech, fmt, esc, floorName, floorTier, C, unseen };
+})();
+
+/* ---- tokens as time: JS reads its pauses from the motion tokens, never a magic number ---- */
+const Tok = {
+  ms(name) { const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return parseFloat(v) * (v.endsWith('ms') ? 1 : 1000) || 0; },
+  reduced: () => matchMedia('(prefers-reduced-motion: reduce)').matches
+};
+/* a replayable auto-demo: steps = [[delayFromPrevious, fn], ...] */
+const Demo = (() => {
+  let timers = [];
+  return {
+    play(steps) { this.stop(); let t = 0; steps.forEach(([d, fn]) => { t += d; timers.push(setTimeout(fn, t)); }); },
+    stop() { timers.forEach(clearTimeout); timers = []; }
+  };
+})();
+/* type text into an element, a few letters a beat (quick, never looping) */
+function typeInto(el, text, total, done) {
+  if (Tok.reduced()) { el.value !== undefined ? el.value = text : el.textContent = text; done && done(); return; }
+  const step = Math.max(1, Math.round(text.length / 12)); let i = 0;
+  const beat = total / Math.ceil(text.length / step);
+  (function tick() { i = Math.min(text.length, i + step); const v = text.slice(0, i); el.value !== undefined ? el.value = v : el.textContent = v; if (i < text.length) setTimeout(tick, beat); else done && done(); })();
+}
+
+/* ---- shared chrome: Data Atlas rail, the gateway line, the keys ---- */
+const Shell = {
+  ic: (n, s) => Icons.svg(n, { size: s || 14, stroke: 1.5 }),
+  rail(extra) {
+    const D = Q.D;
+    return `<nav class="rail" aria-label="${Q.esc(D.app)}">
+      <p class="brand">${Q.esc(D.app)}</p>
+      <a class="nav on" href="#">${Shell.ic('book-open-text')}Front page</a>
+      <a class="nav" href="#">${Shell.ic('list-tree')}Kinds of thing<span class="n mono">${D.kinds.length}</span></a>
+      <a class="nav" href="#">${Shell.ic('inbox')}Triage<span class="n mono">4</span></a>
+      <a class="nav" href="#">${Shell.ic('bookmark')}Saved questions<span class="n mono">${D.saved.length}</span></a>
+      ${extra || ''}
+      <div class="foot"><span class="fl"></span>On <b>${Q.esc(D.floor.name)}</b><br>a Department floor</div>
+    </nav>`;
+  },
+  /* which steps used the model gateway: always said, and G shows the page without it */
+  gatewayLine(on) {
+    const g = Q.D.gateway;
+    return on
+      ? `<span class="gw on">${Shell.ic('cpu', 13)}Model gateway on · ${g.used} of ${g.limit} calls today</span>`
+      : `<span class="gw off">${Shell.ic('cpu', 13)}Model gateway off · turned on by an admin (${Q.esc(g.admin)}) · everything below works without it</span>`;
+  },
+  via(kind, text) {
+    const m = { record: ['database', 'from the record'], rule: ['spell-check', 'by name and spelling'], model: ['cpu', 'model gateway'], you: ['user-round', 'you said'] }[kind];
+    return `<span class="via v-${kind}" title="${m[1]}">${Shell.ic(m[0], 11)}${Q.esc(text || m[1])}</span>`;
+  },
+  keys(list) {
+    return `<div class="keys" aria-label="Keyboard">${list.map(([k, t]) => `<span><span class="kbd">${k}</span>${t}</span>`).join('')}</div>`;
+  },
+  /* the six ways to be empty, as used on this surface */
+  never: () => `<span class="mk mk-gap mk-sm" aria-hidden="true"></span>`,
+  unseen: (t) => `<span class="unseen">${Shell.ic('lock', 11)}${Q.esc(t)}</span>`,
+  brk: () => `<svg class="mk mk-break" viewBox="0 0 28 12" aria-hidden="true"><path d="M1 6 Q4.5 1 8 6 T15 6 T22 6 T27 6"/></svg>`
+};
+/* the front page behind the box: contents of this floor, quiet */
+function contentsHtml() {
+  const D = Q.D;
+  return `<div class="contents" aria-label="Contents">${D.kinds.map(k => `<span>${Q.esc(k.many[0].toUpperCase() + k.many.slice(1))}<b class="mono">${k.n}</b></span>`).join('')}</div>`;
+}
+
+const W = Q.WORDS, ic = Shell.ic;
+/* sample words a person might write about their situation (data, so a deployment's own examples can replace it) */
+const SAY = { situation: 'Winter gritting and salt contracts come up for renewal in December. I want to chase anyone who has gone quiet.', reading: 'You want to chase them, before contracts renew in December.', ties: { kind: 'You mentioned renewals. This is the question renewals touch.', since: 'You didn’t say when quiet starts. Spring could start on different days.' } };
+const USES = ['Chase them', 'Check before a renewal', 'Report on them', 'Just looking'];
+const st = { c: {}, kept: new Set(), gw: DATA.gateway.on, sit: '', reading: null, use: null, cur: 'since' };
+const PL = ['since', 'via', 'kind', 'who'];
+document.getElementById('rail').outerHTML = Shell.rail();
+document.getElementById('keys').innerHTML = Shell.keys([['1–4', 'pick a choice'], ['Enter', 'next plank'], ['K', 'keep it loose'], ['Y / N', 'yes / not that'], ['G', 'model gateway on/off'], ['T', 'technical words'], ['R', 'replay']]);
+const settled = w => Q.isSet(st.c, w) || st.kept.has(w);
+/* points along the arch, in the svg's own box */
+const bz = t => { const p0 = [0, 150], p1 = [500, -40], p2 = [1000, 150]; const u = 1 - t; return [u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]]; };
+function bridgeHtml() {
+  const segs = PL.map((w, i) => { const pts = []; for (let k = 0; k <= 16; k++) pts.push(bz((i + k / 16) / 4 * .96 + .02).join(',')); return `<polyline class="arch ${Q.isSet(st.c, w) ? 'set' : st.kept.has(w) ? 'kept' : 'loose'}" points="${pts.join(' ')}"/>`; }).join('');
+  const planks = PL.map((w, i) => { const [x, y] = bz((i + .5) / 4); const set = Q.isSet(st.c, w);
+    return `<div class="plank ${set ? 'set' : st.kept.has(w) ? 'kept' : ''} ${st.cur === w && st.reading !== null ? 'now' : ''}" style="left:calc(22% + 56% * ${x / 1000});top:${y / 180 * 100}%"><button data-cur="${w}">${Q.esc(set ? Q.phrase(st.c, w) : W[w].word)}</button><small>${set ? 'you said' : st.kept.has(w) ? 'kept loose' : 'loose'}</small></div>`; }).join('');
+  const left = `<div class="bank l"><p class="eyebrow">Where you are</p><p class="b you">“${Q.esc(DATA.question)}”</p>
+    <p class="micro" style="margin-top:var(--space-2)">What’s going on that brought this up?</p>
+    <textarea id="sit" aria-label="What's going on that brought this up? (optional)" placeholder="Optional, in your own words">${Q.esc(st.sit)}</textarea></div>`;
+  let use;
+  if (st.gw && st.reading === 'no') use = `<p class="b you">“${Q.esc(st.sit)}”</p><p class="micro">Kept as you wrote it. The model’s reading was dropped.</p>`;
+  else if (st.gw && st.reading !== null) use = st.reading === 'yes'
+    ? `<p class="b you">${Q.esc(SAY.reading)}</p><p>${Shell.via('you', 'you said yes')}</p><p class="micro">read by ${Shell.via('model', 'model gateway')}, kept as your words</p>`
+    : `<div class="guessbox"><b>Guess</b>${Q.esc(SAY.reading)}</div><p class="micro">${Shell.via('model', 'model gateway')} read your words. Is that it?</p><div class="yn"><button class="btn primary" data-yn="yes">Yes</button><button class="btn" data-yn="no">Not that</button></div>`;
+  else if (!st.gw) use = `<p class="micro">Without the model your words are kept as written, not read. Pick one if it fits:</p><div class="uses">${USES.map(u => `<button aria-pressed="${st.use === u}" data-use="${Q.esc(u)}">${Q.esc(u)}</button>`).join('')}</div>`;
+  else use = `<p class="b" style="color:var(--ink-muted)">Tell it what the answer is for, or skip: it will still ask about the loose words.</p>`;
+  return `<div class="bridge">${left}<svg viewBox="0 0 1000 180" preserveAspectRatio="none" aria-hidden="true"><path class="water" d="M0 176 L1000 176"/>${segs}</svg>${planks}<div class="bank r"><p class="eyebrow">What it’s for</p>${use}</div></div>`;
+}
+function curHtml() {
+  const w = st.cur; if (!w) return `<section class="cur"><p class="ask">Every plank is laid.</p><p class="why">Change any by clicking it on the bridge.</p></section>`;
+  const tie = st.reading === 'yes' && SAY.ties[w] ? `<p class="tie">${ic('link', 13)}${Q.esc(SAY.ties[w])}</p>` : '';
+  const opts = W[w].opts.filter(o => !(st.gw && o.far));
+  return `<section class="cur"><p class="micro">Plank ${PL.indexOf(w) + 1} of ${PL.length} · “${Q.esc(W[w].word)}”</p><p class="ask">${Q.esc(W[w].ask)}</p><p class="why">${Q.esc(W[w].why)}</p>${tie}
+    <div class="opts">${opts.map((o, k) => { const on = w === 'via' ? !!(st.c.via && st.c.via.has(o.id)) : st.c[w] === o.id;
+      return `<button class="opt" data-w="${w}" data-id="${o.id}" aria-pressed="${on}"><span class="k">${k + 1}</span><span class="l">${Q.esc(o.label)}${o.sub ? `<small>${Q.esc(o.sub)}</small>` : ''}</span><span class="c">${Q.countIf(st.c, w, o.id)} left</span></button>`; }).join('')}</div>
+    <p class="neutral">${ic('scale', 12)}What it’s for never ranks these. It only decides which plank to lay first.</p></section>`;
+}
+function render() {
+  const r = Q.run(st.c);
+  document.getElementById('main').innerHTML = `<div class="top"><div><p class="eyebrow">${Q.esc(DATA.floor.name)} · front page</p><h1>Ask</h1></div>${contentsHtml()}</div>
+    <div class="askline">${ic('search', 18)}<input aria-label="Ask in your own words" value="${Q.esc(DATA.question)}">${Shell.gatewayLine(st.gw)}</div>
+    ${bridgeHtml()}
+    <div class="lowerg">${curHtml()}
+      <aside class="out" aria-live="polite"><p class="eyebrow">Across the bridge</p><p class="s">${Q.sentenceHtml(st.c)}</p><p class="tk">${Q.esc(Q.tech(st.c))}</p>
+        <div class="n"><b>${r.quiet.length}</b><span>suppliers, counted ${Shell.via('record', 'from the record')}</span></div>
+        <ul>${r.never.length ? `<li>${Shell.never()}<span>${r.never.length} with no contact recorded at all. ${Q.esc(DATA.filler.who)} could check.</span></li>` : ''}
+          ${r.unseen ? `<li>${ic('lock', 13)}<span>Some not yours to see: ${Q.esc(r.unseenAsk)}.</span></li>` : ''}
+          <li>${Shell.brk()}<span>${Q.esc(DATA.notRecorded[0].what)} aren’t recorded, so a call doesn’t count.</span></li></ul>
+        <div class="acts"><button class="btn primary">${ic('arrow-right')}Show them</button><button class="btn">${ic('bookmark')}Save with what it’s for</button></div></aside></div>`;
+  document.body.classList.toggle('tech', !!st.tech);
+}
+const nextCur = () => { st.cur = (st.reading === 'yes' ? ['kind', 'since', 'via', 'who'] : PL).find(w => !settled(w)) || null; };
+function pick(w, id) { if (w === 'via') { const v = new Set(st.c.via || []); v.has(id) ? v.delete(id) : v.add(id); st.c.via = v; } else { st.c[w] = id; nextCur(); } render(); }
+function yn(v) { st.reading = v; nextCur(); render(); }
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; Demo.stop();
+  if (b.dataset.w) pick(b.dataset.w, b.dataset.id);
+  else if (b.dataset.yn) yn(b.dataset.yn);
+  else if (b.dataset.use) { st.use = b.dataset.use; render(); }
+  else if (b.dataset.cur) { st.cur = b.dataset.cur; delete st.c[st.cur]; st.kept.delete(st.cur); render(); }
+});
+document.addEventListener('input', e => { if (e.target.id === 'sit') st.sit = e.target.value; });
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') { if (e.target.id === 'sit' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); st.reading = st.gw ? 'asked' : null; render(); } return; }
+  const k = e.key.toLowerCase();
+  if (k === 'r') { replay(); return; }
+  Demo.stop();
+  if (k === 'g') { st.gw = !st.gw; render(); }
+  else if (k === 't') { st.tech = !st.tech; render(); }
+  else if (k === 'y') yn('yes'); else if (k === 'n') yn('no');
+  else if (k === 'k' && st.cur) { st.kept.add(st.cur); nextCur(); render(); }
+  else if (k === 'enter') { nextCur(); render(); }
+  else if (/^[1-6]$/.test(k) && st.cur) { const o = W[st.cur].opts.filter(x => !(st.gw && x.far))[+k - 1]; if (o) pick(st.cur, o.id); }
+});
+function replay() {
+  Object.assign(st, { c: {}, kept: new Set(), sit: '', reading: null, use: null, cur: 'since' }); render();
+  const beat = Tok.ms('--motion-base');
+  Demo.play([
+    [Tok.ms('--motion-run'), () => typeInto(document.getElementById('sit'), SAY.situation, Tok.ms('--motion-calm'), () => { st.sit = SAY.situation; })],
+    [Tok.ms('--motion-calm') + Tok.ms('--motion-instant'), () => { st.reading = st.gw ? 'asked' : null; render(); }],
+    [beat * 2, () => yn('yes')],
+    [beat, () => pick('kind', 'since')],
+    [beat, () => pick('since', W.since.opts[1].id)],
+    [beat, () => { pick('via', 'invoice'); pick('via', 'delivery'); pick('via', 'letter'); }]
+  ]);
+}
+replay();
+</script>
+</body>
+</html>

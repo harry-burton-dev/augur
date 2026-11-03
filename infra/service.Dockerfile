@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 # Builds any service by package name:
 #   NODE_AUTH_TOKEN=<read:packages token> docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry .
-# An app's service can carry its built frontend too, at /app/frontend, to give the registry
+# An app's service in apps/ can carry its built frontend too, at /app/frontend, to give the registry
 # when it starts (service kit's publishFrontend):
-#   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/folio --build-arg FRONTEND=@apps/folio-frontend .
+#   docker build -f infra/service.Dockerfile --build-arg PACKAGE=@apps/<id> --build-arg FRONTEND=@apps/<id>-frontend .
 #
 # The first five lines are the same in infra/web.Dockerfile, and come before any build argument, so
 # one builder installs the workspace once and every other image reuses that layer: a release builds a

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The ask · V3 · Situation, gap, use</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+/* ---- V3: Dervin's sense-making bridge. Ask what it's for first; the loose words are planks across the gap ---- */
+.askline{display:flex;align-items:center;gap:var(--space-3);border-bottom:1px solid var(--hairline-strong);padding:0 0 var(--space-2);margin-bottom:var(--space-4)}
+.askline input{flex:1;background:none;border:0;outline:0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light);min-width:0}
+.bridge{position:relative;height:calc(var(--space-8) + var(--space-7));margin-bottom:var(--space-4)}
+.bridge > svg{position:absolute;left:22%;right:22%;top:0;width:56%;height:100%;overflow:visible}
+.bridge .arch{fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
+.bridge .arch.loose{stroke:var(--x-proposed-loose);stroke-dasharray:4 5;opacity:.7}
+.bridge .arch.set{stroke:var(--x-proposed-here);filter:drop-shadow(0 0 var(--space-1) var(--x-proposed-here))}
+.bridge .arch.kept{stroke:var(--ink-muted);stroke-dasharray:1 4}
+.bridge .water{fill:none;stroke:var(--hairline);vector-effect:non-scaling-stroke}
+.bank{position:absolute;top:0;bottom:0;width:calc(22% - var(--space-3));padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);display:flex;flex-direction:column;gap:var(--space-1);overflow:hidden}
+.bank.l{left:0}.bank.r{right:0}
+.bank .b.you{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bank > *{flex:none}
+.bank .b{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.bank .b.you{color:var(--light)}
+.bank > textarea{flex:1 1 auto;min-height:var(--space-6);background:var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-key);resize:none;padding:var(--space-1) var(--space-2);font:300 var(--type-meta)/var(--leading-meta) var(--font-sans);color:var(--light);}
+.bank .guessbox{font-size:var(--type-small);line-height:var(--leading-small)}
+.bank .yn{display:flex;gap:var(--space-2);margin-top:var(--space-1)}
+.bank .yn .btn{height:calc(var(--target-sm) - var(--space-2));font-size:var(--type-small)}
+.uses{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.uses button{font-size:var(--type-small);padding:var(--space-1) var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);color:var(--ink)}
+.uses button[aria-pressed="true"]{border-color:var(--x-proposed-here);color:var(--light);background:var(--x-proposed-here-soft)}
+.plank{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;max-width:13%;text-align:center}
+.plank button{font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);background:var(--surface-bar);border:1px solid var(--hairline-strong);color:var(--x-proposed-loose)}
+.plank.set button{color:var(--light);border-color:var(--x-proposed-here)}
+.plank.kept button{color:var(--ink-muted);border-style:dotted}
+.plank.now button{box-shadow:0 0 var(--glow-blur) var(--x-proposed-here-soft);border-color:var(--light)}
+.plank small{font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);color:var(--ink-muted)}
+.lowerg{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,min(calc(var(--measure-glance) - var(--space-5)),40%));gap:var(--space-6)}
+.cur .ask{margin:0;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.cur .why{margin:var(--space-1) 0 var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cur .tie{display:flex;gap:var(--space-2);align-items:center;margin:0 0 var(--space-3);font-size:var(--type-small);color:var(--ink)}
+.cur .opts{display:grid;gap:2px;max-width:var(--measure-read)}
+.cur .neutral{margin-top:var(--space-2);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.out{display:flex;flex-direction:column;gap:var(--space-3);border-left:1px solid var(--hairline);padding-left:var(--space-5)}
+.out .s{margin:0;font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--ink-muted)}
+.out .n{display:flex;align-items:baseline;gap:var(--space-3)}
+.out .n b{font:200 var(--type-display)/1 var(--font-sans);color:var(--light)}
+.out .n span{font-size:var(--type-meta);color:var(--ink-muted)}
+.out ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.out li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2)}
+.out .acts{display:flex;gap:var(--space-2);margin-top:auto}
+@media (max-height:840px){.out .n b{font-size:var(--type-title)}.cur .opt small{display:none}.cur .why{margin-bottom:var(--space-2)}}
+</style>
+</head>
+<body>
+<div class="app"><div id="rail"></div><main class="main" id="main"></main></div>
+<div id="keys"></div>
+<div class="x-cap"><b>The ask · V3</b> situation, gap, use: what it is for, then loose words as planks · Dervin's sense-making bridge</div>
+<script>
+/*@DATA*/
+/*@ENGINE*/
+const W = Q.WORDS, ic = Shell.ic;
+/* sample words a person might write about their situation (data, so a deployment's own examples can replace it) */
+const SAY = { situation: 'Winter gritting and salt contracts come up for renewal in December. I want to chase anyone who has gone quiet.', reading: 'You want to chase them, before contracts renew in December.', ties: { kind: 'You mentioned renewals. This is the question renewals touch.', since: 'You didn’t say when quiet starts. Spring could start on different days.' } };
+const USES = ['Chase them', 'Check before a renewal', 'Report on them', 'Just looking'];
+const st = { c: {}, kept: new Set(), gw: DATA.gateway.on, sit: '', reading: null, use: null, cur: 'since' };
+const PL = ['since', 'via', 'kind', 'who'];
+document.getElementById('rail').outerHTML = Shell.rail();
+document.getElementById('keys').innerHTML = Shell.keys([['1–4', 'pick a choice'], ['Enter', 'next plank'], ['K', 'keep it loose'], ['Y / N', 'yes / not that'], ['G', 'model gateway on/off'], ['T', 'technical words'], ['R', 'replay']]);
+const settled = w => Q.isSet(st.c, w) || st.kept.has(w);
+/* points along the arch, in the svg's own box */
+const bz = t => { const p0 = [0, 150], p1 = [500, -40], p2 = [1000, 150]; const u = 1 - t; return [u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]]; };
+function bridgeHtml() {
+  const segs = PL.map((w, i) => { const pts = []; for (let k = 0; k <= 16; k++) pts.push(bz((i + k / 16) / 4 * .96 + .02).join(',')); return `<polyline class="arch ${Q.isSet(st.c, w) ? 'set' : st.kept.has(w) ? 'kept' : 'loose'}" points="${pts.join(' ')}"/>`; }).join('');
+  const planks = PL.map((w, i) => { const [x, y] = bz((i + .5) / 4); const set = Q.isSet(st.c, w);
+    return `<div class="plank ${set ? 'set' : st.kept.has(w) ? 'kept' : ''} ${st.cur === w && st.reading !== null ? 'now' : ''}" style="left:calc(22% + 56% * ${x / 1000});top:${y / 180 * 100}%"><button data-cur="${w}">${Q.esc(set ? Q.phrase(st.c, w) : W[w].word)}</button><small>${set ? 'you said' : st.kept.has(w) ? 'kept loose' : 'loose'}</small></div>`; }).join('');
+  const left = `<div class="bank l"><p class="eyebrow">Where you are</p><p class="b you">“${Q.esc(DATA.question)}”</p>
+    <p class="micro" style="margin-top:var(--space-2)">What’s going on that brought this up?</p>
+    <textarea id="sit" aria-label="What's going on that brought this up? (optional)" placeholder="Optional, in your own words">${Q.esc(st.sit)}</textarea></div>`;
+  let use;
+  if (st.gw && st.reading === 'no') use = `<p class="b you">“${Q.esc(st.sit)}”</p><p class="micro">Kept as you wrote it. The model’s reading was dropped.</p>`;
+  else if (st.gw && st.reading !== null) use = st.reading === 'yes'
+    ? `<p class="b you">${Q.esc(SAY.reading)}</p><p>${Shell.via('you', 'you said yes')}</p><p class="micro">read by ${Shell.via('model', 'model gateway')}, kept as your words</p>`
+    : `<div class="guessbox"><b>Guess</b>${Q.esc(SAY.reading)}</div><p class="micro">${Shell.via('model', 'model gateway')} read your words. Is that it?</p><div class="yn"><button class="btn primary" data-yn="yes">Yes</button><button class="btn" data-yn="no">Not that</button></div>`;
+  else if (!st.gw) use = `<p class="micro">Without the model your words are kept as written, not read. Pick one if it fits:</p><div class="uses">${USES.map(u => `<button aria-pressed="${st.use === u}" data-use="${Q.esc(u)}">${Q.esc(u)}</button>`).join('')}</div>`;
+  else use = `<p class="b" style="color:var(--ink-muted)">Tell it what the answer is for, or skip: it will still ask about the loose words.</p>`;
+  return `<div class="bridge">${left}<svg viewBox="0 0 1000 180" preserveAspectRatio="none" aria-hidden="true"><path class="water" d="M0 176 L1000 176"/>${segs}</svg>${planks}<div class="bank r"><p class="eyebrow">What it’s for</p>${use}</div></div>`;
+}
+function curHtml() {
+  const w = st.cur; if (!w) return `<section class="cur"><p class="ask">Every plank is laid.</p><p class="why">Change any by clicking it on the bridge.</p></section>`;
+  const tie = st.reading === 'yes' && SAY.ties[w] ? `<p class="tie">${ic('link', 13)}${Q.esc(SAY.ties[w])}</p>` : '';
+  const opts = W[w].opts.filter(o => !(st.gw && o.far));
+  return `<section class="cur"><p class="micro">Plank ${PL.indexOf(w) + 1} of ${PL.length} · “${Q.esc(W[w].word)}”</p><p class="ask">${Q.esc(W[w].ask)}</p><p class="why">${Q.esc(W[w].why)}</p>${tie}
+    <div class="opts">${opts.map((o, k) => { const on = w === 'via' ? !!(st.c.via && st.c.via.has(o.id)) : st.c[w] === o.id;
+      return `<button class="opt" data-w="${w}" data-id="${o.id}" aria-pressed="${on}"><span class="k">${k + 1}</span><span class="l">${Q.esc(o.label)}${o.sub ? `<small>${Q.esc(o.sub)}</small>` : ''}</span><span class="c">${Q.countIf(st.c, w, o.id)} left</span></button>`; }).join('')}</div>
+    <p class="neutral">${ic('scale', 12)}What it’s for never ranks these. It only decides which plank to lay first.</p></section>`;
+}
+function render() {
+  const r = Q.run(st.c);
+  document.getElementById('main').innerHTML = `<div class="top"><div><p class="eyebrow">${Q.esc(DATA.floor.name)} · front page</p><h1>Ask</h1></div>${contentsHtml()}</div>
+    <div class="askline">${ic('search', 18)}<input aria-label="Ask in your own words" value="${Q.esc(DATA.question)}">${Shell.gatewayLine(st.gw)}</div>
+    ${bridgeHtml()}
+    <div class="lowerg">${curHtml()}
+      <aside class="out" aria-live="polite"><p class="eyebrow">Across the bridge</p><p class="s">${Q.sentenceHtml(st.c)}</p><p class="tk">${Q.esc(Q.tech(st.c))}</p>
+        <div class="n"><b>${r.quiet.length}</b><span>suppliers, counted ${Shell.via('record', 'from the record')}</span></div>
+        <ul>${r.never.length ? `<li>${Shell.never()}<span>${r.never.length} with no contact recorded at all. ${Q.esc(DATA.filler.who)} could check.</span></li>` : ''}
+          ${r.unseen ? `<li>${ic('lock', 13)}<span>Some not yours to see: ${Q.esc(r.unseenAsk)}.</span></li>` : ''}
+          <li>${Shell.brk()}<span>${Q.esc(DATA.notRecorded[0].what)} aren’t recorded, so a call doesn’t count.</span></li></ul>
+        <div class="acts"><button class="btn primary">${ic('arrow-right')}Show them</button><button class="btn">${ic('bookmark')}Save with what it’s for</button></div></aside></div>`;
+  document.body.classList.toggle('tech', !!st.tech);
+}
+const nextCur = () => { st.cur = (st.reading === 'yes' ? ['kind', 'since', 'via', 'who'] : PL).find(w => !settled(w)) || null; };
+function pick(w, id) { if (w === 'via') { const v = new Set(st.c.via || []); v.has(id) ? v.delete(id) : v.add(id); st.c.via = v; } else { st.c[w] = id; nextCur(); } render(); }
+function yn(v) { st.reading = v; nextCur(); render(); }
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; Demo.stop();
+  if (b.dataset.w) pick(b.dataset.w, b.dataset.id);
+  else if (b.dataset.yn) yn(b.dataset.yn);
+  else if (b.dataset.use) { st.use = b.dataset.use; render(); }
+  else if (b.dataset.cur) { st.cur = b.dataset.cur; delete st.c[st.cur]; st.kept.delete(st.cur); render(); }
+});
+document.addEventListener('input', e => { if (e.target.id === 'sit') st.sit = e.target.value; });
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') { if (e.target.id === 'sit' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); st.reading = st.gw ? 'asked' : null; render(); } return; }
+  const k = e.key.toLowerCase();
+  if (k === 'r') { replay(); return; }
+  Demo.stop();
+  if (k === 'g') { st.gw = !st.gw; render(); }
+  else if (k === 't') { st.tech = !st.tech; render(); }
+  else if (k === 'y') yn('yes'); else if (k === 'n') yn('no');
+  else if (k === 'k' && st.cur) { st.kept.add(st.cur); nextCur(); render(); }
+  else if (k === 'enter') { nextCur(); render(); }
+  else if (/^[1-6]$/.test(k) && st.cur) { const o = W[st.cur].opts.filter(x => !(st.gw && x.far))[+k - 1]; if (o) pick(st.cur, o.id); }
+});
+function replay() {
+  Object.assign(st, { c: {}, kept: new Set(), sit: '', reading: null, use: null, cur: 'since' }); render();
+  const beat = Tok.ms('--motion-base');
+  Demo.play([
+    [Tok.ms('--motion-run'), () => typeInto(document.getElementById('sit'), SAY.situation, Tok.ms('--motion-calm'), () => { st.sit = SAY.situation; })],
+    [Tok.ms('--motion-calm') + Tok.ms('--motion-instant'), () => { st.reading = st.gw ? 'asked' : null; render(); }],
+    [beat * 2, () => yn('yes')],
+    [beat, () => pick('kind', 'since')],
+    [beat, () => pick('since', W.since.opts[1].id)],
+    [beat, () => { pick('via', 'invoice'); pick('via', 'delivery'); pick('via', 'letter'); }]
+  ]);
+}
+replay();
+</script>
+</body>
+</html>

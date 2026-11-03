@@ -1,0 +1,155 @@
+@@title
+Picture · V6 · In the sentence
+@@css
+.app{height:100vh;display:grid;grid-template-columns:minmax(0,46rem) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-6);padding:var(--space-5) var(--edge) calc(var(--space-6) + var(--space-2))}
+.top{grid-column:1/-1}
+.doc{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.doc .dh{display:flex;align-items:center;gap:var(--space-2);border-bottom:1px solid var(--hairline);padding-bottom:var(--space-2)}
+.doc .dh h2{margin:0;font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);flex:1}
+.doc .dm{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sents{list-style:none;margin:0;padding:0 var(--space-1) 0 0;display:flex;flex-direction:column;gap:var(--space-2);min-height:0;flex:1;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.sn{position:relative;display:block;width:100%;padding:var(--space-1) var(--space-2) var(--space-1) var(--space-4);border-radius:var(--radius-key);font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink);font-weight:300;transition:background var(--motion-base),color var(--motion-base)}
+.sn::before{content:"";position:absolute;left:var(--space-1);top:var(--space-2);bottom:var(--space-2);border-left:2px solid var(--ink-muted)}
+.sn.pen::before{border-left:2px dashed var(--x-proposed-pencil)}
+.sn.pen .tx{font-style:italic}
+.snb{display:block;width:100%;text-align:left;border-radius:var(--radius-key)}
+.sn:hover{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.sn.cur{background:var(--surface-raised);color:var(--light)}
+.sn .tx b{font-weight:400;font-family:var(--font-mono);font-size:.92em}
+.sn u{text-decoration:none;border-bottom:1px solid transparent;transition:border-color var(--motion-base)}
+.sn.cur u{border-bottom-color:var(--x-proposed-lit)}
+.ws{display:inline-flex;align-items:center;vertical-align:-2px;margin-left:var(--space-1);gap:1px;color:var(--ink)}
+.ws svg.ch.bare{width:calc(var(--space-7) + var(--space-5));height:var(--space-5)}
+.ws .ch .ln,.ws .ch .brk{vector-effect:non-scaling-stroke}
+.ws .ch .ln.emph{stroke-width:1.5}
+.ws .sym{color:var(--x-proposed-data-ctx)}
+.ws .sym.hot{color:var(--x-proposed-data)}
+.ws.tiles5{display:inline-grid;align-items:stretch;grid-template-columns:repeat(5,var(--space-2));grid-auto-rows:var(--space-2);gap:1px;vertical-align:-3px}
+.ws.tiles5 i{display:block;background:color-mix(in srgb,var(--light) calc(var(--v) * 80%),var(--surface-inset));border-radius:1px}
+.ws.tiles5 i.u{background:var(--x-proposed-unseen)}
+.ws.bars9{display:inline-grid;grid-auto-rows:2px;gap:1px;width:calc(var(--space-6) + var(--space-2));vertical-align:-1px}
+.ws.bars9 i{display:block;height:2px;background:var(--x-proposed-data-ctx);width:var(--w)}
+.ws.bars9 i.e{background:var(--x-proposed-data)}
+.h1off .ws{display:none}
+.recs{display:none;margin:var(--space-2) 0 var(--space-1);font-weight:400}
+.h3 .sn.cur .recs{display:block}
+.recs .more{font-size:var(--type-small);color:var(--ink-muted);margin:var(--space-1) 0 0}
+.gwgap{display:none}
+.gw-off .sn.pen{display:none}
+.gw-off .gwgap{display:flex}
+.acts{display:flex;flex-wrap:wrap;gap:var(--space-2);border-top:1px solid var(--hairline);padding-top:var(--space-3);margin-top:auto}
+.margin{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);transition:opacity var(--motion-base) var(--ease-out)}
+.margin.swap{opacity:0}
+.heights{display:flex;gap:var(--space-1)}
+.heights button{display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink-muted)}
+.heights button[aria-pressed="true"]{color:var(--light);border-color:var(--ink-muted);background:var(--surface-raised)}
+.fig{flex:1;min-height:0;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-4);border-top:1px solid var(--hairline-strong)}
+.fig .pic{flex:1;min-height:0;overflow:hidden}
+.fig .pic svg.ch{width:100%;height:100%;max-height:100%}
+.fig .finding{font-size:var(--type-lead);line-height:var(--leading-lead)}
+.read{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);align-items:center;margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.read q{color:var(--light);border-bottom:1px solid var(--x-proposed-lit)}
+.read q::before,.read q::after{content:""}
+.read svg{color:var(--ink-muted)}
+.notoff{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.notoff b{font-weight:400;color:var(--ink);text-decoration:line-through;text-decoration-color:var(--ink-muted)}
+.h2off .fig .pic{display:none}
+@media (max-height:820px){.app{padding-top:var(--space-4);gap:var(--space-3) var(--space-5);grid-template-columns:minmax(0,38rem) minmax(0,1fr)}.lede{display:none}.sn{font-size:var(--type-body);line-height:var(--leading-body)}.doc{padding:var(--space-3) var(--space-4)}}
+@@body
+<div class="app" id="app">
+  <header class="top">
+    <p class="eyebrow" id="eb"></p>
+    <h1>The picture is in the sentence</h1>
+    <p class="lede">You never choose a chart. Each sentence of a briefing gets the picture its own words ask for: word-sized beside its number, full size in the margin, and the records under it. Underlined words are what chose the picture.</p>
+  </header>
+  <article class="doc pane" id="doc">
+    <div class="dh"><i data-lucide="file-text" data-size="18"></i><h2 id="dt"></h2><span class="chip">Draft</span></div>
+    <p class="dm" id="dm"></p>
+    <ol class="sents" id="sents"></ol>
+    <p class="gw-note gwgap" style="margin:0"></p>
+    <div class="acts"><button class="btn" type="button"><i data-lucide="send" data-size="16"></i> Share with the reader</button><button class="btn" type="button"><i data-lucide="target" data-size="16"></i> Feed an intent</button><button class="btn" type="button"><i data-lucide="eye" data-size="16"></i> Watch these numbers</button></div>
+  </article>
+  <aside class="margin" id="margin">
+    <div class="heights" id="heights"></div>
+    <section class="fig" id="fig"></section>
+  </aside>
+</div>
+<div class="x-cap"><b>Picture · V6</b> in the sentence: word-size, margin, records · Tufte sparklines, sidenotes</div>
+@@js
+const RS = DATA.recordSet, REC = U.records();
+U.$('#eb').innerHTML = U.floorLine() + '<span>· Artifacts · briefing</span>';
+const doc = DATA.documents.find(d => d.id === 'd2');
+U.$('#dt').textContent = doc.title;
+U.$('#dm').textContent = 'For ' + DATA.reader.name + ', ' + DATA.reader.role + ' · ' + DATA.reader.when + ' · written by ' + DATA.viewer.name + ' with the model’s help';
+U.$('.gwgap').innerHTML = Icons.svg('power-off', { size: 12 }) + ' Model gateway is off: the draft’s linking sentence isn’t written. Every number and picture above is unchanged.';
+/* word-size pictures */
+const tot = U.totals(U.seen());
+const spark = v => '<span class="ws" aria-hidden="true">' + U.line({ series: [{ values: v, emph: true }], w: 120, h: 24, bare: true, pad: { l: 1, r: 4, t: 3, b: 3 } }) + '</span>';
+const miniTiles = () => { const mx = Math.max(...U.seen().map(s => U.lastK(s, 3))); const cells = []; for (let y = 1; y <= 5; y++) for (let x = 1; x <= 5; x++) { const s = DATA.sites.find(q => q.gx === x && q.gy === y); cells.push(s ? (s.unseen ? '<i class="u"></i>' : `<i style="--v:${(U.lastK(s, 3) / mx).toFixed(2)}"></i>`) : '<i style="--v:0;opacity:0"></i>'); } return `<span class="ws tiles5" aria-hidden="true">${cells.join('')}</span>`; };
+const miniBars = () => { const r = U.seen().map(s => U.lastK(s, 3)).sort((a, b) => b - a); return `<span class="ws bars9" aria-hidden="true">${r.map((v, i) => `<i class="${i ? '' : 'e'}" style="--w:${(100 * v / r[0]).toFixed(0)}%"></i>`).join('')}</span>`; };
+const miniCount = (n, hot, icon) => `<span class="ws" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<span class="sym${i < hot ? ' hot' : ''}">${Icons.svg(icon, { size: 11, stroke: 2 })}</span>`).join('')}</span>`;
+const mSlope = () => { const r = U.riseBy(U.mi(DATA.event.month)); return `<span class="ws" aria-hidden="true">${U.slope(r.map(x => ({ label: '', a: x.a, b: x.b, emph: x.d >= 1 })), { w: 760, h: 300 }).replace('width="100%"', 'width="44" height="18"').replace(/<text[^>]*>.*?<\/text>/g, '')}</span>`; };
+/* vehicles count, for sentence 5 */
+const vout = DATA.vehicles.map(v => ({ s: U.site(v.site), out: v.status.filter(x => x !== 'in').length, n: v.status.length, st: v.status })).sort((a, b) => b.out - a.out);
+const vN = U.sum(vout.map(v => v.n)), vO = U.sum(vout.map(v => v.out));
+const a = { worse: A.get('worse'), where: A.get('where'), big: A.get('big'), many: A.get('many'), after: A.get('after') };
+const trig = (t, words) => words.reduce((s, w) => s.replace(w, '<u>' + w + '</u>'), U.esc(t)).replace(/(?<![\w])(\d{1,3}(?:\.\d+)?%?)(?!\d)/g, '<b>$1</b>');
+const S = [
+  { q: 'worse', ink: true, text: a.worse.title, words: ['doubled', 'since March 2026'], ws: () => spark(tot), read: ['doubled', 'since March 2026'], form: 'a change over time', never: DATA.never.find(n => n.icon === 'chart-no-axes-column') },
+  { q: 'where', ink: true, text: a.where.title, words: ['at the North depots'], ws: miniTiles, read: ['at the North depots'], form: 'a place', never: DATA.never.find(n => n.icon === 'map') },
+  { q: 'big', ink: true, text: a.big.title, words: ['had the most'], ws: miniBars, read: ['had the most'], form: 'which is biggest', never: DATA.never.find(n => n.icon === 'box') },
+  { q: 'many', ink: true, text: a.many.title, words: ['14 of them'], ws: () => miniCount(REC.filter(r => r.month === U.M[U.N - 1]).length, 14, 'circle'), read: ['14 of them'], form: 'a count, small enough to show one by one', never: DATA.never.find(n => n.icon === 'chart-pie') },
+  { q: 'veh', ink: true, text: U.fill(DATA.templates.many, { n: vO, N: vN, k: vout[0].out, site: vout[0].s.short }) + '.', words: ["can't go out"], ws: () => miniCount(vN, vO, 'truck'), read: [vO + ' of ' + vN], form: 'a part of a whole, small enough to count', never: DATA.never.find(n => n.icon === 'circle') },
+  { q: 'after', ink: false, text: 'This may be linked to the new night rounds: the rise starts the month they began, though Ashby Cross ran them too and did not rise.', words: ['the month they began'], ws: mSlope, read: ['the month they began'], form: 'a before and after', never: DATA.never.find(n => n.icon === 'chart-spline') }
+];
+function vehPic() {
+  return U.count(vout.map(v => ({ label: v.s.short, items: [...v.st].sort((x, y) => (x === 'in') - (y === 'in')).map(x => ({ cls: x === 'off' ? 'hot' : x === 'shop' ? 'mid' : '', title: DATA.vehicleStatus[x] })), note: v.out + ' of ' + v.n })), 'truck', { size: 18 });
+}
+let cur = 0, height = 2;
+function list() {
+  U.$('#sents').innerHTML = S.map((s, i) => `<li class="sn${s.ink ? '' : ' pen'}${i === cur ? ' cur' : ''}"><button class="snb" type="button" data-i="${i}"><span class="tx">${trig(s.text, s.words)}</span>${s.ws()}<span class="tk">${s.ink ? 'ink · template ' + s.q : 'pencil · model · not yet accepted'}</span></button>${i === cur ? recs(s) : ''}</li>`).join('');
+}
+function recs(s) {
+  if (s.q === 'veh') return `<div class="recs">${U.table(vout.flatMap(v => v.st.map((x, j) => ({ v, x, j }))).filter(r => r.x !== 'in'), [{ h: 'Vehicle', f: r => `<span class="mono">${r.v.s.id.toUpperCase()}-${r.j + 1}</span>` }, { h: 'Depot', f: r => U.esc(r.v.s.short) }, { h: 'Status', f: r => U.esc(DATA.vehicleStatus[r.x]) }])}</div>`;
+  const rows = s.q === 'many' ? REC.filter(r => r.month === U.M[U.N - 1]) : s.q === 'where' || s.q === 'big' ? REC.filter(r => U.M.indexOf(r.month) >= U.N - 3) : REC;
+  return `<div class="recs">${U.table(rows, [{ h: 'Record', f: r => `<span class="mono">${r.id}</span>` }, { h: 'Date', f: r => `<span class="mono">${r.date}</span>` }, { h: 'Site', f: r => U.esc(r.site.short) }, { h: 'What', f: r => U.esc(U.kindWord(r.kind)) }], { limit: 5 })}<p class="more">and ${rows.length - 5} more · all ${rows.length} open in Data Atlas</p></div>`;
+}
+function fig() {
+  const s = S[cur], F = U.$('#fig'), M = U.$('#margin');
+  const an = s.q === 'veh' ? { title: s.text, conf: DATA.templates.countConf + '.', confWord: '', n: vN, pic: vehPic, notes: [] } : a[s.q];
+  M.classList.add('swap');
+  U.later(U.ms('--motion-quick'), () => {
+    F.classList.add('pre');
+    F.innerHTML = `<p class="read">${Icons.svg('text-search', { size: 14 })} ${s.read.map(w => `<q>${U.esc(w)}</q>`).join(' ')} ${Icons.svg('arrow-right', { size: 12 })} ${U.esc(s.form)} ${Icons.svg('arrow-right', { size: 12 })} <span style="color:var(--ink)">${U.esc(s.q === 'veh' ? 'Count with symbols' : DATA.questions.find(q => q.id === s.q).formWord)}</span><span class="tk">&nbsp;rule match, no model</span></p>
+      <p class="inkmark">${Icons.svg('pen-tool', { size: 12 })} ${s.ink ? 'Sentence is ink: filled from a fixed sentence, from ' + an.n + ' records' : 'Sentence is pencil (the model wrote it); the picture under it is ink'}</p>
+      <h2 class="finding">${U.esc(s.ink ? an.title : a.after.title)}</h2>
+      <p class="conf">${A.confHTML(s.ink ? an : a.after)}</p>
+      <div class="pic">${(s.ink ? an : a.after).pic()}</div>
+      ${s.ink ? '' : U.pencil({ body: U.esc(s.text), links: '<a href="#">from 41 records</a> · <a href="#">1 document</a>' })}
+      <p class="notoff">Not offered for this sentence: <b>${U.esc(s.never.word)}</b> ${U.esc(s.never.why)}</p>`;
+    U.wirePencils(F);
+    M.classList.remove('swap');
+    requestAnimationFrame(() => requestAnimationFrame(() => F.classList.remove('pre')));
+  });
+}
+function setHeight(h) {
+  height = h;
+  U.$('#app').classList.toggle('h3', h === 3);
+  U.$('#app').classList.toggle('h2off', h === 1);
+  U.$$('#heights button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.h === h ? 'true' : 'false'));
+}
+U.$('#heights').innerHTML = [[1, 'Word size', 'type'], [2, 'In the margin', 'panel-right'], [3, 'The records', 'table-2']].map(([h, w, ic]) => `<button type="button" data-h="${h}" aria-pressed="false">${Icons.svg(ic, { size: 14 })} ${w} <span class="kbd">${h}</span></button>`).join('');
+U.$('#heights').onclick = e => { const b = e.target.closest('button'); if (b) setHeight(+b.dataset.h); };
+U.$('#sents').addEventListener('click', e => { const b = e.target.closest('.snb'); if (b && +b.dataset.i !== cur) { cur = +b.dataset.i; list(); fig(); } });
+U.keys((k, e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const vis = S.map((s, i) => i).filter(i => S[i].ink || !document.body.classList.contains('gw-off')); const p = vis.indexOf(cur); cur = vis[(p + (e.key === 'ArrowDown' ? 1 : vis.length - 1)) % vis.length]; list(); fig(); }
+  if (k === '1' || k === '2' || k === '3') setHeight(+k);
+});
+document.body.insertAdjacentHTML('beforeend', U.hints([['↑↓', 'sentence'], ['1 2 3', 'height']]));
+window.replay = () => {
+  document.body.classList.remove('pre');
+  cur = -1; setHeight(1); list(); U.$('#fig').innerHTML = '<p class="muted">Pick a sentence to see its picture in full.</p>';
+  U.later(U.ms('--motion-run'), () => { cur = 0; setHeight(2); list(); fig(); });
+};
+Icons.hydrate();
+window.replay();

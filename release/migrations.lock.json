@@ -35,31 +35,5 @@
     "017_deployment_key": "e6e0addb0f5d02e1",
     "018_after_watch": "a3ded298146207db",
     "019_frontend_folders": "ea9a435440fa75fd"
-  },
-  "@apps/atlas": {
-    "001_entities": "7e8edd330db1dea4",
-    "002_starter_ontology": "a562eb8fe4212128",
-    "003_outbox": "e9521d907cd6fff0",
-    "004_knowledge": "1f93bdad07a47ed1",
-    "005_proposals": "7c617105ab65c3a8",
-    "006_resolve": "230c9309519f62c3",
-    "007_studio": "5c3fe4189caaf79a",
-    "008_used_by": "8c76cdf73dbc62db"
-  },
-  "@apps/folio": {
-    "001_libraries": "1c5f1dfed17e6277",
-    "002_documents": "13680e35861e3f21",
-    "003_tags_views": "671dbdecf0e69ff8",
-    "004_renditions": "3cda292842cefca3",
-    "005_access": "156a05ed4b162a26",
-    "006_publishing": "8a1e49946ed7770f",
-    "007_series": "822d9ba4316fc085",
-    "008_search": "47e34b347322f312",
-    "009_retention": "5b257ca4f3886214",
-    "010_units": "88f449c16c837350",
-    "011_placements": "56d877e6bfbbdf78",
-    "012_links": "cfe9fb4fc42f0c34",
-    "013_folder_tags": "267763cd6c2af04f",
-    "014_folder_grants": "d19d9f44ac794c69"
   }
 }

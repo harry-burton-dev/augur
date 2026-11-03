@@ -9,4 +9,6 @@ Before you publish or share, you sense how far it goes: the target floor as pitc
 
 First found in: [`2026-11-03-room-tone`](../runs/2026-11-03-room-tone/) (pointer V4 and V5, floors V3, combined V3).
 
+Seen as a picture in [reach before act](reach-before-act.md).
+
 Could steer: Approvals, Artifacts publish, privacy.

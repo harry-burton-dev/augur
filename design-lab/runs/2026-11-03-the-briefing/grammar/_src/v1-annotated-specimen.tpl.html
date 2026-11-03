@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Briefing · Grammar V1 · Annotated specimen</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@COMMON_CSS*/
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));gap:var(--space-3)}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5)}
+.top .lede{max-width:80ch}
+.stage{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,calc(var(--measure-read) - var(--space-4))) minmax(0,1fr);gap:var(--space-6);min-height:0}
+.col{display:flex;flex-direction:column;justify-content:space-around;gap:var(--space-3);min-height:0;position:relative;z-index:2}
+.co{position:relative;display:block;width:100%;padding:var(--space-2) var(--space-3);border-radius:var(--radius-inset);border:1px solid transparent;transition:background var(--motion-base) var(--ease-out),border-color var(--motion-base) var(--ease-out),opacity var(--motion-base)}
+.co:hover{background:color-mix(in srgb,var(--ink) 3%,transparent)}
+.co.sel{background:var(--surface-raised);border-color:var(--hairline-strong)}
+.co .hd{display:flex;align-items:center;gap:var(--space-2);margin:0 0 var(--space-1)}
+.co .num{display:inline-flex;align-items:center;justify-content:center;width:calc(var(--space-4) + var(--space-1));height:calc(var(--space-4) + var(--space-1));border:1px solid var(--ink-muted);border-radius:var(--radius-pill);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--light);flex:none}
+.co h2{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.co .dr{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.co .rc{margin:var(--space-1) 0 0;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted)}
+.co .nv{margin:var(--space-1) 0 0;display:flex;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.co .nv svg{flex:none;margin-top:2px;color:var(--x-proposed-disagree)}
+.co .nv b{font-weight:400;color:var(--ink)}
+.co.pen h2{color:var(--x-proposed-pencil-ink)}
+.co.pen .num{border-style:dotted;border-color:var(--x-proposed-pencil-ink);color:var(--x-proposed-pencil-ink)}
+.left .co{text-align:right}
+.left .co .hd{justify-content:flex-end}
+.left .co .nv{justify-content:flex-end}
+.left .co .nv svg{order:2}
+.collapsed .co .rc,.collapsed .co .nv{display:none}
+/* the specimen */
+.spec{position:relative;z-index:2;align-self:center;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4) var(--space-5);background:var(--surface-pane);border:1px solid var(--hairline-strong);border-radius:var(--radius-card);box-shadow:var(--shadow-raised);max-height:100%;overflow:hidden}
+.spec .meta{display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.spec .meta b{font-weight:400;color:var(--ink)}
+.floorchip{display:inline-flex;align-items:center;gap:var(--space-1);white-space:nowrap}
+.floorchip::before{content:"";width:var(--space-3);height:2px;background:var(--fc)}
+.rungs{flex:none;display:inline-flex;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);overflow:hidden}
+.rungs button{padding:var(--space-1) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-right:1px solid var(--hairline)}
+.rungs button:last-child{border-right:0}
+.rungs button[aria-pressed=true]{color:var(--light);background:var(--surface-raised);box-shadow:inset 0 calc(var(--focus-ring) * -1) 0 var(--light)}
+.part{transition:filter var(--motion-slow) var(--ease-out),opacity var(--motion-slow) var(--ease-out)}
+.spec .bl{font-size:var(--type-lead);line-height:var(--leading-lead)}
+.pen-note{display:flex;flex-direction:column;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.pen-note .pencil{margin:0}
+.pen-note .acc{font-style:normal;color:var(--ink-muted);font-size:var(--type-small)}
+.pic .legend{display:flex;gap:var(--space-3);flex-wrap:wrap;margin-top:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.pic .legend span{display:inline-flex;align-items:center;gap:var(--space-1)}
+.sw{display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:1px}
+.sw.b0{background:var(--x-proposed-data-ink)}.sw.b1{background:var(--x-proposed-data-finding)}
+.recs{width:100%;border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small)}
+.recs th{text-align:left;font-weight:400;color:var(--ink-muted);border-bottom:1px solid var(--hairline-strong);padding:2px var(--space-2) 2px 0}
+.recs td{border-bottom:1px solid var(--hairline);padding:2px var(--space-2) 2px 0;color:var(--ink);white-space:nowrap}
+.recs td.m{font-family:var(--font-mono);color:var(--ink-muted)}
+.recs .more td{color:var(--ink-muted);border-bottom:0}
+.notes{display:grid;gap:2px}
+.leaders{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:visible}
+.leaders path{fill:none;stroke:var(--hairline-strong);stroke-width:1;transition:stroke var(--motion-base)}
+.leaders circle{fill:var(--ink-muted)}
+.leaders .sel path{stroke:var(--light)}
+.leaders .sel circle{fill:var(--light)}
+.leaders .pen path{stroke-dasharray:1 3}
+.draw path{stroke-dasharray:var(--len);stroke-dashoffset:var(--len)}
+.drawn path{transition:stroke-dashoffset var(--motion-calm) var(--ease-out);stroke-dashoffset:0}
+.drawn .pen path{stroke-dasharray:1 3}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:var(--space-4)}
+@media (max-height: 820px){ .co .rc{display:none} .spec{gap:var(--space-2);padding:var(--space-3) var(--space-4)} }
+</style>
+</head>
+<body>
+<div class="app pre" id="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow" id="eb"></p>
+      <h1>The parts of a briefing</h1>
+      <p class="lede" id="lede"></p>
+    </div>
+  </header>
+  <div class="stage" id="stage">
+    <div class="col left" id="colL"></div>
+    <article class="spec dep" id="spec" style="--i:0"></article>
+    <div class="col right" id="colR"></div>
+    <svg class="leaders draw" id="lead"></svg>
+  </div>
+  <div class="foot">
+    <span></span>
+    <div class="hints">
+      <span><span class="kbd">1</span>&ndash;<span class="kbd">6</span> one part, the rest racked back</span>
+      <span><span class="kbd">0</span> all parts</span>
+      <span><span class="kbd">H</span> height</span>
+      <span data-key="g"><span class="kbd">G</span> assistant off</span>
+      <span data-key="t"><span class="kbd">T</span> technical words</span>
+      <span><span class="kbd">R</span> replay</span>
+    </div>
+  </div>
+</div>
+<div class="x-cap"><b>Briefing grammar · V1</b> annotated specimen: a real briefing with its parts called out · type specimens, OWID chart anatomy, BLUF</div>
+<script>
+/*@DATA*/
+const HEIGHTS = ['Headline', 'Picture', 'Records'];
+const ST = { sel: null, h: 1 };
+const PEN = { id: 'pencil', name: 'What a model may write', icon: 'pencil-line',
+  drawn: 'A suggested wording for the reader, in pencil beside the template sentence. It links to the same claims and adds none.',
+  recipe: 'italic, --x-proposed-pencil-ink, --x-proposed-pencil-edge (1px dotted), its own lane; “accepted by” line once a person takes it',
+  never: 'A number, a confidence word, or a claim that is not already in ink above it. G removes it and nothing else changes.' };
+const ORDER = [['bottom', 'L'], ['confidence', 'L'], ['pencil', 'L'], ['height', 'R'], ['picture', 'R'], ['workings', 'R']];
+const partOf = id => id === 'pencil' ? PEN : DATA.parts.find(p => p.id === id);
+
+function callout(id, i) {
+  const p = partOf(id);
+  return `<button class="co dep ${id === 'pencil' ? 'pen' : ''}" data-part="${id}" style="--i:${i + 3}" aria-pressed="false">
+    <div class="hd"><span class="num">${i + 1}</span><h2>${esc(p.name)}</h2></div>
+    <p class="dr">${esc(p.drawn)}</p>
+    <p class="rc">${esc(p.recipe)}</p>
+    <p class="nv">${ic('ban', 12)}<span><b>Never claims:</b> ${esc(p.never)}</span></p>
+  </button>`;
+}
+function spec() {
+  const b = bottomLine(), f = DATA.floors[DATA.viewer.floor];
+  const recs = DATA.records.filter(r => r[2] >= DATA.event.week).slice(-5).reverse();
+  return `
+  <div class="meta part" data-p="height">
+    <span>Briefing for <b>${esc(DATA.reader)}</b> · ${esc(DATA.today)} · <span class="floorchip" data-tier="${f.tier}">kept on ${esc(f.name)}</span></span>
+    <span class="rungs" role="group" aria-label="Height">${HEIGHTS.map((h, i) => `<button data-h="${i}" aria-pressed="${i === ST.h}">${h}</button>`).join('')}</span>
+  </div>
+  <p class="bl part" data-p="bottom">${b.s1.replace(`>${S0.after}</span>`, `>${S0.after}</span>${tally(S0.recLast4)}`)} <span class="so">${b.s2.replace('</span></span>', '</span></span>')}</span></p>
+  <div class="pen-note part pencil-only" data-p="pencil">
+    <p class="pencil"><span class="pencil-lab">${ic('pencil-line', 11)}suggested wording · assistant</span><br>Marta, since Greenway started we are missing far more bins than before, and most of them on the narrow streets.</p>
+  </div>
+  ${ST.h >= 1 ? `<div class="pic part" data-p="picture">
+    <p class="ptitle">${pictureTitle()}</p>
+    <div id="chartBox"></div>
+    <div class="legend"><span><i class="sw b0"></i>before</span><span><i class="sw b1"></i>since ${esc(DATA.event.date)}</span><span>${MK.norecord} no record, ${esc(DATA.gapDates)}</span><span class="part" data-p="confidence">cause: ${cw(wordFor(DATA.claims[1].evidence, DATA.claims[1].agreement))} · 2 sources agree, 1 disagrees</span></div>
+  </div>
+  <div class="part" data-p="workings"><p class="fh">How we know</p>${stepsHTML()}</div>` : ''}
+  ${ST.h >= 2 ? `<div class="part" data-p="height"><p class="fh">The records · ${S0.recLast4} in the last ${S0.afterN} weeks, newest first</p>
+    <table class="recs"><tr>${[0, 1, 3, 5, 7].map(i => `<th>${DATA.recordFields[i]}</th>`).join('')}</tr>
+    ${recs.map(r => `<tr><td class="m">${r[0]}</td><td>${r[1].slice(5)}</td><td>${esc(r[3])}</td><td>${r[5]}</td><td>${r[7]}</td></tr>`).join('')}
+    <tr class="more"><td colspan="5">and ${S0.recLast4 - recs.length} more · open all in ${esc(DATA.app.atlas)}</td></tr></table></div>` : ''}
+  <div class="notes part" data-p="workings">${emp('stale')}${emp('hidden')}</div>`;
+}
+function chartSize() {
+  const box = $('#chartBox'); if (!box) return;
+  const w = Math.max(240, $('#spec').clientWidth - tok('--space-5') * 2 - tok('--space-5'));
+  const h = innerHeight < 820 ? 84 : 118;
+  box.innerHTML = weekChart({ w, h, title: 'Weekly ' + DATA.kind.many });
+}
+function render() {
+  $('#eb').textContent = `Briefing sheet · grammar · ${DATA.org}`;
+  $('#lede').innerHTML = `One briefing, called out part by part: how each is drawn, its recipe from the kit tokens, and what it must never claim. Every number below comes from ${S0.total} records; the sentences are templates.`;
+  $('#colL').innerHTML = ORDER.filter(o => o[1] === 'L').map(o => callout(o[0], ORDER.indexOf(o))).join('');
+  $('#colR').innerHTML = ORDER.filter(o => o[1] === 'R').map(o => callout(o[0], ORDER.indexOf(o))).join('');
+  $('#spec').innerHTML = spec();
+  chartSize();
+  Icons.hydrate();
+  $$('.co').forEach(b => b.onclick = () => select(ST.sel === b.dataset.part ? null : b.dataset.part));
+  $$('.rungs button').forEach(b => b.onclick = () => { ST.h = +b.dataset.h; rerender(); });
+  applySel();
+}
+function rerender() { $('#spec').innerHTML = spec(); chartSize(); Icons.hydrate($('#spec')); $$('.rungs button').forEach(b => b.onclick = () => { ST.h = +b.dataset.h; rerender(); }); applySel(); requestAnimationFrame(leaders); }
+function target(id) {
+  const all = $$(`.part[data-p="${id}"]`, $('#spec')).filter(e => e.offsetParent);
+  if (id === 'confidence') return $('.bl .cw', $('#spec')) || all[0];
+  if (id === 'height') return $('.rungs', $('#spec'));
+  return all[0];
+}
+function leaders(animate) {
+  const svg = $('#lead'), st = $('#stage').getBoundingClientRect();
+  let out = '';
+  ORDER.forEach(([id, side], i) => {
+    const c = $(`.co[data-part="${id}"]`), t = target(id);
+    if (!c || !t || (id === 'pencil' && document.body.classList.contains('gate-off'))) return;
+    const a = c.getBoundingClientRect(), b = t.getBoundingClientRect();
+    const x1 = (side === 'L' ? a.right : a.left) - st.left, y1 = a.top + tok('--space-4') - st.top;
+    const x2 = (side === 'L' ? b.left - tok('--space-1') : b.right + tok('--space-1')) - st.left, y2 = b.top + Math.min(b.height / 2, tok('--space-4')) - st.top;
+    const mx = side === 'L' ? x1 + tok('--space-4') : x1 - tok('--space-4');
+    const len = Math.ceil(Math.abs(x2 - x1) + Math.abs(y2 - y1) + tok('--space-5'));
+    out += `<g class="${ST.sel === id ? 'sel' : ''} ${id === 'pencil' ? 'pen' : ''}" style="--len:${len}"><path d="M${x1} ${y1} H${mx} L${x2} ${y2}" style="transition-delay:${(i + 3) * tok('--motion-instant')}ms"/><circle cx="${x2}" cy="${y2}" r="2"/></g>`;
+  });
+  svg.innerHTML = out;
+  if (animate) { svg.classList.add('draw'); svg.classList.remove('drawn'); requestAnimationFrame(() => requestAnimationFrame(() => svg.classList.add('drawn'))); }
+  else svg.classList.add('drawn');
+}
+function applySel() {
+  $$('.co').forEach(c => { c.classList.toggle('sel', c.dataset.part === ST.sel); c.setAttribute('aria-pressed', c.dataset.part === ST.sel); c.classList.toggle('racked', !!ST.sel && c.dataset.part !== ST.sel); });
+  $$('.part', $('#spec')).forEach(p => p.classList.toggle('racked', !!ST.sel && p.dataset.p !== ST.sel && !(ST.sel === 'confidence' && p.dataset.p === 'bottom')));
+  $('#wrap').classList.toggle('collapsed', false);
+  $$('#lead g').forEach((g, i) => g.classList.toggle('sel', ORDER.filter(o => target(o[0]))[i] && ORDER.filter(o => target(o[0]))[i][0] === ST.sel));
+}
+function select(id) { ST.sel = id; applySel(); leaders(false); }
+function boot() {
+  clearTimers(); ST.sel = null; ST.h = 1; setTech(false); setGate(false);
+  const w = $('#wrap'); w.classList.add('pre'); render(); leaders(false); $('#lead').classList.remove('drawn'); $('#lead').classList.add('draw');
+  later(() => { w.classList.remove('pre'); leaders(true); }, tok('--motion-run'));
+  later(() => select('confidence'), tok('--motion-run') + tok('--motion-still'));
+  later(() => select(null), tok('--motion-run') + tok('--motion-still') + tok('--motion-still'));
+}
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k >= '1' && k <= '6') { clearTimers(); select(ORDER[+k - 1][0]); }
+  else if (k === '0' || k === 'escape') { clearTimers(); select(null); }
+  else if (k === 'h') { ST.h = (ST.h + 1) % 3; rerender(); }
+  else if (k === 't') { setTech(!document.body.classList.contains('tech')); requestAnimationFrame(() => leaders(false)); }
+  else if (k === 'g') { setGate(!document.body.classList.contains('gate-off')); requestAnimationFrame(() => leaders(false)); }
+  else if (k === 'r') boot();
+});
+addEventListener('resize', () => { chartSize(); leaders(false); });
+boot();
+</script>
+</body>
+</html>

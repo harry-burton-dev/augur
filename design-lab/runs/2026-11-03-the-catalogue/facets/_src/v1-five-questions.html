@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facets · V1 · Five questions</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS*/
+/* ---- V1: five questions side by side (PMEST) ---- */
+.axes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-4);margin-bottom:var(--space-4)}
+.ax{display:flex;flex-direction:column;min-width:0}
+.ax h2{display:flex;align-items:baseline;gap:var(--space-2);margin:0 0 var(--space-1);font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.ax h2 .pm{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-floor);border:1px solid color-mix(in srgb,var(--x-proposed-floor) 50%,transparent);border-radius:var(--radius-key);padding:2px var(--space-1);align-self:center}
+.ax .q{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-bottom:var(--space-2);min-height:var(--leading-small)}
+.ax .q .tech{display:block}
+.v{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-2);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);overflow:hidden;transition:background var(--motion-quick) var(--ease-standard),color var(--motion-quick) var(--ease-standard)}
+.v .bar,.v .ghost{position:absolute;left:0;bottom:0;height:2px;border-radius:1px;transition:width var(--motion-slow) var(--ease-out)}
+.v .ghost{background:var(--x-proposed-bar-ghost)}
+.v .bar{background:var(--x-proposed-bar)}
+.v .l{position:relative;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v .c{position:relative;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);font-variant-numeric:tabular-nums}
+.v:hover,.v.hot{background:var(--surface-raised)}
+.v[aria-pressed="true"]{background:var(--x-proposed-floor-soft);color:var(--light);box-shadow:inset 2px 0 0 var(--x-proposed-floor)}
+.v[aria-pressed="true"] .c{color:var(--light)}
+.v.zero{color:var(--ink-muted)}
+.v.zero .c::after{content:" why";font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-caps)}
+.v.gap{background-image:var(--x-proposed-gap);color:var(--ink-muted)}
+.v.na{background-image:var(--x-proposed-na);color:var(--ink-muted);cursor:help}
+.v .pv{position:relative;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-floor);opacity:0;transition:opacity var(--motion-quick) var(--ease-standard)}
+.v:hover .pv,.v.hot .pv,.v:focus-visible .pv{opacity:1}
+.lower{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-drawer);gap:var(--space-5)}
+.rs{min-height:0;display:flex;flex-direction:column;border-top:1px solid var(--hairline-strong)}
+.head .sub{max-width:var(--measure-wide)}
+.rs .sum{display:flex;align-items:baseline;gap:var(--space-3);padding:var(--space-3) 0 var(--space-2)}
+.rs .sum .n{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--light)}
+.rs .sum .t{font-size:var(--type-body);color:var(--ink)}
+.rs .sum .t small{color:var(--ink-muted);font-size:var(--type-meta)}
+.rs .sc{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.side{border-top:1px solid var(--hairline-strong);padding-top:var(--space-3);min-height:0;overflow:auto}
+.side h3{margin:var(--space-1) 0 var(--space-2);font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light)}
+.side p{margin:0 0 var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.side p b{color:var(--ink);font-weight:400}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-1) var(--space-3);margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--hairline);font-size:var(--type-small);color:var(--ink-muted)}
+.legend span{display:flex;gap:var(--space-2);align-items:center}
+.empty{padding:var(--space-4) 0}
+@media (max-height:840px){.v{height:calc(var(--target-sm) - var(--space-1))}.ax .q{display:none}}
+</style>
+</head>
+<body class="admin-off">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Facets · V1</b> five questions side by side, counts before you pick · Ranganathan PMEST, OpenRefine facets</div>
+<script>
+/*@DATA*/
+/*@ENGINE*/
+const app = document.getElementById('app');
+let sel = {}, hist = [], hot = null; const total = F.results({}).length;
+app.innerHTML = frame() + '<main class="main"><div class="head"><div><div class="eyebrow">' + DATA.app + ' · ' + DATA.floor.name + '</div><h1>Find</h1><div class="sub">Answer any of the five questions, in any order. Each number says <b>what picking it would leave</b>, before you pick.</div></div><button class="btn" id="tbtn">' + Icons.svg('code', { size: 16 }) + 'Technical names <span class="kbd">T</span></button></div><div class="axes" id="axes"></div><div class="lower"><section class="rs"><div class="sum" id="sum"></div><div class="sc"><ul class="list" id="list"></ul></div></section><aside class="side" id="side" aria-live="polite"></aside></div></main>' +
+  keys([['click', 'pick or unpick'], ['⌫', 'undo last'], ['esc', 'clear'], ['T', 'technical names'], ['R', 'replay']]);
+const all = {}; DATA.facets.forEach(f => all[f.id] = F.counts(f.id, {}));
+function render() {
+  const ax = document.getElementById('axes');
+  ax.innerHTML = DATA.facets.map(f => {
+    const c = F.counts(f.id, sel), base = all[f.id];
+    const max = Math.max(1, ...Object.values(base));
+    const s = sel[f.id] || new Set();
+    const vals = f.values.map(v => ({ id: v.id, label: v.label })).concat(base[F.GAP] ? [{ id: F.GAP, label: 'Not recorded' }] : []);
+    let h = '<div class="ax"><h2><span class="pm" title="' + f.pm + '">' + f.pmest + '</span>' + f.plain + '</h2><div class="q">' + f.q + '?<span class="tech">' + f.pm + ' · ' + f.tech + '</span></div>';
+    vals.forEach(v => {
+      const n = c[v.id], on = s.has(v.id), z = !n && !on;
+      const lv = on ? null : F.leaves(sel, f.id, v.id);
+      h += '<button class="v' + (z ? ' zero' : '') + (v.id === F.GAP ? ' gap' : '') + (hot && hot.f === f.id && hot.v === v.id ? ' hot' : '') + '" data-f="' + f.id + '" data-v="' + v.id + '" aria-pressed="' + on + '"><span class="ghost" style="width:' + (base[v.id] / max * 100) + '%"></span><span class="bar" style="width:' + (n / max * 100) + '%"></span><span class="l">' + v.label + '</span><span class="c">' + (lv != null && F.size(sel) && !z ? '<span class="pv">→' + lv + ' </span>' : '') + n + '</span></button>';
+    });
+    if (c[F.NA]) h += '<div class="v na" title="These have no ' + f.plain.toLowerCase() + ' detail in this deployment"><span class="l">' + F.cap(F.join([...new Set(F.results(sel).filter(r => F.val(r, f.id) === F.NA).map(r => F.KIND[r.kind].many))])) + '</span><span class="c">' + c[F.NA] + ' n/a</span></div>';
+    return h + '</div>';
+  }).join('');
+  const res = F.results(sel), d = F.describe(sel);
+  document.getElementById('sum').innerHTML = '<span class="n mono">' + res.length + '</span><span class="t">' + F.esc(F.size(sel) ? F.cap(d.text) : 'Everything you can see') + ' <small>of ' + total + ' kept here</small></span>';
+  const L = document.getElementById('list');
+  if (res.length) L.innerHTML = res.slice(0, 60).map(F.row).join('');
+  else { const b = F.recover(sel); L.innerHTML = '<li class="empty">' + F.reasons([{ type: 'none', icon: 'search-x', head: 'Nothing matches all of these together', text: b ? 'Undo “' + F.label(b.fid, b.vid) + '” and ' + b.n + ' come back.' : '' }]) + '</li>'; }
+  side();
+}
+function side() {
+  const S = document.getElementById('side');
+  let h = '';
+  if (hot) {
+    const f = F.FACET[hot.f], n = F.counts(hot.f, sel)[hot.v], on = (sel[hot.f] || new Set()).has(hot.v);
+    h += '<div class="eyebrow">' + f.plain + ' · ' + F.label(hot.f, hot.v) + '</div>';
+    if (on) h += '<h3>Chosen</h3><p>Unpick it to get back <b>' + (F.results(F.pick(sel, hot.f, hot.v)).length - F.results(sel).length) + '</b>.</p>';
+    else if (n) h += '<h3>Would leave ' + F.leaves(sel, hot.f, hot.v) + '</h3><p>Of the <b>' + F.results(sel).length + '</b> showing now. Picked with others in the same column, it widens instead of narrowing.</p>';
+    else h += '<h3>Would leave none</h3>' + F.reasons(F.why(sel, hot.f, hot.v));
+  } else h += '<div class="eyebrow">How to read it</div><h3>Point at any answer</h3><p>The number beside it is what you would see if you picked it. A faint line shows how many are kept in all.</p>';
+  h += '<div class="legend"><span><i class="mk gap"></i>Not recorded yet</span><span><i class="mk na"></i>Does not apply</span><span>' + Icons.svg('lock', { size: 14 }) + 'Kept out of reach</span><span>' + Icons.svg('inbox', { size: 14 }) + 'Waiting in Triage</span></div>';
+  S.innerHTML = h;
+}
+function toggle(f, v) { hist.push(F.clone(sel)); sel = F.pick(sel, f, v); render(); }
+app.addEventListener('click', e => { const b = e.target.closest('.v[data-f]'); if (!b) return; hot = { f: b.dataset.f, v: b.dataset.v }; if (b.classList.contains('zero')) { render(); return; } toggle(b.dataset.f, b.dataset.v); });
+app.addEventListener('mouseover', e => { const b = e.target.closest('.v[data-f]'); if (!b) return; const h = { f: b.dataset.f, v: b.dataset.v }; if (!hot || hot.f !== h.f || hot.v !== h.v) { hot = h; document.querySelectorAll('.v.hot').forEach(x => x.classList.remove('hot')); b.classList.add('hot'); side(); } });
+app.addEventListener('focusin', e => { const b = e.target.closest('.v[data-f]'); if (b) { hot = { f: b.dataset.f, v: b.dataset.v }; side(); } });
+document.getElementById('tbtn').onclick = () => document.body.classList.toggle('admin-off');
+let run = 0;
+async function demo() {
+  const me = ++run; sel = {}; hist = []; hot = null; render();
+  await F.wait(F.ms('--motion-run'));
+  const step = F.ms('--motion-calm') * .75;
+  for (const [f, v] of [['kind', 'contract'], ['service', 'roads'], ['region', 'coast']]) {
+    if (me !== run) return; hot = { f, v }; render(); await F.wait(step / 2); if (me !== run) return; toggle(f, v); await F.wait(step / 2);
+  }
+  if (me !== run) return; hot = { f: 'when', v: 'this' }; render();
+}
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') demo();
+  else if (e.key === 't' || e.key === 'T') document.body.classList.toggle('admin-off');
+  else if (e.key === 'Backspace' && hist.length) { sel = hist.pop(); render(); }
+  else if (e.key === 'Escape') { if (F.size(sel)) hist.push(F.clone(sel)); sel = {}; hot = null; render(); }
+});
+demo();
+</script>
+</body>
+</html>

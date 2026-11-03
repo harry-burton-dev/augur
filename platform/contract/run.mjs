@@ -4,7 +4,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { availableParallelism, totalmem } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const here = new URL('.', import.meta.url).pathname;
 const frozen = join(here, 'frozen');
@@ -15,12 +15,23 @@ const releases = (existsSync(frozen) ? readdirSync(frozen) : []).sort((a, b) => 
 const chosen = process.env.CONTRACT_FROZEN === 'edges' && releases.length > 2 ? [releases[0], releases.at(-1)] : releases;
 // Folio ships with AUGUR but can be turned off, so today's build runs with it and without it,
 // and each frozen build beside it, as released apps now run.
+// Folio comes from the release AUGUR ships, laid out by infra/shipped-app.sh; without it (on a laptop
+// that hasn't run that), every run has Folio off, and says so. CI always has it.
+const folioDir = resolve(here, process.env.CONTRACT_FOLIO_DIR ?? '../../.shipped/apps/folio');
+const folio = existsSync(join(folioDir, 'service', 'dist', 'index.js'));
+if (!folio) {
+  if (process.env.CI) {
+    console.error(`✗ Folio isn't laid out in ${folioDir}. Run: infra/shipped-app.sh folio`);
+    process.exit(1);
+  }
+  console.log(`Folio isn't laid out in ${folioDir}, so every run has it off. To run with it: infra/shipped-app.sh folio`);
+}
 const targets = [
   { name: 'source', folio: false, env: {} },
-  { name: 'source', folio: true, env: {} },
+  ...(folio ? [{ name: 'source', folio: true, env: {} }] : []),
   ...chosen.map((release) => ({
     name: release,
-    folio: true,
+    folio,
     env: { DEV_APP_ENTRY: '/apps/reference/entry.js', APP_DIST: `reference=${join(frozen, release)}` },
   })),
 ];
@@ -52,6 +63,7 @@ const run = (target, i) =>
         CONTRACT_PORT: String(5180 + i),
         CONTRACT_FOLIO: target.folio ? 'on' : 'off',
         CONTRACT_FOLIO_PORT: String(8190 + i),
+        CONTRACT_FOLIO_DIR: folioDir,
         FORCE_COLOR: process.env.FORCE_COLOR ?? '1',
         ...target.env,
       },

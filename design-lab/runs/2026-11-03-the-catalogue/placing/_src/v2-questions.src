@@ -1,0 +1,130 @@
+/*@meta {"n":2,"title":"Twenty questions","cap":"one question at a time, chosen to halve what is left; every kind stays on the table and says what ruled it out · the parlour game, Shannon's halving question, the vet's differential"}*/
+/*@css*/
+.grid{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) var(--x-col-side);gap:var(--space-5)}
+.left{display:flex;flex-direction:column;gap:var(--space-4);min-height:0}
+.asked{display:flex;flex-direction:column;gap:calc(var(--space-1) / 2);font-size:var(--type-small);line-height:var(--leading-small)}
+.asked .a{display:grid;grid-template-columns:var(--space-5) auto auto;justify-content:start;gap:var(--space-2);align-items:baseline;color:var(--ink-muted);padding:calc(var(--space-1) / 2) var(--space-2);border-radius:var(--radius-key)}
+.asked .a:hover{background:var(--surface-inset)}
+.asked .a .n{font-family:var(--font-mono);color:var(--ink-muted)}
+.asked .a .ans{font-family:var(--font-mono);color:var(--ink);text-transform:lowercase;letter-spacing:var(--tracking-caps)}
+.asked .a .ans.unsure{color:var(--ink-muted)}
+.stage{position:relative;padding:var(--space-4) var(--space-5);border:1px solid var(--hairline-strong);border-radius:var(--radius-card);background:linear-gradient(var(--surface-raised),var(--surface-inset))}
+.stage .qn{display:flex;justify-content:space-between;align-items:baseline}
+.stage .q{margin:var(--space-2) 0 var(--space-3);font:300 var(--type-title-s)/var(--leading-title-s) var(--font-sans);color:var(--light);min-height:calc(var(--leading-title-s) * 2)}
+.stage .q.in{animation:qin var(--motion-slow) var(--ease-out)}
+@keyframes qin{from{opacity:0;transform:translateY(var(--space-2))}}
+.stage .ansrow{display:flex;gap:var(--space-2);align-items:center}
+.stage .ansrow .btn{height:var(--target-md);padding:0 var(--space-4);font-size:var(--type-body)}
+.stage .ansrow .btn.on{border-color:var(--x-accent);background:var(--x-accent-soft);color:var(--light)}
+.stage .why{margin-left:auto;max-width:calc(var(--measure-card) - var(--space-5));font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:right}
+.stage .why b{font-weight:400;color:var(--ink)}
+.stage.end .why{text-align:left;margin-left:0;max-width:none}
+.stage.end .q{font-size:var(--type-heading);line-height:var(--leading-heading);min-height:0}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-2)}
+.tile{position:relative;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);min-height:calc(var(--space-7) + var(--space-2));transition:opacity var(--motion-slow) var(--ease-standard),transform var(--motion-slow) var(--ease-standard),border-color var(--motion-slow) var(--ease-standard)}
+.tile .kind{font-size:var(--type-meta);flex-wrap:wrap;row-gap:0}
+.tile.ext .inapp{display:block}
+.tile .out{display:block;margin-top:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tile.ruled{opacity:var(--x-out);transform:translateY(var(--space-1))}
+.tile.ruled .kind > span:nth-child(2){text-decoration:line-through}
+.tile.left{border-color:var(--x-accent-edge)}
+.tile.only{border-color:var(--x-accent);background:var(--x-accent-soft)}
+.tile.ext .kind svg{color:var(--ink-muted)}
+.tile.ext .inapp{font-size:var(--type-small);color:var(--ink-muted)}
+.meter{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-small);color:var(--ink-muted)}
+.meter .bar{flex:1;height:var(--space-1);border-radius:var(--radius-pill);background:var(--hairline);overflow:hidden}
+.meter .bar i{display:block;height:100%;background:var(--x-accent);transition:width var(--motion-slow) var(--ease-out)}
+.right{display:flex;flex-direction:column;gap:var(--space-3);min-height:0;overflow:auto;scrollbar-width:thin}
+.right .idle{color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);border:1px dashed var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4)}
+@media (max-height:840px){.said p{display:none}.stage{padding:var(--space-3) var(--space-4)}.stage .q{font-size:var(--type-heading);line-height:var(--leading-heading);min-height:calc(var(--leading-heading) * 2)}.tile{min-height:var(--space-7)}.left{gap:var(--space-3)}}
+/*@html*/
+<div class="grid">
+  <div class="left">
+    <div id="thing"></div>
+    <div class="stage" id="stage" aria-live="polite"></div>
+    <div class="meter" id="meter"></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="asked" id="asked"></div>
+  </div>
+  <aside class="right" id="right" aria-live="polite"></aside>
+</div>
+/*@js*/
+const ALL = [...DATA.kinds, ...DATA.elsewhere.map(e => ({ ...e, ext: true }))];
+const V = {
+  title: 'Add a thing', sub: 'Answer yes, no or not sure. Each question is picked to halve what’s left, and every kind stays on the table saying what ruled it out. <b>Then it goes to Triage.</b>',
+  keys() { return [['1 2 3', 'yes · no · not sure'], ['⌫', 'undo an answer'], ['Y', 'that’s it'], ['Enter', 'it’s new']]; },
+  reset() { this.ans = []; this.out = {}; this.confirm = null; this.result = undefined; $('#thing').innerHTML = thingCard(); $('#right').innerHTML = `<div class="idle">When a kind is found, things we already keep that look like it show here, so nothing gets kept twice.</div>`; this.draw(); },
+  left() { return ALL.filter(k => !this.out[k.id]); },
+  next() {
+    const L = this.left(), asked = new Set(this.ans.map(a => a.q));
+    if (L.length === 1 && this.confirm == null) return { confirm: L[0] };
+    let best = null, score = 1e9;
+    for (const q of DATA.questions) { if (asked.has(q.id)) continue; const y = L.filter(k => k.is.includes(q.id)).length; if (!y || y === L.length) continue; const s = Math.abs(L.length / 2 - y); if (s < score) { score = s; best = q; } }
+    return best ? { q: best, y: L.filter(k => k.is.includes(best.id)).length, n: L.length } : (L.length ? { confirm: L[0] } : null);
+  },
+  draw() {
+    const L = this.left(), nx = this.result === undefined ? this.next() : null;
+    this.cur = nx;
+    const st = $('#stage');
+    st.classList.toggle('end', this.result !== undefined);
+    if (this.result !== undefined) {
+      const k = this.result && (K(this.result) || ALL.find(x => x.id === this.result));
+      st.innerHTML = k ? `<div class="qn"><span class="micro">After ${this.ans.length} answers</span></div><div class="q">${k.ext ? 'That’s kept in ' + k.app + '.' : 'Found it: ' + k.word + '.'}</div><div class="ansrow"><span class="why">${k.says}${k.ext ? '' : ' We keep ' + fmt(k.n) + '.'}</span></div>`
+        : `<div class="qn"><span class="micro">After ${this.ans.length} answers</span></div><div class="q">Nothing we keep is like that, yet.</div><div class="ansrow"><span class="why" style="text-align:left;margin-left:0">Every kind on the table below says what ruled it out. That list goes with your ask, so the admin sees why.</span></div>`;
+    } else if (nx && nx.confirm) {
+      const k = nx.confirm;
+      st.innerHTML = `<div class="qn"><span class="micro">Question ${this.ans.length + 1} · only one kind left: check it</span></div><div class="q in">Is it like this: ${k.says.replace(/\.$/, '')}?</div>
+        <div class="ansrow"><button class="btn" data-a="1">Yes <span class="kbd">1</span></button><button class="btn" data-a="0">No <span class="kbd">2</span></button><span class="why">The game’s guess: <b>${k.word}</b>. A no here means nothing we keep fits.</span></div>`;
+    } else if (nx) {
+      st.innerHTML = `<div class="qn"><span class="micro">Question ${this.ans.length + 1}</span></div><div class="q in">${nx.q.q}</div>
+        <div class="ansrow"><button class="btn" data-a="1">Yes <span class="kbd">1</span></button><button class="btn" data-a="0">No <span class="kbd">2</span></button><button class="btn quiet" data-a="?">Not sure <span class="kbd">3</span></button>
+        <span class="why">Why this one: it splits the <b>${nx.n}</b> left into <b>${nx.y}</b> and <b>${nx.n - nx.y}</b>.</span></div>`;
+    }
+    $('#meter').innerHTML = `<span>${L.length} of ${ALL.length} still possible</span><span class="bar"><i style="width:${(L.length / ALL.length) * 100}%"></i></span><span>${this.ans.length} answered</span>`;
+    $('#tiles').innerHTML = ALL.map(k => `<div class="tile${this.out[k.id] ? ' ruled' : ''}${!this.out[k.id] && L.length <= 3 ? ' left' : ''}${this.result === k.id ? ' only' : ''}${k.ext ? ' ext' : ''}">
+      ${k.ext ? `<span class="kind">${ic(k.icon)}<span>${k.word}</span></span><span class="inapp">in ${k.app}</span>` : kindChip(k)}
+      ${this.out[k.id] ? `<span class="out">${this.out[k.id]}</span>` : ''}</div>`).join('');
+    $('#asked').innerHTML = this.ans.map((a, i) => `<div class="a"><span class="n">Q${i + 1}</span><span>${a.text}</span><span class="ans${a.v === '?' ? ' unsure' : ''}">${a.v === '?' ? 'not sure' : a.v ? 'yes' : 'no'}</span></div>`).join('');
+  },
+  answer(v) {
+    const nx = this.cur; if (!nx || this.result !== undefined) return;
+    if (nx.confirm) {
+      this.ans.push({ q: 'confirm', text: `Check: is it ${nx.confirm.word}?`, v });
+      this.confirm = v;
+      if (v === 1) this.result = nx.confirm.id; else { this.out[nx.confirm.id] = `Not like it (Q${this.ans.length})`; this.result = null; }
+      this.draw(); this.side(); return;
+    }
+    this.ans.push({ q: nx.q.id, text: nx.q.q, v });
+    if (v !== '?') for (const k of this.left()) if (k.is.includes(nx.q.id) !== !!v) this.out[k.id] = `${v ? 'No' : 'Yes'} to Q${this.ans.length}`;
+    if (!this.left().length) this.result = null;
+    steps(1); this.draw(); if (this.result !== undefined) this.side();
+  },
+  undo() { if (!this.ans.length) return; const ans = this.ans.slice(0, -1); this.reset(); steps(ans.length ? 1 : 0); for (const a of ans) this.answer(a.v); },
+  side() {
+    const r = $('#right');
+    if (this.result) {
+      const k = K(this.result);
+      if (!k) { r.innerHTML = `<div class="idle">Written things and asks are kept in other apps. Open ${ALL.find(x => x.id === this.result).app} to add it there; Data Atlas will keep what it’s about.</div>`; return; }
+      r.innerHTML = nearHTML(); steps(2);
+    } else { r.innerHTML = slipHTML(); steps(3, true); }
+    Icons.hydrate(r); reveal(r.firstElementChild);
+  },
+  done(same) { if (MODE !== 'fits' || !this.result) return; $('#right').innerHTML = slipHTML(this.result, same); steps(3); reveal($('#right').firstElementChild); },
+  demo() {
+    steps(1); const t = DATA.things[MODE]; let i = 0;
+    const tick = () => { const nx = this.cur; if (!nx || this.result !== undefined) return;
+      const v = nx.confirm ? (t.kind === nx.confirm.id ? 1 : 0) : (t.is.includes(nx.q.id) ? 1 : 0);
+      this.answer(v); i++; later(tick, ms('--motion-calm')); };
+    tick();
+  },
+  key(e) {
+    if (e.key === '1') { this.answer(1); return true; }
+    if (e.key === '2') { this.answer(0); return true; }
+    if (e.key === '3' && this.cur && !this.cur.confirm) { this.answer('?'); return true; }
+    if (e.key === 'Backspace') { this.undo(); return true; }
+    if (e.key.toLowerCase() === 'y') { this.done('wu7'); return true; }
+    if (e.key === 'Enter' && this.result) { this.done(null); return true; }
+  }
+};
+document.addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b) V.answer(b.dataset.a === '?' ? '?' : +b.dataset.a); });
+boot(V);

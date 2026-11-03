@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grammar · V3 · Anatomy of a catalogue card</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens for the catalogue grammar. Every one is a mix of kit
+   tokens and is listed as "needs token" in notes.md.
+   --------------------------------------------------------------- */
+:root{
+  /* --mark-gap: the gap mark. Four corner ticks of the slot a detail would fill. No fill, no hatch. */
+  --x-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  --x-gap-tick: var(--space-2);
+  --x-gap:
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) left top / var(--x-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) left top / 1px var(--x-gap-tick) no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) right top / var(--x-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) right top / 1px var(--x-gap-tick) no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) left bottom / var(--x-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) left bottom / 1px var(--x-gap-tick) no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) right bottom / var(--x-gap-tick) 1px no-repeat,
+    linear-gradient(var(--x-gap-ink),var(--x-gap-ink)) right bottom / 1px var(--x-gap-tick) no-repeat;
+  /* --mark-stale-hatch and shadow: carried unchanged from wear-and-time and the cinematic light language. */
+  --x-hatch: color-mix(in srgb, var(--ink-muted) 26%, transparent);
+  --x-stale: repeating-linear-gradient(45deg, transparent 0 var(--space-2), var(--x-hatch) var(--space-2) calc(var(--space-2) + 1px));
+  --x-shadow: repeating-linear-gradient(135deg, transparent 0 var(--space-2), var(--hairline) var(--space-2) calc(var(--space-2) + 1px));
+  /* --mark-expected: the "should have" tick before a detail name in a kind. */
+  --x-expected: var(--ink);
+  /* --mark-link: the hairline a link is drawn with, and its verb ink. */
+  --x-link: var(--hairline-strong);
+  /* --time-past-dim from wear-and-time, used for backward readings and quiet lines. */
+  --x-quiet: .62;
+}
+body{overflow:auto}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.wrap{max-width:calc(var(--measure-wide) * 1.75);margin:0 auto;padding:var(--space-5) var(--edge) var(--space-7)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+h1{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;margin:var(--space-1) 0 var(--space-1);color:var(--light)}
+.lede{margin:0;color:var(--ink-muted);font-size:var(--type-meta);line-height:var(--leading-meta);max-width:100ch}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.sm{font-size:var(--type-small);line-height:var(--leading-small)}
+.tech{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.never{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.never b{font-weight:400;color:var(--ink)}
+.kindmark{display:inline-flex;align-items:center;justify-content:center;flex:none;width:var(--target-sm);height:var(--target-sm);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);color:var(--ink);background:var(--surface-inset)}
+.kindmark.s{width:calc(var(--space-5) - var(--space-1));height:calc(var(--space-5) - var(--space-1))}
+.count{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+/* the five empty-looking states */
+.gapslot{background:var(--x-gap);padding:var(--space-2) var(--space-3);border-radius:0;min-height:var(--target-sm);display:flex;flex-direction:column;justify-content:center;gap:2px}
+.gapslot .gl{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.gapslot .gw{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.staleage{background:var(--x-stale);padding:0 var(--space-1);border-radius:var(--radius-key);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.shadowslot{background:var(--x-shadow),var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.nonev{color:var(--ink)}
+.floorEdge{border-left:2px solid var(--fc)}
+[data-tier="department"]{--fc:var(--floor-department-high)}
+[data-tier="team"]{--fc:var(--floor-team-high)}
+[data-tier="org"]{--fc:var(--floor-org-high)}
+[data-tier="you"]{--fc:var(--floor-you-high)}
+.ref{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);vertical-align:super;margin-left:2px}
+.exptick{display:inline-block;width:2px;height:var(--space-3);background:var(--x-expected);margin-right:var(--space-2);vertical-align:-1px}
+.exptick.can{background:transparent}
+/* empty-looking family strip */
+.fam{display:grid;grid-template-columns:repeat(var(--n,6),minmax(0,1fr));gap:var(--space-3)}
+.fam .st{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+.fam .stage{height:calc(var(--space-7) - var(--space-2));position:relative;display:flex;align-items:center;padding:0 var(--space-2);border-radius:var(--radius-key);background:var(--slate-deep);border:1px solid var(--hairline)}
+.fam .stage > *{width:100%}
+.fam .nm{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.fam .nm small{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);margin-left:var(--space-1)}
+.fam .d{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0}
+.fam .tk{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);opacity:var(--x-quiet);margin:0}
+.fam .st.on .stage{border-color:var(--hairline-strong);background:var(--surface-raised)}
+.vrow{display:flex;justify-content:space-between;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}
+.vrow .k{color:var(--ink-muted)}
+/* deposit animation: parts arrive in order, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-quick))}
+.pre .dep{opacity:0;transform:translateY(calc(var(--space-1) * -1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}}
+.hints{position:fixed;right:var(--edge-tight);bottom:var(--edge-tight);z-index:999;display:flex;gap:var(--space-3);align-items:center;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);background:var(--scrim);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key)}
+.kbd{font:400 var(--type-small)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1)}
+
+:root{
+  /* card proportions: a 5 × 3 inch library card */
+  --x-card-ratio: 5 / 3;
+  /* ruled lines on the card, one per reading line */
+  --x-rule: repeating-linear-gradient(to bottom, transparent 0 calc(var(--leading-body) - 1px), var(--hairline) calc(var(--leading-body) - 1px) var(--leading-body));
+}
+.wrap{padding-top:var(--space-4)}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5);margin-bottom:var(--space-4)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:var(--space-5);align-items:start}
+.lc{position:relative;aspect-ratio:var(--x-card-ratio);border-radius:var(--radius-key);background:var(--slate-deep);border:1px solid var(--hairline-strong);box-shadow:var(--shadow-raised);padding:var(--space-4) var(--space-5) var(--space-5) calc(var(--space-8) + var(--space-2));overflow:hidden}
+.lc::before{content:"";position:absolute;left:0;right:0;top:calc(var(--space-6) + var(--space-3));height:3px;border-top:1px solid var(--hairline-strong);border-bottom:1px solid var(--hairline-strong)}
+.lc::after{content:"";position:absolute;left:50%;bottom:var(--space-3);width:var(--space-4);height:var(--space-4);margin-left:calc(var(--space-2) * -1);border-radius:var(--radius-pill);background:radial-gradient(var(--slate), var(--slate-deep));border:1px solid var(--hairline-strong)}
+.lc .ruled{position:absolute;left:0;right:0;top:calc(var(--space-7) - var(--space-2));bottom:var(--space-6);background:var(--x-rule);opacity:.5;pointer-events:none}
+.z{position:relative;transition:background var(--motion-base) var(--ease-standard),opacity var(--motion-base) var(--ease-standard),filter var(--motion-base)}
+.z .zn{position:absolute;left:calc((var(--space-8) - var(--space-3)) * -1);top:0;font:400 var(--type-small)/var(--leading-body) var(--font-mono);color:var(--ink-muted)}
+.callno{position:absolute;left:var(--space-4);top:var(--space-4);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink);display:flex;flex-direction:column;gap:2px}
+.callno .k{display:flex;align-items:center;gap:var(--space-1);text-transform:uppercase;letter-spacing:var(--tracking-caps)}
+
+.heading{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);margin:0 0 var(--space-6)}
+.body{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink);text-indent:var(--space-5)}
+.body .dn{color:var(--ink-muted)}
+.body .sep{color:var(--ink-muted)}
+.gapin{display:inline-block;text-indent:0;background:var(--x-gap);--x-gap-tick:var(--space-1);padding:0 var(--space-2);line-height:var(--leading-body);color:var(--ink-muted);font-size:var(--type-small)}
+.gapin b{font-weight:400;color:var(--ink)}
+.notes{margin-top:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-body);color:var(--ink-muted);text-indent:var(--space-5)}
+.notes b{font-weight:400;color:var(--ink)}
+.tracings{margin-top:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-body);color:var(--ink-muted);text-indent:var(--space-5)}
+.tracings b{font-weight:400;color:var(--ink)}
+.stamp{position:absolute;right:var(--space-5);top:var(--space-4);padding:var(--space-1) var(--space-2);border:1px solid var(--fc);color:var(--fc);font:400 var(--type-small)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;border-radius:var(--radius-key);transform:rotate(-4deg)}
+.heading .zn{position:static;font-size:var(--type-small);margin-right:var(--space-2);vertical-align:middle}
+.lc .body .exptick{display:none;height:var(--space-2);margin:0 var(--space-1) 0 0}
+.lc.req .body .exptick{display:inline-block}
+.stamp .zn{left:calc(var(--space-5) * -1);top:var(--space-1);line-height:1}
+.lcid{position:absolute;left:var(--space-4);bottom:var(--space-3);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);opacity:var(--x-quiet)}
+.lc.focus .z:not(.on):not(:has(.on)){opacity:var(--x-quiet);filter:saturate(.4)}
+.lc .z.on{background:color-mix(in srgb, var(--light) 5%, transparent)}
+.lc .gapin.on{background:var(--x-gap),var(--surface-raised);color:var(--ink)}
+.switch{display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap;align-items:center}
+.switch .lb{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-right:var(--space-2)}
+.tab{display:inline-flex;align-items:center;gap:var(--space-1);height:var(--target-sm);padding:0 var(--space-3);border-radius:var(--radius-pill);border:1px solid var(--hairline);font-size:var(--type-small);color:var(--ink-muted)}
+.tab[aria-pressed="true"]{background:var(--surface-raised);border-color:var(--hairline-strong);color:var(--ink)}
+.rules{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3) var(--space-5)}
+.rules li{border-top:1px solid var(--hairline);padding-top:var(--space-2);transition:opacity var(--motion-base) var(--ease-standard)}
+.rules li.on{border-top-color:var(--ink)}
+.rules.focus li:not(.on){opacity:var(--x-quiet)}
+.rules .lib{float:right;margin-top:var(--space-2);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;display:flex;gap:var(--space-2)}
+.rules .pl{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.rules .tc{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.rules .nv{margin-top:var(--space-1)}
+.rhead{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin:0 0 var(--space-3)}
+.famh{display:flex;align-items:baseline;gap:var(--space-3);margin:var(--space-5) 0 var(--space-2)}
+.famh h2{margin:0;font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+@media (max-width:1400px){.lc{aspect-ratio:auto;min-height:calc(var(--measure-card) + var(--space-5))}.main{grid-template-columns:minmax(0,1fr) minmax(0,.9fr)}.rules .nv{display:none}.rules li.on .nv{display:block}.lc{padding-left:var(--space-8)}}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="top"><div><span class="eyebrow" id="eyebrow"></span><h1 id="h1"></h1><p class="lede" id="lede"></p></div></div>
+  <div class="main">
+    <div>
+      <div class="lc dep" style="--i:0" id="lc" aria-live="polite"></div>
+      <div class="switch" id="switch"></div>
+    </div>
+    <div><p class="rhead" id="rhead"></p><ol class="rules" id="rules"></ol></div>
+  </div>
+  <div class="famh"><h2 id="famh"></h2><span class="sm muted" id="famd"></span></div>
+  <div class="fam" id="fam"></div>
+</div>
+<div class="hints"><span><span class="kbd">T</span> another kind, same card</span><span><span class="kbd">1</span>–<span class="kbd">9</span> one rule</span><span><span class="kbd">R</span> replay</span></div>
+<div class="x-cap"><b>Grammar · V3</b> anatomy of a catalogue card: one fixed shape for every kind · Library of Congress printed cards, ISBD areas, Dewey call numbers</div>
+<script>
+/* ===== Sample data: every word, kind, count and name on this sheet comes from here.
+   A different deployment brings its own ontology; nothing below is drawn for one trade. ===== */
+const DATA = {
+  deployment: 'Regional services (sample)',
+  floors: {
+    ops:     { name: 'Operations', tier: 'department' },
+    fleet:   { name: 'Fleet', tier: 'team' },
+    finance: { name: 'Finance', tier: 'team' },
+    org:     { name: 'Whole organisation', tier: 'org' }
+  },
+  apps: { atlas: 'Data Atlas', artifacts: 'Artifacts', mandate: 'Mandate' },
+  /* Kinds of thing. tech = the pack term one step down (illustrative). exp = should have; known = cards that hold it. */
+  kinds: [
+    { id: 'site', name: 'Site', plural: 'Sites', icon: 'building-2', count: 34, floor: 'ops', tech: 'cco:Facility',
+      details: [
+        { n: 'Site code', fam: 'key', exp: true, known: 34, key: true },
+        { n: 'Address', fam: 'place', exp: true, known: 34 },
+        { n: 'Opening hours', fam: 'time', exp: true, known: 21 },
+        { n: 'Site manager', fam: 'people', exp: true, known: 30, link: true },
+        { n: 'Fire inspection', fam: 'paper', exp: true, known: 26 },
+        { n: 'Running cost', fam: 'money', exp: false, known: 9 },
+        { n: 'Fuel store', fam: 'condition', exp: false, known: 19 } ] },
+    { id: 'supplier', name: 'Supplier', plural: 'Suppliers', icon: 'handshake', count: 61, floor: 'org', tech: 'cco:Organization',
+      details: [
+        { n: 'Company number', fam: 'key', exp: true, known: 61, key: true },
+        { n: 'Registered address', fam: 'place', exp: true, known: 58 },
+        { n: 'Contact person', fam: 'people', exp: true, known: 40, link: true },
+        { n: 'Insurance certificate', fam: 'paper', exp: true, known: 37 },
+        { n: 'Credit limit', fam: 'money', exp: false, known: 12 } ] },
+    { id: 'contract', name: 'Contract', plural: 'Contracts', icon: 'file-signature', count: 118, floor: 'ops', tech: 'own term (no pack match)',
+      details: [
+        { n: 'Contract number', fam: 'key', exp: true, known: 118, key: true },
+        { n: 'Start and end', fam: 'time', exp: true, known: 109 },
+        { n: 'Contract owner', fam: 'people', exp: true, known: 97, link: true },
+        { n: 'Value', fam: 'money', exp: true, known: 88 },
+        { n: 'Signed copy', fam: 'paper', exp: true, known: 71 } ] },
+    { id: 'person', name: 'Person', plural: 'People', icon: 'user', count: 412, floor: 'org', tech: 'cco:Person',
+      details: [
+        { n: 'Staff number', fam: 'key', exp: true, known: 380, key: true },
+        { n: 'Works at', fam: 'place', exp: true, known: 371, link: true },
+        { n: 'Role', fam: 'people', exp: true, known: 402 },
+        { n: 'First-aid certificate', fam: 'paper', exp: false, known: 96 } ] },
+    { id: 'vehicle', name: 'Vehicle', plural: 'Vehicles', icon: 'truck', count: 87, floor: 'fleet', tech: 'cco:GroundVehicle',
+      details: [
+        { n: 'Registration', fam: 'key', exp: true, known: 87, key: true },
+        { n: 'Based at', fam: 'place', exp: true, known: 81, link: true },
+        { n: 'Next service', fam: 'time', exp: true, known: 74 },
+        { n: 'Fuel', fam: 'condition', exp: true, known: 81 },
+        { n: 'Lease cost', fam: 'money', exp: false, known: 40 } ] },
+    { id: 'incident', name: 'Incident', plural: 'Incidents', icon: 'siren', count: 230, floor: 'ops', tech: 'own term, broader: Event',
+      details: [
+        { n: 'Reference', fam: 'key', exp: true, known: 230, key: true },
+        { n: 'Happened at', fam: 'place', exp: true, known: 219, link: true },
+        { n: 'When', fam: 'time', exp: true, known: 230 },
+        { n: 'Reported by', fam: 'people', exp: true, known: 201, link: true },
+        { n: 'Severity', fam: 'condition', exp: true, known: 188 } ] }
+  ],
+  /* Things kept by other apps that Data Atlas points at. */
+  elsewhere: [
+    { id: 'document', name: 'Document', plural: 'Documents', icon: 'file-text', count: 1904, app: 'artifacts', role: 'where details came from' },
+    { id: 'intent', name: 'Intent', plural: 'Intents', icon: 'target', count: 52, app: 'mandate', role: 'what uses a card' }
+  ],
+  /* Detail families: the columns a periodic-style sheet groups details by. */
+  families: [
+    { id: 'key', name: 'Name and key' }, { id: 'place', name: 'Where' }, { id: 'time', name: 'When' },
+    { id: 'people', name: 'Who' }, { id: 'condition', name: 'Condition' }, { id: 'money', name: 'Money' }, { id: 'paper', name: 'Paperwork' }
+  ],
+  /* Kinds of link, each read both ways. one/many in plain words. */
+  links: [
+    { from: 'contract', to: 'supplier', verb: 'is held by', back: 'holds', fromN: 'one', toN: 'any number of', tech: 'heldBy / inverse holds' },
+    { from: 'contract', to: 'site', verb: 'covers', back: 'is covered by', fromN: 'any number of', toN: 'any number of', tech: 'covers / coveredBy' },
+    { from: 'vehicle', to: 'site', verb: 'is based at', back: 'is the base for', fromN: 'one', toN: 'any number of', tech: 'basedAt / baseFor' },
+    { from: 'incident', to: 'site', verb: 'happened at', back: 'was where', fromN: 'one', toN: 'any number of', tech: 'occursAt (cco)' },
+    { from: 'incident', to: 'vehicle', verb: 'involved', back: 'was involved in', fromN: 'any number of', toN: 'any number of', tech: 'involves / involvedIn' },
+    { from: 'site', to: 'person', verb: 'is managed by', back: 'manages', fromN: 'one', toN: 'any number of', tech: 'managedBy / manages' }
+  ],
+  /* One card, used as the specimen. */
+  record: {
+    kind: 'site', name: 'Kestrel Road Depot', other: 'KRD, North depot', key: { n: 'Site code', v: 'KRD-04' }, floor: 'ops',
+    id: 'ent_01JB7Q4K2S9V3XGM8T0N5RWD6E',
+    details: [
+      { n: 'Address', v: '14 Kestrel Road, Hallam North', ref: 1, state: 'known' },
+      { n: 'Opening hours', state: 'gap', who: 'Operations leads can add it', hint: 'Mara Okafor would know' },
+      { n: 'Site manager', v: 'Mara Okafor', link: true, ref: 2, state: 'known' },
+      { n: 'Fire inspection', v: '12 Mar 2025', ref: 3, state: 'stale', age: '19 months', who: 'Facilities can refresh it' },
+      { n: 'Fuel store', v: 'None', ref: 4, state: 'none' }
+    ],
+    could: ['Running cost'],
+    links: [
+      { verb: 'is the base for', n: 9, kind: 'Vehicles' },
+      { verb: 'is covered by', n: 3, kind: 'Contracts' },
+      { verb: 'was where', n: 14, kind: 'Incidents' }
+    ],
+    hidden: { n: 'Lease', what: 'a contract', floor: 'finance', who: 'Ask Finance leads' },
+    usedBy: { n: 2, what: 'intents in Mandate' },
+    noRecord: { from: '2019', to: 'Mar 2021', why: 'moved from the old asset register' },
+    sources: [
+      { id: 1, kind: 'document', icon: 'file-text', what: 'Site register 2026', app: 'Artifacts', grade: 'B2', sure: 'usually reliable, probably true' },
+      { id: 2, kind: 'person', icon: 'user', what: 'Dev Patel, 3 Oct 2026', app: 'a person', grade: 'A1', sure: 'reliable, confirmed' },
+      { id: 3, kind: 'document', icon: 'file-text', what: 'Fire safety log', app: 'Artifacts', grade: 'B2', sure: 'usually reliable, probably true' },
+      { id: 4, kind: 'document', icon: 'file-text', what: 'Fleet inspection, Jun 2026', app: 'Artifacts', grade: 'B1', sure: 'usually reliable, confirmed' }
+    ]
+  },
+  /* The vocabulary of the run. plain first; tech one step down; never = the misreadings each word must not allow. */
+  terms: [
+    { id: 'kind', plain: 'Kind of thing', say: 'What something is: a site, a supplier, a vehicle. Every card has one kind; kinds can sit inside broader kinds.',
+      tech: 'class · owl:Class · "type" in the API', studio: 'pack term by IRI, parent class',
+      mark: 'Lucide icon in a --radius-key square, --hairline-strong edge · count in --font-mono · no hue',
+      never: 'a folder, a floor, a team or a tag. A kind says what a thing is, never where it is kept.' },
+    { id: 'detail', plain: 'Detail', say: 'One thing worth knowing about every thing of a kind: an address, a registration, an end date.',
+      tech: 'property · owl:DatatypeProperty', studio: 'range (datatype), identity key flag',
+      mark: 'name in --type-small --ink-muted, value in --ink below or beside it',
+      never: 'a comment, a note, or a column you add for yourself. If its value is another thing, it is a link.' },
+    { id: 'link', plain: 'Link', say: 'How two things connect, said as a verb both ways: a contract is held by a supplier; the supplier holds it.',
+      tech: 'relation · owl:ObjectProperty + inverse', studio: 'domain, range, owl:inverseOf',
+      mark: '1px --x-link line · verb at mid-line · backward reading below at --x-quiet',
+      never: 'a web link, ownership, or "related to". A link without a verb is not a link.' },
+    { id: 'facet', plain: 'Filter', say: 'A question you answer to narrow the list (what kind, where, when), each choice saying how many it leaves.',
+      tech: 'facet · a detail or link used for browsing', studio: 'facet order per kind',
+      mark: 'chip: name · value · count left, in --font-mono · chosen: --surface-raised, --hairline-strong',
+      never: 'a saved search, a tag, a sort, or a hidden rule. A count is what the choice leaves, never a total.' },
+    { id: 'card', plain: 'Card', say: 'One real thing, on one card. Every card of a kind has the same shape, so any of them reads the same way.',
+      tech: 'entity · individual · ent_ + ULID', studio: 'owl:NamedIndividual, the id',
+      mark: 'fixed zones: kind, name, key, details, links, where it came from · --radius-inset · 2px floor edge',
+      never: 'a document (that is Artifacts), a copy, or the thing itself. Retiring a card never deletes it.' },
+    { id: 'gap', plain: 'Not known yet', say: 'A detail this kind should have that this card does not: drawn where it would be, with who could fill it.',
+      tech: 'missing value · expected property, no accepted fact', studio: 'sh:minCount 1 not met',
+      mark: '--x-gap: four 1px corner ticks, --space-2 long · empty inside · words + who · Add if you may',
+      never: 'none, zero, hidden, old or broken. Never blocks saving, never red.' },
+    { id: 'source', plain: 'Where it came from', say: 'What every detail rests on: a document in Artifacts, a person, a register. How sure, in words.',
+      tech: 'observation · provenance · grade (B2)', studio: 'prov:wasDerivedFrom, Admiralty grade',
+      mark: 'numbered note in --font-mono · file-text or user icon · how sure in words, letters one step down',
+      never: 'who typed it, or proof. A withdrawn source stays, struck, and stops counting.' },
+    { id: 'floor', plain: 'Kept on', say: 'The floor that keeps a card and can change it. You see what is kept on your floor and the floors above.',
+      tech: 'workspace · X-Workspace-Id', studio: 'floor fence, raise to a floor above',
+      mark: '2px left edge in --floor-*-high · floor name',
+      never: 'a kind, a category or importance. Floor hue never marks a kind or a state.' },
+    { id: 'expected', plain: 'Should have', say: 'What a kind expects every card to hold. A missing "should have" is a gap; a missing "can have" is listed once, quietly.',
+      tech: 'cardinality · min 1 (should) or min 0 (can)', studio: 'sh:minCount, owl:minCardinality',
+      mark: '--x-expected: 2px tick before the detail name · "can have" details carry none',
+      never: 'compulsory, a rule that stops work, or a score to hit.' }
+  ],
+  /* Six things that can look empty, and are not the same. */
+  states: [
+    { id: 'gap', plain: 'Not known yet', tech: 'missing value', from: 'this run', d: 'Should be on this card; nobody has recorded it.', never: 'none' },
+    { id: 'none', plain: 'None', tech: 'stated absence', from: 'this run', d: 'Someone checked: there is none. A value, with its source.', never: 'a gap' },
+    { id: 'stale', plain: 'Out of date', tech: 'stale · hatch 45°', from: 'wear and time', d: 'Known but old: says how old and who can refresh it.', never: 'unavailable' },
+    { id: 'norecord', plain: 'No record', tech: 'record gap · unconformity', from: 'wear and time', d: 'A hole in time: we don’t know what happened, and why.', never: 'nothing happened' },
+    { id: 'shadow', plain: 'Not yours to see', tech: 'unseen · shadow 135°', from: 'light language', d: 'It exists, kept elsewhere: which floor, who to ask.', never: 'missing' },
+    { id: 'could', plain: 'Could also hold', tech: 'optional, min 0', from: 'this run', d: 'Not expected for this kind. Named once, never drawn as a slot.', never: 'a gap' }
+  ]
+};
+
+const SHEET = {
+  eyebrow: 'The catalogue · grammar · card anatomy',
+  title: 'Anatomy of a card',
+  lede: 'A library card has the same zones whatever the book; ours does too, whatever the kind. Press T: the kind changes, the shape does not.',
+  rulesHead: 'Rules of entry: the library word, then ours',
+  /* zone order on the card = rule order; lib = what a cataloguer calls the zone */
+  rules: [
+    { z: 'callno', lib: 'Call number', term: 'kind' },
+    { z: 'heading', lib: 'Main entry', term: 'card' },
+    { z: 'body', lib: 'Body of the entry', term: 'detail' },
+    { z: 'body', lib: 'Required elements', term: 'expected' },
+    { z: 'gap', lib: '[ ] to be supplied', term: 'gap' },
+    { z: 'notes', lib: 'Notes', term: 'source' },
+    { z: 'subjects', lib: 'Subject tracings 1, 2, 3', term: 'facet' },
+    { z: 'added', lib: 'Added entries I, II, III', term: 'link' },
+    { z: 'stamp', lib: 'Location stamp', term: 'floor' }
+  ],
+  demoRule: 5,
+  /* more sample cards, same shape as DATA.record */
+  more: [
+    { kind: 'vehicle', name: 'Gritter 07', key: { n: 'Registration', v: 'HN19 GRT' }, floor: 'fleet', id: 'ent_01JB8C2M7X…',
+      details: [{ n: 'Based at', v: 'Kestrel Road Depot', state: 'known', ref: 1 }, { n: 'Next service', state: 'gap', who: 'Fleet leads can add it' }, { n: 'Fuel', v: 'Diesel', state: 'known', ref: 2 }],
+      subjects: ['Vehicles', 'Diesel', 'Hallam North'], links: [{ verb: 'involved in', n: 2, kind: 'Incidents' }], sources: ['Fleet list, Sep 2026', 'Dev Patel'] },
+    { kind: 'supplier', name: 'Northmoor Aggregates', key: { n: 'Company number', v: '08812245' }, floor: 'org', id: 'ent_01J9ZK0P4D…',
+      details: [{ n: 'Registered address', v: 'Unit 4, Mill Lane, Ashby', state: 'known', ref: 1 }, { n: 'Contact person', state: 'gap', who: 'Procurement leads can add it' }, { n: 'Insurance certificate', v: 'to 30 Apr 2026', state: 'stale', age: '6 months', ref: 2 }],
+      subjects: ['Suppliers', 'Ashby'], links: [{ verb: 'holds', n: 5, kind: 'Contracts' }], sources: ['Supplier register', 'Insurance letter'] },
+    { kind: 'incident', name: 'Skid on Kestrel Road', key: { n: 'Reference', v: 'INC-2291' }, floor: 'ops', id: 'ent_01JC1T9R2H…',
+      details: [{ n: 'Happened at', v: 'Kestrel Road Depot', state: 'known', ref: 1 }, { n: 'When', v: '2 Nov 2026, 06:40', state: 'known', ref: 1 }, { n: 'Severity', state: 'gap', who: 'Operations leads can add it' }],
+      subjects: ['Incidents', 'Hallam North', 'November 2026'], links: [{ verb: 'involved', n: 1, kind: 'Vehicles' }], sources: ['Incident form 2291'] }
+  ],
+  famTitle: 'Six things that look empty',
+  famLede: 'Only the bracket “to be supplied” is a gap. The rest say something else, and say it in words.'
+};
+/* ===== Shared helpers (generated into every sheet) ===== */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const ms = n => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(n)) || 0;
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ic = (n, s) => Icons.svg(n, { size: s || 16, stroke: 1.5 });
+const K = id => DATA.kinds.find(k => k.id === id) || DATA.elsewhere.find(k => k.id === id);
+const FL = id => DATA.floors[id];
+const T = id => DATA.terms.find(t => t.id === id);
+const REC = DATA.record;
+const fmt = n => n.toLocaleString('en-GB');
+const det = n => REC.details.find(d => d.n === n);
+const byState = s => REC.details.find(d => d.state === s);
+const SRC = id => REC.sources.find(s => s.id === id);
+
+/* one stage per empty-looking state, all drawn from the specimen card */
+function stateStage(id) {
+  const g = byState('gap'), st = byState('stale'), no = byState('none'), h = REC.hidden, nr = REC.noRecord;
+  if (id === 'gap') return `<div class="gapslot"><span class="gl">${g.n} · not known yet</span><span class="gw">${g.who}</span></div>`;
+  if (id === 'none') return `<div class="vrow"><span class="k">${no.n}</span><span class="nonev">${no.v}<span class="ref">${no.ref}</span></span></div>`;
+  if (id === 'stale') return `<div class="vrow"><span class="k">${st.n}</span><span>${st.v} <span class="staleage">${st.age}</span></span></div>`;
+  if (id === 'shadow') return `<div class="shadowslot sm">${ic('lock', 14)}<span>${h.n} · kept on ${FL(h.floor).name}</span></div>`;
+  if (id === 'could') return `<div class="sm muted">Could also hold: <span style="color:var(--ink)">${REC.could.join(', ')}</span></div>`;
+  if (id === 'norecord') { let w = ''; for (let y = 2; y <= 22; y += 4) w += `${w ? 'L' : 'M'}${(y / 4) % 2 ? 94 : 90},${y}`; let w2 = ''; for (let y = 2; y <= 22; y += 4) w2 += `${w2 ? 'L' : 'M'}${(y / 4) % 2 ? 134 : 130},${y}`;
+    return `<svg viewBox="0 0 220 40" style="display:block;width:100%;height:calc(var(--space-6) - var(--space-1))" aria-hidden="true">
+      <rect x="0" y="4" width="90" height="16" data-tier="${FL(REC.floor).tier}" style="fill:color-mix(in srgb, var(--fc) 26%, transparent)"/>
+      <rect x="92" y="4" width="40" height="16" style="fill:url(#x-stale)"/>
+      <path d="${w}" style="fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2"/><path d="${w2}" style="fill:none;stroke:var(--ink-muted);stroke-dasharray:2 2"/>
+      <rect x="134" y="4" width="86" height="16" data-tier="${FL(REC.floor).tier}" style="fill:color-mix(in srgb, var(--fc) 26%, transparent)"/>
+      <text x="112" y="36" text-anchor="middle" style="font:400 var(--type-small) var(--font-mono);fill:var(--ink)">no record ${nr.from} to ${nr.to}</text></svg>`; }
+  return '';
+}
+/* the strip of six empty-looking states; opts.tech shows the technical line, opts.ids picks and orders them */
+function renderFamily(el, opts) {
+  opts = opts || {};
+  const ids = opts.ids || DATA.states.map(s => s.id);
+  el.style.setProperty('--n', ids.length);
+  el.innerHTML = ids.map((id, i) => { const s = DATA.states.find(x => x.id === id);
+    return `<div class="st dep" style="--i:${i}" data-state="${id}"><div class="stage">${stateStage(id)}</div>
+      <div class="nm">${s.plain}<small>${s.from}</small></div><p class="d">${s.d}</p>
+      ${opts.tech === false ? '' : `<p class="tk">${s.tech} · never “${s.never}”</p>`}</div>`; }).join('');
+  Icons.hydrate(el);
+}
+/* one shared hatch pattern for SVG */
+document.body.insertAdjacentHTML('afterbegin', `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <pattern id="x-stale" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" style="stroke:var(--x-hatch);stroke-width:1"/></pattern>
+  <pattern id="x-shadow" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(135)"><line x1="0" y1="0" x2="0" y2="8" style="stroke:var(--hairline);stroke-width:1"/></pattern></defs></svg>`);
+/* timers for the auto-demo; R replays from the start */
+const TIMERS = [];
+const later = (fn, t) => TIMERS.push(setTimeout(fn, t));
+function boot(reset, demo) {
+  const w = $('#wrap');
+  const run = () => { TIMERS.splice(0).forEach(clearTimeout); reset(); w.classList.add('pre'); later(() => { w.classList.remove('pre'); demo(); }, ms('--motion-run')); };
+  document.addEventListener('keydown', e => { if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) run(); });
+  run();
+}
+
+/* the specimen in the same shape as the other sample cards */
+const CARDS = [{ kind: REC.kind, name: REC.name, key: REC.key, floor: REC.floor, id: REC.id.slice(0, 14) + '…', details: REC.details,
+  subjects: [K(REC.kind).plural, 'Hallam North', FL(REC.floor).name], links: REC.links, sources: REC.sources.map(s => s.what), hidden: REC.hidden }, ...SHEET.more];
+let ci = 0, focusRule = null;
+const rn = z => SHEET.rules.findIndex(r => r.z === z) + 1;
+function cardHTML(c) {
+  const k = K(c.kind), fl = FL(c.floor), kd = k.details;
+  const val = d => d.state === 'gap' ? `<span class="gapin z" data-z="gap">${d.n.toLowerCase()} to be supplied · <b>${d.who}</b></span>`
+    : `<span class="dn">${kd.find(x => x.n === d.n && x.exp) ? '<span class="exptick"></span>' : ''}${d.n}:</span> ${d.v}${d.ref ? `<span class="ref">${d.ref}</span>` : ''}${d.state === 'stale' ? ` <span class="staleage">${d.age} old</span>` : ''}`;
+  const roman = ['I', 'II', 'III', 'IV'];
+  return `<div class="ruled"></div>
+    <div class="callno z dep" style="--i:1" data-z="callno"><span class="k"><span class="muted">${rn('callno')}</span>${ic(k.icon, 12)}${k.name}</span><span>${c.key.v}</span></div>
+    <div class="stamp z dep" style="--i:6" data-z="stamp" data-tier="${fl.tier}"><span class="zn">${rn('stamp')}</span>Kept on ${fl.name}</div>
+    <h2 class="heading z dep" style="--i:2" data-z="heading"><span class="zn">${rn('heading')}</span>${c.name}</h2>
+    <p class="body z dep" style="--i:3;margin:0" data-z="body"><span class="zn">${rn('body')}</span>${c.key.n} ${c.key.v}<span class="sep"> — </span>${c.details.map(val).join('<span class="sep"> — </span>')}.</p>
+    <p class="notes z dep" style="--i:4;margin-bottom:0" data-z="notes"><span class="zn">${rn('notes')}</span>Sources: ${c.sources.map((s, i) => `${i + 1}. <b>${s}</b>`).join('; ')}.${c.hidden ? ` Also ${c.hidden.what} kept on ${FL(c.hidden.floor).name}, ${ic('lock', 12)} not shown here: ${c.hidden.who.toLowerCase()}.` : ''}</p>
+    <p class="tracings z dep" style="--i:5;margin-bottom:0" data-z="subjects"><span class="zn">${rn('subjects')}</span>${c.subjects.map((s, i) => `${i + 1}. <b>${s}</b>`).join('  ')}.</p>
+    <p class="tracings z dep" style="--i:5;margin-top:0" data-z="added"><span class="zn">${rn('added')}</span>${c.links.map((l, i) => `${roman[i]}. ${l.verb} <b>${l.n} ${l.kind}</b>`).join('  ')}.</p>
+    <span class="lcid dep" style="--i:7">${c.id}</span>`;
+}
+function render() {
+  $('#eyebrow').textContent = SHEET.eyebrow; $('#h1').textContent = SHEET.title; $('#lede').textContent = SHEET.lede; $('#rhead').textContent = SHEET.rulesHead;
+  $('#rules').innerHTML = SHEET.rules.map((r, i) => { const t = T(r.term);
+    return `<li class="dep" style="--i:${i + 2}" data-n="${i + 1}"><div class="pl"><span class="lib"><span>${String(i + 1).padStart(2, '0')}</span>${r.lib}</span>${t.plain}</div><div class="tc">${t.tech}</div><p class="never nv" style="margin-bottom:0"><b>Never means</b> ${t.never}</p></li>`; }).join('');
+  $('#switch').innerHTML = `<span class="lb">Same card, any kind</span>` + CARDS.map((c, i) => `<button class="tab" aria-pressed="${i === ci}" data-i="${i}">${ic(K(c.kind).icon, 14)}${K(c.kind).name}</button>`).join('');
+  $$('#switch .tab').forEach(b => b.addEventListener('click', () => show(+b.dataset.i)));
+  $('#famh').textContent = SHEET.famTitle; $('#famd').textContent = SHEET.famLede;
+  renderFamily($('#fam'));
+  show(ci, true);
+}
+function show(i, quiet) { ci = i; $('#lc').innerHTML = cardHTML(CARDS[i]); $('#lc').setAttribute('aria-label', `Card for ${CARDS[i].name}`);
+  $$('#switch .tab').forEach(b => b.setAttribute('aria-pressed', +b.dataset.i === i)); Icons.hydrate(document.body); setRule(focusRule); }
+function setRule(n) { focusRule = n; const r = n && SHEET.rules[n - 1];
+  $('#lc').classList.toggle('focus', !!r); $('#lc').classList.toggle('req', !!r && r.term === 'expected'); $('#rules').classList.toggle('focus', !!r);
+  $$('#lc .z').forEach(z => z.classList.toggle('on', !!r && z.dataset.z === r.z));
+  $$('#rules li').forEach(l => l.classList.toggle('on', +l.dataset.n === n));
+  $$('#fam .st').forEach(s => s.classList.toggle('on', !!r && r.term === 'gap' && s.dataset.state === 'gap')); }
+render();
+$$('#rules li').forEach(l => { l.tabIndex = 0; l.addEventListener('mouseenter', () => setRule(+l.dataset.n)); l.addEventListener('focus', () => setRule(+l.dataset.n)); l.addEventListener('mouseleave', () => setRule(null)); });
+document.addEventListener('keydown', e => { if (e.key === 't' || e.key === 'T') show((ci + 1) % CARDS.length);
+  const n = +e.key; if (n >= 1 && n <= SHEET.rules.length) setRule(n); if (e.key === 'Escape') setRule(null); });
+boot(() => { setRule(null); show(0); }, () => later(() => setRule(SHEET.demoRule), ms('--motion-run') + ms('--motion-base')));
+</script>
+</body>
+</html>
