@@ -81,11 +81,18 @@ jobs:
           RELEASE_TARGET: ${{ github.event.pull_request.head.sha }}
       # Only the newest preview of each app is kept, and none of an app the pull request no longer changes.
       - name: Delete this pull request's older previews
-        run: node scripts/app-release.mjs previews-clean "$PR_NUMBER" $TAGS
+        id: clean
+        run: |
+          node scripts/app-release.mjs previews-clean "$PR_NUMBER" $TAGS | tee "$RUNNER_TEMP/clean.txt"
+          echo "deleted=$(grep -q '^Deleted ' "$RUNNER_TEMP/clean.txt" && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           TAGS: ${{ steps.previews.outputs.tags }}
+    # Whether the feed must change: a preview was released or one deleted. A push that changes no app
+    # released on its own changes neither, so it signs no feed and starts no pipeline run.
+    outputs:
+      feed: ${{ steps.apps.outputs.changed != '[]' || steps.clean.outputs.deleted == 'true' }}
 
   closed:
     if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
@@ -100,16 +107,23 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Its previews leave the app feed, so deployments take them, and their scratch data, away.
       - name: Delete the pull request's previews
-        run: node scripts/app-release.mjs previews-clean "$PR_NUMBER"
+        id: clean
+        run: |
+          node scripts/app-release.mjs previews-clean "$PR_NUMBER" | tee "$RUNNER_TEMP/clean.txt"
+          echo "deleted=$(grep -q '^Deleted ' "$RUNNER_TEMP/clean.txt" && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+    outputs:
+      feed: ${{ steps.clean.outputs.deleted }}
   # Deployments' app runners learn of a new or removed preview from the feed beside the images. The
   # feed is signed as the Release feed workflow on main (ADR 0017), never as a pull request, so this
   # asks for a run on main rather than publishing it from here.
   feed:
     needs: [preview, closed]
-    if: always() && (needs.preview.result == 'success' || needs.closed.result == 'success')
+    # Only when a preview was released or deleted: re-signing an unchanged feed costs a run here, one of
+    # feed.yml and one of the pipeline feed.
+    if: always() && (needs.preview.outputs.feed == 'true' || needs.closed.outputs.feed == 'true')
     runs-on: ubuntu-latest
     permissions:
       actions: write

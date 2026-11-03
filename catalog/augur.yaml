@@ -503,7 +503,7 @@ metadata:
   name: keycloak
   description: 'Keycloak: sign-in for people and services (realm "platform")'
   annotations:
-    augur.dev/image: quay.io/keycloak/keycloak:26.0.8
+    augur.dev/image: quay.io/keycloak/keycloak:26.8.1
 spec:
   type: identity-provider
   owner: group:default/augur-core
