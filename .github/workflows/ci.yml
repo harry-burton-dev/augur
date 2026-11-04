@@ -53,7 +53,7 @@ jobs:
     # The registry's Postgres store is tested against a real database.
     services:
       postgres:
-        image: pgvector/pgvector:0.8.0-pg17
+        image: pgvector/pgvector:0.8.0-pg16
         env:
           POSTGRES_USER: platform
           POSTGRES_PASSWORD: platform-ci-only
@@ -92,6 +92,8 @@ jobs:
       - run: pnpm check:release
       - run: pnpm check:catalog
       - run: pnpm check:licences
+      # Workflows pinned and scoped, no untrusted text in scripts, CI on servers' Postgres major.
+      - run: pnpm check:repo-security
       - run: pnpm test:scripts
       # Into a hotfix's release/<unit>-<major.minor> branch only that unit's fixes go, as patches
       # (docs/release-channels.md).

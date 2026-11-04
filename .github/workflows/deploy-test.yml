@@ -71,20 +71,23 @@ jobs:
         env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}
           BROWSER_CHECK_OUT: ${{ runner.temp }}/browser-check
+          IMAGES_OUT: ${{ runner.temp }}/images.txt
       - name: Keep the browser check's screenshots
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: browser-check-${{ steps.releases.outputs.to }}
           path: ${{ runner.temp }}/browser-check
           retention-days: 14
           if-no-files-found: ignore
-      # The release's images, now pulled, against known vulnerabilities (ADR 0043): a critical one
+      # Every image the release runs, AUGUR's own and third-party ones (Keycloak, Postgres, Garage,
+      # nginx, Tailscale, the docker proxy), against known vulnerabilities (ADR 0043): a critical one
       # that has a fix fails the test. Accepted ones go in .trivyignore with a reason.
       - name: No critical vulnerabilities with a fix (Trivy)
         run: |
           failed=0
-          for image in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep "^ghcr.io/.*:$TO$" | sort -u); do
+          test -s "$IMAGES" || { echo "::error::The fresh install didn't list its images"; exit 1; }
+          for image in $(cat "$IMAGES"); do
             echo "::group::$image"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/trivy" \
               -v "$GITHUB_WORKSPACE/.trivyignore:/.trivyignore:ro" aquasec/trivy:0.60.0 image --quiet \
@@ -93,7 +96,7 @@ jobs:
           done
           exit $failed
         env:
-          TO: ${{ steps.releases.outputs.to }}
+          IMAGES: ${{ runner.temp }}/images.txt
       - name: Upgrade from the release before, then back
         if: ${{ !cancelled() && steps.releases.outputs.from != '' }}
         run: infra/deploy-test.sh upgrade "$FROM"
