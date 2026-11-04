@@ -63,13 +63,22 @@ jobs:
           git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
           git checkout -q "augur@$TO"
           # The test script and Trivy's exceptions are this workflow's, so an older release is tested the same way.
-          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh .trivyignore
+          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-browser-check.mjs .trivyignore
         env:
           TO: ${{ steps.releases.outputs.to }}
       - name: A fresh server
         run: infra/deploy-test.sh fresh
         env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}
+          BROWSER_CHECK_OUT: ${{ runner.temp }}/browser-check
+      - name: Keep the browser check's screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-check-${{ steps.releases.outputs.to }}
+          path: ${{ runner.temp }}/browser-check
+          retention-days: 14
+          if-no-files-found: ignore
       # The release's images, now pulled, against known vulnerabilities (ADR 0043): a critical one
       # that has a fix fails the test. Accepted ones go in .trivyignore with a reason.
       - name: No critical vulnerabilities with a fix (Trivy)
