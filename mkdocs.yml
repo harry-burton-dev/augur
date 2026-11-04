@@ -20,6 +20,7 @@ nav:
   - Running AUGUR on your own server: deploy.md
   - Domain events: domain-events.md
   - "Artifacts: a guide for people and admins": folio.md
+  - Background and scheduled jobs: jobs.md
   - Licensing: licensing.md
   - "Mandate: intent": mandate.md
   - Mirroring AUGUR releases: mirror.md
