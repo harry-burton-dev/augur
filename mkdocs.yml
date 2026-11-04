@@ -88,3 +88,4 @@ nav:
       - 0054. App frontends load data with TanStack Query, route with TanStack Router and call APIs with openapi-fetch, all wrapped by the app kit: decisions/0054-app-frontend-starter-libraries.md
       - 0056. Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal: decisions/0056-seed-through-public-apis.md
       - 0057. The realm is kept as code and applied by identity's realm job, which alone holds Keycloak's admin: decisions/0057-realm-as-code-applied-by-identitys-realm-job.md
+      - 0063. Accessibility is checked by axe in CI, failing on serious findings: decisions/0063-accessibility-checked-by-axe.md
