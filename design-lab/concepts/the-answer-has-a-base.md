@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-referen
 Could steer: The briefing (M), Explorer org views, the meter (W4).
 
 In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the pass balances against the source file's own TOTAL; every line and every value is accounted for (pass V2).
+
+In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): book counts always with their base, "four games: not a rate, read them" (collection V4, V5, combined V3).

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Marking V2 · Your own moves first</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Marking V2: the person who made a move marks it before seeing anyone else's mark; then both are shown, side by side ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.4fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.yours{min-height:0;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)}
+.yours .it{display:grid;grid-template-columns:2em minmax(0,1fr) auto;gap:var(--space-2);align-items:baseline;padding:var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small)}
+.yours .it.sel{background:var(--surface-raised);box-shadow:inset 2px 0 0 var(--light)}
+.yours .it .n{font-family:var(--font-mono);color:var(--ink-muted);text-align:right}
+.yours .st{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.yours .note{margin-top:auto;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.pair{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.pair .san{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-4);flex:1;min-height:0}
+.col{padding:var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline-strong);display:flex;flex-direction:column;gap:var(--space-2);transition:border-color var(--motion-calm) var(--ease-out)}
+.col .gl{font-size:var(--type-title)}
+.col .ln{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.col .by{font-size:var(--type-small);color:var(--ink-muted)}
+.col.pen{border-style:dotted;border-color:var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash)}
+.col.pen .ln{font-style:italic}
+.col.sealed{border-style:dashed;align-items:center;justify-content:center;text-align:center;color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);background:var(--x-proposed-unseen)}
+.col.sealed .w{background:var(--slate-deep);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key)}
+.reply{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.gap{font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-2) var(--space-3)}
+@media (max-width:1400px){.pair{padding:var(--space-3) var(--space-4);gap:var(--space-2)}.col{padding:var(--space-3)}.col .gl{font-size:var(--type-title-s)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Marking · V2</b> your own moves first: Jo marks her move before seeing the reviewer’s; then both stand, signed, and she may reply · Kasparov annotating his own games, after-action review (no blame)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const ME = 'p3';
+const MINE = MOVES.filter(m => m.by === ME).map(m => m.n);
+const S = { n: 4, released: false };
+function render() {
+  const m = MV(S.n), s = selfMark(S.n), r = reviewMarks(S.n)[0];
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', DEC.id, 'Your moves'], [['Enter', 'release yours'], ['R', 'replay']], { as: DATA.review.held, floor: 'team' }) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">Your own moves first</h1><p class="lede">Masters annotate their own games first, and those notes are the ones people read. Before anyone marks your move, you do. You see the reviewer’s mark only after you release yours, so neither steers the other.</p></div>
+    <aside class="yours pane"><p class="eyebrow">${P(ME).name} · your moves in ${DEC.id}</p>
+      ${MINE.map(n => `<div class="it ${n === S.n ? 'sel' : ''}"><span class="n">${n}.</span><span>${MV(n).san}</span><span class="st">${n === S.n && !S.released ? 'yours to mark' : selfMark(n) ? 'released' : 'not marked'}</span></div>`).join('')}
+      <p class="small" style="margin-top:var(--space-3)">You were also present for moves ${MOVES.filter(x => x.by === 'body' && le(x.on, '2026-11-03')).map(x => x.n).join(', ')}, made by the meeting. Those are marked by the reviewer only.</p>
+      <p class="note">${I('eye-off', 12)} Until you release it, your mark is yours alone. You can withdraw it until the meeting agrees the review on ${dt(DATA.review.agreed, 'short')}. Nothing anywhere counts your marks.</p></aside>
+    <section class="pair pane">
+      <p class="lab">Move ${m.n} · ${dt(m.on)}</p><p class="san">${m.san}</p><p class="small">${m.text}</p>
+      <div class="two">
+        <div class="col ${S.released ? '' : 'pen'}"><p class="lab">${S.released ? 'Yours, released' : 'Yours, in pencil'}</p>${gl(s.g)}<p class="ln">${s.line}</p><p class="by">${P(ME).name}, ${dt(DATA.review.held, 'short')}</p>
+          ${S.released ? '' : `<div class="reply" style="margin-top:auto"><button class="btn go sm" id="rel">${I('send', 14)} Release to the review</button><span>then you’ll see ${first(r.by)}’s</span></div>`}</div>
+        ${S.released ? `<div class="col fade"><p class="lab">The reviewer’s</p>${gl(r.g)}<p class="ln">${r.line}</p><p class="by">${P(r.by).name}, ${dt(DATA.review.held, 'short')}</p>
+          <div class="reply" style="margin-top:auto"><button class="btn sm">${I('message-square', 14)} Reply in one line</button><span>A reply sits under the mark; it doesn’t change it.</span></div></div>`
+        : `<div class="col sealed"><span class="w">${I('lock', 14)} ${P(r.by).name} has marked this move.<br>You’ll see it when you release yours.</span></div>`}
+      </div>
+      ${S.released ? `<p class="gap box fade">${gl(s.g)} and ${gl(r.g)}: one step apart. Both stay, signed. A gap between the mover and the reviewer is common and useful: here it is the difference between “I didn’t check” and “nobody checked”.</p>` : ''}
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $('#rel') && ($('#rel').onclick = () => { S.released = true; render(); });
+}
+function replay() { clearLater(); S.released = false; render(); settle(); later(() => { S.released = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === 'Enter') { S.released = true; render(); } });
+replay();
+</script>
+</body>
+</html>
