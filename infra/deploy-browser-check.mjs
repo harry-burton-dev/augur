@@ -93,7 +93,9 @@ try {
   await page.waitForSelector('meta[name="augur-kit"]', { state: 'attached', timeout: 30_000 });
   const kit = JSON.parse(await page.locator('meta[name="augur-kit"]').getAttribute('content'));
   const map = JSON.parse(await page.locator('script[type="importmap"]').textContent());
-  const kitBase = `${kit.url}${kit.version}/`;
+  // The kit's address, KIT_URL with the pinned version: /kit/0.1.0/ by default.
+  const kitBase = kit.url;
+  if (!kitBase.endsWith(`/${kit.version}/`)) fail(`the kit's address (${kitBase}) doesn't name its version, ${kit.version}`);
   const kitImports = Object.entries(map.imports).filter(([, url]) => url.startsWith(kitBase));
   if (kitImports.length === 0) fail(`the import map names nothing under ${kitBase}`);
   const unhashed = kitImports.filter(([, url]) => !map.integrity?.[url]);
