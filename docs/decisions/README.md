@@ -61,5 +61,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0054](0054-app-frontend-starter-libraries.md) | App frontends use TanStack Query and Router and openapi-fetch, wrapped by the app kit | Accepted | 2026-11-03 |
 | [0056](0056-seed-through-public-apis.md) | Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal | Proposed | 2026-11-03 |
 | [0057](0057-realm-as-code-applied-by-identitys-realm-job.md) | The realm is kept as code and applied by identity's realm job, which alone holds Keycloak's admin | Proposed | 2026-11-03 |
+| [0063](0063-accessibility-checked-by-axe.md) | Accessibility is checked by axe in CI, failing on serious findings | Proposed | 2026-11-04 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.
