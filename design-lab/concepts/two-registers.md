@@ -10,3 +10,5 @@ Plain word on top, the admin's word one step under it, the same rows on both fac
 First found in: [`2026-11-03-the-catalogue`](../runs/2026-11-03-the-catalogue/) (grammar V6, card V6, every surface's T key).
 
 Could steer: Admin screens, Explorer, the keys and doors (N), the constitution (R).
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): T shows which service keeps each field of a piece, or that it needs the working set (combined V2).

@@ -7,6 +7,7 @@ The **Deploy test** workflow (`.github/workflows/deploy-test.yml`) runs it **onc
 ## What it checks
 
 1. **A fresh server.** The new release starts on empty volumes. Each service's `/healthz` answers, the front door serves the shell, sign-in (`/sso/realms/platform/.well-known/openid-configuration`) and each pillar app's frontend, and no container keeps restarting.
+   Then a real browser (Playwright's own image, `infra/deploy-browser-check.mjs`) signs in as the first admin, sets a new password and a one-time-code app as Keycloak asks (the code is worked out from the key Keycloak shows), and opens Home and each app that ships with AUGUR (`release/shipped-apps.json`). Each one must render. React and the kit must come from the release's kit under `KIT_URL`, each with its hash in the import map (ADR 0048). Each app's frontend must come from `/apps/<id>/`, and no code or style file may fail to load. The workflow keeps a screenshot of each page for 14 days (the run's `browser-check-<version>` artifact). `BROWSER_CHECK=0` skips this step when you run the test yourself, and it is skipped when `THEN` is set, because it changes the first admin's password.
 2. **An upgrade.** The release before it (dev builds aside) starts first, from its own tag's deploy files as a server that checked it out has them, and is left to fill its tables, then the new release replaces it, as `pc up -d` does on a server. The same checks pass, every service reports its new version, and no table that had rows is gone or empty.
 3. **No critical vulnerabilities with a fix** in the release's images (Trivy, ADR 0043). One that's accepted goes in `.trivyignore` with why and a date to look again.
 4. **Going back.** The release it came from starts again on the upgraded data (docs/upgrade.md, "Going back"). This is what the migration rules in [versioning.md](versioning.md#database-migrations) promise, now tried for real.
@@ -21,7 +22,10 @@ LOCAL_TAG=0.14.0 infra/deploy-test.sh upgrade 0.13.1   # two published releases 
 BUILD=1 infra/deploy-test.sh upgrade 0.13.1            # this checkout, built here, against a release
 BUILD=1 infra/deploy-test.sh fresh
 BUILD=1 infra/deploy-test.sh broken                    # with the updater: its check must see AUGUR broken
+THEN='<command>' infra/deploy-test.sh fresh            # a fresh install, with <command> run against it
 ```
+
+**A command against a fresh install.** With `THEN` set, `fresh` allows sample data (`SEED_ALLOWED=true`) and, once the install is ready, runs `THEN` with `bash -c` before removing it. The command gets `AUGUR_URL` (the front door), `AUGUR_ADMIN_USER` and `AUGUR_ADMIN_PASSWORD` (the first admin, whose password must be changed at first sign-in) in its environment, and its exit status is the test's. The run suite's dry run uses it (the `augur-run` repository, ADR 0050): it seeds the install with `pnpm seed` and runs every scenario once.
 
 A release under test runs only its published images, the shipped apps' included (ADR 0049), so every AUGUR container must carry the release's version. With `BUILD=1`, `infra/deploy/compose.build.yml` builds the platform's images here, and Artifacts, Explorer and Data Atlas run AUGUR's images of the newest beta release (or `SHIPPED_APPS_VERSION`'s), so the version check leaves those four out.
 

@@ -211,7 +211,7 @@ export const applyRequiredActions = async (kc: KeycloakDirectory, changes: Chang
 
 /** Makes the platform's roles and `TWO_STEP_ROLE`, and puts `TWO_STEP_ROLE` inside each of `TWO_STEP_ROLES`. */
 export const applyRoles = async (kc: KeycloakDirectory, changes: Changes) => {
-  const made = await kc.ensureRoles([...PLATFORM_ROLES, TWO_STEP_ROLE, { name: 'admin', description: 'Runs the platform; sees the Admin app' }]);
+  const made = await kc.ensureRoles([...PLATFORM_ROLES, TWO_STEP_ROLE, { name: 'admin', description: 'Runs AUGUR; sees the Admin app' }]);
   if (made.length) changes.push(`roles made: ${made.join(', ')}`);
   const { data: twoStep } = await kc.call<{ id: string; name: string }>('GET', `/roles/${encodeURIComponent(TWO_STEP_ROLE.name)}`);
   for (const role of TWO_STEP_ROLES) {

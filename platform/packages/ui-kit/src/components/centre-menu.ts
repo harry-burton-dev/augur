@@ -779,7 +779,7 @@ export class UiCentreMenu extends LitElement {
       .menu {
         position: absolute; inset: 0; overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; touch-action: none;
         font-family: var(--font-sans); color: var(--ink); cursor: grab;
-        --wm-ease: cubic-bezier(0.2, 0.7, 0.2, 1); --wm-dur: 280ms;
+        --wm-ease: var(--ease-out); --wm-dur: var(--motion-base);
       }
       .menu.moving { cursor: grabbing; }
       /* while it follows the hand nothing eases behind it; letting go turns the easing back on, which carries it to rest */
@@ -857,6 +857,8 @@ export class UiCentreMenu extends LitElement {
       @keyframes track { from { opacity: 0; letter-spacing: calc(var(--tracking-title) * 1.7); filter: blur(10px); } }
       .title-variant .cat.focus, .title-variant .item.focus { filter: none; }
 
+      /* One switch for both: the system's setting, and AUGUR's own (data-motion="reduce" on <html>), which the motion tokens carry in and .reduce marks. */
+      .menu.reduce, .menu.reduce * { transition: none !important; animation: none !important; }
       @media (prefers-reduced-motion: reduce) {
         .menu, .menu * { transition: none !important; animation: none !important; }
       }
@@ -899,7 +901,7 @@ export class UiCentreMenu extends LitElement {
 
     return html`
       <div
-        class="menu ${variantClass} ${showIntro ? 'intro' : ''} ${ready ? 'in' : ''} ${this.spinning ? 'spinning' : ''} ${this.moving ? 'moving' : ''}"
+        class="menu ${variantClass} ${showIntro ? 'intro' : ''} ${ready ? 'in' : ''} ${this.spinning ? 'spinning' : ''} ${this.moving ? 'moving' : ''} ${this.reduce ? 'reduce' : ''}"
         style=${styleMap({ perspectiveOrigin: `${g.cx}px ${g.orbit ? g.rowY - 290 : g.rowY}px`, opacity: ready ? '' : '0' })}
         @keydown=${this.onKey}
         @pointerdown=${this.onPointerDown}

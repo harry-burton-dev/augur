@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A proposal waiting · V5 · The marking scheme</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: tick, correct or cross, as an examiner marks. Each mark shows, before you make it, what it does to the agent's record ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,var(--measure-decision));gap:var(--space-6);max-width:calc(var(--measure-wide) + var(--measure-decision));margin:0 auto}
+.paper{min-height:0;display:flex;flex-direction:column;gap:var(--space-4);justify-content:center}
+.it{padding:var(--space-5) var(--space-6);border-radius:var(--radius-inset)}
+.it .k{font-size:var(--type-meta);color:var(--ink-muted)}
+.it .v{font-size:var(--type-display);line-height:var(--leading-display);font-weight:200;color:var(--light);font-style:italic}
+.it.inked .v{font-style:normal}
+.it .src{font-size:var(--type-small);color:var(--ink-muted);margin-top:var(--space-2)}
+.it .corr{display:inline-block;margin-left:var(--space-4);font-size:var(--type-heading);font-style:normal;color:var(--x-proposed-seam)}
+.marks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
+.mark{display:flex;flex-direction:column;gap:var(--space-1);align-items:flex-start;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);text-align:left;transition:border-color var(--motion-quick) var(--ease-standard),background var(--motion-quick) var(--ease-standard)}
+.mark b{display:flex;gap:var(--space-2);align-items:center;font-weight:400;font-size:var(--type-lead);color:var(--light)}
+.mark span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.mark.hot,.mark:hover,.mark:focus-visible{background:var(--surface-raised);border-color:var(--ink-muted)}
+.mark.y.hot{border-color:var(--x-proposed-lit)}
+.reasons{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.reasons button{padding:var(--space-1) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);font-size:var(--type-small)}
+.reasons button.on{border-color:var(--light);color:var(--light)}
+.rec{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding-top:var(--space-6)}
+.card{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.card h3{margin:0 0 var(--space-2);font-weight:400;font-size:var(--type-meta);color:var(--light);display:flex;gap:var(--space-2);align-items:center}
+.tally{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-2)}
+.tally div{display:flex;flex-direction:column}
+.tally .n{font:300 var(--type-heading)/var(--leading-heading) var(--font-mono);color:var(--light)}
+.tally .n .d{font-size:var(--type-small);color:var(--x-proposed-lit);margin-left:var(--space-1)}
+.tally .n .d.neg{color:var(--x-proposed-disagree)}
+.tally .l{font-size:var(--type-small);color:var(--ink-muted)}
+.eff{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.eff b{font-weight:400;color:var(--light)}
+.never{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.it .v{font-size:var(--type-title);line-height:var(--leading-title)}.it{padding:var(--space-4)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A proposal waiting · V5</b> tick, correct or cross, with what each does to the record · examiners' marking, the crit</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PR = DATA.proposal, AG = PR.agent, a = A(AG), L1 = PR.lines.find(l => l.focal), KD = K(PR.kind);
+const S = { hot: null, reason: 1, done: null, corr: '3,421' };
+/* what each mark does to the record of this kind of work. Worked out, shown before you choose */
+function effect(m) {
+  const r = { acc: KD.acc, chg: KD.chg, rej: KD.rej, run: KD.run };
+  if (m === 'y') { r.acc++; r.run++; }
+  if (m === 'c') { r.chg++; r.run = 0; }
+  if (m === 'x') { r.rej++; r.run = 0; }
+  return r;
+}
+function render() {
+  const m = S.done || S.hot, r = m ? effect(m) : { acc: KD.acc, chg: KD.chg, rej: KD.rej, run: KD.run };
+  const dl = (k, base) => r[k] === base ? '' : `<span class="d ${k === 'acc' || (k === 'run' && r.run > base) ? '' : 'neg'}">${r[k] > base ? '+' + (r[k] - base) : '→' + r[k]}</span>`;
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Triage', PR.entity.name], [['Y', 'tick'], ['C', 'correct'], ['X', 'cross'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="paper">
+      <div class="it ${S.done === 'y' || S.done === 'c' ? 'pencil inked' : 'pencil'}"><p class="k">${PR.entity.name} · ${L1.k} ${mm(AG, S.done === 'y' || S.done === 'c')}</p>
+        <p class="v">${S.done === 'c' ? `<span class="struck">${L1.v}</span><span class="corr">${S.corr}</span>` : S.done === 'x' ? `<span class="struck">${L1.v}</span>` : L1.v}</p>
+        <p class="src">${PR.doc.title}, page ${L1.page}: <span class="mono">${L1.quote}</span></p></div>
+      <div class="marks">
+        <button class="mark y ${m === 'y' ? 'hot' : ''}" data-m="y"><b>${I('check', 20)} Tick</b><span>It’s right as read. <span class="kbd">Y</span></span></button>
+        <button class="mark ${m === 'c' ? 'hot' : ''}" data-m="c"><b>${I('pen-line', 20)} Correct</b><span>Nearly: put the right value. The record keeps both. <span class="kbd">C</span></span></button>
+        <button class="mark ${m === 'x' ? 'hot' : ''}" data-m="x"><b>${I('x', 20)} Cross</b><span>Wrong: say why, from the list. <span class="kbd">X</span></span></button>
+      </div>
+      ${m === 'x' ? `<div class="reasons" role="radiogroup" aria-label="Why">${PR.rejectReasons.map((w, i) => `<button role="radio" aria-checked="${S.reason === i}" class="${S.reason === i ? 'on' : ''}" data-r="${i}">${w}</button>`).join('')}</div>` : ''}
+    </section>
+    <aside class="rec">
+      <div class="card"><h3>${mm(AG)} ${a.name}’s record · ${KD.w.toLowerCase()}</h3>
+        <div class="tally"><div><span class="n">${KD.acc}${dl('acc', KD.acc)}</span><span class="l">ticked</span></div><div><span class="n">${KD.chg}${dl('chg', KD.chg)}</span><span class="l">corrected</span></div><div><span class="n">${KD.rej}${dl('rej', KD.rej)}</span><span class="l">crossed</span></div><div><span class="n">${KD.run}${dl('run', KD.run)}</span><span class="l">in a row</span></div></div></div>
+      <div class="card eff">${!m ? `Point at a mark to see what it does before you make it.` : m === 'y' ? `<b>Tick:</b> the detail goes in as ink, signed by you, with ${mm(AG, true)} kept. The run of ticks reaches <b>${r.run}</b>.` : m === 'c' ? `<b>Correct:</b> your value goes in as ink. The agent’s value is kept beside it as what it read, so the pattern can be found later. The run starts again at 0. It does <b>not</b> lower the rung: only you can.` : `<b>Cross, “${PR.rejectReasons[S.reason].toLowerCase()}”:</b> nothing goes in. The reason is filed with the kind of work, so ten crosses for one reason show as a pattern, not as ten bad days. The run starts again at 0.`}</div>
+      <p class="never">A mark changes the record. It never changes the rung: widening and narrowing are decisions a person makes on their own page, with a reason (see scope and level). The reasons are a fixed list so they can be counted.</p>
+      <p class="tk">Triage accept / change / reject · feedback event agent.marked { kind, verdict, reason } · rung untouched</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.mark').forEach(b => { b.onmouseenter = () => { if (!S.done && S.hot !== b.dataset.m) { S.hot = b.dataset.m; render(); } }; b.onclick = () => { S.done = b.dataset.m === 'x' && !S.done && S.hot !== 'x' ? null : b.dataset.m; S.hot = b.dataset.m; render(); }; });
+  $$('[data-r]').forEach(b => b.onclick = () => { S.reason = +b.dataset.r; S.done = 'x'; render(); });
+}
+function replay() {
+  clearLater(); S.hot = null; S.done = null; settle(); render();
+  /* the moment: pointing at each mark previews its effect on the record */
+  later(() => { S.hot = 'y'; render(); }, MOMENT());
+  later(() => { S.hot = 'c'; render(); }, MOMENT() + ms('--motion-run'));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  const k = e.key.toLowerCase();
+  if (k === 'y' || k === 'c' || k === 'x') { clearLater(); S.hot = k; S.done = k; render(); }
+});
+replay();
+</script>
+</body>
+</html>

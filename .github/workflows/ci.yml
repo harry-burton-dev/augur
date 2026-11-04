@@ -91,6 +91,7 @@ jobs:
       - run: pnpm check:versions
       - run: pnpm check:release
       - run: pnpm check:catalog
+      - run: pnpm check:licences
       - run: pnpm test:scripts
       # Into a hotfix's release/<unit>-<major.minor> branch only that unit's fixes go, as patches
       # (docs/release-channels.md).

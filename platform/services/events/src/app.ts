@@ -220,7 +220,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         if (!toTeam && !principals && !notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Name the recipients, or send to the team.' });
         if (principals) {
           // Reaching people by role or across the org is the platform's: an app names the people it means.
-          if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services send to an audience. Name the recipients.' });
+          if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services send to an audience. Name the recipients.' });
           if (toTeam || notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Send to an audience, the team or recipients: one of them.' });
           try {
             // Like a team, an audience is asked as it's sent: someone who has since lost the role isn't told.
@@ -407,7 +407,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const service = await fromService(req, reply, owner === 'platform' ? undefined : owner, 'events:publish');
         if (!service) return reply;
         if ((service.kind === 'platform') !== (owner === 'platform')) {
-          return reply.code(403).send({ error: 'forbidden', message: service.kind === 'platform' ? 'Platform services publish on "platform." topics.' : '"platform." topics belong to the platform.' });
+          return reply.code(403).send({ error: 'forbidden', message: service.kind === 'platform' ? 'AUGUR’s own services publish on "platform." topics.' : '"platform." topics belong to AUGUR’s own services.' });
         }
         const places = new Map<string, EventFloor>();
         for (const id of new Set(req.body.events.flatMap((e) => (e.workspace ? [e.workspace] : [])))) {

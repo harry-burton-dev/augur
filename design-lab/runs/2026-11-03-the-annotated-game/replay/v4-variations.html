@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Replay V4 · Variations</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens. All are mixes of kit tokens; listed as
+   "needs token" in the notes. Marks carried from earlier runs.
+   --------------------------------------------------------------- */
+:root{
+  /* carried: six ways to be empty, stale hatch, not yours to see, warning edge, quiet, micro type, lit, pencil */
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  --x-proposed-hatch: color-mix(in srgb, var(--ink-muted) 34%, transparent);
+  --x-proposed-stale: repeating-linear-gradient(45deg, transparent 0 calc(var(--space-1) - 1px), var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-warn: color-mix(in srgb, var(--warning) 70%, var(--ink));
+  --x-proposed-warn-wash: color-mix(in srgb, var(--warning) 7%, transparent);
+  --x-proposed-quiet: .62;
+  --x-proposed-type-micro: .6875rem;
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 70%, transparent);
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--ink) 3%, transparent);
+  /* NEW in this run. the marks: tone only backs the glyph, never replaces it */
+  --x-proposed-mark-good: var(--x-proposed-lit);
+  --x-proposed-mark-info: color-mix(in srgb, var(--info) 75%, var(--ink));
+  --x-proposed-mark-soft: color-mix(in srgb, var(--warning) 40%, var(--ink));
+  --x-proposed-mark-bad: var(--x-proposed-warn);
+  /* NEW. glyph pairs (!? ?!) set tight, as in print */
+  --x-proposed-glyph-tracking: calc(var(--tracking-caps) * -1);
+  /* NEW. the computed view's bar: the two halves of an evaluation bar */
+  --x-proposed-eval-on: color-mix(in srgb, var(--light) 82%, transparent);
+  --x-proposed-eval-off: var(--slate-deep);
+  /* NEW. the far plane of a replay: what was not known yet, racked out of focus (focal planes) */
+  --x-proposed-future-blur: var(--space-1);
+  /* NEW. hindsight: anything known only after the move, on its own wash */
+  --x-proposed-hindsight: color-mix(in srgb, var(--info) 7%, transparent);
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.lite{color:var(--light)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hints .on{color:var(--x-proposed-lit)}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+h1,h2,h3,p,ul,ol{margin:0}
+ul,ol{padding:0;list-style:none}
+
+/* floors */
+[data-tier="department"]{--fc:var(--floor-department-high);--fl:var(--floor-department-low)}
+[data-tier="team"]{--fc:var(--floor-team-high);--fl:var(--floor-team-low)}
+[data-tier="org"]{--fc:var(--floor-org-high);--fl:var(--floor-org-low)}
+[data-tier="you"]{--fc:var(--floor-you-high);--fl:var(--floor-you-low)}
+.fchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-4);height:2px;background:var(--fc);border-radius:1px}
+.who{color:var(--ink);white-space:nowrap;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--fc) 55%,transparent);text-underline-offset:var(--focus-gap);text-decoration-thickness:1px}
+.face{display:inline-flex;align-items:center;justify-content:center;width:var(--target-sm);height:var(--target-sm);border-radius:var(--radius-pill);border:1px solid color-mix(in srgb,var(--fc) 60%,transparent);font:400 var(--type-small)/1 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink);background:var(--surface-inset);flex:none}
+.face.sm{width:calc(var(--space-5) - var(--space-1));height:calc(var(--space-5) - var(--space-1));font-size:var(--x-proposed-type-micro)}
+.face.off{opacity:var(--x-proposed-quiet);border-style:dashed}
+
+/* two registers: technical line one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* ---- the notation ---- */
+.gl{display:inline-block;font:500 var(--type-meta)/1 var(--font-mono);letter-spacing:var(--x-proposed-glyph-tracking);color:var(--ink);min-width:1.4em;text-align:center;white-space:nowrap}
+.gl-good{color:var(--x-proposed-mark-good)}
+.gl-info{color:var(--x-proposed-mark-info)}
+.gl-soft{color:var(--x-proposed-mark-soft)}
+.gl-bad{color:var(--x-proposed-mark-bad)}
+.gl-pos{color:var(--light);font-weight:400}
+.gl-plain{color:var(--ink)}
+.gl.big{font-size:var(--type-heading)}
+.gl.huge{font-size:var(--type-title);font-weight:400}
+.gl.second{opacity:var(--x-proposed-quiet)}
+.door{display:inline-flex;vertical-align:-2px;color:var(--ink-muted)}
+.did{display:inline-block;font:400 var(--type-small)/1 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:3px var(--space-1);white-space:nowrap;vertical-align:1px}
+
+/* the score sheet */
+.mv{display:grid;grid-template-columns:2.2em var(--space-1) minmax(0,1fr) auto auto;gap:var(--space-2);align-items:center;width:100%;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);transition:background var(--motion-quick) var(--ease-standard)}
+.mv:hover{background:var(--surface-raised)}
+.mv.sel{background:var(--surface-raised);box-shadow:inset 2px 0 0 var(--light)}
+.mv-n{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);text-align:right}
+.mv-side{width:var(--space-1);height:var(--space-4);border-radius:1px;background:var(--light)}
+.mv.world .mv-side{background:none;outline:1px solid var(--ink-muted);outline-offset:-1px}
+.mv.world .mv-san{color:var(--ink-muted);font-style:italic}
+.mv-san{min-width:0}
+.mv-g{display:inline-flex;gap:var(--space-1)}
+.mv-p{min-width:2em;text-align:right}
+.mv.future{filter:blur(var(--x-proposed-future-blur)) saturate(0);opacity:var(--x-proposed-quiet);pointer-events:none}
+
+/* the evaluation bar */
+.eb{position:relative;display:inline-block;width:var(--space-3);height:100%;min-height:var(--space-6);background:var(--x-proposed-eval-off);border:1px solid var(--hairline-strong);border-radius:2px;overflow:hidden;vertical-align:middle}
+.eb-on{position:absolute;left:0;right:0;top:0;background:var(--x-proposed-eval-on);transition:height var(--motion-calm) var(--ease-out),width var(--motion-calm) var(--ease-out)}
+.eb::after{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:var(--x-proposed-warn);opacity:.7}
+.eb.flat{width:100%;height:var(--space-2);min-height:0}
+.eb.flat .eb-on{top:0;bottom:0;right:auto}
+.eb.flat::after{left:50%;top:0;bottom:0;width:1px;height:auto}
+.eb-blind{position:absolute;inset:0;background:var(--x-proposed-unseen)}
+
+/* the curve */
+.cv{display:block;overflow:visible}
+.cv-mid{stroke:var(--hairline-strong);stroke-width:1}
+.cv-band{stroke:var(--hairline);stroke-width:1;stroke-dasharray:2 3}
+.cv-area{fill:color-mix(in srgb,var(--light) 9%,transparent)}
+.cv-ln{fill:none;stroke:var(--light);stroke-width:1.5;stroke-linejoin:round}
+.cv-tick{stroke:var(--ink-muted);stroke-width:1}
+.cv-tick.us{stroke:var(--ink)}
+.cv-tick.sel{stroke:var(--light);stroke-width:2}
+.cv-sel{stroke:var(--light);stroke-width:1;opacity:.5}
+.cv-crit{fill:var(--slate-deep);stroke:var(--x-proposed-warn);stroke-width:1.5}
+.cv-now{stroke:var(--light);stroke-width:1}
+
+/* pencil and ink */
+.pencil{border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3)}
+.pencil .pt{font-style:italic;color:var(--ink)}
+.pencil .pl{display:flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);margin:0 0 var(--space-1)}
+.hind{background:var(--x-proposed-hindsight);border-left:2px solid var(--info);padding:var(--space-1) var(--space-2);border-radius:0 var(--radius-key) var(--radius-key) 0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.hind .hl{font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--info);margin-right:var(--space-2)}
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);white-space:nowrap;transition:background var(--motion-quick) var(--ease-standard),border-color var(--motion-quick) var(--ease-standard)}
+.btn:hover{background:var(--surface-raised)}
+.btn.go{border-color:var(--x-proposed-lit);color:var(--light);background:var(--x-proposed-lit-wash)}
+.btn.sm{height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-2);font-size:var(--type-small)}
+.btn[aria-disabled="true"]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+.btn.on{border-color:var(--light);background:var(--surface-raised);color:var(--light)}
+
+/* app frame */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.top{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--slate-deep) 70%,transparent);min-width:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0;white-space:nowrap}
+.crumb{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);white-space:nowrap;min-width:0;overflow:hidden}
+.crumb b{font-weight:400;color:var(--light)}
+.crumb svg{opacity:var(--x-proposed-quiet);flex:none}
+.asat{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--type-small);color:var(--ink-muted);white-space:nowrap}
+.asat b{font-weight:400;color:var(--light)}
+.top .hints{margin-left:auto;justify-content:flex-end}
+.main{min-height:0;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));overflow:hidden}
+.h1{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light)}
+.h2{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.lab{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.small{font-size:var(--type-small);line-height:var(--leading-small)}
+.meta{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.pane{background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset)}
+.box{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline-strong);background:var(--surface-inset)}
+.box.lit{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.box.warn{border-color:var(--x-proposed-warn);background:var(--x-proposed-warn-wash)}
+.intro{display:flex;align-items:baseline;gap:var(--space-4);flex-wrap:wrap}
+.intro .lede{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);max-width:var(--measure-wide)}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+.fade{animation:fade var(--motion-calm) var(--ease-out)}
+@keyframes fade{from{opacity:0}}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+.x-cap{max-width:calc(100vw - 2 * var(--edge-tight));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.intro .h1{white-space:nowrap}
+@media (max-width:1400px){.h1{font-size:var(--type-heading);line-height:var(--leading-heading);letter-spacing:var(--tracking-label)}}
+
+/* ---- Replay V4: the main line, and at the moments that turned, the lines not played that were on the record at the time ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.main-line{min-height:0;padding:var(--space-3);display:flex;flex-direction:column;gap:2px}
+.mv .vb{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-mark-info);border:1px solid color-mix(in srgb,var(--info) 40%,transparent);border-radius:var(--radius-pill);padding:2px var(--space-1)}
+.tree{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.at{display:flex;align-items:baseline;gap:var(--space-3)}
+.at .n{font:300 var(--type-title-s)/1 var(--font-mono);color:var(--ink-muted)}
+.at .t{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.branches{position:relative;display:grid;gap:var(--space-3);padding-left:var(--space-6)}
+.branches::before{content:"";position:absolute;left:var(--space-4);top:0;bottom:var(--space-6);width:1px;background:var(--hairline-strong)}
+.br{position:relative;padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-inset);display:grid;gap:var(--space-1);transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.br::before{content:"";position:absolute;left:calc(var(--space-5) * -1 + 1px);top:var(--space-5);width:calc(var(--space-5) - 2px);height:1px;background:var(--hairline-strong)}
+.br.played{border-color:var(--hairline-strong)}
+.br.played .s::after{content:"  · played";font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.br.alt{border-style:dashed;border-color:color-mix(in srgb,var(--info) 50%,transparent)}
+.br .s{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.br .t{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.br .src{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted)}
+.br .est{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);font-style:italic}
+.br .elsewhere{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--x-proposed-mark-good)}
+.closed .br.alt{opacity:0;transform:translateX(calc(var(--space-4) * -1))}
+.foot{margin-top:auto;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.tree{padding:var(--space-3) var(--space-4);gap:var(--space-2)}.br{padding:var(--space-2) var(--space-3)}.main-line .mv{padding:2px var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Replay · V4</b> variations: at the moments that turned, the lines not played, only from the record at the time; one was played elsewhere and kept · Informator variations, opening theory</div>
+<script>
+/* Sample data. Every name, label, count, date, code and floor below is deployment data:
+   nothing in the markup or the scripts repeats any of it. One organisation; the story is
+   the minute run's D-118 (a contract decision that went badly), now reviewed as a game:
+   replayed move by move on 24 November 2026, its critical moments marked, the review agreed
+   on 8 December, filed in the floor's book under a situation code, and met a year later by
+   a new colleague who is drafting the same kind of decision. */
+const DATA = {
+  org: 'Ridgeway Regional Services',
+  today: '2026-11-24',
+  floors: {
+    org:        { name: 'Ridgeway Regional Services', word: 'Org' },
+    department: { name: 'Fleet and Facilities',       word: 'Department' },
+    team:       { name: 'North depot crew',           word: 'Team' }
+  },
+  people: {
+    p1:  { name: 'Marcus Hale',   role: 'Head of Fleet and Facilities', floor: 'department', initials: 'MH' },
+    p2:  { name: 'Priya Nair',    role: 'Fleet lead',                   floor: 'department', initials: 'PN', left: '2027-03-31' },
+    p3:  { name: 'Jo Barnes',     role: 'North depot keeper',           floor: 'team',       initials: 'JB' },
+    p4:  { name: 'Dana Whitlock', role: 'Contracts manager',            floor: 'org',        initials: 'DW' },
+    p5:  { name: 'Ade Bello',     role: 'Finance business partner',     floor: 'org',        initials: 'AB' },
+    p8:  { name: 'Sam Okafor',    role: 'Depot coordinator',            floor: 'team',       initials: 'SO' },
+    p9:  { name: 'Owen Pryce',    role: 'Improvement lead',             floor: 'org',        initials: 'OP' },
+    p10: { name: 'Leah Grant',    role: 'Contracts officer',            floor: 'department', initials: 'LG', joined: '2027-09-06' },
+    p11: { name: 'Nadia Kerr',    role: 'Head of Parks and Open Spaces', floor: 'department', initials: 'NK' }
+  },
+  body: { name: 'Fleet and Facilities leadership meeting', short: 'Leadership meeting', code: 'FFL', chair: 'p1', floor: 'department' },
+
+  /* ---- the notation: a deployment may rename the words, never the marks ---- */
+  marks: {
+    '!!': { w: 'Won it',      say: 'A move that decided the outcome for the better. Rare.',            tone: 'good' },
+    '!':  { w: 'Good move',   say: 'Helped, and is worth repeating.',                                  tone: 'good' },
+    '!?': { w: 'Interesting', say: 'A risk taken knowingly. Worth discussing, not a mistake.',          tone: 'info' },
+    '?!': { w: 'Dubious',     say: 'A weak step. Not yet a mistake.',                                  tone: 'soft' },
+    '?':  { w: 'Mistake',     say: 'Made the outcome worse, and was avoidable with what was known then.', tone: 'bad' },
+    '??': { w: 'Lost it',     say: 'Decided the outcome for the worse, with what was known then. Rare.',  tone: 'bad' }
+  },
+  markOrder: ['!!', '!', '!?', '?!', '?', '??'],
+  signs: {
+    '□': { w: 'Only move',      say: 'There was no real choice.' },
+    '⊕': { w: 'Against a clock', say: 'Decided under a deadline.' },
+    'N': { w: 'New to us',      say: 'The first time this body played this.' },
+    '∆': { w: 'With the idea',  say: 'The intention behind a move, in a line of commentary.' }
+  },
+  /* the computed view: a position read from the decision's own lines, as at a date. Never typed */
+  positions: [
+    { s: '±', w: 'On course',          min: 0.5,  say: 'Every line it set has room.' },
+    { s: '⩲', w: 'On course, narrowly', min: 0.2,  say: 'A line is getting close.' },
+    { s: '=', w: 'At its lines',       min: -0.2, say: 'A line is reached, or nearly.' },
+    { s: '⩱', w: 'Off course',         min: -0.5, say: 'A line is crossed.' },
+    { s: '∓', w: 'Well off course',    min: -9,   say: 'Two lines crossed, or one far over.' }
+  ],
+  unclear: { s: '∞', w: 'The records can’t see this', say: 'A person’s mark on a position: what matters here is not in the records. It can only lower the computed view’s certainty, never raise it.' },
+
+  /* ---- the decision under review ---- */
+  decision: {
+    id: 'D-118', title: 'Van inspections at the North depot move in-house', kind: 'Change a contract', floor: 'department',
+    words: 'That van inspections at the North depot move in-house from 1 July 2026, as a six-month trial, and that Kestrel’s servicing contract is reduced to breakdown cover when it renews on 1 September 2026.',
+    made: '2026-05-12', ended: '2026-11-03', result: 'reversed', reversedBy: 'D-131', days: 175,
+    intended: 'Our own fitters inspect North depot vans from 1 July at £112 a van, saving about £16,000 a year, with no more vans overdue.',
+    happened: 'No fitter until 9 September, and only one. Kestrel went to breakdown cover on 1 September. Overdue vans rose from 2 to 7 of 18 and our cost rose to £148 a van. £3,100 of the saving was counted. Reversed on 3 November by D-131.'
+  },
+  /* the lines the decision set for itself; the computed view reads only these */
+  lines: [
+    { id: 'L1', text: 'revisit if more than 4 North depot vans are overdue', series: 'overdue', at: 4, kind: 'max' },
+    { id: 'L2', text: 'revisit if fewer than two fitters are in post on 1 August', series: 'fitters', need: 2, from: '2026-05-12', by: '2026-08-01', kind: 'by' },
+    { id: 'L3', text: 'the saving: £186 a van down to £112', series: 'cost', was: 186, plan: 112, kind: 'aim' }
+  ],
+  series: {
+    overdue: { label: 'North depot vans overdue', of: 18, pts: [['2026-05-01', 2], ['2026-06-01', 2], ['2026-07-01', 1], ['2026-08-01', 2], ['2026-09-01', 2], ['2026-09-15', 3], ['2026-10-01', 4], ['2026-10-06', 5], ['2026-11-01', 7]] },
+    fitters: { label: 'Fitters in post at the North depot', pts: [['2026-05-01', 0], ['2026-09-09', 1]] },
+    cost:    { label: 'Our cost per van inspection', unit: '£', pts: [['2026-05-01', 112], ['2026-07-31', 131], ['2026-08-31', 139], ['2026-09-30', 144], ['2026-10-31', 148]] }
+  },
+
+  /* ---- the game: every move on the record, ours and the world's ---- */
+  moves: [
+    { n: 1, on: '2026-05-05', side: 'us', by: 'p2', san: 'Paper: in-house at £112 a van', text: 'Priya circulates the costing: our own fitters at £112 a van against Kestrel’s £186. It has no figure for cover when a fitter is off.', refs: 'In-house inspection costing, v2' },
+    { n: 2, on: '2026-05-12', side: 'us', by: 'p5', san: 'Amend: as a six-month trial', text: 'Ade asks for cover costs and proposes the change as a six-month trial. Accepted.' },
+    { n: 3, on: '2026-05-12', side: 'us', by: 'p1', san: 'Line: more than 4 overdue', text: 'The chair sets a line at the table: revisit if more than 4 vans are overdue.' },
+    { n: 4, on: '2026-05-12', side: 'us', by: 'p3', san: 'Assumed: two fitters by 30 June', text: 'Jo says in passing that two fitters by the end of June “should be fine”. It is recorded as an assumption, and a second line is set on it for 1 August.' },
+    { n: 5, on: '2026-05-12', side: 'us', by: 'body', san: 'Decided: D-118, 4 for, 1 abstained', text: 'The meeting resolves D-118. Ade abstains: the costing has no figure for cover.', sign: 'N' },
+    { n: 6, on: '2026-05-28', side: 'us', by: 'p4', san: 'Notice: Kestrel to breakdown cover', text: 'Dana gives Kestrel notice: from 1 September the contract covers breakdowns only. No fitter has been hired yet.', door: true, sign: '⊕', clock: 'Kestrel needs three months’ notice to change scope, so notice for 1 September had to go by 1 June.',
+      opts: [
+        { san: 'Give notice now for 1 September', played: true },
+        { san: 'Renew for a year with the six-month break', text: 'Contract C-0412, clause 9, allowed a break at six months on three months’ notice. Notice could wait until both fitters were in post.', from: 'Contract C-0412' },
+        { san: 'Ask the meeting to move the start', text: 'Put the start back to 1 December and give notice in August.', from: 'not on the record: proposed at review' }
+      ] },
+    { n: 7, on: '2026-06-23', side: 'world', san: 'No qualified applicants', text: 'The first hiring round closes with no qualified applicants.' },
+    { n: 8, on: '2026-06-23', side: 'us', by: 'p1', san: 'Date moved: fitters by 31 August', text: 'The chair agrees to move the hiring action to 31 August. The line on 1 August is not moved.' },
+    { n: 9, on: '2026-07-22', side: 'us', by: 'p8', san: 'Bay fitted out', text: 'Sam’s inspection bay is fitted out and signed off.' },
+    { n: 10, on: '2026-08-01', side: 'world', san: 'Line crossed: no fitter on 1 August', text: 'The second line is crossed: no fitter is in post. The decision is marked worth revisiting and the chair is asked once.' },
+    { n: 11, on: '2026-08-01', side: 'us', by: 'p1', san: 'Noted and kept, no reason', text: 'The chair notes the line and keeps the decision. No reason is recorded. The next meeting is on 8 September.',
+      opts: [
+        { san: 'Note it and keep it', played: true },
+        { san: 'Bring the review forward', text: 'Call the meeting early, as was done in October.', from: 'the revisit item’s three choices' },
+        { san: 'Put it on the next agenda with a reason', text: 'Keep it, and write down why.', from: 'the revisit item’s three choices' }
+      ] },
+    { n: 12, on: '2026-09-01', side: 'world', san: 'Kestrel to breakdown cover', text: 'Kestrel stops inspecting. Our own inspections start with no fitter in post.', door: true },
+    { n: 13, on: '2026-09-08', side: 'us', by: 'body', san: 'D-128: keep the trial with one fitter', text: 'The meeting keeps the trial going with one fitter, who starts the next day, until the November review.',
+      opts: [
+        { san: 'Keep the trial with one fitter', played: true },
+        { san: 'Buy Kestrel visits for the overdue vans', text: 'Dana’s note in the pack: Kestrel would inspect ad hoc at £210 a van.', from: 'D-128 pack' },
+        { san: 'Reverse now', text: 'Go back to a contractor from 1 December.', from: 'raised by Ade at the meeting' }
+      ] },
+    { n: 14, on: '2026-09-09', side: 'world', san: 'One fitter starts', text: 'The first fitter starts. The second post is re-advertised at a higher grade.' },
+    { n: 15, on: '2026-10-06', side: 'world', san: 'Line crossed: 5 vans overdue', text: 'October’s count is 5 of 18, over the line of 4. The decision is marked worth revisiting again.' },
+    { n: 16, on: '2026-10-13', side: 'us', by: 'body', san: 'D-130: review brought forward', text: 'The meeting brings its November review forward to 3 November.' },
+    { n: 17, on: '2026-11-03', side: 'us', by: 'body', san: 'D-131: reversed, bay and fitter kept', text: 'Before the vote the meeting sees everything that rests on D-118. It reverses it: a contractor inspects again from 1 December; the bay and the fitter stay, for repairs.' }
+  ],
+
+  /* the decision's actions, with every change dated (the minute run's A-301 to A-303) */
+  actions: [
+    { id: 'A-301', text: 'Give Kestrel notice of breakdown cover only', owner: 'p4', set: '2026-05-12', due: [['2026-05-12', '2026-05-31']], done: '2026-05-28' },
+    { id: 'A-302', text: 'Hire two fitters for the North depot', owner: 'p3', set: '2026-05-12', due: [['2026-05-12', '2026-06-30'], ['2026-06-23', '2026-08-31'], ['2026-08-28', '2026-10-31']], part: ['2026-09-09', '1 of 2 in post'], overtaken: '2026-11-03' },
+    { id: 'A-303', text: 'Fit out the inspection bay', owner: 'p8', set: '2026-05-12', due: [['2026-05-12', '2026-07-15']], done: '2026-07-22' }
+  ],
+  /* what had been circulated or recorded by each date: the board a reviewer replays on */
+  record: [
+    { on: '2026-02-02', w: 'Kestrel annual report 2025: 3 of 12 visits missed' },
+    { on: '2026-05-05', w: 'In-house inspection costing, v2 (no figure for cover)' },
+    { on: '2026-05-12', w: 'D-118 and its three actions; two revisit lines' },
+    { on: '2026-05-28', w: 'Notice letter to Kestrel, acknowledged' },
+    { on: '2026-06-23', w: 'Hiring round 1 closed: no qualified applicants' },
+    { on: '2026-07-22', w: 'Bay sign-off by the health and safety adviser' },
+    { on: '2026-08-01', w: 'Revisit item to the chair: line L2 crossed' },
+    { on: '2026-09-08', w: 'D-128 pack, with Kestrel’s ad hoc price of £210 a van' },
+    { on: '2026-10-06', w: 'Revisit item to the chair: line L1 crossed' },
+    { on: '2026-10-28', w: 'Briefing: North depot vans overdue' },
+    { on: '2026-11-03', w: 'D-131 and the wake of D-118' }
+  ],
+  /* the marks, by move. self: the person who made the move marks it first. Lines are one sentence */
+  annotations: {
+    1:  [ { g: '?!', by: 'p2', self: true, line: 'I had no figure for cover, so I left it out. The first page should have said so.' },
+          { g: '?!', by: 'p9', line: 'A costing with no cover for sickness or leave. Ade asked for it at the table.' } ],
+    2:  [ { g: '!',  by: 'p9', line: 'Turned a bet into a trial with an end date. It is why reversing cost so little.' } ],
+    3:  [ { g: '!',  by: 'p9', line: 'A line anyone could read. It fired on time.' } ],
+    4:  [ { g: '?!', by: 'p3', self: true, line: 'I said it to keep the meeting moving. I hadn’t checked the market.' },
+          { g: '?',  by: 'p9', line: 'Everything rested on this, and nobody tested it before the one step that couldn’t be undone.', crit: true } ],
+    6:  [ { g: '□',  by: 'p4', self: true, line: 'The decision said 1 September and the notice period set the date. I did what it asked.' },
+          { g: '?',  by: 'p9', line: 'The one step that couldn’t be undone was taken before what it depended on. Clause 9 allowed a break instead.', crit: true },
+          { g: '∞',  by: 'p9', pos: true, line: 'The records saw no change here. The options closed.' } ],
+    8:  [ { g: '?!', by: 'p9', line: 'The action’s date moved; the line it depended on did not.' } ],
+    9:  [ { g: '!',  by: 'p9' } ],
+    11: [ { g: '?!', by: 'p1', self: true, line: 'I expected a fitter within weeks. I should have written that down.' },
+          { g: '?',  by: 'p9', line: 'The line did its job. Noting it without a reason let 38 days pass.', crit: true } ],
+    13: [ { g: '!?', by: 'p9', line: 'A risk taken knowingly: a fitter started the next day.', crit: true },
+          { g: '?',  by: 'p5', line: 'One fitter can’t inspect 18 vans a month. We had the numbers.' } ],
+    16: [ { g: '!',  by: 'p9', line: 'Acted within a week of the line.' } ],
+    17: [ { g: '!',  by: 'p9', line: 'Saw the wake first, and kept what was worth keeping.' } ]
+  },
+  /* what the records now say about a move, with hindsight (shown only when asked) */
+  hindsight: {
+    4:  'Hiring took 120 days for one fitter; the second post is still open.',
+    6:  'Undoing the notice cost a quick tender, and ad hoc visits at £210 a van meanwhile.',
+    11: 'Overdue vans stayed at 2 until September, then rose every month.',
+    13: 'Overdue rose from 2 to 7 in the eight weeks after.'
+  },
+  /* the review, as an after-action review (what was meant, what happened, why, what to keep) */
+  review: {
+    id: 'R-07', held: '2026-11-24', agreed: '2026-12-08', facilitator: 'p9', with: ['p1', 'p2', 'p3', 'p4', 'p5', 'p8'],
+    why: [
+      { text: 'The hiring assumption was said, not tested.', move: 4 },
+      { text: 'The one step that couldn’t be undone was taken first, against a notice clock.', move: 6 },
+      { text: 'A crossed line was noted without a reason; the meeting saw it 38 days later.', move: 11 }
+    ],
+    keep: [
+      { text: 'Make a change a trial with an end date.', move: 2 },
+      { text: 'Set lines anyone can read.', move: 3 },
+      { text: 'Look at the wake before reversing.', move: 17 }
+    ],
+    change: [
+      { text: 'Test what a decision assumes before its one-way step.', move: 6 },
+      { text: 'Give a reason when a crossed line is noted and kept.', move: 11 },
+      { text: 'Count cover for sickness and leave in any in-house costing.', move: 1 }
+    ]
+  },
+
+  /* ---- the book: reviewed decisions filed by situation. Codes and words are this deployment's ---- */
+  book: {
+    families: { C: 'Contracts', S: 'Spending and pilots', P: 'People and posts' },
+    codes: {
+      C1: 'Renew a contract as it is', C2: 'Re-tender a contract', C3: 'Bring work in-house',
+      'C3.1': 'Bring work in-house, staff already in post', 'C3.2': 'Bring work in-house, depending on hiring', 'C3.3': 'Bring work in-house, depending on equipment',
+      C4: 'Cut a contract’s scope', C5: 'Move work out to a contractor',
+      S1: 'Pilot before buying', S2: 'Spend to save', P1: 'Merge or restructure a team'
+    },
+    /* what makes two situations the same position, whatever their first moves */
+    facets: [
+      { k: 'kind',    w: 'What it changes', vals: { contract: 'a contract', spend: 'a budget', people: 'a team' } },
+      { k: 'depends', w: 'Depends on',      vals: { hiring: 'hiring', equipment: 'equipment', none: 'nothing new' } },
+      { k: 'door',    w: 'One-way step',    vals: { notice: 'a notice period', sale: 'a sale', none: 'none' } },
+      { k: 'trial',   w: 'Trial',           vals: { yes: 'a trial with an end date', no: 'for good' } }
+    ],
+    motifs: {
+      first:   { name: 'One-way step first', say: 'A step that can’t be undone is taken before what it depends on is in hand.', tone: 'bad' },
+      depfirst:{ name: 'What it depends on, first', say: 'The dependency is secured, then the one-way step.', tone: 'good' },
+      noted:   { name: 'Noted, no reason', say: 'A crossed line is noted and the decision kept, with no reason written.', tone: 'bad' },
+      trial:   { name: 'A trial, not a bet', say: 'The change has an end date and a review, so undoing it is cheap.', tone: 'good' },
+      cover:   { name: 'No cover in the costing', say: 'An in-house costing leaves out sickness, leave and vacancies.', tone: 'bad' },
+      wake:    { name: 'The wake, before reversing', say: 'Everything that rests on it is seen before the vote.', tone: 'good' }
+    },
+    games: [
+      { id: 'R-07', ref: 'D-118', code: 'C3.2', year: 2026, unit: 'Fleet and Facilities', floor: 'department', title: 'North depot van inspections move in-house', result: 'reversed', days: 175, facets: { kind: 'contract', depends: 'hiring', door: 'notice', trial: 'yes' }, motifs: ['first', 'noted', 'trial', 'cover', 'wake'], crit: 4, by: 'p9', key: 6 },
+      { id: 'R-03', ref: 'PO-41', code: 'C3.2', year: 2025, unit: 'Parks and Open Spaces', floor: 'department', title: 'Grounds maintenance moves in-house', result: 'kept', days: 410, facets: { kind: 'contract', depends: 'hiring', door: 'notice', trial: 'no' }, motifs: ['depfirst', 'cover'], crit: 2, by: 'p11', key: 3, note: 'Waited until four gardeners were in post, then gave the contractor notice.' },
+      { id: 'R-11', ref: 'LC-19', code: 'C3.2', year: 2027, unit: 'Libraries and Culture', floor: 'department', title: 'Mobile library drivers move in-house', result: 'amended', days: 140, facets: { kind: 'contract', depends: 'hiring', door: 'notice', trial: 'yes' }, motifs: ['depfirst', 'trial'], crit: 2, by: 'p9', key: 2, note: 'Counted cover from the start; amended to keep one agency driver.' },
+      { id: 'R-01', ref: 'F-208', code: 'C3.1', year: 2024, unit: 'Finance', floor: 'org', title: 'Payroll moves in-house', result: 'kept', days: 690, facets: { kind: 'contract', depends: 'none', door: 'notice', trial: 'no' }, motifs: ['depfirst'], crit: 1, by: 'p5', key: 1 },
+      { id: 'R-08', ref: 'PO-57', code: 'C3.3', year: 2026, unit: 'Parks and Open Spaces', floor: 'department', title: 'Tree surgery in-house with a new chipper', result: 'amended', days: 220, facets: { kind: 'contract', depends: 'equipment', door: 'notice', trial: 'no' }, motifs: ['first'], crit: 3, by: 'p11', key: 2 },
+      { id: 'R-04', ref: 'CS-33', code: 'C5', year: 2025, unit: 'Customer Services', floor: 'org', title: 'Out-of-hours phone line moves to a contractor', result: 'reversed', days: 260, facets: { kind: 'contract', depends: 'hiring', door: 'notice', trial: 'yes' }, motifs: ['first', 'noted'], crit: 3, by: 'p9', key: 4, note: 'Our own night staff were given notice before the contractor had hired its night team.' },
+      { id: 'R-02', ref: 'D-071', code: 'C2', year: 2024, unit: 'Fleet and Facilities', floor: 'department', title: 'Depot cleaning re-tendered', result: 'amended', days: 365, facets: { kind: 'contract', depends: 'none', door: 'notice', trial: 'no' }, motifs: ['cover'], crit: 2, by: 'p4', key: 2 },
+      { id: 'R-06', ref: 'D-110', code: 'C1', year: 2026, unit: 'Fleet and Facilities', floor: 'department', title: 'Tyre supply renewed for two years', result: 'kept', days: 210, facets: { kind: 'contract', depends: 'none', door: 'none', trial: 'no' }, motifs: [], crit: 0, by: 'p4', key: 0 },
+      { id: 'R-05', ref: 'D-104', code: 'S1', year: 2026, unit: 'Fleet and Facilities', floor: 'department', title: 'Telematics pilot on 12 vans', result: 'kept', days: 300, facets: { kind: 'spend', depends: 'equipment', door: 'none', trial: 'yes' }, motifs: ['trial', 'noted'], crit: 2, by: 'p9', key: 1 },
+      { id: 'R-09', ref: 'D-149', code: 'C4', year: 2027, unit: 'Fleet and Facilities', floor: 'department', title: 'Depot security cut to nights only', result: 'kept', days: 120, facets: { kind: 'contract', depends: 'none', door: 'notice', trial: 'yes' }, motifs: ['trial'], crit: 1, by: 'p4', key: 1 },
+      { id: 'R-10', ref: 'HR-12', code: 'P1', year: 2027, unit: 'People Services', floor: 'org', title: 'Two business support teams merge', result: 'amended', restricted: { who: 'p9', why: 'It names people whose posts changed. Its body keeps it to those who took part.' } },
+      { id: 'R-12', ref: 'HR-15', code: 'C3.2', year: 2027, unit: 'People Services', floor: 'org', title: 'Occupational health moves in-house', result: 'kept', restricted: { who: 'p9', why: 'Its body has not agreed the review yet. Drafts stay with those who took part.' } }
+    ]
+  },
+  results: { kept: 'Kept', amended: 'Amended', reversed: 'Reversed' },
+
+  /* ---- a year later: a new colleague drafts the same kind of decision ---- */
+  later: {
+    today: '2027-11-09', who: 'p10', manager: 'p4',
+    draft: {
+      id: 'D-163', title: 'South depot van inspections move to the North bay', code: 'C3.2', meeting: 'FFL 27/12', meets: '2027-12-14',
+      contractor: 'Brackley Fleet Services', vans: 14, price: 192, ours: 118, noticeBy: '2027-12-31', ends: '2028-03-31',
+      facets: { kind: 'contract', depends: 'hiring', door: 'notice', trial: 'no' },
+      moves: [
+        { n: 1, san: 'Paper: the North bay at £118 a van', text: 'The North bay inspects the south depot’s 14 vans at £118 a van; Brackley charges £192.', like: 1 },
+        { n: 2, san: 'Depends on: two more fitters by 1 March', text: 'The bay needs two more fitters before it can take 14 more vans.', like: 4 },
+        { n: 3, san: 'Plan: notice to Brackley by 31 December', text: 'Brackley needs three months’ notice, so the contract ends on 31 March.', like: 6, door: true }
+      ]
+    },
+    /* the precedent's critical moment, put as a question */
+    puzzle: {
+      move: 6, asAt: '2026-05-28',
+      known: ['D-118 says inspections move in-house; Kestrel drops to breakdown cover on 1 September.', 'No fitter has been hired yet. Jo expects two by 30 June.', 'Kestrel needs three months’ notice to change scope.', 'Contract C-0412, clause 9: a renewal may include a break at six months.'],
+      choices: [
+        { k: 'a', san: 'Give notice now for 1 September', played: true },
+        { k: 'b', san: 'Renew with the six-month break; give notice when both fitters are in post', best: true },
+        { k: 'c', san: 'Ask the meeting to move the start to December' }
+      ]
+    },
+    /* what she can ask, and of whom */
+    people: [
+      { id: 'p4', about: [6], here: true },
+      { id: 'p3', about: [4], here: true },
+      { id: 'p5', about: [2, 13], here: true },
+      { id: 'p2', about: [1], here: false },
+      { id: 'p11', about: ['R-03'], here: true }
+    ]
+  }
+};
+
+/* ---- shared helpers (same in every page of the run) ---- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const I = (n, size = 16, stroke = 1.5) => Icons.svg(n, { size, stroke });
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ms = v => parseFloat(css(v)) || 0;
+const fmt = n => n.toLocaleString('en-GB');
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+/* people. 'body' is the meeting itself, never a person */
+const P = id => id === 'body' ? { name: DATA.body.short, role: DATA.body.name, floor: DATA.body.floor, initials: DATA.body.code } : DATA.people[id];
+const first = id => id === 'body' ? 'the meeting' : P(id).name.split(' ')[0];
+const who = id => `<span class="who" data-tier="${P(id).floor}">${id === 'body' ? 'the meeting' : P(id).name}</span>`;
+const face = (id, cls = '') => `<span class="face ${cls}" data-tier="${P(id).floor}" title="${P(id).name}, ${P(id).role}">${P(id).initials}</span>`;
+const list = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+
+/* dates: ISO in the data, words on the page */
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const dP = iso => { const [y, m, d] = iso.split('-').map(Number); return { y, m, d: d || 1 }; };
+const dt = (iso, style = 'long') => { if (!iso) return ''; const { y, m, d } = dP(iso); if (iso.length === 7) return style === 'long' ? `${MONTH[m - 1]} ${y}` : MON[m - 1]; return style === 'short' ? `${d} ${MON[m - 1]}` : style === 'month' ? `${MON[m - 1]} ${y}` : `${d} ${MON[m - 1]} ${y}`; };
+const ts = iso => Date.UTC(dP(iso).y, dP(iso).m - 1, dP(iso).d);
+const days = (a, b) => Math.round((ts(b) - ts(a)) / 864e5);
+const le = (a, b) => ts(a) <= ts(b);
+const addDays = (iso, n) => new Date(ts(iso) + n * 864e5).toISOString().slice(0, 10);
+
+/* the game */
+const DEC = DATA.decision;
+const MOVES = DATA.moves;
+const MV = n => MOVES.find(m => m.n === n);
+const ANN = n => DATA.annotations[n] || [];
+const selfMark = n => ANN(n).find(a => a.self);
+const reviewMarks = n => ANN(n).filter(a => !a.self && !a.pos);
+const posMark = n => ANN(n).find(a => a.pos);
+const mainMark = n => reviewMarks(n)[0];
+
+/* ---- the computed view: read from the decision's own lines, as at a date. Never typed ---- */
+function seriesAt(key, at) {
+  const pts = DATA.series[key].pts.filter(([d]) => le(d, at));
+  return pts.length ? pts[pts.length - 1][1] : DATA.series[key].pts[0][1];
+}
+const clamp = (v, a = -1, b = 1) => Math.max(a, Math.min(b, v));
+function lineAt(L, at) {
+  const v = seriesAt(L.series, at);
+  if (L.kind === 'max') return { id: L.id, v, h: clamp((L.at - v) / L.at), crossed: v > L.at };
+  if (L.kind === 'by') {
+    const missing = Math.max(0, L.need - v);
+    if (!missing) return { id: L.id, v, h: 1, crossed: false };
+    if (ts(at) < ts(L.by)) { const el = clamp(days(L.from, at) / days(L.from, L.by), 0, 1); return { id: L.id, v, h: Math.max(0, 1 - 1.5 * el * missing / L.need), crossed: false, left: days(at, L.by) }; }
+    return { id: L.id, v, h: -missing / L.need, crossed: true };
+  }
+  const share = (L.was - v) / (L.was - L.plan);
+  return { id: L.id, v, h: clamp((share - 0.5) * 2), crossed: false, share };
+}
+function posAt(at) {
+  const lines = DATA.lines.map(L => lineAt(L, at));
+  const h = Math.min(...lines.map(l => l.h));
+  const crossed = lines.filter(l => l.crossed).length;
+  let p = DATA.positions.find(x => h >= x.min);
+  if (crossed >= 2) p = DATA.positions[DATA.positions.length - 1];
+  const weakest = lines.find(l => l.h === h);
+  return { lines, h, crossed, s: p.s, w: p.w, say: p.say, rank: DATA.positions.indexOf(p), weakest };
+}
+const POS = s => DATA.positions.find(p => p.s === s);
+const posOfMove = n => posAt(MV(n).on);
+/* critical moments the records find: the position falls two steps, or a line is newly crossed */
+function recordsCritical() {
+  const out = [];
+  MOVES.forEach((m, i) => { if (!i) return; const a = posOfMove(MOVES[i - 1].n), b = posOfMove(m.n);
+    if (b.rank - a.rank >= 2 || b.crossed > a.crossed) out.push(m.n); });
+  return out;
+}
+const peopleCritical = () => Object.keys(DATA.annotations).map(Number).filter(n => ANN(n).some(a => a.crit));
+
+/* an action as at a date */
+function actionAt(a, at) {
+  if (!le(a.set, at)) return null;
+  let due = a.due[0][1]; a.due.forEach(([on, d]) => { if (le(on, at)) due = d; });
+  const moved = a.due.filter(([on]) => le(on, at)).length - 1;
+  if (a.overtaken && le(a.overtaken, at)) return { s: 'overtaken', w: 'Overtaken by D-131', due, moved };
+  if (a.done && le(a.done, at)) return { s: 'done', w: 'Done ' + dt(a.done, 'short'), due, moved };
+  const late = ts(due) < ts(at);
+  if (a.part && le(a.part[0], at)) return { s: late ? 'late' : 'part', w: a.part[1] + (late ? ' · late' : ''), due, moved };
+  return { s: late ? 'late' : 'open', w: late ? 'Late' : 'Open', due, moved };
+}
+const recordAt = at => DATA.record.filter(r => le(r.on, at));
+
+/* ---- marks ---- */
+const MK = g => DATA.marks[g] || DATA.signs[g] || (g === DATA.unclear.s ? DATA.unclear : null) || POS(g) || { w: g };
+const toneOf = g => (DATA.marks[g] || {}).tone || (POS(g) ? 'pos' : 'plain');
+const gl = (g, cls = '') => `<span class="gl gl-${toneOf(g)} ${cls}" title="${MK(g).w}">${g}</span>`;
+const posGl = (s, cls = '') => `<span class="gl gl-pos ${cls}" title="${POS(s).w} (from the records)">${s}</span>`;
+
+/* the evaluation bar: light from the top is "on course", ground from the bottom is "off course" */
+function evalBar(h, opts = {}) {
+  const f = (clamp(h) + 1) / 2;
+  const blind = opts.blind ? `<span class="eb-blind" title="${DATA.unclear.w}"></span>` : '';
+  return `<span class="eb ${opts.flat ? 'flat' : ''}" role="img" aria-label="Computed position ${(h * 100).toFixed(0)} in a range of minus 100 to 100"><span class="eb-on" style="${opts.flat ? 'width' : 'height'}:${(f * 100).toFixed(1)}%"></span>${blind}</span>`;
+}
+
+/* the curve: the computed position over the game, with moves as ticks */
+const G0 = MOVES[0].on, G1 = DEC.ended;
+function curve(opts = {}) {
+  const w = opts.w || 600, h = opts.h || 120, pad = opts.pad || 6, from = opts.from || G0, to = opts.to || addDays(G1, 6), upto = opts.upto || to;
+  const X = d => pad + (ts(d) - ts(from)) / (ts(to) - ts(from)) * (w - 2 * pad);
+  const Y = v => h / 2 - clamp(v) * (h / 2 - pad);
+  const pts = []; for (let d = from; le(d, upto); d = addDays(d, 2)) pts.push([d, posAt(d).h]);
+  const end = posAt(upto).h; pts.push([upto, end]);
+  let path = ''; pts.forEach(([d, v], i) => { path += (i ? 'L' : 'M') + X(d).toFixed(1) + ' ' + Y(v).toFixed(1) + ' '; });
+  const area = path + `L${X(upto).toFixed(1)} ${(h / 2).toFixed(1)} L${X(from).toFixed(1)} ${(h / 2).toFixed(1)} Z`;
+  const bands = DATA.positions.slice(0, -1).map(p => `<line x1="${pad}" x2="${w - pad}" y1="${Y(p.min).toFixed(1)}" y2="${Y(p.min).toFixed(1)}" class="cv-band"/>`).join('');
+  const rc = opts.crit === false ? [] : recordsCritical();
+  const ticks = (opts.ticks === false ? [] : MOVES.filter(m => le(m.on, upto))).map(m => {
+    const x = X(m.on).toFixed(1), sel = opts.sel === m.n;
+    return `<line x1="${x}" x2="${x}" y1="${h - pad}" y2="${h - pad - (m.side === 'world' ? 4 : 7)}" class="cv-tick ${m.side} ${sel ? 'sel' : ''}"/>` +
+      (rc.includes(m.n) ? `<circle cx="${x}" cy="${Y(posOfMove(m.n).h).toFixed(1)}" r="3.5" class="cv-crit"/>` : '') +
+      (sel ? `<line x1="${x}" x2="${x}" y1="${pad}" y2="${h - pad}" class="cv-sel"/>` : '');
+  }).join('');
+  const nowx = opts.now ? `<line x1="${X(opts.now).toFixed(1)}" x2="${X(opts.now).toFixed(1)}" y1="0" y2="${h}" class="cv-now"/>` : '';
+  const label = `Computed position from ${dt(from)} to ${dt(upto)}: ${MOVES.filter(m => le(m.on, upto)).map(m => 'move ' + m.n + ' ' + POS(posOfMove(m.n).s).w).join(', ')}`;
+  return `<svg class="cv" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${label}">
+    <line x1="${pad}" x2="${w - pad}" y1="${h / 2}" y2="${h / 2}" class="cv-mid"/>${bands}
+    <path d="${area}" class="cv-area"/><path d="${path}" class="cv-ln"/>${ticks}${nowx}</svg>`;
+}
+const curveX = (opts, d) => { const w = opts.w || 600, pad = opts.pad || 6, from = opts.from || G0, to = opts.to || addDays(G1, 6); return pad + (ts(d) - ts(from)) / (ts(to) - ts(from)) * (w - 2 * pad); };
+
+/* a move as one row of a score sheet */
+function moveRow(m, opts = {}) {
+  const r = mainMark(m.n), s = selfMark(m.n), pm = posMark(m.n);
+  const marks = opts.marks === false ? '' : `${r ? gl(r.g) : ''}${reviewMarks(m.n).length > 1 ? gl(reviewMarks(m.n)[1].g, 'second') : ''}${pm ? gl(pm.g) : ''}`;
+  const pos = opts.pos ? posGl(posOfMove(m.n).s) : '';
+  return `<button class="mv ${m.side} ${opts.sel === m.n ? 'sel' : ''} ${opts.cls || ''}" data-n="${m.n}" aria-label="Move ${m.n}, ${dt(m.on)}: ${esc(m.san)}">
+    <span class="mv-n">${m.n}</span><span class="mv-side" aria-hidden="true"></span>
+    <span class="mv-san">${m.san}${m.sign ? ' ' + gl(m.sign) : ''}${m.door ? ` <span class="door" title="Can’t be undone">${I('door-closed', 13)}</span>` : ''}</span>
+    <span class="mv-g">${marks}</span>${pos ? `<span class="mv-p">${pos}</span>` : ''}</button>`;
+}
+
+/* ---- frame ---- */
+const STATE = { tech: false };
+function topHTML(crumbs, hints, opts = {}) {
+  const fl = DATA.floors[opts.floor || DEC.floor];
+  return `<header class="top"><p class="brand">AUGUR</p>
+    <nav class="crumb" aria-label="Where you are">${crumbs.map((c, i) => (i ? I('chevron-right', 14) : '') + (i === crumbs.length - 1 ? `<b>${c}</b>` : `<span>${c}</span>`)).join('')}</nav>
+    <span class="fchip" data-tier="${opts.floor || DEC.floor}">${fl.name} · ${fl.word}</span>
+    ${opts.as ? `<span class="asat">${I('calendar', 14)} as at <b>${dt(opts.as)}</b></span>` : ''}
+    <div class="hints">${hints.map(([k, w, id]) => `<span ${id ? `id="${id}"` : ''}><span class="kbd">${k}</span>${w}</span>`).join('')}</div></header>`;
+}
+function commonKeys(e, rerender, replay) {
+  const k = e.key.toLowerCase();
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  if (e.target.closest && e.target.closest('input,textarea,[contenteditable="true"]')) return false;
+  if (k === 'r') { replay(); return true; }
+  if (k === 't') { STATE.tech = !STATE.tech; document.body.classList.toggle('tech', STATE.tech); $('#h-t')?.classList.toggle('on', STATE.tech); return true; }
+  return false;
+}
+/* timers for the moment, cleared on replay */
+let TIMERS = [];
+const later = (fn, t) => TIMERS.push(setTimeout(fn, reduced ? Math.min(t, 50) : t));
+const clearLater = () => { TIMERS.forEach(clearTimeout); TIMERS = []; };
+const MOMENT = () => ms('--motion-run');
+function settle() { document.body.classList.add('pre'); requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre'))); }
+
+const BRANCHED = MOVES.filter(m => m.opts).map(m => m.n);
+const S = { n: 6, open: false };
+/* a line not played: what the records can say about it, and what only a reviewer can */
+const EST = {
+  6: { 1: { est: 'Reviewer’s estimate: inspections stay with Kestrel to March 2027 at £186; notice goes in December once both fitters are in; nothing overdue.', game: 'R-03' }, 2: { est: 'Reviewer’s estimate: the same hiring trouble, three months later. Buys time, not an answer.' } },
+  11: { 1: { est: 'Reviewer’s estimate: the meeting sees it in August, before Kestrel stops on 1 September.' }, 2: { est: 'Reviewer’s estimate: the September meeting gets a reason to test.' } },
+  13: { 1: { est: 'On the record: £210 a van for the overdue vans. About £1,500 to the end of the trial.' }, 2: { est: 'Reviewer’s estimate: reversal two months earlier, with Kestrel still willing to quote.' } }
+};
+function render() {
+  const m = MV(S.n), G = n => DATA.book.games.find(g => g.id === n);
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', DEC.id, 'Variations'], [['← →', 'moments with lines'], ['T', 'sources', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">Variations</h1><p class="lede">An annotated game shows the moves that could have been played. Here only lines that were <b class="lite">on the record at the time</b> count: a clause, a quote in a pack, a choice the item offered. The records can’t play a line out, so what follows one is a reviewer’s estimate, and says so.</p></div>
+    <section class="main-line pane scroll" aria-label="Main line">${MOVES.map(x => moveRow(x, { sel: S.n }).replace('</span></button>', '</span>' + (BRANCHED.includes(x.n) ? `<span class="vb">${x.opts.length - 1} lines</span>` : '<span></span>') + '</button>')).join('')}</section>
+    <section class="tree pane ${S.open ? '' : 'closed'}" aria-live="polite">
+      <div class="at"><span class="n">${m.n}.</span><span class="t">${m.san}</span>${ANN(m.n).map(a => gl(a.g, 'big')).join('')}</div>
+      <p class="small muted">${dt(m.on)} · ${m.side === 'world' ? 'the world' : P(m.by).name}</p>
+      ${m.opts ? `<div class="branches">${m.opts.map((o, i) => { const e = (EST[m.n] || {})[i]; const g = e && e.game ? G(e.game) : null; return `<div class="br ${o.played ? 'played' : 'alt'}" style="transition-delay:calc(var(--motion-instant) * ${i})">
+          <p class="s">(${m.n}. ${o.san})</p>${o.text ? `<p class="t">${o.text}</p>` : ''}${o.from ? `<p class="src">${I('file-text', 11)} ${o.from}</p>` : ''}
+          ${e ? `<p class="est">${e.est}</p>` : ''}${g ? `<p class="elsewhere">${I('book-open', 14)} Played in ${g.id}, ${g.unit}, ${g.year}: ${DATA.results[g.result].toLowerCase()}. “${g.note}”</p>` : ''}</div>`; }).join('')}</div>`
+      : `<p class="meta">No lines were on the record at this move. ${BRANCHED.length} moves have them: ${BRANCHED.join(', ')}.</p>`}
+      <p class="foot">${I('info', 12)} Lines a reviewer thinks of afterwards are allowed, and marked “not on the record”. They teach, but they don’t count against the people who played the move.</p>
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.mv').forEach(b => b.onclick = () => { clearLater(); S.n = +b.dataset.n; S.open = true; render(); });
+}
+function replay() { clearLater(); S.n = 6; S.open = false; render(); settle(); later(() => { S.open = true; $('.tree').classList.remove('closed'); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const i = BRANCHED.indexOf(S.n);
+  if (e.key === 'ArrowRight') { clearLater(); S.n = BRANCHED[Math.min(BRANCHED.length - 1, i + 1)]; S.open = true; render(); }
+  if (e.key === 'ArrowLeft') { clearLater(); S.n = BRANCHED[Math.max(0, i - 1)]; S.open = true; render(); }
+});
+replay();
+</script>
+</body>
+</html>
