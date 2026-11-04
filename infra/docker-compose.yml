@@ -100,6 +100,7 @@ services:
       SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio,app-auspex=platform-local-only-auspex,app-atlas=platform-local-only-atlas
       PLATFORM_ADMIN_USER: alex
       REALM_LANGUAGES: ${REALM_LANGUAGES:-en}
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
     depends_on: [keycloak]
 
   # ---- the platform ----
