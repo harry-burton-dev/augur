@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { partsFor } from './parts.ts';
 import type { AppHost, RunnerState } from './runner.ts';
 import type { Server } from './upgrade.ts';
 
@@ -20,7 +21,7 @@ export interface ServerOptions {
   dockerConfig: string;
   /** Who may sign AUGUR's images: the Release workflow's identity, and the issuer that vouches for it. */
   signer: { identity: string; issuer: string };
-  /** Each service's health address inside the Compose network. */
+  /** Each service's health address inside the Compose network (parts.ts): the platform's own by default. */
   healthUrls?: Record<string, string>;
   /** The gateway inside the Compose network, whose /traffic the watch after an upgrade reads. */
   gatewayUrl?: string;
@@ -33,20 +34,6 @@ export interface ServerOptions {
    */
   signIn?: () => Promise<unknown>;
 }
-
-/** Where each part answers inside the Compose network (infra/deploy/compose.yml). */
-export const HEALTH_URLS: Record<string, string> = {
-  identity: 'http://identity:8081/healthz',
-  registry: 'http://registry:8082/healthz',
-  events: 'http://events:8084/healthz',
-  models: 'http://models:8085/healthz',
-  gateway: 'http://gateway:8080/healthz',
-  folio: 'http://folio:8083/healthz',
-  auspex: 'http://auspex:8090/healthz',
-  atlas: 'http://atlas:8086/healthz',
-  // nginx has no /healthz; the shell's page answering is the check.
-  web: 'http://web:8080/',
-};
 
 /** Where the updater's image keeps the deploy files of the release it was built for (infra/service.Dockerfile). */
 export const OWN_DEPLOY_DIR = '/augur/deploy';
@@ -106,7 +93,7 @@ export const command = (file: string, args: string[], env: Record<string, string
     if (input !== undefined) child.stdin?.end(input);
   });
 
-export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrls = HEALTH_URLS, gatewayUrl = 'http://gateway:8080', signInUrl, signIn }: ServerOptions): Server & { login(registry: string, user: string, token: string): Promise<void>; replaceSelf(): Promise<void> } => {
+export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrls = partsFor().health, gatewayUrl = 'http://gateway:8080', signInUrl, signIn }: ServerOptions): Server & { login(registry: string, user: string, token: string): Promise<void>; replaceSelf(): Promise<void> } => {
   // Only what the CLIs need: a PLATFORM_VERSION here would win over the settings file.
   const env = (more: Record<string, string> = {}) => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dockerConfig, DOCKER_HOST: dockerHost, DOCKER_CONFIG: dockerConfig, ...more });
   const envFile = join(dir, '.env');
@@ -195,6 +182,7 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
     },
     async health(service) {
       const url = healthUrls[service];
+      if (!url) throw new Error(`The updater doesn’t know where ${service} answers.`);
       const res = await fetch(url, { signal: AbortSignal.timeout(5_000) });
       if (!res.ok) return undefined;
       return url.endsWith('/healthz') ? ((await res.json()) as { version?: string }) : {};

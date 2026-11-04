@@ -15,6 +15,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { isDevBuild } from './signers.ts';
 import { envQuoted, envValue, withEnvValue } from './env-file.ts';
+import { partsFor, type Parts } from './parts.ts';
 
 /** What the registry hands the updater for the open upgrade (GET /v1/platform/upgrade/target). */
 export interface Target {
@@ -105,16 +106,6 @@ export interface Server {
   wait(ms: number): Promise<void>;
 }
 
-/**
- * The parts the updater restarts, in order: storage's set-up first (it gives apps their database
- * logins and buckets, then stops), then the services others call, then the apps that ship with
- * AUGUR, the front door last.
- */
-export const ROLL_ORDER = ['storage', 'identity', 'registry', 'events', 'models', 'folio', 'folio-worker', 'auspex', 'atlas', 'gateway', 'web'] as const;
-/** Parts that do their work and stop, rather than serve: ready once they've stopped without an error. */
-const JOBS = new Set<string>(['storage']);
-/** Parts that work in the background and answer nothing: ready once they're running and stay up. */
-const WORKERS = new Set<string>(['folio-worker']);
 /** Itself: pulled with the rest, and replaced only after the upgrade has ended (see index.ts). */
 export const UPDATER = 'updater';
 /** Its line to Docker: left running through an upgrade, which it carries. */
@@ -148,24 +139,25 @@ const imageRepo = (env: string, ref: string) => envValue(env, 'PLATFORM_IMAGES')
 class StepFailed extends Error {}
 
 /** Waits until each service answers with the version the release gives it (any version when it gives none). */
-const ready = async (server: Server, services: readonly string[], versionOf: (service: string) => string | undefined) => {
+const ready = async (server: Server, parts: Parts, services: readonly string[], versionOf: (service: string) => string | undefined) => {
   for (const service of services) {
-    if (JOBS.has(service)) {
+    if (parts.roles[service] === 'job') {
       await finished(server, service);
       continue;
     }
-    if (WORKERS.has(service)) {
+    if (parts.roles[service] === 'worker') {
       await running(server, service);
       continue;
     }
     const want = versionOf(service);
+    const allowed = parts.readyMs[service] ?? READY_MS;
     let seen: string | undefined;
     for (let waited = 0; ; waited += POLL_MS) {
       const health = await server.health(service).catch(() => undefined);
       seen = health?.version;
       if (health && (!want || health.version === want)) break;
-      if (waited >= READY_MS) {
-        throw new StepFailed(health ? `${service} came back on ${seen ?? 'an unknown version'}, not ${want}.` : `${service} didn’t answer within ${READY_MS / 1000} s.`);
+      if (waited >= allowed) {
+        throw new StepFailed(health ? `${service} came back on ${seen ?? 'an unknown version'}, not ${want}.` : `${service} didn’t answer within ${allowed / 1000} s.`);
       }
       await server.wait(POLL_MS);
     }
@@ -201,7 +193,7 @@ const tooManyErrors = (calls: { requests: number; serverErrors: number }, minute
  * any stops being so. Says how many calls it judged by, so a quiet watch (fewer than MIN_CALLS, as
  * in a night-time window) isn't taken for one that saw errors stay low.
  */
-const watch = async (server: Server, services: readonly string[], versionOf: (service: string) => string | undefined): Promise<{ calls?: number }> => {
+const watch = async (server: Server, parts: Parts, services: readonly string[], versionOf: (service: string) => string | undefined): Promise<{ calls?: number }> => {
   let signInMisses = 0;
   let judged: number | undefined;
   for (let watched = WATCH_EVERY_MS; watched <= WATCH_MS; watched += WATCH_EVERY_MS) {
@@ -216,9 +208,9 @@ const watch = async (server: Server, services: readonly string[], versionOf: (se
     if (failing) throw new StepFailed(failing);
     if (calls) judged = calls.requests;
     // Every part must stay up, not only be up at the start: a part that falls over meanwhile is seen.
-    if (watched % (2 * 60_000) === 0) await ready(server, services, versionOf);
+    if (watched % (2 * 60_000) === 0) await ready(server, parts, services, versionOf);
   }
-  await ready(server, services, versionOf);
+  await ready(server, parts, services, versionOf);
   return { calls: judged };
 };
 
@@ -248,12 +240,13 @@ export const lookAfterWatch = async (look: AfterWatchLook, server: Pick<Server, 
 };
 
 /** What a part's look found now: nothing when it's ready, else why not. Nothing is waited for. */
-const partProblem = async (server: Pick<Server, 'health' | 'exitCode'>, service: string) => {
-  if (JOBS.has(service) || WORKERS.has(service)) {
+const partProblem = async (server: Pick<Server, 'health' | 'exitCode'>, parts: Parts, service: string) => {
+  const role = parts.roles[service];
+  if (role === 'job' || role === 'worker') {
     // A job still running, or one Compose doesn't know of here, isn't a problem yet; a worker must not have stopped.
     const code = await server.exitCode(service).catch(() => undefined);
-    if (code === undefined || (JOBS.has(service) && code === 0)) return undefined;
-    return `${service} stopped${JOBS.has(service) ? ' with an error' : ''} (exit code ${code}); its logs say why.`;
+    if (code === undefined || (role === 'job' && code === 0)) return undefined;
+    return `${service} stopped${role === 'job' ? ' with an error' : ''} (exit code ${code}); its logs say why.`;
   }
   const health = await server.health(service).catch(() => undefined);
   return health ? undefined : `${service} doesn’t answer.`;
@@ -271,9 +264,9 @@ export interface CheckResult {
  * of `services` is ready now, and AUGUR's own calls through the gateway in the last `minutes` mostly
  * succeeded. The watch lets sign-in miss once and waits for parts to come back; one look doesn't, so
  * anything wrong now is a problem. The deploy test breaks AUGUR on purpose and needs this to see it
- * (docs/deploy-test.md).
+ * (docs/deploy-test.md). `parts`: what each part is (parts.ts), with the apps that ship with this release.
  */
-export const checkOnce = async (server: Pick<Server, 'signInProblem' | 'traffic' | 'health' | 'exitCode'>, services: readonly string[], minutes = WATCH_MS / 60_000): Promise<CheckResult> => {
+export const checkOnce = async (server: Pick<Server, 'signInProblem' | 'traffic' | 'health' | 'exitCode'>, services: readonly string[], minutes = WATCH_MS / 60_000, parts: Parts = partsFor()): Promise<CheckResult> => {
   const problems: string[] = [];
   const signIn = await server.signInProblem().catch((err) => reason(err));
   if (signIn) problems.push(`Signing in doesn’t work: ${signIn}`);
@@ -281,7 +274,7 @@ export const checkOnce = async (server: Pick<Server, 'signInProblem' | 'traffic'
   const failing = calls && tooManyErrors(calls, minutes);
   if (failing) problems.push(failing);
   for (const service of services) {
-    const problem = await partProblem(server, service);
+    const problem = await partProblem(server, parts, service);
     if (problem) problems.push(problem);
   }
   return {
@@ -297,9 +290,10 @@ const reason = (err: unknown) => (err instanceof Error ? err.message : String(er
 /**
  * `devIdentity`: who signs AUGUR's dev builds (signers.ts). Only a dev server (SERVER_RING=dev, the
  * workbench) runs one, and only with images signed by that workflow on dev.
+ * `parts`: the parts this updater restarts (parts.ts), with the apps that ship with this release.
  */
-export const runUpgrade = async (target: Target, server: Server, report: Reporter, { devIdentity }: { devIdentity?: string } = {}): Promise<Outcome> => {
-  const services = ROLL_ORDER.filter((s) => target.images[s]);
+export const runUpgrade = async (target: Target, server: Server, report: Reporter, { devIdentity, parts = partsFor() }: { devIdentity?: string; parts?: Parts } = {}): Promise<Outcome> => {
+  const services = parts.order.filter((s) => target.images[s]);
   // A platform service's part is @augur/<service>; an app that ships with AUGUR is @apps/<its id>.
   const versionOf = (service: string) => (service === 'web' ? undefined : (target.parts?.[`@augur/${service}`] ?? target.parts?.[`@apps/${service}`]));
   const before = await server.readEnv();
@@ -332,6 +326,16 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       }
       if (dev && !devIdentity) throw new StepFailed(`${target.version} is a dev build of AUGUR, and this updater doesn’t know who signs those.`);
       if (!target.deploy || !target.parts) throw new StepFailed(`AUGUR ${target.version}’s release file couldn’t be read, or names no deploy files, so whether it fits this server isn’t known. Upgrade by hand (docs/upgrade.md).`);
+      // A part the server runs that this updater doesn't know would be restarted with the rest but never
+      // checked to come back: refused, so nothing is half upgraded. A part new in the release is started once
+      // its compose.yml is in place (roll-forward), and the release's own updater knows it from then on.
+      const running = new Set(await server.services());
+      const unknown = Object.keys(target.images).filter((service) => service !== UPDATER && !parts.roles[service] && running.has(service));
+      if (unknown.length) {
+        throw new StepFailed(
+          `AUGUR ${target.version} has ${unknown.length > 1 ? 'images' : 'an image'} for ${unknown.join(', ')}, which this server runs, and this updater doesn’t know how to restart ${unknown.length > 1 ? 'them' : 'it'} or tell ${unknown.length > 1 ? 'they' : 'it'} came back. Upgrade by hand (docs/upgrade.md).`,
+        );
+      }
       // The release's deploy files that differ from the server's are written by the updater, as long as
       // the server's are still as the running release left them: one changed by hand is never overwritten.
       const onDisk = await server.hashDeployFiles(Object.keys(target.deploy));
@@ -418,7 +422,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       const paths = Object.keys(changedFiles);
       // Parts the release doesn't have, such as one added after it when going back: stopped while the
       // compose.yml that names them is still in place.
-      left = (await server.services()).filter((service) => (ROLL_ORDER as readonly string[]).includes(service) && !target.images[service]);
+      left = (await server.services()).filter((service) => parts.order.includes(service) && !parts.kept.includes(service) && !target.images[service]);
       if (left.length) await server.remove(left);
       if (paths.length) await server.writeDeployFiles(changedFiles);
       await server.writeEnv(withEnvValue(settings, 'PLATFORM_VERSION', target.version));
@@ -436,7 +440,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       if (remount.length) await server.recreate(remount);
       for (const service of services) {
         await server.up([service]);
-        await ready(server, [service], versionOf);
+        await ready(server, parts, [service], versionOf);
       }
       if (added.length) await server.up(added);
       const notes = [left.length ? `stopped ${left.join(', ')}, which ${target.version} doesn’t have` : '', paths.length ? `wrote ${paths.join(', ')}` : '', enteredKeys.length ? `set ${enteredKeys.join(', ')} as entered` : '', madeKeys.length ? `made up ${madeKeys.join(', ')} in .env` : '', added.length ? `started ${added.join(', ')}` : ''].filter(Boolean);
@@ -445,7 +449,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     // Every part again, now that all of them are on it: one that came up early may have fallen over since.
     step = 'verify';
     await report({ step, state: 'running' });
-    await ready(server, services, versionOf);
+    await ready(server, parts, services, versionOf);
     if (!target.watch) {
       await report({ step, state: 'done', message: `Running AUGUR ${target.version}.`, outcome: 'done' });
       return 'done';
@@ -453,7 +457,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     await report({ step, state: 'done', message: `Running AUGUR ${target.version}.` });
     step = 'watch';
     await report({ step, state: 'running', message: `Watching sign-in, every part and AUGUR’s calls for ${WATCH_MS / 60_000} minutes.` });
-    const watched = await watch(server, services, versionOf);
+    const watched = await watch(server, parts, services, versionOf);
     await report({ step, state: 'done', message: watchedSentence(target.version, watched), outcome: 'done', ...(watched.calls !== undefined ? { calls: watched.calls } : {}) });
     return 'done';
   } catch (err) {
@@ -470,7 +474,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       return 'failed';
     }
     await report({ step, state: 'failed', message: why }).catch(() => undefined);
-    return rollBack(target, server, report, before, services, why, backup, { oldFiles, fresh, others, left });
+    return rollBack(target, server, report, before, parts, services, why, backup, { oldFiles, fresh, others, left });
   }
 };
 
@@ -493,6 +497,7 @@ const rollBack = async (
   server: Server,
   report: Reporter,
   before: string,
+  parts: Parts,
   services: readonly string[],
   why: string,
   backup?: string,
@@ -513,7 +518,7 @@ const rollBack = async (
     }
     const back = [...services.filter((service) => !fresh.includes(service)), ...left];
     await server.up(back);
-    await ready(server, back, () => undefined);
+    await ready(server, parts, back, () => undefined);
   } catch (err) {
     await report({ step: 'roll-back', state: 'failed', message: `Back on ${target.from} didn’t work either: ${reason(err)} The upgrade had stopped because ${why}${kept}`, outcome: 'failed' });
     return 'failed';

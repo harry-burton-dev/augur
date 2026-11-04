@@ -51,6 +51,14 @@ describe('configFromEnv', () => {
     expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('starts with augur-'), expect.stringContaining('FRONTENDS_BUCKET_SECRET must be 64')]);
   });
 
+  it('gives no app storage under an id a part of AUGUR answers to', () => {
+    const bad = configFromEnv({ DATABASE_URL: 'postgres://a:b@db/platform', APP_STORAGE: 'identity public', IDENTITY_DATABASE_PASSWORD: 'p'.repeat(20), PUBLIC_DATABASE_PASSWORD: 'p'.repeat(20) });
+    expect('problems' in bad && bad.problems).toEqual([
+      'APP_STORAGE: "identity" is kept for the identity service, a part of AUGUR. Choose another id for the app.',
+      expect.stringContaining('"public" is kept for the database’s shared schema'),
+    ]);
+  });
+
   it('takes only a preview’s storage away, on its own', () => {
     const key = 'k'.repeat(64);
     const base = { DATABASE_URL: 'postgres://a:b@db/platform', GARAGE_ADMIN_TOKEN: 't', APP_SECRETS_KEY: key };
