@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Grammar V4 · The desk plan</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: position is meaning. a plan of the desk: each place says a state, and maps to one place in AUGUR ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:var(--space-6)}
+.plan{position:relative;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:repeating-linear-gradient(0deg,transparent 0 calc(var(--space-5) - 1px),color-mix(in srgb,var(--ink) 4%,transparent) calc(var(--space-5) - 1px) var(--space-5)),repeating-linear-gradient(90deg,transparent 0 calc(var(--space-5) - 1px),color-mix(in srgb,var(--ink) 4%,transparent) calc(var(--space-5) - 1px) var(--space-5))}
+.zone{position:absolute;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-inset);padding:var(--space-2) var(--space-3);display:flex;flex-direction:column;gap:var(--space-1)}
+.zone .n{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-lit)}
+.zone b{font-weight:400;font-size:var(--type-meta);color:var(--light)}
+.zone small{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.zone.wall{border-style:double;border-width:3px}
+.zone.priv{border-style:dashed}
+.zone.on{border-color:var(--x-proposed-lit)}
+.dim{position:absolute;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+/* the token that walks the path, a small strip */
+.walker{position:absolute;width:var(--space-8);height:var(--space-5);border-radius:2px;background:var(--x-proposed-strip);border:1px solid var(--light);border-left:var(--x-proposed-strip-edge) solid var(--floor-department-high);transition:left var(--motion-calm) var(--ease-out),top var(--motion-calm) var(--ease-out);z-index:2}
+.walker.tr{border-style:dashed;border-left-style:solid}
+.walker.ck{transform:translateX(var(--space-3))}
+.key{display:flex;flex-direction:column;gap:var(--space-2);min-height:0}
+.key table{border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small)}
+.key td{padding:var(--space-2) var(--space-2) var(--space-2) 0;border-bottom:1px solid var(--hairline);vertical-align:top;color:var(--ink)}
+.key td:first-child{font:400 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--x-proposed-lit);width:var(--space-5)}
+.key td:nth-child(3){color:var(--ink-muted)}
+@media (max-width:1400px){.zone small{display:none}.key td:nth-child(3){display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V4</b> the desk plan: where a thing sits says its state; each place on the desk is one place in AUGUR · Sellen and Harper, office layout studies</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* places on the desk: [n, name, state it means, place in AUGUR, x, y, w, h (in %), kind] */
+const Z = [
+  ['1', 'In-tray', 'offered to you, not yours yet', 'Home · coming to you', 3, 6, 24, 22],
+  ['2', 'Your bay', 'you hold it; in time order', 'Home · you hold', 31, 6, 36, 52],
+  ['3', 'Cock lane', 'set aside by you, to come back to', 'a step out of your bay (private)', 69, 6, 9, 52, 'priv'],
+  ['4', 'Out-tray', 'offered on, still yours until taken', 'Home · offered, dashed', 3, 34, 24, 24],
+  ['5', 'Clip', 'pointed out to you; someone else’s', 'Home · pointed out', 81, 6, 16, 22],
+  ['6', 'Stamp rack', 'what you may sign, and for what', 'the stamp in Artifacts and Mandate', 81, 34, 16, 24],
+  ['7', 'Stamp book', 'every mark you made, numbered', 'your account area', 3, 64, 24, 30, 'priv'],
+  ['8', 'Ledger', 'a thing’s account; nothing erased', 'each object’s history', 31, 64, 36, 30],
+  ['9', 'The wall', 'the team’s board: slots and holders', 'the Team floor’s board', 69, 64, 28, 30, 'wall']
+];
+/* the walk of one strip: in-tray, bay, cock lane, bay, out-tray */
+const WALK = [[0, 'tr'], [1, ''], [2, 'ck'], [1, ''], [3, 'tr']];
+const S = { step: 0 };
+function pos(i) { const z = Z[WALK[i][0]]; return [z[4] + 2, z[5] + (WALK[i][0] === 1 ? 14 : 12)]; }
+function render() {
+  const [x, y] = pos(S.step), on = Z[WALK[S.step][0]][0];
+  $('#app').innerHTML = topHTML(['Design lab', 'Desk language'], [['N', 'walk the strip on'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <section style="display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4);min-height:0"><div><p class="eyebrow">Desk language · position is meaning</p><h1 class="t" style="margin-top:var(--space-1)">The desk, in plan</h1></div>
+        <div class="plan" id="plan">${Z.map(([n, w, st, au, x, y, ww, hh, k]) => `<div class="zone ${k || ''} ${n === on ? 'on' : ''}" style="left:${x}%;top:${y}%;width:${ww}%;height:${hh}%"><span class="n">${n}</span><b>${w}</b><small>${st}</small></div>`).join('')}
+          <span class="walker ${WALK[S.step][1]}" style="left:${x}%;top:${y}%"></span>
+          <span class="dim" style="left:31%;top:60%">← within reach →</span><span class="dim" style="left:69%;top:60%">on the wall, for everyone</span></div></section>
+      <aside class="key"><p class="eyebrow">Key · each place is one state</p>
+        <table>${Z.map(([n, w, st, au, , , , , k]) => `<tr class="${n === on ? 'lite' : ''}"><td>${n}</td><td><b style="font-weight:400;color:var(--light)">${w}</b> · ${st}</td><td>${au}${k === 'priv' ? ' · only you' : ''}</td></tr>`).join('')}</table>
+        <p class="note">Nine places, and a thing is in exactly one of them for each person who can see it. Moving it between places is the only way its state changes, and every move is a mark. Places 3 and 7 are private; 9 is the only one everybody shares.</p></aside>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function step() { if (S.step < WALK.length - 1) { S.step++; const w = $('.walker'), [x, y] = pos(S.step); w.className = 'walker ' + WALK[S.step][1]; w.style.left = x + '%'; w.style.top = y + '%'; const on = Z[WALK[S.step][0]][0]; $$('.zone').forEach((z, i) => z.classList.toggle('on', Z[i][0] === on)); $$('.key tr').forEach((r, i) => r.classList.toggle('lite', Z[i][0] === on)); } }
+function replay() {
+  clearLater(); S.step = 0; render(); settle();
+  /* the moment: a strip walks from the in-tray to your bay, out to the cock lane, back, and on to the out-tray */
+  [0, 1, 2, 3].forEach(k => later(step, ms('--motion-run') + k * ms('--motion-calm')));
+}
+onKeys({ r: replay, n: step });
+replay();
+</script>
+</body>
+</html>

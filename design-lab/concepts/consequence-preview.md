@@ -18,3 +18,5 @@ Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): a run
 Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): notification settings rehearsed on the person's own last week.
 
 Used in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): the wake is a consequence preview for revisiting a decision (revisit V2).
+
+Used in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a return previews where the strip goes and where the row restarts (approvals V6); the correction slip previews its ledger line (ledger V5).

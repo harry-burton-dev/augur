@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Corrections V2 · Strike in place</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: the correction sits where the value sits. one line through the old value, the new one beside it, initials, date, reason ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-6)}
+.card{display:grid;gap:var(--space-4);align-content:start;padding:var(--space-5);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-3) var(--space-5);align-items:baseline}
+.facts dt{font-size:var(--type-small);color:var(--ink-muted)}
+.facts dd{margin:0;font-size:var(--type-body);color:var(--light)}
+/* the correction: a struck value that stays legible, then the new value, then the mark */
+.corr{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-2) var(--space-3)}
+.old{position:relative;color:var(--ink-muted);font-family:var(--font-mono)}
+.old::after{content:"";position:absolute;left:-2px;right:-2px;top:55%;height:1px;background:var(--x-proposed-strike);transform-origin:left;transform:scaleX(var(--s,1));transition:transform var(--motion-calm) var(--ease-out)}
+.nw{font-family:var(--font-mono);color:var(--light);transition:opacity var(--motion-base) var(--ease-out)}
+.cm{display:inline-flex;gap:var(--space-1);align-items:center;font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);color:var(--ink-muted);border-left:1px solid var(--hairline-strong);padding-left:var(--space-2);transition:opacity var(--motion-base) var(--ease-out)}
+.why{font-size:var(--type-small);line-height:var(--leading-small)}
+.facts dd.reason{grid-column:2;border-left:2px solid var(--hairline-strong);padding-left:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.reason b{font-weight:400;color:var(--ink-muted)}
+.hide{opacity:0}
+.trail{display:grid;gap:var(--space-2)}
+.trail .t{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.doc2{display:grid;gap:var(--space-2)}
+.doc2 p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+@media (max-width:1400px){.card{padding:var(--space-4);gap:var(--space-3)}.trail{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Corrections · V2</b> strike in place: one line through the old value, the new one beside it, initials, date and reason where the value is read · good documentation practice (ALCOA+)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const c = FT.entries.find(e => e.act === 'correct');
+const S = { k: 0 }; /* 0 before, 1 struck, 2 written, 3 initialled */
+function corrHTML(old, nw, who, at, why) {
+  return `<span class="corr"><span class="old" style="--s:${S.k >= 1 ? 1 : 0}">${old}</span><span class="nw ${S.k >= 2 ? '' : 'hide'}">${nw}</span><span class="cm ${S.k >= 3 ? '' : 'hide'}" data-tier="${P(who).floor}">${ini(who, 'sm')}${at}</span></span>`;
+}
+function render() {
+  const sec2 = AP.sections.find(s => s.n === 2);
+  $('#app').innerHTML = topHTML(['Data Atlas', FT.subject], [['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <section class="card"><div><p class="eyebrow">A fact · ${FT.subject}</p><h2 class="h" style="margin-top:var(--space-1)">Where you read it, you see it was corrected</h2></div>
+        <dl class="facts">
+          ${FT.others.slice(0, 2).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}
+          <dt>${FT.field.charAt(0).toUpperCase() + FT.field.slice(1)}</dt><dd>${corrHTML(c.was, c.v, c.by, c.at, c.note)}</dd>
+          <dd class="reason ${S.k >= 3 ? '' : 'hide'}"><b>Why:</b> ${c.note} <b>Evidence:</b> ${c.src}. <b>Countersigned:</b> ${P(c.counter).name}.</dd>
+          ${FT.others.slice(2).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+        <div class="trail"><p class="eyebrow">How it got here</p>${FT.entries.filter(e => e.act !== 'cited').map(e => `<div class="t"><span class="mono muted">${e.at}</span><span>${entryWords(e)}</span></div>`).join('')}</div>
+      </section>
+      <section class="card"><div><p class="eyebrow">A document · ${AP.doc}, ${AP.version}</p><h2 class="h" style="margin-top:var(--space-1)">The same mark in a paragraph</h2></div>
+        <div class="doc2"><p class="note">Section ${sec2.n} · ${sec2.t}</p>
+          <p>An emergency hazard is made safe within <span class="corr"><span class="old">${sec2.old}</span><span class="nw">${sec2.words.match(/\d+ h/)[0]}</span><span class="cm" data-tier="team">${ini(AP.author, 'sm')}v3</span></span>, and fixed within 14 days.</p></div>
+        <div class="panel" style="display:grid;gap:var(--space-2)"><p class="eyebrow">The mark, always the same four parts</p>
+          <p class="note"><b>One line</b> through the old value, so it stays readable. <b>The new value</b> beside it, never on top. <b>Initials and a date.</b> <b>A reason</b>, one click or one key away, never hidden.</p>
+          <p class="note">On paper: no correction fluid, no scribbling out, no pencil. Here: no silent edit. A value that was never wrong has no mark at all, so a mark always means something happened.</p></div>
+        <p class="why">${I('info', 14)}<span>After ${FT.foldAfterDays} days (a setting) a struck value can fold into a small “corrected” tag beside the new value, with the same reason underneath. It is never removed.</span></p>
+      </section></div></main>`;
+  Icons.hydrate($('#app'));
+}
+function step(k) { S.k = k; render(); }
+function replay() {
+  clearLater(); S.k = 0; render(); settle();
+  /* the moment: one line draws through 2014, 2017 is written beside it, then the initials and the reason */
+  later(() => { S.k = 1; $('.card .old').style.setProperty('--s', 1); }, ms('--motion-run') - ms('--motion-calm'));
+  later(() => step(2), ms('--motion-run'));
+  later(() => step(3), ms('--motion-run') + ms('--motion-base'));
+}
+onKeys({ r: replay });
+replay();
+</script>
+</body>
+</html>

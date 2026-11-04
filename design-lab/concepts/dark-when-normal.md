@@ -14,3 +14,5 @@ Could steer: Sound (B): silence as the normal state. Any ambient idea.
 Confirmed for sound in [`2026-11-03-room-tone`](../runs/2026-11-03-room-tone/): no beds, no ticks by default.
 
 Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): "Nobody was called" is the headline of a quiet weekend; the standby lamp is steady and never blinks (diary V2, standby V1).
+
+Applied to a team board in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): one warning only, held by someone who is away (board V5).
