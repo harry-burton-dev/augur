@@ -18,10 +18,12 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   home: 'Home',
   admin: 'Admin',
   upgrades: 'the Upgrade Centre',
+  'sign-in-theme': 'AUGUR’s sign-in pages and emails, in its Keycloak image',
   // What every deployment runs beside them (infra/deploy/compose.yml).
   web: 'the front door',
   postgres: 'the database',
   keycloak: 'the sign-in service',
+  'keycloak-config': 'the sign-in realm’s set-up job',
   garage: 'the object store',
   backup: 'the backups',
   tailscale: 'the tailnet',
