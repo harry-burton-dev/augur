@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Not for you V5 · Closed until</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: "not for you" has a date. Each item shows when it opens to you, and when it goes for everyone ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.cat{display:grid;grid-template-columns:minmax(230px,.9fr) minmax(210px,.8fr) minmax(0,2fr);align-content:start;overflow:auto;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.cat > *{padding:var(--space-3) var(--space-3);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.cat .hd{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);background:var(--surface-inset)}
+.cat .t{color:var(--light)}
+.cat .t .who{display:block}
+.cat .st{color:var(--ink)}
+.cat .st .who{display:block}
+.axis{position:relative;height:100%;min-height:calc(var(--space-6) + var(--space-1))}
+.axis .yr{position:absolute;top:0;bottom:0;border-left:1px solid var(--hairline);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);padding-left:2px}
+.band{position:absolute;top:50%;height:var(--space-3);margin-top:calc(var(--space-2) * -1);border-radius:1px;transform-origin:left center;transition:transform var(--motion-calm) var(--ease-out)}
+.band.closed{background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline)}
+.band.open{background:var(--ink)}
+.band.count{background:var(--x-proposed-said-other)}
+.band.fade{-webkit-mask-image:linear-gradient(90deg,var(--shade) 60%,transparent);mask-image:linear-gradient(90deg,var(--shade) 60%,transparent)}
+.pre-bands .band{transform:scaleX(0)}
+.end{position:absolute;top:50%;margin-top:calc(var(--space-3) * -1);color:var(--ink-muted)}
+.now{position:absolute;top:0;bottom:0;border-left:1px solid var(--x-proposed-lit)}
+.now span{position:absolute;top:var(--space-1);left:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-lit);white-space:nowrap}
+.hot{background:var(--x-proposed-lit-wash);transition:background var(--motion-calm) var(--ease-out)}
+.key{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);align-items:center}
+.key i{display:inline-block;width:var(--space-5);height:var(--space-2);vertical-align:1px;margin-right:var(--space-1);border-radius:1px}
+@media (prefers-reduced-motion: reduce){.pre-bands .band{transform:none;opacity:0}.band{transition:opacity var(--motion-base)}}
+@media (max-width:1400px){.cat > *{padding:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Not for you · V5</b> closed until: each item says when it opens to you and when it goes for everyone; an embargo is a date, not a no · archive closure periods (TNA), press embargoes, retention schedules</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const me = READERS.sam;
+const S = { shown: false };
+/* the time axis: from this month to the furthest keep date. Dates are worked out from labels and data */
+const T0 = new Date(2026, 9, 1), T1 = new Date(2037, 0, 1);
+const X = d => ((d - T0) / (T1 - T0) * 100).toFixed(2) + '%';
+const D = s => { const m = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 }; const p = s.split(' '); return new Date(+p[2], m[p[1]], +p[0]); };
+const TODAY = D(DATA.today);
+function items() {
+  const B = DATA.briefing, est = new Date(2032, 11, 31);
+  return [
+    { t: B.title, s: `${'Artifacts'} · briefing ${B.id}`, label: 'lbOff', status: `Opens to you on ${B.embargo.until}`, why: B.embargo.why,
+      bands: [{ c: 'closed', a: TODAY, b: D(B.embargo.until) }, { c: 'open', a: D(B.embargo.until), b: T1 }], hot: true },
+    { t: FACT('f5').k, s: DATA.record.title, label: 'lbHours', status: 'Inside counts only, for you', why: `${tpl(L('lbHours').caveat.plain)} Removed for everyone ${keepWord('lbHours')}: about the end of 2032, if it closes this winter.`,
+      bands: [{ c: 'count', a: TODAY, b: est, fade: true }] },
+    { t: FACT('f6').k, s: DATA.record.title, label: 'lbDiary', status: 'Closed to all but one investigator', why: `Removed ${keepWord('lbDiary')}.`,
+      bands: [{ c: 'closed', a: TODAY, b: new Date(2027, 0, 31), fade: true }] },
+    { t: FACT('f8').k, s: DATA.record.title, label: 'lbSec', status: 'Open to you', why: `Kept by your team. Its label is ${keepWord('lbSec')}: next in ${L('lbSec').keepDate.replace('review ', '')}.`,
+      bands: [{ c: 'open', a: TODAY, b: new Date(2027, 0, 15) }], review: new Date(2027, 0, 15) },
+    { t: FACT('f7').k, s: DATA.record.title, label: 'lbComm', status: 'Closed to you, for its life', why: `Kept by ${F('com').name} until ${L('lbComm').keepDate}. Ask ${P('p5').name} for a purpose.`,
+      bands: [{ c: 'closed', a: TODAY, b: D(L('lbComm').keepDate) }] },
+    { t: FACT('f1').k, s: DATA.record.title, label: 'lbOff', status: 'Open to you', why: `Removed ${keepWord('lbOff')} (${L('lbOff').keepDate}).`,
+      bands: [{ c: 'open', a: TODAY, b: D(L('lbOff').keepDate) }] }
+  ];
+}
+function axisHTML(it) {
+  const yrs = []; for (let y = 2027; y <= 2036; y++) yrs.push(y);
+  return `<div class="axis">${yrs.map(y => `<span class="yr" style="left:${X(new Date(y, 0, 1))}">${String(y).slice(2)}</span>`).join('')}
+    ${it.bands.map((b, i) => `<span class="band ${b.c} ${b.fade ? 'fade' : ''}" style="left:${X(b.a)};width:calc(${X(b.b)} - ${X(b.a)});transition-delay:calc(${i} * var(--motion-quick))"></span>`).join('')}
+    ${it.review ? `<span class="end" style="left:${X(it.review)}">${I('rotate-ccw', 12)}</span>` : ''}
+    <span class="now" style="left:${X(TODAY)}"></span></div>`;
+}
+function render() {
+  const IT = items();
+  $('#app').innerHTML = topHTML(['Artifacts and Data Atlas', 'Closed to me'], [...STD_HINTS], me.person) +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;justify-content:space-between;gap:var(--space-5);align-items:flex-end"><div><p class="eyebrow">${P(me.person).name} · ${F(me.floor).name}</p><h1 class="title">Closed until</h1></div>
+      <div class="key"><span><i style="background:var(--ink)"></i>open to you</span><span><i style="background:var(--x-proposed-said-other)"></i>inside counts only</span><span><i style="background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline)"></i>closed to you</span><span>${I('rotate-ccw', 12)} label reviewed</span><span>bands end when the value is removed for everyone</span></div></div>
+    <div class="cat ${S.shown ? '' : 'pre-bands'}">
+      <span class="hd">Item</span><span class="hd">For you</span><span class="hd" style="position:relative">Oct 2026 → 2036 <span class="now" style="left:${X(TODAY)};border:0"><span>today</span></span></span>
+      ${IT.map((it, i) => `<span class="t dep ${it.hot && S.shown ? 'hot' : ''}" ${it.hot ? 'data-hot' : ''} style="--i:${i}">${whyBtn(it.label, pmHTML(it.label))} ${it.t}<span class="who">${it.s}</span></span><span class="st dep ${it.hot && S.shown ? 'hot' : ''}" ${it.hot ? 'data-hot' : ''} style="--i:${i}">${it.status}<span class="who">${it.why}</span></span><span class="dep ${it.hot && S.shown ? 'hot' : ''}" ${it.hot ? 'data-hot' : ''} style="--i:${i};padding-top:0;padding-bottom:0">${axisHTML(it)}</span>`).join('')}
+    </div>
+  </div></main>`;
+  afterRender();
+}
+function replay() { clearLater(); closeDeed(); S.shown = false; settleIn(); render(); later(() => { S.shown = true; $('.cat').classList.remove('pre-bands'); document.querySelectorAll('[data-hot]').forEach(e => e.classList.add('hot')); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

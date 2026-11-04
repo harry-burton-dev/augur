@@ -668,7 +668,7 @@ export const appRunnerRoutes =
       {
         schema: {
           summary: "The oldest open job (the deployment's app runner only)",
-          description: 'Signed in as the platform-updater client. Each call counts as the runner being seen, and looks for automatic updates whose window has opened, at most once a minute.',
+          description: 'Signed in as the updater client (platform-updater). Each call counts as the runner being seen, and looks for automatic updates whose window has opened, at most once a minute.',
           response: {
             200: { ...ref(AppJobSchema), description: 'The job' },
             204: empty('Nothing to do'),

@@ -1,5 +1,19 @@
 # @augur/upgrades
 
+## 0.1.3
+
+### Patch Changes
+
+- 2eae812: AUGUR serves kit 0.4.0 (Common 0.6.0, Quill 0.6.0) and the shell draws on Aerie 0.5.0. Apps' frames keep one layout at every width and fold their drawer and rail over the page when narrow; the floor gauge keeps a lane of its own, so it never covers an app; danger actions can ask twice; Reduce motion stops every loop; and floors move with Alt+Page Up and Alt+Page Down, leaving Page Up and Page Down to the app.
+- 8a161b9: AUGUR serves kit 0.5.0 (Common 0.7.0, Quill 0.6.1) and the shell draws on Aerie 0.5.1. The kit now brings its own typefaces (Jost and Nunito, served with the kit at `KIT_URL`) and its reduced-motion values, so a deployment that serves the kit from another site shows the same type and calms the same moves.
+- cbbefd9: The Upgrade Centre can install a halted AUGUR release for a test on Workbench and Preview servers (ADR 0051). Beside a halted release, "Install … for a test" says why the publisher halted it, asks for a reason for the audit log, and follows the upgrade step by step; the watch judges it and AUGUR goes back by itself if it fails. On a Production server, or with a registry too old for it, the action stays visible and says why it can't be used.
+- Updated dependencies [2c37293]
+- Updated dependencies [2ad8555]
+- Updated dependencies [5ad27cc]
+- Updated dependencies [8a89c6f]
+- Updated dependencies [49a631f]
+  - @augur/mfe-sdk@1.11.0
+
 ## 0.1.2
 
 ### Patch Changes

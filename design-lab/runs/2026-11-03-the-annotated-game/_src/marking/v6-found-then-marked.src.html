@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Marking V6 · Found by rule, marked by people</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Marking V6: the rules put candidates on the table; the model may draft a sentence in pencil; only the reviewer marks ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-card);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.cands{min-height:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);align-content:start}
+.cd{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-pane);display:flex;flex-direction:column;gap:var(--space-2);transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out)}
+.cd .h{display:flex;align-items:baseline;gap:var(--space-3)}
+.cd .h .n{font:300 var(--type-heading)/1 var(--font-mono);color:var(--ink-muted)}
+.cd .h .s{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.cd .why{display:flex;gap:var(--space-1);flex-wrap:wrap}
+.cd .why span{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);border:1px solid var(--hairline);border-radius:var(--radius-pill);padding:1px var(--space-2)}
+.cd .dec{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;margin-top:auto}
+.cd.kept{border-color:var(--hairline-strong)}
+.cd.hide{opacity:0}
+.gw-off .pencil.model{display:none}
+.gw-off .gwnote{display:flex}
+.gwnote{display:none;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.side{min-height:0;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.side li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);padding:var(--space-2) 0;border-top:1px solid var(--hairline)}
+.side b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.cd{padding:var(--space-2) var(--space-3);gap:var(--space-1)}.cands{gap:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Marking · V6</b> found by rule, marked by people: the records put six candidates on the table, the model drafts in pencil, the reviewer keeps, marks or bins · engine “learn from your mistakes” modes, pencil and ink</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { gw: true, shown: false };
+/* candidates the rules find, with why. The model's draft is a pencil sentence the reviewer may keep or bin */
+const CAND = [
+  { n: 6, why: [['door-closed', 'one-way step']], draft: 'Notice was given before either fitter was hired; the contract allowed a break instead.' },
+  { n: 10, why: [['trending-down', 'falls two steps'], ['eye', 'line crossed']], draft: 'No fitter in post on 1 August; the line set at the table is crossed.' },
+  { n: 11, why: [['clock', 'no answer for 38 days']], draft: 'The chair noted the crossed line; no reason is recorded.' },
+  { n: 12, why: [['door-closed', 'one-way step']], draft: 'Kestrel stops inspecting with no fitter in post.' },
+  { n: 15, why: [['eye', 'line crossed']], draft: '5 of 18 vans overdue, over the line of 4.' },
+  { n: 8, why: [['calendar-clock', 'date moved, line not']], draft: 'The action’s date moved to 31 August; the line stayed at 1 August.' }
+];
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', DEC.id, 'Candidates'], [['G', 'model gateway', 'h-g'], ['R', 'replay']], { as: DATA.review.held }) +
+  `<main class="main"><div class="wrap ${S.gw ? '' : 'gw-off'}">
+    <div class="intro"><h1 class="h1">Found by rule, marked by people</h1><p class="lede">Engines show where the evaluation dropped; players decide what it meant. Here the records’ rules put candidate moments on the table with their reason. The model may draft a sentence for each, in pencil. Only the reviewer marks.</p></div>
+    <section class="cands scroll">${CAND.map((c, i) => { const m = MV(c.n), r = mainMark(c.n);
+      return `<div class="cd ${S.shown ? '' : 'hide'} ${r ? 'kept' : ''}" style="transition-delay:calc(var(--motion-instant) * ${i})"><div class="h"><span class="n">${c.n}.</span><span class="s">${m.san}</span></div>
+        <div class="why">${c.why.map(([ic, w]) => `<span>${I(ic, 11)} ${w}</span>`).join('')}<span>${posGl(posOfMove(c.n).s)} ${POS(posOfMove(c.n).s).w.toLowerCase()}</span></div>
+        <div class="pencil model"><p class="pl">${I('pencil', 11)} drafted by the model, from the records only</p><p class="pt">${c.draft}</p></div>
+        <div class="dec">${m.side === 'world' ? `<span class="small muted">A world move: no mark. The reviewer marks the answer to it${c.n === 10 ? ' (11)' : c.n === 12 ? ' (13)' : c.n === 15 ? ' (16)' : ''}.</span>` : r ? `${gl(r.g, 'big')}<span class="small">marked by ${first(r.by)}${r.line && r.line !== c.draft ? ', in his own words' : ''}</span>` : `<button class="btn sm">${I('check', 14)} Keep as a moment</button><button class="btn sm">${I('x', 14)} Not critical</button>`}</div></div>`; }).join('')}</section>
+    <aside class="side pane scroll"><p class="eyebrow">What each voice did here</p><ul>
+      <li>${I('activity', 16)}<span><b>The records</b> found ${CAND.length} candidates by rule. They can’t find move 4: an untested assumption leaves no trace in the numbers until it fails.</span></li>
+      <li>${I('pencil', 16)}<span><b>The model</b> drafted one sentence each from the same records, in pencil. It never marks, and never sees the people’s own marks.</span></li>
+      <li>${I('user-round', 16)}<span><b>The reviewer</b> kept 4 of these, marked 6, 8 and 11 in his own words, and added move 4 and 13 himself.</span></li></ul>
+      <p class="gwnote">${I('plug-zap', 14)} Model gateway off: the drafts are gone. Every candidate, mark and line is still here.</p>
+      <p class="small muted" style="margin-top:auto">Turning the model gateway off changes the work, never the review. G toggles it.</p></aside>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $('#h-g')?.classList.toggle('on', !S.gw);
+}
+function replay() { clearLater(); S.shown = false; S.gw = true; render(); settle(); later(() => { S.shown = true; $$('.cd').forEach(c => c.classList.remove('hide')); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 'g') { S.gw = !S.gw; render(); } });
+replay();
+</script>
+</body>
+</html>

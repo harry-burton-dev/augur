@@ -309,5 +309,38 @@ describe('events', () => {
         { topic: 'platform.app.blocked', payload: { app: 'notes' }, workspace: { id: 'w-legal' } },
       ]);
     });
+
+    it('streams the events on the person’s floor and topics to their browser, as they’re published', async () => {
+      const app = (open = await buildApp({ verifyService, grants, floors, heartbeatMs: 50 }));
+      const url = await app.listen({ port: 0, host: '127.0.0.1' });
+      const onFinance = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });
+      const controller = new AbortController();
+      const res = await fetch(`${url}/v1/domain-events/stream?topics=folio.document.*,platform.team.renamed`, { headers: onFinance, signal: controller.signal });
+      expect(res.headers.get('content-type')).toBe('text/event-stream');
+      const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+      expect((await reader.read()).value).toContain(': connected');
+
+      const publish = (events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events } });
+      // Another floor, no floor, a topic not asked for: none of them reach Sam.
+      await publish([published('legal', 'w-legal'), published('nowhere'), published('payroll', 'w-payroll')]);
+      await publish([{ topic: 'folio.library.renamed', id: 'l1', payload: {}, workspace: 'w-finance' }]);
+      await publish([published('d7', 'w-finance')]);
+      let text = '';
+      while (!text.includes('event: domain-event')) text += (await reader.read()).value;
+      const data = text.split('\n').find((l) => l.startsWith('data: '))!;
+      expect(JSON.parse(data.slice(6))).toMatchObject({ topic: 'folio.document.published', id: 'd7', publisher: 'folio', payload: { document: 'd7' }, workspace: { id: 'w-finance' } });
+      expect(text).not.toMatch(/legal|nowhere|payroll|l1/);
+      controller.abort();
+    });
+
+    it('opens a browser stream only for someone signed in, on a floor, following real topics', async () => {
+      const app = (open = await buildApp({ verifyService, grants, floors }));
+      const onFinance = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });
+      const stream = (headers: Record<string, string>, topics: string) => app.inject({ method: 'GET', url: `/v1/domain-events/stream?topics=${encodeURIComponent(topics)}`, headers });
+      expect((await stream({}, 'folio.*')).statusCode).toBe(401);
+      expect((await stream(sam, 'folio.*')).json().message).toContain('X-Workspace-Id');
+      expect((await stream(onFinance, 'folio.*,FOLIO')).statusCode).toBe(400);
+      expect((await stream(onFinance, Array.from({ length: 101 }, (_, i) => `a${i}.x`).join(','))).statusCode).toBe(400);
+    });
   });
 });

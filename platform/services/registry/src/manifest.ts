@@ -5,6 +5,7 @@
  */
 import Type, { type Static } from 'typebox';
 import semver from 'semver';
+import { APP_CATEGORIES, type AppCategory } from '@augur/mfe-sdk';
 import { SCOPES } from '@augur/service-kit';
 import { PLATFORM_APP_VERSIONS } from './platform-app-versions.js';
 
@@ -74,7 +75,7 @@ export const surfaceSchema = Type.Object(
     slot: Type.Enum([...SURFACE_SLOTS]),
     module: Type.String({ pattern: '^[A-Za-z0-9_./-]+$', maxLength: 100, description: "The module the app's entry exposes for it" }),
     role: Type.Optional(Type.Enum(['member', 'lead'], { description: 'Only for people with this role on the floor' })),
-    rollup: Type.Optional(Type.Boolean({ description: "Shows this floor and the teams below it that the person is on, using the platform's roll-up" })),
+    rollup: Type.Optional(Type.Boolean({ description: "Shows this floor and the teams below it that the person is on, using AUGUR's roll-up" })),
   },
   { additionalProperties: false },
 );
@@ -145,42 +146,34 @@ export const appEntrySchema = Type.Object(
       Type.Array(Type.String({ pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80 }), { maxItems: 50, description: 'Intent types this app handles, such as document.open' }),
     ),
     ai: Type.Optional(Type.Boolean({ description: 'The app is an AI; the menus draw it as a bubble' })),
-    search: Type.Optional(
-      Type.Boolean({
-        description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it",
-      }),
-    ),
+    search: Type.Optional(Type.Boolean({ description: "The app's service answers GET /v1/search?q=, and the shell's Find asks it" })),
     storage: Type.Optional(
       Type.Object(
         { database: Type.Optional(Type.Boolean()), bucket: Type.Optional(Type.Boolean()) },
-        {
-          additionalProperties: false,
-          description:
-            'The storage the app keeps on the platform: its own database schema, its own bucket. An admin adds the app to APP_STORAGE and its service gets DATABASE_URL (a login owning one schema) and S3_* (its own bucket). See docs/app-storage.md.',
-        },
+        { additionalProperties: false, description: 'The storage the app keeps on AUGUR: its own database schema, its own bucket. See docs/app-storage.md' },
       ),
     ),
     maxUpload: Type.Optional(
       Type.Integer({
         minimum: 1,
         maximum: MAX_UPLOAD_MB,
-        description: `The largest request body, in MB, the gateway lets through to the app's service; ${DEFAULT_UPLOAD_MB} without it. An admin can lower it. In the manifest the registry serves, always present: what the app asks, or less where an admin lowered it.`,
+        description: `The largest request body, in MB, the gateway lets through to the app's service; ${DEFAULT_UPLOAD_MB} without it. An admin can lower it.`,
       }),
     ),
     previews: Type.Optional(
       Type.Array(featurePreviewSchema, {
         maxItems: MAX_FEATURE_PREVIEWS,
-        description: "Features the app is trying before they're everyone's (SDK 1.7): admins say who gets each, people turn opt-in ones on in the shell's Previews, and the app asks ctx.previewOn(id)",
+        description: "Features the app has ready to try before they're everyone's (SDK 1.7): admins say who gets each, people opt in, and the app asks ctx.previewOn(id)",
       }),
     ),
     settings: Type.Optional(
-      Type.Array(appSettingSchema, { maxItems: MAX_SETTINGS, description: "Settings the app offers admins in Admin, Apps; its service reads them from the registry's /apps/{id}/settings" }),
+      Type.Array(appSettingSchema, { maxItems: MAX_SETTINGS, description: 'Settings the app offers admins in Admin, Apps; its service reads them from the registry' }),
     ),
     scopes: Type.Optional(
       Type.Array(Type.Enum([...SCOPES]), {
         uniqueItems: true,
         maxItems: SCOPES.length,
-        description: 'What the app\'s service asks to do on the platform, such as "notifications:send". An app may always register itself.',
+        description: 'What the app\'s service asks to do on AUGUR, such as "notifications:send". An app may always register itself.',
       }),
     ),
     floors: Type.Optional(
@@ -192,33 +185,27 @@ export const appEntrySchema = Type.Object(
       }),
     ),
     surfaces: Type.Optional(
-      Type.Array(surfaceSchema, {
-        maxItems: 30,
-        description:
-          "What the app shows on each kind of floor, for the shell to place. When several match, the most specific floor wins, then a role condition, then manifest order. Each surface's floor must be in floors.",
-      }),
+      Type.Array(surfaceSchema, { maxItems: 30, description: "What the app shows on each kind of floor, for the shell to place. Each surface's floor must be in floors." }),
     ),
-    orbit: Type.Optional(
-      Type.Boolean({
-        description:
-          "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus",
-      }),
-    ),
+    orbit: Type.Optional(Type.Boolean({ description: 'false: the app keeps its own menu inside it and the shell never shows its Orbit' })),
     sameOnEveryFloor: Type.Optional(
-      Type.Boolean({
-        description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)",
-      }),
+      Type.Boolean({ description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why (SDK 1.6)" }),
+    ),
+    followsAddress: Type.Optional(
+      Type.Boolean({ description: 'true: the app follows the address itself, so the shell keeps it mounted on Back and Forward inside it (SDK 1.11)' }),
     ),
     focus: Type.Optional(
-      Type.Boolean({
-        description: 'true: the app can narrow what it shows to a working context inside the floor, from ctx.focus (SDK 1.10). Reserved: the shell offers none yet (ADR 0029)',
+      Type.Boolean({ description: 'true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029)' }),
+    ),
+    category: Type.Optional(
+      Type.Enum([...APP_CATEGORIES], {
+        description: 'The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed',
       }),
     ),
     areas: Type.Optional(
       Type.Array(appAreaSchema, {
         maxItems: 6,
-        description:
-          "The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. With fewer than two, Title shows the app alone. Nothing repeats its parent: the registry warns when an area's label or icon matches the app's, a group's its area's, or an item's its group's, and accepts the manifest. See docs/shell-principles.md",
+        description: 'The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See docs/shell-principles.md',
       }),
     ),
     menu: Type.Optional(
@@ -272,11 +259,11 @@ export const menuWarnings = (entry: Pick<AppEntry, 'name' | 'icon' | 'menu' | 'a
 };
 
 /**
- * The platform's own apps. They ship with the platform, so they live in code, not in the catalogue table.
+ * AUGUR's own apps. They ship with AUGUR, so they live in code, not in the catalogue table.
  * "/" is the shell's own: Title, where every app is a chapter.
  */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0', icon: 'home', description: 'What needs you' },
+  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0', icon: 'home', description: 'What needs you', category: 'platform' },
   {
     id: 'admin',
     name: 'Admin',
@@ -287,6 +274,7 @@ export const platformApps: AppEntry[] = [
     icon: 'admin',
     description: 'People, departments, apps, status, updates and activity',
     requiredRole: 'admin',
+    category: 'platform',
     // people, departments, apps and the system are the organisation's, whichever floor you stand on
     sameOnEveryFloor: true,
     areas: [
@@ -340,12 +328,37 @@ export const platformApps: AppEntry[] = [
     icon: 'download',
     description: 'What this deployment runs, and upgrading it',
     requiredRole: 'admin',
+    category: 'platform',
     // what a deployment runs is the deployment's, whichever floor you stand on
     sameOnEveryFloor: true,
     // its sections are in its own rail (ADR 0030)
     orbit: false,
   },
 ];
+
+/** Why an app's own claim to a kind isn't used. */
+export const CATEGORY_REFUSED = 'Only apps that ship with AUGUR or come from its app feed can be a platform or pillar app.';
+
+/** The kind in force for an app, and the claim it made that isn't used, if any. */
+export interface CategoryInForce {
+  category?: AppCategory;
+  refused?: { asked: AppCategory; why: string };
+}
+
+/**
+ * The kind in force for an app (ADR 0032): the registry's own apps are platform apps;
+ * an app's own claim counts only when it ships with AUGUR (PILLAR_APPS) or the app runner
+ * installed it from the signed app feed. Anything else is just an app, and the claim is
+ * reported to admins as refused. A value this registry doesn't know is no kind.
+ */
+export const categoryOf = (entry: Pick<AppEntry, 'id' | 'category'>, trust: { ships: boolean; fromFeed: boolean }): CategoryInForce => {
+  const own = platformApps.find((a) => a.id === entry.id);
+  if (own) return { category: own.category ?? 'platform' };
+  const asked = entry.category;
+  if (!asked || !(APP_CATEGORIES as readonly string[]).includes(asked)) return {};
+  if (trust.ships || trust.fromFeed) return { category: asked };
+  return { refused: { asked, why: CATEGORY_REFUSED } };
+};
 
 /**
  * Platform apps whose frontend hasn't shipped yet. Their ids and routes stay
@@ -388,7 +401,7 @@ export const settingsProblem = (entry: AppEntry): string | undefined => {
 /** Why an app can't take the id or route it asked for, or undefined when it can. */
 export const conflictFor = (entry: AppEntry, others: AppEntry[]): string | undefined => {
   const platform = platformApps.find((a) => a.id === entry.id);
-  if (platform) return `"${entry.id}" is one of the platform's own apps.`;
+  if (platform) return `"${entry.id}" is one of AUGUR's own apps.`;
   const route = trimRoute(entry.route);
   const all = [...platformApps, ...others].filter((a) => a.id !== entry.id);
   const sameRoute = all.find((a) => trimRoute(a.route) === route);
@@ -435,7 +448,7 @@ export const entryOriginProblem = (entry: Pick<AppEntry, 'name' | 'entry'>, allo
   try {
     url = new URL(entry.entry);
   } catch {
-    return `${entry.name}'s entry "${entry.entry}" is neither a path on the platform nor a full web address.`;
+    return `${entry.name}'s entry "${entry.entry}" is neither a path on AUGUR's own address nor a full web address.`;
   }
   if (allowed.includes(url.origin)) return undefined;
   return `${entry.name} loads from ${url.origin}, which isn't a place apps are allowed to load from. An admin can allow it in Admin, Apps.`;

@@ -27,7 +27,6 @@ Spectral finds an error in it (`.spectral.yaml`).
 | The generated contract | `contracts/<service>.openapi.yaml` |
 | The generator and check | `scripts/check-contracts.mjs` |
 | Lint rules | `.spectral.yaml` |
-| The app manifest's JSON Schema | `contracts/manifest.schema.json`, from the registry's `src/manifest.ts` by `pnpm manifest-schema`; checked by `pnpm check:manifest` ([Build an app](build-an-app.md#checking-a-manifest)) |
 
 Response schemas document what is sent; they don't filter it. A route answers with plain JSON, as it did
 before contracts were generated.

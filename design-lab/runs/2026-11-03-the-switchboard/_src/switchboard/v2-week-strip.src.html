@@ -1,0 +1,109 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My switchboard · V2 The week strip</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,19rem);gap:var(--space-5);height:100%}
+.hd{display:flex;align-items:baseline;gap:var(--space-3);margin-bottom:var(--space-2);flex-wrap:wrap}
+.ctl{display:flex;gap:var(--space-4);align-items:center;font-size:var(--type-meta);margin-bottom:var(--space-3);flex-wrap:wrap}
+.ctl b{font:400 var(--type-lead)/1 var(--font-mono);color:var(--light)}
+.ctl .btn{padding:0 var(--space-2)}
+.strip{display:grid;grid-template-columns:5.5rem minmax(0,1fr);row-gap:var(--space-2)}
+.lab{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);display:flex;flex-direction:column;justify-content:center}
+.lab small{font-size:var(--type-small);color:var(--ink-muted);display:inline-flex;gap:var(--space-1);align-items:center}
+.row{position:relative;height:calc(var(--target-md) + var(--space-3));border-radius:var(--radius-key);background:var(--x-proposed-night);overflow:visible}
+.row .work{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--slate) 85%,var(--green) 6%);border-left:1px solid var(--hairline-strong);border-right:1px solid var(--hairline-strong);transition:left var(--motion-base) var(--ease-standard),width var(--motion-base) var(--ease-standard)}
+.row .oncall{position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--floor-team-high);opacity:.7}
+.row .ed{position:absolute;top:0;bottom:0;width:1px;background:var(--info);opacity:.8}
+.row .ed::after{content:"";position:absolute;top:-2px;left:-3px;width:7px;height:7px;border-radius:1px;background:var(--info)}
+.dot{position:absolute;top:50%;width:var(--space-3);height:var(--space-3);margin:calc(var(--space-3) / -2) 0 0 calc(var(--space-3) / -2);border-radius:50%;background:var(--ink);opacity:0;transition:opacity var(--motion-base),transform var(--motion-base);transform:translateY(calc(var(--space-3) * -1))}
+.dot.in{opacity:1;transform:none}
+.dot.needs{background:var(--x-proposed-lit)}
+.dot.failed{background:var(--danger)}
+.dot.info{background:none;border:1px solid var(--ink-muted)}
+.dot.ghost{background:none;border:1px dashed var(--ink-muted)}
+.hold{position:absolute;top:calc(50% - 2px);height:4px;background:var(--x-proposed-held);border-radius:2px;opacity:0;transition:opacity var(--motion-base)}
+.hold.in{opacity:1}
+.axis{grid-column:2;position:relative;height:var(--space-4);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.axis span{position:absolute;transform:translateX(-50%)}
+.side{display:flex;flex-direction:column;gap:var(--space-3)}
+.side .pane{padding:var(--space-3) var(--space-4)}
+.tal{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);margin-top:var(--space-2)}
+.tal b{font:400 var(--type-lead)/1 var(--font-mono);color:var(--light);text-align:right}
+.tal .d{font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-lit)}
+.leg{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:var(--space-2)}
+.leg span{display:flex;align-items:center;gap:var(--space-2)}
+.leg i{display:inline-block;width:var(--space-5);height:var(--space-2);border-radius:1px}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <section>
+      <div class="hd"><p class="eyebrow">My switchboard</p><h1 class="heading" id="h"></h1></div>
+      <div class="ctl" id="ctl"></div>
+      <div class="strip" id="strip"></div>
+    </section>
+    <aside class="side">
+      <div class="pane"><p class="eyebrow">Last week, with these hours</p><div class="tal" id="tal"></div></div>
+      <div class="pane"><p class="eyebrow">Key</p><div class="leg" id="leg"></div></div>
+    </aside>
+  </div></main>
+</div>
+<div class="x-cap"><b>My switchboard · V2</b> the week strip: your hours over last week’s notices; move them and see what would have waited · rota charts, timetables</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const ME = DATA.me, BASE = JSON.parse(JSON.stringify(P(ME).hours));
+let H0 = JSON.parse(JSON.stringify(BASE));
+const pct = m => (m / DAY * 100).toFixed(3) + '%';
+const toHM = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+$('#top').innerHTML = topHTML(['My switchboard', 'Hours'], [['←→', 'end of day'], ['⇧ ←→', 'start'], ['R', 'replay'], ['T', 'technical words', 'h-t']]);
+$('#h').textContent = `${P(ME).name}: when AUGUR may reach you live`;
+$('#leg').innerHTML = `<span><i style="background:color-mix(in srgb,var(--slate) 85%,var(--green) 6%);border:1px solid var(--hairline-strong)"></i>your working hours: told live</span><span><i style="background:var(--x-proposed-night)"></i>quiet: held for later</span><span><i style="background:var(--floor-team-high);height:2px"></i>on call (${DATA.rota.name})</span><span><i style="background:var(--info);width:1px;height:var(--space-3)"></i>your edition</span><span><i style="background:var(--x-proposed-held);height:4px"></i>held until you start</span>`;
+function compute() {
+  return whatIf(D => { D.people[ME].hours = JSON.parse(JSON.stringify(H0)); }, () => forPerson(ME).map(d => ({ sent: d.sent, told: d.told, ed: d.edition, rule: d.rule, held: !!d.held, level: d.n.level, title: d.n.title })));
+}
+function render(animate) {
+  const ds = compute(), h = hoursOf(H0);
+  $('#ctl').innerHTML = `${I('sun', 16)} Live from <b>${H0.from}</b> to <b>${H0.to}</b> <button class="btn sm" data-k="s-">${I('minus', 12)} start</button><button class="btn sm" data-k="s+">${I('plus', 12)} start</button><button class="btn sm" data-k="e-">${I('minus', 12)} end</button><button class="btn sm" data-k="e+">${I('plus', 12)} end</button>${JSON.stringify(H0) !== JSON.stringify(BASE) ? `<button class="btn sm" data-k="reset">Put back ${BASE.from}–${BASE.to}</button>` : ''}`;
+  let html = '';
+  for (let d = 0; d < 7; d++) {
+    const on = DATA.rota.byDay[d] === ME, wk = h.days.includes(d);
+    html += `<div class="lab">${DATA.week.days[d]}<small>${on ? I('phone', 12) + 'on call' : wk ? '' : 'day off'}</small></div><div class="row" data-d="${d}">`;
+    if (wk) html += `<div class="work" style="left:${pct(h.from)};width:${pct(h.to - h.from)}"></div><div class="ed" style="left:${pct(mins(P(ME).digest))}" title="your edition"></div>`;
+    if (on) html += `<div class="oncall"></div>`;
+    ds.filter(x => dayOf(x.sent) === d).forEach((x, i) => {
+      if (x.held && dayOf(x.told) === d) html += `<span class="hold" style="left:${pct(x.sent % DAY)};width:${pct(x.told - x.sent)}"></span>`;
+      else if (x.held) html += `<span class="hold" style="left:${pct(x.sent % DAY)};right:0"></span>`;
+      html += `<span class="dot ${x.level} ${x.rule === 'record' ? 'info' : ''}" style="left:${pct(x.sent % DAY)}" title="${at(x.sent)} · ${x.title} · ${RULES[x.rule].word}${x.held ? ', told ' + at(x.told) : ''}"></span>`;
+    });
+    ds.filter(x => x.held && dayOf(x.told) === d && dayOf(x.sent) !== d).forEach(x => { html += `<span class="hold" style="left:0;width:${pct(x.told % DAY)}"></span><span class="dot ghost" style="left:${pct(x.told % DAY)}" title="told ${at(x.told)}: ${x.title}"></span>`; });
+    html += `</div>`;
+  }
+  html += `<div class="axis">${[0, 3, 6, 9, 12, 15, 18, 21, 24].map(x => `<span style="left:${pct(x * 60)}">${pad(x)}:00</span>`).join('')}</div>`;
+  $('#strip').innerHTML = html;
+  const live = ds.filter(x => !x.held && x.rule !== 'record').length, held = ds.filter(x => x.held).length, ed = ds.filter(x => x.rule === 'record').length;
+  const b = BASE_T, dl = (a, k) => a === b[k] ? '' : `<span class="d">${a > b[k] ? '+' : ''}${a - b[k]}</span>`;
+  $('#tal').innerHTML = `<b>${live}</b><span>reached you live ${dl(live, 'live')}</span><b>${held}</b><span>waited for your start ${dl(held, 'held')}</span><b>${ed}</b><span>went into an edition ${dl(ed, 'ed')}</span><b>${(h.to - h.from) / 60}</b><span>hours a day you can be reached</span>`;
+  Icons.hydrate(document.body);
+  if (!animate) $$('.dot,.hold').forEach(x => x.classList.add('in'));
+}
+const BASE_T = (() => { const ds = forPerson(ME); return { live: ds.filter(x => !x.held && x.rule !== 'record').length, held: ds.filter(x => x.held).length, ed: ds.filter(x => x.rule === 'record').length }; })();
+function nudge(k) {
+  const f = mins(H0.from), t = mins(H0.to);
+  if (k === 's-') H0.from = toHM(Math.max(300, f - 30)); if (k === 's+') H0.from = toHM(Math.min(t - 60, f + 30));
+  if (k === 'e-') H0.to = toHM(Math.max(f + 60, t - 30)); if (k === 'e+') H0.to = toHM(Math.min(1380, t + 30));
+  if (k === 'reset') H0 = JSON.parse(JSON.stringify(BASE));
+  render(false);
+}
+$('#ctl').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) nudge(b.dataset.k); });
+function play() {
+  clearLater(); H0 = JSON.parse(JSON.stringify(BASE)); document.body.classList.add('pre'); render(true);
+  later(() => document.body.classList.remove('pre'), 60);
+  $$('.dot,.hold').forEach((x, i) => later(() => x.classList.add('in'), 1200 + i * 40));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, play)) return;
+  if (e.key === 'ArrowRight') nudge(e.shiftKey ? 's+' : 'e+'); if (e.key === 'ArrowLeft') nudge(e.shiftKey ? 's-' : 'e-');
+});
+Icons.hydrate(document.body); play();
+</script></body></html>

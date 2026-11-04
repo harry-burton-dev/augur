@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A proposal waiting · V1 · Pencil on the record</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the proposal sits on the record itself, in pencil among the ink, line by line ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,var(--measure-drawer));gap:var(--space-6);max-width:calc(var(--measure-wide) + var(--measure-drawer) + var(--space-6));margin:0 auto}
+.rec{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.rec h1{margin:0;font-weight:200;font-size:var(--type-title);line-height:var(--leading-title);letter-spacing:var(--tracking-tight);color:var(--light)}
+.facts{display:grid;gap:var(--space-1)}
+.f{display:grid;grid-template-columns:minmax(160px,var(--measure-rail)) minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);font-size:var(--type-body);line-height:var(--leading-body)}
+.f .k{font-size:var(--type-meta);color:var(--ink-muted)}
+.f .src{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.f.pencil{padding:var(--space-2) var(--space-3)}
+.f.pencil .v{font-style:italic}
+.f.inked{border:1px solid var(--hairline-strong)}
+.f.gone{opacity:var(--x-proposed-quiet)}
+.f.gone .v{text-decoration:line-through;text-decoration-color:var(--hairline-strong)}
+.two{display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap}
+.two .alt{display:inline-flex;align-items:center;gap:var(--space-2);padding:0 var(--space-2);border-radius:var(--radius-key)}
+.acts{display:flex;gap:var(--space-1)}
+.ib{display:inline-grid;place-items:center;width:var(--target-sm);height:var(--target-sm);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink)}
+.ib:hover{background:var(--surface-raised)}
+.ib.y{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit)}
+.work{grid-column:1 / -1;margin:var(--space-2) 0 0;padding:var(--space-2) var(--space-3);border-left:2px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:grid;gap:2px}
+.work b{font-weight:400;color:var(--ink)}
+.work q{font-family:var(--font-mono);color:var(--ink);quotes:none}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding-top:var(--space-6)}
+.side .box{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.side .box b{font-weight:400;color:var(--ink)}
+.side .box h3{margin:0 0 var(--space-1);font-weight:400;font-size:var(--type-meta);color:var(--light)}
+@media (max-width:1400px){.f{grid-template-columns:var(--measure-rail) minmax(0,1fr) auto}.f .src{display:none}.rec h1{font-size:var(--type-title-s);line-height:var(--leading-title-s)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A proposal waiting · V1</b> pencil on the record: its details in pencil among the ink · the copy-editor's pencil, pencil and ink</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PR = DATA.proposal, AG = PR.agent, a = A(AG);
+const S = { st: {}, open: 'L1' }; /* st: lineId -> 'acc' | 'rej' | 'chg' */
+function lineHTML(l) {
+  const st = S.st[l.id];
+  const cls = st === 'acc' || st === 'chg' ? 'inked' : st === 'rej' ? 'gone' : 'pencil';
+  const val = st === 'chg' ? l.v.replace(/\d$/, d => (+d + 1) % 10) : l.v;
+  const right = st ? `<span class="small muted">${st === 'acc' ? 'accepted' : st === 'chg' ? 'changed' : 'rejected: ' + PR.rejectReasons[1].toLowerCase()} by ${first(DATA.me)} ${mm(AG, st !== 'rej')}</span>`
+    : `<span class="acts"><button class="ib y" data-a="acc" data-l="${l.id}" aria-label="Accept ${l.k}">${I('check', 16)}</button><button class="ib" data-a="chg" data-l="${l.id}" aria-label="Change ${l.k}">${I('pen-line', 16)}</button><button class="ib" data-a="rej" data-l="${l.id}" aria-label="Reject ${l.k}">${I('x', 16)}</button></span>`;
+  const v = l.disagrees ? `<span class="two"><span class="alt pencil inked" style="font-style:normal">${l.disagrees} <span class="small muted">${PR.known.find(k => k.k === l.k).src}</span></span><span class="mk-disagree" title="sources disagree"></span><span class="alt pencil"><span class="pen">${val}</span> ${mm(AG)}</span></span>` : `<span class="v">${val}</span>`;
+  return `<div class="f ${cls}" data-o="${l.id}"><span class="k">${l.k}</span><span>${v}${!l.disagrees ? ` <span class="src">${st ? '' : mm(AG) + ' '}from the survey, p.${l.page}</span>` : ''}</span>${right}
+    ${S.open === l.id && !st ? `<div class="work"><span><b>Read from</b> ${PR.doc.title}, page ${l.page}: <q>${l.quote}</q></span><span><b>Read again by pattern:</b> ${l.rule === '—' ? 'no pattern for this detail' : l.rule + (l.agree ? ', the same' : ', different')}</span><span><b>On the record now:</b> ${l.disagrees ? l.disagrees + ' (disagrees: both stay until you choose)' : 'nothing (new detail)'}</span><span class="tk">proposal ${PR.id} · run ${PR.run} · kind ${PR.kind}</span></div>` : ''}</div>`;
+}
+function render() {
+  const e = PR.entity, left = PR.lines.filter(l => !S.st[l.id]).length;
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Vessels', e.name], [['A', 'accept line'], ['↑ ↓', 'line'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="rec scroll">
+      <div><p class="eyebrow">${e.kindWord} · ${e.ids} · kept on ${F(e.floor).name}</p><h1>${e.name}</h1></div>
+      <div class="facts">
+        ${PR.known.filter(k => !PR.lines.some(l => l.k === k.k)).map(k => `<div class="f"><span class="k">${k.k}</span><span>${k.v} <span class="src">${k.src}</span></span><span></span></div>`).join('')}
+        ${PR.lines.map(lineHTML).join('')}
+      </div>
+    </section>
+    <aside class="side scroll">
+      <div class="box"><h3>${mm(AG)} ${left ? `${left} of ${PR.lines.length} in pencil` : 'All decided'}</h3>Proposed by <b>${a.name}</b>, an agent working under <b>${P(a.supervisor).name}</b>, from <b>${PR.doc.title}</b>, ${PR.doc.arrived}. Pencil isn’t counted anywhere until a person accepts it.</div>
+      ${modeHTML(AG, { v: true })}
+      <div class="box"><h3>Two answers for Owner</h3>The survey and the port register disagree. ${a.name} may not choose: you can keep both, or accept one and keep the other as superseded.</div>
+      <div class="box">Accepting turns a line to ink and keeps ${mm(AG, true)} on it for good. Changing keeps your value and teaches the record. Rejecting asks for one reason.</div>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-a]').forEach(b => b.onclick = e => { e.stopPropagation(); S.st[b.dataset.l] = b.dataset.a; S.open = (PR.lines.find(l => !S.st[l.id]) || {}).id; render(); });
+  $$('[data-o]').forEach(r => r.onclick = () => { S.open = r.dataset.o; render(); });
+}
+function replay() { clearLater(); S.st = {}; S.open = null; settle(); render(); later(() => { S.open = 'L1'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  const ids = PR.lines.map(l => l.id), i = ids.indexOf(S.open);
+  if (e.key === 'ArrowDown') { S.open = ids[(i + 1) % ids.length]; render(); }
+  if (e.key === 'ArrowUp') { S.open = ids[(i - 1 + ids.length) % ids.length]; render(); }
+  if (e.key.toLowerCase() === 'a' && S.open && !S.st[S.open]) { S.st[S.open] = 'acc'; S.open = (PR.lines.find(l => !S.st[l.id]) || {}).id; render(); }
+});
+replay();
+</script>
+</body>
+</html>

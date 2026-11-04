@@ -91,7 +91,8 @@ const sharedModulesMap = (): Plugin => {
     const integrity = dev
       ? undefined
       : Object.fromEntries(Object.entries(kit.integrity).filter(([file]) => file.endsWith('.js') && !file.startsWith('dev/')).map(([file, hash]) => [`${base}${file}`, hash]));
-    return { imports: { ...shared(), ...kitImports }, ...(integrity ? { integrity } : {}) };
+    // shared-build/ comes last: in production it serves react/jsx-dev-runtime in place of the kit's (vite.shared.config.ts).
+    return { imports: { ...kitImports, ...shared() }, ...(integrity ? { integrity } : {}) };
   };
   return {
     name: 'shared-modules',

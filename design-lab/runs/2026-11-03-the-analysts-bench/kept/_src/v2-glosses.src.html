@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Kept · V2 · Glosses</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Kept V2: the decision's words in the middle of the page, the techniques that shaped each phrase in the margins around them, as a glossed manuscript ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr);gap:var(--space-6);align-items:center}
+.margin{display:flex;flex-direction:column;gap:var(--space-4)}
+.gl{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);transition:opacity var(--motion-calm) var(--ease-out),background var(--motion-base) var(--ease-standard)}
+.gl .n{font:500 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-lit)}
+.gl .muted{color:var(--ink-muted)}
+.gl.hot{background:var(--surface-raised)}
+.hold .gl{opacity:0}
+.left .gl{text-align:right;justify-items:end}
+.centre{display:grid;gap:var(--space-4);text-align:center}
+.words{font-weight:300;font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-2));color:var(--light)}
+.words .ph{border-bottom:1px solid var(--x-proposed-lit);cursor:pointer}
+.words .ph.hot{background:var(--x-proposed-lit-wash)}
+.words sup{font:500 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-lit);margin-left:2px}
+.frame{border-top:1px solid var(--hairline-strong);border-bottom:1px solid var(--hairline-strong);padding:var(--space-5) var(--space-4)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Kept · V2</b> glosses: the decision’s words in the middle, the technique behind each phrase in the margins · glossed manuscripts, the Talmud page</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DATA.decision;
+const S = { shown: false, hot: null };
+function render() {
+  const ch = D.changes;
+  let words = D.words;
+  ch.forEach((c, i) => { const key = c.to.split(',')[0]; if (words.includes(key)) words = words.replace(key, `<span class="ph ${S.hot === i ? 'hot' : ''}" data-i="${i}">${key}<sup>${i + 1}</sup></span>`); });
+  const gloss = (c, i) => `<div class="gl ${S.hot === i ? 'hot' : ''}" data-i="${i}"><span class="n">${i + 1}</span>${tq(c.tid, 14)}<span>${c.from ? `<span class="struck">${c.from}</span> → ` : ''}${c.to}</span><span class="muted">${c.why}</span></div>`;
+  $('#app').innerHTML = topHTML(['Mandate', F('fac').name, 'Decisions', D.id], [['1–5', 'a gloss'], ...STD]) +
+  `<main class="main"><div class="wrap ${S.shown ? '' : 'hold'}">
+    <div class="margin left">${ch.map((c, i) => i % 2 === 0 ? gloss(c, i) : '').join('')}</div>
+    <div class="centre"><p class="eyebrow">${D.id} · decided ${D.on} · ${D.body}</p><div class="frame"><p class="words">${words}</p></div>
+      <p class="small muted">Every underlined phrase was put there, or changed, by a technique. Read the margin to see which, and why. Words without a gloss came through untested; that is said too: ${D.words.split(' ').length} words, ${ch.length} glossed phrases.</p></div>
+    <div class="margin right">${ch.map((c, i) => i % 2 === 1 ? gloss(c, i) : '').join('')}</div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-i]').forEach(b => b.onmouseenter = () => { S.hot = +b.dataset.i; render(); });
+}
+function replay() { clearLater(); S.shown = false; S.hot = null; settle(); render(); later(() => { S.shown = true; $('.wrap').classList.remove('hold'); }, MOMENT()); later(() => { S.hot = 0; render(); }, MOMENT() + ms('--motion-calm')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (/^[1-5]$/.test(e.key)) { S.hot = +e.key - 1; render(); }
+});
+replay();
+</script>
+</body>
+</html>

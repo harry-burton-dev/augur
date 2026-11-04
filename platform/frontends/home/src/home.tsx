@@ -33,6 +33,8 @@ export interface HomeCard {
   app: string;
   name: string;
   icon?: string;
+  /** Why the app can't be opened here, and who can change that: its card stays, says so, and isn't mounted. */
+  unavailable?: string;
 }
 
 export interface HomeState {
@@ -64,8 +66,31 @@ const toItem = (n: HomeNeed, now: number): ListItem => ({
 /** How long Home waits to hear from the shell before saying nothing needs you. */
 const PATIENCE_MS = 1000;
 
+const CardName = ({ card }: { card: HomeCard }) => (
+  <div className="flex items-center gap-2 text-meta text-ink-muted">
+    <Icon name={(card.icon ?? 'apps') as IconName} size={16} />
+    <span>{card.name}</span>
+  </div>
+);
+
+/** An app's card where the app can't be opened: it stays where it would be and says why, rather than vanishing. */
+function UnavailableTile({ card }: { card: HomeCard }) {
+  return (
+    <div className="contents" data-unavailable={card.app}>
+      <Surface kind="pane" pad className="flex flex-col gap-3">
+        <CardName card={card} />
+        <State kind="empty" size="line" heading="Can’t be opened here" body={card.unavailable} />
+      </Surface>
+    </div>
+  );
+}
+
 /** One app's glance card: the shell mounts the app's own surface into it, and says when it can't. */
 function CardTile({ card, ctx }: { card: HomeCard; ctx: MountContext }) {
+  return card.unavailable ? <UnavailableTile card={card} /> : <MountedTile card={card} ctx={ctx} />;
+}
+
+function MountedTile({ card, ctx }: { card: HomeCard; ctx: MountContext }) {
   const tile = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -79,10 +104,7 @@ function CardTile({ card, ctx }: { card: HomeCard; ctx: MountContext }) {
   }, [card.app, ctx.bus]);
   return (
     <Surface kind="pane" pad className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-meta text-ink-muted">
-        <Icon name={(card.icon ?? 'apps') as IconName} size={16} />
-        <span>{card.name}</span>
-      </div>
+      <CardName card={card} />
       {failed ? <State kind="error" size="line" heading={`${card.name} couldn’t show this right now.`} /> : null}
       <div ref={tile} data-card={card.app} hidden={failed} />
     </Surface>

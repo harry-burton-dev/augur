@@ -7,6 +7,7 @@
  */
 import Type, { type Static, type TSchema } from 'typebox';
 import { SCOPES } from '@augur/service-kit';
+import { APP_CATEGORIES } from '@augur/mfe-sdk';
 import {
   appAreaSchema,
   appEntrySchema,
@@ -115,11 +116,19 @@ export const CatalogueEntry = Type.Intersect(
   [
     ref(AppManifestEntry),
     Type.Object({
-      platform: Type.Boolean({ description: 'Ships with the platform and is always on' }),
+      platform: Type.Boolean({ description: "One of AUGUR's own apps, always on" }),
+      category: Type.Optional(Type.Enum([...APP_CATEGORIES], { description: 'The kind in force (ADR 0032)' })),
+      categoryRefused: Type.Optional(
+        Type.Object(
+          { asked: Type.Enum([...APP_CATEGORIES]), why: Type.String() },
+          { description: "The app's own claim to a kind when it isn't used, and why" },
+        ),
+      ),
+      ships: Type.Optional(Type.Boolean({ description: 'Ships with AUGUR: its version comes with the release, and it is turned off rather than removed' })),
       pillar: Type.Optional(
         Type.Boolean({
           description:
-            'Ships with AUGUR (PILLAR_APPS) but is an ordinary app: it registers itself, is given the scopes its release asks for, changes version with the release, and can be turned off but not removed.',
+            'The old name for `ships`, kept for /v1 readers. Ships with AUGUR (PILLAR_APPS) but is an ordinary app: it registers itself, is given the scopes its release asks for, changes version with the release, and can be turned off but not removed.',
         }),
       ),
       enabled: Type.Boolean(),

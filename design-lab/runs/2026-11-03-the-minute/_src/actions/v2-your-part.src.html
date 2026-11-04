@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Actions V2 · Your part and the full score</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: an owner's actions as their part (entries, rests, cues); the chair's as the full score, in step ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.part{padding:var(--space-4) var(--space-5);display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr);gap:var(--space-5)}
+.part .who2 .h2{margin-top:var(--space-1)}
+.part .who2 p.s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:var(--space-2)}
+.staff{position:relative;height:calc(var(--space-8) + var(--space-5))}
+.staff .line{position:absolute;left:0;right:0;height:1px;background:var(--hairline)}
+.ent{position:absolute;top:var(--space-4);transform:translateX(-50%);display:grid;justify-items:center;gap:var(--space-1);text-align:center;width:calc(var(--space-8) + var(--space-6))}
+.ent .note{display:inline-flex;align-items:center;justify-content:center;width:var(--target-sm);height:var(--target-sm);border-radius:var(--radius-pill);border:1px solid var(--light);background:var(--slate-deep);color:var(--light)}
+.ent.late .note{border-color:var(--x-proposed-warn);color:var(--x-proposed-warn)}
+.ent.done .note{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit)}
+.ent b{font-weight:400;font-size:var(--type-small);line-height:var(--leading-small);color:var(--light)}
+.ent span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rest{position:absolute;top:calc(var(--space-4) + var(--space-3));height:var(--space-3);border-top:2px solid var(--ink-muted);border-bottom:2px solid var(--ink-muted);display:flex;align-items:center;justify-content:center}
+.rest span{position:absolute;top:calc(100% + var(--space-1));font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.rest i{display:block;width:100%;height:2px;background:var(--ink-muted)}
+.cue{position:absolute;top:0;transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--info);white-space:nowrap}
+.cue::after{content:"";display:block;width:1px;height:var(--space-3);background:var(--info);margin:2px auto 0}
+.nowl{position:absolute;top:calc(var(--space-2) * -1);bottom:0;width:1px;background:var(--light)}
+.nowl span{position:absolute;bottom:calc(var(--space-1) * -1);left:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--light);white-space:nowrap}
+.score{min-height:0;padding:var(--space-3) var(--space-5);display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr);grid-auto-rows:min-content;row-gap:0;column-gap:var(--space-5)}
+.score .hd{grid-column:1 / -1;display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--space-2)}
+.sl{display:flex;align-items:center;gap:var(--space-2);height:var(--space-6);border-bottom:1px solid var(--hairline);font-size:var(--type-small);color:var(--ink)}
+.sl.me{color:var(--light)}
+.sl.me::before{content:"";width:2px;height:var(--space-4);background:var(--fc)}
+.sv{position:relative;height:var(--space-6);border-bottom:1px solid var(--hairline)}
+.sv .bar{position:absolute;top:calc(var(--space-3) - 1px);height:var(--space-4);border-radius:var(--radius-key);background:var(--surface-raised);border:1px solid var(--hairline-strong);display:flex;align-items:center;padding:0 var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);white-space:nowrap;overflow:hidden}
+.sv .bar.me{border-color:var(--light);color:var(--light)}
+.sv .bar.late{border-color:var(--x-proposed-warn)}
+.sv .bar.closed{opacity:var(--x-proposed-quiet)}
+.sv .rest2{position:absolute;top:calc(var(--space-3) + var(--space-2) - 1px);height:1px;border-top:1px dashed var(--hairline-strong)}
+.months{position:relative;height:var(--space-4)}
+.months span{position:absolute;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.vnow{position:absolute;top:0;bottom:0;width:1px;background:var(--light);opacity:.7}
+.who-pick{display:flex;gap:var(--space-1);flex-wrap:wrap;margin-top:var(--space-2)}
+.who-pick button{font-size:var(--type-small);padding:2px var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-pill);color:var(--ink-muted)}
+.who-pick button[aria-pressed="true"]{border-color:var(--x-proposed-lit);color:var(--light)}
+@media (max-width:1400px){.part,.score{grid-template-columns:180px minmax(0,1fr);gap:var(--space-4)}.ent{width:calc(var(--space-8) + var(--space-3))}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Actions · V2</b> your part and the full score: entries, rests and cues for the owner; every owner on one page for the chair · orchestral parts, the score (F)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = '2026-06-20';
+const FROM = '2026-05-01', TO = '2026-08-31';
+const CUES = { 'A-302': { by: 'A-303', w: 'bay fitted out' }, 'A-303': { w: 'trial starts 1 Jul', on: '2026-07-01' } };
+const S = { me: 'p3' };
+const acts = () => Object.keys(DATA.actions).filter(id => le(Ac(id).set, NOW) && !le(dueAt(id, NOW), FROM));
+const clipTo = d => le(d, TO) ? d : TO;
+function render() {
+  const X = scaleX(FROM, TO, 100), mine = acts().filter(id => Ac(id).owner === S.me), people = [...new Set(acts().map(id => Ac(id).owner))];
+  const open = mine.filter(id => actionAt(id).open).sort((a, b) => ts(dueAt(a)) - ts(dueAt(b)));
+  const nextDue = open[0] ? dueAt(open[0]) : null;
+  const lastEnd = mine.map(id => dueAt(id)).sort().pop();
+  /* the part: entries at their due dates, a rest from the last entry to the end of the view */
+  const ents = mine.map(id => { const s = actionAt(id), a = Ac(id); return `<div class="ent dep ${s.late ? 'late' : s.s === 'done' || s.s === 'discharged' ? 'done' : ''}" style="left:${Math.min(92, X(clipTo(s.due)))}%">${`<span class="note">${I(AS[s.shown].icon, 18)}</span>`}<b>${a.text}</b><span>${id} · by ${dt(s.due, 'short')}${s.open ? ` · in ${days(NOW, s.due)} days` : ''}</span></div>`; }).join('');
+  const restFrom = lastEnd && ts(lastEnd) > ts(FROM) ? lastEnd : NOW;
+  const rest = `<div class="rest dep" style="left:calc(${X(restFrom)}% + var(--space-8));right:0"><span>rest · nothing for you after ${dt(restFrom, 'short')} from these decisions</span><i></i></div>`;
+  const cues = mine.filter(id => CUES[id]).map(id => { const c = CUES[id]; const at = c.by ? dueAt(c.by) : c.on; return `<span class="cue" style="left:${X(at)}%">cue: ${c.w}${c.by ? ` (${first(Ac(c.by).owner)})` : ''}</span>`; }).join('');
+  $('#app').innerHTML = topHTML(['Home', 'Your part'], [['O', 'next person'], ['T', 'record fields', 'h-t'], ['R', 'replay']], { as: NOW, floor: P(S.me).floor }) +
+    `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">Actions out of decisions · as at ${dt(NOW)}</p><p class="h1">Your part, and the full score</p></div>
+    <section class="part pane"><div class="who2"><p class="eyebrow">Your part</p><p class="h2">${P(S.me).name}</p>
+      <p class="s">${nextDue ? `Next: ${dt(nextDue, 'short')}, in ${days(NOW, nextDue)} days.` : 'Nothing open.'} ${mine.length} action${mine.length === 1 ? '' : 's'} from ${new Set(mine.map(id => Ac(id).from)).size} decision${new Set(mine.map(id => Ac(id).from)).size === 1 ? '' : 's'}.</p>
+      <div class="who-pick">${people.map(p => `<button data-p="${p}" aria-pressed="${p === S.me}">${first(p)}</button>`).join('')}</div></div>
+      <div class="staff"><span class="line" style="top:calc(var(--space-4) + var(--target-sm) / 2)"></span>${cues}${ents}${rest}<span class="nowl" style="left:${X(NOW)}%"><span>now</span></span></div></section>
+    <section class="score pane scroll"><div class="hd"><p class="eyebrow">The full score · ${P(B.chair).name}’s view · every owner, ${dt(FROM, 'month')} to ${dt(TO, 'month')}</p><span class="small muted">one row per person · one bar per action, from set to due</span></div>
+      <span></span><div class="months">${[5, 6, 7, 8].map(m => { const d = `2026-0${m}-01`; return `<span style="left:${X(d)}%">${dt(d.slice(0, 7), 'short')}</span>`; }).join('')}<span class="vnow" style="left:${X(NOW)}%"></span></div>
+      ${people.map(p => `<div class="sl ${p === S.me ? 'me' : ''}" data-tier="${P(p).floor}">${P(p).name}</div><div class="sv">${acts().filter(id => Ac(id).owner === p).map(id => { const s = actionAt(id), a = Ac(id), st = le(a.set, FROM) ? FROM : a.set, en = clipTo(dueAt(id)); return `<span class="bar ${p === S.me ? 'me' : ''} ${s && s.late ? 'late' : ''} ${s && !s.open ? 'closed' : ''}" style="left:${X(st)}%;width:calc(${Math.max(1, X(en) - X(st))}%)" title="${a.text}">${id}</span>`; }).join('')}<span class="vnow" style="left:${X(NOW)}%"></span></div>`).join('')}
+    </section></div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.who-pick button').forEach(b => b.onclick = () => { S.me = b.dataset.p; render(); });
+}
+function replay() {
+  clearLater(); S.me = 'p4'; render(); settle();
+  /* the moment: the part changes hands from Dana (done, resting) to Jo (one entry, ten days away, with its cue) */
+  later(() => { S.me = 'p3'; render(); }, MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key.toLowerCase() === 'o') { const ps = [...new Set(acts().map(id => Ac(id).owner))]; S.me = ps[(ps.indexOf(S.me) + 1) % ps.length]; render(); }
+});
+replay();
+</script>
+</body>
+</html>

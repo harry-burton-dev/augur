@@ -8,7 +8,7 @@
   "ssoSessionIdleTimeout": 28800,
   "roles": {
     "realm": [
-      { "name": "admin", "description": "Runs the platform; sees the Admin app" },
+      { "name": "admin", "description": "Runs AUGUR; sees the Admin app" },
       { "name": "editor", "description": "Can publish to libraries" },
       { "name": "publisher", "description": "Publishes to the whole org and to any team" },
       { "name": "deployment-admin", "description": "Runs the deployment: settings, secrets, updates and backups" }

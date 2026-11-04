@@ -1,5 +1,13 @@
 # @augur/updater
 
+## 0.8.1
+
+### Patch Changes
+
+- 3b86bbc: `node dist/index.js check` runs one look of the watch after an upgrade on demand: sign-in, AUGUR's calls at the gateway and every part's readiness. It prints what it found as one JSON line and exits 1 when anything is wrong. The deploy test's new `broken` mode uses it to show the watch sees a real failure on real containers.
+- Updated dependencies [b3060e0]
+  - @augur/service-kit@0.12.0
+
 ## 0.8.0
 
 ### Minor Changes

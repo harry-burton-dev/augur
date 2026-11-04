@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Rungs V6 · Focus pull</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: three focal planes. The reading is near, its meaning mid, its situation far; each lift pulls focus one plane back ---- */
+:root{
+  /* carried from the cinematic run: the far plane's blur */
+  --x-proposed-far-blur: calc(var(--space-1) * 1.5);
+}
+.wrap{position:relative;height:100%}
+.plane{position:absolute;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-2);transition:filter var(--motion-slow) var(--ease-out),opacity var(--motion-slow) var(--ease-out),border-color var(--motion-slow) var(--ease-out)}
+.plane.soft{filter:blur(var(--x-proposed-far-blur)) saturate(.4);opacity:.55}
+.plane.sharp{border-color:var(--hairline-strong)}
+.plane .tag{display:flex;align-items:center;gap:var(--space-3)}
+.plane .tag b{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+/* far: the situation, wide and at the back */
+.far{left:0;right:0;top:0;height:36%}
+.mid{left:4%;right:30%;top:31%;height:38%}
+.near{left:12%;width:32%;top:62%;height:34%;background:var(--slate-deep)}
+.far .row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-4)}
+.far .row > div{display:grid;gap:var(--space-1);align-content:start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.far .row > div b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.cal{position:relative;height:var(--space-6);margin-top:var(--space-2);border-top:1px solid var(--hairline-strong)}
+.cal span{position:absolute;top:0;transform:translateX(-50%);display:grid;justify-items:center;gap:2px;font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);color:var(--ink-muted)}
+.cal span::before{content:"";width:1px;height:var(--space-2);background:var(--ink-muted)}
+.cal span.key{color:var(--light)}
+.cal span.key::before{background:var(--light);height:var(--space-3)}
+.mid .chart{width:100%;height:auto;max-height:100%}
+.near .fig{font:200 var(--type-hero)/1 var(--font-mono);color:var(--light)}
+.lens{position:absolute;right:0;bottom:0;width:26%;display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--surface-inset)}
+.scale{display:flex;justify-content:space-between;position:relative;padding-top:var(--space-3);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.scale::before{content:"";position:absolute;left:0;right:0;top:var(--space-1);height:1px;background:var(--hairline-strong)}
+.scale .idx{position:absolute;top:0;width:2px;height:var(--space-3);background:var(--x-proposed-lit);transition:left var(--motion-slow) var(--ease-out)}
+.scale span.on{color:var(--light)}
+.pulled{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+@media (prefers-reduced-motion: reduce){.plane{transition:opacity var(--motion-base) var(--ease-out)}}
+@media (max-width:1400px){.plane{padding:var(--space-3) var(--space-4)}.near .fig{font-size:var(--type-display-fluid)}.far .row > div span.muted{display:none}.lens{width:30%}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Rungs · V6</b> focus pull: the reading near, its meaning mid, its situation far; each lift racks focus back one plane · rack focus and deep focus, focal planes (cinematic run)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { f: 0 };
+const PLANES = [
+  { rung: 'data', name: 'The reading', pulled: null },
+  { rung: 'info', name: 'What it means', pulled: [{ k: 'comparison', w: 'compared with July' }, { k: 'threshold', w: `against ${R.limitWhere}` }] },
+  { rung: 'context', name: 'The situation', pulled: [{ k: 'question', w: T.title }, { k: 'reader', w: 'for ' + P(T.decider).name }] }
+];
+const CAL = [['3 Nov', 4], ['30 Nov', 46], [T.decideBy.replace(' 2026', ''), 52, true], ['15 Jan', 88], [T.ends.replace(' 2027', ''), 100, true]];
+function cls(k) { return S.f === k ? 'sharp' : 'soft'; }
+function render() {
+  const it = INTENT(T.intent);
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id], [['1 2 3', 'pull focus'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="plane far ${cls(2)}" aria-hidden="${S.f !== 2}"><div class="tag">${rm('context', { word: false })}<b>${PLANES[2].name}</b><span class="small muted">for ${whoHTML(T.decider, { role: true })}</span></div>
+      <div class="row">
+        <div><b>${T.title}</b><span>${T.question}</span><span class="muted">${it.id} · ${it.title}</span></div>
+        <div><b>${R.limitWhere}</b><span>${R.limitRule[0].toUpperCase() + R.limitRule.slice(1)}.</span><span class="muted">${PC('c1').src.title}</span></div>
+        <div><b>The offer on the table</b><span>${PC('c2').text}.</span><span class="muted">${PC('c2').src.restricted}</span></div>
+        <div><b>The alternatives</b><span>${PC('c3').text}. ${PC('c4').text}.</span></div>
+      </div>
+      <div class="cal">${CAL.map(([w, x, key]) => `<span class="${key ? 'key' : ''}" style="left:${x}%">${w}</span>`).join('')}</div>
+      <p class="small muted" style="display:flex;gap:var(--space-4);flex-wrap:wrap">Also going on: ${['d5', 'd3', 'd4', 'i5'].map(id => `<span>${rm(PC(id).rung, { word: false })} ${PC(id).text}</span>`).join('')}</p>
+    </section>
+    <section class="plane mid ${cls(1)}" aria-hidden="${S.f !== 1}"><div class="tag">${rm('info', { word: false })}<b>${PLANES[1].name}</b><span class="small muted">${PC('i1').text}; ${PC('i2').text.split(':')[0].toLowerCase()}.</span></div>${chart({ w: 640, h: 170, values: true, hi: ['Jul', 'Sep', 'Oct'] })}</section>
+    <section class="plane near ${cls(0)}" aria-hidden="${S.f !== 0}"><div class="tag">${rm('data', { word: false })}<b>${PLANES[0].name}</b></div><span class="fig">${R.series.at(-1).v}</span><span class="meta">${R.unit} in October · ${R.place}</span>${srcHTML(PC('d1').src)}</section>
+    <aside class="lens"><p class="eyebrow">Focus</p>
+      <div class="scale">${PLANES.map((p, k) => `<span class="${S.f === k ? 'on' : ''}">${RUNG[p.rung].word}</span>`).join('')}<i class="idx" style="left:${S.f * 50}%"></i></div>
+      <p class="pulled">${PLANES[S.f].pulled ? `Pulled back by ${PLANES[S.f].pulled.map(liftHTML).join(' ')}` : 'Near: the reading, as read. Press 2 and 3 to pull focus back.'}</p></aside>
+  </div></main>`;
+  hydrate($('#app'));
+}
+/* rack focus in place, so the blur transitions rather than jumps */
+function focus(f) {
+  S.f = f;
+  [['.far', 2], ['.mid', 1], ['.near', 0]].forEach(([s, k]) => { const el = $(s); el.classList.toggle('sharp', f === k); el.classList.toggle('soft', f !== k); el.setAttribute('aria-hidden', f !== k); });
+  $('.idx').style.left = f * 50 + '%';
+  $$('.scale span').forEach((el, k) => el.classList.toggle('on', k === f));
+  $('.pulled').innerHTML = PLANES[f].pulled ? `Pulled back by ${PLANES[f].pulled.map(liftHTML).join(' ')}` : 'Near: the reading, as read. Press 2 and 3 to pull focus back.';
+  hydrate($('.pulled'));
+}
+play(() => { S.f = 0; render(); }, () => {
+  const step = ms('--motion-calm') * 1.2;
+  later(() => focus(1), 0);
+  later(() => focus(2), step);
+}, (e, k) => { if ('123'.includes(k)) focus(+k - 1); });
+</script>
+</body>
+</html>

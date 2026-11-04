@@ -27,7 +27,7 @@ import {
   signedCallers,
   type CallerCheck,
 } from '@augur/service-kit';
-import { SDK_VERSION } from '@augur/mfe-sdk';
+import { APP_CATEGORIES, SDK_VERSION } from '@augur/mfe-sdk';
 import { appRunnerRoutes } from './app-runner.ts';
 import { describeApi } from './contract.ts';
 import {
@@ -55,6 +55,7 @@ import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import {
+  categoryOf,
   conflictFor,
   DEFAULT_UPLOAD_MB,
   entryOriginProblem,
@@ -67,6 +68,8 @@ import {
   floorKindsOf,
   unbuiltApps,
   versionProblem,
+  type AppEntry,
+  type CategoryInForce,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { LiveOverrides } from './live.ts';
@@ -163,15 +166,20 @@ const settingsOf = (r: AppRecord) => ({
   }),
 });
 
-const catalogueEntry = (r: AppRecord, allowed: string[], pillar: boolean) => {
+const catalogueEntry = (r: AppRecord, allowed: string[], ships: boolean, kind: CategoryInForce) => {
   const blocked = entryOriginProblem(r.entry, allowed);
+  const { category: _asked, ...entry } = r.entry;
   return {
-    ...r.entry,
+    ...entry,
     // Registered from an origin no longer allowed: kept, but not offered.
     ...(blocked ? { blocked } : {}),
     platform: false,
+    // The kind in force (ADR 0032), and the app's own claim when it isn't used, so Admin can say why.
+    ...(kind.category ? { category: kind.category } : {}),
+    ...(kind.refused ? { categoryRefused: kind.refused } : {}),
     // Ships with AUGUR: its version comes with the release, and it's turned off rather than removed.
-    ...(pillar ? { pillar: true } : {}),
+    // `pillar` is the old name for `ships`, kept for /v1 readers.
+    ...(ships ? { ships: true, pillar: true } : {}),
     enabled: r.enabled,
     registeredBy: r.registeredBy,
     registeredAt: r.registeredAt,
@@ -222,8 +230,12 @@ export const buildApp = async ({
   now = () => new Date(),
 }: RegistryOptions = {}) => {
   const isPillar = (id: string) => pillars.includes(id);
+  /** The apps the app runner installed from the signed app feed, whose kind is honoured too. */
+  const feedApps = async () => new Set((await store.installedApps()).map((i) => i.app));
+  const kindOf = (entry: Pick<AppEntry, 'id' | 'category'>, feed: ReadonlySet<string>) => categoryOf(entry, { ships: isPillar(entry.id), fromFeed: feed.has(entry.id) });
   const live = new LiveOverrides(updates.ring, tailnet);
-  const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[]) => catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id));
+  const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[], feed: ReadonlySet<string>) =>
+    catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id), kindOf(r.entry, feed));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
@@ -296,6 +308,7 @@ export const buildApp = async ({
           const kept = await store.frontends();
           const previews = await previewsChosenBy(caller?.id);
           const optIns = caller ? await store.featureOptIns({ person: caller.id }) : [];
+          const feed = await feedApps();
           const at = new Date();
           const registered = (await store.records())
             .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
@@ -306,7 +319,10 @@ export const buildApp = async ({
               const served = servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept);
               // Live on the workbench: this developer's own machine's frontend, in place of any build.
               const from = live.of(caller?.id, r.entry.id);
-              return { ...served, ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
+              // Only the kind in force (ADR 0032): a claim the registry doesn't honour never reaches the shell.
+              const { category: _asked, ...rest } = served;
+              const { category } = kindOf(r.entry, feed);
+              return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
             });
           const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
@@ -345,7 +361,9 @@ export const buildApp = async ({
                       icon: Type.Optional(Type.String()),
                       description: Type.Optional(Type.String()),
                       floors: Type.Optional(Type.Array(Type.Enum(['personal', 'team', 'org']))),
-                      pillar: Type.Optional(Type.Boolean()),
+                      category: Type.Optional(Type.Enum([...APP_CATEGORIES])),
+                      ships: Type.Optional(Type.Boolean()),
+                      pillar: Type.Optional(Type.Boolean({ description: 'The old name for `ships`, kept for /v1 readers' })),
                       requiredRole: Type.Optional(Type.String()),
                       hasRole: Type.Optional(Type.Boolean()),
                       state: Type.Object({
@@ -380,7 +398,8 @@ export const buildApp = async ({
           const rules = await store.rules();
           const platform = platformApps
             .filter((a) => !unbuiltApps.has(a.id))
-            .map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description, requiredRole: a.requiredRole, state: { on: true, why: 'platform' } as const }));
+            .map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description, requiredRole: a.requiredRole, category: categoryOf(a, { ships: false, fromFeed: false }).category, state: { on: true, why: 'platform' } as const }));
+          const feed = await feedApps();
           const registered = (await store.records())
             .filter((r) => !entryOriginProblem(r.entry, allowed))
             .map((r) => {
@@ -388,7 +407,9 @@ export const buildApp = async ({
               const rule = 'by' in state ? rules.find((x) => x.app === r.entry.id && x.workspace === state.by) : undefined;
               return {
                 id: r.entry.id, name: r.entry.name, icon: r.entry.icon, description: r.entry.description, requiredRole: r.entry.requiredRole,
-                floors: [...floorKindsOf(r.entry)], pillar: isPillar(r.entry.id) || undefined,
+                floors: [...floorKindsOf(r.entry)], category: kindOf(r.entry, feed).category,
+                // `pillar` is the old name for `ships`, kept for /v1 readers.
+                ships: isPillar(r.entry.id) || undefined, pillar: isPillar(r.entry.id) || undefined,
                 state: rule ? { ...state, setBy: rule.setBy, setAt: rule.setAt } : state,
               };
             });
@@ -422,7 +443,7 @@ export const buildApp = async ({
         {
           schema: {
             summary: 'The whole catalogue, for admins',
-            description: "Every app, the platform's own first, whether or not it is turned on.",
+            description: "Every app, AUGUR's own first, whether or not it is turned on.",
             response: {
               200: Type.Array(ref(CatalogueEntry), { description: 'Catalogue entries' }),
               403: refused('Not an admin'),
@@ -434,7 +455,8 @@ export const buildApp = async ({
           const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
           const allowed = await allowedOrigins();
           const kept = await store.frontends();
-          return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed, kept))];
+          const feed = await feedApps();
+          return [...platform, ...(await store.records()).map((r) => entryOf(r, allowed, kept, feed))];
         },
       );
 
@@ -488,7 +510,7 @@ export const buildApp = async ({
             target: id,
             detail: { version: changed.entry.version },
           });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(id), await feedApps());
         } catch (err) {
           if (err instanceof UnknownVersionError) return reply.code(404).send({ error: 'not_found', message: err.message });
           if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
@@ -580,7 +602,7 @@ export const buildApp = async ({
           schema: {
             summary: 'What an app may do on a floor (platform services only)',
             description: [
-              "The platform's services check an app's calls against this, and keep",
+              "AUGUR's services check an app's calls against this, and keep",
               'each answer for up to 30 seconds. An app is granted the scopes it asks',
               'for that an admin has granted, on floors where it is on (see',
               "/manifest); nothing where it is off, on a floor that doesn't exist, or",
@@ -603,7 +625,7 @@ export const buildApp = async ({
         async (req, reply) => {
           const service = await serviceOf(req, reply);
           if (service === undefined) return reply;
-          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can read what an app is granted.' });
+          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can read what an app is granted.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const { workspace } = req.query;
@@ -645,7 +667,7 @@ export const buildApp = async ({
               'platform-services), which may register only its own id; by a platform',
               'service signed in as its own client (platform-<name>); or by an admin',
               'through the gateway.',
-              "Unknown fields are refused. The platform's own apps (home, admin) and",
+              "Unknown fields are refused. AUGUR's own apps (home, admin) and",
               'routes another app already has cannot be taken. Every version is kept',
               '(the last 5, plus a pinned one); an app an admin has pinned keeps',
               'serving its pinned version. An entry that is a full address must be on',
@@ -677,6 +699,9 @@ export const buildApp = async ({
           if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });
           const conflict = conflictFor(entry, await store.list());
           if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
+          // A kind the app may not claim is kept and explained to admins, never a reason to refuse it (ADR 0032).
+          const { refused } = kindOf(entry, await feedApps());
+          if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');
           try {
             const created = await store.put(entry, by.id);
             // An app that ships with AUGUR may do what its release asks: the admin chose the release.
@@ -737,7 +762,7 @@ export const buildApp = async ({
               201: { ...ref(StoredFrontendSchema), description: 'Kept' },
               400: refused('Not a semver version, or not a usable tarball (links, odd paths, too big)'),
               403: refused('Another app, or not an admin'),
-              409: refused("One of the platform's own apps"),
+              409: refused("One of AUGUR's own apps"),
               415: refused('Not sent as application/gzip'),
               501: refused("This deployment doesn't keep frontends by version (FRONTENDS_BUCKET_SECRET isn't set)"),
               503: refused("The sign-in service can't be reached to check the app's token"),
@@ -749,7 +774,7 @@ export const buildApp = async ({
         if (!by) return reply;
         const { id, version } = req.params;
         if (!frontendFiles) return reply.code(501).send({ error: 'not_implemented', message: 'This deployment doesn’t keep apps’ frontends by version (FRONTENDS_BUCKET_SECRET isn’t set).' });
-        if (platformApps.some((a) => a.id === id)) return reply.code(409).send({ error: 'conflict', message: `"${id}" is one of the platform’s own apps.` });
+        if (platformApps.some((a) => a.id === id)) return reply.code(409).send({ error: 'conflict', message: `"${id}" is one of AUGUR’s own apps.` });
         if (!semver.valid(version)) return reply.code(400).send({ error: 'bad_request', message: `"${version}" is not a semver version such as 1.2.0.` });
         if (!Buffer.isBuffer(req.body)) return reply.code(415).send({ error: 'unsupported_media_type', message: 'Send the frontend as one gzipped tarball, Content-Type application/gzip.' });
         const digest = frontendDigest(req.body);
@@ -827,7 +852,7 @@ export const buildApp = async ({
           schema: {
             summary: "Say where the gateway reaches an app's service (a platform service or an admin, never the app)",
             description: [
-              "http or https, a host and port only, never one of the platform's own",
+              "http or https, a host and port only, never one of AUGUR's own",
               'parts. null forgets it. Kept when the app registers new versions.',
               'Audited as app.upstream-set or app.upstream-cleared.',
             ].join(' '),
@@ -838,7 +863,7 @@ export const buildApp = async ({
               400: refused("Not an address an app's service can be at"),
               403: refused('Not a platform service or an admin'),
               404: refused('No such app'),
-              409: refused("One of the platform's own apps"),
+              409: refused("One of AUGUR's own apps"),
               503: refused("The sign-in service can't be reached to check the caller's token"),
             },
           },
@@ -849,8 +874,8 @@ export const buildApp = async ({
           const caller = callerFromHeaders(req.headers);
           const by: NewAuditEntry['actor'] | undefined =
             service?.kind === 'platform' ? { id: service.name, kind: 'service' } : !service && caller?.roles.includes('admin') ? { id: caller.id, kind: 'user' } : undefined;
-          if (!by) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the platform service that runs an app can say where it is.' });
-          if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: `"${req.params.id}" is one of the platform’s own apps.` });
+          if (!by) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the AUGUR service that runs an app can say where it is.' });
+          if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: `"${req.params.id}" is one of AUGUR’s own apps.` });
           const problem = req.body.url === null ? undefined : upstreamProblem(req.body.url);
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
           const url = req.body.url === null ? null : req.body.url.replace(/\/+$/, '');
@@ -858,7 +883,7 @@ export const buildApp = async ({
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, upstream: url, by: by.id }, 'app upstream set');
           await record(req, { actor: by, app: 'registry', action: url ? 'app.upstream-set' : 'app.upstream-cleared', target: req.params.id, detail: url ? { url } : {} });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         },
       );
 
@@ -886,7 +911,7 @@ export const buildApp = async ({
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can turn apps on or off.' });
           const platform = platformApps.find((a) => a.id === req.params.id);
-          if (platform) return reply.code(409).send({ error: 'conflict', message: `${platform.name} is part of the platform and can’t be turned off.` });
+          if (platform) return reply.code(409).send({ error: 'conflict', message: `${platform.name} is part of AUGUR and can’t be turned off.` });
           const before = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!before || !(await store.setEnabled(req.params.id, req.body.enabled))) {
             return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
@@ -895,7 +920,7 @@ export const buildApp = async ({
             req.log.info({ app: req.params.id, enabled: req.body.enabled, by: caller.id }, req.body.enabled ? 'app turned on' : 'app turned off');
             await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: req.body.enabled ? 'app.enabled' : 'app.disabled', target: req.params.id });
           }
-          return entryOf({ ...before, enabled: req.body.enabled }, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf({ ...before, enabled: req.body.enabled }, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         },
       );
 
@@ -1011,7 +1036,7 @@ export const buildApp = async ({
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, scopes: req.body.scopes, by: caller.id }, 'app scopes granted');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.scopes-granted', target: req.params.id, detail: { scopes: req.body.scopes } });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         },
       );
 
@@ -1049,7 +1074,7 @@ export const buildApp = async ({
           }
           const changed = (await store.limitUploads(req.params.id, mb))!;
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.upload-limit-set', target: req.params.id, detail: { mb } });
-          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id));
+          return entryOf(changed, await allowedOrigins(), await store.frontends(req.params.id), await feedApps());
         },
       );
 
@@ -1124,7 +1149,7 @@ export const buildApp = async ({
         '/origins',
         {
           schema: {
-            summary: 'Where apps may load from besides the platform itself (admins only)',
+            summary: 'Where apps may load from besides AUGUR itself (admins only)',
             response: {
               200: Type.Array(ref(AllowedOrigin), { description: 'Allowed origins' }),
               403: refused('Not an admin'),
@@ -1501,7 +1526,7 @@ export const buildApp = async ({
           schema: {
             summary: "The upgrade to run (the deployment's updater only)",
             description: [
-              'Signed in as the platform-updater client. Each call counts as the updater being seen. On the',
+              'Signed in as the updater client (platform-updater). Each call counts as the updater being seen. On the',
               "workbench, and where AUGUR's desired state is Automatic, it first asks for the upgrade Automatic",
               'reaches by itself (ADR 0020), audited as platform.upgrade-requested.',
             ].join(' '),

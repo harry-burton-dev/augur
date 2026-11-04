@@ -1452,10 +1452,31 @@ components:
           properties:
             platform:
               type: boolean
-              description: Ships with the platform and is always on
+              description: One of AUGUR's own apps, always on
+            category:
+              enum:
+                - platform
+                - pillar
+              description: The kind in force (ADR 0032)
+            categoryRefused:
+              type: object
+              required:
+                - asked
+                - why
+              properties:
+                asked:
+                  enum:
+                    - platform
+                    - pillar
+                why:
+                  type: string
+              description: The app's own claim to a kind when it isn't used, and why
+            ships:
+              type: boolean
+              description: "Ships with AUGUR: its version comes with the release, and it is turned off rather than removed"
             pillar:
               type: boolean
-              description: "Ships with AUGUR (PILLAR_APPS) but is an ordinary app: it registers itself, is given the scopes its release asks for, changes version with the release, and can be turned off but not removed."
+              description: "The old name for `ships`, kept for /v1 readers. Ships with AUGUR (PILLAR_APPS) but is an ordinary app: it registers itself, is given the scopes its release asks for, changes version with the release, and can be turned off but not removed."
             enabled:
               type: boolean
             registeredBy:
@@ -1667,7 +1688,7 @@ components:
           description: The app is an AI; the menus draw it as a bubble
         search:
           type: boolean
-          description: "The app's service answers GET /v1/search?q= with { results: [{ id, title, detail?, path?, workspace? }] }, and the shell's Find asks it"
+          description: The app's service answers GET /v1/search?q=, and the shell's Find asks it
         storage:
           type: object
           properties:
@@ -1676,31 +1697,31 @@ components:
             bucket:
               type: boolean
           additionalProperties: false
-          description: "The storage the app keeps on the platform: its own database schema, its own bucket. An admin adds the app to APP_STORAGE and its service gets DATABASE_URL (a login owning one schema) and S3_* (its own bucket). See docs/app-storage.md."
+          description: "The storage the app keeps on AUGUR: its own database schema, its own bucket. See docs/app-storage.md"
         maxUpload:
           type: integer
           minimum: 1
           maximum: 2048
-          description: "The largest request body, in MB, the gateway lets through to the app's service; 10 without it. An admin can lower it. In the manifest the registry serves, always present: what the app asks, or less where an admin lowered it."
+          description: The largest request body, in MB, the gateway lets through to the app's service; 10 without it. An admin can lower it.
         previews:
           type: array
           items:
             $ref: "#/components/schemas/FeaturePreview"
           maxItems: 8
-          description: "Features the app is trying before they're everyone's (SDK 1.7): admins say who gets each, people turn opt-in ones on in the shell's Previews, and the app asks ctx.previewOn(id)"
+          description: "Features the app has ready to try before they're everyone's (SDK 1.7): admins say who gets each, people opt in, and the app asks ctx.previewOn(id)"
         settings:
           type: array
           items:
             $ref: "#/components/schemas/AppSetting"
           maxItems: 10
-          description: Settings the app offers admins in Admin, Apps; its service reads them from the registry's /apps/{id}/settings
+          description: Settings the app offers admins in Admin, Apps; its service reads them from the registry
         scopes:
           type: array
           items:
             $ref: "#/components/schemas/Scope"
           uniqueItems: true
           maxItems: 6
-          description: What the app's service asks to do on the platform, such as "notifications:send". An app may always register itself.
+          description: What the app's service asks to do on AUGUR, such as "notifications:send". An app may always register itself.
         floors:
           type: array
           items:
@@ -1714,22 +1735,30 @@ components:
           items:
             $ref: "#/components/schemas/Surface"
           maxItems: 30
-          description: What the app shows on each kind of floor, for the shell to place. When several match, the most specific floor wins, then a role condition, then manifest order. Each surface's floor must be in floors.
+          description: What the app shows on each kind of floor, for the shell to place. Each surface's floor must be in floors.
         orbit:
           type: boolean
-          description: "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus"
+          description: "false: the app keeps its own menu inside it and the shell never shows its Orbit"
         sameOnEveryFloor:
           type: boolean
-          description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)"
+          description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why (SDK 1.6)"
+        followsAddress:
+          type: boolean
+          description: "true: the app follows the address itself, so the shell keeps it mounted on Back and Forward inside it (SDK 1.11)"
         focus:
           type: boolean
-          description: "true: the app can narrow what it shows to a working context inside the floor, from ctx.focus (SDK 1.10). Reserved: the shell offers none yet (ADR 0029)"
+          description: "true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029)"
+        category:
+          enum:
+            - platform
+            - pillar
+          description: The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed
         areas:
           type: array
           items:
             $ref: "#/components/schemas/AppArea"
           maxItems: 6
-          description: "The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. With fewer than two, Title shows the app alone. Nothing repeats its parent: the registry warns when an area's label or icon matches the app's, a group's its area's, or an item's its group's, and accepts the manifest. See docs/shell-principles.md"
+          description: The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See docs/shell-principles.md
         menu:
           type: array
           items:
@@ -1771,7 +1800,7 @@ components:
           description: Only for people with this role on the floor
         rollup:
           type: boolean
-          description: Shows this floor and the teams below it that the person is on, using the platform's roll-up
+          description: Shows this floor and the teams below it that the person is on, using AUGUR's roll-up
       additionalProperties: false
     Scope:
       enum:
@@ -1964,8 +1993,15 @@ paths:
                               - personal
                               - team
                               - org
+                        category:
+                          enum:
+                            - platform
+                            - pillar
+                        ships:
+                          type: boolean
                         pillar:
                           type: boolean
+                          description: The old name for `ships`, kept for /v1 readers
                         requiredRole:
                           type: string
                         hasRole:
@@ -2024,7 +2060,7 @@ paths:
   /apps:
     get:
       summary: The whole catalogue, for admins
-      description: Every app, the platform's own first, whether or not it is turned on.
+      description: Every app, AUGUR's own first, whether or not it is turned on.
       responses:
         "200":
           description: Catalogue entries
@@ -2176,7 +2212,7 @@ paths:
   /apps/{id}/grants:
     get:
       summary: What an app may do on a floor (platform services only)
-      description: The platform's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007).
+      description: AUGUR's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007).
       parameters:
         - schema:
             type: string
@@ -2902,7 +2938,7 @@ paths:
   /app-runner/next:
     get:
       summary: The oldest open job (the deployment's app runner only)
-      description: Signed in as the platform-updater client. Each call counts as the runner being seen, and looks for automatic updates whose window has opened, at most once a minute.
+      description: Signed in as the updater client (platform-updater). Each call counts as the runner being seen, and looks for automatic updates whose window has opened, at most once a minute.
       responses:
         "200":
           description: The job
@@ -3183,7 +3219,7 @@ paths:
   /apps/{id}:
     put:
       summary: Register an app, or update it
-      description: Called by an app's own service on the internal network, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. Unknown fields are refused. The platform's own apps (home, admin) and routes another app already has cannot be taken. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An entry that is a full address must be on an origin an admin has allowed (see /origins); a path is served by the platform itself and always may.
+      description: Called by an app's own service on the internal network, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. Unknown fields are refused. AUGUR's own apps (home, admin) and routes another app already has cannot be taken. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An entry that is a full address must be on an origin an admin has allowed (see /origins); a path is served by the platform itself and always may.
       requestBody:
         required: true
         content:
@@ -3359,7 +3395,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: One of the platform's own apps
+          description: One of AUGUR's own apps
           content:
             application/problem+json:
               schema:
@@ -3417,7 +3453,7 @@ paths:
   /apps/{id}/upstream:
     put:
       summary: Say where the gateway reaches an app's service (a platform service or an admin, never the app)
-      description: http or https, a host and port only, never one of the platform's own parts. null forgets it. Kept when the app registers new versions. Audited as app.upstream-set or app.upstream-cleared.
+      description: http or https, a host and port only, never one of AUGUR's own parts. null forgets it. Kept when the app registers new versions. Audited as app.upstream-set or app.upstream-cleared.
       requestBody:
         required: true
         content:
@@ -3465,7 +3501,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: One of the platform's own apps
+          description: One of AUGUR's own apps
           content:
             application/problem+json:
               schema:
@@ -3794,7 +3830,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /origins:
     get:
-      summary: Where apps may load from besides the platform itself (admins only)
+      summary: Where apps may load from besides AUGUR itself (admins only)
       responses:
         "200":
           description: Allowed origins
@@ -4067,7 +4103,7 @@ paths:
   /platform/upgrade/target:
     get:
       summary: The upgrade to run (the deployment's updater only)
-      description: Signed in as the platform-updater client. Each call counts as the updater being seen. On the workbench, and where AUGUR's desired state is Automatic, it first asks for the upgrade Automatic reaches by itself (ADR 0020), audited as platform.upgrade-requested.
+      description: Signed in as the updater client (platform-updater). Each call counts as the updater being seen. On the workbench, and where AUGUR's desired state is Automatic, it first asks for the upgrade Automatic reaches by itself (ADR 0020), audited as platform.upgrade-requested.
       responses:
         "200":
           description: The open upgrade, with each part's image by digest

@@ -16,6 +16,6 @@ export const upstreamProblem = (url: string): string | undefined => {
   if (parsed.username || parsed.password) return 'An app’s address can’t carry a user name or password.';
   if ((parsed.pathname !== '/' && parsed.pathname !== '') || parsed.search || parsed.hash) return 'Give only the scheme, host and port: the gateway adds the path.';
   const host = parsed.hostname.toLowerCase();
-  if (PLATFORM_HOSTS.includes(host) || host.endsWith('.localhost') || host === '127.0.0.1' || host === '[::1]') return `${host} is part of the platform, not an app’s service.`;
+  if (PLATFORM_HOSTS.includes(host) || host.endsWith('.localhost') || host === '127.0.0.1' || host === '[::1]') return `${host} is part of AUGUR, not an app’s service.`;
   return undefined;
 };
