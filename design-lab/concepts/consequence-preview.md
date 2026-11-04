@@ -18,3 +18,9 @@ Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): a run
 Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): notification settings rehearsed on the person's own last week.
 
 Used in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): the wake is a consequence preview for revisiting a decision (revisit V2).
+
+Used in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a return previews where the strip goes and where the row restarts (approvals V6); the correction slip previews its ledger line (ledger V5).
+
+In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the pass shows what will be made, changed and linked, what is set aside or not brought in, and what landing would move in other apps (pass V1, V3, V6).
+
+Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): the draft decision changes line by line as each technique runs, and a cheaper technique says what you give up (combined V1, choose V6).

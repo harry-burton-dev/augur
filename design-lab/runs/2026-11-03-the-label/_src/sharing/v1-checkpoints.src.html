@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Sharing V1 · Checkpoints</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: a section through the floors. The paper's paragraphs rise towards the target; at the checkpoint each passes, passes said another way, or stops with why ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(260px,22%) minmax(0,1fr) minmax(300px,26%);gap:var(--space-5)}
+.tg{display:flex;flex-direction:column;gap:var(--space-2)}
+.tbtn{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-1) var(--space-2);padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);text-align:left}
+.tbtn[aria-pressed="true"]{border-color:var(--fc, var(--hairline-strong));background:var(--surface-raised)}
+.tbtn b{font-weight:400;color:var(--light)}
+.tbtn .n{font:400 var(--type-meta)/var(--leading-meta) var(--font-mono);color:var(--ink)}
+.tbtn .s{grid-column:1 / -1;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sec{position:relative;min-height:0;display:grid;grid-template-rows:repeat(3,minmax(0,1fr));border:1px solid var(--hairline);border-radius:var(--radius-inset);overflow:hidden}
+.lvl{position:relative;display:flex;align-items:flex-start;padding:var(--space-2) var(--space-4);border-top:2px solid var(--fc, var(--hairline-strong))}
+.lvl:first-child{border-top:0}
+.lvl:first-child::before{content:"";position:absolute;inset:0;background:var(--x-proposed-unseen);opacity:.45}
+.lvl .nm{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--fc, var(--ink-muted))}
+.lvl.tgt{background:color-mix(in srgb,var(--fc, var(--ink)) 7%,transparent)}
+.gate{position:absolute;left:0;right:0;height:0;border-top:1px dashed var(--hairline-strong);z-index:1}
+.gate span{position:absolute;right:var(--space-3);top:calc(var(--space-4) * -1 - 2px);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);background:var(--slate-deep);padding:2px var(--space-2);border-radius:var(--radius-key)}
+.blocks{position:absolute;left:var(--space-5);right:calc(var(--space-8) + var(--space-5));bottom:var(--space-4);display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-3);z-index:2;pointer-events:none}
+.blk{pointer-events:auto;display:grid;gap:var(--space-1);padding:var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-overlay);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);transition:transform var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i) * var(--motion-instant))}
+.blk .h{display:flex;justify-content:space-between;gap:var(--space-1);align-items:center}
+.risen .blk:not([data-v="stop"]){transform:translateY(var(--lift))}
+.blk .h svg{opacity:0;transition:opacity var(--motion-base) var(--ease-standard)}
+.risen .blk .h svg{opacity:1}
+.risen .blk[data-v="stop"]{border-color:var(--x-proposed-stopped);border-left-width:3px}
+.risen .blk[data-v="said"]{border-color:var(--x-proposed-said-other)}
+.risen .blk[data-v="ask"]{border-style:dashed}
+.blk .t{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.verd{display:grid;gap:var(--space-2);align-content:start;overflow:auto}
+.vd{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);padding-bottom:var(--space-2);border-bottom:1px solid var(--hairline)}
+.vd b{font-weight:400;color:var(--light)}
+.vd[data-v="stop"] > svg{color:var(--x-proposed-stopped)}
+.vd[data-v="said"] > svg{color:var(--x-proposed-said-other)}
+.vd[data-v="ok"] > svg{color:var(--x-proposed-lit)}
+.sum{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset)}
+@media (prefers-reduced-motion: reduce){.blk{transition:opacity var(--motion-base)}}
+@media (max-width:1400px){.blocks{right:var(--space-5);gap:var(--space-2)}.blk .t{-webkit-line-clamp:2}.wrap{grid-template-columns:minmax(220px,22%) minmax(0,1fr) minmax(260px,26%);gap:var(--space-4)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Sharing · V1</b> checkpoints: the paragraphs rise through the floors to the target; at the gate each passes, passes said another way, waits for someone, or stops with why · architectural section, customs checkpoint</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const B = DATA.briefing;
+const S = { t: 't1', risen: false };
+const VICON = { ok: 'check', said: 'corner-down-right', ask: 'hand', stop: 'ban' };
+function render() {
+  const t = TG(S.t), C = shareCheck(t), lb = paperLabel(C);
+  const levels = [{ id: 'out', nm: 'Outside the organisation' }, { id: 'org', nm: F('org').name + ' · Org', tier: 'org' }, { id: 'mops', nm: F('mops').name + ' · Department · kept here', tier: 'department' }];
+  const tgtLvl = t.kind === 'outside' ? 0 : t.floor === 'org' ? 1 : 2;
+  $('#app').innerHTML = topHTML(['Artifacts', B.title, 'Share'], [['1–4', 'a target'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <aside class="tg"><p class="eyebrow">Share ${B.title}</p><p class="sub">Pick where it goes. The paper rises to that floor; at each gate the label checks every paragraph.</p>
+      ${DATA.targets.map((x, i) => `<button class="tbtn" data-tier="${x.floor ? tierOf(x.floor) : ''}" aria-pressed="${S.t === x.id}" data-t="${x.id}"><b>${i + 1} · ${tgName(x)}</b><span class="n">${x.people ? fmt(x.people) : '?'}</span><span class="s">${x.via}${x.approval ? ` · needs ${P(x.approval).name}` : ''}</span></button>`).join('')}
+    </aside>
+    <section class="sec" aria-label="Floors, top first">
+      ${levels.map((l, i) => `<div class="lvl ${i === tgtLvl ? 'tgt' : ''}" ${l.tier ? `data-tier="${l.tier}"` : ''}><span class="nm">${l.nm}</span></div>`).join('')}
+      <div class="gate" style="top:33.33%"><span>${I('shield', 10)} gate · outside</span></div>
+      <div class="gate" style="top:66.66%"><span>${I('shield', 10)} gate · ${t.kind === 'floor' ? 'whole floor' : t.kind === 'group' ? `${tgName(t)} · ${t.people}` : 'org'}</span></div>
+      <div class="blocks ${S.risen ? 'risen' : ''}" id="blocks">${C.map((c, i) => `<div class="blk" style="--i:${i}" data-v="${c.v}"><span class="h">${pmHTML(paraLabel(c.p))}${I(VICON[c.v], 12)}</span><span class="t">${c.p.text}</span></div>`).join('')}</div>
+    </section>
+    <aside class="verd"><p class="eyebrow">At the gate · ${tgName(t)}</p>
+      ${C.map((c, i) => `<div class="vd dep" style="--i:${i}" data-v="${c.v}">${I(VICON[c.v], 14)}<span><b>¶${i + 1} ${c.v === 'ok' ? 'passes' : c.v === 'said' ? 'passes, as a count' : c.v === 'ask' ? `waits for ${P(c.who).name}` : 'stops'}</b>${c.why ? ` · ${c.why}` : ''}${c.fix ? ` <span class="muted">${c.fix}</span>` : ''}</span></div>`).join('')}
+      <div class="sum"><span class="who">What arrives</span>${markHTML(lb)}<span class="who"><b>${C.filter(c => c.v !== 'stop').length} of ${C.length}</b> paragraphs · ${t.people ? `${fmt(t.people)} people` : 'outside: reach unknown, can’t be recalled'}</span>
+        <button class="btn ${C.some(c => c.v === 'ask') ? '' : 'go'}">${I('send', 14)} ${C.some(c => c.v === 'ask') ? 'Ask, then send' : 'Send what passes'}</button></div>
+    </aside>
+  </div></main>`;
+  afterRender();
+  const row = $('.lvl').getBoundingClientRect().height;
+  $('#blocks').style.setProperty('--lift', `-${(2 - tgtLvl) * row}px`);
+  $$('.tbtn').forEach(b => b.onclick = () => go(b.dataset.t));
+}
+function rise() { S.risen = true; $('#blocks').classList.add('risen'); }
+function go(id) { S.t = id; S.risen = false; render(); requestAnimationFrame(() => requestAnimationFrame(rise)); }
+function replay() { clearLater(); closeDeed(); S.t = 't1'; S.risen = false; settleIn(); render(); later(rise, MOMENT()); }
+addEventListener('resize', () => render());
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-4]$/.test(e.key)) go(DATA.targets[+e.key - 1].id);
+});
+replay();
+</script>
+</body>
+</html>

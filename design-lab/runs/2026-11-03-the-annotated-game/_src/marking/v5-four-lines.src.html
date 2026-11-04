@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Marking V5 · Four lines for seventeen moves</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Marking V5: commentary is rationed to the moments that were found. A line on a quiet move has to say why it is critical ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.meter{grid-column:1 / -1;display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--space-4)}
+.slots{display:flex;gap:var(--space-2)}
+.slot{width:var(--space-7);height:var(--space-3);border-radius:2px;border:1px solid var(--hairline-strong);transition:background var(--motion-calm) var(--ease-out)}
+.slot.used{background:var(--light);border-color:var(--light)}
+.slot.extra{border-style:dashed;border-color:var(--x-proposed-warn)}
+.meter .w{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.meter .w b{font-weight:400;color:var(--light)}
+.page{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-1)}
+.ln{display:grid;grid-template-columns:2em minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);align-items:baseline;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small)}
+.ln .n{font-family:var(--font-mono);color:var(--ink-muted);text-align:right}
+.ln.world .s{font-style:italic;color:var(--ink-muted)}
+.ln .c{grid-column:2 / 4;color:var(--ink);font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-1) 0 var(--space-2) var(--space-3);border-left:1px solid var(--hairline-strong)}
+.ln.crit{background:var(--surface-inset)}
+.ln.try{box-shadow:inset 2px 0 0 var(--x-proposed-warn)}
+.ask{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.ask .q{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.ask .opts{display:grid;gap:var(--space-2)}
+.ask .opts .btn{justify-content:flex-start;height:auto;padding:var(--space-2) var(--space-3);white-space:normal;text-align:left;line-height:var(--leading-small);font-size:var(--type-small)}
+.ask .why{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:auto}
+.empty{color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+@media (max-width:1400px){.page{padding:var(--space-3) var(--space-4)}.ln{padding:1px var(--space-2)}.ln .c{padding-bottom:var(--space-1)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Marking · V5</b> four lines for seventeen moves: commentary only at the moments found; a line elsewhere must make its move critical first · Nimzowitsch, Informator’s “commentary only at the critical moments”</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const FOUND = [...new Set([...peopleCritical(), ...recordsCritical()])].sort((a, b) => a - b);
+const LINES = peopleCritical();
+const S = { trying: null };
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', DEC.id, 'Commentary'], [['click a quiet move', 'try a line'], ['Esc', 'leave it'], ['R', 'replay']], { as: DATA.review.held }) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">Four lines for seventeen moves</h1><p class="lede">A review that comments on everything teaches nothing. Lines go only where the game turned; every other move gets a mark or nothing. The budget isn’t a number someone sets: it is the moments that were found.</p></div>
+    <div class="meter pane"><div class="slots">${FOUND.map(n => `<span class="slot ${LINES.includes(n) ? 'used' : ''}" title="Move ${n}"></span>`).join('')}${S.trying ? '<span class="slot extra"></span>' : ''}</div>
+      <p class="w"><b>${LINES.length} lines</b> on ${FOUND.length} moments found (${FOUND.join(', ')}). The records found ${recordsCritical().join(' and ')} and the lines there are theirs: a sentence by template, not a person’s.</p></div>
+    <section class="page pane scroll" aria-label="The annotated game">${MOVES.map(m => { const crit = LINES.includes(m.n), c = (ANN(m.n).find(a => a.crit) || {}), rc = recordsCritical().includes(m.n);
+      return `<button class="ln ${m.side} ${crit || rc ? 'crit' : ''} ${S.trying === m.n ? 'try' : ''}" data-n="${m.n}"><span class="n">${m.n}.</span><span class="s">${m.san}</span><span>${ANN(m.n).filter(a => !a.pos).map(a => gl(a.g, a.self ? 'second' : '')).join('')}</span>
+        ${crit ? `<span class="c">${c.line}</span>` : rc ? `<span class="c muted">${I('activity', 12)} The records: ${m.san.toLowerCase()}; the position falls to ${posOfMove(m.n).s} (${POS(posOfMove(m.n).s).w.toLowerCase()}).</span>` : ''}</button>`; }).join('')}</section>
+    <section class="ask pane" aria-live="polite">${S.trying ? (() => { const m = MV(S.trying); return `<p class="lab">A line on move ${m.n}?</p><p class="q">${m.san} wasn’t found critical.</p>
+      <p class="small">No finder points here: the position didn’t fall, no line was crossed, no step was one-way, and nobody has marked it ? or !?. To write a line, say which of these is true:</p>
+      <div class="opts"><button class="btn">${I('user-round', 14)} It is where the game turned, and I can say what else was on the record. It joins the critical moments.</button><button class="btn">${I('circle-dot', 14)} It’s a good or weak step, not a turning point. A mark on its own.</button><button class="btn">${I('x', 14)} Leave it unmarked.</button></div>
+      <p class="why">${m.n === 9 ? `Most reviewers want to praise the bay (${gl('!')}): it was done. The mark says that. A line would take a reader’s attention from the four moments that decided the result.` : 'A mark says enough here.'}</p>`; })()
+      : `<p class="lab">Every line has a reason to be there</p><p class="empty">Choose a quiet move to try writing a line on it.</p>`}</section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.ln').forEach(b => b.onclick = () => { const n = +b.dataset.n; S.trying = FOUND.includes(n) || MV(n).side === 'world' ? null : n; render(); });
+}
+function replay() { clearLater(); S.trying = null; render(); settle(); later(() => { S.trying = 9; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === 'Escape') { S.trying = null; render(); } });
+replay();
+</script>
+</body>
+</html>

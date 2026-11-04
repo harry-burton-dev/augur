@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Premortem · V3 · Reasons become work</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Premortem V3: reasons are grouped, and every group must leave as one of three things: a change to the plan now, a watch, or a risk accepted by name ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.lanes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4);min-height:0}
+.lane{display:flex;flex-direction:column;gap:var(--space-2);min-height:0;border-top:2px solid var(--hairline-strong);padding-top:var(--space-3)}
+.lane h2{display:flex;align-items:center;gap:var(--space-2);font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.lane .rule2{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cl{border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-2) var(--space-3);display:grid;gap:var(--space-1);background:var(--surface-inset);transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.cl .nm{display:flex;justify-content:space-between;gap:var(--space-2);color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.cl .rs{display:grid;gap:2px}
+.cl .rs span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cl .rs span.pen{font-style:italic}
+.cl .out{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.hold .cl{opacity:0;transform:translateY(var(--space-3))}
+.unsorted{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.unsorted span{border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-2);font-size:var(--type-small);color:var(--ink);background:var(--surface-pane);transition:opacity var(--motion-calm) var(--ease-out)}
+.done .unsorted span{opacity:.25}
+.foot{display:flex;gap:var(--space-6);align-items:center;font-size:var(--type-small);color:var(--ink-muted)}
+.foot b{font:200 var(--type-heading)/1 var(--font-mono);color:var(--light);display:block}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Premortem · V3</b> reasons become work: each group leaves as a change, a watch or a risk accepted by name · Klein (2007), Kawakita’s KJ method, RAID logs</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PM = DATA.premortem;
+const FATES = [
+  { id: 'change', name: 'Change the plan now', icon: 'pencil-ruler', rule: 'A reason you can fix before signing is fixed, not watched.' },
+  { id: 'watch', name: 'Watch for it', icon: 'eye', rule: 'A reason you can’t fix now gets a sign, a source and an owner.' },
+  { id: 'accept', name: 'Accept, by name', icon: 'hand', rule: 'A reason left as it is says who accepted it and why.' }
+];
+const S = { sorted: false };
+function render() {
+  const g = STATE.gateway, rs = PM.reasons.filter(r => g || !r.pencil);
+  const cls = PM.clusters.filter(c => rs.some(r => r.cl === c.id));
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, T('pre').name, 'Sorting'], [...STD]) +
+  `<main class="main"><div class="wrap ${S.sorted ? 'done' : 'hold'}">
+    <div><p class="eyebrow">${T('pre').name} · ${PM.date} · ${plural(rs.length, 'reason')} in ${plural(cls.length, 'group')}</p>
+      <div class="unsorted" style="margin-top:var(--space-2)">${rs.map(r => `<span class="${r.pencil ? 'pen' : ''}">${r.say.split(/[,.;]/)[0]}</span>`).join('')}</div></div>
+    <div class="lanes">${FATES.map(f => { const mine = cls.filter(c => c.to === f.id); return `<section class="lane scroll"><h2>${I(f.icon, 18)}${f.name}<span class="num muted" style="margin-left:auto">${mine.length}</span></h2><p class="rule2">${f.rule}</p>
+      ${mine.map((c, i) => `<div class="cl" style="transition-delay:calc(${i} * var(--motion-quick))"><div class="nm"><span>${c.name}</span><span class="small muted">${P(c.owner).name}</span></div>
+        <div class="rs">${rs.filter(r => r.cl === c.id).map(r => `<span class="${r.pencil ? 'pen' : ''}">“${r.say}” · ${r.pencil ? 'assistant' : first(r.by)}</span>`).join('')}</div>
+        <div class="out">${c.to === 'change' ? `${I('corner-down-right', 12)} ${c.change}` : c.to === 'watch' ? watchHTML(W(c.watch), { owner: false }) : `${I('corner-down-right', 12)} ${c.why}`}</div></div>`).join('')}</section>`; }).join('')}</div>
+    <div class="foot"><span><b>${cls.filter(c => c.to === 'change').length}</b>changes before signing</span><span><b>${cls.filter(c => c.to === 'watch').length}</b>watches, ${cls.filter(c => c.to === 'watch' && !W(c.watch).sees).length} AUGUR can’t see</span><span><b>${cls.filter(c => c.to === 'accept').length}</b>accepted by name</span><span><b>0</b>reasons dropped</span><span style="max-width:48ch">No reason may leave the room as “noted”. ${g ? 'The assistant’s reason is sorted like any other, by a person.' : ''}</span></div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.sorted = false; settle(); render(); later(() => { S.sorted = true; const w = $('.wrap'); w.classList.remove('hold'); w.classList.add('done'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

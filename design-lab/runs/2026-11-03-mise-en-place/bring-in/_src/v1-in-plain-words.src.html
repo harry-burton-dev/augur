@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Bring in V1 · In plain words</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the file described in sentences; every number points at its cells ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:var(--space-6)}
+.read{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.file{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);transition:transform var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+.pre .file{transform:translateY(calc(var(--space-5) * -1));opacity:0}
+.file b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.file small{display:block;color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.file .kept{margin-left:auto;font-size:var(--type-small);color:var(--ink-muted);text-align:right}
+.para{margin:0;font-size:var(--type-lead);line-height:var(--leading-lead);font-weight:300;color:var(--ink);max-width:56ch}
+.para + .para{margin-top:var(--space-3)}
+.n{all:unset;cursor:pointer;color:var(--light);font-weight:400;border-bottom:1px solid var(--hairline-strong);transition:border-color var(--motion-quick) var(--ease-standard)}
+.n:hover,.n.on{border-bottom-color:var(--light)}
+.n:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.probs{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2);border-top:1px solid var(--hairline-strong);padding-top:var(--space-3)}
+.probs li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.probs li svg{color:var(--x-proposed-disagree);margin-top:2px}
+.probs li.ok svg{color:var(--ink-muted)}
+.acts{margin-top:auto;display:flex;gap:var(--space-2);align-items:center}
+.acts .muted{font-size:var(--type-small);margin-left:var(--space-2)}
+.sheetbox{min-height:0;overflow:hidden;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.sheetbox .sheet td,.sheetbox .sheet th{padding:1px var(--space-2)}
+.sheetbox .sheet td{transition:background var(--motion-base) var(--ease-out),color var(--motion-base) var(--ease-out)}
+@media (max-width:1400px){.para{font-size:var(--type-body);line-height:var(--leading-body)}.probs li{font-size:var(--type-small);line-height:var(--leading-small)}.sheetbox .sheet{font-size:var(--x-proposed-type-micro);line-height:var(--leading-small)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Bring in · V1</b> the file in plain words; every number lights its cells · Wrangler's data profile, a reference librarian's first look</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* reading only: the first look runs the parts of the engine that don't need a person (no recipe yet) */
+const R = run('oct', DATA.recipe.steps), PL = plate(R), F0 = R.file, H = R.header;
+const ci = n => H.indexOf(n);
+const vanCol = ci(R.st.s6.col), dCol = ci(R.st.s7.col), depCol = ci(R.st.s8.col), resCol = ci(R.st.s9.col), odoCol = ci(R.st.s10.col);
+const dataLines = R.lines.filter(l => !['title', 'header', 'blank', 'total'].includes(l.role));
+const spellings = Object.values(R.st.s8.groups).reduce((a, g) => a + Object.keys(g).length, 0);
+const shapes = R.st.s7.shapes;
+const vanOdd = R.st.s6.values.map(v => v[2]);
+/* each highlight: lines and columns to light */
+const HL = {
+  visits:  { lines: dataLines.map(l => l.n), cols: null },
+  title:   { lines: R.lines.filter(l => l.role === 'title' || l.role === 'blank').map(l => l.n), cols: null },
+  total:   { lines: [R.total.line], cols: null },
+  copy:    { lines: PL.copies.flatMap(l => [l.n, l.of]), cols: null },
+  vans:    { lines: [...vanOdd, PL.aside[0].n], cols: [vanCol] },
+  dates:   { lines: R.recs.filter(r => r.v.on.shape !== 'd/m/y').map(r => r.n), cols: [dCol] },
+  depots:  { lines: dataLines.map(l => l.n), cols: [depCol] },
+  results: { lines: R.recs.map(r => r.n), cols: [resCol] },
+  odo:     { lines: [...R.st.s10.values.map(v => v[2]), ...PL.valuesAside.map(v => v.n)], cols: [odoCol] },
+  loan:    { lines: [PL.aside[0].n], cols: null }
+};
+const S = { on: null };
+const N = (k, txt) => `<button class="n ${S.on === k ? 'on' : ''}" data-k="${k}">${txt}</button>`;
+function cellCls(l, i) {
+  if (!S.on) return '';
+  const h = HL[S.on]; if (!h.lines.includes(l.n)) return '';
+  return !h.cols || h.cols.includes(i) ? 'hit' : '';
+}
+function render() {
+  const sites = Object.keys(R.st.s8.groups).length;
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, F0.name], [['Tab', 'next number'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="read">
+      <div class="file">${I('file-spreadsheet', 24)}<div><b>${esc(F0.name)}</b><small>from ${P(F0.from).name} · ${F0.received} · ${F0.via}</small></div><span class="kept">kept as it came<br>${F0.doc.id} · ${F0.doc.library}</span></div>
+      <div class="dep" style="--i:0"><p class="para">This file holds ${N('visits', `${dataLines.length} lines of visits`)} by ${FIRM.name} in ${F0.month}, one line for each van they looked at. Above them are ${N('title', 'a title and two empty lines')}; at the bottom ${N('total', `a TOTAL that says ${R.total.said} visits`)}.</p>
+      <p class="para">The visits cover ${N('depots', `${sites} depots, spelt ${spellings} ways`)} and van numbers written ${N('vans', `${profile(R, H[vanCol]).ways} ways`)}. Dates come in ${N('dates', `${Object.keys(shapes).length} shapes`)}, results mix ${N('results', 'pass, fail and advisories in one column')}, and ${N('odo', 'odometers')} are mostly miles.</p></div>
+      <ul class="probs dep" style="--i:2">
+        <li>${I('copy', 14)}<span>${N('copy', `Line ${PL.copies[0].n} is an exact copy of line ${PL.copies[0].of}`)}. Probably pasted twice.</span></li>
+        <li>${I('truck', 14)}<span>${N('loan', `Line ${PL.aside[0].n} says “${esc(PL.aside[0].cells[0])}”`)} instead of a van number. It counts in Kestrel’s total.</span></li>
+        <li>${I('gauge', 14)}<span>One odometer, “${esc(PL.valuesAside[0].raw)}” on line ${PL.valuesAside[0].n}, isn’t a reading. Its note says the odometer wasn’t working.</span></li>
+        <li class="ok">${I('layers', 14)}<span>Two other sheets: ${F0.otherSheets.map(s => `“${s.name}” (${s.lines ? s.lines + ' lines, ' : ''}${s.what})`).join(' and ')}. Not brought in; say if they should be.</span></li>
+      </ul>
+      <div class="acts"><button class="btn go">${I('chef-hat', 14)} Start tidying</button><button class="btn">${I('book-open', 14)} Use a saved recipe</button><span class="muted">Nothing has changed yet. The file stays as it came.</span></div>
+    </section>
+    <section class="sheetbox scroll" aria-label="The file">${sheetHTML(R, { cell: cellCls })}</section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.n').forEach(b => { b.onclick = () => { S.on = S.on === b.dataset.k ? null : b.dataset.k; render(); $(`.n[data-k="${b.dataset.k}"]`)?.focus(); }; b.onfocus = () => { if (S.on !== b.dataset.k) { S.on = b.dataset.k; render(); $(`.n[data-k="${b.dataset.k}"]`)?.focus(); } }; });
+}
+function replay() { clearLater(); S.on = null; document.body.classList.add('pre'); render(); later(() => document.body.classList.remove('pre'), ms('--motion-quick')); later(() => { S.on = 'depots'; render(); }, ms('--motion-run')); }
+document.addEventListener('keydown', e => { commonKeys(e, render, replay); });
+replay();
+</script>
+</body>
+</html>

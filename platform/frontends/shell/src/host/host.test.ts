@@ -89,6 +89,56 @@ describe('AppMounter', () => {
     expect(m.mounted?.id).toBe('library');
   });
 
+  it('keeps an app that follows the address mounted on a move inside it, and tells it the path', async () => {
+    const follows = app('library', '/library', { followsAddress: true });
+    const lib = { ...mfe(), navigated: vi.fn() };
+    const m = new AppMounter(document.createElement('div'), vi.fn(async () => ({ default: lib })));
+    expect(await m.mount(follows, ctx())).toBe('mounted');
+    expect(await m.mount(follows, { ...ctx(), path: '/doc/7' })).toBe('kept');
+    expect(lib.mount).toHaveBeenCalledOnce();
+    expect(lib.unmount).not.toHaveBeenCalled();
+    expect(lib.navigated).toHaveBeenCalledWith(expect.any(HTMLElement), '/doc/7');
+  });
+
+  it('mounts it again for an intent, on another floor, from a new catalogue, or without the flag', async () => {
+    const follows = app('library', '/library', { followsAddress: true });
+    const lib = { ...mfe(), navigated: vi.fn() };
+    const m = new AppMounter(document.createElement('div'), vi.fn(async () => ({ default: lib })));
+    await m.mount(follows, ctx());
+    await m.mount(follows, { ...ctx(), intent: { type: 'document.open', payload: {} } });
+    const team = { ...own, id: 'w-team', kind: 'team' as const, slug: 'team' };
+    await m.mount(follows, { ...ctx(), workspace: team, getWorkspace: () => team });
+    await m.mount({ ...follows }, { ...ctx(), workspace: team, getWorkspace: () => team });
+    const plain = manifest[1];
+    await m.mount(plain, ctx());
+    await m.mount(plain, { ...ctx(), path: '/doc/7' });
+    expect(lib.mount).toHaveBeenCalledTimes(6);
+    expect(lib.navigated).not.toHaveBeenCalled();
+  });
+
+  it('mounts an app again that sets the flag but has no navigated to hear the path with', async () => {
+    const follows = app('library', '/library', { followsAddress: true });
+    const lib = mfe();
+    const m = new AppMounter(document.createElement('div'), vi.fn(async () => ({ default: lib })));
+    await m.mount(follows, ctx());
+    expect(await m.mount(follows, { ...ctx(), path: '/doc/7' })).toBe('mounted');
+    expect(lib.mount).toHaveBeenCalledTimes(2);
+  });
+
+  it('mounts an app again when it throws on being told the path', async () => {
+    const follows = app('library', '/library', { followsAddress: true });
+    const lib = {
+      ...mfe(),
+      navigated: vi.fn(() => {
+        throw new Error('no');
+      }),
+    };
+    const m = new AppMounter(document.createElement('div'), vi.fn(async () => ({ default: lib })));
+    await m.mount(follows, ctx());
+    expect(await m.mount(follows, { ...ctx(), path: '/doc/7' })).toBe('mounted');
+    expect(lib.mount).toHaveBeenCalledTimes(2);
+  });
+
   it('loads each entry once', async () => {
     const load = vi.fn(async () => ({ default: mfe() }));
     const m = new AppMounter(document.createElement('div'), load);

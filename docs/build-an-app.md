@@ -184,9 +184,10 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 - `version` is copied from the frontend's `package.json` on release; don't edit it.
 - `sdk` is the range of SDK releases the app works with. The shell refuses an app outside it.
 - `icon` and menu `icon`s are the kit's icon names (see Storybook's Icons).
-- `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit, and `areas` (SDK 1.5) names the broad parts of the app Title lists under it, each menu group naming its `area`; an app that draws its own menu inside it sets `"orbit": false` (SDK 1.4) to open straight away; an app that shows the same on every floor, as Admin does, sets `"sameOnEveryFloor": true` (SDK 1.6), and the shell's floor gauge rests while it's open, saying why; see [platform/frontends](../platform/frontends/README.md#title-and-orbit). How the shell draws menus follows the [shell principles](shell-principles.md).
+- `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit, and `areas` (SDK 1.5) names the broad parts of the app Title lists under it, each menu group naming its `area`; an app that draws its own menu inside it sets `"orbit": false` (SDK 1.4) to open straight away; an app that shows the same on every floor, as Admin does, sets `"sameOnEveryFloor": true` (SDK 1.6), and the shell's floor gauge rests while it's open, saying why; an app that follows the address itself, as one built on the app kit's `placeRoutes` does, sets `"followsAddress": true` and gives `navigated(el, path)` (SDK 1.11), and the shell keeps it mounted on Back, Forward and its own links while it stays open on the same floor, calling `navigated` with the new path (it needs both: the shell's own moves, such as Find, push the address without a popstate) (an intent, a request, another floor or a changed preview still mounts it again); see [platform/frontends](../platform/frontends/README.md#title-and-orbit). How the shell draws menus follows the [shell principles](shell-principles.md).
 - `previews` (SDK 1.7) lists features the app is trying before they're everyone's: `[{ "id": "board-view", "name": "Board view", "detail": "Tasks as columns.", "until": "2027-01-31" }]`. Ask `ctx.previewOn('board-view')` and keep working when it's false; admins decide who gets each, and people turn opt-in ones on in the shell's Previews ([release-channels.md](release-channels.md#feature-previews)).
 - `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`), `models:use` to ask an AI model through the model gateway (`askModel`, see [Agents and models](agents.md)), `events:publish` and `events:subscribe` to tell other services what happened and hear what they did (see [Domain events](domain-events.md)), `people:read` to ask who someone stands for and find people and teams to share with (see [Sharing](#sharing)). Scopes are checked on the floor your service names (`X-Workspace-Id`, which the service kit's calls take as `workspace`); a call that names none is checked on the organisation's floor, as the gateway does. So if your app is off for the organisation and on only for some teams, name the team's floor when you notify or audit for it. An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope. A new version that asks for more scopes is still served, but gets the new ones only once an admin allows them in Admin, Apps.
+- `category` (SDK 1.11) says what kind of app it is ([ADR 0032](decisions/0032-platform-apps-and-pillar-apps.md)): `platform`, for using and managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only apps that ship with AUGUR (`PILLAR_APPS`) or that the app runner installed from the signed app feed can be either, and the registry's own apps (Home, Admin, the Upgrade Centre) are always platform apps. Any other app may send it and still registers, but it's just an app: the shell and `GET /v1/me/apps` get no kind for it, and Admin, Apps shows the claim and why it isn't used. Leave it out unless your app is one of those. Ask for `"sdk": "^1.11.0"` when you set it, so an older deployment refuses the release with a reason instead of the registry refusing the manifest. A value other than the two is refused when the app registers.
 - `floors` is the kinds of floor the app works on: `personal` (someone's own), `team` (any team, at any depth) and `org`. Leave it out for all three. The shell never offers the app on another kind.
 - `surfaces` says what the app shows on each kind of floor, for the shell to place: a `page`, a `card` on the floor's page, a `panel`, the floor's `settings` or `admin`, each from a `module` the entry exposes. `role` limits one to members or leads there; `rollup` means it shows the floor and the teams below it that the person is on (identity's `GET /v1/me/workspaces/{id}/rollup`). Each surface's floor must be in `floors`. When several match, the most specific floor wins, then a role condition, then manifest order. The shell places `card`s on Home (SDK 1.2); the other slots are checked and kept, and placed later.
 
@@ -222,6 +223,25 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
 - `storage` says the app keeps its own database schema (`"database": true`) or files (`"bucket": true`) on the platform; an admin gives it them, and its service reads them with `appStorageFromEnv()`. See [App storage](app-storage.md).
 
 `pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
+
+### Checking a manifest
+
+The manifest has a published JSON Schema, `contracts/manifest.schema.json`. It is generated from the registry's own schema (`appEntrySchema` in `platform/services/registry/src/manifest.ts`, TypeBox) by `pnpm manifest-schema`, so it has exactly the fields and limits the registry accepts ([ADR 0055](decisions/0055-schema-first-apis-with-typebox.md)). Point your manifest's `"$schema"` at it and your editor completes and checks the fields as you type:
+
+```json
+{ "$schema": "../../contracts/manifest.schema.json", "id": "expenses", … }
+```
+
+The path is relative to the manifest; in an app's own repository, point it at the file in an AUGUR checkout or a copy of it. The registry accepts `$schema` and doesn't use it. A registry from before the schema was published refuses it as an unknown field, so leave it out of an app that may register with a deployment that hasn't upgraded.
+
+To check manifests, build AUGUR, then name them, or name none to check every `apps/<id>/manifest.json`:
+
+```sh
+pnpm build
+node scripts/check-manifests.mjs path/to/manifest.json
+```
+
+Each manifest is checked against the schema first, and each problem names where it is in plain words (`menu[0].items[2].path doesn't have the form it needs`). One that passes is then put to the registry in memory, for the rules a schema can't say: a semver version and range, surfaces on the app's floors, a route of its own. The check also fails when `contracts/manifest.schema.json` is out of step with the registry; `pnpm build && pnpm manifest-schema` writes it again.
 
 ### Find
 

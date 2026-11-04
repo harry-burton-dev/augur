@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/) (live 
 Could steer: Approvals, the commission (V) sign-off, any record made by several people at once.
 
 Related: [the readback moves it](the-readback-moves-it.md) (paper and the desk): the same read-back, applied to a handover rather than a minute.
+
+In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): reviews are agreed like minutes; assent is to the record, not to each mark; two reviewers' marks both stand (marking V4).

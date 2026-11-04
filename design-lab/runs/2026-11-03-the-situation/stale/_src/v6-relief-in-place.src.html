@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Stale V6 · Relief in place</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: staff rotate. What the set kept of the outgoing owner, what lived only in his head, and the overlap in which both hold it ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.overlap{position:relative;height:calc(var(--space-7) + var(--space-2));border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.overlap .bar{position:absolute;height:var(--space-4);border-radius:2px;display:flex;align-items:center;padding:0 var(--space-2);font-size:var(--type-small);color:var(--slate-deep);white-space:nowrap;overflow:hidden}
+.overlap .bar.tom{top:var(--space-3);background:var(--floor-department-high)}
+.overlap .bar.leah{top:calc(var(--space-3) + var(--space-5));background:color-mix(in srgb,var(--floor-department-high) 55%,var(--light))}
+.overlap .zone{position:absolute;top:0;bottom:0;background:var(--x-proposed-lit-wash);border-left:1px dashed var(--x-proposed-lit);border-right:1px dashed var(--x-proposed-lit)}
+.overlap .zone span{position:absolute;top:calc(var(--space-1) * -0.5);left:calc(100% + var(--space-2));font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-lit);white-space:nowrap}
+.overlap .d{position:absolute;bottom:var(--space-1);transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.cols{min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);overflow:auto;scrollbar-width:thin}
+.col h2{display:flex;gap:var(--space-2);align-items:center;font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.col .sub{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.li{display:grid;gap:2px;padding:var(--space-2) 0;border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.li q{font-style:italic}
+.col.gaps{border-style:dashed;border-color:var(--x-proposed-broken)}
+.col.gaps.lit{background:color-mix(in srgb,var(--warning) 4%,transparent)}
+.blank{position:relative;padding:var(--space-3);--t:var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);
+  background:
+    linear-gradient(var(--ink-muted),var(--ink-muted)) left top / var(--t) 1px no-repeat,linear-gradient(var(--ink-muted),var(--ink-muted)) left top / 1px var(--t) no-repeat,
+    linear-gradient(var(--ink-muted),var(--ink-muted)) right top / var(--t) 1px no-repeat,linear-gradient(var(--ink-muted),var(--ink-muted)) right top / 1px var(--t) no-repeat,
+    linear-gradient(var(--ink-muted),var(--ink-muted)) left bottom / var(--t) 1px no-repeat,linear-gradient(var(--ink-muted),var(--ink-muted)) left bottom / 1px var(--t) no-repeat,
+    linear-gradient(var(--ink-muted),var(--ink-muted)) right bottom / var(--t) 1px no-repeat,linear-gradient(var(--ink-muted),var(--ink-muted)) right bottom / 1px var(--t) no-repeat}
+.blank b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.col{padding:var(--space-2) var(--space-3)}.li .src{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Stale · V6</b> relief in place: what the set kept of the outgoing owner, what only he knew, and the days both held it · relief in place and continuity books, scheduled rotation</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { lit: false };
+const tom = P('tom'), leah = P('leah');
+/* days on the overlap strip, from 3 Nov (0) to 1 Dec (28) */
+const DAY = { '3 Nov': 0, '7 Nov': 4, '14 Nov': 11, '17 Nov': 14, '24 Nov': 21, '28 Nov': 25, '1 Dec': 28 }, SPAN = 30, x = d => (DAY[d] + 0.8) / SPAN * 100;
+const reasons = DATA.pieces.filter(p => p.by === 'tom');
+const said = DATA.pieces.filter(p => p.said);
+function render() {
+  const un = RO.unrecorded;
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Handed over'], [['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">Stale context · staff rotate · ${T.id}</p><h1 class="title">What left with ${first('tom')}</h1></div>
+    <div class="overlap" role="img" aria-label="${tom.name} held the set from 3 Nov to 14 Nov; ${leah.name} from 14 Nov; both from 14 to 17 Nov">
+      <span class="zone" style="left:${x('14 Nov')}%;width:${x('17 Nov') - x('14 Nov')}%"><span>both hold it</span></span>
+      <span class="bar tom" style="left:${x('3 Nov')}%;width:${x('17 Nov') - x('3 Nov')}%">${tom.name} · ${tom.role}</span>
+      <span class="bar leah" style="left:${x('14 Nov')}%;width:${x('1 Dec') - x('14 Nov')}%">${leah.name} · reads it back ${'17 Nov'}</span>
+      ${Object.keys(DAY).map(d => `<span class="d" style="left:${x(d)}%">${d}</span>`).join('')}
+    </div>
+    <div class="cols">
+      <section class="col"><h2>${I('archive', 18)} Kept</h2><p class="sub">In the set, in ${first('tom')}’s words, with his name. ${leah.name} reads them as he wrote them.</p>
+        ${reasons.slice(0, 6).map(p => `<div class="li">${rm(p.rung, { word: false })} ${p.text}<q>${p.reason}</q></div>`).join('')}
+        <div class="li">${I('archive', 12)} ${DATA.setAside.length} pieces set aside, each with why</div></section>
+      <section class="col"><h2>${I('quote', 18)} Said, not checked</h2><p class="sub">Kept as what someone said. Its only witness has moved post; the claim stays marked until someone checks it.</p>
+        ${said.map(p => `<div class="li">${p.text} ${saidHTML(p)}${srcHTML(p.src)}<span class="muted">${CH(p.id).now}</span></div>`).join('')}</section>
+      <section class="col gaps ${S.lit ? 'lit' : ''}"><h2>${I('circle-dashed', 18)} Only in his head</h2><p class="sub">What happened that no record holds. Drawn as a gap with a name, not as nothing, so it can be asked for before it is lost.</p>
+        ${un.map(u => `<div class="blank ${S.lit ? 'fresh' : ''}"><b>${u.on} · ${u.what}.</b> No note, no record. ${S.lit ? `Ask ${u.ask}.` : ''}</div>`).join('')}
+        ${S.lit ? `<button class="btn sm go fresh" style="align-self:start">${I('message-circle', 14)} Ask ${first('tom')} for a note</button>` : ''}
+        <p class="sub" style="margin-top:auto">Rotation is scheduled; a gap like this is an outage with a date on it. The handover asks the outgoing owner, line by line, whether anything happened that the set doesn’t hold.</p></section>
+    </div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.lit = false; render(); }, () => { S.lit = true; render(); });
+</script>
+</body>
+</html>

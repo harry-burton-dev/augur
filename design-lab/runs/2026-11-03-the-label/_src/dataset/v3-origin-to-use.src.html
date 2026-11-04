@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Dataset V3 · From origin to use</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: where each part came from and where it may go. Bands from origin to part to use, width by records; a band that may not go ends at a stop ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.fig{position:relative;min-height:0}
+svg.flow{width:100%;height:100%;overflow:visible}
+.flow .band{fill:none;stroke:var(--ink);stroke-opacity:.22;transition:stroke-opacity var(--motion-base) var(--ease-standard),stroke-dashoffset var(--motion-run) var(--ease-out)}
+.flow .band.count{stroke:var(--x-proposed-said-other);stroke-opacity:.35}
+.flow .band.hot{stroke-opacity:.6}
+.flow .stop{fill:none;stroke:var(--x-proposed-stopped);stroke-width:1.5;stroke-dasharray:2 3}
+.flow .node{fill:var(--surface-raised);stroke:var(--hairline-strong)}
+.flow text{fill:var(--ink);font-family:var(--font-sans);font-size:var(--type-small)}
+.flow text.h{fill:var(--light);font-size:var(--type-meta)}
+.flow text.m{fill:var(--ink-muted);font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-soft)}
+.flow .col{fill:var(--ink-muted);font-family:var(--font-mono);font-size:var(--type-label);letter-spacing:var(--tracking-label)}
+.pre-draw .band{stroke-dasharray:2000;stroke-dashoffset:2000}
+.key{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted);align-items:center}
+.key i{display:inline-block;width:var(--space-5);height:var(--space-2);margin-right:var(--space-1);vertical-align:1px}
+@media (prefers-reduced-motion: reduce){.pre-draw .band{stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:0}}
+</style>
+</head>
+<body class="pre pre-draw">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Dataset · V3</b> from origin to use: bands from where each part came from, through the part, to the uses its label allows; a band that may not go ends at a stop · Sankey's flow diagrams, Minard, provenance graphs</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DSET();
+const S = { hot: null };
+const ORIGIN = { ros: 'Roster system', nm: 'Confidential reporting form', inc: 'Pilotage and the harbour master', dia: 'Pilots, by consent', ais: 'Coastal AIS Ltd (licence)' };
+function render() {
+  const W = Math.max(900, innerWidth - 2 * 24), H = Math.max(420, innerHeight - 250);
+  const cx = [W * .02, W * .36, W * .72], nw = 10, top = 40;
+  const total = D.records, scale = (H - top - 40 - D.parts.length * 14) / total;
+  let y = top; const parts = D.parts.map(p => { const h = Math.max(6, p.n * scale); const o = { p, y, h }; y += h + 14; return o; });
+  const uses = USE_IDS(); const uh = (H - top - 40) / uses.length;
+  const U = uses.map((u, i) => ({ u, y: top + i * uh + 4, h: uh - 16 }));
+  let svg = `<text class="col" x="${cx[0]}" y="16">WHERE IT CAME FROM</text><text class="col" x="${cx[1]}" y="16">PART · RECORDS</text><text class="col" x="${cx[2]}" y="16">MAY BE USED FOR</text>`;
+  const path = (x1, y1, x2, y2) => `M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}`;
+  parts.forEach(({ p, y, h }) => {
+    svg += `<path class="band" data-p="${p.id}" d="${path(cx[0] + 220, y + h / 2, cx[1], y + h / 2)}" stroke-width="${h}"/>`;
+    svg += `<text x="${cx[0]}" y="${y + h / 2 + 4}">${ORIGIN[p.id]}</text>`;
+    svg += `<rect class="node" x="${cx[1]}" y="${y}" width="${nw}" height="${h}"/>`;
+    svg += `<text class="h" x="${cx[1] + nw + 8}" y="${y + Math.min(h / 2, 14) + 4}">${p.name} · ${p.n}</text><text class="m" x="${cx[1] + nw + 8}" y="${y + Math.min(h / 2, 14) + 20}">${markShort(p.label)}</text>`;
+    const lb = L(p.label);
+    U.forEach(({ u, y: uy, h: uhh }, j) => {
+      const v = lb.uses[u], share = uhh / D.parts.length, ty = uy + share * D.parts.indexOf(p) + share / 2, sw = Math.max(2, Math.min(h, share - 2));
+      const from = [cx[1] + nw + 220, y + h / 2];
+      if (v === 'yes' || v === 'count' || v === 'ask') svg += `<path class="band ${v === 'count' ? 'count' : ''}" data-p="${p.id}" d="${path(from[0], from[1], cx[2], ty)}" stroke-width="${sw}"/>`;
+      else if (u === S.hot?.u || p.id === S.hot) svg += `<path class="stop" d="${path(from[0], from[1], (from[0] + cx[2]) / 2, ty)}"/>`;
+    });
+  });
+  U.forEach(({ u, y: uy, h: uhh }) => {
+    const n = D.parts.filter(p => ['yes', 'count', 'ask'].includes(L(p.label).uses[u])).reduce((a, p) => a + p.n, 0);
+    svg += `<rect class="node" x="${cx[2]}" y="${uy}" width="${nw}" height="${uhh}"/><text class="h" x="${cx[2] + nw + 8}" y="${uy + 16}">${US(u).long}</text><text class="m" x="${cx[2] + nw + 8}" y="${uy + 32}">${n ? `${n} of ${D.records} records${D.parts.some(p => L(p.label).uses[u] === 'count') ? ' · some as counts' : ''}` : 'none of it'}</text>`;
+  });
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Collections', D.title, 'Origin to use'], [['1–5', 'a part'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5)"><div><p class="eyebrow">${D.title} · ${markWord(dsetLabel())}</p><h1 class="title">Origin to use</h1></div>
+      <div class="key"><span><i style="background:var(--ink);opacity:.4"></i>may</span><span><i style="background:var(--x-proposed-said-other);opacity:.6"></i>as a count only</span><span><i style="border-top:1.5px dashed var(--x-proposed-stopped)"></i>may not (shown for the part you pick)</span></div></div>
+    <div class="fig"><svg class="flow" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMin meet" role="img" aria-label="Flows from origin to part to permitted use">${svg}</svg></div>
+  </div></main>`;
+  afterRender();
+  $$('.band').forEach(b => b.onmouseenter = () => hot(b.dataset.p));
+}
+function hot(id) { S.hot = id; render(); document.body.classList.remove('pre-draw'); $$('.band').forEach(b => b.classList.toggle('hot', b.dataset.p === id)); }
+function replay() { clearLater(); closeDeed(); S.hot = null; document.body.classList.add('pre-draw'); settleIn(); render(); later(() => document.body.classList.remove('pre-draw'), MOMENT() * .5); later(() => hot('dia'), MOMENT() + ms('--motion-calm')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-5]$/.test(e.key)) hot(D.parts[+e.key - 1].id);
+});
+addEventListener('resize', () => render());
+replay();
+</script>
+</body>
+</html>

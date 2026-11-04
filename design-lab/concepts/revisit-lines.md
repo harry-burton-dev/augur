@@ -12,3 +12,7 @@ First found in: [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/) (revis
 Could steer: Mandate intents, Upgrade Centre policies, care is scheduled, the groundskeeper (K).
 
 Related: [watches say what they can't see](watches-say-what-they-cant-see.md), [care is scheduled](care-is-scheduled.md).
+
+Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): assumptions' signs and premortem watches become the revisit lines, and a crossing offers the hedge written at the table (combined V3).
+
+In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): the computed view reads only a decision's own lines ("no lines, no evaluation"); when an action's date moves, its line moves or the meeting says why (grammar V4, voices V6).

@@ -10,3 +10,5 @@ A person signs every fact an agent proposes; trust only changes how much of the 
 First found in: [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/) (diary V5, proposal V4, combined V1, mistake V3).
 
 Could steer: Triage at volume, imports, the meter (W4).
+
+In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): check every result a person's answer touched plus a seeded random few; the Triage decider checks the same ones (pass V4, combined V3).

@@ -464,9 +464,13 @@ services:
       <<: [*folio-storage, *env]
       PORT: 8083
       SERVICE_CLIENT_SECRET: ${FOLIO_CLIENT_SECRET}
-    depends_on:
+    depends_on: &shipped-app
       postgres: { condition: service_healthy }
       storage: { condition: service_completed_successfully }
+      # It signs in as itself and gives the registry its frontend once, when it starts: so after the
+      # realm job has made its sign-in (it retries the registry for a few seconds), or a fresh server never lists it.
+      keycloak-config: { condition: service_completed_successfully }
+      registry: { condition: service_started }
 
   # Auspex, where you are on AUGUR and why you can or can't use things: the second app every deployment
   # ships with. It keeps nothing of its own (no schema, no bucket), so it gets no database login: it reads
@@ -493,7 +497,12 @@ services:
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
       SERVICE_CLIENT_SECRET: ${AUSPEX_CLIENT_SECRET}
-    depends_on: [identity, registry, events]
+    # Like the other shipped apps, it starts once its sign-in exists.
+    depends_on:
+      identity: { condition: service_started }
+      events: { condition: service_started }
+      keycloak-config: { condition: service_completed_successfully }
+      registry: { condition: service_started }
 
   # Data Atlas, the entities the org knows about and how they connect: the third app every deployment
   # ships with. Its graph lives in Postgres, in its own schema (it uses pg_trgm and pgvector, which the
@@ -513,9 +522,7 @@ services:
       <<: [*atlas-storage, *env]
       PORT: 8086
       SERVICE_CLIENT_SECRET: ${ATLAS_CLIENT_SECRET}
-    depends_on:
-      postgres: { condition: service_healthy }
-      storage: { condition: service_completed_successfully }
+    depends_on: *shipped-app
 
   # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
   # It works on the tables Folio's service makes, so it waits for the service to start.

@@ -12,3 +12,7 @@ First found in: [`2026-11-03-the-briefing`](../runs/2026-11-03-the-briefing/) (c
 Could steer: The label (L), Data Atlas grades, the minute (T).
 
 Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): "read the same twice / model only / a person chooses" is a verdict made by rule, and it decides whether a detail may go in a batch (proposal V4).
+
+Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): assumption marks are worked out from the fact's word by the same rule, and a challenge may only lower one (assumptions V1 and V6).
+
+Argued against in scope by [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): "never typed" holds for claims and positions; a judgement of a choice (`?!`) is typed by a named person in a fixed notation, kept apart and never averaged; a person's `∞` may only lower a position (grammar V2, V4, voices V5).

@@ -9,6 +9,7 @@
   "icon": "apps",
   "handles": ["reference.show", "reference.answer"],
   "search": true,
+  "followsAddress": true,
   "surfaces": [{ "floor": "personal", "slot": "card", "module": "./Glance" }],
   "previews": [
     { "id": "turned-on", "name": "Turned on", "detail": "On for the stand-in person in the contract tests" },

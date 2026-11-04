@@ -1,8 +1,8 @@
-import { Button, Details, Dialog, Heading, Rows, Select, Status, Table, TextField, Toggle, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
+import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table, TextField, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
 import { InstallsSection, RunnerControls, useInstalls, type Installs } from './app-runner.js';
-import { appStatus, FLOOR_CHOICES, floorStatus, floorTree, NEWEST, rollbackNote, scopeWords, uploadChoices, type AppFloor } from './apps-model.js';
+import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
 import { featureHint, featureModeChoices } from './installs.js';
 import { day, Line, Page, Problem, Quiet, Secret } from './parts.js';
 
@@ -11,6 +11,7 @@ const columns: TableColumn[] = [
   { key: 'version', label: 'Version', sortable: true },
   { key: 'route', label: 'Address', sortable: true },
   { key: 'state', label: 'Status', kind: 'status', sortable: true, format: (v, row) => <Status status={row.stateStatus as StatusName} label={String(v)} />, text: (v) => String(v) },
+  { key: 'kind', label: 'Kind', sortable: true },
   { key: 'source', label: 'From', sortable: true },
 ];
 
@@ -45,7 +46,7 @@ export function Apps({ api }: { api: AdminApi }) {
 
   const rows: TableRow[] = apps.map((a) => {
     const s = appStatus(a);
-    return { id: a.id, name: a.name, version: a.pinnedVersion ? `${a.version}, held` : a.version, route: a.route, state: s.label, stateStatus: s.status, source: a.platform || a.pillar ? 'AUGUR' : (a.registeredBy ?? '') };
+    return { id: a.id, name: a.name, version: a.pinnedVersion ? `${a.version}, held` : a.version, route: a.route, state: s.label, stateStatus: s.status, kind: kindWords(a).label, source: a.platform || shipsWithAugur(a) ? 'AUGUR' : (a.registeredBy ?? '') };
   });
   const app = apps.find((a) => a.id === open);
 
@@ -97,10 +98,13 @@ export function Apps({ api }: { api: AdminApi }) {
 /** One app opened: what it is, whether it's offered, its limits, settings and previews, where it's on, its versions and its runner. */
 function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; app: CatalogueApp; ins: Installs; took: (a: CatalogueApp) => void; onIssue: () => void; onClose: () => void }) {
   const [problem, setProblem] = useState('');
-  const shipped = app.platform || app.pillar;
+  const ships = shipsWithAugur(app);
+  const shipped = app.platform || ships;
+  const refused = refusedKindNote(app);
   const installed = ins.installs?.installed.find((i) => i.app === app.id);
   const s = appStatus(app);
   const facts: Detail[] = [
+    { label: 'Kind', value: kindWords(app).fact },
     { label: 'Version', value: app.pinnedVersion ? `${app.version}, held` : app.version },
     { label: 'AUGUR SDK', value: app.sdk },
     { label: 'Address', value: app.route },
@@ -121,17 +125,29 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
       open
       light
       size="read"
-      eyebrow={app.platform ? 'Part of AUGUR' : app.pillar ? 'Ships with AUGUR' : `Registered by ${app.registeredBy ?? 'its service'}`}
+      eyebrow={appEyebrow(app)}
       heading={app.name}
       summary={app.description ?? ''}
       cancelLabel="Close"
       onClose={onClose}
     >
       <Details items={facts} limit={0} />
+      {refused ? <p data-kind-refused>{refused}</p> : null}
       {app.platform ? (
         <p>Built-in apps are always on.</p>
       ) : (
-        <Toggle label="Offered to people" hint={s.why ?? 'Everyone it’s meant for sees it in Apps and Title.'} checked={app.enabled} onChange={async (enabled) => took(await api.setAppEnabled(app.id, enabled))} />
+        <div className="admin-live-actions" data-offered>
+          <p className="admin-muted">{app.enabled ? (s.why ?? 'Offered to people: everyone it’s meant for sees it in Apps and Title.') : 'Turned off: nobody is offered it. Nothing of its data is removed.'}</p>
+          {app.enabled ? (
+            <AskTwice size="sm" confirm="Press again: nobody is offered it from now" busyLabel="Turning off…" onPress={() => act(() => api.setAppEnabled(app.id, false))}>
+              Turn it off
+            </AskTwice>
+          ) : (
+            <Button kind="secondary" size="sm" busyLabel="Turning on…" onPress={() => act(() => api.setAppEnabled(app.id, true))}>
+              Offer it to people
+            </Button>
+          )}
+        </div>
       )}
       {app.awaitingScopes?.length ? (
         <>
@@ -161,7 +177,7 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
       {app.platform ? null : <FeaturePreviewsPart api={api} app={app} />}
       {app.platform ? null : <Floors api={api} app={app} />}
       {app.handles?.length ? <p>Answers {app.handles.join(', ')}.</p> : null}
-      {app.pillar ? <p data-pillar>It ships with AUGUR and changes version with it. Turn it off here or floor by floor; it can’t be removed, and its sign-in is in the server’s settings.</p> : null}
+      {ships ? <p data-pillar>It ships with AUGUR and changes version with it. Turn it off here or floor by floor; it can’t be removed, and its sign-in is in the server’s settings.</p> : null}
       {shipped ? null : <Versions api={api} app={app} took={took} />}
       {shipped ? null : (
         <div>
@@ -348,7 +364,7 @@ function Versions({ api, app, took }: { api: AdminApi; app: CatalogueApp; took: 
   );
 }
 
-/** Sites apps may load from besides the platform itself: allow one, and remove one. */
+/** Sites apps may load from besides AUGUR itself: allow one, and remove one. */
 function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promise<void>; onClose: () => void }) {
   const { value: origins, setValue, error, setError } = useLoaded<AllowedOrigin[]>(() => api.origins());
   const [working, setWorking] = useState(false);
@@ -399,9 +415,9 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
             <Line
               key={o.origin}
               end={
-                <Button kind="tertiary" size="sm" busy={working} onPress={() => void remove(o.origin)}>
+                <AskTwice size="sm" busy={working} confirm="Press again: apps from here stop loading" onPress={() => void remove(o.origin)}>
                   Remove
-                </Button>
+                </AskTwice>
               }
             >
               {o.origin} <Quiet>since {day(o.addedAt)}</Quiet>
