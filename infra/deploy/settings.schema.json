@@ -435,6 +435,16 @@
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
+    "ORG_PRODUCT_NAME": {
+      "type": "string",
+      "description": "What people see the product called: the browser tab, the sign-in pages and emails (the realm's display name).",
+      "default": "AUGUR",
+      "x-services": [
+        "web",
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
     "ORG_LOGO_URL": {
       "type": "string",
       "description": "A link to the organisation's logo, shown on the sign-in pages and in emails. Empty shows none.",

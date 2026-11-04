@@ -52,6 +52,9 @@ COPY --chmod=755 infra/deploy/live-origins.envsh /docker-entrypoint.d/15-live-or
 # another host serving the same files. When the container starts, infra/deploy/kit-url.envsh writes the
 # shell's page for it, and the hashes and the kit's site the Content Security Policy needs.
 ENV KIT_URL=/kit/
+# The product's name in the shell's page (its title, and a meta tag the shell reads for the tab), also
+# written by kit-url.envsh. A deployment sets its own in ORG_PRODUCT_NAME.
+ENV ORG_PRODUCT_NAME=AUGUR
 COPY --chmod=755 infra/deploy/kit-url.envsh /docker-entrypoint.d/16-kit-url.envsh
 # What the front door holds callers to (infra/deploy/nginx.conf). Requests a second from one address,
 # and the burst let through at once, for the API and for sign-in; the largest upload in MB; and

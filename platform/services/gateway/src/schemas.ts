@@ -109,6 +109,23 @@ export const Status = Type.Object(
   { description: 'Every component, the gateway first' },
 );
 
+export const BrowserTelemetry = Type.Object(
+  {
+    on: Type.Boolean({ description: 'Whether the shell should send browser errors and traces here' }),
+    why: Type.Optional(Type.String({ description: 'Why it is off, and who can change that' })),
+  },
+  { $id: 'BrowserTelemetry', description: 'Whether this deployment collects browser telemetry (ADR 0059)' },
+);
+
+/** An OTLP/HTTP JSON export request, as Faro's OTLP transport sends it. The gateway reads only the resource lists. */
+export const OtlpExport = Type.Object(
+  {
+    resourceLogs: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }))),
+    resourceSpans: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }))),
+  },
+  { additionalProperties: true, description: 'OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces' },
+);
+
 /**
  * What every refusal carries: an RFC 9457 problem (`application/problem+json`, @augur/service-kit's
  * problemDetails), with AUGUR's `reason` and `whoCanChange`, and `error` and `message` for SDK 1.x clients.
@@ -135,4 +152,4 @@ export const Refusal = Type.Unsafe<{ error: string; message: string; [extension:
 export const refused = (description: string) => ({ description, content: { 'application/problem+json': { schema: ref(Refusal) } } });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, OffsiteCopy, BackupStatus, Seeding];
+export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, OffsiteCopy, BackupStatus, Seeding, BrowserTelemetry];

@@ -25,8 +25,9 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
   const { kcClsx } = getKcClsx({ doUseDefaultCss, classes });
   const { msg, msgStr, currentLanguage, enabledLanguages } = i18n;
   const { realm, auth, url, message, isAppInitiatedAction, properties } = kcContext;
-  // The product's name is the realm's display name; the organisation's comes from Keycloak's
-  // environment (vite.config.ts). Neither is written here.
+  // The product's name is the realm's display name, which the realm job sets from ORG_PRODUCT_NAME (so
+  // emails' subjects agree); the organisation's comes from Keycloak's environment (vite.config.ts).
+  // Neither is written here.
   const product = realm.displayName || realm.name;
   const org = properties.ORG_NAME;
   const logo = properties.ORG_LOGO_URL;

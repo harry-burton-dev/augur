@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Gateway
-  version: 1.6.0
+  version: 1.7.0
   description: The gateway's own API, beside the services it forwards to. Reached at /api/gateway/v1 by a signed-in caller. Everything else under /api/<service> is forwarded to that service with the caller in x-user-* headers and in x-augur-caller, a token the gateway signs (EdDSA, one minute) for that service alone (its `aud` is the service's name), and without the caller's Authorization header. Services that check callers believe only the signed one. Every path but /healthz and /caller-keys needs a signed-in caller, however it is spelt. x-user-signed-in-at (and the token's `signedInAt`) carries when the caller last entered their password (the token's auth_time, ISO 8601), for a service that wants a fresh sign-in for something drastic; the shell's /auth/again?return=<path> asks for the password and comes back.
 components:
   schemas:
@@ -189,6 +189,18 @@ components:
           type: string
           description: Who can turn it on, and how
       description: Whether `pnpm seed` may fill this deployment with synthetic sample data (SEED_ALLOWED, ADR 0056)
+    BrowserTelemetry:
+      type: object
+      required:
+        - on
+      properties:
+        on:
+          type: boolean
+          description: Whether the shell should send browser errors and traces here
+        why:
+          type: string
+          description: Why it is off, and who can change that
+      description: Whether this deployment collects browser telemetry (ADR 0059)
 paths:
   /caller-keys:
     get:
@@ -276,6 +288,153 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Sign-in or floors can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /telemetry:
+    get:
+      summary: Whether this deployment collects browser errors and traces
+      description: "The shell asks once after sign-in and starts Faro only when on is true: when the deployment names a collector (OTEL_EXPORTER_OTLP_ENDPOINT). When off, why says so."
+      responses:
+        "200":
+          description: Whether this deployment collects browser telemetry (ADR 0059)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrowserTelemetry"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /telemetry/v1/logs:
+    post:
+      summary: Browser logs from the shell, passed on to the deployment's collector
+      description: OTLP/HTTP JSON logs, as Grafana Faro's OTLP transport sends them (ADR 0059). The gateway stamps each resource as service.name=augur-browser with the deployment's own attributes, takes out anything that could name a person and query strings from URLs, and forwards it. At most 256 KB a send and 60 sends a minute a person.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resourceLogs:
+                  type: array
+                  items:
+                    type: object
+                    properties: {}
+                    additionalProperties: true
+                resourceSpans:
+                  type: array
+                  items:
+                    type: object
+                    properties: {}
+                    additionalProperties: true
+              additionalProperties: true
+              description: "OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces"
+        description: "OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces"
+      responses:
+        "200":
+          description: Passed on
+          content:
+            application/json:
+              schema:
+                description: Passed on
+                type: object
+                additionalProperties: true
+        "400":
+          description: Not an OTLP body of this signal
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Browser telemetry is off here, with why (error telemetry_off)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "429":
+          description: More than 60 sends this minute
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The collector didn't take it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /telemetry/v1/traces:
+    post:
+      summary: Browser traces from the shell, passed on to the deployment's collector
+      description: OTLP/HTTP JSON traces, as Grafana Faro's OTLP transport sends them (ADR 0059). The gateway stamps each resource as service.name=augur-browser with the deployment's own attributes, takes out anything that could name a person and query strings from URLs, and forwards it. At most 256 KB a send and 60 sends a minute a person.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resourceLogs:
+                  type: array
+                  items:
+                    type: object
+                    properties: {}
+                    additionalProperties: true
+                resourceSpans:
+                  type: array
+                  items:
+                    type: object
+                    properties: {}
+                    additionalProperties: true
+              additionalProperties: true
+              description: "OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces"
+        description: "OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces"
+      responses:
+        "200":
+          description: Passed on
+          content:
+            application/json:
+              schema:
+                description: Passed on
+                type: object
+                additionalProperties: true
+        "400":
+          description: Not an OTLP body of this signal
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Browser telemetry is off here, with why (error telemetry_off)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "429":
+          description: More than 60 sends this minute
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The collector didn't take it
           content:
             application/problem+json:
               schema:

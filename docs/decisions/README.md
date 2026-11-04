@@ -64,6 +64,7 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0056](0056-seed-through-public-apis.md) | Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal | Proposed | 2026-11-03 |
 | [0057](0057-realm-as-code-applied-by-identitys-realm-job.md) | The realm is kept as code and applied by identity's realm job, which alone holds Keycloak's admin | Proposed | 2026-11-03 |
 | [0058](0058-editor-on-tiptap.md) | Quill's Editor is built on Tiptap, and keeps writing the same small Markdown | Proposed | 2026-11-04 |
+| [0059](0059-grafana-alerting-and-faro.md) | A deployment watches itself with Grafana alerting as files and Faro in the shell, and Backstage watches for silence | Proposed | 2026-11-04 |
 | [0060](0060-off-server-backups-with-restic.md) | Backups are copied off the server with restic, encrypted on the server, to a bucket each deployment names | Proposed | 2026-11-04 |
 | [0063](0063-accessibility-checked-by-axe.md) | Accessibility is checked by axe in CI, failing on serious findings | Proposed | 2026-11-04 |
 
