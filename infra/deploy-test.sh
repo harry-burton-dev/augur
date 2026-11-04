@@ -274,6 +274,9 @@ fi
 case "$mode" in
   fresh)
     use "$local_tag"
+    # IMAGES_OUT gets every image the release's compose file runs, third-party ones too, for the
+    # vulnerability scan (Tailscale among them, though the test never starts it).
+    if [ -n "${IMAGES_OUT:-}" ]; then pc config --images | sort -u > "$IMAGES_OUT"; fi
     up
     wait_ready "Fresh install of this checkout"
     no_restarts
