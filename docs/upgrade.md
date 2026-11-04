@@ -82,6 +82,12 @@ gunzip -c infra/deploy/backups/platform-<date>.sql.gz | pc exec -T postgres psql
 pc up -d --remove-orphans
 ```
 
+### Artifacts, Explorer and Data Atlas come from their own repositories
+
+Since augur@0.17.0, AUGUR no longer builds Artifacts, Explorer and Data Atlas itself. Each one is released in its own repository (`augur-folio`, `augur-auspex`, `augur-atlas`), and AUGUR's release takes the release `release/shipped-apps.json` pins, checks that repository signed it, and signs it again as AUGUR's ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)). Nothing changes on the server: the images keep their names under `PLATFORM_IMAGES`, they still come with each AUGUR release, and the apps keep their tables and buckets. An app the app runner installs (Mandate) moves the same way, and the updater takes a backup before its first release from the new repository (docs/ship-an-app.md, "An app in its own repository").
+
+**Going back** to a release that built them here (0.16.x) is the usual code step in [Going back](#going-back): check out `augur@0.16.1`, set `PLATFORM_VERSION=0.16.1`, `pc up -d --remove-orphans`. No restore is needed. Neither 0.17.0 nor the apps' releases in it are breaking, so their migrations only add ([versioning.md](versioning.md#database-migrations)), and 0.17.0's deploy test went from 0.16.1 to 0.17.0 and back on the same data. Going back past 0.18.0 is the exception: Keycloak 26.8's database needs the restore in "Keycloak 26.8 and the realm job" first.
+
 ### Sample data, where you allow it
 
 `pnpm seed` (docs/seed.md) fills a deployment with synthetic sample people, floors, documents and entities, and only where `.env` sets `SEED_ALLOWED=true`; nothing changes on a server that doesn't. To use it on a server that already exists, also add its sign-in client, which Keycloak doesn't import into an existing realm: open the Keycloak admin console (`KEYCLOAK_CONSOLE=open`, deploy.md), choose the `platform` realm, **Clients → Import client**, and import the `platform-cli` entry from `infra/deploy/keycloak/platform-realm.json`. Then close the console again.
