@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Apprentice sheet · V4 · The marks</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: a specimen sheet of every mark agent work can wear, like an assay office's chart of marks ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.intro{display:flex;justify-content:space-between;align-items:end;gap:var(--space-5)}
+.intro > p{max-width:var(--measure-read);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.sheet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:var(--space-3);min-height:0}
+.sp{display:grid;grid-template-rows:minmax(var(--space-7),1fr) auto;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);min-height:0}
+.sp .show{display:flex;align-items:center;justify-content:center;gap:var(--space-3);border-bottom:1px solid var(--hairline);padding-bottom:var(--space-2);flex-wrap:wrap}
+.sp h3{margin:0;font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.sp p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sp .no{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);margin-right:var(--space-2)}
+.sp.from{opacity:1}
+.fact{display:inline-flex;align-items:baseline;gap:var(--space-2);padding:var(--space-1) var(--space-3);font-size:var(--type-meta)}
+.fact .k{font-size:var(--type-small);color:var(--ink-muted);font-style:normal}
+.batch{position:relative;display:inline-grid;place-items:center;width:calc(var(--space-7) + var(--space-4));height:var(--space-6)}
+.batch i{position:absolute;inset:0;border:1px dotted var(--x-proposed-pencil);border-radius:var(--radius-key);background:var(--slate-deep)}
+.batch i:nth-child(1){transform:translate(calc(var(--space-1) * 2),calc(var(--space-1) * -2))}
+.batch i:nth-child(2){transform:translate(var(--space-1),calc(var(--space-1) * -1))}
+.batch span{position:relative;font:400 var(--type-small)/1.3 var(--font-mono);text-align:center;color:var(--ink)}
+.fence{display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-3);background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small);color:var(--ink-muted)}
+.ceil{width:70%;border-top:3px solid var(--x-proposed-ceiling);padding-top:var(--space-1);font-size:var(--type-small);color:var(--ink);text-align:center}
+.stamp{display:inline-grid;grid-template-columns:auto auto;gap:0 var(--space-2);align-items:center;padding:var(--space-1) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);transform:rotate(-2deg)}
+.stamp b{grid-row:span 2;font-weight:400}
+.mini-mode{display:flex;gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);border:1px solid var(--hairline);border-radius:var(--radius-key);padding:var(--space-1) var(--space-2)}
+.mini-mode b{font-weight:500;color:var(--light)}
+.mini-mode .l{font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps)}
+.sp .tk{margin-top:2px}
+.sp.lit{border-color:var(--x-proposed-lit)}
+@media (max-width:1400px){.sp p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.sp .tk{display:none!important}.intro > p{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Apprentice sheet · V4</b> the marks: twelve signs agent work can wear · assay office mark charts, theatre cue lights, proof correction marks</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const AG = 'a1', a = A(AG), sup = P(a.supervisor);
+const S = { stage: 0 }; /* 0 before, 1 after the moment: pencil inks, lamp goes, batch is signed */
+const MARKS = () => [
+  { h: 'Maker’s mark', p: `Each agent’s monogram, set by its app. Dotted while its work is pencil, solid once a person accepts it.`, tech: 'manifest agents block · mark (2–3 letters)',
+    show: `${mm(AG)} ${mm('a2')} ${mm('a3')} <span class="muted">→</span> ${mm(AG, true)}` },
+  { h: 'Pencil', p: 'Agent work not yet accepted: dotted edge, italic. It never enters a count.', tech: 'proposal.state = proposed · proposedBy agent:survey-reader',
+    show: `<span class="pencil fact"><span class="k">Gross tonnage</span><span class="pen">3,412</span>${mm(AG)}</span>` },
+  { h: 'Ink, with the mark kept', p: `Accepted: solid, upright, and still signed by its maker, with who accepted it.`, tech: 'acceptedBy person · proposedBy kept for good',
+    show: `<span class="pencil ${S.stage ? 'inked' : ''} fact"><span class="k">Gross tonnage</span><span class="${S.stage ? '' : 'pen'}">3,412</span>${mm(AG, !!S.stage)}</span><span class="small muted">${S.stage ? first(a.supervisor) + ', ' + DATA.today : ''}</span>` },
+  { h: 'The batch', p: `A run’s work waiting as one. The sample to check is drawn by AUGUR, across kinds and sources.`, tech: 'checkpoint · batch · sample drawn stratified',
+    show: `<span class="batch"><i></i><i></i><i></i><span>${S.stage ? 'signed' : '22 details'}<br>${S.stage ? first(a.supervisor) : 'check 4'}</span></span>` },
+  { h: 'Standby lamp', p: 'Lit and steady while an agent holds before something it can’t undo. Out on go. Never blinks.', tech: 'checkpoint kind standby · Inbox item',
+    show: `<span class="lamp ${S.stage ? 'go' : 'on'}"></span><span class="small">${S.stage ? 'go: ' + first(A('a3').supervisor) : 'standing by'}</span><span class="lamp off"></span><span class="small muted">lapsed</span>` },
+  { h: 'The ceiling', p: 'What no agent does alone. A solid bar, never a hatch: it is a rule, not a lock.', tech: 'fixed standby kinds',
+    show: `<span class="ceil">${DATA.ceiling.length} things it stands by for</span>` },
+  { h: 'The rung', p: 'Four bars for four rungs. A dashed bar is above what that kind of work can reach.', tech: 'level per kind · cap per kind',
+    show: `${lvl(0, 3, false)} ${lvl(1, 2, false)} ${lvl(2, 2, false)} ${lvl(3, 3, false)}` },
+  { h: 'Outside its scope', p: 'Where it may not work, drawn and named, with whom to ask. Same hatch as “not yours to see”.', tech: 'workspace grant missing',
+    show: `<span class="fence">${I('fence', 14)} ${F('department').name}: ask ${P('p3').name}</span>` },
+  { h: 'Held for you', p: 'One piece waiting one by one, at rung 1. It says why it didn’t go in a batch.', tech: 'checkpoint · single',
+    show: `<span class="pencil fact">${I('hand', 14)}<span class="pen">MV Saltire Spirit</span>${mm(AG)}</span>` },
+  { h: 'The seam', p: 'A repair that stays visible: struck value, right value, who found it and who fixed it.', tech: 'audit agent.repair · seam on the detail',
+    show: `<span class="seam fact"><span class="struck">2,890</span> 5,140 <span class="small muted">found by ${first('p3')}</span></span>` },
+  { h: 'Countersigned', p: `A day of the diary signed by the person who checked it. Unsigned days stay open.`, tech: 'diary day · countersignedBy',
+    show: `<span class="stamp">${I('signature', 18)}<span>${S.stage ? sup.name : 'not yet signed'}</span><span class="muted">${DATA.diary[0].day} to ${DATA.today.split(' ')[0]}</span></span>` },
+  { h: 'Now and next', p: 'What the agent is doing now and will do next, wherever its work appears. A change is boxed once.', tech: 'run status · next step · stop conditions',
+    show: `<span class="mini-mode"><span><span class="l">Now</span><br><b>${a.now.w}</b></span><span><span class="l">Next</span><br><b>${a.next[0].w}</b></span><span><span class="l">Stops</span><br>${a.calls.limit} calls</span></span>` }
+];
+function render() {
+  $('#app').innerHTML = topHTML(['Admin', 'Agents', 'How agents work', 'Marks'], [['Space', 'before and after'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><div><p class="eyebrow">Specimen sheet</p><h1 class="title">The marks</h1></div>
+      <p>Twelve marks, one meaning each, the same in every app. An assay office stamps a maker’s mark beside its own; here the agent’s mark stays on its work after a person has accepted it. ${S.stage ? 'After: a person has acted.' : 'Before: the agent has acted, no person yet.'}</p></div>
+    <div class="sheet">${MARKS().map((m, i) => `<div class="sp dep" style="--i:${i}"><div class="show">${m.show}</div><div><h3><span class="no">${String(i + 1).padStart(2, '0')}</span>${m.h}</h3><p>${m.p}</p><p class="tk">${m.tech}</p></div></div>`).join('')}</div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.stage = 0; settle(); render(); later(() => { S.stage = 1; render(); }, MOMENT() + ms('--motion-run')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.key === ' ') { e.preventDefault(); S.stage = 1 - S.stage; render(); }
+});
+replay();
+</script>
+</body>
+</html>

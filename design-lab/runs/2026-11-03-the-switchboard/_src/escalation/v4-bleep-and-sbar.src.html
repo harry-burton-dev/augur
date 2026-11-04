@@ -1,0 +1,79 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Escalation · V4 Bleep log and handover note</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:var(--space-5);height:100%}
+.log{display:flex;flex-direction:column;gap:var(--space-3);min-height:0}
+table{border-collapse:collapse;width:100%;font-size:var(--type-meta);line-height:var(--leading-meta)}
+th{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);text-align:left;padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline-strong)}
+td{padding:var(--space-2);border-bottom:1px solid var(--hairline);vertical-align:top}
+td.t{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+td small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+td .cb{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink)}
+td .lapse{color:var(--x-proposed-blocked)}
+tr.me td{background:var(--x-proposed-lit-wash)}
+.sbar{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);min-height:0;overflow:auto}
+.f{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr);gap:var(--space-3);align-items:start}
+.f .l{display:flex;align-items:center;justify-content:center;width:var(--space-6);height:var(--space-6);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font:400 var(--type-lead)/1 var(--font-mono);color:var(--light)}
+.f .v{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.f .v .k{display:block;font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);margin-bottom:2px}
+.f .v .auto{color:var(--ink-muted);font-style:italic}
+.f .box{border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3);min-height:calc(var(--leading-meta) * 2 + var(--space-4));background:var(--slate-deep);color:var(--light)}
+.f .box .cur{display:inline-block;width:1px;height:1em;background:var(--x-proposed-lit);vertical-align:-2px}
+.f.filled .l{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit)}
+.acts{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+.small.muted b{font-weight:400;color:var(--ink)}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <section class="log">
+      <div><p class="eyebrow">Escalation · bleep log</p><h1 class="heading" id="h"></h1></div>
+      <table><thead><tr><th>Asked</th><th>Who, and why</th><th>Called back</th><th>Answer</th></tr></thead><tbody id="rows"></tbody></table>
+      <p class="small muted" id="sum"></p>
+    </section>
+    <section class="pane sbar" aria-label="Handover note">
+      <p class="eyebrow">Pass it on · handover note</p>
+      <p class="small muted">Passing it on asks the next step now. The note goes with it, so whoever is asked next doesn’t start from nothing. S and B are filled from the trail; you write A and R.</p>
+      <div id="form"></div>
+      <div class="acts"><button class="btn go">${'Pass it on'}</button><button class="btn">Keep it</button><span class="small muted" id="to"></span></div>
+    </section>
+  </div></main>
+</div>
+<div class="x-cap"><b>Escalation · V4</b> the bleep log, and a handover note in SBAR form when passing on · hospital bleep and callback, SBAR (NHS), I-PASS</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const ME = DATA.me, r = route('n16'), n = r.n, mine1 = r.deliveries.find(d => d.p === ME);
+$('#top').innerHTML = topHTML(['Inbox', n.title, 'Bleep log'], [['R', 'replay'], ['T', 'technical words', 'h-t']]);
+$('#h').textContent = n.title;
+const why = d => d.via === 'addressed' ? 'named' : d.via === 'cover' ? `cover for ${first(P(d.coverFor).name)}` : (() => { const s = r.steps.find(x => x.k === d.step); return s.who === 'rota' ? `on call ${dayName(d.sent)}` : s.who === 'lead' ? 'team lead' : 'Department admin'; })();
+$('#rows').innerHTML = r.deliveries.map(d => {
+  const st = r.steps.find(s => s.k === d.step) || r.steps[0];
+  const ans = d.taken != null ? `<span class="cb">took it ${at(d.taken)}</span><small>“${d.note}”</small>` : d.passed != null ? `<span class="cb">passed on ${hhmm(d.passed)}</span><small>“${d.note}”</small>` : d.stoodDown != null ? `<span class="lapse">no answer</span><small>next step ${at(st.until)}; stood down ${at(d.stoodDown)}</small>` : '';
+  return `<tr class="${d.p === ME ? 'me' : ''}"><td class="t">${at(d.told)}</td><td>${who(d.p)}<small>${why(d)}${d.held ? `, held from ${hhmm(d.sent)}` : ''} · ${d.ch.map(c => CHANNELS[c].word.toLowerCase()).join(', ')}</small></td><td class="t">${d.seen != null ? `${hhmm(d.seen)}<small>${dur(d.seen - d.told)} later</small>` : '—'}</td><td>${ans}</td></tr>`;
+}).join('');
+const callbacks = r.deliveries.filter(d => d.seen != null).map(d => d.seen - d.told);
+$('#sum').innerHTML = `Everyone asked saw it, in <b>${dur(Math.min(...callbacks))}</b> to <b>${dur(Math.max(...callbacks))}</b>. Seeing is the callback; it doesn’t stop the asking. Only taking it does.`;
+/* the handover note: S and B written by AUGUR from the trail; A and R by the person */
+const prev = r.deliveries.filter(d => d.told < mine1.told);
+const next = r.steps.find(s => s.k > mine1.step && !s.skipped);
+const F = [
+  ['S', 'Situation', `${n.title}, from ${A(n.app).name}. Limit ${at(tm(n.limit))}, passed.`, true],
+  ['B', 'Background', `${prev.map(d => `${P(d.p).name} (${why(d)}) asked ${at(d.told)}, saw it ${hhmm(d.seen)}`).join('; ')}. ${P(prev[0].p).name} is away until ${dayLong(backAt(prev[0].p))}.`, true],
+  ['A', 'Assessment', mine1.note.split('. ')[1] ? mine1.note.split('. ')[1].replace(/\.$/, '') + '.' : mine1.note, false],
+  ['R', 'Recommendation', mine1.note.split('. ')[0] + '.', false]
+];
+$('#form').innerHTML = F.map(([l, k, v, auto], i) => `<div class="f" data-i="${i}" style="margin-bottom:var(--space-3)"><span class="l">${l}</span><div class="v"><span class="k">${k}${auto ? ' · from the trail' : ' · yours'}</span>${auto ? `<span class="auto">${v}</span>` : `<div class="box" data-v="${v.replace(/"/g, '&quot;')}"></div>`}</div></div>`).join('');
+$('.acts .btn.go').innerHTML = `${I('forward', 14)} Pass it on`;
+$('#to').innerHTML = next ? `goes to ${who(next.people[0])} (${next.who === 'lead' ? 'team lead' : next.who}) at once` : '';
+function type(el, text, t0) { for (let i = 0; i <= text.length; i += 3) later(() => { el.innerHTML = text.slice(0, i) + (i < text.length ? '<span class="cur"></span>' : ''); }, t0 + i * 12); }
+function play() {
+  clearLater(); document.body.classList.add('pre'); $$('.box').forEach(b => b.textContent = ''); $$('.f').forEach(f => f.classList.remove('filled'));
+  later(() => document.body.classList.remove('pre'), 60);
+  $$('.f').forEach((f, i) => later(() => f.classList.add('filled'), 1200 + i * 200));
+  let t = 1600; $$('.box').forEach(b => { type(b, b.dataset.v, t); t += b.dataset.v.length * 4 + 200; });
+}
+document.addEventListener('keydown', e => commonKeys(e, play));
+Icons.hydrate(document.body); play();
+</script></body></html>

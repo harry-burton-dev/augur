@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>While you were away · V2 · Night orders</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: the night order book. What you told it before you left, on the left; the log answering each order, on the right ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-3)}
+.book{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);min-height:0;overflow:hidden}
+.pg{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-2)}
+.pg + .pg{border-left:1px solid var(--hairline-strong);background:var(--surface-inset)}
+.pg h2{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);margin:0}
+.pg .by{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.row{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) 0;border-top:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);min-height:calc(var(--space-7) - var(--space-2))}
+.row .no{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.order{font-style:italic;color:var(--ink)}
+.order.call{color:var(--light)}
+.ans{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-2);align-items:start;color:var(--ink)}
+.ans .v{font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;white-space:nowrap;padding:0 var(--space-2);border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);color:var(--ink-muted)}
+.ans .v.kept{color:var(--x-proposed-lit);border-color:var(--x-proposed-lit)}
+.ans .v.short{color:var(--x-proposed-disagree);border-color:var(--x-proposed-disagree)}
+.ans .d{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ans b{font-weight:400;color:var(--light);font-family:var(--font-mono)}
+.ans.blank{opacity:0}
+.ans{transition:opacity var(--motion-calm) var(--ease-out)}
+.calm{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.calm b{font-weight:400;color:var(--light)}
+.other{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.ans .d{display:none}.row{min-height:0}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>While you were away · V2</b> night orders: what you told it before you left, answered order by order · the master's night order book, the deck log</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const AG = 'a1', a = A(AG), sup = P(a.supervisor);
+const S = { shown: 0 };
+const d = id => DATA.diary.find(x => x.id === id);
+const mine = DATA.diary.filter(x => x.agent === AG);
+/* the orders are written from its indenture and the rungs on Friday; the answers are summed from the diary */
+const ORDERS = () => [
+  { o: `Read survey reports as they arrive, and each night at 22:00.`, v: D.n('limit', AG) ? 'short' : 'kept',
+    a: `<b>${D.reports(AG)}</b> reports read in ${new Set(mine.map(x => x.run)).size} runs. <b>${D.n('limit', AG)}</b> waited from Sunday ${d('d9').t.split(' ')[1]} to ${d('d9').resumed}.`, dd: `${d('d9').why}; it went back to them at ${d('d9').resumed} and read them all.` },
+  { o: `Put class survey details in one batch a run, for me to check by sample.`, v: 'kept',
+    a: `<b>${D.n('batch', AG)}</b> details in <b>${D.of('batch', AG).length}</b> batches. Check <b>${sum(D.of('batch', AG), x => x.sample)}</b>.`, dd: D.of('batch', AG).map(x => `${x.day}: ${x.n}, check ${x.sample}`).join(' · ') },
+  { o: `Hold Nordhavn Class details for me one by one.`, v: 'kept', a: `<b>${d('d2').n}</b> held one by one.`, dd: d('d2').why },
+  { o: `Hold new vessels for me.`, v: 'kept', a: `<b>${d('d5').n}</b> held: ${d('d5').text.replace(/^a new vessel, /, '')}.`, dd: d('d5').why },
+  { o: `Where sources disagree, propose both answers and don’t choose.`, v: 'kept', a: `<b>${d('d8').n}</b>: ${d('d8').text}.`, dd: 'Both answers wait in Triage, side by side.' },
+  { o: `Don’t propose outside ${F(a.floor).name}.`, v: 'kept', a: `<b>${d('d3').n}</b> left alone: ${d('d3').text}.`, dd: `Ask ${P(d('d3').ask).name}. It may read there but not propose.` },
+  { o: `Call me, or ${first(a.deputy)}, if something can’t wait until Monday.`, call: true, v: 'kept', a: `No call. Nothing it did or held had a deadline before ${DATA.today}.`, dd: `The one standby on the floor (${d('d7').text}) is ${A(d('d7').agent).name}’s, for ${P(d('d7').waits).name}, with no deadline.` }
+];
+function render() {
+  const os = ORDERS();
+  $('#app').innerHTML = topHTML(['Home', a.name, 'Night orders'], [['Space', 'show all'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">${a.name} · ${DATA.awaySince} to ${DATA.today}, ${DATA.now}</p><h1 class="title">Night orders</h1></div>
+    <div class="book">
+      <section class="pg scroll"><h2>Orders</h2><p class="by">Written by ${sup.name} on leaving, ${DATA.awaySince}. Drafted from the indenture; ${first(a.supervisor)} added the last one.</p>
+        ${os.map((x, i) => `<div class="row"><span class="no">${i + 1}.</span><span class="order ${x.call ? 'call' : ''}">${x.o}</span></div>`).join('')}</section>
+      <section class="pg scroll"><h2>The log answers</h2><p class="by">Built from the diary of ${a.name}, order by order. ${mm(AG)} wrote nothing here itself: every line is counted.</p>
+        ${os.map((x, i) => `<div class="row"><span class="no">${i + 1}.</span><div class="ans ${i < S.shown ? '' : 'blank'}"><span>${I(x.v === 'kept' ? 'check' : 'minus', 16)}</span><span>${x.a}<span class="d">${x.dd}</span></span><span class="v ${x.v}">${x.v === 'kept' ? 'kept' : 'kept, late'}</span></div></div>`).join('')}</section>
+    </div>
+    <div class="calm">${I('moon', 16)}<span><b>Nobody was called.</b> ${os.filter(x => x.v === 'kept').length} of ${os.length} orders kept as written; ${os.filter(x => x.v !== 'kept').length} kept late, with the reason. <span class="other">${A('a2').name} works under ${P(A('a2').supervisor).name}: his orders are on his page.</span></span></div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() {
+  clearLater(); S.shown = 0; settle(); render();
+  /* the moment: the log answers the orders one by one, once */
+  ORDERS().forEach((_, i) => later(() => { S.shown = i + 1; render(); }, MOMENT() + i * ms('--motion-slow')));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.key === ' ') { e.preventDefault(); clearLater(); S.shown = ORDERS().length; render(); }
+});
+replay();
+</script>
+</body>
+</html>

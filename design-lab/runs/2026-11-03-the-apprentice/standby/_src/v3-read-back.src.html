@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Standby and go · V3 · Read back</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: closed-loop go. The person reads back the one number that matters before go arms ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,var(--measure-decision));gap:var(--space-6);max-width:calc(var(--measure-wide) + var(--measure-decision));margin:0 auto;align-items:start;padding-top:var(--space-5)}
+.left{display:flex;flex-direction:column;gap:var(--space-4)}
+.say{font-weight:300;font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-2));color:var(--ink)}
+.say b{font-weight:400;color:var(--light)}
+.say .n{font-family:var(--font-mono);color:var(--light)}
+.loop{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.loop i{font-style:normal;font-family:var(--font-mono);color:var(--ink)}
+.loop .on{color:var(--light)}
+.panel{padding:var(--space-4);border:1px solid var(--x-proposed-standby);border-radius:var(--radius-inset);background:var(--surface-pane);display:grid;gap:var(--space-3)}
+.panel.ok{border-color:var(--x-proposed-lit)}
+.panel label{font-size:var(--type-meta);color:var(--light)}
+.panel input{width:100%;height:var(--target-md);background:var(--surface-inset);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--light);font:300 var(--type-heading)/1 var(--font-mono);padding:0 var(--space-3)}
+.panel input:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.panel .msg{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);min-height:var(--leading-small)}
+.panel .msg.bad{color:var(--x-proposed-disagree)}
+.panel .msg.good{color:var(--x-proposed-lit)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Standby and go · V3</b> read back: go arms only when the person says back the number that can't be undone · ATC readback, closed-loop communication</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const SB = DATA.standby, AG = SB.agent, a = A(AG), RB = SB.readBack; ME = SB.me;
+const S = { val: '', gone: false };
+const ok = () => S.val.replace(/\D/g, '') === RB.answer;
+function render() {
+  const ir = SB.irreversible, good = ok();
+  $('#app').innerHTML = topHTML(['Inbox', SB.title], [['type', 'the number'], ['Enter', 'go'], ['R', 'replay'], ['T', 'ADR words']], 'department') +
+  `<main class="main"><div class="wrap">
+    <section class="left"><p class="eyebrow">${mm(AG)} ${a.name} stands by · ${SB.raisedAt}</p>
+      <p class="say">On go it will <b>publish</b> ${SB.title} to <span class="n">${fmt(ir[0].reach)}</span> people on the ${F(ir[0].floor).word} floor, and <b>email</b> it to <span class="n">${fmt(ir[1].reach)}</span> addresses outside ${DATA.org}. The email can’t be unsent.</p>
+      <div class="loop"><i>${a.name}</i><span>says what it will do, with the numbers</span><i class="${!good ? 'on' : ''}">${first(ME)}</i><span class="${!good ? 'on' : ''}">says back the one that can’t be undone</span><i class="${good && !S.gone ? 'on' : ''}">AUGUR</i><span class="${good && !S.gone ? 'on' : ''}">checks it matches; only then go arms</span><i class="${S.gone ? 'on' : ''}">${first(ME)}</i><span class="${S.gone ? 'on' : ''}">says go</span></div>
+      <p class="small muted">The read-back is for steps that reach people outside the deployment or can’t be withdrawn. Publishing alone (which can be withdrawn) doesn’t ask for one.</p>
+    </section>
+    <aside class="panel ${good ? 'ok' : ''}">${S.gone ? `<p class="lite">${I('check', 16)} Gone at ${DATA.now}. ${fmt(ir[1].reach)} emailed, as read back. It is in ${a.name}’s diary with your read-back.</p>` : `
+      <label for="rb">${RB.ask}</label>
+      <input id="rb" inputmode="numeric" autocomplete="off" value="${S.val}" aria-describedby="rbm">
+      <p class="msg ${S.val && !good ? 'bad' : good ? 'good' : ''}" id="rbm">${!S.val ? 'Say it back to arm go.' : good ? 'Matches. Go is armed.' : `That isn’t what it will do. Read the sentence again; nothing has been sent.`}</p>
+      <div style="display:flex;gap:var(--space-2)"><button class="btn ${good ? 'go' : ''}" ${good ? '' : 'aria-disabled="true"'} data-go>${I('play', 14)} Go <span class="kbd">Enter</span></button><button class="btn">${I('pause', 14)} Hold</button></div>`}
+      <p class="tk">standby.readBack { field: recipients.count } · go accepted only when it matches · read-back stored with the audit event</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  const i = $('#rb'); if (i) { i.oninput = () => { S.val = i.value; const pos = i.selectionStart; render(); const j = $('#rb'); j.focus(); j.setSelectionRange(pos, pos); }; i.onkeydown = e => { if (e.key === 'Enter' && ok()) { S.gone = true; render(); } }; }
+  $('[data-go]') && ($('[data-go]').onclick = () => { if (ok()) { S.gone = true; render(); } });
+}
+function replay() {
+  clearLater(); S.val = ''; S.gone = false; settle(); render();
+  /* the moment: a wrong number first (the people, not the addresses), then the right one */
+  later(() => { S.val = String(SB.irreversible[0].reach); render(); }, MOMENT());
+  later(() => { S.val = RB.answer; render(); }, MOMENT() + ms('--motion-run') * 1.2);
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input')) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'r') replay(); else if (k === 't') { STATE.tech = !STATE.tech; document.body.classList.toggle('tech', STATE.tech); }
+});
+replay();
+</script>
+</body>
+</html>

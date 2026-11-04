@@ -94,6 +94,29 @@ test('the event bus carries events within the page', async ({ page }) => {
   await expect(check(page, 'bus')).toHaveText('pong');
 });
 
+test('a domain event the person may see reaches the app on the bus, and it reloads', async ({ page }) => {
+  since('1.10');
+  let loads = 0;
+  await page.route('**/api/reference/v1/thing', (route) => route.fulfill({ body: `thing ${++loads}` }));
+  await page.goto('/@me/reference');
+  await press(page, 'follow');
+  await expect(check(page, 'thing')).toHaveText('thing 1');
+  // Published as the stand-in events service would stream it: on this floor, on a topic of an app the person has here.
+  const publish = (detail: object) => page.evaluate((d) => dispatchEvent(new CustomEvent('augur:dev-domain-event', { detail: d })), detail);
+  await expect
+    .poll(async () => {
+      await publish({ topic: 'reference.thing.changed', payload: { thing: 't1' } });
+      return loads;
+    })
+    .toBeGreaterThan(1);
+  await expect(check(page, 'thing')).toHaveText(`thing ${loads}`);
+  // Another floor's: no reload.
+  const before = loads;
+  await publish({ topic: 'reference.thing.changed', workspace: 'dev-org' });
+  await page.waitForTimeout(300);
+  expect(loads).toBe(before);
+});
+
 test('leaving the app unmounts it', async ({ page }) => {
   await page.goto('/reference');
   await expect(check(page, 'token')).toHaveText('ok');

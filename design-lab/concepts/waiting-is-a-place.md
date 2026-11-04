@@ -10,3 +10,5 @@ A thing that can't be placed yet has its own visible state, not a reject: it nam
 First found in: [`2026-11-03-the-catalogue`](../runs/2026-11-03-the-catalogue/) (placing V2 and V6, combined).
 
 Could steer: Triage, Mandate asks, the commission (V), approvals.
+
+Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): work held one by one says why it didn't go in a batch; other supervisors' standbys are shown but can't be called (diary, standby V4).
