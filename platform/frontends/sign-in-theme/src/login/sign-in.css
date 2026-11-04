@@ -1,0 +1,184 @@
+/* AUGUR's sign-in pages: Keycloakify's pages (classes in KcPage.tsx) and the frame (Template.tsx) in
+   Common's look. Fields are Common's underlined field, buttons Common's primary and secondary. Every value
+   is a token (var(--…)) from @augur/kit-common/tokens.css: no raw colours, durations or distances. */
+
+.augur-signin-html, .augur-signin-body { margin: 0; min-height: 100%; background: var(--slate-deep); }
+.augur-signin-body { color: var(--ink); font-family: var(--font-sans); font-size: var(--type-body); line-height: var(--leading-body); }
+
+.augur-signin {
+  box-sizing: border-box;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--edge) var(--edge-tight);
+  background: radial-gradient(120% 90% at 50% 40%, var(--slate), var(--slate-deep));
+}
+.augur-signin *, .augur-signin *::before, .augur-signin *::after { box-sizing: border-box; }
+
+.augur-signin-card {
+  width: 100%;
+  max-width: var(--measure-decision);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--edge);
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-raised);
+  backdrop-filter: blur(var(--surface-blur));
+}
+
+.augur-signin-head { display: flex; flex-direction: column; gap: var(--space-4); }
+.augur-signin-logo { display: block; max-height: var(--target-md); max-width: var(--measure-card); object-fit: contain; align-self: flex-start; }
+.augur-signin-username { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); color: var(--ink); }
+
+.augur-signin a, .augur-signin-link { color: var(--green); text-decoration: none; }
+.augur-signin a:hover, .augur-signin-link:hover { text-decoration: underline; }
+.augur-signin-link { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.augur-signin-quiet { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--type-small); }
+.augur-signin :focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-gap); }
+
+/* Keycloak's message for the page: the shape, not only the colour, says which kind it is. */
+.augur-signin-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-inset);
+  background: var(--surface-inset);
+  font-size: var(--type-small);
+  line-height: var(--leading-small);
+}
+.augur-signin-message svg { flex: none; }
+.augur-signin-message[data-type='error'] svg { color: var(--danger); }
+.augur-signin-message[data-type='warning'] svg { color: var(--warning); }
+.augur-signin-message[data-type='success'] svg { color: var(--success); }
+.augur-signin-message[data-type='info'] svg { color: var(--info); }
+
+.augur-signin-content { display: flex; flex-direction: column; gap: var(--space-5); }
+.augur-signin-content form { display: flex; flex-direction: column; gap: var(--space-5); margin: 0; }
+.augur-signin-content p, .augur-signin-content li { margin: 0; color: var(--ink-muted); }
+.augur-signin-content ol, .augur-signin-content ul:not([class]) { margin: 0; padding-left: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); }
+.augur-signin-content li > ul { margin-top: var(--space-2); }
+.augur-signin-content img { display: block; margin: var(--space-3) 0; border-radius: var(--radius-inset); }
+/* Keycloakify's spacers, empty rows and forms of hidden fields take no room: the gaps space the page. */
+.augur-signin-content br,
+.augur-signin-content form:not(:has(input:not([type='hidden']), button, select, textarea, a)),
+.augur-signin-setting:not(:has(input, a)) { display: none; }
+.augur-signin-content hr { width: 100%; border: 0; border-top: 1px solid var(--hairline); margin: 0; }
+.augur-signin-content h2 { margin: 0; font-size: var(--type-label); line-height: var(--leading-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--ink-muted); font-weight: var(--weight-label); }
+
+/* Fields: Common's underlined field. */
+.augur-signin-group { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.augur-signin-label, .augur-signin-group label { color: var(--ink); font-weight: 500; font-size: var(--type-meta); line-height: var(--leading-meta); }
+.augur-signin-input {
+  width: 100%;
+  min-height: var(--target-md);
+  padding: var(--space-3) 0;
+  border: 0;
+  border-bottom: 1px solid var(--hairline-strong);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--type-body);
+  line-height: var(--leading-body);
+  transition: border-color var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard);
+}
+.augur-signin-input:hover { border-bottom-color: color-mix(in srgb, var(--ink) 50%, transparent); }
+.augur-signin-input:focus, .augur-signin-input:focus-visible { outline: none; border-bottom-color: var(--focus); box-shadow: 0 1px 0 var(--focus); }
+.augur-signin-input[aria-invalid='true'] { border-bottom-color: var(--danger); }
+.augur-signin-input:-webkit-autofill { -webkit-text-fill-color: var(--ink); box-shadow: 0 0 0 var(--target-md) var(--slate) inset; }
+.augur-signin-input-group { display: flex; align-items: stretch; gap: var(--space-2); }
+.augur-signin-input-group .augur-signin-input { flex: 1; min-width: 0; }
+.augur-signin-error { color: var(--danger); font-size: var(--type-small); line-height: var(--leading-small); }
+.augur-signin-hint { color: var(--ink-muted); font-size: var(--type-small); line-height: var(--leading-small); }
+.augur-signin-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Show or hide the password: Keycloakify draws an icon font AUGUR doesn't load, so the button says it in words. */
+.augur-signin-reveal {
+  flex: none;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-bottom: 1px solid var(--hairline-strong);
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: var(--type-small);
+  cursor: pointer;
+}
+.augur-signin-reveal::after { content: attr(aria-label); }
+.augur-signin-reveal:hover { color: var(--ink); }
+
+/* Remember me, and the link to reset a password. */
+.augur-signin-setting { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--type-small); }
+.augur-signin-setting label, .augur-signin-content .checkbox label { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 400; font-size: var(--type-small); }
+.augur-signin input[type='checkbox'], .augur-signin input[type='radio'] { accent-color: var(--green); width: var(--space-4); height: var(--space-4); margin: 0; }
+
+/* Buttons: Common's primary (one per page) and secondary. */
+.augur-signin-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.augur-signin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--target-md);
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-key);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--motion-instant) var(--ease-standard), box-shadow var(--motion-instant) var(--ease-standard),
+    color var(--motion-instant) var(--ease-standard), transform var(--motion-quick) var(--ease-standard);
+}
+.augur-signin-button:active { transform: scale(0.97); }
+.augur-signin-button:disabled { opacity: 0.4; cursor: default; }
+.augur-signin-block { width: 100%; }
+.augur-signin-primary { font-weight: 600; background: var(--green); color: var(--slate-deep); }
+.augur-signin-primary:hover:not(:disabled) { box-shadow: 0 0 var(--space-6) color-mix(in srgb, var(--green) 35%, transparent); }
+.augur-signin-secondary { padding: calc(var(--space-3) - 1px) calc(var(--space-5) - 1px); border: 1px solid var(--hairline-strong); }
+.augur-signin-secondary:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ink) 55%, transparent); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.augur-signin a.augur-signin-button { color: var(--ink); text-decoration: none; }
+.augur-signin a.augur-signin-primary { color: var(--slate-deep); }
+
+/* Other ways in: an organisation's own sign-in (Entra, brokered by Keycloak), or another step. */
+.augur-signin-providers { display: flex; flex-direction: column; gap: var(--space-4); }
+.augur-signin-provider-list { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.augur-signin a.augur-signin-provider {
+  display: flex; align-items: center; justify-content: center; min-height: var(--target-md); padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius-key); color: var(--ink);
+}
+.augur-signin a.augur-signin-provider:hover { text-decoration: none; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.augur-signin-choices { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.augur-signin-choice {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: var(--space-3) var(--space-4); text-align: left;
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius-inset); background: none; color: var(--ink); font: inherit; cursor: pointer;
+}
+.augur-signin-choice:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.augur-signin-choice-title { font-weight: 500; }
+.augur-signin-choice-detail { color: var(--ink-muted); font-size: var(--type-small); }
+.augur-signin-codes { margin: 0; padding: var(--space-4); border-radius: var(--radius-inset); background: var(--surface-inset); font-variant-numeric: tabular-nums; }
+.augur-signin-warning { padding: var(--space-3) var(--space-4); border: 1px solid var(--warning); border-radius: var(--radius-inset); }
+.augur-signin-info { color: var(--ink-muted); font-size: var(--type-small); text-align: center; }
+
+/* Under the card: the product's name and the languages. */
+.augur-signin-foot { display: flex; align-items: center; gap: var(--space-5); color: var(--ink-muted); font-size: var(--type-small); }
+.augur-signin-product { font-family: var(--font-rounded); letter-spacing: var(--tracking-mark); text-transform: uppercase; font-size: var(--type-label); }
+.augur-signin-languages { position: relative; }
+.augur-signin-languages summary { display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; list-style: none; }
+.augur-signin-languages summary::-webkit-details-marker { display: none; }
+.augur-signin-languages ul {
+  position: absolute; bottom: calc(100% + var(--space-2)); right: 0; z-index: var(--layer-menu); margin: 0; padding: var(--space-2) 0; list-style: none;
+  min-width: var(--reel-card); max-height: var(--measure-read); overflow-y: auto;
+  background: linear-gradient(var(--surface-overlay), var(--surface-overlay)), var(--slate-deep); border: 1px solid var(--hairline); border-radius: var(--radius-inset); box-shadow: var(--shadow-overlay); backdrop-filter: blur(var(--surface-blur));
+}
+.augur-signin-languages li a { display: block; padding: var(--space-2) var(--space-4); color: var(--ink); }
+.augur-signin-languages li a[aria-current='true'] { color: var(--green); }

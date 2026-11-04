@@ -1,62 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import Type from 'typebox';
 import semver from 'semver';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
 import { changesIn } from './changes.ts';
 import { LiveOverrides } from './live.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { automaticProblem, defaultDesiredState, windowAt } from './desired-state.ts';
-import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppChannel, type AppPolicy } from './app-updates.ts';
-import { appEntrySchema, settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
-import { APP_JOB_STEPS, type AppFollow, type AppJob, type AppJobOutcome, type AppJobStepState, type AppRelease, type AppStore, type RunningPreview } from './store.ts';
+import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds } from './app-updates.ts';
+import { settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
+import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
+import { empty, orNull, ref, refused } from './schemas.ts';
+import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, RunningPreview } from './store.ts';
 import { upstreamProblem } from './upstreams.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
 
-/** What an app release file must say before the runner is asked to install it. Mirrors AppRelease in contracts/registry.openapi.yaml. */
-export const APP_RELEASE_SCHEMA = 'augur.app-release/v1';
-const DIGEST_REF = '^[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}$';
-const appReleaseSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['schema', 'id', 'version', 'channel', 'manifest', 'service', 'frontend', 'signer'],
-  properties: {
-    schema: { const: APP_RELEASE_SCHEMA },
-    id: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' },
-    version: { type: 'string', minLength: 1, maxLength: 40 },
-    channel: { enum: ['stable', 'beta', 'dev', 'preview'] },
-    releasedAt: { type: 'string', maxLength: 40 },
-    sdk: { type: 'string', maxLength: 100 },
-    manifest: appEntrySchema,
-    service: { anyOf: [{ type: 'null' }, { type: 'object', additionalProperties: false, required: ['image'], properties: { image: { type: 'string', pattern: DIGEST_REF, maxLength: 300 } } }] },
-    frontend: {
-      anyOf: [
-        { type: 'null' },
-        {
-          type: 'object',
-          additionalProperties: false,
-          required: ['artifact', 'digest', 'mediaType'],
-          properties: { artifact: { type: 'string', pattern: DIGEST_REF, maxLength: 300 }, digest: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' }, mediaType: { type: 'string', maxLength: 100 } },
-        },
-      ],
-    },
-    signer: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['repository', 'workflow'],
-      properties: { repository: { type: 'string', pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' }, workflow: { type: 'string', pattern: '^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$' } },
-    },
-    asks: { type: 'object' },
-    notes: { type: 'string', maxLength: 20000 },
-    // A pull request's build: which one, and where to read it.
-    preview: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['pr'],
-      properties: { pr: { type: 'integer', minimum: 1 }, title: { type: 'string', maxLength: 300 }, url: { type: 'string', maxLength: 300 } },
-    },
-  },
-} as const;
+/** What an app release file must say before the runner is asked to install it: AppRelease in app-runner-schemas.ts. */
+export { APP_RELEASE_SCHEMA } from './app-runner-schemas.ts';
 
 /** How recently an admin must have entered their password to install code on the server. */
 const INSTALL_SIGN_IN_MS = 10 * 60 * 1000;
@@ -127,7 +89,8 @@ export interface AppRunnerRouteOptions {
  */
 export const appRunnerRoutes =
   ({ store, pillars, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date() }: AppRunnerRouteOptions) =>
-  async (app: FastifyInstance) => {
+  async (plain: FastifyInstance) => {
+    const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /** When the runner last asked what to do; it lives only as long as this process. */
     let runnerSeenAt: string | undefined;
     /** When automatic updates were last looked for on a runner's poll. */
@@ -217,7 +180,7 @@ export const appRunnerRoutes =
       const installedIds = new Set(installed.map((i) => i.app));
       const latestJob = (id: string) => jobs.find((j) => j.app === id && j.pr === undefined);
       return {
-        feed: updates.on ? 'on' : 'off',
+        feed: updates.on ? ('on' as const) : ('off' as const),
         ...(checkedAt ? { checkedAt } : {}),
         ...(problem ? { problem } : {}),
         ...(runnerSeenAt ? { runnerSeenAt } : {}),
@@ -245,7 +208,7 @@ export const appRunnerRoutes =
               .filter((r) => r.app === id && r.release?.service && onChannel(takesPreview(ring) ? 'beta' : 'stable', r.channel) && semver.lt(r.version, release.version))
               .sort((a, b) => semver.rcompare(a.version, b.version))
               .slice(0, 3)
-              .map((r) => ({ version: r.version, channel: r.channel })),
+              .map((r) => ({ version: r.version, channel: r.channel as 'stable' | 'beta' })),
             history: jobs.filter((j) => j.app === id && j.pr === undefined).slice(0, APP_HISTORY_LISTED).map(historyOf),
             developers: developers.filter((d) => d.app === id).map((d) => d.person),
             previews: running.filter((p) => p.app === id).map(previewView),
@@ -260,7 +223,8 @@ export const appRunnerRoutes =
             name: r.release!.manifest.name,
             ...(r.release!.manifest.description ? { description: r.release!.manifest.description } : {}),
             version: r.version,
-            channel: r.channel,
+            // Only stable or beta: newestOn and onChannel above never offer dev or preview here.
+            channel: r.channel as 'stable' | 'beta',
             ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
             signer: r.release!.signer,
             asks: { scopes: r.release!.manifest.scopes ?? [], storage: r.release!.manifest.storage ?? {}, maxUpload: r.release!.manifest.maxUpload ?? 10 },
@@ -293,15 +257,32 @@ export const appRunnerRoutes =
     });
 
     /** Who may try an app's pull requests' previews: people's ids. Previews run only for apps with someone to try them. */
-    app.put<{ Params: { id: string }; Body: { people: string[] } }>(
+    const installs = (description: string) => ({ ...ref(AppInstalls), description });
+    const signInAgain = refused('sign_in_again: enter the password again first');
+    const notDeploymentAdmin = refused('Not a deployment admin (the refusal names the requiredRole)');
+    const runnerUnreachable = refused("The sign-in service can't be reached to check the app runner's token");
+    const appParams = Type.Object({ id: Type.String() });
+
+    app.put(
       '/app-runner/apps/:id/developers',
       {
         schema: {
-          body: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['people'],
-            properties: { people: { type: 'array', maxItems: MAX_DEVELOPERS, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 100 } } },
+          summary: "Set who may try an installed app's pull requests' previews (deployment admins only)",
+          description: [
+            `People's ids, at most ${MAX_DEVELOPERS}. Previews run only for apps with developers; one taken off loses`,
+            'their choice of its previews. Needs a deployment admin who entered their password in the last',
+            '10 minutes, or it answers 401 sign_in_again. Audited as app.developers-set.',
+          ].join(' '),
+          params: appParams,
+          body: Type.Object(
+            { people: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { maxItems: MAX_DEVELOPERS, uniqueItems: true }) },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: installs("Admin → Apps' installs"),
+            401: signInAgain,
+            403: notDeploymentAdmin,
+            404: refused("The app runner hasn't installed that app"),
           },
         },
       },
@@ -324,7 +305,40 @@ export const appRunnerRoutes =
     );
 
     /** The previews the caller may try: of the apps they're a developer of, with the one they chose of each. */
-    app.get('/previews', async (req, reply) => {
+    app.get(
+      '/previews',
+      {
+        schema: {
+          summary: "The previews the caller may try, of the apps they're a developer of",
+          description: [
+            "Each pull request's newest build runs beside the app on the deployment, for a week after",
+            'its last build or until the pull request closes. `chosen` is the pull request whose',
+            'preview the caller uses instead of the app, if any.',
+          ].join(' '),
+          response: {
+            200: Type.Object(
+              {
+                apps: Type.Array(
+                  Type.Object({
+                    app: Type.String(),
+                    name: Type.String(),
+                    version: Type.String({ description: 'The installed version' }),
+                    chosen: Type.Optional(Type.Integer()),
+                    previews: Type.Array(ref(Preview)),
+                    live: Type.Optional(Type.String({ description: "Live on the workbench: the entry on the caller's own machine the shell loads instead of the app" })),
+                    liveProblem: Type.Optional(
+                      Type.String({ description: "Why the app can't be loaded from the caller's machine here (only the workbench, SERVER_RING=dev, does)" }),
+                    ),
+                  }),
+                ),
+              },
+              { description: "The caller's apps and their previews" },
+            ),
+            401: refused('Not signed in'),
+          },
+        },
+      },
+      async (req, reply) => {
       const caller = callerFromHeaders(req.headers);
       if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to see previews.' });
       const [mine, running, choices, installed] = await Promise.all([store.developers(), store.runningPreviews(), store.previewChoices(caller.id), store.installedApps()]);
@@ -348,12 +362,29 @@ export const appRunnerRoutes =
             };
           }),
       };
-    });
+      },
+    );
 
     /** Uses one of an app's running previews instead of the app, for the caller alone; `null` goes back to the app. */
-    app.put<{ Params: { id: string }; Body: { pr: number | null } }>(
+    app.put(
       '/previews/:id',
-      { schema: { body: { type: 'object', additionalProperties: false, required: ['pr'], properties: { pr: { type: ['integer', 'null'], minimum: 1 } } } } },
+      {
+        schema: {
+          summary: "Use one of an app's previews instead of the app, for the caller alone",
+          description: [
+            "The shell is given the preview's manifest, and the gateway sends the caller's calls to the",
+            'app to the preview, until they choose `null` (back to the app) or the preview goes.',
+          ].join(' '),
+          params: appParams,
+          body: Type.Object({ pr: orNull(Type.Integer({ minimum: 1 })) }, { additionalProperties: false }),
+          response: {
+            204: empty('Chosen'),
+            401: refused('Not signed in'),
+            403: refused("Not one of the app's developers"),
+            404: refused('No preview of that pull request is running'),
+          },
+        },
+      },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to try a preview.' });
@@ -368,9 +399,32 @@ export const appRunnerRoutes =
     );
 
     /** Loads an app's frontend from the caller's own machine instead of the app, for them alone, on the workbench; `null` stops. */
-    app.put<{ Params: { id: string }; Body: { url: string | null } }>(
+    app.put(
       '/previews/:id/live',
-      { schema: { body: { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: ['string', 'null'], maxLength: 2048 } } } } },
+      {
+        schema: {
+          summary: "Load an app's frontend from the caller's own machine, for them alone (Live on the workbench)",
+          description: [
+            'Only on the workbench (SERVER_RING=dev), whose front door lets the shell load scripts from *.ts.net.',
+            "The shell is given `url` as the app's entry for the caller until they send `null` or the registry",
+            "restarts. The app's service stays the installed one.",
+          ].join(' '),
+          params: appParams,
+          body: Type.Object(
+            {
+              url: orNull(Type.String({ maxLength: 2048, description: 'https://<machine>.ts.net/…/entry.ts, as pnpm dev:app <id> --live prints it' })),
+            },
+            { additionalProperties: false },
+          ),
+          response: {
+            204: empty('Loading it from there, or stopped'),
+            400: refused('Not an app entry on a machine on the tailnet'),
+            401: refused('Not signed in'),
+            403: refused("Not one of the app's developers"),
+            409: refused("This server isn't the workbench"),
+          },
+        },
+      },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to load an app from your machine.' });
@@ -386,22 +440,61 @@ export const appRunnerRoutes =
       },
     );
 
-    app.get('/app-runner/apps', async (req, reply) => {
-      if (!admin(req, reply)) return reply;
-      return appsView();
-    });
+    app.get(
+      '/app-runner/apps',
+      {
+        schema: {
+          summary: 'Installed apps and how each takes updates, and what the app feed offers (admins only)',
+          response: { 200: installs("Admin → Apps' installs"), 403: refused('Not an admin') },
+        },
+      },
+      async (req, reply) => {
+        if (!admin(req, reply)) return reply;
+        return appsView();
+      },
+    );
 
     /** Checks the app feed now (and starts any automatic updates it finds), rather than waiting for the next check. */
-    app.post('/app-runner/check', async (req, reply) => {
-      if (!admin(req, reply)) return reply;
-      await updates.check();
-      return appsView();
-    });
+    app.post(
+      '/app-runner/check',
+      {
+        schema: {
+          summary: 'Check the app feed now, starting any automatic updates it finds (admins only)',
+          response: { 200: installs("Admin → Apps' installs after the check"), 403: refused('Not an admin') },
+        },
+      },
+      async (req, reply) => {
+        if (!admin(req, reply)) return reply;
+        await updates.check();
+        return appsView();
+      },
+    );
 
     /** How an installed app takes new releases: its channel, and Automatic, Ask first or Hold. */
-    app.put<{ Params: { id: string }; Body: { channel: AppChannel; policy: AppPolicy } }>(
+    app.put(
       '/app-runner/apps/:id/follow',
-      { schema: { body: { type: 'object', additionalProperties: false, required: ['channel', 'policy'], properties: { channel: { enum: ['stable', 'beta', 'dev'] }, policy: { enum: ['automatic', 'ask', 'hold'] } } } } },
+      {
+        schema: {
+          summary: 'Set how an installed app takes new releases (deployment admins only)',
+          description: [
+            'Its channel, and its policy: automatic (a newer release on the channel that asks for nothing',
+            'new installs by itself), ask (each waits for an admin) or hold (nothing is offered). An app',
+            'with no choice yet follows stable, automatically. A production server (SERVER_RING=production)',
+            'follows stable only, and refuses beta or dev with 409. dev (dev builds too) is for a preview server.',
+            'Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401',
+            'sign_in_again. Audited as app.updates-set.',
+          ].join(' '),
+          params: appParams,
+          body: Type.Object({ channel: Type.Enum(['stable', 'beta', 'dev']), policy: Type.Enum(['automatic', 'ask', 'hold']) }, { additionalProperties: false }),
+          response: {
+            200: installs("Admin → Apps' installs"),
+            401: signInAgain,
+            403: notDeploymentAdmin,
+            404: refused("The app runner hasn't installed that app"),
+            409: refused('This is a production server: it follows stable releases only (error production_server)'),
+          },
+        },
+      },
       async (req, reply) => {
         // The same record as the desired state (ADR 0020), so the same gate (ADR 0022): a deployment admin who signed in just now.
         const caller = deploymentAdmin(req, reply, 'change how an app takes new releases');
@@ -442,32 +535,53 @@ export const appRunnerRoutes =
     };
 
     /** The runner's recent jobs, and when it last asked for work (none means it isn't running). */
-    app.get<{ Querystring: { app?: string } }>('/app-runner/jobs', async (req, reply) => {
-      if (!admin(req, reply)) return reply;
-      return { jobs: await store.appJobs(req.query.app), ...(runnerSeenAt ? { runnerSeenAt } : {}) };
-    });
+    app.get(
+      '/app-runner/jobs',
+      {
+        schema: {
+          summary: "The app runner's recent jobs, newest first (admins only)",
+          querystring: Type.Object({ app: Type.Optional(Type.String({ description: "Only this app's" })) }),
+          response: {
+            200: Type.Object(
+              { jobs: Type.Array(ref(AppJobSchema)), runnerSeenAt: Type.Optional(Type.String({ format: 'date-time' })) },
+              { description: "Up to 50 jobs, and when the runner last asked for work (missing when it hasn't since the registry started)" },
+            ),
+            403: refused('Not an admin'),
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!admin(req, reply)) return reply;
+        return { jobs: await store.appJobs(req.query.app), ...(runnerSeenAt ? { runnerSeenAt } : {}) };
+      },
+    );
 
     /**
      * Asks the runner to install a release (a first install, an upgrade or going back to an older
      * one) or to remove an app's containers. Needs an admin who entered their password in the last
      * few minutes: it puts code on the server.
      */
-    app.post<{ Body: { action: 'install'; release: AppRelease } | { action: 'install'; app: string; version: string } | { action: 'remove'; app: string } }>(
+    app.post(
       '/app-runner/jobs',
       {
         schema: {
-          body: {
-            oneOf: [
-              { type: 'object', additionalProperties: false, required: ['action', 'release'], properties: { action: { const: 'install' }, release: appReleaseSchema } },
-              // A release from the app feed, by version.
-              {
-                type: 'object',
-                additionalProperties: false,
-                required: ['action', 'app', 'version'],
-                properties: { action: { const: 'install' }, app: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' }, version: { type: 'string', minLength: 1, maxLength: 40 } },
-              },
-              { type: 'object', additionalProperties: false, required: ['action', 'app'], properties: { action: { const: 'remove' }, app: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' } } },
-            ],
+          summary: 'Ask the app runner to install a release or remove an app (deployment admins only)',
+          description: [
+            'Installing covers a first install, an upgrade and going back to an older version alike;',
+            'going back to an older version holds an app on Automatic there. A release its publisher',
+            "halted is refused (ADR 0018), and so is a pull request's build, or a dev build on a production",
+            'server. Needs a deployment admin who entered their password in the last 10 minutes, or it',
+            'answers 401 sign_in_again. Apps that ship with AUGUR are refused. Audited as',
+            'app.install-requested or app.uninstall-requested.',
+          ].join(' '),
+          body: JobRequest,
+          response: {
+            202: { ...ref(AppJobSchema), description: 'Waiting for the runner' },
+            400: refused("The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's or dev build it can't take, or a bad manifest"),
+            401: signInAgain,
+            403: notDeploymentAdmin,
+            404: refused('The app feed has no release file for that app and version'),
+            409: refused('The app ships with AUGUR, its publisher halted that release, or it already has a job waiting or under way'),
           },
         },
       },
@@ -522,46 +636,92 @@ export const appRunnerRoutes =
     );
 
     /** Takes back a job the runner hasn't started. One under way finishes, or leaves the old version serving. */
-    app.delete<{ Params: { id: string } }>('/app-runner/jobs/:id', async (req, reply) => {
-      const caller = admin(req, reply);
-      if (!caller) return reply;
-      const job = (await store.appJobs()).find((j) => j.id === req.params.id);
-      if (job?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes by itself.' });
-      if (!job || !(await store.cancelAppJob(job.id))) return reply.code(404).send({ error: 'not_found', message: 'No such job is waiting.' });
-      await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.job-cancelled', target: job.app, detail: { action: job.action } });
-      return reply.code(204).send();
-    });
+    app.delete(
+      '/app-runner/jobs/:id',
+      {
+        schema: {
+          summary: "Take back a job the runner hasn't started (admins only)",
+          description: 'Audited as app.job-cancelled.',
+          params: appParams,
+          response: {
+            204: empty('Cancelled'),
+            403: refused('Not an admin'),
+            404: refused('No such job is waiting'),
+            409: refused('It has started; it finishes by itself'),
+          },
+        },
+      },
+      async (req, reply) => {
+        const caller = admin(req, reply);
+        if (!caller) return reply;
+        const job = (await store.appJobs()).find((j) => j.id === req.params.id);
+        if (job?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes by itself.' });
+        if (!job || !(await store.cancelAppJob(job.id))) return reply.code(404).send({ error: 'not_found', message: 'No such job is waiting.' });
+        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.job-cancelled', target: job.app, detail: { action: job.action } });
+        return reply.code(204).send();
+      },
+    );
 
     /** What the runner should do next: the oldest open job, or nothing (204). */
-    app.get('/app-runner/next', async (req, reply) => {
-      if (!(await isRunner(req, reply))) return reply;
-      runnerSeenAt = new Date().toISOString();
-      // A window may have opened since the last check: look again, at most once a minute.
-      if (now().getTime() - lastAutoAt >= AUTO_EVERY_MS) {
-        lastAutoAt = now().getTime();
-        await autoUpdate().catch((err) => req.log.warn({ err }, 'automatic app updates failed'));
-      }
-      const job = await store.nextAppJob();
-      return job ?? reply.code(204).send();
-    });
+    app.get(
+      '/app-runner/next',
+      {
+        schema: {
+          summary: "The oldest open job (the deployment's app runner only)",
+          description: 'Signed in as the updater client (platform-updater). Each call counts as the runner being seen, and looks for automatic updates whose window has opened, at most once a minute.',
+          response: {
+            200: { ...ref(AppJobSchema), description: 'The job' },
+            204: empty('Nothing to do'),
+            403: refused('Not the app runner'),
+            503: runnerUnreachable,
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!(await isRunner(req, reply))) return reply;
+        runnerSeenAt = new Date().toISOString();
+        // A window may have opened since the last check: look again, at most once a minute.
+        if (now().getTime() - lastAutoAt >= AUTO_EVERY_MS) {
+          lastAutoAt = now().getTime();
+          await autoUpdate().catch((err) => req.log.warn({ err }, 'automatic app updates failed'));
+        }
+        const job = await store.nextAppJob();
+        return job ?? reply.code(204).send();
+      },
+    );
 
     /** One step of an open job, from the runner; with `outcome`, how it ended. */
-    app.post<{ Params: { id: string }; Body: Omit<AppJobStepState, 'at'> & { outcome?: AppJobOutcome; upstream?: string } }>(
+    app.post(
       '/app-runner/jobs/:id/progress',
       {
         schema: {
-          body: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['step', 'state'],
-            properties: {
-              step: { enum: [...APP_JOB_STEPS] },
-              state: { enum: ['running', 'done', 'failed'] },
-              message: { type: 'string', maxLength: 2000 },
-              outcome: { enum: ['done', 'failed'] },
+          summary: "Report a step of an open job (the deployment's app runner only)",
+          description: [
+            'The first report starts it. With `outcome` it ends, audited as app.installed,',
+            'app.install-failed, app.uninstalled, app.uninstall-failed, app.preview-started,',
+            'app.preview-failed, app.preview-removed or app.preview-remove-failed. A preview',
+            'that started ends with `upstream`, where it answers.',
+          ].join(' '),
+          params: appParams,
+          body: Type.Object(
+            {
+              step: ref(AppJobStep),
+              state: Type.Enum(['running', 'done', 'failed']),
+              message: Type.Optional(Type.String({ maxLength: 2000 })),
+              outcome: Type.Optional(Type.Enum(['done', 'failed'])),
               // Where a preview it started answers.
-              upstream: { type: 'string', maxLength: 300 },
+              upstream: Type.Optional(
+                Type.String({ maxLength: 300, description: "With a preview's outcome: where it answers, such as http://app-notes-pr12:8080" }),
+              ),
             },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: { ...ref(AppJobSchema), description: 'The job as it stands' },
+            400: refused("`upstream` isn't an address a preview's service can be at"),
+            403: refused('Not the app runner'),
+            404: refused("The job isn't open"),
+            503: runnerUnreachable,
           },
         },
       },

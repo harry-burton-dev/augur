@@ -216,7 +216,8 @@ services:
   # first (docs/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
   keycloak:
     logging: *logging
-    image: quay.io/keycloak/keycloak:26.8.1
+    # AUGUR's Keycloak: Keycloak with AUGUR's sign-in and email theme (ADR 0041, infra/service.Dockerfile).
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/keycloak:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     restart: unless-stopped
     command: ["start", "--import-realm"]
     environment:
@@ -244,6 +245,10 @@ services:
       PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:?set PLATFORM_ADMIN_FIRST_NAME in .env}
       PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:?set PLATFORM_ADMIN_LAST_NAME in .env}
       PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Platform}
+      # Shown on the sign-in pages and in emails: the organisation's name (as identity has it) and, if
+      # set, a link to its logo. The product's name is the realm's display name.
+      ORG_NAME: ${ORG_NAME:-Organisation}
+      ORG_LOGO_URL: ${ORG_LOGO_URL:-}
     # Its share of the server's memory: Keycloak sizes its Java heap from it.
     mem_limit: ${KEYCLOAK_MEM_LIMIT:-2g}
     # Ready once it answers on its management port (9000, inside the container only). The image has no
@@ -288,6 +293,8 @@ services:
       REALM_SESSION_MAX_HOURS: ${REALM_SESSION_MAX_HOURS:-}
       REALM_SIGN_IN_EVENT_DAYS: ${REALM_SIGN_IN_EVENT_DAYS:-}
       REALM_ADMIN_EVENT_DAYS: ${REALM_ADMIN_EVENT_DAYS:-}
+      # The languages offered at sign-in, comma separated, the first the default (default en).
+      REALM_LANGUAGES: ${REALM_LANGUAGES:-}
     depends_on:
       keycloak: { condition: service_healthy }
 

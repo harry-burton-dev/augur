@@ -430,9 +430,19 @@
       "description": "What the top floor, the whole organisation, is called.",
       "default": "Organisation",
       "x-services": [
-        "identity"
+        "identity",
+        "keycloak"
       ],
       "x-docs": "docs/deploy.md#first-start"
+    },
+    "ORG_LOGO_URL": {
+      "type": "string",
+      "description": "A link to the organisation's logo, shown on the sign-in pages and in emails. Empty shows none.",
+      "default": "",
+      "x-services": [
+        "keycloak"
+      ],
+      "x-docs": "docs/deploy.md#whats-in-it"
     },
     "BACKUP_HOUR_UTC": {
       "type": "string",
@@ -1312,6 +1322,15 @@
         "keycloak-config"
       ],
       "x-docs": "docs/deploy.md#day-to-day"
+    },
+    "REALM_LANGUAGES": {
+      "type": "string",
+      "description": "The languages offered at sign-in, comma separated, the first the default (say en,de,fr). Empty offers English only.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#whats-in-it"
     },
     "LOG_MAX_SIZE": {
       "type": "string",

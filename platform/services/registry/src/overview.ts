@@ -3,6 +3,10 @@
 // needs an admin. Also the routes that change a unit's desired state and mark a result looked at.
 import { callerFromHeaders, signedInRecently, type NewAuditEntry } from '@augur/service-kit';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import Type from 'typebox';
+import { ref, refused } from './schemas.ts';
+import { DesiredState as DesiredStateSchema, DesiredStateInput as DesiredStateInputSchema, Overview as OverviewSchema } from './update-schemas.ts';
 import semver from 'semver';
 import { newestOn, type AppFeedRelease, type AppUpdateChecker } from './app-updates.ts';
 import {
@@ -10,12 +14,10 @@ import {
   automaticProblem,
   firstUpgradeProblem,
   desiredStateProblems,
-  MAX_WINDOWS,
   policySentence,
   resolvedState,
   windowAt,
   type DesiredState,
-  type DesiredStateInput,
   type StoredDesiredState,
 } from './desired-state.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
@@ -224,30 +226,10 @@ export const overviewBuilder =
     });
   };
 
-const windowSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['day', 'start', 'hours'],
-  properties: { day: { type: 'integer', minimum: 0, maximum: 6 }, start: { type: 'string', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }, hours: { type: 'number', minimum: 1, maximum: 24 } },
-};
-
-const desiredStateSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['channel', 'policy', 'automaticUpTo', 'windows'],
-  properties: {
-    channel: { enum: ['stable', 'beta', 'dev'] },
-    policy: { enum: ['automatic', 'ask', 'hold'] },
-    automaticUpTo: { enum: ['patch', 'minor'] },
-    pin: { type: 'string', minLength: 1, maxLength: 64 },
-    windows: { type: 'array', maxItems: MAX_WINDOWS, items: windowSchema },
-    timeZone: { type: 'string', minLength: 1, maxLength: 64 },
-  },
-};
-
 export const overviewRoutes =
   ({ store, updates, appUpdates, timeZone, record, now = () => new Date(), reporting }: OverviewRouteOptions) =>
-  async (app: FastifyInstance) => {
+  async (plain: FastifyInstance) => {
+    const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const ring = updates.ring;
     const adminOf = (req: FastifyRequest) => {
       const caller = callerFromHeaders(req.headers);
@@ -259,18 +241,59 @@ export const overviewRoutes =
     const overview = async (): Promise<Overview> => ({ ...(await built()), ...(reporting ? { reporting: { mode: reporting.mode, why: reporting.why } } : {}) });
 
     /** Every unit at once: what it runs, what it follows, what's next and what needs an admin. */
-    app.get('/platform/overview', async (req, reply) => {
-      if (!adminOf(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
-      return overview();
-    });
+    app.get(
+      '/platform/overview',
+      {
+        schema: {
+          summary: "Every unit this server runs, with its desired state, what's next and what needs an admin (admins only)",
+          description: [
+            'AUGUR first, then each app the app runner installed. Each unit has its desired state (ADR 0020):',
+            'channel, policy, how far Automatic goes, a semver pin and the weekly windows an automatic upgrade',
+            'may start in, with whether a window is open now. Needs you lists a halted release being run, and',
+            "a failed or went-back result until an admin marks it looked at, and AUGUR's first upgrade on a",
+            'server, which Automatic leaves to an admin.',
+          ].join(' '),
+          response: {
+            200: { ...ref(OverviewSchema), description: 'The overview' },
+            403: refused('Not an admin'),
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!adminOf(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
+        return overview();
+      },
+    );
 
     /** A unit is AUGUR or an app the app runner installed. */
     const knownUnit = async (unit: string) => unit === AUGUR_UNIT || (await store.installedApps()).some((a) => a.app === unit);
 
     /** Sets how a unit takes new releases. Audited as platform.desired-state-set, with the record before. */
-    app.put<{ Params: { unit: string }; Body: DesiredStateInput & { timeZone?: string } }>(
+    app.put(
       '/platform/units/:unit/desired-state',
-      { schema: { body: desiredStateSchema } },
+      {
+        schema: {
+          summary: 'Set how a unit takes new releases (deployment admins only)',
+          description: [
+            "`unit` is augur or an installed app's id. Needs a deployment admin (ADR 0022) who entered their",
+            "password in the last 10 minutes, or it answers 401 sign_in_again. AUGUR's channel comes from",
+            "RELEASE_CHANNEL, so a different one is refused with 409; a production server's apps follow stable",
+            "only (409 production_server). Without timeZone the record takes the deployment's",
+            "(DEPLOYMENT_TIME_ZONE). Kept in the unit's history and audited as platform.desired-state-set,",
+            'with the record before.',
+          ].join(' '),
+          params: Type.Object({ unit: Type.String() }),
+          body: ref(DesiredStateInputSchema),
+          response: {
+            200: { ...ref(OverviewSchema), description: 'The overview, with the new record' },
+            400: refused('A bad pin, time zone or window, with how to write it'),
+            401: refused('sign_in_again: enter the password again first'),
+            403: refused('Not a deployment admin (the refusal names the requiredRole)'),
+            404: refused('This server runs no such unit'),
+            409: refused("AUGUR's channel is set in .env, or a production server's apps follow stable only"),
+          },
+        },
+      },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         // Policies, pins and windows decide what the server runs, so they need the deployment's own role (ADR 0022).
@@ -306,16 +329,41 @@ export const overviewRoutes =
     );
 
     /** The records a unit has had, newest first, each with who set it and when. */
-    app.get<{ Params: { unit: string } }>('/platform/units/:unit/desired-state/history', async (req, reply) => {
-      if (!adminOf(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how updates were set.' });
-      if (!(await knownUnit(req.params.unit))) return reply.code(404).send({ error: 'not_found', message: `This server runs no ${req.params.unit}.` });
-      return { unit: req.params.unit, history: await store.desiredStateHistory(req.params.unit) };
-    });
+    app.get(
+      '/platform/units/:unit/desired-state/history',
+      {
+        schema: {
+          summary: 'The records a unit has had, newest first (admins only, at most 50)',
+          params: Type.Object({ unit: Type.String() }),
+          response: {
+            200: Type.Object({ unit: Type.String(), history: Type.Array(ref(DesiredStateSchema)) }, { description: 'The history' }),
+            403: refused('Not an admin'),
+            404: refused('This server runs no such unit'),
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!adminOf(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how updates were set.' });
+        if (!(await knownUnit(req.params.unit))) return reply.code(404).send({ error: 'not_found', message: `This server runs no ${req.params.unit}.` });
+        return { unit: req.params.unit, history: await store.desiredStateHistory(req.params.unit) };
+      },
+    );
 
     /** Marks a finished upgrade or install looked at, for every admin: it leaves Needs you. */
-    app.post<{ Params: { kind: 'upgrade' | 'app-job'; id: string } }>(
+    app.post(
       '/platform/results/:kind/:id/seen',
-      { schema: { params: { type: 'object', required: ['kind', 'id'], properties: { kind: { enum: ['upgrade', 'app-job'] }, id: { type: 'string', maxLength: 64 } } } } },
+      {
+        schema: {
+          summary: 'Mark a finished upgrade or app install looked at, for every admin (admins only)',
+          description: 'It leaves Needs you. Audited as platform.result-seen.',
+          params: Type.Object({ kind: Type.Enum(['upgrade', 'app-job']), id: Type.String({ maxLength: 64 }) }),
+          response: {
+            200: { ...ref(OverviewSchema), description: 'The overview' },
+            403: refused('Not an admin'),
+            404: refused('No finished upgrade or job with that id'),
+          },
+        },
+      },
       async (req, reply) => {
         const caller = adminOf(req);
         if (!caller) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can mark a result looked at.' });
