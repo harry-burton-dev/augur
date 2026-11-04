@@ -1,0 +1,61 @@
+# Squawk lints each new database migration (scripts/check-migrations.mjs, ADR 0053).
+#
+# AUGUR's rule: within a major version, migrations only add, so the release before still runs on the tables
+# after a rollback (docs/versioning.md). The rules kept are the ones that catch a migration the release before
+# can't live with: drops, renames, type changes, columns made required, new write restrictions. A violation
+# needs a major changeset for its service, or a reviewed `-- squawk-ignore <rule>` comment on the statement.
+#
+# Each service runs its migrations at start, all in one transaction under an advisory lock, before it serves
+# (runMigrations in the service kit), so the rules about taking locks on a live table are left out.
+#
+# What Squawk has no rule for (truncate, deleting rows, updating every row) check-migrations.mjs checks itself,
+# under rule names of its own (augur-*) that the same ignore comment takes.
+
+pg_version = "16"
+# runMigrations wraps every run in one transaction.
+assume_in_transaction = true
+
+# Off by default in Squawk; each one catches something the release before can't run on.
+included_rules = [
+  "ban-drop-index",                  # its queries slow down, and a unique one stops guarding its upserts
+  "ban-drop-sequence",
+  "ban-drop-trigger",
+  "ban-drop-default",                # its inserts that leave the column out start failing
+  "ban-drop-domain",
+  "ban-drop-policy",
+  "ban-drop-extension",
+  "ban-drop-generated-expression",
+  "ban-alter-generated-expression",
+  "ban-revoke",
+  "ban-detach-inheritance",
+  "ban-disable-trigger",
+  "ban-replace-view-function",       # changes a view or function under it
+]
+
+excluded_rules = [
+  # About locks and timeouts on a live table. Migrations run at start, in one transaction, before the service
+  # serves; a lock or statement timeout would only make a start fail part way, and CONCURRENTLY can't run in
+  # a transaction at all.
+  "require-lock-timeout",
+  "require-statement-timeout",
+  "require-timeout-settings",
+  "require-concurrent-index-creation",
+  "require-concurrent-index-deletion",
+  "adding-foreign-key-constraint",
+  "disallowed-unique-constraint",
+  "adding-serial-primary-key-field",
+  "adding-field-with-default",
+  # Robustness against a half-run migration: the transaction already rolls a failing run back whole.
+  "prefer-robust-stmts",
+  # Flags every new column that is required with a default too, which is how AUGUR adds one. A constraint added
+  # to a table that has one already is still caught, by constraint-missing-not-valid.
+  "ban-new-write-restriction",
+  # Column style. Good advice for a new table, but not about rolling back, and these must not need a major.
+  "prefer-bigint-over-int",
+  "prefer-bigint-over-smallint",
+  "prefer-identity",
+  "prefer-text-field",
+  "prefer-timestamp-tz",
+  "ban-char-field",
+  "require-enum-value-ordering",
+]

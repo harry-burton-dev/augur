@@ -13,9 +13,10 @@ import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, 
 import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appReposFrom, appRunner } from './runner.ts';
+import { partsFor, shippedAppsFrom } from './parts.ts';
 import { composeAppHost, composeServer } from './server.ts';
 import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity } from './signers.ts';
-import { checkOnce, lookAfterWatch, ROLL_ORDER, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
+import { checkOnce, lookAfterWatch, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
 
 // Every setting the updater reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('updater', [
@@ -62,7 +63,12 @@ const serviceSecret = process.env.SERVICE_CLIENT_SECRET;
 const signInCheck = serviceSecret
   ? () => clientCredentials({ tokenUrl: serviceAuthFromEnv().tokenUrl, clientId: platformClientId('updater'), clientSecret: serviceSecret })()
   : undefined;
-const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl, signIn: signInCheck });
+// The apps that ship with this release (release/shipped-apps.json, in this image): the updater restarts and
+// checks them with the platform's own parts. An image without the file knows the platform's only, and refuses
+// an upgrade of a server that runs any other part (upgrade.ts).
+const shippedFile = '/augur/shipped-apps.json';
+const parts = partsFor(existsSync(shippedFile) ? shippedAppsFrom(JSON.parse(readFileSync(shippedFile, 'utf8'))) : []);
+const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl, signIn: signInCheck, healthUrls: parts.health });
 
 if (process.argv[2] === 'replace') {
   // Lets the updater that started this finish saying how the upgrade went first.
@@ -74,8 +80,8 @@ if (process.argv[2] === 'replace') {
 
 if (process.argv[2] === 'check') {
   // The parts this deployment runs, as its compose.yml names them; every part AUGUR has, if that can't be read.
-  const named = await server.services().catch(() => [...ROLL_ORDER]);
-  const result = await checkOnce(server, ROLL_ORDER.filter((service) => named.includes(service)));
+  const named = await server.services().catch(() => [...parts.order]);
+  const result = await checkOnce(server, parts.order.filter((service) => named.includes(service)), undefined, parts);
   console.log(JSON.stringify(result));
   process.exit(result.ok ? 0 : 1);
 }
@@ -123,7 +129,7 @@ const once = async () => {
   }
   log('upgrading', { from: target.from, to: target.version });
   await signIn();
-  const outcome = await runUpgrade(target, server, report, { devIdentity: AUGUR_DEV_SIGNER });
+  const outcome = await runUpgrade(target, server, report, { devIdentity: AUGUR_DEV_SIGNER, parts });
   log('upgrade ended', { outcome, to: target.version });
   if (outcome === 'done' && target.images[UPDATER]) await server.replaceSelf();
 };

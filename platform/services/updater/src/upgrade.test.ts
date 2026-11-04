@@ -1,7 +1,13 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { partsFor } from './parts.ts';
 import { checkOnce, lookAfterWatch, runUpgrade, Withdrawn, type Report, type Server, type Target } from './upgrade.ts';
 
+/** The apps a release ships, as release/shipped-apps.json would have them. */
+const parts = partsFor([
+  { id: 'folio', port: 8083, workers: ['folio-worker'] },
+  { id: 'atlas', port: 8086, workers: [] },
+]);
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const image = (service: string, digest: string) => `ghcr.io/o/r/${service}@sha256:${digest}`;
 const target = (more: Partial<Target> = {}): Target => ({
@@ -100,7 +106,7 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
 
 const run = async (t: Target, server: Server) => {
   const reports: Report[] = [];
-  const outcome = await runUpgrade(t, server, async (r) => void reports.push(r));
+  const outcome = await runUpgrade(t, server, async (r) => void reports.push(r), { parts });
   return { outcome, reports, steps: reports.map((r) => `${r.step} ${r.state}${r.outcome ? ` → ${r.outcome}` : ''}`), last: reports.at(-1)! };
 };
 
@@ -110,14 +116,14 @@ describe('an upgrade', () => {
     const dev = target({ version: '0.3.0-dev.48' });
     const elsewhere = fakeServer();
     const refused: Report[] = [];
-    await runUpgrade(dev, elsewhere.server, async (r) => void refused.push(r), { devIdentity });
+    await runUpgrade(dev, elsewhere.server, async (r) => void refused.push(r), { devIdentity, parts });
     expect(refused.find((r) => r.step === 'preflight' && r.state === 'failed')?.message).toContain('0.3.0-dev.48 is a dev build of AUGUR, and only the workbench (SERVER_RING=dev in .env) runs those.');
     expect(elsewhere.did).toEqual([]);
 
     const workbench = fakeServer();
     workbench.setEnv(`${workbench.env()}SERVER_RING=dev\n`);
     const reports: Report[] = [];
-    const outcome = await runUpgrade(dev, workbench.server, async (r) => void reports.push(r), { devIdentity });
+    const outcome = await runUpgrade(dev, workbench.server, async (r) => void reports.push(r), { devIdentity, parts });
     expect(reports.filter((r) => r.state === 'failed').map((r) => r.message)).toEqual([]);
     expect(outcome).toBe('done');
     const verified = workbench.did.filter((d) => d.startsWith('verify'));
@@ -173,6 +179,24 @@ describe('an upgrade', () => {
     const { outcome, last } = await run(shipped, fakeServer({ worker: true }).server);
     expect(outcome).toBe('rolled-back');
     expect(last.message).toContain('folio-worker stopped (exit code 1)');
+  });
+
+  it('refuses a release with an image for a part the server runs that it doesn’t know, rather than restart it unchecked', async () => {
+    const fake = fakeServer();
+    const services = fake.server.services;
+    fake.server.services = async () => [...(await services()), 'mandate'];
+    const { outcome, last } = await run(target({ images: { ...target().images, mandate: image('mandate', 'm3') } }), fake.server);
+    expect(outcome).toBe('rolled-back');
+    expect(last.message).toContain('Nothing was changed.');
+    expect(last.message).toContain('has an image for mandate, which this server runs, and this updater doesn’t know how to restart it');
+    expect(fake.did.some((d) => d.startsWith('up') || d.startsWith('env') || d.startsWith('backup'))).toBe(false);
+    // Without the apps that ship with AUGUR, it knows the platform's own parts only.
+    const alone = fakeServer();
+    alone.server.services = async () => [...(await services()), 'folio'];
+    const reports: Report[] = [];
+    const shipped = target({ images: { ...target().images, folio: image('folio', 'f3') } });
+    expect(await runUpgrade(shipped, alone.server, async (r) => void reports.push(r))).toBe('rolled-back');
+    expect(reports.at(-1)?.message).toContain('for folio');
   });
 
   it('verifies images where the deployment pulls them from', async () => {
@@ -340,18 +364,18 @@ describe('the watch after an upgrade (ADR 0020)', () => {
 });
 
 describe('one look on demand (node dist/index.js check)', () => {
-  const parts = ['storage', 'identity', 'registry', 'folio', 'folio-worker', 'web'];
+  const services = ['storage', 'identity', 'registry', 'folio', 'folio-worker', 'web'];
 
   it('passes when sign-in works, every part answers and AUGUR’s calls succeed, and says what it looked at', async () => {
-    const result = await checkOnce(fakeServer().server, parts);
-    expect(result).toEqual({ ok: true, checked: { signIn: true, parts, calls: { minutes: 10, requests: 100, serverErrors: 0 } }, problems: [] });
+    const result = await checkOnce(fakeServer().server, services, undefined, parts);
+    expect(result).toEqual({ ok: true, checked: { signIn: true, parts: services, calls: { minutes: 10, requests: 100, serverErrors: 0 } }, problems: [] });
   });
 
   it('fails and names each part that doesn’t answer, sign-in that doesn’t work and calls that fail', async () => {
     const fake = fakeServer({ signIn: true, errors: true, storage: true });
     fake.setEnv('PLATFORM_VERSION=0.3.0\n');
     const server = { ...fake.server, health: async (service: string) => (service === 'identity' ? Promise.reject(new Error('connect ECONNREFUSED')) : { version: '1' }) };
-    const result = await checkOnce(server, parts);
+    const result = await checkOnce(server, services, undefined, parts);
     expect(result.ok).toBe(false);
     expect(result.problems).toEqual([
       'Signing in doesn’t work: the sign-in service answered 503.',
@@ -364,7 +388,7 @@ describe('one look on demand (node dist/index.js check)', () => {
   it('counts a worker that stopped, and doesn’t judge errors when the gateway can’t say', async () => {
     const fake = fakeServer({ worker: true });
     fake.setEnv('PLATFORM_VERSION=0.3.0\n');
-    const result = await checkOnce({ ...fake.server, traffic: async () => undefined }, parts);
+    const result = await checkOnce({ ...fake.server, traffic: async () => undefined }, services, undefined, parts);
     expect(result.checked.calls).toBeNull();
     expect(result.problems).toEqual(['folio-worker stopped (exit code 1); its logs say why.']);
   });

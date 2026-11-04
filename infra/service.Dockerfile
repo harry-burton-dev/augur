@@ -50,6 +50,8 @@ COPY --from=build /out .
 COPY infra/deploy /augur/deploy
 # Which repositories publish the apps that live in their own (ADR 0047): the runner trusts each for its app.
 COPY release/app-repos.json /augur/app-repos.json
+# The apps that ship with this release: the updater restarts and checks them with the platform's own parts.
+COPY release/shipped-apps.json /augur/shipped-apps.json
 ENV NODE_ENV=production
 USER node
 CMD ["node", "dist/index.js"]
