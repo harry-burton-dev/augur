@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KeycloakDirectory } from './directory.ts';
-import { applyRealmSettings, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmSettingsFromEnv, TWO_STEP_STEP } from './realm.ts';
+import { applyLook, applyRealmSettings, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -112,5 +112,47 @@ describe('the sign-in flow', () => {
     const writes = calls.filter((c) => c.method !== 'GET').map((c) => `${c.method} ${c.path}`);
     expect(writes.slice(0, 3)).toEqual(['PUT ', 'DELETE /authentication/flows/f-old', 'POST /authentication/flows/browser/copy']);
     expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ browserFlow: 'browser' });
+  });
+});
+
+describe('the sign-in pages’ look and languages', () => {
+  const serverinfo = 'http://kc/admin/serverinfo';
+  const withTheme = { themes: { login: [{ name: 'keycloak.v2' }, { name: SIGN_IN_THEME, locales: ['de', 'en', 'fr'] }], email: [{ name: SIGN_IN_THEME }] } };
+
+  it('offer English unless a deployment asks for more, leaving out what isn’t a language', () => {
+    expect(realmLookFromEnv({})).toEqual({ theme: SIGN_IN_THEME, languages: ['en'] });
+    const warnings: string[] = [];
+    expect(realmLookFromEnv({ REALM_LANGUAGES: 'de, en,de,../x' }, (m) => warnings.push(m)).languages).toEqual(['de', 'en']);
+    expect(warnings[0]).toContain('../x');
+  });
+
+  it('put the realm in AUGUR’s theme, with the languages the pages have, the first the default', async () => {
+    let realm: Record<string, unknown> = { loginTheme: 'keycloak.v2' };
+    const { calls, kc } = keycloak((method, path, body) => {
+      if (path === serverinfo) return withTheme;
+      if (path !== '') return undefined;
+      if (method === 'PUT') realm = { ...realm, ...(body as object), supportedLocales: [...((body as { supportedLocales: string[] }).supportedLocales)].sort() };
+      return method === 'GET' ? realm : undefined;
+    });
+    const warnings: string[] = [];
+    const changes: string[] = [];
+    await applyLook(kc, { theme: SIGN_IN_THEME, languages: ['fr', 'en', 'tlh'] }, changes, (m) => warnings.push(m));
+    expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ internationalizationEnabled: true, supportedLocales: ['fr', 'en'], defaultLocale: 'fr', loginTheme: SIGN_IN_THEME, emailTheme: SIGN_IN_THEME });
+    expect(warnings).toEqual([expect.stringContaining('no tlh')]);
+    // Keycloak keeps the languages in its own order: that is no change.
+    await applyLook(kc, { theme: SIGN_IN_THEME, languages: ['fr', 'en'] }, changes);
+    expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+    expect(changes).toHaveLength(1);
+  });
+
+  it('keep Keycloak’s own look on a Keycloak without the theme, and say so', async () => {
+    const { calls, kc } = keycloak((method, path) => {
+      if (path === serverinfo) return { themes: { login: [{ name: 'keycloak.v2' }], email: [] } };
+      return path === '' && method === 'GET' ? { loginTheme: SIGN_IN_THEME, emailTheme: '' } : undefined;
+    });
+    const warnings: string[] = [];
+    await applyLook(kc, { theme: SIGN_IN_THEME, languages: ['en'] }, [], (m) => warnings.push(m));
+    expect(calls.find((c) => c.method === 'PUT')!.body).toMatchObject({ loginTheme: '', emailTheme: '' });
+    expect(warnings[0]).toContain(`no ${SIGN_IN_THEME} theme`);
   });
 });
