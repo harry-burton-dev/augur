@@ -1,6 +1,6 @@
 ---
 name: shell-owns-loudness
-status: to explore
+status: explored
 ---
 
 # The shell owns loudness
@@ -10,3 +10,5 @@ Apps raise a notice at a level; only the shell decides whether and how loudly it
 First found in: [`2026-11-03-room-tone`](../runs/2026-11-03-room-tone/) (grammar V1, combined V1 and V4).
 
 Could steer: Notifications contract; control room (E).
+
+Explored in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): the four classes (urgent, needs you, tell me, for the record) are the shell's loudness table; an app sets only the level and the address.

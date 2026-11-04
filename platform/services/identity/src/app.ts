@@ -75,7 +75,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       const platformOnly = async (req: FastifyRequest, reply: FastifyReply) => {
         try {
           if ((await identifyService(req.headers, verifyService))?.kind === 'platform') return true;
-          void reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can look floors up.' });
+          void reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can look floors up.' });
         } catch (err) {
           if (!(err instanceof ServiceAuthUnavailable)) throw err;
           void reply.code(503).send({ error: 'unavailable', message: err.message });

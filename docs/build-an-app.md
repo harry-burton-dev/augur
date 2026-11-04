@@ -36,6 +36,7 @@ Nothing else of the platform runs, so the shell stands in for it:
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
 - The catalogue is Home and your app. Home (`/@me/home`) shows what your app's `ctx.notify({ needsYou: true })` sends, and your glance card if you have one. `ctx.raise` and `ctx.request` reach your app when it `handles` the intent, and otherwise fail the way they do when no app handles one.
 - Notifications from `ctx.notify` appear in the stream. Ones your service sends with `notify` from the service kit don't, because there's no events service.
+- Nor do the domain events your service publishes. To try your `refreshOn`, send one from the browser console: `dispatchEvent(new CustomEvent('augur:dev-domain-event', { detail: { topic: 'expenses.claim.approved', payload: { claim: 'c1' } } }))`. It reaches your app on the floor you're on (`workspace` names another).
 
 To try your app with the rest of the platform, use the full local stack (see the [README](../README.md)) and register it as in step 7.
 
@@ -66,12 +67,12 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.path` | Where in your app they are, below its route: `/reports/q3` for `/expenses/reports/q3` |
 | `ctx.getToken()` | A current token to send as `Authorization: Bearer …` to `/api/<id>/…` |
 | `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. A team also has its `level`, what its level is called ("Department" right below the org, "Team" below that, unless an admin renamed them, SDK 1.9): say it where you'd say "team". The `kind` stays `team` at every level. SDK 1.1 |
-| `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on, and a call to your app on a floor where it's off for them (a call naming no floor is checked on the organisation's). SDK 1.1 |
+| `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on, and a call to your app on a floor where it's off for them (a call naming no floor is checked on the organisation's). Only a request to AUGUR's own origin carries them: since SDK 1.11 a URL on another site is fetched without the token or the floor, so fetching a public resource never hands it the person's sign-in. SDK 1.1 |
 | `ctx.notify({ title, body?, needsYou?, actions? })` | A notification on the shell's stream. `actions` (SDK 1.2) is up to two `{ label, intent }` buttons on it; pressing one raises the intent through the shell, as `ctx.raise` does |
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
 | `ctx.request(intent)` | Ask whichever app handles an intent for an answer; it opens over yours. Rejects with `isIntentCancelled(err)` when the person closes it |
 | `ctx.intent`, `ctx.reply` | Present when your app was opened to handle an intent, or to answer a request (`reply.respond(result)`) |
-| `ctx.bus` | Events within the page |
+| `ctx.bus` | Events within the page. The shell also puts every domain event on your floor from the apps the person has there, and the platform's, on it under its topic: `ctx.bus.on('folio.document.published', …)`, or `useData(…, { refreshOn: [topic] })` in the app kit ([domain-events.md](domain-events.md#in-the-browser)) |
 
 **What your app can reach.** Your app runs in the shell's own window with the signed-in person's session, so it can call anything that person can, admin routes included. That's why only apps the deployment's own team wrote or reviewed are installed this way ([ADR 0024](decisions/0024-apps-are-trusted-code.md)). Apps from anyone else will run sandboxed, with a token limited to their own upstreams. Your service still only gets the scopes the registry granted it, and the gateway still applies floor rules on every call.
 
@@ -335,6 +336,35 @@ The platform has a **publisher** role for people who may put things out beyond t
 ### Records like Artifacts'
 
 If your app keeps things people organise, version and publish, keep them the way Artifacts does: levels, a lifecycle on each version, grants that reach down, tags, relationships and publishing up the floors with one owner. [App patterns](app-patterns.md) sets out each one and the tables to keep, and `@augur/records` holds the rules.
+
+### Testing without AUGUR
+
+`@augur/mfe-sdk/testing` lets an app's tests run with no shell, gateway or services. It needs [MSW](https://mswjs.io) 2 or 3 as a dev dependency, and is for tests only: never import it from the app itself.
+
+- **`fakeContext(options?)`** is a whole `MountContext`: a person, their own floor (pass `workspace` for a team or the org), a real event bus, and a `ctx.fetch` that adds the token and `X-Workspace-Id` as the shell does and sends relative paths to `http://augur.test` (`TEST_BASE`; change it with `base`). It records what the app did in `ctx.raised`, `ctx.requested` and `ctx.notified`. `ctx.request` answers from `answers`, by intent type (a value, or a function of the intent), and rejects with an `IntentError` for a type with no answer, as the shell does when no app handles it; throw an `IntentCancelled` from an answer to act as if the person closed the picker. `reply: true` mounts the app as a picker: `ctx.reply.responses` and `ctx.reply.cancels` show what it answered. `previews` lists the previews that are on, and `ctx.moveTo(floor)` moves the fake shell to another floor.
+- **`contractHandlers(document, { base?, answers? })`** turns an OpenAPI 3.x contract, such as one from `contracts/` or your own service's, into MSW handlers: one per operation, answering with the example documented for its first 2xx response. Load the YAML yourself and pass the parsed document. `base` is where the service sits behind the gateway (`http://augur.test/api/registry`), and the contract's server path (`/v1`) goes after it. `answers` overrides an operation by its `operationId`, or by `METHOD /path` as the contract writes it (`GET /me/apps`), with a JSON body, a `Response`, or a function of the request. An operation with neither an answer nor an example answers 501 with a problem body that names it, and an answer for an operation the contract doesn't have throws.
+
+```ts
+import { readFileSync } from 'node:fs';
+import { setupServer } from 'msw/node';
+import { parse } from 'yaml';
+import { contractHandlers, fakeContext } from '@augur/mfe-sdk/testing';
+import app from './entry.js';
+
+const registry = parse(readFileSync('contracts/registry.openapi.yaml', 'utf8'));
+const server = setupServer(
+  ...contractHandlers(registry, { base: 'http://augur.test/api/registry', answers: { 'GET /me/apps': { workspace: 'ws-me', apps: [] } } }),
+);
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+afterAll(() => server.close());
+
+it('opens a document when one is picked', async () => {
+  const ctx = fakeContext({ answers: { 'document.pick': { app: 'folio', id: 'd1', title: 'Brief' } } });
+  await app.mount(document.createElement('div'), ctx);
+  // … press the app's Pick button, then:
+  expect(ctx.raised).toContainEqual(expect.objectContaining({ type: 'document.open' }));
+});
+```
 
 ## 6. Before you open a pull request
 

@@ -31,7 +31,7 @@ token. If you need to break one, change the rule here first.
 | **Depth, not scrims** | Harry's principle (PDR-010): don't fight for flat screen space, use shallow depth of field and layers. When focus moves to an active surface (a dialog, the palette, the radial menu), the layout stays in place and the plane behind loses fine detail and colour and shrinks a touch, as a lens refocuses. No black scrim, so nobody loses their bearings. Ambient things can sit softly out of focus while something that needs action pulls focus to itself, and hovering or focusing one brings it back at once. | `FocusStage` (in every `AppFrame`), `useRack`, `FocusField` and `FocusItem` in Quill, with the `depth-*` and `ambient-*` tokens; Quill's CSS racks Common's dialogs too. Reduced transparency falls back to the `veil`, reduced motion drops the shrink. Tests in `app-kit/src/depth.test.tsx` |
 | **The path you took is lit** | In a tree, the place you open opens in place and its neighbours dim, so only the path down to where you are is lit, joined by a line. Nothing is hidden: the neighbours stay where they were, readable at 4.5:1, and come up on hover and focus. | `PathTree` in Quill and the `path-dim` token, with its tests |
 | **Actions live on the object** | Every action an object has is in its radial menu (right-click, the context-menu key, Shift+F10 or a long press), round the object, which stays sharp while the rest racks out. Unavailable actions stay with their reasons; danger goes last; past eight it's a list. | `RadialMenu` and `useRingTarget` in Quill, with their tests |
-| **Tokens only** | Every duration, distance and colour comes from the token files in `packages/kit-common/tokens/` in the `augur-kit` repository; in React, through the Tailwind theme built from them, which has nothing else in it. Icons come from Lucide through `icon.ts`. | Token build; the theme test in `kit-common`; review |
+| **Tokens only** | Every duration, distance and colour comes from the token files in `packages/kit-common/tokens/` in the `augur-kit` repository; in React, through the Tailwind theme built from them, which has nothing else in it. Icons come from Lucide through `icon.ts`. | Token build; the theme and `tokens-only` tests in `kit-common`; `tokens-only.test.ts` in `platform/packages/ui-kit` over the Lit kit and AUGUR's frontends; review |
 
 Rules marked "coming" are agreed and being built. Until they land, the
 behaviour they describe isn't there yet.
@@ -40,3 +40,10 @@ Where the shell hides things today, it is to be measured against **Nothing is
 obtuse**: an app offered only on some kinds of floor, a menu entry that needs
 a role, and an empty menu should show as unavailable with the reason, unless
 knowing it exists is itself restricted.
+
+Already held to it: Agents, not built yet, stay among the Shell's functions
+and say why when pressed (until Aerie's functions take `unavailable` as its
+navs do, when they will also look unavailable). An app's Home card stays when
+the shell can't open the app, saying why and who can change it. Nothing a
+person reads calls AUGUR "the platform": `pnpm check:reasons` fails on it
+outside comments, unless the line says `check-reasons: code-only`.

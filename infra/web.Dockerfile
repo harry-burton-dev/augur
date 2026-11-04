@@ -30,6 +30,7 @@ RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/a
  && cp -r platform/frontends/admin/dist /site/apps/admin \
  && cp -r platform/frontends/upgrades/dist /site/apps/upgrades \
  && if [ -d .shipped/frontends ]; then cp -r .shipped/frontends/. /site/apps/; fi \
+ && mkdir -p /site/legal && cp LICENSE /site/legal/licence.txt && cp THIRD_PARTY_NOTICES.md /site/legal/third-party.txt \
  && mv /site/index.template.html /index.template.html \
  && node scripts/kit.mjs check
 
@@ -41,6 +42,7 @@ USER root
 RUN apk upgrade --no-cache
 USER 101
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 # Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
 ENV APP_ORIGINS=""
 # Set from SERVER_RING and PLATFORM_URL when the container starts (infra/deploy/live-origins.envsh): the workbench's own tailnet, on the workbench only.

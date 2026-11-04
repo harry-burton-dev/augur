@@ -12,3 +12,5 @@ Proposed by batch 1 research. Explored in [`2026-11-02-wear-and-time`](../runs/2
 Grown into [six ways to be empty](six-ways-to-be-empty.md) by [`2026-11-03-the-catalogue`](../runs/2026-11-03-the-catalogue/).
 
 Could steer: A, D.
+
+Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): editions list every source, even at zero.

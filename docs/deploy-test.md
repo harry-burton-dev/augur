@@ -22,7 +22,10 @@ LOCAL_TAG=0.14.0 infra/deploy-test.sh upgrade 0.13.1   # two published releases 
 BUILD=1 infra/deploy-test.sh upgrade 0.13.1            # this checkout, built here, against a release
 BUILD=1 infra/deploy-test.sh fresh
 BUILD=1 infra/deploy-test.sh broken                    # with the updater: its check must see AUGUR broken
+THEN='<command>' infra/deploy-test.sh fresh            # a fresh install, with <command> run against it
 ```
+
+**A command against a fresh install.** With `THEN` set, `fresh` allows sample data (`SEED_ALLOWED=true`) and, once the install is ready, runs `THEN` with `bash -c` before removing it. The command gets `AUGUR_URL` (the front door), `AUGUR_ADMIN_USER` and `AUGUR_ADMIN_PASSWORD` (the first admin, whose password must be changed at first sign-in) in its environment, and its exit status is the test's. The run suite's dry run uses it (the `augur-run` repository, ADR 0050): it seeds the install with `pnpm seed` and runs every scenario once.
 
 A release under test runs only its published images, the shipped apps' included (ADR 0049), so every AUGUR container must carry the release's version. With `BUILD=1`, `infra/deploy/compose.build.yml` builds the platform's images here, and Artifacts, Explorer and Data Atlas run AUGUR's images of the newest beta release (or `SHIPPED_APPS_VERSION`'s), so the version check leaves those four out.
 

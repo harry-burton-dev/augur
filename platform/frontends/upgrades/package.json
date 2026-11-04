@@ -2,6 +2,7 @@
   "name": "@augur/upgrades",
   "version": "0.1.2",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL.",
   "scripts": {

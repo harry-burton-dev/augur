@@ -37,11 +37,11 @@ export async function loadFloors(fetchImpl: typeof fetch, url: string, token: st
   try {
     res = await fetchImpl(url, { headers: { authorization: `Bearer ${token}`, accept: 'application/json' } });
   } catch {
-    throw new FloorsError("Can't reach the platform to find your floors. Try again.");
+    throw new FloorsError("Can't reach AUGUR to find your floors. Try again.");
   }
-  if (!res.ok) throw new FloorsError(`Finding your floors failed: the platform answered ${res.status}. Try again.`);
+  if (!res.ok) throw new FloorsError(`Finding your floors failed: AUGUR answered ${res.status}. Try again.`);
   const body = (await res.json()) as { workspaces?: Workspace[] };
   const floors = (body.workspaces ?? []).filter((f) => typeof f?.id === 'string' && typeof f.slug === 'string' && Array.isArray(f.path));
-  if (!ownFloor(floors)) throw new FloorsError('The platform sent an answer the shell could not read.');
+  if (!ownFloor(floors)) throw new FloorsError('AUGUR sent an answer this page could not read. Try again.');
   return floors.map(({ id, kind, name, slug, path, role, level }) => ({ id, kind, name, slug, path, role, ...(typeof level === 'string' ? { level } : {}) }));
 }

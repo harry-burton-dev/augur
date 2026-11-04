@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Grammar V5 · One decision, five forms</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the same decision as five real record forms, and what AUGUR's record takes from each ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-3)}
+.intro{display:flex;align-items:end;justify-content:space-between;gap:var(--space-5)}
+.intro p.l{max-width:var(--measure-wide);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.cols{min-height:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) minmax(0,1.3fr);gap:var(--space-3)}
+.form{min-height:0;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.form .fh{display:flex;align-items:center;gap:var(--space-2);color:var(--light);font-size:var(--type-meta)}
+.form .take{color:var(--ink-muted);border-bottom:1px solid var(--hairline);padding-bottom:var(--space-2)}
+.form .take b{font-weight:400;color:var(--x-proposed-lit)}
+.bit{border-radius:var(--radius-key);padding:var(--space-1) var(--space-2);margin:0 calc(var(--space-2) * -1);transition:background var(--motion-base) var(--ease-standard),box-shadow var(--motion-base) var(--ease-standard)}
+.bit.hot{background:var(--x-proposed-lit-wash);box-shadow:inset 2px 0 0 var(--x-proposed-lit)}
+.caps{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.verb{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);color:var(--ink-muted)}
+.it{font-style:italic;color:var(--ink-muted)}
+.raid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-2)}
+.raid span:nth-child(odd){color:var(--ink-muted);font-family:var(--font-mono);font-size:var(--x-proposed-type-micro)}
+.augur{border-color:var(--x-proposed-lit);background:color-mix(in srgb,var(--surface-pane) 80%,var(--x-proposed-lit-wash))}
+.fld{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);align-items:start;padding:var(--space-1) 0;border-bottom:1px solid var(--hairline);opacity:.4;transition:opacity var(--motion-base) var(--ease-out)}
+.fld.on{opacity:1}
+.fld b{display:block;font-weight:400;color:var(--light)}
+.fld .from{font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);white-space:nowrap;text-align:right}
+.fld.own .from{color:var(--x-proposed-lit)}
+@media (max-width:1400px){.cols{grid-template-columns:repeat(5,minmax(0,1fr)) minmax(0,1.2fr);gap:var(--space-2)}.form{padding:var(--space-2)}.form .take{display:none}.hide-s{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Minute sheet · V5</b> one decision in five forms, and what AUGUR’s record takes from each · board resolutions, Hansard, law reports, ADRs, RAID logs</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = Dn('D-118'), MT = meetingOf('D-118'), A2 = Ac('A-302');
+/* AUGUR's record: each field names the form it comes from; two are new */
+const FIELDS = [
+  ['words', 'The words, fixed', 'board'], ['said', 'What was said, and the agreed summary', 'hansard'], ['held', 'Decided apart from said', 'law'],
+  ['context', 'Context, consequences', 'adr'], ['status', 'Status, and what replaced it', 'adr'], ['owner', 'Actions: one owner, one date, one state', 'raid'],
+  ['rests', 'Rests on: each record, then and now', 'own'], ['revisit', 'Revisit if: watched lines', 'own']
+];
+const S = { hot: null, on: 99 };
+const bit = (k, html) => `<div class="bit ${S.hot === k ? 'hot' : ''}" data-k="${k}">${html}</div>`;
+function render() {
+  const forms = [
+    ['board', 'landmark', 'Board minute', 'the resolution as a fixed form of words',
+      bit('words', `<p class="caps">${MT.no.replace(' ', ' minute ')}/${D.item}</p><p>IT WAS RESOLVED ${D.words.replace(/^That/, 'that')}</p>`) + `<p class="it">Proposed: ${P(D.motion.by).name}. Seconded: ${P(D.motion.seconded).name}.</p>`],
+    ['hansard', 'mic', 'Hansard', 'a verbatim record with an agreed summary',
+      bit('said', `<p class="caps">Verbatim</p>${DATA.heard.slice(1, 4).map(h => `<p><span class="verb">${h.t}</span> <b style="font-weight:400">${P(h.by).name}:</b> ${h.text}</p>`).join('')}<p class="caps" style="margin-top:var(--space-1)">Agreed summary</p><p>${D.plain}</p>`)],
+    ['law', 'scale', 'Law report', 'what was decided versus what was said',
+      `<p class="caps">Catchwords</p><p>${D.subjects.join(' · ')}</p>` + bit('held', `<p class="caps">Held</p><p>${D.plain}</p><p class="caps">Obiter</p><p class="it">${D.obiter[0].text} (${P(D.obiter[0].by).name})</p>`) + `<p class="caps">Later</p><p>Followed: D-128. Reversed: ${D.reversedBy}.</p>`],
+    ['adr', 'scroll-text', 'Decision record', 'context, decision, consequences, status',
+      bit('status', `<p class="caps">Status</p><p>Superseded by ${D.reversedBy}</p>`) + bit('context', `<p class="caps">Context</p><p>${D.because[0].text}</p><p class="caps hide-s">Consequences</p><p class="hide-s">Kestrel keeps breakdown cover. Two fitters are needed by 30 June.</p>`)],
+    ['raid', 'list-checks', 'Action log', 'one owner, one date, one status',
+      bit('owner', `<div class="raid"><span>ID</span><span>A-302</span><span>Action</span><span>${A2.text}</span><span>Owner</span><span>${P(A2.owner).name}</span><span>Due</span><span>${dt(dueAt('A-302'), 'short')} <span class="seam"><s>${dt(A2.due, 'short')}</s></span></span><span>Status</span><span>${AS[actionAt('A-302').shown].s}</span><span>From</span><span>${A2.from}</span></div>`)]
+  ];
+  $('#app').innerHTML = topHTML(['Mandate', 'Decisions', 'Five forms'], [['1–8', 'trace a field'], ['T', 'record fields', 'h-t'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+    <div class="intro"><div><p class="eyebrow">Minute sheet · ${did('D-118')}</p><h1 class="h1">One decision, five forms</h1></div>
+    <p class="l">Five practices that keep decisions, each holding the same decision their own way. Each keeps something the others lose. AUGUR’s record, on the right, takes one thing from each and adds two of its own: what the decision rests on, and what would reopen it.</p></div>
+    <div class="cols">${forms.map(([k, ic, n, take, body], i) => `<section class="form pane scroll dep" style="--i:${i}"><p class="fh">${I(ic, 16)} ${n}</p><p class="take">Take: <b>${take}</b></p>${body}</section>`).join('')}
+      <section class="form pane augur scroll dep" style="--i:6"><p class="fh">${I('stamp', 16)} The AUGUR record</p><p class="take">One record type, in Mandate, with a reference other apps can point at</p>
+      ${FIELDS.map(([k, w, f], i) => `<button class="fld ${i < S.on ? 'on' : ''} ${f === 'own' ? 'own' : ''}" data-k="${k}"><span><b>${w}</b><span class="tk">${k}</span></span><span class="from">${f === 'own' ? 'new' : 'from ' + forms.find(x => x[0] === f)[2].toLowerCase()}</span></button>`).join('')}</section>
+    </div></div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.fld').forEach(b => { b.onmouseenter = b.onfocus = () => { S.hot = b.dataset.k; $$('.bit').forEach(x => x.classList.toggle('hot', x.dataset.k === S.hot)); }; });
+}
+function replay() {
+  clearLater(); S.on = 0; S.hot = null; render(); settle();
+  /* the moment: each field of the AUGUR record lights in turn, and the part of the form it came from lights with it */
+  FIELDS.forEach(([k], i) => later(() => { S.on = i + 1; S.hot = k; render(); }, MOMENT() + i * ms('--motion-base')));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const n = +e.key; if (n >= 1 && n <= FIELDS.length) { S.hot = FIELDS[n - 1][0]; render(); }
+});
+replay();
+</script>
+</body>
+</html>

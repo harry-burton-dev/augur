@@ -30,16 +30,18 @@ jobs:
   feed:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: oras-project/setup-oras@v1
-      - uses: sigstore/cosign-installer@v3
-      - run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1.2.4
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - run: echo "$ORAS_TOKEN" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
+        env:
+          ORAS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the feed
         run: node scripts/publish-feed.mjs --out "$RUNNER_TEMP/feed.json" --sign --push
         env:
