@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import semver from 'semver';
-import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
+import { callerFromHeaders, reservedIdProblem, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
 import { changesIn } from './changes.ts';
 import { LiveOverrides } from './live.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
@@ -49,7 +49,7 @@ export const releaseProblem = (release: AppRelease, pillars: string[]): string |
   if (!semver.valid(release.version)) return `"${release.version}" is not a version such as 1.2.0.`;
   if (pillars.includes(release.id)) return `${release.manifest.name} ships with AUGUR, so it’s upgraded with AUGUR, not on its own.`;
   if (!release.service) return 'The app runner installs apps with a service. A frontend-only app isn’t supported yet.';
-  return versionProblem(release.manifest) ?? surfaceProblem(release.manifest) ?? settingsProblem(release.manifest);
+  return reservedIdProblem(release.id) ?? versionProblem(release.manifest) ?? surfaceProblem(release.manifest) ?? settingsProblem(release.manifest);
 };
 
 /** Why a pull request's build can't be previewed beside the installed release; undefined when it can. */

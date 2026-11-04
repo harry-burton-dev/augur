@@ -6,7 +6,7 @@
 import Type, { type Static } from 'typebox';
 import semver from 'semver';
 import { APP_CATEGORIES, type AppCategory } from '@augur/mfe-sdk';
-import { SCOPES } from '@augur/service-kit';
+import { reservedIdProblem, SCOPES } from '@augur/service-kit';
 import { PLATFORM_APP_VERSIONS } from './platform-app-versions.js';
 
 /** How many settings one app may offer. */
@@ -407,6 +407,8 @@ export const settingsProblem = (entry: AppEntry): string | undefined => {
 export const conflictFor = (entry: AppEntry, others: AppEntry[]): string | undefined => {
   const platform = platformApps.find((a) => a.id === entry.id);
   if (platform) return `"${entry.id}" is one of AUGUR's own apps.`;
+  const reserved = reservedIdProblem(entry.id);
+  if (reserved) return reserved;
   const route = trimRoute(entry.route);
   const all = [...platformApps, ...others].filter((a) => a.id !== entry.id);
   const sameRoute = all.find((a) => trimRoute(a.route) === route);
