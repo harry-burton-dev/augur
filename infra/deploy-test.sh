@@ -160,9 +160,16 @@ no_restarts() {
   if [ -n "$bad" ]; then echo "$bad" >&2; return 1; fi
 }
 
-# Keycloak's image in the deploy files in use. Moving Keycloak to a new minor migrates its database,
+# The Keycloak version the deploy files in use run. Moving Keycloak to a new minor migrates its database,
 # which can't be undone, so going back across one is a restore of Keycloak's database (docs/upgrade.md).
+# AUGUR's Keycloak image is tagged with AUGUR's version, so the version is Keycloak's own image label,
+# which AUGUR's image keeps; an image without it is told apart by its name.
 keycloak_image() { pc config --format json | jq -r '.services.keycloak.image'; }
+keycloak_version() {
+  local image
+  image=$(keycloak_image)
+  docker image inspect --format '{{index .Config.Labels "version"}}' "$image" 2>/dev/null | grep . || echo "$image"
+}
 save_keycloak() { pc exec -T postgres pg_dump -U platform -d keycloak -Fc > "$work/keycloak.dump"; }
 restore_keycloak() {
   echo "Keycloak moved from $1 to $2: going back restores its database from before the upgrade." >&2
@@ -246,7 +253,7 @@ counted_apart() {
 }
 
 if [ "${BUILD:-}" = 1 ]; then
-  pc build $(services | grep -vx -e postgres -e backup -e garage -e keycloak -e docker-proxy) >&2
+  pc build $(services | grep -vx -e postgres -e backup -e garage -e docker-proxy) >&2
   # The build cache isn't needed again, and on a CI runner its space is.
   docker builder prune -af >/dev/null
 fi
@@ -276,12 +283,12 @@ case "$mode" in
     no_restarts
     on_version "$from"
     tables > "$work/before"
-    keycloak_from=$(keycloak_image)
+    keycloak_from=$(keycloak_version)
     save_keycloak
 
     use "$local_tag"
-    keycloak_to=$(keycloak_image)
     up
+    keycloak_to=$(keycloak_version)
     new=$(wait_ready "Upgrade from augur@$from to this checkout")
     no_restarts
     tables > "$work/after"
