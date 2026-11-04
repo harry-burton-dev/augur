@@ -150,13 +150,14 @@ const ready = async (server: Server, parts: Parts, services: readonly string[], 
       continue;
     }
     const want = versionOf(service);
+    const allowed = parts.readyMs[service] ?? READY_MS;
     let seen: string | undefined;
     for (let waited = 0; ; waited += POLL_MS) {
       const health = await server.health(service).catch(() => undefined);
       seen = health?.version;
       if (health && (!want || health.version === want)) break;
-      if (waited >= READY_MS) {
-        throw new StepFailed(health ? `${service} came back on ${seen ?? 'an unknown version'}, not ${want}.` : `${service} didn’t answer within ${READY_MS / 1000} s.`);
+      if (waited >= allowed) {
+        throw new StepFailed(health ? `${service} came back on ${seen ?? 'an unknown version'}, not ${want}.` : `${service} didn’t answer within ${allowed / 1000} s.`);
       }
       await server.wait(POLL_MS);
     }
@@ -421,7 +422,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       const paths = Object.keys(changedFiles);
       // Parts the release doesn't have, such as one added after it when going back: stopped while the
       // compose.yml that names them is still in place.
-      left = (await server.services()).filter((service) => parts.order.includes(service) && !target.images[service]);
+      left = (await server.services()).filter((service) => parts.order.includes(service) && !parts.kept.includes(service) && !target.images[service]);
       if (left.length) await server.remove(left);
       if (paths.length) await server.writeDeployFiles(changedFiles);
       await server.writeEnv(withEnvValue(settings, 'PLATFORM_VERSION', target.version));

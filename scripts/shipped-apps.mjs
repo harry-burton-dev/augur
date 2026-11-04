@@ -128,8 +128,8 @@ export const composeProblems = (json, file, text, kind, platform) => {
   return problems;
 };
 
-/** The platform's own parts that run its images: each service under platform/services, and the front door. */
-export const platformParts = (dir = join(root, 'platform/services')) => [...readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name), 'web'];
+/** The platform's own parts that run its images: each service under platform/services, AUGUR's Keycloak and the front door. */
+export const platformParts = (dir = join(root, 'platform/services')) => [...readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name), 'keycloak', 'web'];
 
 /** What's wrong with every compose file against release/shipped-apps.json. */
 export const layoutProblems = (json = readShipped()) => {
