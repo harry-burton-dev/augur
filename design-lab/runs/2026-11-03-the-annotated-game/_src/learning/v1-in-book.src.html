@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Learning V1 · In book</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Learning V1: while she drafts, a margin says when her moves follow a reviewed game, and speaks only at the move where that game went wrong ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.draft{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.draft .t{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.draft .meta{color:var(--ink-muted)}
+.st{display:grid;grid-template-columns:2em minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-3);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-inset);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.st .n{font-family:var(--font-mono);color:var(--ink-muted)}
+.st .x{grid-column:2 / 4;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.st .bk{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);white-space:nowrap}
+.st.typing{border-style:dashed;border-color:var(--hairline-strong)}
+.st.out{border-color:var(--x-proposed-warn)}
+.add{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.margin{min-height:0;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);border-left:2px solid var(--hairline-strong)}
+.margin .bookline{font:400 var(--type-small)/1.8 var(--font-mono);color:var(--ink-muted)}
+.margin .bookline b{font-weight:400;color:var(--light)}
+.note{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--x-proposed-warn);background:var(--x-proposed-warn-wash);display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}
+.note .h{display:flex;align-items:baseline;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.note .alt{display:grid;grid-template-columns:2em minmax(0,1fr);gap:var(--space-2);color:var(--ink)}
+.note .acts{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.quiet{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.draft{padding:var(--space-3) var(--space-4);gap:var(--space-2)}.st{padding:var(--space-2) var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Learning · V1</b> in book: while a new colleague drafts, the margin knows when her moves follow a reviewed game, and speaks only at the move where that game went wrong · opening books and “out of book”, the next step is shown</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = DATA.later.today;
+const L = DATA.later, D = L.draft, G = DATA.book.games.find(g => g.id === 'R-07');
+const S = { k: 2 };
+function render() {
+  const shown = D.moves.slice(0, S.k), out = S.k >= 3;
+  $('#app').innerHTML = topHTML(['Mandate', 'Drafts', D.id], [['N', 'add her next move'], ['R', 'replay']], { as: NOW }) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">In book</h1><p class="lede">${P(L.who).name} joined in ${dt(P(L.who).joined, 'month')}. She is drafting her first decision for the ${D.meeting} meeting on ${dt(D.meets)}. Nothing interrupts her. The margin follows her moves, and says something only where a reviewed game went wrong at the same move.</p></div>
+    <section class="draft pane"><p class="lab">Draft · ${D.id} · ${P(L.who).name}</p><p class="t">${D.title}</p><p class="small meta">${D.contractor}’s contract ends ${dt(D.ends)} · ${D.vans} vans · ${DATA.book.codes[D.code]} (${D.code}), recognised from her answers</p>
+      ${shown.map((m, i) => `<div class="st ${out && m.like === 6 ? 'out' : ''} ${i === S.k - 1 && S.k === 3 ? 'fade' : ''}"><span class="n">${m.n}.</span><span>${m.san} ${m.door ? I('door-closed', 14) : ''}</span><span class="bk">${m.like === 6 ? (out ? 'out of book' : '') : 'in book · R-07 move ' + m.like}</span><span class="x">${m.text}</span></div>`).join('')}
+      ${S.k < 3 ? `<div class="st typing"><span class="n">3.</span><span class="muted">Next step…</span><span></span></div>` : ''}
+      <p class="add">${I('plus', 14)} Add a step · the margin reads only what she has written</p></section>
+    <aside class="margin pane" aria-live="polite"><p class="eyebrow">${I('book-open', 12)} The book</p>
+      <p class="bookline">Your moves so far follow <b>${G.id}</b> (${G.unit}, ${G.year}):<br>${D.moves.slice(0, Math.min(S.k, 2)).map(m => `${m.n}. ${m.san.split(':')[0]} = R-07 ${m.like}`).join('<br>')}</p>
+      ${out ? `<div class="note fade"><p class="h">${gl('?', 'big')} R-07 played this move, and it was where the game turned.</p>
+          <p>${MV(6).n}. ${MV(6).san}: “${mainMark(6).line}” <span class="muted">· ${P(mainMark(6).by).name}</span></p>
+          <div class="alt">${gl('!')}<span>The book line, from R-03 and R-11: hire first, then give notice. ${DATA.book.games.find(g => g.id === 'R-03').note}</span></div>
+          <div class="acts"><button class="btn sm">${I('play', 14)} Replay R-07 from move 4</button><button class="btn sm">${I('message-square', 14)} Ask ${first(L.manager)}, who played it</button><button class="btn sm">${I('x', 14)} Keep my move, with a reason</button></div></div>`
+        : `<p class="quiet">${I('check', 12)} Nothing to say yet. Both moves were played in R-07 without trouble. <span class="tk">match := draft.facets = R-07.facets ∧ step.like = move</span></p>`}
+      <p class="quiet" style="margin-top:auto">Only agreed reviews speak here. Your draft is yours: the margin never tells anyone what you wrote, and keeping your move needs a reason only you and the meeting see.</p></aside>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() { clearLater(); S.k = 2; render(); settle(); later(() => { S.k = 3; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 'n') { S.k = Math.min(3, S.k + 1); render(); } });
+replay();
+</script>
+</body>
+</html>

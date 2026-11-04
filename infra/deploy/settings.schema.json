@@ -1312,6 +1312,51 @@
         "keycloak-config"
       ],
       "x-docs": "docs/deploy.md#day-to-day"
+    },
+    "LOG_MAX_SIZE": {
+      "type": "string",
+      "description": "The largest each container log file grows before Docker starts a new one.",
+      "default": "10m",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "LOG_MAX_FILES": {
+      "type": "string",
+      "description": "How many log files Docker keeps per container.",
+      "default": "3",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "KEYCLOAK_MEM_LIMIT": {
+      "type": "string",
+      "description": "Keycloak's memory limit; it sizes its Java heap from it.",
+      "default": "2g",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "FOLIO_WORKER_MEM_LIMIT": {
+      "type": "string",
+      "description": "The memory limit of Artifacts' rendition worker.",
+      "default": "4g",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "OTEL_LGTM_MEM_LIMIT": {
+      "type": "string",
+      "description": "The memory limit of the observability stack.",
+      "default": "2g",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
     }
   }
 }

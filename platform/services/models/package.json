@@ -1,6 +1,6 @@
 {
   "name": "@augur/models",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -13,8 +13,11 @@
   },
   "dependencies": {
     "@augur/service-kit": "workspace:*",
+    "@fastify/swagger": "^9.9.0",
+    "@fastify/type-provider-typebox": "^6.3.0",
     "fastify": "^5.6.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "typebox": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

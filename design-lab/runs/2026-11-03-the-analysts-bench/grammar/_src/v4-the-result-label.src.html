@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Grammar · V4 · The result label</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Grammar V4: what every technique leaves behind, drawn as a museum specimen label with its parts numbered ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:var(--space-6);align-items:start}
+.label{position:relative;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-pane);padding:var(--space-5) var(--space-5) var(--space-4);display:grid;gap:var(--space-3)}
+.label::before{content:"";position:absolute;inset:var(--space-1);border:1px solid var(--hairline);border-radius:2px;pointer-events:none}
+.part{position:relative;border-radius:var(--radius-key);padding:var(--space-1) var(--space-2);margin:0 calc(var(--space-2) * -1);transition:background var(--motion-base) var(--ease-standard)}
+.part.hot{background:var(--x-proposed-lit-wash);outline:1px solid var(--x-proposed-lit)}
+.pn{position:absolute;left:calc(var(--space-6) * -1 + var(--space-1));top:var(--space-1);display:inline-grid;place-items:center;width:var(--space-5);height:var(--space-5);border-radius:50%;border:1px solid var(--hairline-strong);font:500 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);background:var(--slate-deep);transition:background var(--motion-base) var(--ease-standard),color var(--motion-base) var(--ease-standard)}
+.part.hot .pn{background:var(--x-proposed-lit);color:var(--slate-deep);border-color:var(--x-proposed-lit)}
+.label .q{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.facts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--space-4);font-size:var(--type-small);line-height:var(--leading-small)}
+.res{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)}
+.legend{display:grid;gap:var(--space-1)}
+.legend button{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);text-align:left}
+.legend button b{display:block;font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.legend button span span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.legend button.hot{background:var(--surface-raised)}
+.legend .pn{position:static}
+.labelwrap{padding-left:var(--space-6)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V4</b> the result label: nine parts every technique leaves beside the output · museum specimen labels, lab notebooks, Heuer (1999)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const RUN = DATA.working.find(w => w.tid === 'ach');
+const PARTS = [
+  { b: 'The question', w: 'In the asker’s words, not the technique’s.' },
+  { b: 'The technique, and its time', w: 'Said before it started; what it took, after. Both kept.' },
+  { b: 'Who ran it', w: 'People by name. The model, if it took part, by its own mark.' },
+  { b: 'What it ran on', w: 'Facts from Data Atlas with their word at the time, never copied numbers.' },
+  { b: 'The result, in one sentence', w: 'Built from the marks by template. A model can’t write it.' },
+  { b: 'What it changed', w: 'The line of the output it moved. A result that changed nothing says so.' },
+  { b: 'What it left open', w: 'The next fact that would settle it, and who could get it.' },
+  { b: 'Pencil offered', w: 'What the model proposed, and whether a person took it.' },
+  { b: 'Where it is kept', w: 'The output it shaped. It travels with it, at every height.' }
+];
+const S = { hot: null };
+function render() {
+  const surv = hypsShown().filter(h => tested(h.id)).sort((a, b) => against(a.id) - against(b.id));
+  const part = (n, inner) => `<div class="part ${S.hot === n ? 'hot' : ''}"><span class="pn">${n + 1}</span>${inner}</div>`;
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, 'Working', T('ach').name], [['1–9', 'a part'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <div class="labelwrap scroll" style="max-height:100%"><div class="label">
+      ${part(0, `<p class="lbl">Question</p><p class="q">“${X.question}”</p>`)}
+      <div class="two">${part(1, `<p class="lbl">Technique</p>${tq('ach')}<p class="small" style="margin-top:var(--space-1)">said ${mins(RUN.said)} · took ${mins(RUN.took, RUN.took > RUN.said)} · ${RUN.on}</p><span class="tk">${T('ach').tech}</span>`)}
+        ${part(2, `<p class="lbl">Run by</p><p class="small">${RUN.by.map(p => P(p).name).join(', ')}</p>${STATE.gateway ? `<p class="small">${pencilBy()} proposed one explanation</p>` : ''}`)}</div>
+      ${part(3, `<p class="lbl">Ran on ${X.rows.length} facts</p><div class="facts">${X.rows.slice(0, 4).map(r => `<span>${DATA.facts[r.fact].say}</span>${yw(r.fact)}`).join('')}<span class="muted">and ${X.rows.length - 4} more</span><span></span></div>`)}
+      ${part(4, `<p class="lbl">Result</p><p class="res">${X.result}</p><p class="small muted">Least against it: ${surv.slice(0, 2).map(h => h.short.lc()).join(' and ')} (0 each). Most against: ${H('h1').short.lc()} (${against('h1')}), ruled out by two facts.</p>`)}
+      <div class="two">${part(5, `<p class="lbl">Changed</p><p class="small">${RUN.changed}.</p>`)}
+        ${part(6, `<p class="lbl">Left open</p><p class="small">${X.split.fact}: ${P(X.split.who).name} could get it.</p>`)}</div>
+      <div class="two">${part(7, `<p class="lbl">Pencil</p>${STATE.gateway ? `<p class="small pen">“${H('h6').say}”</p><p class="small muted">Taken as an explanation by ${P('sam').name}; not tested yet.</p>` : `<p class="small muted">Model off: nothing offered.</p>`}`)}
+        ${part(8, `<p class="lbl">Kept on</p><p class="small">${DATA.decision.id} and the briefing for ${DATA.intent.id}, ${fchip('fac')}</p>`)}</div>
+    </div></div>
+    <aside class="legend scroll" style="max-height:100%"><p class="eyebrow" style="margin-bottom:var(--space-2)">Every result label has these nine parts</p>
+      ${PARTS.map((p, i) => `<button class="${S.hot === i ? 'hot' : ''}" data-i="${i}"><span class="pn">${i + 1}</span><span><b>${p.b}</b><span>${p.w}</span></span></button>`).join('')}
+      ${gatewayNote()}
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.legend button').forEach(b => { b.onmouseenter = () => { S.hot = +b.dataset.i; render(); }; b.onclick = b.onmouseenter; });
+}
+function replay() { clearLater(); S.hot = null; settle(); render(); [4, 5].forEach((n, i) => later(() => { S.hot = n; render(); }, MOMENT() + i * ms('--motion-still') / 2)); later(() => { S.hot = 4; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (/^[1-9]$/.test(e.key)) { S.hot = +e.key - 1; render(); }
+});
+replay();
+</script>
+</body>
+</html>

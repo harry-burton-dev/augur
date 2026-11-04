@@ -64,6 +64,14 @@ describe('glance cards', () => {
     expect(cardsFor(manifest, me, ['a5', 'home', 'a2']).map((c) => c.app)).toEqual(['a5', 'a2', 'a1', 'a3', 'a4', 'a6']);
   });
 
+  it('keeps the card of an app it can’t open, saying why and who can change it', () => {
+    const manifest = [app('claims', { surfaces: [card('personal')] }), app('old', { sdk: '^0.1.0', surfaces: [card('personal')] })];
+    const [claims, old] = cardsFor(manifest, me, []);
+    expect(claims.unavailable).toBeUndefined();
+    expect(old).toMatchObject({ app: 'old', name: 'Old' });
+    expect(old.unavailable).toMatch(/made for an older version of AUGUR.*Its team needs to release/);
+  });
+
   it('mounts a card from its app’s entry, once per entry, and puts it away', async () => {
     const mount = vi.fn((el: HTMLElement) => void (el.textContent = 'card'));
     const unmount = vi.fn();

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Working set V6 · The agent’s bundle</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: what an agent was given, as a jury is given a bundle: each piece with a direction on what it may be used for; what it was not given, and why; what it said back ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-6)}
+.hd{grid-column:1 / -1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding-bottom:var(--space-3);border-bottom:1px solid var(--hairline-strong)}
+.mm.xl{--x-proposed-mark-size:2.75rem;font-size:var(--type-meta)}
+.hd h1{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.hd p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.hd .lim{text-align:right;font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.hd .lim b{color:var(--light);font-weight:400}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);overflow:auto;scrollbar-width:thin}
+.col h2{display:flex;gap:var(--space-2);align-items:center;font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.ex{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr);gap:var(--space-1) var(--space-3);padding:var(--space-3) 0;border-top:1px solid var(--hairline)}
+.ex .tab{grid-row:span 3;align-self:start;justify-content:center;padding:0}
+.ex b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.ex .dir{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);display:flex;gap:var(--space-2);align-items:baseline}
+.ex .dir svg{flex:none;color:var(--ink-muted);transform:translateY(2px)}
+.no{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-3);padding:var(--space-2) var(--space-3);background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.no b{font-weight:400;color:var(--ink);font-size:var(--type-small)}
+.no p{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.out{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border-radius:var(--radius-key);border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);opacity:0;transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.out.in{opacity:1}
+.out .mm{justify-self:start}
+.out p.t{font-style:italic;color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.out.accepted{border-style:solid;border-color:var(--hairline-strong);background:none}
+.out.accepted p.t{font-style:normal;color:var(--light)}
+.out.rejected p.t{text-decoration:line-through;text-decoration-color:var(--ink-muted);color:var(--ink-muted)}
+.out .vd{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--ink-muted);flex-wrap:wrap}
+.out .vd b{font-weight:400;color:var(--ink)}
+.rule-box{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.rule-box b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.hd p{display:none}.ex .src{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Working set · V6</b> the agent’s bundle: what it was given, each with a direction; what it wasn’t, and why; what it said back · jury bundles and directions, works under someone, pencil and ink</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { shown: 0, decided: false };
+const A = DATA.agent, B = DATA.bundle;
+function outHTML(o, k) {
+  const st = S.decided ? o.state : 'pencil';
+  return `<div class="out ${S.shown > k ? 'in' : ''} ${st}">${mmHTML(st === 'accepted')}<p class="t">${o.text}</p>
+    <p class="vd">${st === 'pencil' ? `${I('pencil', 12)} pencil · waiting for ${P(A.supervisor).name}` : st === 'accepted' ? `${I('check', 12)} <b>accepted by ${P(o.by).name}</b> · ${o.at} · now piece ${DATA.pieces.findIndex(p => p.id === o.piece) + 1} of ${T.id}, with ${A.mark}’s mark kept` : `${I('x', 12)} <b>not accepted by ${P(o.by).name}</b> · ${o.at} · <q>${o.why}</q>`}</p></div>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Given to ' + A.name], [['A', 'decide'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="hd"><span class="mm ink xl">${A.mark}</span><div><p class="eyebrow">Working set · what an agent was given</p><h1>${A.name}, for ${T.id}</h1><p>${A.name} ${A.errand}. Works under ${whoHTML(A.supervisor, { role: true })}; deputy ${whoHTML(A.deputy)}. It may read only what is in this bundle, and only for what each direction says.</p></div>
+      <p class="lim">Model calls <b>${B.calls}</b> of ${B.limit} today<br>Bundle sealed ${T.assembled.replace(' 2026', '')}, 16:05<br>Ends with the task, ${T.decideBy.replace(' 2026', '')}</p></div>
+    <section class="col"><h2>${I('book-open-check', 18)} Given · ${B.given.length}</h2>
+      ${B.given.map((g, k) => `<div class="ex"><span class="tab" data-tier="${g.kept}">${String.fromCharCode(65 + k)}</span><b>${g.title} ${g.restricted ? I('lock', 12) : ''}</b><span>${srcHTML({ app: g.app, title: g.title, kept: g.kept, keeper: T.owner, tech: 'grant · read · ' + T.id })}</span><p class="dir">${I('gavel', 12)}<span><b class="small">Direction:</b> ${g.direction}</span></p></div>`).join('')}
+      <h2 style="margin-top:var(--space-2)">${I('eye-off', 18)} Not given · ${B.notGiven.length}</h2>
+      ${B.notGiven.map(n => `<div class="no">${I('lock', 14)}<b>${n.title}</b><p>${n.why}</p></div>`).join('')}
+    </section>
+    <section class="col"><h2>${I('pencil', 18)} What it said back</h2>
+      <p class="small muted">The question it was asked: <q class="pen">${T.question}</q> It answers in pencil, one clause at a time, each pointing at a page of a given document.</p>
+      ${B.proposed.map(outHTML).join('')}
+      <div class="rule-box"><b>A person can review what it was given</b>, not only what it said: every exhibit, every direction, and everything held back, with why. If it says something it couldn’t have got from its bundle, that shows.</div>
+      <div class="rule-box"><b>When ${T.id} is handed over</b>, ${A.name}’s supervisor is handed over with it. No supervisor, no run: until the new owner takes it, the agent waits.</div>
+    </section>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.shown = 0; S.decided = false; render(); }, () => {
+  const step = ms('--motion-calm');
+  later(() => { S.shown = 1; $$('.out')[0].classList.add('in'); }, 0);
+  later(() => { S.shown = 2; $$('.out')[1].classList.add('in'); }, step * 0.7);
+  later(() => { S.decided = true; render(); }, step * 2);
+}, (e, k) => { if (k === 'a') { S.shown = 2; S.decided = !S.decided; render(); } });
+</script>
+</body>
+</html>

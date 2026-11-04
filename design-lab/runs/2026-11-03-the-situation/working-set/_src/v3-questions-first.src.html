@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Working set V3 · Questions first</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: the decider's questions come first; every piece is filed under the question it answers; an unanswered question is a gap with a name ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.hd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:end}
+.hd h1{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.hd .by{font-size:var(--type-small);color:var(--ink-muted);display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center}
+.qs{min-height:0;overflow:auto;scrollbar-width:thin;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);align-content:start}
+.q{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.q h2{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2);font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.q h2 .n{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.q .st{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.q .st b{font-weight:400;color:var(--ink)}
+.q ul{display:grid;gap:var(--space-1)}
+.q li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-1) 0;border-top:1px solid var(--hairline);opacity:0;transform:translateY(var(--space-1));transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.filed .q li{opacity:1;transform:none}
+.q li .rm{padding-top:2px}
+.q.gap{border-style:dashed;background:none}
+.q.gap .ask{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;margin-top:auto}
+.q.gap.lit{border-color:var(--x-proposed-lit);border-style:solid}
+.q.part h2::after{content:"";}
+.cov{display:flex;gap:2px;margin-top:auto}
+.cov i{flex:1;height:var(--space-1);border-radius:1px;background:var(--hairline)}
+.cov i.on{background:var(--ink)}
+.orph{grid-column:1 / -1;display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;font-size:var(--type-small);color:var(--ink-muted);padding-top:var(--space-2);border-top:1px solid var(--hairline)}
+@media (prefers-reduced-motion: reduce){.q li{transform:none}}
+@media (max-width:1400px){.q{padding:var(--space-2) var(--space-3)}.q li .src{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Working set · V3</b> questions first: the decider sets the questions, every piece files under one, an empty question is a gap with a name · commander’s critical information requirements, PIRs</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { filed: false, lit: false };
+/* the decider's questions for the task (set by Grace on 30 Oct), and the pieces that answer each */
+const QS = [
+  { q: `Is ${T.supplierShort} failing the contract?`, by: T.decider, pieces: ['d1', 'i1', 'i2', 'd4'], enough: true },
+  { q: 'Can we decline to renew without penalty?', by: T.decider, pieces: ['c1'], enough: false, note: 'Not until November’s count is in' },
+  { q: 'Is any of the rise our own doing?', by: T.decider, pieces: ['d5', 'i4'], enough: true },
+  { q: 'Do the two counts agree, and if not, why?', by: T.owner, pieces: ['d3', 'i3'], enough: true },
+  { q: 'What would renewing cost, and what are the other ways?', by: T.decider, pieces: ['c2', 'c3', 'c4'], enough: true },
+  { q: `Can ${T.supplierShort} fix it, and how fast?`, by: T.decider, pieces: ['i5'], enough: false, gap: true, who: 'kerry', how: 'a written recovery plan, with dates' }
+];
+function render() {
+  const answered = QS.filter(q => q.enough).length;
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'By question'], [['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap ${S.filed ? 'filed' : ''}">
+    <div class="hd"><div><p class="eyebrow">Working set · ${T.id} · filed by the questions the decision needs</p><h1>${T.title}</h1>
+      <p class="by">Questions set by ${whoHTML(T.decider, { role: true })} on 30 Oct · filled by ${whoHTML(T.owner)} · <span class="lite">${answered} of ${QS.length} answered well enough to decide</span></p></div>
+      <button class="btn sm">${I('plus', 14)} Ask another question</button></div>
+    <div class="qs">${QS.map((q, k) => `<section class="q ${q.gap ? 'gap' : ''} ${q.gap && S.lit ? 'lit' : ''}"><h2><span class="n">Q${k + 1}</span><span>${q.q}</span></h2>
+      <p class="st">${q.enough ? `${I('check', 12)} <b>Answered</b> · ${q.pieces.length} pieces` : q.gap ? `${I('circle-dashed', 12)} <b>Not answered</b> · only something said` : `${I('clock', 12)} <b>Not yet</b> · ${q.note}`}${q.by !== T.decider ? ` · asked by ${first(q.by)}` : ''}</p>
+      <ul>${q.pieces.map((id, j) => { const p = PC(id); return `<li style="transition-delay:calc(var(--motion-instant) * ${k + j})">${rm(p.rung, { word: false })}<span>${p.text} ${saidHTML(p)}<br>${srcHTML(p.src)}</span></li>`; }).join('')}</ul>
+      ${q.gap ? `<div class="ask"><span class="small muted">Who could answer: ${whoHTML(q.who, { role: true })}, with ${q.how}.</span><button class="btn sm ${S.lit ? 'go' : ''}">${I('send', 14)} Ask ${first(q.who)} for it</button></div>` : `<div class="cov" title="pieces at each rung">${RUNGS.map(r => `<i class="${q.pieces.some(id => PC(id).rung === r) ? 'on' : ''}"></i>`).join('')}</div>`}
+    </section>`).join('')}
+      <p class="orph">${I('info', 14)} Every piece answers at least one question. A piece that answers none can’t be added without a new question, so the set can’t grow by habit.</p></div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.filed = false; S.lit = false; render(); }, () => {
+  $('.wrap').classList.add('filed'); S.filed = true;
+  later(() => { S.lit = true; const g = $('.q.gap'); g.classList.add('lit'); g.querySelector('.btn').classList.add('go'); }, ms('--motion-calm') * 1.5);
+});
+</script>
+</body>
+</html>

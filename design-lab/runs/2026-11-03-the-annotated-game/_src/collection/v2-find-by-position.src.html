@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Collection V2 · Find by position</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Collection V2: describe where you stand in one sentence of facets; games that reached the same position by any route come back first ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.sent{padding:var(--space-4) var(--space-5);font-weight:300;font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-2));color:var(--ink)}
+.sent select{font:inherit;color:var(--light);background:var(--surface-inset);border:0;border-bottom:1px solid var(--light);padding:0 var(--space-1);border-radius:var(--radius-key) var(--radius-key) 0 0;cursor:pointer}
+.sent select:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.sent .tk{font-size:var(--type-small)}
+.res{min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);align-content:start}
+.card{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-pane);display:flex;flex-direction:column;gap:var(--space-2);transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out)}
+.card.full{border-color:var(--hairline-strong)}
+.card.low{opacity:var(--x-proposed-quiet)}
+.card .h{display:flex;align-items:baseline;gap:var(--space-2)}
+.card .id{font:400 var(--type-small)/1 var(--font-mono);color:var(--light)}
+.card .code{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);border:1px solid var(--hairline);border-radius:var(--radius-key);padding:2px var(--space-1)}
+.card .t{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.card .u{font-size:var(--type-small);color:var(--ink-muted)}
+.match{display:flex;gap:var(--space-1)}
+.match i{flex:1;height:3px;border-radius:1px;background:var(--hairline)}
+.match i.on{background:var(--light)}
+.fs{display:flex;gap:var(--space-1);flex-wrap:wrap}
+.fs span{font-size:var(--x-proposed-type-micro);line-height:1.5;border:1px solid var(--hairline);border-radius:var(--radius-pill);padding:0 var(--space-2);color:var(--ink-muted)}
+.fs span.on{border-color:var(--hairline-strong);color:var(--ink)}
+.rz{font:400 var(--type-label)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-top:auto}
+.rz.kept{color:var(--x-proposed-mark-good)}.rz.amended{color:var(--ink)}.rz.reversed{color:var(--x-proposed-mark-bad)}
+.trans{font-size:var(--type-small);line-height:var(--leading-small);color:var(--x-proposed-mark-info)}
+@media (max-width:1400px){.sent{font-size:var(--type-lead);line-height:calc(var(--leading-lead) + var(--space-2));padding:var(--space-3) var(--space-4)}.card{padding:var(--space-2) var(--space-3);gap:var(--space-1)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Collection · V2</b> find by position: say where you stand in one sentence of facets; games that reached the same position by another route come back too · transpositions in opening theory, said in a sentence, de Groot</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = DATA.later.today;
+const BK = DATA.book;
+const S = { f: { kind: 'contract', depends: 'equipment', door: 'notice', trial: 'yes' } };
+const sel = (k) => { const F = BK.facets.find(x => x.k === k); return `<select data-k="${k}" aria-label="${F.w}">${Object.entries(F.vals).map(([v, w]) => `<option value="${v}" ${S.f[k] === v ? 'selected' : ''}>${w}</option>`).join('')}</select>`; };
+function render() {
+  const keys = BK.facets.map(f => f.k);
+  const scored = BK.games.filter(g => !g.restricted).map(g => ({ g, n: keys.filter(k => g.facets[k] === S.f[k]).length })).sort((a, b) => b.n - a.n || b.g.year - a.g.year);
+  const hidden = BK.games.filter(g => g.restricted);
+  $('#app').innerHTML = topHTML(['Mandate', 'The book', 'Find by position'], [['R', 'replay']], { as: NOW }) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">Find by position</h1><p class="lede">Search the book by where you stand, not by subject. Two decisions about different things can reach the same position: a change to ${sel('kind')} that depends on ${sel('depends')}, where the step you can’t undo is ${sel('door')}, made ${sel('trial')}.</p></div>
+    <p class="sent pane">Games where ${S.f.depends === 'none' ? 'nothing new had to be in place' : BK.facets[1].vals[S.f.depends] + ' had to be in place'} before ${BK.facets[2].vals[S.f.door]} ran out. <span class="tk">facets: ${keys.map(k => k + '=' + S.f[k]).join(' ')}</span></p>
+    <section class="res scroll">${scored.map(({ g, n }) => `<div class="card dep ${n === keys.length ? 'full' : n <= 1 ? 'low' : ''}" style="--i:${scored.findIndex(x => x.g === g)}">
+        <div class="h"><span class="id">${g.id}</span><span class="code">${g.code}</span><span class="u">${g.unit}, ${g.year}</span></div><p class="t">${g.title}</p>
+        <div class="match" aria-label="${n} of ${keys.length} facts match">${keys.map(k => `<i class="${g.facets[k] === S.f[k] ? 'on' : ''}"></i>`).join('')}</div>
+        <div class="fs">${keys.map(k => `<span class="${g.facets[k] === S.f[k] ? 'on' : ''}">${BK.facets.find(x => x.k === k).vals[g.facets[k]]}</span>`).join('')}</div>
+        ${g.code !== (S.f.depends === 'hiring' ? 'C3.2' : S.f.depends === 'equipment' ? 'C3.3' : 'C3.1') && n === keys.length ? `<p class="trans">${I('git-merge', 12)} A different code (${BK.codes[g.code].toLowerCase()}), the same position.${g.note ? ' “' + g.note + '”' : ''}</p>` : ''}
+        <p class="rz ${g.result}">${DATA.results[g.result]} · ${g.motifs.map(mk => BK.motifs[mk].name.toLowerCase()).slice(0, 2).join(', ') || 'no motifs'}</p></div>`).join('')}
+      ${hidden.length ? `<div class="card low"><p class="t">${hidden.length} more you can’t open</p><p class="u">${hidden.map(g => `${g.id}, ${g.unit}`).join('; ')}. Reach follows the decision. Ask ${P(hidden[0].restricted.who).name}.</p></div>` : ''}</section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('select').forEach(s => s.onchange = () => { S.f[s.dataset.k] = s.value; render(); });
+}
+function replay() { clearLater(); S.f = { kind: 'contract', depends: 'equipment', door: 'notice', trial: 'yes' }; render(); settle(); later(() => { S.f.depends = 'hiring'; S.f.trial = 'yes'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { commonKeys(e, render, replay); });
+replay();
+</script>
+</body>
+</html>

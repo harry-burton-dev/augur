@@ -1,6 +1,6 @@
 ---
 name: the-technique-fits-the-question
-status: to explore
+status: explored
 ---
 
 # The technique fits the question
@@ -10,3 +10,5 @@ People describe what they are trying to decide (explain, choose, forecast, plan)
 Proposed by batch 6 research.
 
 Could steer: the analyst's bench (AA), Explorer, Mandate planning.
+
+Explored in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): six kinds of question, one technique each, offered one at a time by rule at pause points; "no technique" is an answer; the bench as a Quill kit part with results in Mandate (grammar V2 and V3, choose V2 and V3, combined V1 and V2).

@@ -38,7 +38,7 @@ services:
       POSTGRES_USER: platform
       POSTGRES_PASSWORD: platform-local-only
       POSTGRES_DB: platform
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
 
   # Apps' files: S3's API at http://localhost:3900 (region "garage"), admin API at :3903.
@@ -47,7 +47,7 @@ services:
     environment:
       GARAGE_RPC_SECRET: 0000000000000000000000000000000000000000000000000000000000000000
       GARAGE_ADMIN_TOKEN: platform-local-only
-    ports: ["3900:3900", "3903:3903"]
+    ports: ["127.0.0.1:3900:3900", "127.0.0.1:3903:3903"]
     volumes: ["./garage/garage.toml:/etc/garage.toml:ro", "garagemeta:/var/lib/garage/meta", "garagedata:/var/lib/garage/data"]
 
   # Each app's own database login and schema, and its own bucket and key, then stops. See docs/app-storage.md.
@@ -75,7 +75,7 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       # Browsers and the gateway reach Keycloak at different addresses; tokens name this one.
       KC_HOSTNAME: http://localhost:8180
-    ports: ["8180:8080"]
+    ports: ["127.0.0.1:8180:8080"]
     volumes:
       - ./keycloak/platform-realm.json:/opt/keycloak/data/import/platform-realm.json:ro
       # The server's breached-password list, so local passwords follow the same policy.

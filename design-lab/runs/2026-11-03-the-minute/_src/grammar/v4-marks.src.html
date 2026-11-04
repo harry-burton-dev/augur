@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Grammar V4 · The marks</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: the marks at three sizes, and a citation that always shows its decision's status ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.cite{grid-column:1 / -1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-5);align-items:center;padding:var(--space-3) var(--space-5)}
+.cite .doc{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink);max-width:var(--measure-wide)}
+.cite .doc .src{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-bottom:var(--space-1)}
+.cref{display:inline-flex;align-items:center;gap:var(--space-2);padding:0 var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);line-height:var(--leading-lead);white-space:nowrap;vertical-align:1px;transition:border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.cref .dm{height:1em}
+.cref.st-review{border-color:var(--x-proposed-warn);background:var(--x-proposed-warn-wash)}
+.cref.st-reversed{background:var(--x-proposed-stale)}
+.cref .to{color:var(--ink-muted)}
+.scrub{display:flex;flex-direction:column;gap:var(--space-1);align-items:flex-end}
+.scrub .dates{display:flex;gap:var(--space-1)}
+.scrub button{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);padding:2px var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.scrub button[aria-pressed="true"]{border-color:var(--x-proposed-lit);color:var(--light)}
+.tbl{min-height:0;padding:var(--space-3) var(--space-4)}
+.tbl h2{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--space-2)}
+table{width:100%;border-collapse:collapse}
+th{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);text-align:left;padding:0 var(--space-2) var(--space-2);border-bottom:1px solid var(--hairline-strong);font-weight:400}
+td{padding:var(--space-2);border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);vertical-align:middle;color:var(--ink)}
+td.m{color:var(--ink-muted)}
+tr.hot td{background:var(--x-proposed-lit-wash)}
+.row{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:var(--space-2);align-items:center;padding:var(--space-1) var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);min-width:0}
+.row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.big{display:flex;align-items:center;gap:var(--space-2)}
+.big .dm{width:4px;height:var(--space-5)}
+.big .stw{font-size:var(--type-small)}
+.is-reversed .t,.is-spent .t,.is-lapsed .t{opacity:var(--x-proposed-reversed)}
+.other{display:grid;gap:var(--space-2);margin-top:var(--space-3)}
+.other div{display:grid;grid-template-columns:minmax(150px,auto) minmax(0,1fr);gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);align-items:center}
+.other .x{color:var(--ink)}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:var(--space-3)}td.m{display:none}th.m{display:none}.cite .doc{font-size:var(--type-body);line-height:var(--leading-body)}.other div{grid-template-columns:120px minmax(0,1fr)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Minute sheet · V4</b> the marks at three sizes, and a citation that always shows its decision’s status · legal citators, ADR status</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = Dn('D-118');
+const DATES = [['2026-05-12', 'agreed'], [D.revisitIf[1].tripped, 'line crossed'], [D.affirmedOn, 'kept'], [D.revisitIf[0].tripped, 'line crossed'], [D.reversedOn, 'reversed']];
+const S = { at: DATES.length - 1, hot: 'reversed' };
+const MEAN = {
+  'motion': 'Put, not yet voted. Dashed, like the honest blank.',
+  'in force': 'Agreed and binding. Solid, full light.',
+  'review': 'A revisit line was crossed. Warning edge, never red: it is a question, not a failure.',
+  'amended': 'A later decision changed a term. The bar has a seam.',
+  'reversed': 'A later decision undid it. Hatched, quieter, still all there, with a pointer on.',
+  'spent': 'It has done its work; nothing more follows from it.',
+  'lapsed': 'Its own end date passed. Dotted.'
+};
+const SAMPLE = { 'motion': 'D-118', 'in force': 'D-131', 'review': 'D-118', 'amended': 'D-104', 'reversed': 'D-118', 'spent': 'D-117', 'lapsed': 'D-105' };
+function cref(id, at) {
+  const st = statusAt(id, at), d = Dn(id);
+  const tail = st === 'reversed' ? ` <span class="to">→ ${did(d.reversedBy)}</span>` : st === 'amended' ? ` <span class="to">→ ${did(d.amendedBy)}</span>` : '';
+  return `<span class="cref ${ST[st].cls}" title="${ST[st].w}">${did(id)}<i class="dm ${ST[st].cls}"></i><span>${ST[st].w.toLowerCase()}</span>${tail}</span>`;
+}
+function render() {
+  const at = DATES[S.at][0], doc = DATA.docs['doc-proc'];
+  $('#app').innerHTML = topHTML(['Mandate', 'Decisions', 'The marks'], [['← →', 'move the date'], ['T', 'record fields', 'h-t'], ['R', 'replay']], { as: at }) +
+    `<main class="main"><div class="wrap">
+    <section class="cite pane dep" aria-label="A citation in a document"><div><p class="eyebrow">A decision, cited</p><p class="h2" style="white-space:nowrap">Word size</p></div>
+      <p class="doc"><span class="src">${I('file-text', 12)} ${doc.title}, section 4 · in Artifacts · written by ${P(doc.by).name}</span>Our own fitters inspect every North depot van each month, in the bay at the back of the yard, under ${cref('D-118', at)}.</p>
+      <div class="scrub"><span class="lab">The citation reads the record on</span><div class="dates">${DATES.map(([d, w], i) => `<button data-i="${i}" aria-pressed="${i === S.at}" title="${w}">${dt(d, 'short')}</button>`).join('')}</div><span class="small muted">${DATES[S.at][1]}</span></div></section>
+    <section class="tbl pane scroll dep" style="--i:2" aria-label="Decision marks"><h2><span class="lab">A decision · seven states</span><span class="small muted">word · row · page</span></h2>
+      <table><thead><tr><th>Word size</th><th>Row size</th><th>Page size</th><th class="m">Means</th></tr></thead><tbody>
+      ${Object.keys(ST).filter(k => k !== 'not yet').map(k => { const id = SAMPLE[k], d = Dn(id); const cls = ST[k].cls; return `<tr class="${S.hot === k ? 'hot' : ''}"><td>${stHTML(k)}</td>
+        <td><div class="row is-${k === 'reversed' ? 'reversed' : k}">${did(id)}<i class="dm ${cls}"></i><span class="t">${d.title}</span></div></td>
+        <td><div class="big"><i class="dm ${cls}"></i><span class="stw ${cls}">${ST[k].w}</span></div></td><td class="m">${MEAN[k]}</td></tr>`; }).join('')}
+      </tbody></table></section>
+    <section class="tbl pane scroll dep" style="--i:3" aria-label="Action marks and other marks"><h2><span class="lab">An action · six states and one alarm</span></h2>
+      <table><tbody>${Object.keys(AS).map(k => `<tr><td style="width:var(--space-5)">${amHTML(k, 18)}</td><td><span class="lite">${AS[k].s}</span></td><td class="m">${AS[k].w}${k === 'overdue' ? ' · derived from the date' : k === 'discharged' ? ' · only the person who asked' : ''}</td></tr>`).join('')}</tbody></table>
+      <div class="other"><p class="lab">And five more</p>
+        <div><span class="x">because<span class="ptr">2</span></span><span class="muted">a pointer to what a reason rests on</span></div>
+        <div><span class="seam"><s>30 Jun</s> 31 Aug</span><span class="muted">a seam: a date moved, with who and why</span></div>
+        <div><span class="x">${spark('overdue', { line: 4, w: 72, h: 18 })}</span><span class="muted">a revisit line on the record it watches</span></div>
+        <div><span class="x" style="font-style:italic;color:var(--ink-muted)">said, not decided</span><span class="muted">dashed, italic: context, never a decision</span></div>
+        <div><span class="mk-gap">no date</span><span class="muted">a part not known yet: corner ticks, never blank space</span></div></div></section>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.scrub button').forEach(b => b.onclick = () => { S.at = +b.dataset.i; S.hot = statusAt('D-118', DATES[S.at][0]); render(); });
+}
+function replay() {
+  clearLater(); S.at = 0; S.hot = 'in force'; render(); settle();
+  /* the moment: the citation in the procedures reads the record on each date in turn, ending today */
+  DATES.forEach((_, i) => i && later(() => { S.at = i; S.hot = statusAt('D-118', DATES[i][0]); render(); }, MOMENT() + (i - 1) * ms('--motion-slow')));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowRight') { S.at = Math.min(DATES.length - 1, S.at + 1); S.hot = statusAt('D-118', DATES[S.at][0]); render(); }
+  if (e.key === 'ArrowLeft') { S.at = Math.max(0, S.at - 1); S.hot = statusAt('D-118', DATES[S.at][0]); render(); }
+});
+replay();
+</script>
+</body>
+</html>

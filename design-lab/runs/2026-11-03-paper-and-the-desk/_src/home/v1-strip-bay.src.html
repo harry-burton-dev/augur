@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Home V1 · The strip bay</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: what needs you as a rack of strips, held / coming / pointed out, in time order ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-glance);gap:var(--space-6)}
+.rack{min-height:0;display:grid;align-content:start;gap:var(--space-5);padding-right:var(--x-proposed-cock)}
+.head{display:flex;align-items:flex-end;gap:var(--space-4);margin-bottom:calc(var(--space-1) * -1)}
+.head .lede{margin-left:auto;text-align:right;max-width:46ch}
+.bay .strip{cursor:pointer}
+.back{min-height:0;display:flex;flex-direction:column;gap:var(--space-4);border-left:1px solid var(--hairline);padding-left:var(--space-5)}
+.back dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-4);margin:0;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.back dt{color:var(--ink-muted);font-size:var(--type-small)}
+.back dd{margin:0;color:var(--ink)}
+.marks{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.marks li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.marks li .t{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.acts{display:grid;gap:var(--space-2);margin-top:auto}
+.acts .btn{justify-content:space-between}
+.empty-bay{font-size:var(--type-small);color:var(--ink-muted);border:1px dashed var(--x-proposed-slot);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3)}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,1fr) calc(var(--measure-card) + var(--space-4))}.head .lede{display:none}.strip .ln{font-size:var(--x-proposed-type-micro)}.rack{gap:var(--space-4)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Home · V1</b> the strip bay: what you hold, in time order; cock one to come back to it · flight progress strips, MacKay 1999</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { sel: 'M-207', cocked: new Set() };
+const me = DATA.me;
+const held = () => DATA.items.filter(x => x.holder === me).sort((a, b) => a.h - b.h);
+const coming = () => DATA.items.filter(x => x.to === me || x.next === me);
+const pointed = () => DATA.items.filter(x => x.pointedBy);
+const all = () => [...held(), ...coming(), ...pointed()];
+const isCocked = it => S.cocked.has(it.id);
+
+function bay(title, sub, list, explain) {
+  return `<section class="bay" aria-label="${title}"><div class="bay-h"><p class="eyebrow">${title}</p><span class="c">${list.length}</span><span class="x">${sub}</span></div>
+    ${list.length ? list.map((it, i) => stripHTML({ ...it, cock: isCocked(it) ? it.cock : null }, { tag: 'button', i, sel: S.sel === it.id, cocked: isCocked(it), ghost: !!it.next })).join('') : `<p class="empty-bay">${explain}</p>`}</section>`;
+}
+function backHTML() {
+  const it = ITEM(S.sel), k = K(it.kind);
+  const marks = [];
+  marks.push([it.from && it.from !== 'rule' ? ini(it.from, 'sm') : I('cog', 14), it.from === 'rule' ? 'Came to you by the team’s rule for disputes' : it.from ? `Handed to you by ${P(it.from).name}` : `Held by ${P(it.holder).name}`, it.since]);
+  if (it.to) marks.push([ini(it.holder, 'sm'), `Offered to ${P(it.to).name}. ${it.holder === me ? 'Yours until ' + first(it.to) + ' takes it.' : 'Waits for your readback.'}`, it.offered]);
+  if (it.pointedBy) marks.push([ini(it.pointedBy, 'sm'), `${P(it.pointedBy).name} pointed it out to you. It stays theirs.`, it.pointed]);
+  if (isCocked(it)) marks.push([ini(me, 'sm'), `Cocked by you: “${it.cock.note}”. Only you see this.`, DATA.now.time]);
+  const mine = it.holder === me && !it.to;
+  return `<div><p class="eyebrow">The back of the strip</p><h2 class="h" style="margin-top:var(--space-1)">${it.title}</h2></div>
+    <dl><dt>What</dt><dd>${k.word} in ${k.app} · ${fchip(it.floor)}</dd>
+      <dt>Holds it</dt><dd>${pchip(it.holder)}${it.holder === me ? ' <span class="muted">(you)</span>' : ''}</dd>
+      <dt>State</dt><dd>${it.state} · ${it.line}</dd>
+      <dt>Time</dt><dd class="${dueWords(it).past ? 'past' : ''}">${dueWords(it).main} · ${dueWords(it).sub}</dd>
+      ${it.why ? `<dt>Why it matters</dt><dd>${it.why}</dd>` : ''}</dl>
+    <div><p class="eyebrow" style="margin-bottom:var(--space-2)">Marks on it, oldest first</p><ul class="marks">${marks.map(([a, b, c]) => `<li>${a}<span>${b}</span><span class="t">${c}</span></li>`).join('')}</ul></div>
+    <div class="acts">
+      <button class="btn">${I('arrow-up-right', 14)} Open in ${k.app}<span class="kbd">Enter</span></button>
+      <button class="btn" data-cock ${mine ? '' : 'aria-disabled="true"'}>${I('corner-down-right', 14)} ${isCocked(it) ? 'Put it back in line' : 'Cock it: set aside to come back to'}<span class="kbd">C</span></button>
+      <button class="btn" ${mine ? '' : 'aria-disabled="true"'}>${I('hand-helping', 14)} Hand it over<span class="kbd">H</span></button>
+      ${mine ? '' : `<p class="why">${I('info', 14)}<span>${it.to === me ? 'It isn’t yours yet: read it back to take it.' : it.to ? 'You still hold it, but it is offered: take it back or wait.' : 'It isn’t yours: ' + P(it.holder).name + ' holds it.'}</span></p>`}
+    </div>`;
+}
+function render() {
+  const h = held();
+  $('#app').innerHTML = topHTML(['Home', 'What needs you'], [['↑ ↓', 'move'], ['C', 'cock'], ['H', 'hand over'], ['Enter', 'open'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap"><div class="rack scroll">
+      <div class="head"><div><p class="eyebrow">Your bay · ${DATA.now.day}, ${DATA.now.time}</p><h1 class="t">What needs you</h1></div>
+        <p class="lede">One strip for each thing, ordered by its time. Nothing reorders by itself while you work: a new strip only joins the bottom bay until you take it.</p></div>
+      ${bay('You hold', `${h.filter(x => x.to).length} offered on, still yours`, h, 'You hold nothing. Things come to you here when someone hands them over or a rule gives them to you.')}
+      ${bay('Coming to you', 'not yours until you take them', coming(), 'Nothing is on its way to you.')}
+      ${bay('Pointed out to you', 'someone else holds these', pointed(), 'Nobody has pointed anything out to you.')}
+    </div><aside class="back scroll" aria-live="polite">${backHTML()}</aside></div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.bay .strip').forEach(b => b.onclick = () => { S.sel = b.dataset.id; render(); $(`.strip[data-id="${S.sel}"]`).focus(); });
+  $('[data-cock]').onclick = cock;
+}
+function cock() {
+  const it = ITEM(S.sel);
+  if (it.holder !== me || it.to || !it.cock) return;
+  S.cocked.has(it.id) ? S.cocked.delete(it.id) : S.cocked.add(it.id);
+  render();
+}
+function move(d) { const a = all(), i = a.findIndex(x => x.id === S.sel); S.sel = a[(i + d + a.length) % a.length].id; render(); $(`.strip[data-id="${S.sel}"]`).focus(); }
+function replay() {
+  clearLater(); S.cocked.clear(); S.sel = 'M-207'; render(); settle();
+  /* the moment: you cock the overdue intent; it sticks out of the bay with your note */
+  later(() => { S.cocked.add('M-207'); render(); }, ms('--motion-run'));
+}
+onKeys({ r: replay, c: cock, ArrowDown: () => move(1), ArrowUp: () => move(-1), j: () => move(1), k: () => move(-1) });
+replay();
+</script>
+</body>
+</html>

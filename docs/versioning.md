@@ -5,7 +5,7 @@ Every package, service and app in the monorepo has its own [semver](https://semv
 | Version | Where it lives | Answers |
 | --- | --- | --- |
 | Release | each `package.json`, bumped by [Changesets](https://github.com/changesets/changesets) | Which build of this service, package or app is deployed? |
-| API | each `contracts/<service>.openapi.yaml` `info.version`; its major is the path prefix (`/v1`) and the service's `API_VERSION` | Can a caller keep calling this service the way it does? |
+| API | each `contracts/<service>.openapi.yaml` `info.version`, set in the service's `src/contract.ts` ([api-contracts.md](api-contracts.md)); its major is the path prefix (`/v1`) and the service's `API_VERSION` | Can a caller keep calling this service the way it does? |
 | SDK range | each app's `manifest.json` `sdk`, a range over `@augur/mfe-sdk` releases | Can this shell open this app? |
 
 ## Releases
@@ -189,7 +189,8 @@ Renovate proposes dependency updates (ADR 0033, `renovate.json`). It runs once a
 
 1. Merge fresh `main` into it and let CI run.
 2. Check its changeset. The **Renovate changeset** workflow adds one to each Renovate PR: a patch for every package whose files it changes, or an empty one when it only changes tooling outside the packages (workflows, the root lockfile). Change it by hand if a unit should be released that it missed. The workflow pushes with a deploy key, because a push with the workflow's own token starts no CI: a repository admin adds a deploy key with write access (Settings, Deploy keys) and puts its private key in the `RENOVATE_CHANGESET_KEY` secret. Until then the workflow says so on the PR, and the changeset is added by hand (`pnpm changeset`).
-3. If it's labelled `needs-upgrade-note` (a major update to Postgres, pgvector, Keycloak or Garage), write the note in docs/upgrade.md first, including how to go back.
+3. If it's the kit's PR (`renovate/augur-kit`, labelled `kit`), check that `release/kit.json` moved with it. Renovate opens it as soon as augur-kit releases a kit, not on Monday, with every kit package together. The same workflow installs the new kit, re-pins it (`node scripts/kit.mjs pin`) and rewrites the open-source notices; without the deploy key, run **Actions → Lockfile** on its branch instead. CI's `pnpm check:kit` fails while the pin names another kit, so the pin can't fall behind the packages. Renovate reads the kit from GitHub Packages through a host rule: in Renovate's settings (developer.mend.io, the organisation's **Credentials**), a host rule for `npm.pkg.github.com` with a classic token that has `read:packages`. Without it Renovate can't see new kits and opens no kit PR.
+4. If it's labelled `needs-upgrade-note` (a major update to Postgres, pgvector, Keycloak or Garage), write the note in docs/upgrade.md first, including how to go back.
 
 ## Going back to an earlier app version
 

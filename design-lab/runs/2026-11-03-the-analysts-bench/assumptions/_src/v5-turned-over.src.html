@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Assumptions · V5 · Turned over</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Assumptions V5: every assumption turned over. "If this is false, what do we do?" Below the decision's bar, the answer must be written before deciding: a hedge ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.hd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-5);align-items:end}
+.bar{display:inline-flex;align-items:center;gap:var(--space-2);border:1px solid var(--x-proposed-lit);border-radius:var(--radius-pill);padding:var(--space-1) var(--space-3);font-size:var(--type-small);color:var(--light)}
+.rows{display:grid;gap:var(--space-2);align-content:start;min-height:0}
+.pr{display:grid;grid-template-columns:minmax(0,1fr) var(--space-6) minmax(0,1.2fr);align-items:stretch}
+.side{padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);display:grid;gap:var(--space-1);align-content:start;font-size:var(--type-small);line-height:var(--leading-small)}
+.side b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.arrow{display:grid;place-items:center;color:var(--ink-muted)}
+.inv{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.hold .inv{opacity:0;transform:translateX(calc(var(--space-4) * -1))}
+.inv .hedge{margin-top:var(--space-1)}
+.inv.needs{border-color:var(--x-proposed-hedge)}
+.inv.ok{opacity:.8}
+.k{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.foot{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:var(--space-4)}
+.check{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Assumptions · V5</b> turned over: each assumption’s opposite, and what we would do; below the bar the hedge is written before deciding · Munger’s inversion, Dewar’s hedging actions</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* the bar this decision kind asks for, carried from the briefing run: rung 1, very likely or better. Marks at or above it are "solid" */
+const BELOW = a => markOf(a) !== 'solid';
+const S = { turned: false };
+function render() {
+  const below = DATA.assumptions.filter(BELOW), hedged = below.filter(a => a.ifFalse);
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, T('kac').name, 'Turned over'], [...STD]) +
+  `<main class="main"><div class="wrap ${S.turned ? '' : 'hold'}">
+    <div class="hd"><div><p class="eyebrow">${T('kac').name} · turned over · ${DATA.plan.title}</p><p class="sent" style="max-width:72ch">For each assumption: <b>if it is false, what do we do?</b> Anything below the bar must have its answer written before the meeting decides.</p></div>
+      <span class="bar">${I('ruler', 14)}${DATA.intent.kind}: ${DATA.yardstick[DATA.intent.bar].word.lc()} or better</span></div>
+    <div class="rows scroll">${DATA.assumptions.map(a => { const b = BELOW(a); return `<div class="pr">
+      <div class="side"><span class="k">${a.id} · we assume</span><b>${a.say}</b>${amk(markOf(a))}</div>
+      <div class="arrow">${I('refresh-ccw', 18, 1.25)}</div>
+      <div class="side inv ${b ? 'needs' : 'ok'}"><span class="k">${b ? 'below the bar · if false' : 'solid · if false'}</span><b>${a.not}</b>
+        ${a.ifFalse ? `<div class="hedge">${b ? 'Hedge: ' : 'We would: '}${a.ifFalse}</div>` : `<span class="muted">nothing written</span>`}
+        <span class="muted">${a.sees ? 'Shows as: ' + a.sign.lc() : 'AUGUR can’t see it: ' + a.cant}</span></div></div>`; }).join('')}</div>
+    <div class="foot">
+      <div class="card"><p class="lbl">Ready to decide?</p><p class="check">${hedged.length} of ${below.length} below the bar have a hedge.</p><p class="small">${hedged.length === below.length ? 'The plan can go to the meeting below its bar, because every weak point has a written way out and a sign to trigger it.' : 'The plan can’t go to the meeting until every assumption below the bar has a hedge.'}</p></div>
+      <div class="card"><p class="lbl">Why turn them over</p><p class="small">“Invert, always invert.” Writing the opposite makes the assumption visible as a choice, and the hedge turns a worry into a step someone can take on the day the sign shows.</p><p class="small muted">The opposites are written by the person checking. The model may draft them in pencil; the hedge is always a person’s.</p></div>
+    </div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.turned = false; settle(); render(); later(() => { S.turned = true; $('.wrap').classList.remove('hold'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

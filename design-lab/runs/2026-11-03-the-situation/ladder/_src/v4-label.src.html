@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Ladder V4 · The museum label</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: three label tiers around one object. The tombstone and caption stay; the interpretation changes with the visitor ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:var(--space-6)}
+.room{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.vit{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,40%);gap:var(--space-5);align-items:center;padding:var(--space-5);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:radial-gradient(60% 70% at 30% 35%,color-mix(in srgb,var(--light) 5%,transparent),transparent 70%),var(--surface-inset)}
+.obj{display:grid;gap:var(--space-2);align-self:center}
+.obj .fig{font:200 var(--type-hero)/1 var(--font-mono);color:var(--light);letter-spacing:var(--tracking-tight)}
+.obj .chart{width:100%;height:auto}
+.tomb{display:grid;gap:2px;padding:var(--space-3);border-top:1px solid var(--hairline-strong);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink)}
+.tomb .muted{font-size:var(--x-proposed-type-micro)}
+.tier{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1)}
+.cap{padding:var(--space-4);border-left:1px solid var(--hairline-strong);display:grid;gap:var(--space-2)}
+.cap p.t{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink);max-width:60ch}
+.panel{display:grid;gap:var(--space-3);padding:var(--space-4) var(--space-5);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);transition:border-color var(--motion-calm) var(--ease-out)}
+.panel[data-tier]{border-color:color-mix(in srgb,var(--fc) 45%,transparent)}
+.panel .ask{font-size:var(--type-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+.panel .nut{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.panel .ques{font-style:italic;color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.visitors{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.rules{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.rules h2{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.rules ol{display:grid;gap:var(--space-2);counter-reset:r}
+.rules li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-1) var(--space-2);counter-increment:r;padding:var(--space-2) 0;border-top:1px solid var(--hairline)}
+.rules li::before{content:counter(r);font:400 var(--type-meta)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.rules li q{font-style:italic;color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small)}
+.rules li p{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.swap{animation:land var(--motion-calm) var(--ease-out)}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:var(--space-5)}.obj .fig{font-size:var(--type-display-fluid)}.vit{padding:var(--space-4);grid-template-columns:minmax(0,1fr) minmax(200px,42%)}.cap p.t{font-size:var(--type-meta);line-height:var(--leading-meta)}.panel .nut{font-size:var(--type-body);line-height:var(--leading-body)}.rules li q{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Ladder · V4</b> the museum label: tombstone, caption, interpretation; only the last changes with the visitor · Tilden (1957), V&amp;A and Serrell label practice</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { who: 'grace' };
+const d = PC('d1'), i = PC('i1');
+const TILDEN = [
+  ['Interpretation that does not relate to the visitor is sterile.', 'Context names its reader. Without one, it stays information.'],
+  ['Information, as such, is not interpretation.', 'Rung two is not rung three: a comparison is not yet a reason to act.'],
+  ['Interpretation is an art.', 'Why a piece is here is written by a person, in their words, with their name.'],
+  ['The chief aim is not instruction, but provocation.', 'Each interpretation ends on the question it bears on, not on advice.'],
+  ['It should present a whole rather than a part.', 'Context is a working set for a task, not a single figure.'],
+  ['Interpretation for children needs a different approach.', 'A different reader gets a different panel. The tombstone and the caption never change.']
+];
+function render(fresh) {
+  const r = READER(S.who), p = P(S.who), it = INTENT(r.intent);
+  $('#app').innerHTML = topHTML(['Grammar', 'The ladder'], [['1–3', 'visitor'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="room">
+      <div><p class="eyebrow">Grammar · the label hierarchy</p><h1 class="title">Object, caption, interpretation</h1></div>
+      <div class="vit">
+        <div class="obj"><span class="fig">${R.series.at(-1).v}</span>${chart({ w: 520, h: 170, hi: ['Jul', 'Oct'], values: true })}</div>
+        <div class="tomb"><div class="tier">${rm('data')}</div>${R.label} · ${R.place}<br>October 2026 · ${R.series.at(-1).v} of ${fmt(R.scheduled)} scheduled<br><span class="muted">${d.src.title} · kept by ${P(d.src.keeper).name} · ${F(d.src.kept).word}</span><span class="tk">${d.src.tech}</span></div>
+      </div>
+      <div class="cap"><div class="tier">${rm('info')} ${liftsHTML(i)}</div><p class="t">${i.text}. September was the first month over the contract’s limit of ${R.limit}; October was the second.</p></div>
+    </div>
+    <div class="rules">
+      <div class="tier">${rm('context')} <span class="small muted">interpretation, for the visitor in front of it</span></div>
+      <div class="visitors">${DATA.readers.map((x, k) => `<button class="tab" data-w="${x.id}" data-tier="${P(x.id).floor}" aria-pressed="${x.id === S.who}"><span class="kbd">${k + 1}</span>${P(x.id).name} · ${F(P(x.id).floor).word}</button>`).join('')}</div>
+      <article class="panel ${fresh ? 'swap' : ''}" data-tier="${p.floor}">
+        <p class="ask">${whoHTML(S.who, { role: true })}</p>
+        <p class="nut">${r.nut}</p>
+        <p class="ques">${I('circle-help', 14)} ${r.asks}</p>
+        <p class="small muted">Relates to ${it.id} · ${it.title} · by ${r.horizon}</p>
+      </article>
+      <h2>Tilden’s six, as rules</h2>
+      <ol class="scroll">${TILDEN.map(([q, a]) => `<li><q>${q}</q><p>${a}</p></li>`).join('')}</ol>
+    </div>
+  </div></main>`;
+  hydrate($('#app'));
+  $$('.tab').forEach(b => b.onclick = () => { S.who = b.dataset.w; render(true); });
+}
+play(() => { S.who = 'grace'; render(); }, () => {
+  const step = ms('--motion-still') / 2;
+  later(() => { S.who = 'mira'; render(true); }, 0);
+  later(() => { S.who = 'owen'; render(true); }, step);
+  later(() => { S.who = 'grace'; render(true); }, step * 2);
+}, (e, k) => { const r = DATA.readers[+k - 1]; if (r) { S.who = r.id; render(true); } });
+</script>
+</body>
+</html>
