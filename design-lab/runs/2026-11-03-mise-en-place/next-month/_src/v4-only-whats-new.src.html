@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Next month V4 · Only what's new</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: management by exception: the rerun shows only what is new this month, each with its suggested answer; the rest is one sentence ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center}
+.col{width:min(100%,var(--measure-wide));min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.head{display:flex;align-items:baseline;gap:var(--space-4);flex-wrap:wrap}
+.tally{display:flex;gap:var(--space-5);flex-wrap:wrap;font-size:var(--type-meta);color:var(--ink-muted)}
+.tally b{font:300 var(--type-heading)/1 var(--font-mono);color:var(--light);margin-right:var(--space-1)}
+.tally .s b{color:var(--x-proposed-stop)}
+.ex{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.e{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.e > svg{margin-top:2px;color:var(--ink-muted)}
+.e.stop{border-color:var(--x-proposed-stop)}
+.e.stop > svg{color:var(--x-proposed-stop)}
+.e.check > svg{color:var(--x-proposed-disagree)}
+.e.done{border-color:var(--hairline);background:none}
+.e.done > svg{color:var(--x-proposed-lit)}
+.e .w{font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.e .k{font:400 var(--type-label)/var(--leading-body) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);white-space:nowrap}
+.e .ev{grid-column:2 / span 2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.e .ev .rawv{font-size:var(--x-proposed-type-micro)}
+.e .acts{grid-column:2 / span 2;display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-top:var(--space-1)}
+.e .acts .muted{font-size:var(--type-small)}
+.rest{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);border-top:1px solid var(--hairline-strong);padding-top:var(--space-3);margin:0}
+.rest b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.e{padding:var(--space-2) var(--space-3)}.e .w{font-size:var(--type-meta);line-height:var(--leading-meta)}.tally b{font-size:var(--type-lead)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Next month · V4</b> only what's new: each exception with its suggested answer; the rest is one sentence · management by exception, a sous-chef's handover</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DATA.december, steps = DATA.recipe.steps, F0 = DATA.files.oct, F1 = DATA.files.nov, OCT = run('oct');
+const S = { done: {} };
+function render() {
+  const ans = { ...(S.done.rename ? { rename: { [D.rename.from]: D.rename.to } } : {}), ...(S.done.word ? { value: { [D.newWord.value]: D.newWord.choice } } : {}) };
+  const N0 = run('nov'), N = run('nov', steps, ans), PN = plate(N);
+  const col = N0.stops.find(s => s.kind === 'column'), val = N0.stops.find(s => s.kind === 'value'), near = N0.st.s8.near[0];
+  const tech = profile(N0, D.newCol.name);
+  const same = steps.filter(st => stepState(st, N0) === 'ok');
+  const E = [
+    { id: 'rename', cls: 'stop', ic: 'hand', k: 'stopped', w: `${raw(col.want)} is called ${raw(col.guess)} now`, ev: `${col.fit} of ${col.of} values in ${raw(col.guess)} look like van numbers, as ${raw(col.want)}’s did. Recipe lines ${steps.filter(s => (s.col || [])[0] === col.want).map(s => s.id.slice(1)).join(' and ')} read it.`, a: [`Yes, read ${col.guess} as ${col.want}`, 'Pick another column'] },
+    { id: 'word', cls: 'stop', ic: 'hand', k: 'stopped', w: `A result nobody knows: ${raw(val.value)}`, ev: `${plural(val.lines.length, 'line')}: ${val.lines.map(n => `${N0.lines[n - 1].cells[N0.header.indexOf(D.rename.to)]} on line ${n}`).join(', ')}. ${DATA.app} keeps ${KD('result').words.map(w => `“${w}”`).join(', ')}.`, a: [`Set aside, ask ${P(D.newWord.decides).name} for “${D.newWord.ask}”`, 'Land as not known yet'] },
+    { id: 'near', cls: 'check', ic: 'eye', k: 'check once', w: `A new spelling, ${raw(near.raw)}, joined ${DEPOT(near.to).name}`, ev: `It is near ${raw(near.like)}, which the recipe already joins there. Lines ${near.lines.join(', ')}.`, a: ['Right', 'Undo'] },
+    { id: 'tech', cls: 'check', ic: 'eye-off', k: 'left out', w: `A new column, ${raw(D.newCol.name)}, isn’t brought in`, ev: `${tech.distinct} different values (${Object.keys(tech.values).join(', ')}). No detail of an ${DATA.kinds.inspection.word} fits; it looks like people’s names, so it stays out unless you say otherwise.`, a: ['Leave it out', 'Ask for a detail'] }
+  ];
+  const open = E.filter(e => !S.done[e.id]);
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, DATA.recipe.name, `Run ${F1.run.n}`], [['1', 'take the suggestion'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap"><div class="col">
+    <div class="head"><h1 class="t">${FIRM.short}’s ${F1.month} visits</h1><span class="lede">arrived ${F1.received}; the recipe ran to the pass and stopped short of it</span></div>
+    <div class="tally"><span><b>${PN.land}</b>ready</span><span class="s"><b>${open.filter(e => e.cls === 'stop').length}</b>stopped</span><span><b>${open.filter(e => e.cls === 'check').length}</b>to look at</span><span><b>${same.length}</b>recipe lines as last month</span></div>
+    <ol class="ex">${E.map((e, i) => { const d = S.done[e.id];
+      return `<li class="e ${d ? 'done' : e.cls} dep" style="--i:${i}">${d ? I('check', 16) : I(e.ic, 16)}<span class="w">${e.w}</span><span class="k">${d ? 'answered' : e.k}</span><span class="ev">${e.ev}</span>
+        <span class="acts">${d ? `<span class="heard">${I('check', 12)} heard</span><span class="muted">${e.a[0]}${e.id === 'rename' ? `: recipe version ${DATA.recipe.version + 1}` : ''}</span>` : `<button class="btn sm ${e.cls === 'stop' ? 'go' : ''}" data-d="${e.id}">${I('check', 12)} ${e.a[0]}</button><button class="btn sm">${e.a[1]}</button>`}</span></li>`; }).join('')}</ol>
+    <p class="rest"><b>Everything else ran as last month:</b> ${same.map(st => lc(stepWords(st, N0).w)).slice(0, 6).join('; ')}; and ${same.length - 6} more. Counts moved with the file (${dataLinesOf(N0).length} lines of visits, not ${dataLinesOf(OCT).length}), which is not news. The “${F0.otherSheets.find(s => !F1.otherSheets.some(x => x.name === s.name))?.name}” sheet is gone and there is ${plural(F1.formulas, 'formula')}; neither changes what lands.</p>
+    ${open.length ? '' : `<p><span class="heard">${I('check', 12)} ready for the pass</span> ${PN.land} ${DATA.kinds.inspection.word}s, ${PN.aside.length} set aside; the file says ${N.total.said} ${PN.balances ? '✓' : '≠'}. <button class="btn go sm">${I('utensils', 12)} Go to the pass</button></p>`}
+  </div></div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-d]').forEach(b => b.onclick = () => { S.done[b.dataset.d] = true; render(); });
+}
+function replay() { clearLater(); S.done = {}; document.body.classList.add('pre'); render(); settle(ms('--motion-run')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === '1') { const n = ['rename', 'word', 'near', 'tech'].find(x => !S.done[x]); if (n) { S.done[n] = true; render(); } } });
+replay();
+</script>
+</body>
+</html>

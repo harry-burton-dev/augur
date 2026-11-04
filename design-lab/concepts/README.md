@@ -63,7 +63,7 @@ app pattern took it), **dropped** (say why in the file).
 | [One now](one-now.md) | explored | 2026-11-02-wear-and-time |
 | [The past under water](past-under-water.md) | to explore | 2026-11-02-wear-and-time |
 | [Question and answer](question-and-answer.md) | explored | 2026-11-03-room-tone |
-| [The recipe is the record](the-recipe-is-the-record.md) | to explore | batch 3 research |
+| [The recipe is the record](the-recipe-is-the-record.md) | explored | batch 3 research |
 | [The record has edges](the-record-has-edges.md) | to explore | 2026-11-02-wear-and-time |
 | [The shell owns loudness](shell-owns-loudness.md) | explored | 2026-11-03-room-tone |
 | [The signal is the control](the-signal-is-the-control.md) | to explore | 2026-11-03-room-tone |
@@ -91,6 +91,17 @@ app pattern took it), **dropped** (say why in the file).
 | [Enforce what you can see](enforce-what-you-can-see.md) | explored | 2026-11-03-the-label |
 | [Copies know their source](copies-know-their-source.md) | explored | 2026-11-03-the-label |
 | [The policy is data](the-policy-is-data.md) | explored | 2026-11-03-the-label |
+| [Someone holds it](someone-holds-it.md) | explored | 2026-11-03-paper-and-the-desk |
+| [The readback moves it](the-readback-moves-it.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Say what you sign for](say-what-you-sign-for.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Shared work stays sharp](shared-work-stays-sharp.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Set aside, not flagged](set-aside-not-flagged.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Room you can see](room-you-can-see.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Status is a mark](status-is-a-mark.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Raw and kept](raw-and-kept.md) | explored | 2026-11-03-mise-en-place |
+| [Stop, don't guess](stop-dont-guess.md) | explored | 2026-11-03-mise-en-place |
+| [Every answer is a line](every-answer-is-a-line.md) | explored | 2026-11-03-mise-en-place |
+| [Rehearsed to the pass](rehearsed-to-the-pass.md) | explored | 2026-11-03-mise-en-place |
 | [Context is a working set](context-is-a-working-set.md) | to explore | batch 6 research |
 | [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
 | [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · By example V5 · The recipe writes itself</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: every fix by example writes one line of the recipe, live, with its count, its example and an undo ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(380px,1fr);gap:var(--space-6)}
+.sheetbox{min-height:0;overflow:hidden;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.sheetbox .sheet td,.sheetbox .sheet th{padding:1px var(--space-2)}
+.sheetbox .sheet td.ok{border-bottom:1px dotted var(--x-proposed-seam)}
+.sheetbox .sheet td.ok.fresh{background:color-mix(in srgb,var(--light) 6%,transparent)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.side .recipe{flex:none}
+.rl.fresh{animation:land var(--motion-calm) var(--ease-out)}
+@keyframes land{from{opacity:0;transform:translateX(var(--space-2))}to{opacity:1;transform:none}}
+.rl.undone .rw{text-decoration:line-through;text-decoration-color:var(--ink-muted);color:var(--ink-muted)}
+.rl .u{grid-column:2 / span 3;display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--ink-muted)}
+.todo{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.todo li{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-small);color:var(--ink-muted)}
+.todo .btn{margin-left:auto}
+.side .foot{margin-top:auto;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline-strong);padding-top:var(--space-3)}
+.side .foot b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.sheetbox .sheet{font-size:var(--x-proposed-type-micro)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>By example · V5</b> every fix writes one recipe line, live, with its count, its example and an undo · Power Query's applied steps, Wrangler</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const BASE = DATA.recipe.steps.slice(0, 5), F0 = DATA.files.oct;
+const FIX = ['s6', 's7', 's9'].map(STEP);
+const KEY = { van: 'van', date: 'on', result: 'result' };
+const S = { done: [], undone: [], fresh: null };
+function current() { return run('oct', [...BASE, ...FIX.filter(f => S.done.includes(f.id) && !S.undone.includes(f.id))]); }
+function render() {
+  const R = current(), H = R.header;
+  const active = FIX.filter(f => S.done.includes(f.id) && !S.undone.includes(f.id));
+  const colOf = f => H.indexOf(f.col[0]);
+  const cell = (l, i) => { if (l.role && l.role !== 'land') return ''; const f = active.find(f => colOf(f) === i); if (!f || !l.rec) return ''; const v = l.rec.v[KEY[f.op]]; return v && v.val !== v.raw ? `ok ${S.fresh === f.id ? 'fresh' : ''}` : ''; };
+  let html = sheetHTML(R, { cell, line: l => l.role === 'aside' ? 'aside' : ['title', 'blank', 'total', 'copy'].includes(l.role) ? 'dim' : '' });
+  const tmp = document.createElement('div'); tmp.innerHTML = html;
+  $$('tbody tr', tmp).forEach(tr => { const l = R.lines[+tr.dataset.n - 1]; if (!l.rec) return; active.forEach(f => { const v = l.rec.v[KEY[f.op]]; if (v && v.val !== v.raw) { const td = tr.children[colOf(f) + 1]; td.textContent = v.val + (l.rec.v.rnote && f.op === 'result' ? ' · ' + l.rec.v.rnote.val : ''); td.title = `was “${v.raw}” · recipe line ${f.id.slice(1)}`; } }); });
+  html = tmp.innerHTML;
+  const shown = [...BASE, ...FIX.filter(f => S.done.includes(f.id))];
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, F0.name, 'Tidy'], [['1–3', 'fix one'], ['U', 'undo last'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="sheetbox scroll" aria-label="The file, as tidied so far">${html}</section>
+    <section class="side"><div><h1 class="t">The recipe so far</h1><p class="lede" style="margin-top:var(--space-1)">You never write a line. Each fix you make on the sheet writes one, in words, with how many values it changed. Lines 1–5 came from the first reading.</p></div>
+      <ol class="recipe">${shown.map((st, i) => { const w = stepWords(st, R), und = S.undone.includes(st.id);
+        return `<li class="rl ${und ? 'undone' : ''} ${S.fresh === st.id ? 'fresh' : ''} st-${und ? 'todo' : 'ok'}"><span class="rn">${st.id.slice(1)}</span><span class="rw">${w.w}${w.ex && !und ? `<span class="rex">${pair(w.ex[0], w.ex[1])}</span>` : ''}<span class="tk">${esc(w.tk)}</span></span><span class="rc">${und ? 'undone' : stepCount(st, R)}</span><span class="rs">${und ? I('undo-2', 14) : I('check', 14)}</span>
+          ${FIX.includes(st) ? `<span class="u">${und ? `kept struck through, so the next person sees it was tried · <button class="btn sm" data-redo="${st.id}">Redo</button>` : `taught by your example on line ${R.lines.find(l => l.cells[H.indexOf(st.col[0])] === st.example[0])?.n || '—'} · <button class="btn sm" data-undo="${st.id}">${I('undo-2', 12)} Undo</button>`}</span>` : ''}</li>`; }).join('')}</ol>
+      <ul class="todo">${FIX.filter(f => !S.done.includes(f.id)).map(f => `<li>${I('circle-dashed', 14)} ${raw(f.col[0])} still has ${Object.keys(profile(R, f.col[0]).shapes).length} shapes <button class="btn sm" data-fix="${f.id}">${I('pen-line', 12)} Fix ${raw(f.example[0])}</button></li>`).join('')}</ul>
+      <p class="foot"><b>Undo keeps the line.</b> An undone line stays in the recipe, struck through, with who tried it. Its values go back to how the file had them, and the seam goes with them. <b>Reorder</b> by dragging; the counts rerun at once.</p></section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-fix]').forEach(b => b.onclick = () => fix(b.dataset.fix));
+  $$('[data-undo]').forEach(b => b.onclick = () => { S.undone.push(b.dataset.undo); S.fresh = null; render(); });
+  $$('[data-redo]').forEach(b => b.onclick = () => { S.undone = S.undone.filter(x => x !== b.dataset.redo); S.fresh = b.dataset.redo; render(); });
+}
+function fix(id) { if (!S.done.includes(id)) S.done.push(id); S.undone = S.undone.filter(x => x !== id); S.fresh = id; render(); }
+function replay() { clearLater(); Object.assign(S, { done: [], undone: [], fresh: null }); render(); settle(); const t = ms('--motion-run'); later(() => fix('s6'), t); later(() => fix('s7'), t + ms('--motion-calm')); later(() => fix('s9'), t + ms('--motion-calm') * 2); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-3]$/.test(e.key)) { clearLater(); fix(FIX[+e.key - 1].id); }
+  if (e.key.toLowerCase() === 'u') { const last = [...S.done].reverse().find(x => !S.undone.includes(x)); if (last) { S.undone.push(last); S.fresh = null; render(); } }
+});
+replay();
+</script>
+</body>
+</html>
