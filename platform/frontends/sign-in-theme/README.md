@@ -12,7 +12,8 @@ and shipped as a jar in AUGUR's Keycloak image (`infra/service.Dockerfile`, targ
 - **Emails** (`src/email`): Keycloak's own emails, in AUGUR's layout. `email-layout.ftl` is the layout;
   `scripts/email-layout.mjs` fills in Common's values (email clients don't read CSS variables) and writes
   `src/email/html/template.ftl` when the jar is built.
-- **Names, not literals:** the product's name is the realm's display name; the organisation's name and
+- **Names, not literals:** the product's name is the realm's display name, which the realm job sets from the deployment's
+  `ORG_PRODUCT_NAME` (default AUGUR); the organisation's name and
   logo come from Keycloak's environment (`ORG_NAME`, `ORG_LOGO_URL`, the same settings identity reads),
   until they move to identity's organisation settings (ADR 0042).
 - **Languages:** every word is Keycloak's own message, so each page and email comes in every language
