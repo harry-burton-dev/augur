@@ -106,25 +106,35 @@ use() {
 }
 services() { pc config --services | grep -vx tailscale; }
 
-# Each service's /healthz, as the compose network sees it, from a container that has Node.
-HEALTH='{"gateway":"http://gateway:8080","identity":"http://identity:8081","registry":"http://registry:8082","events":"http://events:8084","models":"http://models:8085","folio":"http://folio:8083","auspex":"http://auspex:8090","atlas":"http://atlas:8086"}'
+# Each service's /healthz, as the compose network sees it: every service whose healthcheck asks for one in
+# the compose file in use, so a release's own parts, and the apps it ships, are what's probed.
+health_urls() {
+  pc config --format json | jq -c '[.services | to_entries[]
+    | (.value.healthcheck.test // [] | tostring | capture("127\\.0\\.0\\.1:(?<port>[0-9]+)/healthz")) as $h
+    | {key, value: "http://\(.key):\($h.port)"}] | from_entries'
+}
+# Asked from a container that has Node.
 probe() {
+  local health
+  health=$(health_urls) || return 1
   pc exec -T gateway node -e '
     const urls = JSON.parse(process.argv[1]);
     Promise.all(Object.entries(urls).map(async ([name, url]) => {
       try { const r = await fetch(`${url}/healthz`); return [name, r.ok ? (await r.json()).version : `HTTP ${r.status}`]; }
       catch { return [name, "down"]; }
     })).then((rows) => console.log(JSON.stringify(Object.fromEntries(rows))));
-  ' "$HEALTH" 2>/dev/null
+  ' "$health" 2>/dev/null
 }
 
-# The front door serves the shell, sign-in and the pillar apps' frontends.
+# The front door serves the shell, sign-in and the frontends of the apps that ship with the release (the
+# registry's PILLAR_APPS in the compose file in use).
 serving() {
   curl -fsS -o /dev/null "http://localhost:$port/" &&
-    curl -fsS -o /dev/null "http://localhost:$port/sso/realms/platform/.well-known/openid-configuration" &&
-    curl -fsS -o /dev/null "http://localhost:$port/apps/folio/entry.js" &&
-    curl -fsS -o /dev/null "http://localhost:$port/apps/auspex/entry.js" &&
-    curl -fsS -o /dev/null "http://localhost:$port/apps/atlas/entry.js"
+    curl -fsS -o /dev/null "http://localhost:$port/sso/realms/platform/.well-known/openid-configuration" || return 1
+  local app
+  for app in $(pc config --format json | jq -r '.services.registry.environment.PILLAR_APPS // ""'); do
+    curl -fsS -o /dev/null "http://localhost:$port/apps/$app/entry.js" || return 1
+  done
 }
 
 # Waits until every service answers its /healthz and the front door serves; prints the versions they report.
@@ -148,7 +158,7 @@ on_version() {
   local want=$1 wrong
   # A build from this checkout runs the shipped apps' images of a release, not ones built here.
   local skip='[]'
-  if [ "${BUILD:-}" = 1 ] && [ "$want" = "$local_tag" ]; then skip='["folio","folio-worker","auspex","atlas"]'; fi
+  if [ "${BUILD:-}" = 1 ] && [ "$want" = "$local_tag" ]; then skip=$(jq -c '[.apps | to_entries[] | .key, (.value.build // {} | keys[])]' "$here/../release/shipped-apps.json"); fi
   wrong=$(pc ps --format json | jq -rs --arg want ":$want" --argjson skip "$skip" 'flatten | map(select(.Image | startswith("ghcr.io/")) | select(.Service as $s | $skip | index($s) | not) | select(.Image | endswith($want) | not)) | map("\(.Service) runs \(.Image)") | .[]')
   if [ -n "$wrong" ]; then echo "Not on $want:"$'\n'"$wrong" >&2; return 1; fi
 }
@@ -240,7 +250,10 @@ traffic() {
 # calls to an app's API through the front door land under apps, not platform. Without a signed-in
 # person the gateway answers them itself (401), which is enough to see where they're counted.
 counted_apart() {
-  local before after app=folio calls=10
+  local before after app calls=10
+  # Any app the release ships: the first of the registry's PILLAR_APPS.
+  app=$(pc config --format json | jq -r '.services.registry.environment.PILLAR_APPS // "" | split(" ") | map(select(. != "")) | .[0] // empty')
+  [ -n "$app" ] || { echo "The release ships no app to count calls to." >&2; return 1; }
   before=$(traffic)
   for _ in $(seq "$calls"); do curl -s -o /dev/null "http://localhost:$port/api/$app/healthz" || true; done
   after=$(traffic)

@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { steadyPool } from '@augur/service-kit';
+import { runMigrations, steadyPool, type Migration } from '@augur/service-kit';
 
 /** What admins set in Admin: whether models can be used at all, and how many calls each app gets a day. */
 export interface ModelSettings {
@@ -74,7 +74,7 @@ export class MemoryModelStore implements ModelStore {
   }
 }
 
-export const migrations: { id: string; sql: string }[] = [
+export const migrations: Migration[] = [
   {
     id: '001-settings-and-usage',
     sql: `
@@ -113,27 +113,7 @@ export class PgModelStore implements ModelStore {
   }
 
   async migrate() {
-    const client = await this.pool.connect();
-    try {
-      await client.query('begin');
-      await client.query("select pg_advisory_xact_lock(hashtext('models.migrate'))");
-      // On a server the storage job makes the schema for models's own login, which may not create schemas.
-      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'models'");
-      if (!hasSchema) await client.query('create schema models');
-      await client.query('create table if not exists models.migrations (id text primary key, applied_at timestamptz not null default now())');
-      const { rows } = await client.query<{ id: string }>('select id from models.migrations');
-      const applied = new Set(rows.map((r) => r.id));
-      for (const m of migrations.filter((m) => !applied.has(m.id))) {
-        await client.query(m.sql);
-        await client.query('insert into models.migrations (id) values ($1)', [m.id]);
-      }
-      await client.query('commit');
-    } catch (err) {
-      await client.query('rollback');
-      throw err;
-    } finally {
-      client.release();
-    }
+    await runMigrations(this.pool, { schema: 'models', migrations });
   }
 
   async settings() {
