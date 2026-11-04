@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-briefing`](../runs/2026-11-03-the-briefing/) (a
 Could steer: The switchboard (O), the events service, the groundskeeper (K).
 
 In [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/), escalation needs the same events-service clock as watches.
+
+Used in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): a decision's revisit watch lists what it can't see (revisit V1).

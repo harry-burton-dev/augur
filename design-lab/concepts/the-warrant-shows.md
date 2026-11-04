@@ -10,3 +10,5 @@ Every claim in an output shows what supports it and why that support counts (Tou
 Proposed by batch 6 research.
 
 Could steer: the argument (Z), the briefing's bottom line, the minute (T).
+
+First tried in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): record V4 drew a decision as a Toulmin argument, and the warrant was the leg that broke.

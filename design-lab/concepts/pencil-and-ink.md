@@ -14,3 +14,5 @@ Used in [`2026-11-03-the-briefing`](../runs/2026-11-03-the-briefing/): the model
 Could steer: The apprentice (Q), the briefing (M), Mandate drafting, every place the model gateway writes.
 
 Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): agent work is pencil until a person accepts it, then keeps its maker's mark; the model is one step of six, and G removes it without changing a number (proposal V3, grammar V4).
+
+Used in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): the model hears a meeting in pencil; only the room's read-back inks the minute (live V2, combined V3).
