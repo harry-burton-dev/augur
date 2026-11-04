@@ -1,5 +1,19 @@
 # @augur/identity
 
+## 1.0.0
+
+### Major Changes
+
+- 783bd30: Keycloak 26.8.1, with the realm kept as code (ADR 0057). A new `keycloak-config` container, built from identity's image, sets the realm up on every `up`: a 15-character password floor checked against a breached-password list, a code app or passkey as a second step for admins and deployment admins, passkeys in the sign-in form, 8-hour idle and 10-hour sessions, sign-in and admin events kept, the declared profile fields, the services' sign-ins and identity's rights. Identity loses `manage-realm` and no longer touches the realm's settings when it starts. Breaking: Keycloak's database migrates and can't go back without a restore, so take a backup first (docs/upgrade.md, "Keycloak 26.8 and the realm job").
+
+### Patch Changes
+
+- b3060e0: Every platform service answers errors as RFC 9457 problem details (`application/problem+json`) with AUGUR's `reason` and `whoCanChange`, and keeps `error` and `message` for SDK 1.x clients. The service kit adds `problemDetails()`, `Problem`, `sendProblem` and `serviceFastifyOptions()`. A service's unexpected errors are logged and answered with a plain 500, never with their own words.
+- 8d48714: Fixes from the 2 Nov audit. In Admin → People, a person's sign-in (on or off, a new one-time password) sits in its own section that says it takes effect at once: each asks first, acts straight away and says what happened, while their name, email, department and roles change only on Save. Agents stay among the Shell's functions and say they aren't here yet, and Home keeps the card of an app this shell can't open, saying why and who can change it, instead of hiding either. Messages people read say AUGUR, not "the platform", and `pnpm check:reasons` now catches it. The centre menu's transitions stop for AUGUR's own reduced-motion setting as well as the system's and are timed from motion tokens; the lifecycle's divider uses the hairline token; overlay shadows use the shadow token. A new test holds the Lit kit and AUGUR's frontends to tokens only.
+- 2478c1f: On a fresh server, Artifacts, Explorer and Data Atlas now start only after the realm job has made their sign-ins. Before, they could start too early. Then they failed to give the registry their frontends and register, and they never appeared in the shell until someone restarted them. The deploy test's new browser check found this.
+- Updated dependencies [b3060e0]
+  - @augur/service-kit@0.12.0
+
 ## 0.10.0
 
 ### Minor Changes
