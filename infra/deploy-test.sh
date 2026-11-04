@@ -194,7 +194,8 @@ up() { pc up -d --no-build --remove-orphans $(services) >&2; }
 # BROWSER_CHECK_OUT keeps its screenshots.
 PLAYWRIGHT=1.56.1
 browser_check() {
-  [ "${BROWSER_CHECK:-1}" = 1 ] || return 0
+  # It changes the first admin's password, which THEN's command still has to change itself.
+  [ "${BROWSER_CHECK:-1}" = 1 ] && [ -z "${THEN:-}" ] || return 0
   local env=$deploy/.env apps shots="${BROWSER_CHECK_OUT:-$work/browser-check}"
   apps="home $( [ -e "$here/../release/shipped-apps.json" ] && jq -r '.apps | keys | join(" ")' "$here/../release/shipped-apps.json")"
   mkdir -p "$shots"
