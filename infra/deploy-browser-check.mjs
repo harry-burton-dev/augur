@@ -6,6 +6,7 @@
 //   node deploy-browser-check.mjs <front door> <admin user> <admin password> <app id>...
 //
 // Writes a screenshot of each page to $OUT (default ./browser-check) and exits 1 on any failure.
+import { createHmac } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
@@ -15,6 +16,18 @@ if (!base || !user || !password || apps.length === 0) {
   console.error('usage: node deploy-browser-check.mjs <front door> <admin user> <admin password> <app id>...');
   process.exit(2);
 }
+/** The current one-time code for a base32 secret (RFC 6238: SHA-1, 6 digits, 30 s), as an authenticator app shows it. */
+function totp(secret) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bits = [...secret.toUpperCase().replace(/=+$/, '')].map((c) => alphabet.indexOf(c).toString(2).padStart(5, '0')).join('');
+  const key = Buffer.from(bits.match(/.{8}/g).map((byte) => parseInt(byte, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  const mac = createHmac('sha1', key).update(counter).digest();
+  const offset = mac[mac.length - 1] & 0xf;
+  return String((mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
+}
+
 const out = process.env.OUT ?? 'browser-check';
 mkdirSync(out, { recursive: true });
 
@@ -49,17 +62,32 @@ page.on('response', (res) => {
 const shot = (name) => page.screenshot({ path: join(out, `${name}.png`) });
 
 try {
-  // Sign in with the first admin's starting password; Keycloak asks for a new one straight away.
+  // Sign in with the first admin's starting password. Keycloak then asks for whatever the account still
+  // needs, in its own order: a new password, and a one-time-code app for a deployment admin (ADR 0035).
   await page.goto(base);
   await page.locator('#username').fill(user);
   await page.locator('#password').fill(password);
   await page.locator('#kc-login').click();
-  const fresh = `Ab1-${crypto.randomUUID()}`;
-  await page.locator('#password-new').fill(fresh, { timeout: 30_000 });
-  await page.locator('#password-confirm').fill(fresh);
-  await page.locator('[type=submit]').click();
-  await page.waitForURL((url) => url.origin === new URL(base).origin && !url.pathname.startsWith('/sso/'), { timeout: 30_000 });
-  pass('the first admin signs in and sets a password');
+  const signedIn = (url) => url.origin === new URL(base).origin && !url.pathname.startsWith('/sso/');
+  for (let step = 0; step < 4 && !signedIn(new URL(page.url())); step++) {
+    await page.waitForLoadState('domcontentloaded');
+    const before = page.url();
+    if (await page.locator('#password-new').count()) {
+      const fresh = `Ab1-${crypto.randomUUID()}`;
+      await page.locator('#password-new').fill(fresh);
+      await page.locator('#password-confirm').fill(fresh);
+      await page.locator('[type=submit]').first().click();
+    } else if (page.url().includes('CONFIGURE_TOTP')) {
+      await page.locator('#mode-manual').click();
+      const secret = (await page.locator('#kc-totp-secret-key').innerText()).replace(/\s+/g, '');
+      await page.locator('#totp').fill(totp(secret));
+      await page.locator('#userLabel').fill('deploy test');
+      await page.locator('[type=submit]').first().click();
+    }
+    await page.waitForURL((url) => signedIn(url) || url.href !== before, { timeout: 30_000 }).catch(() => {});
+  }
+  await page.waitForURL(signedIn, { timeout: 30_000 });
+  pass('the first admin signs in, sets a password and a one-time-code app');
 
   // The kit: where the page says it comes from, and that every kit file came from there.
   await page.waitForSelector('meta[name="augur-kit"]', { state: 'attached', timeout: 30_000 });
