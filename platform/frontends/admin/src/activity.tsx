@@ -248,7 +248,7 @@ export function Activity({ api }: { api: AdminApi }) {
   const e = entries.find((x) => x.id === open);
 
   return (
-    <Page heading="Activity" summary="Every change made through the platform: who, what, where and when. Nothing here can be edited or removed.">
+    <Page heading="Activity" summary="Every change made through AUGUR: who, what, where and when. Nothing here can be edited or removed.">
       <div className="admin-filters" data-filters>
         <Select label="Who" options={options.people} value={filters.who} onChange={set('who')} />
         <Select label="Where" options={options.areas} value={filters.area} onChange={set('area')} />
