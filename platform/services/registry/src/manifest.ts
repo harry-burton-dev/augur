@@ -1,4 +1,5 @@
 import semver from 'semver';
+import { APP_CATEGORIES, type AppCategory } from '@augur/mfe-sdk';
 import { SCOPES, type Scope } from '@augur/service-kit';
 import { PLATFORM_APP_VERSIONS } from './platform-app-versions.js';
 
@@ -42,6 +43,11 @@ export interface AppEntry {
   settings?: AppSetting[];
   /** Features the app has ready to try before they're everyone's (SDK 1.7): admins say who gets each, people opt in. */
   previews?: FeaturePreview[];
+  /**
+   * The kind of app it says it is (SDK 1.11, ADR 0032): `platform` or `pillar`. Only honoured for apps
+   * that ship with AUGUR or come from its app feed; `categoryOf` decides the kind in force.
+   */
+  category?: AppCategory;
 }
 
 /**
@@ -180,7 +186,7 @@ export const menuWarnings = (entry: Pick<AppEntry, 'name' | 'icon' | 'menu' | 'a
  * "/" is the shell's own: Title, where every app is a chapter.
  */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0', icon: 'home', description: 'What needs you' },
+  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0', icon: 'home', description: 'What needs you', category: 'platform' },
   {
     id: 'admin',
     name: 'Admin',
@@ -191,6 +197,7 @@ export const platformApps: AppEntry[] = [
     icon: 'admin',
     description: 'People, departments, apps, status, updates and activity',
     requiredRole: 'admin',
+    category: 'platform',
     // people, departments, apps and the system are the organisation's, whichever floor you stand on
     sameOnEveryFloor: true,
     areas: [
@@ -244,12 +251,37 @@ export const platformApps: AppEntry[] = [
     icon: 'download',
     description: 'What this deployment runs, and upgrading it',
     requiredRole: 'admin',
+    category: 'platform',
     // what a deployment runs is the deployment's, whichever floor you stand on
     sameOnEveryFloor: true,
     // its sections are in its own rail (ADR 0030)
     orbit: false,
   },
 ];
+
+/** Why an app's own claim to a kind isn't used. */
+export const CATEGORY_REFUSED = 'Only apps that ship with AUGUR or come from its app feed can be a platform or pillar app.';
+
+/** The kind in force for an app, and the claim it made that isn't used, if any. */
+export interface CategoryInForce {
+  category?: AppCategory;
+  refused?: { asked: AppCategory; why: string };
+}
+
+/**
+ * The kind in force for an app (ADR 0032): the registry's own apps are platform apps;
+ * an app's own claim counts only when it ships with AUGUR (PILLAR_APPS) or the app runner
+ * installed it from the signed app feed. Anything else is just an app, and the claim is
+ * reported to admins as refused. A value this registry doesn't know is no kind.
+ */
+export const categoryOf = (entry: Pick<AppEntry, 'id' | 'category'>, trust: { ships: boolean; fromFeed: boolean }): CategoryInForce => {
+  const own = platformApps.find((a) => a.id === entry.id);
+  if (own) return { category: own.category ?? 'platform' };
+  const asked = entry.category;
+  if (!asked || !(APP_CATEGORIES as readonly string[]).includes(asked)) return {};
+  if (trust.ships || trust.fromFeed) return { category: asked };
+  return { refused: { asked, why: CATEGORY_REFUSED } };
+};
 
 /**
  * Platform apps whose frontend hasn't shipped yet. Their ids and routes stay
@@ -332,6 +364,7 @@ export const appEntrySchema = {
     orbit: { type: 'boolean' },
     sameOnEveryFloor: { type: 'boolean' },
     focus: { type: 'boolean' },
+    category: { enum: [...APP_CATEGORIES] },
     areas: {
       type: 'array',
       maxItems: 6,
