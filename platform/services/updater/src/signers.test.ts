@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { verifyArgs } from './server.ts';
-import { AUGUR_REPOSITORIES, augurDevIdentity, isDevBuild, releaseIdentity } from './signers.ts';
+import { AUGUR_REPOSITORIES, augurDevIdentity, isDevBuild, releaseIdentity, repositoryOfIdentity } from './signers.ts';
 
 describe('release signers', () => {
   const identity = releaseIdentity('o/r/.github/workflows/release.yml');
@@ -20,6 +20,14 @@ describe('release signers', () => {
     expect(matches('refs/pull/12/merge')).toBe(false);
     expect(new RegExp(identity).test('https://github.com/o/rx/.github/workflows/release.yml@refs/heads/main')).toBe(false);
     expect(new RegExp(identity).test('https://github.com/o/r/.github/workflows/releaseXyml@refs/heads/main')).toBe(false);
+  });
+
+  it('name the repository a fork’s IMAGE_SIGNER is in, so its dev builds are taken from there too', () => {
+    expect(repositoryOfIdentity('https://github.com/acme/augur/.github/workflows/release.yml@refs/heads/main')).toBe('acme/augur');
+    expect(repositoryOfIdentity(releaseIdentity('acme/augur/.github/workflows/release.yml'))).toBe('acme/augur');
+    // The publisher's own, under both its names, names no one repository: its dev signer stays as it was.
+    expect(repositoryOfIdentity(releaseIdentity(AUGUR_REPOSITORIES.map((r) => `${r}/.github/workflows/release.yml`)))).toBeUndefined();
+    expect(repositoryOfIdentity('')).toBeUndefined();
   });
 
   it('are checked as a pattern, while an exact identity stays exact', () => {

@@ -90,6 +90,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm check:versions
       - run: pnpm check:release
+      - run: pnpm check:settings
       - run: pnpm check:catalog
       - run: pnpm check:licences
       - run: pnpm test:scripts

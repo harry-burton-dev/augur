@@ -33,7 +33,7 @@ The gateway publishes its public key at `/api/gateway/v1/caller-keys`, with no s
 - Otherwise, in production (`NODE_ENV=production`, which every image sets), `GATEWAY_URL` plus that path. `GATEWAY_URL` defaults to `http://gateway:8080`.
 - Otherwise (local dev and tests), nothing is checked and `x-user-*` headers are believed, as `pnpm dev:app` sends them.
 
-The gateway makes a new key each time it starts. A service sees a key id it doesn't know and fetches the key again, so nothing needs restarting. More than one gateway behind a load balancer must sign with the same key: give each the same `CALLER_SIGNING_KEY` (`openssl rand -hex 32`).
+The gateway makes a new key each time it starts. A service sees a key id it doesn't know and fetches the key again, so nothing needs restarting. More than one gateway behind a load balancer must sign with the same key: give each the same `CALLER_SIGNING_KEY` (`openssl rand -hex 32`, in `.env`), which also keeps the key the same across the gateway's restarts.
 
 ## From inside a container
 
