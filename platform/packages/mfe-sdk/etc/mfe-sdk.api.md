@@ -5,6 +5,9 @@
 ```ts
 
 // @public
+export const APP_CATEGORIES: readonly ["platform", "pillar"];
+
+// @public
 export interface AppArea {
     detail?: string;
     icon?: string;
@@ -14,9 +17,13 @@ export interface AppArea {
 }
 
 // @public
+export type AppCategory = (typeof APP_CATEGORIES)[number];
+
+// @public
 export interface AppManifestEntry {
     ai?: boolean;
     areas?: AppArea[];
+    category?: AppCategory;
     description?: string;
     entry: string;
     floors?: WorkspaceKind[];
