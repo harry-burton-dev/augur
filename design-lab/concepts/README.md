@@ -60,7 +60,7 @@ app pattern took it), **dropped** (say why in the file).
 | [Feel as a setting](feel-as-a-setting.md) | to explore | 2026-11-03-room-tone |
 | [Hear the reach](hear-the-reach.md) | to explore | 2026-11-03-room-tone |
 | [Mine versus ours](mine-versus-ours.md) | to explore | 2026-11-02-wear-and-time |
-| [One now](one-now.md) | to explore | 2026-11-02-wear-and-time |
+| [One now](one-now.md) | explored | 2026-11-02-wear-and-time |
 | [The past under water](past-under-water.md) | to explore | 2026-11-02-wear-and-time |
 | [Question and answer](question-and-answer.md) | explored | 2026-11-03-room-tone |
 | [The recipe is the record](the-recipe-is-the-record.md) | to explore | batch 3 research |
@@ -68,7 +68,7 @@ app pattern took it), **dropped** (say why in the file).
 | [The shell owns loudness](shell-owns-loudness.md) | explored | 2026-11-03-room-tone |
 | [The signal is the control](the-signal-is-the-control.md) | to explore | 2026-11-03-room-tone |
 | [Subtraction as cue](subtraction-as-cue.md) | to explore | 2026-11-03-room-tone |
-| [Time as an address](time-as-address.md) | to explore | 2026-11-02-wear-and-time |
+| [Time as an address](time-as-address.md) | explored | 2026-11-02-wear-and-time |
 | [Time is matter, light is need](time-is-matter.md) | to explore | 2026-11-02-wear-and-time |
 | [Turn-taking](turn-taking.md) | to explore | 2026-11-03-room-tone |
 | [Visible repair](visible-repair.md) | explored | 2026-11-02-wear-and-time |
@@ -79,6 +79,11 @@ app pattern took it), **dropped** (say why in the file).
 | [News waits for the edition](news-waits-for-the-edition.md) | explored | 2026-11-03-the-switchboard |
 | [Quiet has named keys](quiet-has-named-keys.md) | explored | 2026-11-03-the-switchboard |
 | [Rehearse on last week](rehearse-on-last-week.md) | explored | 2026-11-03-the-switchboard |
+| [Status beside the words](status-beside-the-words.md) | explored | 2026-11-03-the-minute |
+| [Agreed in the room](agreed-in-the-room.md) | explored | 2026-11-03-the-minute |
+| [Decided versus said](decided-versus-said.md) | explored | 2026-11-03-the-minute |
+| [Revisit lines](revisit-lines.md) | explored | 2026-11-03-the-minute |
+| [The wake](the-wake.md) | explored | 2026-11-03-the-minute |
 | [Context is a working set](context-is-a-working-set.md) | to explore | batch 6 research |
 | [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
 | [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |

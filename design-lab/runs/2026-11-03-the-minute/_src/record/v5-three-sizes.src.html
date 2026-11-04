@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Record V5 · Three sizes</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the same record as a chip, a card and a page; the same facts at every size ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1fr) minmax(0,1.3fr);grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4) var(--space-5)}
+.ttl{grid-column:1 / -1;display:flex;align-items:end;justify-content:space-between;gap:var(--space-5)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);justify-content:center}
+.col > .lab{margin-bottom:var(--space-2)}
+.col > .lab{display:flex;justify-content:space-between}
+.ctx{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);background:var(--surface-inset);border:1px solid var(--hairline);font-size:var(--type-body);line-height:var(--leading-lead)}
+.ctx .src{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-bottom:var(--space-1)}
+.chip{display:inline-flex;align-items:center;gap:var(--space-2);padding:0 var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);white-space:nowrap;vertical-align:1px;font-size:var(--type-small)}
+.chip.st-reversed{background:var(--x-proposed-stale)}
+.chip.st-review{border-color:var(--x-proposed-warn)}
+.card{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline-strong);background:var(--surface-overlay);box-shadow:var(--shadow-raised);display:grid;gap:var(--space-2)}
+.card .t{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.card .m{display:flex;gap:var(--space-3);flex-wrap:wrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.card .m b{font-weight:400;color:var(--ink)}
+.card .pt{border-top:1px solid var(--hairline);padding-top:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}
+.page{padding:var(--space-4) var(--space-5);display:grid;gap:var(--space-3);align-content:start}
+.page .res{font-size:var(--type-body);line-height:var(--leading-body)}
+.page .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+.page .grid div{border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.page .grid b{display:block;font:300 var(--type-heading)/var(--leading-heading) var(--font-mono);color:var(--light)}
+.page .grid span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.page .acts{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.page .acts div{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-2);align-items:center}
+.check{grid-column:1 / -1;display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));gap:var(--space-1) var(--space-3);align-items:center;padding:var(--space-3) var(--space-4);border-top:1px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small)}
+.check .h{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.check .ok{color:var(--x-proposed-lit);display:inline-flex;align-items:center;gap:var(--space-1)}
+.pulse{transition:background var(--motion-calm) var(--ease-out)}
+.pulse.on{background:var(--x-proposed-lit-wash)}
+.as{display:flex;gap:var(--space-1)}
+.as button{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);padding:2px var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.as button[aria-pressed="true"]{border-color:var(--x-proposed-lit);color:var(--light)}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,.85fr) minmax(0,1fr) minmax(0,1.2fr);gap:var(--space-3) var(--space-4)}.page .grid b{font-size:var(--type-lead)}.page{padding:var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A decision record · V5</b> three sizes: chip, card and page give the same status, dates and counts · the overview rung, same digits at every height</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = Dn('D-118'), MT = meetingOf('D-118');
+const ASAT = [MT.date, '2026-08-20', '2026-10-20', DATA.today];
+const S = { as: '2026-10-20', flash: false };
+/* one function gives the facts every size draws */
+function facts(at) {
+  const st = statusAt('D-118', at), acts = D.actions.map(a => actionAt(a, at));
+  return { st, open: acts.filter(a => a.open).length, late: acts.filter(a => a.late).length, crossed: D.revisitIf.filter(t => t.tripped && le(t.tripped, at)).length, since: st === 'reversed' ? D.reversedOn : st === 'review' ? D.revisitIf.filter(t => t.tripped && le(t.tripped, at)).map(t => t.tripped).sort().pop() : D.inForce, acts };
+}
+const sinceW = f => f.st === 'reversed' ? `by ${D.reversedBy}, ${dt(f.since, 'short')}` : f.st === 'review' ? `line crossed ${dt(f.since, 'short')}` : `since ${dt(f.since, 'short')}`;
+function chip(f) { return `<span class="chip ${ST[f.st].cls} pulse ${S.flash ? 'on' : ''}">${did('D-118')}<i class="dm ${ST[f.st].cls}"></i>${ST[f.st].w.toLowerCase()}${f.st === 'reversed' ? ' → ' + D.reversedBy : ''}</span>`; }
+function render() {
+  const at = S.as, f = facts(at);
+  const rows = [['Status', ST[f.st].w], ['Since', sinceW(f)], ['Open actions', f.open], ['Past their date', f.late], ['Lines crossed', f.crossed]];
+  $('#app').innerHTML = topHTML(['Mandate', 'Decisions', 'D-118', 'Sizes'], [['A', 'as at'], ['T', 'record fields', 'h-t'], ['R', 'replay']], { as: at }) +
+    `<main class="main"><div class="wrap">
+    <div class="ttl"><div><p class="eyebrow">A decision record at three sizes</p><p class="h1">Chip, card, page</p></div><span class="as">${ASAT.map(d => `<button data-d="${d}" aria-pressed="${d === at}">${d === DATA.today ? 'today' : dt(d, 'short')}</button>`).join('')}</span></div>
+    <section class="col"><p class="lab"><span>Word size · a chip</span><span>inside other records</span></p>
+      <div class="ctx dep"><span class="src">${I('inbox', 12)} ${P('p3').name}’s Inbox</span>${amHTML(f.acts[1].shown, 14)} ${Ac('A-302').text}, by ${dt(f.acts[1].due, 'short')}, from ${chip(f)}</div>
+      <div class="ctx dep" style="--i:1"><span class="src">${I('file-text', 12)} ${docT('doc-proc')} · Artifacts</span>Our own fitters inspect every van each month, under ${chip(f)}.</div>
+      <div class="ctx dep" style="--i:2"><span class="src">${I('target', 12)} Intent M-42 · Mandate</span>Forecast saving counts £16,000 a year from ${chip(f)}.</div></section>
+    <section class="col"><p class="lab"><span>Row size · a card</span><span>on hover, in the log</span></p>
+      <div class="card dep pulse ${S.flash ? 'on' : ''}" style="--i:3"><p class="lab">${did('D-118')} ${stHTML(f.st)}</p><p class="t">${D.title}</p>
+        <div class="m"><span>${B.short}, <b>${dt(MT.date, 'short')}</b></span><span>${sinceW(f)}</span></div>
+        <div class="m"><span><b>${f.open}</b> open actions</span><span><b>${f.late}</b> past their date</span><span><b>${f.crossed}</b> of ${D.revisitIf.length} lines crossed</span></div>
+        <p class="pt">${f.st === 'reversed' ? Dn(D.reversedBy).plain : D.plain}</p></div></section>
+    <section class="col"><p class="lab"><span>Page size</span><span>the record</span></p>
+      <div class="page pane dep pulse ${S.flash ? 'on' : ''}" style="--i:4"><p class="lab">${did('D-118')} ${stHTML(f.st)} <span class="muted" style="text-transform:none;letter-spacing:0">${sinceW(f)}</span></p><p class="h2">${D.title}</p><p class="res">${D.words}</p>
+        <div class="grid"><div><b>${f.open}</b><span>open actions</span></div><div><b>${f.late}</b><span>past their date</span></div><div><b>${f.crossed}</b><span>of ${D.revisitIf.length} lines crossed</span></div><div><b>${D.evidence.length}</b><span>records it rests on</span></div></div>
+        <div class="acts">${D.actions.map((a, i) => `<div>${amHTML(f.acts[i].shown, 14)}<span>${Ac(a).text}</span><span class="${f.acts[i].late ? 'late' : 'muted'}">${AS[f.acts[i].shown].s}</span></div>`).join('')}</div></div></section>
+    <div class="check"><span class="h">Same at every size</span>${rows.map(([k, v]) => `<span><span class="muted">${k}</span> <b style="font-weight:400" class="lite">${v}</b> <span class="ok">${I('check', 12)} 3 of 3</span></span>`).join('')}<span class="tk" style="grid-column:1 / -1">chip, card and page all call facts(D-118, as_at); none of them stores a status</span></div>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.as button').forEach(b => b.onclick = () => { S.as = b.dataset.d; render(); });
+}
+function replay() {
+  clearLater(); S.as = '2026-10-20'; S.flash = false; render(); settle();
+  /* the moment: the date moves to today; chip, card and page change together, once */
+  later(() => { S.as = DATA.today; S.flash = true; render(); }, MOMENT());
+  later(() => { S.flash = false; render(); }, MOMENT() + ms('--motion-run'));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key.toLowerCase() === 'a') { S.as = ASAT[(ASAT.indexOf(S.as) + 1) % ASAT.length]; render(); }
+});
+replay();
+</script>
+</body>
+</html>
