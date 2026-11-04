@@ -60,16 +60,18 @@ export class AppMounter {
   /**
    * Unmounts whatever is open and mounts `app`. A newer call wins over a slower older one.
    *
-   * An app whose manifest sets `followsAddress` stays mounted instead when it is already open, from the
-   * same catalogue entry (so the same floor and previews), on the same floor, and nothing is waiting for
-   * it (an intent or a request): the shell tells it the new path. Resolves `'kept'` then, else `'mounted'`.
+   * An app whose manifest sets `followsAddress` and that gives `navigated` stays mounted instead when it is
+   * already open, from the same catalogue entry (so the same floor and previews), on the same floor, and
+   * nothing is waiting for it (an intent or a request): the shell tells it the new path. Both are needed,
+   * because the shell's own moves (Find, menus, notifications) push the address without a popstate, so an
+   * app that can't hear them would show the old place. Resolves `'kept'` then, else `'mounted'`.
    */
   async mount(app: AppManifestEntry, ctx: MountContext): Promise<'mounted' | 'kept'> {
     const generation = ++this.generation;
     const open = this.current;
-    if (open && app.followsAddress && open.app === app && open.floor === ctx.workspace.id && !ctx.intent && !ctx.reply) {
+    if (open && app.followsAddress && open.mfe.navigated && open.app === app && open.floor === ctx.workspace.id && !ctx.intent && !ctx.reply) {
       try {
-        open.mfe.navigated?.(open.el, ctx.path);
+        open.mfe.navigated(open.el, ctx.path);
       } catch {
         // An app that trips over the news is mounted again, as one without the flag would be.
         return this.mountFresh(app, ctx, generation);

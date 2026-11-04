@@ -101,7 +101,8 @@ export interface AppManifestEntry {
    * so Back and Forward inside its route don't mount it again (SDK 1.11). While
    * the same app stays open on the same floor and no intent is waiting for it,
    * the shell keeps it mounted and calls its `navigated` with the new path.
-   * Without it, every move mounts the app again at the new path.
+   * An app without `navigated` is mounted again on every move, flag or not.
+   * Without the flag, every move mounts the app again at the new path.
    */
   followsAddress?: boolean;
   /**
@@ -335,8 +336,10 @@ export interface MicroFrontend {
    * The shell kept the app mounted through a move inside its route, Back or
    * Forward or a link, because its manifest sets `followsAddress` (SDK 1.11).
    * `path` is below the app's route, as `ctx.path` is at mount; `ctx.path`
-   * keeps the path it was mounted at. An app whose router reads the address
-   * itself has nothing to do here.
+   * keeps the path it was mounted at. A router that reads the address itself
+   * still needs telling: the shell's own moves (Find, menus, notifications)
+   * push the address without a popstate. Without it the shell mounts the app
+   * again on every move.
    */
   navigated?(el: HTMLElement, path: string): void;
   /**

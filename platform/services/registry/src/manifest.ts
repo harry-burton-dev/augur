@@ -202,8 +202,6 @@ export const platformApps: AppEntry[] = [
     category: 'platform',
     // people, departments, apps and the system are the organisation's, whichever floor you stand on
     sameOnEveryFloor: true,
-    // it moves between its sections itself, so Back and Forward keep it mounted
-    followsAddress: true,
     areas: [
       { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People and departments' },
       { id: 'system', label: 'System', icon: 'server', detail: 'Apps, status, updates and activity' },
@@ -258,8 +256,6 @@ export const platformApps: AppEntry[] = [
     category: 'platform',
     // what a deployment runs is the deployment's, whichever floor you stand on
     sameOnEveryFloor: true,
-    // it moves between its sections itself, so Back and Forward keep it mounted
-    followsAddress: true,
     // its sections are in its own rail (ADR 0030)
     orbit: false,
   },

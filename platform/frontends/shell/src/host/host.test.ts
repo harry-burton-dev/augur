@@ -116,6 +116,15 @@ describe('AppMounter', () => {
     expect(lib.navigated).not.toHaveBeenCalled();
   });
 
+  it('mounts an app again that sets the flag but has no navigated to hear the path with', async () => {
+    const follows = app('library', '/library', { followsAddress: true });
+    const lib = mfe();
+    const m = new AppMounter(document.createElement('div'), vi.fn(async () => ({ default: lib })));
+    await m.mount(follows, ctx());
+    expect(await m.mount(follows, { ...ctx(), path: '/doc/7' })).toBe('mounted');
+    expect(lib.mount).toHaveBeenCalledTimes(2);
+  });
+
   it('mounts an app again when it throws on being told the path', async () => {
     const follows = app('library', '/library', { followsAddress: true });
     const lib = {
