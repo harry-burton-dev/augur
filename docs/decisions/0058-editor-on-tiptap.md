@@ -32,7 +32,7 @@ Option 1, with these rules:
 
 - A mention is one unit in the text: it shows as a chip where it was written, the caret steps over it, and one Backspace removes it whole.
 - Formatting shows as formatting while writing. Pasted rich text is cut down to the subset.
-- The editor chunk is about 100 kB gzipped, loaded once per kit version and only by pages with an editor. The main Quill module doesn't grow.
+- The editor chunk is about 130 kB gzipped (markdown-it, which Quill already loads for its reader, comes on top of it), loaded once per kit version and only by pages with an editor. The main Quill module doesn't grow.
 - Behaviour that happy-dom can't fake (typing into contenteditable) is covered by Storybook stories in a real browser on Chromatic; the Markdown round trip and the mention format are unit tests.
 - Harry's K5 default stays true for the frozen Lit kit's `ui-editor` until SDK 2 removes it.
 
