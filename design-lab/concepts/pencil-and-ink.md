@@ -20,3 +20,5 @@ Used in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): the model hea
 In [`2026-11-03-the-label`](../runs/2026-11-03-the-label/): suggested labels are pencil until inked; the model gateway refuses labelled values.
 
 In [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a model-drafted handover situation and background are pencil until the giver accepts them; the assessment and recommendation are never model-written.
+
+In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the model proposes links between lines from their notes, never codes; G changes no count (mapping V6).

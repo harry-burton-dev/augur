@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Mapping V1 · Each line, in a sentence</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the mapping is a sentence with blanks; each blank names the column that fills it ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-5)}
+.tpl{font-weight:300;font-size:var(--type-title-s);line-height:calc(var(--leading-title-s) + var(--space-4));color:var(--ink);margin:0;max-width:62ch}
+.slot{display:inline-flex;flex-direction:column;vertical-align:top;line-height:1.1;margin:0 var(--space-1)}
+.slot .w{font-weight:400;color:var(--light);border-bottom:2px solid var(--light);padding:0 var(--space-1)}
+.slot .c{align-self:flex-start;margin-top:var(--space-1);font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted);display:inline-flex;gap:var(--space-1);align-items:center}
+.slot.fixed .w{border-bottom-style:dotted}
+.slot.gap .w{color:var(--ink-muted);border-bottom:1px dashed var(--ink-muted)}
+.slot.on .w{background:color-mix(in srgb,var(--light) 8%,transparent)}
+.read{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.read .n{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.read p{margin:0;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.read p b{font-weight:400;color:var(--light);border-bottom:1px dotted var(--x-proposed-seam)}
+.read p .nk{display:inline-flex;align-items:center;gap:var(--space-1);color:var(--ink-muted)}
+.read .raw{grid-column:2 / span 2;display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.lower{min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-5)}
+.lower section{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.lower ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.lower li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.lower li svg{color:var(--ink-muted);margin-top:2px}
+.lower li small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.tpl{font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-4))}.read p{font-size:var(--type-body);line-height:var(--leading-body)}.lower li{font-size:var(--type-small);line-height:var(--leading-small)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Mapping · V1</b> each line in a sentence; every blank names the column that fills it · said in a sentence, Mad Libs, Query by Example</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R), map = STEP('s12'), K = DATA.kinds.inspection, ask = DATA.asked[0];
+const colFor = id => Object.entries(map.cols).find(([, d]) => d === id)?.[0];
+const recs = R.recs;
+const S = { i: recs.findIndex(r => r.v.result.val === 'failed' && r.v.rnote), on: null };
+const SLOTS = [['van', 'van'], ['depot', 'depot'], ['on', 'inspected on'], ['result', 'result'], ['odometer', 'odometer'], ['note', 'note']];
+const slot = (id, cls = '') => { const c = id === 'by' ? null : colFor(id); return `<span class="slot ${cls} ${S.on === id ? 'on' : ''}" data-s="${id}"><span class="w">${KD(id).word}</span><span class="c">${c ? `${I('arrow-up', 10)} ${esc(c)}` : `${I('pin', 10)} the same for every line`}</span></span>`; };
+function sentence(r) {
+  const v = r.v;
+  const odo = v.odometer.val ? `<b>${v.odometer.val}</b> miles on the clock` : `<span class="nk"><span class="mk-gap"></span> miles not known yet</span>`;
+  return `An ${K.word} of van <b>${v.van.val}</b> at <b>${v.depot.val}</b> on <b>${v.on.val}</b>: <b>${v.result.val}</b>${v.note.val ? ` (<b>${esc(v.note.val)}</b>)` : ''}, ${odo}, by <b>${v.by.val}</b>${v.kindOfVisit ? `. <span class="nk">${I('message-circle-question-mark', 14)} ${esc(v.kindOfVisit.val)}, kept in the note until “${ask.word}” exists</span>` : ''}.`;
+}
+function render() {
+  const r = recs[S.i];
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, R.file.name, 'Map'], [['↑↓', 'another line'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <p class="tpl dep" style="--i:0">Each line is an ${K.word} of a ${slot('van')} at a ${slot('depot')} on ${slot('on')}, ${slot('result')}, with ${slot('odometer')} miles and a ${slot('note')}, by ${slot('by', 'fixed')}.<span class="tk">${K.tech}(${K.details.map(d => `${d.tech} ← ${colFor(d.id) || (d.id === 'by' ? FIRM.id : '—')}`).join(', ')})</span></p>
+    <div class="read dep" style="--i:2"><span class="n">line ${r.n}</span><p>${sentence(r)}</p><span class="n">${S.i + 1} of ${recs.length}</span>
+      <span class="raw">${r.cells.map(c => raw(c)).join('')}</span></div>
+    <div class="lower">
+      <section><p class="eyebrow">${I('link', 12)} What each blank links to</p><ul>
+        <li>${I(DATA.kinds.van.icon, 14)}<span>van: a ${DATA.kinds.van.word} ${DATA.app} keeps<small>${R.st.s11.matched.size} known; ${plural(R.st.s11.fresh.size, 'new one')} (${[...R.st.s11.fresh].join(', ')}) proposed in Triage</small></span></li>
+        <li>${I(DATA.kinds.depot.icon, 14)}<span>depot: a ${DATA.kinds.depot.word} ${DATA.app} keeps<small>all ${Object.keys(R.st.s8.groups).length} known; spellings joined in tidying</small></span></li>
+        <li>${I(DATA.kinds.firm.icon, 14)}<span>by: ${FIRM.name}<small>a firm ${DATA.app} keeps (${FIRM.id}); not in any column, so it is said once for the whole file</small></span></li></ul></section>
+      <section><p class="eyebrow">${I('check', 12)} What each blank expects</p><ul>
+        <li>${I('calendar', 14)}<span>inspected on: a date<small>${recs.length} of ${recs.length} fit</small></span></li>
+        <li>${I('list', 14)}<span>result: one of ${KD('result').words.map(w => `“${w}”`).join(', ')}<small>${recs.filter(x => KD('result').words.includes(x.v.result.val)).length} of ${recs.length} fit</small></span></li>
+        <li>${I('gauge', 14)}<span>odometer: a number of miles<small>${recs.filter(x => x.v.odometer.val).length} of ${recs.length} fit; ${PL.valuesAside.length} not known yet</small></span></li></ul></section>
+      <section><p class="eyebrow">${I('circle-dashed', 12)} Columns with no blank</p><ul>
+        <li>${I('message-circle-question-mark', 14)}<span>${raw(ask.from)} has no blank yet<small>asked ${P(ask.decides).name} for “${ask.word}” on ${ask.when}; kept in the note meanwhile, so nothing is lost</small></span></li>
+        <li>${I('check', 14)}<span>every other column fills a blank<small>${R.header.filter(h => h !== ask.from).map(h => esc(h)).join(', ')}</small></span></li></ul></section>
+    </div>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.slot').forEach(s => s.onmouseenter = () => { S.on = s.dataset.s; });
+}
+function replay() { clearLater(); S.i = recs.findIndex(r => r.v.result.val === 'failed' && r.v.rnote); document.body.classList.add('pre'); render(); settle(ms('--motion-run')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowDown') { S.i = (S.i + 1) % recs.length; render(); e.preventDefault(); }
+  if (e.key === 'ArrowUp') { S.i = (S.i - 1 + recs.length) % recs.length; render(); e.preventDefault(); }
+});
+replay();
+</script>
+</body>
+</html>
