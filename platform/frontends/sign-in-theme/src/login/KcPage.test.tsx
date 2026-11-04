@@ -1,7 +1,7 @@
 import { createGetKcContextMock } from 'keycloakify/login/KcContext';
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { describe, expect, it, vi } from 'vitest';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { kcEnvDefaults, themeNames } from '../kc.gen';
 import type { KcContextExtension } from './KcContext';
 import KcPage from './KcPage';
@@ -11,10 +11,20 @@ const { getKcContextMock } = createGetKcContextMock({
   kcContextExtensionPerPage: {},
 });
 
+let root: Root | undefined;
+
+// Unmounted before the next test: Keycloakify loads the page's language after the first render and
+// drops it once the page is gone, so nothing is left to update a torn-down document.
+afterEach(async () => {
+  await act(async () => root?.unmount());
+  root = undefined;
+});
+
 const render = async (kcContext: Parameters<typeof KcPage>[0]['kcContext']) => {
   const el = document.createElement('div');
   document.body.replaceChildren(el);
-  await act(async () => createRoot(el).render(<KcPage kcContext={kcContext} />));
+  root = createRoot(el);
+  await act(async () => root!.render(<KcPage kcContext={kcContext} />));
   // Keycloakify loads each page lazily: wait until the page is in.
   await vi.waitFor(() => expect(el.querySelector('#kc-page-title form, #kc-content form')).not.toBeNull(), { timeout: 5000, interval: 20 });
   await act(async () => undefined);
