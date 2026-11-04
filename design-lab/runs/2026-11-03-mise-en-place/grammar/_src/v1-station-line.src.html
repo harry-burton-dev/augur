@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Grammar V1 · The station line</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: six words as stations on one line, set aside under it ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.line{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-3);min-height:0;position:relative}
+.line::before{content:"";position:absolute;left:0;right:0;top:calc(var(--space-6) + var(--space-1));height:1px;background:linear-gradient(90deg,transparent,var(--hairline-strong) 8%,var(--hairline-strong) 92%,transparent)}
+.stn{position:relative;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);min-height:0;transition:border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.stn .kw{font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light);margin:0}
+.stn .aw{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0}
+.stn .dot{position:absolute;top:calc(var(--space-6) - var(--space-1));right:var(--space-3);width:var(--space-3);height:var(--space-3);border-radius:50%;border:1px solid var(--hairline-strong);background:var(--slate-deep);transition:background var(--motion-calm) var(--ease-out),box-shadow var(--motion-calm) var(--ease-out)}
+.stn .rule{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);margin:0}
+.stn .ct{margin-top:auto;font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.stn .ct b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.stn.lit{border-color:var(--hairline-strong);background:var(--surface-raised)}
+.stn.lit .dot{background:var(--light);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--light) 50%,transparent)}
+.kit,.nev{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.kit svg,.nev svg{vertical-align:-2px}
+.nev{color:var(--ink)}
+.ticket{min-height:calc(var(--space-8) + var(--space-5));border-radius:var(--radius-key);padding:var(--space-2);background:var(--surface-inset);border:1px solid var(--hairline);display:grid;gap:var(--space-1);align-content:start;font-size:var(--type-small);line-height:var(--leading-small);opacity:.35;transition:opacity var(--motion-calm) var(--ease-out)}
+.stn.lit .ticket,.stn.done .ticket{opacity:1}
+.ticket .r{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+.ticket .lab{color:var(--ink-muted);min-width:7ch}
+.card{display:grid;gap:2px}
+.card .h{display:flex;align-items:center;gap:var(--space-2);color:var(--light);font-size:var(--type-meta)}
+.under{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--space-4);align-items:start}
+.under .tray{opacity:.35;transition:opacity var(--motion-calm) var(--ease-out)}
+.under .tray.lit{opacity:1}
+.under .kw{font:300 var(--type-lead)/var(--leading-lead) var(--font-sans);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light);margin:0}
+.under p{margin:0}
+.head{display:flex;align-items:baseline;gap:var(--space-4);flex-wrap:wrap}
+@media (max-width:1400px){.stn .rule{font-size:var(--type-small);line-height:var(--leading-small)}.kit,.nev{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.kit svg,.nev svg{vertical-align:-2px}
+.nev{color:var(--ink)}
+.ticket{min-height:var(--space-8)}.stn{padding:var(--space-2)}.stn .kw{font-size:var(--type-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V1</b> the station line: ingredient, prep, recipe, pass, plate; set aside under it · Escoffier's brigade, line-side stations</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R);
+const FOLLOW = R.lines.find(l => l.role === 'land' && l.rec.v.van.by.length && l.rec.v.depot.raw !== l.rec.v.depot.val);
+const ASIDE = PL.aside[0];
+const S = { at: -1 };
+const STN = [
+  { k: 'Ingredient', a: `the file, as it came · ${DATA.app}, ${DATA.bench}`, rule: 'Kept exactly as it arrived. Nothing is changed on it, ever: every later step reads from it.', kit: 'Goods in: check the delivery against the docket before it goes on the shelf.', never: 'edit the file itself',
+    ct: () => `<b>${PL.data}</b> lines of visits · ${R.header.length} columns · from ${P(R.file.from).name}` },
+  { k: 'Prep', a: 'tidying values', rule: 'One kind of fix at a time, shown on the values themselves, with how many it touches.', kit: 'Mise en place: everything washed, cut and in its bowl before service.', never: 'fix a value without saying which line did it',
+    ct: () => `<b>${DATA.recipe.steps.filter(s => R.st[s.id] && R.st[s.id].changed).reduce((a, s) => a + R.st[s.id].changed, 0)}</b> values changed, each by one numbered line` },
+  { k: 'Recipe', a: 'the saved steps', rule: 'Every prep is a numbered line anyone can read, reorder, undo and run again next month.', kit: 'The recipe card and the knitting pattern: a procedure a new hand can follow and check.', never: 'a step only an expert can read',
+    ct: () => `<b>${DATA.recipe.steps.length}</b> lines · “${DATA.recipe.name}”` },
+  { k: 'Pass', a: 'the check before Triage', rule: 'Everything that will be made, changed or set aside, counted against the file’s own total, before anything leaves.', kit: 'The pass: the head chef checks every plate; the line answers “heard”.', never: 'send what wasn’t previewed',
+    ct: () => `file says <b>${R.total.said}</b> · ${PL.land} land + ${PL.aside.length} set aside ${PL.balances ? '✓' : '≠'} · ${PL.copies.length} copy not counted` },
+  { k: 'Plate', a: `what reaches Triage in ${DATA.app}`, rule: `Proposals only. ${P('p2').name} decides in Triage; nothing skips it.`, kit: 'The plate leaves the kitchen once, as checked, with the ticket it answers.', never: 'write straight into what is kept',
+    ct: () => `<b>${PL.land}</b> inspections · ${PL.fresh.length} new van · ${PL.odo.length} odometers` }
+];
+function ticket(i) {
+  const r = FOLLOW.rec, v = r.v;
+  if (i === 0) return `<div class="r"><span class="lab">line ${FOLLOW.n}</span></div>${FOLLOW.cells.slice(0, 5).map(c => `<div class="r">${raw(c)}</div>`).join('')}`;
+  if (i === 1) return ['van', 'on', 'depot', 'result'].map(k => `<div class="r">${pair(v[k].raw, v[k].val)}</div>`).join('');
+  if (i === 2) return ['van', 'on', 'depot', 'result'].map(k => `<div class="r"><span class="lab">${KD(k).word}</span>${v[k].by.map(stepNo).join('')}</div>`).join('') + `<div class="r muted">recipe ${DATA.recipe.id}, version ${DATA.recipe.version}</div>`;
+  if (i === 3) return `<div class="r">${I('check', 12)} new ${DATA.kinds.inspection.word}</div><div class="r">${I('link', 12)} ${r.van.status === 'match' ? 'known' : 'new'} van ${r.van.id}</div><div class="r">${I('link', 12)} known depot ${v.depot.val}</div><div class="r muted">checked: lands once, nothing lost</div>`;
+  return `<div class="card"><span class="h">${I(DATA.kinds.inspection.icon, 14)} ${DATA.kinds.inspection.word}</span>${['van', 'depot', 'on', 'result'].map(k => `<span>${KD(k).word} <span class="lite">${v[k].val}</span></span>`).join('')}<span class="muted">by ${v.by.val} · proposed</span></div>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, 'Kitchen sheet'], [['1–5', 'station'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="head"><h1 class="t">Mise en place, in five stations and a tray</h1><p class="lede">One line of ${FIRM.short}’s ${R.file.month} file, followed from the file to Triage. The words people see are the kitchen’s; the second line under each is where it lives in AUGUR.</p></div>
+    <div class="line">${STN.map((s, i) => `<section class="stn ${S.at === i ? 'lit' : ''} ${S.at > i ? 'done' : ''}" aria-label="${s.k}"><span class="dot" aria-hidden="true"></span>
+      <p class="kw">${s.k}</p><p class="aw">${s.a}</p><p class="rule">${s.rule}</p><div class="ticket">${ticket(i)}</div><p class="kit">${I('chef-hat', 12)} ${s.kit}</p><p class="nev">${I('ban', 12)} Never ${s.never}.</p><p class="ct">${s.ct()}</p></section>`).join('')}</div>
+    <div class="under"><div><p class="kw">Set aside</p><p class="lede">Under the line, never off it. What doesn’t fit is counted, kept with its reason, and shown at the pass. Nothing is dropped without a line in the recipe saying so.</p></div>
+      <div class="tray ${S.at >= 1 ? 'lit' : ''}"><p class="eyebrow">${I('archive', 12)} line ${ASIDE.n} · set aside by recipe line ${ASIDE.by.slice(1)}</p>
+        <p style="margin-top:var(--space-2)">${ASIDE.cells.filter(Boolean).slice(0, 4).map(raw).join(' ')}</p>
+        <p class="muted" style="margin-top:var(--space-1);font-size:var(--type-small)">${ASIDE.why}. Kept here for ${P(DATA.me).name} to ask ${P(R.file.from).name} which van it was; it still counts in the pass (${R.total.said} = ${PL.land} + ${PL.aside.length}).</p></div></div>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() {
+  clearLater(); S.at = -1; render(); settle();
+  const t = ms('--motion-run'), step = ms('--motion-calm');
+  [0, 1, 2, 3, 4].forEach(i => later(() => { S.at = i; render(); }, t + i * step));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-5]$/.test(e.key)) { clearLater(); S.at = +e.key - 1; render(); }
+});
+replay();
+</script>
+</body>
+</html>

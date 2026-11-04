@@ -10,3 +10,5 @@ Every answer says what share of what it covers ("covers 32 of 44"), counts every
 First found in: [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-reference-desk/) (cant V1, workings V2, grammar V4, combined V3).
 
 Could steer: The briefing (M), Explorer org views, the meter (W4).
+
+In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the pass balances against the source file's own TOTAL; every line and every value is accounted for (pass V2).

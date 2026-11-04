@@ -16,7 +16,7 @@ then write the prompt with "what to take from each".
 |---|---|---|---|---|
 | Film and screen graphics | FUI, title sequence, rack focus, letterbox, shot list, Territory Studio | Pushing Pixels FUI archive, Make It So | focus, urgency, motion | cinematic |
 | Instrument panels | glass cockpit, dark cockpit, master caution, annunciator, MFD soft keys | avionics manuals, Open MCT | alerts, telemetry | cinematic |
-| Wear and history | edit wear, read wear, History Flow, provenance, patina, visible repair, strata | Hill and Hollan; Viégas and Wattenberg; Xanadu patterns | history, trust | wear and time |
+| Wear and history | edit wear, read wear, History Flow, provenance, patina, visible repair, strata | Hill and Hollan; Viégas and Wattenberg; Xanadu patterns | history, trust | wear and time; mise en place (provenance, partly) |
 | Sound and listening | earcon, auditory icon, sonification, room tone, worldizing, aural alert | Brewster earcon guidelines; Apple Audio Graphs; Murch | alerts, ambient, a11y | room tone (run 3) |
 | Typography and editorial | standfirst, kicker, measure, baseline grid, optical size, grade axis | Bringhurst; Müller-Brockmann; Kinneir and Calvert | hierarchy, tables | batch 1 (C, queued); batch 6 (Y, partly) |
 | Cartography | hillshade, hypsometric tint, contour, plan oblique, soundings, unsurveyed, generalisation | Imhof; nautical charts; Beck | Explorer, Data Atlas | batch 1 (D, queued) |
@@ -26,7 +26,7 @@ then write the prompt with "what to take from each".
 | Movement notation | Labanotation, Benesh, Eshkol-Wachman, staff, motif, phrasing | Laban; *Designing Gestural Interfaces* ch. 5 | gestures, radial menu, flows | batch 2 (F, partly) |
 | Game interfaces | diegetic, spatial, meta, non-diegetic, HUD-less, wayfinding in world, Dead Space health spine | Game UI Database; Fagerholt and Lorentzon taxonomy | floors, objects, letterbox | batch 2 (G) |
 | Weaving and textiles | warp and weft, draft, threading, treadling, Jacquard card, selvedge, floats | Anni Albers *On Weaving*; Jacquard; handweaving drafts | structure, floors, brand | batch 2 (W2) |
-| Kitchen brigade | mise en place, the pass, expediting, ticket rail, "heard", fire and hold | Escoffier brigade; restaurant expo practice | urgency, handover, queues | batch 3 (J) |
+| Kitchen brigade | mise en place, the pass, expediting, ticket rail, "heard", fire and hold | Escoffier brigade; restaurant expo practice | urgency, handover, queues | batch 3 (J); mise en place (run) |
 | Transit operations | train graph (Marey), headway, dwell, block signalling, dispatcher board | railway timetabling; signalling manuals | scheduling, capacity | the switchboard (train graph); the minute (Marey) |
 | Hospital and ward | early warning score (NEWS2), observation chart, track-and-trigger, whiteboard | NHS NEWS2 chart; ward boards | escalation, thresholds | the switchboard (bleep, whiteboard, partly); paper and the desk (partly) |
 | Museum and exhibition | object label, didactic panel, sightline, vitrine, wayfinding, interpretation hierarchy | V&A label guidelines; Serrell *Exhibit Labels* | Artifacts, explain in place | |
@@ -40,7 +40,7 @@ then write the prompt with "what to take from each".
 | Library classification | faceted classification, PMEST, Colon Classification, UDC, catalogue card, authority file, controlled vocabulary | Ranganathan; Wikidata item pages | Data Atlas structure, finding | batch 3 (H) |
 | Reference librarianship | reference interview, neutral questioning, sense-making, question negotiation | Dervin and Dewdney (1986) | search, asking data | batch 3 (I) |
 | End-user querying | query by example, dynamic queries, pivot table, faceted search, natural-language interface to databases | Zloof (1975); Shneiderman (1992) | search, Data Atlas | batch 3 (I) |
-| Data wrangling | predictive interaction, transformation by example, applied steps, clustering near-duplicates | Wrangler; OpenRefine; Power Query | imports, Triage | batch 3 (J) |
+| Data wrangling | predictive interaction, transformation by example, applied steps, clustering near-duplicates | Wrangler; OpenRefine; Power Query | imports, Triage | batch 3 (J); mise en place (run) |
 | Maintenance engineering | planned preventive maintenance, MOT, advisory, condition-based maintenance, jidoka | fleet and building manuals | upkeep, Upgrade Centre | batch 3 (K); the apprentice (jidoka, partly) |
 | Markings and labels | security classification, handling caveat, allergen label, traffic-light label, licence deed, chain of custody, consent receipt | UK GSC; Dataset Nutrition Label; Creative Commons | governance, sharing | batch 3 (L); the label (run) |
 | Statistical communication | Isotype, transformer, BLUF, probability yardstick, calibrated uncertainty, explorable explanation | Neurath; Rosling; IPCC; Our World in Data | briefings, Home | batch 3 (M) |
@@ -62,10 +62,10 @@ then write the prompt with "what to take from each".
 | Sensemaking and interpretation | DIKW, a difference that makes a difference, situation awareness levels, data/frame, sensemaking, interpretation, nut graf, common operational picture | Ackoff (1989); Endsley (1995); Klein, Moon and Hoffman (2006); Tilden (1957) | context, Home, handover, agents | batch 6 (AB) |
 | Mission command and strategy deployment | commander's intent, end state, two levels up, backbrief, disciplined initiative, Hoshin Kanri, catchball, OKR, BDI | ADP 6-0; Bungay *The Art of Action*; Klein *Sources of Power* | Mandate, approvals, Home | batch 6 (AC) |
 | Chess and game review | annotation symbols, Informator, critical moment, evaluation bar, opening book, ECO code, after-action review | de Groot; Chess Informant; annotated game collections | review, learning, decisions | batch 6 (W6) |
-| Quality inspection | acceptance sampling, AQL, lot, stratified sampling, first article inspection, recall by lot, airworthiness directive | ISO 2859-1; FAA airworthiness directives; product recall practice | Triage at volume, imports, agents | the apprentice |
+| Quality inspection | acceptance sampling, AQL, lot, stratified sampling, first article inspection, recall by lot, airworthiness directive | ISO 2859-1; FAA airworthiness directives; product recall practice | Triage at volume, imports, agents | the apprentice; mise en place (partly) |
 | Safety-critical work control | permit to work, isolation, handback, time out, pause point, readback, closed-loop communication | HSE HSG250; WHO Surgical Safety Checklist; ICAO readback | approvals, irreversible actions, standby | the apprentice |
 | Supervision in care | five rights of delegation, scope of practice, competency sign-off, preceptorship, SBAR, I-PASS, just culture | NCSBN/ANA delegation guidance; RCN accountability; Reason; Dekker | agents, approvals, handover, incident review | the apprentice |
-| Lean production | andon cord, jidoka, stop the line, poka-yoke, gemba walk | Ohno, Toyota Production System; Liker | pausing automation, mistakes, alerts | the apprentice |
+| Lean production | andon cord, jidoka, stop the line, poka-yoke, gemba walk | Ohno, Toyota Production System; Liker | pausing automation, mistakes, alerts | the apprentice; mise en place (jidoka, andon) |
 | Seafaring watchkeeping | night order book, deck log, standing orders, handover of the watch, bridge resource management | STCW; masters' night orders | diary, handover, agents while away | the apprentice |
 | Postal services | classes of post, recorded delivery, redirection, franking, dead letter office, "while you were out" card | Royal Mail service guides; UPU | notices, receipts, away | the switchboard |
 | On-call and incident response | escalation policy, rota, acknowledge vs resolve, follow-the-sun, SBAR, I-PASS | PagerDuty incident response docs; NHS SBAR; Google SRE on-call | escalation, Inbox | the switchboard |
@@ -81,6 +81,9 @@ then write the prompt with "what to take from each".
 | Regulated records | ALCOA+, good documentation practice, single-line correction, attributable, contemporaneous, audit trail review, 21 CFR Part 11 | MHRA and FDA data integrity guidance | corrections, audit, e-signatures | paper and the desk (partly) |
 | Lean visual management | kamishibai, heijunka box, andon, gemba walk, leader standard work, obeya | Toyota; Lean Enterprise Institute | team board, status, rounds | paper and the desk (partly) |
 | Railway safeworking | token working, Tyer's tablet, staff and ticket, block instrument, interlocking, permissive working | railway rule books; signalling histories | ownership, locks, concurrency | paper and the desk (partly) |
+| Accounting reconciliation | bank reconciliation, cross-foot, control total, batch total, hash total, suspense account | audit practice (ISA 500); batch controls in data processing | imports, the pass, Triage | mise en place (partly) |
+| Procedural instructions | wordless instructions, assembly diagram, knitting chart, pattern errata, recipe card yield, standard work | IKEA assembly instructions; Craft Yarn Council chart symbols; Toyota standard work | recipes, onboarding, how-to | mise en place (grammar) |
+| Record linkage | Fellegi–Sunter, blocking, match weights, clerical review, deduplication | Fellegi and Sunter (1969); Christen, *Data Matching* | Data Atlas matching, Triage | mise en place (mapping V3) |
 
 ## Techniques worth a search on their own
 consequence preview · small multiples · sparkline · micro/macro reading ·
