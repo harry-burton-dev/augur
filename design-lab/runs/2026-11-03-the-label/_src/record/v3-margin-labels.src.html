@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Record V3 · Margin labels</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: the record reads clean; each value's label sits in the margin beside it, like a museum label, with where its copies went ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) var(--space-6) minmax(380px,.9fr);align-content:start;overflow:auto;min-height:0}
+.v{padding:var(--space-3) 0;border-bottom:1px solid var(--hairline);display:grid;gap:var(--space-1);transition:background var(--motion-base) var(--ease-standard)}
+.v .k{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.v .t{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.tie{position:relative}
+.tie::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dotted var(--hairline-strong)}
+.on .tie::before,.tie.on::before{border-top:1px solid var(--x-proposed-lit)}
+.m{padding:var(--space-2) var(--space-3);border-left:1px solid var(--hairline-strong);display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);align-content:center;transition:background var(--motion-base) var(--ease-standard),border-color var(--motion-base) var(--ease-standard)}
+.m.on,.v.on{background:var(--x-proposed-lit-wash)}
+.m.on{border-left-color:var(--x-proposed-lit)}
+.m .cp{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3)}
+.m .cp span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap;color:var(--ink)}
+.m .cp .said{white-space:nowrap}
+.copies{opacity:0;transition:opacity var(--motion-calm) var(--ease-out)}
+.shown .copies{opacity:1}
+@media (max-width:1400px){.v .t{font-size:var(--type-body);line-height:var(--leading-body)}.grid{grid-template-columns:minmax(0,1fr) var(--space-5) minmax(360px,1fr)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Record · V3</b> margin labels: values read clean, each label in the margin beside its value, with where its copies went · museum object labels (V&amp;A, Serrell), marginalia</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = DATA.record, me = READERS.leah;
+/* where each value was quoted, from custody and the briefing: worked out, never typed */
+function copiesOf(f) {
+  const out = [];
+  if (f.id === 'f5') { out.push({ where: `Answer ${DATA.answer.id}`, how: 'as a count' }); out.push({ where: `${DATA.briefing.id} ¶3`, how: 'as a count' }); }
+  DATA.briefing.paras.filter(p => p.from === R.id && f.label === p.label && f.src === '§2').forEach(p => out.push({ where: `${DATA.briefing.id} ¶${p.id.slice(1)}`, how: 'as it is' }));
+  if (f.src.startsWith('§')) out.unshift({ where: `${DATA.doc.id} ${f.src}`, how: 'source' });
+  return out;
+}
+const S = { on: null };
+function render() {
+  const vis = R.facts.filter(f => viewFact(f, me).state !== 'hidden');
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Groundings', R.title], [['↑ ↓', 'a value'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5)"><div><p class="eyebrow">${R.kind} · ${R.id} · kept by ${F(R.keptOn).name}</p><h1 class="title">${R.title}</h1></div>
+      <p class="sub">The value is the object; the label is beside it, in the margin, the way a museum hangs its labels. Read down the left for the facts and down the right for how to handle them.</p></div>
+    <div class="grid">${vis.map((f, i) => { const v = viewFact(f, me), lb = L(f.label), cp = copiesOf(f); return `
+      <div class="v dep ${S.on === f.id ? 'on' : ''}" style="--i:${i}" data-f="${f.id}"><span class="k">${f.k}</span><span class="t">${valueHTML(f, me)}</span></div>
+      <div class="tie ${S.on === f.id ? 'on' : ''}" aria-hidden="true"></div>
+      <div class="m dep ${S.on === f.id ? 'on' : ''}" style="--i:${i}" data-f="${f.id}">
+        <span>${whyBtn(f.label, markHTML(lb), `${R.title}, ${f.src}`)}</span>
+        ${v.state === 'open' ? `<span>${usesHTML(lb, { compact: true })} · ${I('hourglass', 12)} ${keepWord(lb)}</span>` : `<span>${v.why || ''}</span>`}
+        ${v.state === 'open' && cp.length ? `<span class="cp copies">${I('copy', 12)} ${cp.map(c => `<span>${c.where}${c.how === 'as a count' ? ` <span class="said">${c.how}</span>` : c.how === 'source' ? ' <span class="muted">(source)</span>' : ''}</span>`).join('')}</span>` : ''}
+        <span class="tk">${f.id} · ${f.label} · kept on ${f.keptOn}</span>
+      </div>`; }).join('')}</div>
+  </div></main>`;
+  afterRender();
+  $$('[data-f]').forEach(r => r.onmouseenter = () => light(r.dataset.f));
+}
+function light(id) { S.on = id; $$('[data-f]').forEach(x => x.classList.toggle('on', x.dataset.f === id)); $$('.tie').forEach((t, i) => t.classList.toggle('on', $$('.v')[i]?.dataset.f === id)); }
+function replay() {
+  clearLater(); closeDeed(); S.on = null; document.body.classList.remove('shown'); settleIn(); render();
+  later(() => { document.body.classList.add('shown'); light('f5'); }, MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const ids = $$('.v').map(v => v.dataset.f); const i = ids.indexOf(S.on); light(ids[(i + (e.key === 'ArrowDown' ? 1 : -1) + ids.length) % ids.length]); }
+});
+replay();
+</script>
+</body>
+</html>

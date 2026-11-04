@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Custody V4 · About me</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: custody from the side of the person the data is about. What AUGUR holds about them, where it went, on what grounds, and the one thing they can take back ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(360px,1fr);gap:var(--space-6)}
+.list{display:grid;gap:var(--space-3);align-content:start;min-height:0;overflow:auto}
+.it{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);font-size:var(--type-meta);line-height:var(--leading-meta);transition:border-color var(--motion-base) var(--ease-standard),opacity var(--motion-base) var(--ease-standard)}
+.it h2{display:flex;justify-content:space-between;gap:var(--space-3);font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.it .row{display:grid;grid-template-columns:calc(var(--space-8) - var(--space-4)) minmax(0,1fr);gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.it .row .h{font:400 var(--type-label)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.it.on{border-color:var(--x-proposed-lit)}
+.went{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2)}
+.went span{display:inline-flex;align-items:center;gap:var(--space-1);padding:0 var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);white-space:nowrap}
+.went span.gone{text-decoration:line-through;text-decoration-color:var(--x-proposed-seam);color:var(--ink-muted);border-style:dashed}
+.went span.never{color:var(--ink-muted);border-style:dotted}
+.rcpt{align-self:start;display:grid;gap:var(--space-2);padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-pane);box-shadow:var(--shadow-raised);font-size:var(--type-small);line-height:var(--leading-small)}
+.rcpt h2{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.rcpt .row{display:grid;grid-template-columns:calc(var(--space-8) - var(--space-4)) minmax(0,1fr);gap:var(--space-3);border-bottom:1px solid var(--hairline);padding-bottom:var(--space-1)}
+.rcpt .row .h{font:400 var(--type-label)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.preview{display:grid;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-inset);background:var(--x-proposed-seam-wash);border:1px solid var(--x-proposed-seam);opacity:0;transition:opacity var(--motion-calm) var(--ease-out)}
+.pv .preview{opacity:1}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Custody · V4</b> about me: what AUGUR holds about a person, where each value went and on what grounds, and the consent they can withdraw, with what that would undo · Kantara consent receipts, GDPR subject access</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const me = 'p3', C = DATA.consents[0];
+const S = { pv: false };
+/* everything about this person, worked out from the record's facts with "about" */
+function mine() {
+  return DATA.record.facts.filter(f => f.about === me).map(f => {
+    const consent = DATA.consents.find(c => c.facts.includes(f.id));
+    const share = DATA.shares.find(s => s.facts.includes(f.id));
+    const went = [`${DATA.record.app} · ${DATA.record.title}`];
+    if (f.src.startsWith('§')) went.unshift(`${DATA.doc.app} · report ${f.src}`);
+    if (share) went.push(`${P(share.to).name} (share ${share.id}, until ${share.until})`);
+    if (f.id === 'f5') { went.push(`Answer ${DATA.answer.id}, as a count`); went.push(`${DATA.briefing.title} ¶3, as a count`); went.push(`${DATA.groups.sc.name}, as a count`); }
+    if (consent) consent.reached.slice(1).forEach(r => went.push(r));
+    return { f, consent, went, never: consent ? consent.notReached : [] };
+  });
+}
+function render() {
+  const M = mine();
+  $('#app').innerHTML = topHTML(['You', 'About me'], [['W', 'preview withdrawing'], ...STD_HINTS], me) +
+  `<main class="main"><div class="wrap ${S.pv ? 'pv' : ''}">
+    <section style="display:flex;flex-direction:column;gap:var(--space-4);min-height:0"><div><p class="eyebrow">${P(me).name} · what AUGUR holds about you</p><h1 class="title">About me</h1></div>
+      <div class="list">${M.map(({ f, consent, went, never }, i) => `<article class="it dep ${consent ? 'on' : ''}" style="--i:${i}">
+        <h2><span>${f.k}: ${f.v}</span>${whyBtn(f.label, pmHTML(f.label))}</h2>
+        <div class="row"><span class="h">On</span><span>${DATA.record.title}</span></div>
+        <div class="row"><span class="h">Grounds</span><span>${consent ? `Your consent ${consent.id}, given ${consent.on}, for ${consent.purposeNote}.` : `The port’s safety duty. Your consent isn’t asked for this, so it can’t be withdrawn; ${P(DS('personal').owner).name} can answer questions.`}</span></div>
+        <div class="row"><span class="h">Not for</span><span>${usesHTML(f.label, { only: ['no'] })}</span></div>
+        <div class="row"><span class="h">Went to</span><span class="went">${went.map(w => `<span class="${S.pv && consent ? 'gone' : ''}">${w}</span>`).join('')}${never.map(w => `<span class="never">${I('circle-slash', 10)} never reached ${w}</span>`).join('')}</span></div>
+        <div class="row"><span class="h">Kept</span><span>${keepWord(f.label)}</span></div>
+      </article>`).join('')}</div></section>
+    <aside class="rcpt" aria-label="Consent receipt"><p class="eyebrow">Consent receipt · ${C.id}</p><h2>${C.what}</h2>
+      <div class="row"><span class="h">Given to</span><span>${P(C.to).name}, ${P(C.to).role}</span></div>
+      <div class="row"><span class="h">For</span><span>${C.purposeNote}</span></div>
+      <div class="row"><span class="h">Not for</span><span>${C.not.map(u => US(u).word.toLowerCase()).join(', ')}</span></div>
+      <div class="row"><span class="h">Until</span><span>${C.until}</span></div>
+      <div class="row"><span class="h">Controller</span><span>${C.controller} · ${P(C.contact).name}, ${P(C.contact).role}</span></div>
+      <div class="row"><span class="h">Given</span><span>${C.on}</span></div>
+      <div class="preview" role="status"><b class="lite" style="font-weight:400">If you withdraw now</b><span>Your diary leaves ${andList(C.reached)} at once, and each place says it was withdrawn, by you, on ${DATA.today}.</span><span>It never reached ${andList(C.notReached)}: their labels kept it out, so nothing there changes.</span><span class="who">${P(C.to).name} is told; she doesn’t learn why.</span></div>
+      <div style="display:flex;gap:var(--space-2)"><button class="btn" data-pv>${I('eye', 14)} What would change <span class="kbd">W</span></button><button class="btn">${I('undo-2', 14)} Withdraw</button></div>
+    </aside>
+  </div></main>`;
+  afterRender();
+  $('[data-pv]').onclick = () => { S.pv = !S.pv; render(); };
+}
+function replay() { clearLater(); closeDeed(); S.pv = false; settleIn(); render(); later(() => { S.pv = true; $('.wrap').classList.add('pv'); $$('.it.on .went span:not(.never)').forEach(s => s.classList.add('gone')); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key.toLowerCase() === 'w') { S.pv = !S.pv; render(); }
+});
+replay();
+</script>
+</body>
+</html>

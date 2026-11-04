@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Grammar V5 · The life of one value</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: one value followed from a cell to the record, and what the record keeps about it ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:var(--space-6)}
+.life{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.stages{list-style:none;margin:0;padding:0;display:grid;gap:0;position:relative;flex:1;min-height:0;align-content:start}
+.stg{display:grid;grid-template-columns:var(--space-7) var(--space-5) minmax(0,1fr) minmax(0,1.1fr);gap:var(--space-3);align-items:start;padding:var(--space-3) 0;position:relative;transition:opacity var(--motion-calm) var(--ease-out)}
+.stg.wait{opacity:.25}
+.stg .when{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);text-align:right}
+.stg .pin{position:relative;display:flex;justify-content:center;padding-top:var(--space-1)}
+.stg .pin::before{content:"";position:absolute;top:0;bottom:calc(var(--space-2) * -1 - var(--space-6));width:1px;background:var(--hairline-strong)}
+.stg:last-child .pin::before{display:none}
+.stg .pin i{position:relative;width:var(--space-3);height:var(--space-3);border-radius:50%;background:var(--slate-deep);border:1px solid var(--ink-muted)}
+.stg.now .pin i{background:var(--light);border-color:var(--light)}
+.stg .what b{display:block;font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.stg .what span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.stg .form{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;min-height:var(--leading-meta)}
+.stg .form .muted{font-size:var(--type-small)}
+.prov{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.rec{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-4)}
+.rec h2{margin:0 0 var(--space-2);font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);display:flex;align-items:center;gap:var(--space-2)}
+.rec dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-4);margin:0;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.rec dt{color:var(--ink-muted)}
+.rec dd{margin:0;color:var(--ink)}
+.rec dd.hl{background:color-mix(in srgb,var(--light) 6%,transparent);box-shadow:inset 2px 0 0 var(--light);padding-left:var(--space-2)}
+.seam{border-top:1px solid var(--hairline);margin-top:var(--space-3);padding-top:var(--space-3);display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink)}
+.seam span:nth-child(odd){color:var(--ink-muted)}
+.note{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin:0}
+.note b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.stg{grid-template-columns:var(--space-6) var(--space-4) minmax(0,1fr) minmax(0,1fr);padding:var(--space-1) 0}.stg .what b{font-size:var(--type-small)}.rec dl{font-size:var(--type-small);line-height:var(--leading-small)}.rec{padding:var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V5</b> one value from a cell to the record, and the seam it keeps · archival provenance, W3C PROV, wear and time</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R), F0 = R.file, REC = DATA.recipe;
+const L = R.lines.find(l => l.rec && l.rec.v.van.raw !== l.rec.v.van.val), v = L.rec.v;
+const cell = `${COLS[R.header.indexOf(v.van.col)]}${L.n}`;
+const S = { at: -1 };
+function stages() {
+  const st = STEP(v.van.by[0]);
+  return [
+    { when: F0.received.split(',')[0], w: `In ${F0.name}`, s: `cell ${cell}, sheet ${F0.sheet}; kept untouched as ${F0.doc.id} in the ${F0.doc.library} library`, form: raw(v.van.raw) },
+    { when: F0.run.at.split(', ')[1], w: `Recipe line ${st.id.slice(1)}: ${stepWords(st, R).w.replace(/^./, c => c.toLowerCase())}`, s: `taught by example by ${P(REC.owner).name}; ${R.st[st.id].changed} values made this way`, form: `${raw(v.van.raw)}${arrow()}${kept(v.van.val)}${stepNo(st.id)}` },
+    { when: '', w: `Recipe line 11: matched to a van ${DATA.app} keeps`, s: `exact number, so ink; kept on the ${F(DATA.myFloor).word} floor`, form: `${I('link', 14)} ${kept('van ' + L.rec.van.id)}` },
+    { when: '', w: 'At the pass', s: `one of ${PL.land} ${DATA.kinds.inspection.word}s; ${R.total.said} = ${PL.land} + ${PL.aside.length} checked against the file’s own total`, form: `<span class="heard">${I('check', 12)} heard</span>` },
+    { when: F0.run.decided.split(', ')[1], w: `Triage ${F0.run.triage}: accepted`, s: `by ${P('p2').name}, with the other ${PL.land - 1}`, form: `${I('clipboard-check', 14)} ${kept('accepted')}` },
+    { when: '', w: 'Kept, with its seam', s: 'the record says which file, cell, recipe line and run made this value', form: `${kept(v.van.val)}${stepNo(st.id)} <span class="muted">was ${raw(v.van.raw)}</span>` },
+    { when: DATA.december.today, w: `Recipe changed to version ${REC.version + 1}`, s: `line ${st.id.slice(1)} now reads ${DATA.december.rename.from} or ${DATA.december.rename.to}. This value keeps “made by version ${REC.version}”; it isn’t remade, because the line gives the same answer for it`, form: `${kept(v.van.val)}${stepNo(st.id)} <span class="muted">v${REC.version}</span>` }
+  ];
+}
+function render() {
+  const st = STEP(v.van.by[0]);
+  $('#app').innerHTML = topHTML([DATA.app, 'Vans', L.rec.van.id, 'Inspection ' + v.on.val], [['1–7', 'stage'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="life"><div><h1 class="t">The life of one value</h1><p class="lede" style="margin-top:var(--space-1)">${raw(v.van.raw)} in cell ${cell} of ${FIRM.short}’s ${F0.month} file, from the moment it arrived to the record it helped make. Every stage is kept.</p></div>
+      <ol class="stages">${stages().map((s, i) => `<li class="stg ${S.at < i ? 'wait' : ''} ${S.at === i ? 'now' : ''}"><span class="when">${s.when}</span><span class="pin"><i></i></span><span class="what"><b>${s.w}</b><span>${s.s}</span></span><span class="form">${s.form}</span></li>`).join('')}</ol></section>
+    <section class="prov"><p class="eyebrow">${I('history', 12)} What the record keeps about this one value</p>
+      <div class="rec"><h2>${I(DATA.kinds.inspection.icon, 18)} ${DATA.kinds.inspection.word} of ${L.rec.van.id}</h2>
+        <dl><dt>${KD('van').word}</dt><dd class="hl">${v.van.val} ${stepNo(st.id)}</dd><dt>${KD('on').word}</dt><dd>${v.on.val} ${stepNo('s7')}</dd><dt>${KD('depot').word}</dt><dd>${v.depot.val} ${stepNo('s8')}</dd><dt>${KD('result').word}</dt><dd>${v.result.val} ${stepNo('s9')}</dd><dt>${KD('by').word}</dt><dd>${v.by.val}</dd></dl>
+        <div class="seam"><span>was</span><span>“${esc(v.van.raw)}”</span>
+          <span>from</span><span>${F0.doc.id} · ${esc(F0.name)} · ${F0.sheet}!${cell}</span>
+          <span>made by</span><span>${REC.id} v${REC.version} line ${st.id.slice(1)} · “${stepWords(st, R).w}”</span>
+          <span>run</span><span>${F0.run.n} · ${F0.run.at} · ${P(REC.owner).name}</span>
+          <span>kept by</span><span>Triage ${F0.run.triage} · ${P('p2').name} · ${F0.run.decided}</span>
+          <span class="tk">prov</span><span class="tk">wasDerivedFrom ${F0.doc.id}#${cell} · wasGeneratedBy run/${F0.run.n} · used ${REC.id}@${REC.version}#${st.id} · wasAttributedTo ${DATA.me}</span></div></div>
+      <p class="note"><b>One seam per value, not per record.</b> Four values on this record were changed by four different lines, and each knows its own. The firm was added by the recipe’s last line; it says so when asked.</p>
+      <p class="note"><b>When the recipe changes,</b> values made by an older version of a line keep their version. Rerunning offers to remake them and shows the difference first; nothing is quietly rewritten.</p>
+      <p class="note"><b>When the file is withdrawn</b> in Artifacts, what was read from it stays, marked, and stops counting as evidence, as ${DATA.app} already does for documents.</p></section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() { clearLater(); S.at = -1; render(); settle(); const t = ms('--motion-run'), step = ms('--motion-calm') / 1.5; for (let i = 0; i < 7; i++) later(() => { S.at = i; render(); }, t + i * step); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (/^[1-7]$/.test(e.key)) { clearLater(); S.at = +e.key - 1; render(); } });
+replay();
+</script>
+</body>
+</html>

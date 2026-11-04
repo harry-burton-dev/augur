@@ -442,7 +442,7 @@ export const buildApp = async ({
         async (req, reply) => {
           const service = await serviceOf(req, reply);
           if (service === undefined) return reply;
-          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can read what an app is granted.' });
+          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can read what an app is granted.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const { workspace } = req.query;
@@ -533,7 +533,7 @@ export const buildApp = async ({
         if (!by) return reply;
         const { id, version } = req.params;
         if (!frontendFiles) return reply.code(501).send({ error: 'not_implemented', message: 'This deployment doesn’t keep apps’ frontends by version (FRONTENDS_BUCKET_SECRET isn’t set).' });
-        if (platformApps.some((a) => a.id === id)) return reply.code(409).send({ error: 'conflict', message: `"${id}" is one of the platform’s own apps.` });
+        if (platformApps.some((a) => a.id === id)) return reply.code(409).send({ error: 'conflict', message: `"${id}" is one of AUGUR’s own apps.` });
         if (!semver.valid(version)) return reply.code(400).send({ error: 'bad_request', message: `"${version}" is not a semver version such as 1.2.0.` });
         if (!Buffer.isBuffer(req.body)) return reply.code(415).send({ error: 'unsupported_media_type', message: 'Send the frontend as one gzipped tarball, Content-Type application/gzip.' });
         const digest = frontendDigest(req.body);
@@ -582,8 +582,8 @@ export const buildApp = async ({
           const caller = callerFromHeaders(req.headers);
           const by: NewAuditEntry['actor'] | undefined =
             service?.kind === 'platform' ? { id: service.name, kind: 'service' } : !service && caller?.roles.includes('admin') ? { id: caller.id, kind: 'user' } : undefined;
-          if (!by) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the platform service that runs an app can say where it is.' });
-          if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: `"${req.params.id}" is one of the platform’s own apps.` });
+          if (!by) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the AUGUR service that runs an app can say where it is.' });
+          if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: `"${req.params.id}" is one of AUGUR’s own apps.` });
           const problem = req.body.url === null ? undefined : upstreamProblem(req.body.url);
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
           const url = req.body.url === null ? null : req.body.url.replace(/\/+$/, '');
@@ -602,7 +602,7 @@ export const buildApp = async ({
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can turn apps on or off.' });
           const platform = platformApps.find((a) => a.id === req.params.id);
-          if (platform) return reply.code(409).send({ error: 'conflict', message: `${platform.name} is part of the platform and can’t be turned off.` });
+          if (platform) return reply.code(409).send({ error: 'conflict', message: `${platform.name} is part of AUGUR and can’t be turned off.` });
           const before = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!before || !(await store.setEnabled(req.params.id, req.body.enabled))) {
             return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });

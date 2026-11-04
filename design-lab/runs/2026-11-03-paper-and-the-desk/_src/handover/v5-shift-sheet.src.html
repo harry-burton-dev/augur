@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Handover V5 · The handover sheet</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: before you go, one sheet hands out everything you hold. each line is a short SBAR; each taker reads back ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.head{display:flex;gap:var(--space-5);align-items:flex-end}
+.head .tally{margin-left:auto;display:flex;gap:var(--space-5)}
+.tally div{display:grid;gap:2px;text-align:right}
+.tally b{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--light)}
+.tally span{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+table{width:100%;border-collapse:collapse}
+th{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);text-align:left;padding:0 var(--space-3) var(--space-2);border-bottom:1px solid var(--hairline-strong);white-space:nowrap}
+td{padding:var(--space-3);border-bottom:1px solid var(--hairline);vertical-align:top;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+td.item{width:24%}
+td.item .t{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+td.item .id{font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);color:var(--ink-muted);display:flex;gap:var(--space-1);align-items:center}
+tr td:first-child{box-shadow:inset var(--x-proposed-strip-edge) 0 0 var(--fc)}
+.rb{display:grid;gap:var(--space-1)}
+.rb .q{font-style:italic;color:var(--ink)}
+.state{display:inline-flex;gap:var(--space-1);align-items:center;font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);white-space:nowrap}
+.state.ok{color:var(--x-proposed-lit)}
+.state.wait{color:var(--ink-muted)}
+.state.keep{color:var(--x-proposed-disagree)}
+tr.landed td{animation:fill var(--motion-calm) var(--ease-out)}
+@keyframes fill{from{background:var(--x-proposed-lit-wash)}}
+.foot{display:flex;gap:var(--space-4);align-items:center;border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.foot .note{max-width:90ch}
+@media (max-width:1400px){td{padding:var(--space-2)}td.bg{display:none}th.bg{display:none}.tally b{font-size:var(--type-heading)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Handover · V5</b> the handover sheet: before you go, everything you hold on one sheet, one short SBAR line each, read back by each taker · ward shift handover, I-PASS</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const SH = DATA.shift, me = DATA.me;
+const S = { got: 0 }; /* how many readbacks have arrived (in sheet order of their times) */
+const got = r => r.read && S.got >= (r.to === 'tom' ? 1 : 2);
+function rowHTML(r, i) {
+  const it = ITEM(r.item), k = K(it.kind);
+  const st = r.keep ? `<span class="state keep">${I('user-round', 12)} stays with you</span>` : got(r) ? `<span class="state ok">${I('check', 12)} taken ${r.at}</span>` : `<span class="state wait">${I('hourglass', 12)} offered, still yours</span>`;
+  const rb = r.keep ? `<span class="note">${r.keep}.</span>` : got(r) ? `<span class="q">“${r.read}”</span>` : `<span class="note">waiting for ${first(r.to)} to read it back</span>`;
+  return `<tr class="${got(r) && S.just === r.item ? 'landed' : ''}" data-tier="${it.floor}"><td class="item"><span class="id">${I(k.icon, 12)}${it.id} · ${k.word}</span><span class="t">${it.title}</span></td>
+    <td>${r.to ? pchip(r.to, { sm: true }) : '<span class="muted">nobody</span>'}</td><td>${r.s}</td><td class="bg">${it.line}</td><td>${r.r}</td><td><div class="rb">${st}${rb}</div></td></tr>`;
+}
+function render() {
+  const rows = SH.rows, taken = rows.filter(got).length, out = rows.filter(r => r.to && !got(r)).length, kept = rows.filter(r => r.keep).length;
+  $('#app').innerHTML = topHTML(['Home', 'Handover sheet'], [['N', 'next readback'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div class="head"><div><p class="eyebrow">${SH.why} · back ${SH.back}</p><h1 class="t" style="margin-top:var(--space-1)">Your handover sheet</h1></div>
+        <div class="tally"><div><b>${taken}</b><span>taken</span></div><div><b>${out}</b><span>offered</span></div><div><b>${kept}</b><span>kept by you</span></div></div></div>
+      <div class="scroll"><table><thead><tr><th>What you hold</th><th>To</th><th>S · now</th><th class="bg">B · so far</th><th>R · do next</th><th>Their readback</th></tr></thead><tbody>${rows.map(rowHTML).join('')}</tbody></table></div>
+      <div class="foot">${I('info', 16)}<p class="note">Assessment lives on each full card; the sheet shows one line. Anything not taken by the time you leave stays yours and shows on Nkechi Bello’s board as <b>held by someone who is away</b>, with its time. Nothing is reassigned behind your back.</p></div>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function next() { if (S.got < 2) { S.got++; S.just = S.got === 1 ? 'M-207' : 'S-44'; render(); } }
+function replay() {
+  clearLater(); S.got = 0; S.just = null; render(); settle();
+  /* the moment: Tom's readback arrives, then Nkechi's; Lena's and your own approval stay open, and say so */
+  later(next, ms('--motion-run') - ms('--motion-calm'));
+  later(next, ms('--motion-run'));
+}
+onKeys({ r: replay, n: next });
+replay();
+</script>
+</body>
+</html>
