@@ -38,16 +38,24 @@
       "type": "string",
       "writeOnly": true,
       "description": "An app's own database login, for an app named in APP_STORAGE: <ID> is its id in capitals with _ for -.",
-      "x-services": ["storage"],
-      "x-via": { "updater": ".env" },
+      "x-services": [
+        "storage"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
     },
     "^[A-Z][A-Z0-9_]*_BUCKET_SECRET$": {
       "type": "string",
       "writeOnly": true,
       "description": "An app's own bucket key (64 hex), for an app named in APP_STORAGE.",
-      "x-services": ["storage"],
-      "x-via": { "updater": ".env" },
+      "x-services": [
+        "storage"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
     }
   },
@@ -55,618 +63,916 @@
     "PLATFORM_VERSION": {
       "type": "string",
       "description": "The AUGUR release this server runs, such as 0.1.1.",
-      "x-services": ["compose"],
-      "x-via": { "updater": ".env" },
+      "x-services": [
+        "compose"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/deploy.md#first-start"
     },
     "PLATFORM_IMAGES": {
       "type": "string",
       "description": "Where the images come from, for a mirror in your own registry. The default is the publisher's image path, an old id kept on purpose (AGENTS.md, Names).",
       "default": "ghcr.io/harry-burton-dev/im-platform",
-      "x-services": ["compose"],
-      "x-via": { "updater": ".env" },
+      "x-services": [
+        "compose"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/mirror.md#point-the-server-at-it"
     },
     "PLATFORM_URL": {
       "type": "string",
       "description": "AUGUR's address: https://<TS_HOSTNAME>.<your tailnet>.ts.net.",
-      "x-services": ["web", "keycloak", "registry"],
-      "x-via": { "updater": ".env" },
+      "x-services": [
+        "web",
+        "keycloak",
+        "registry"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/deploy.md#first-start"
     },
     "TS_HOSTNAME": {
       "type": "string",
       "description": "The machine's name on the tailnet.",
       "default": "platform",
-      "x-services": ["compose", "tailscale"],
+      "x-services": [
+        "compose",
+        "tailscale"
+      ],
       "x-docs": "docs/deploy.md#before-you-start"
     },
     "TS_AUTHKEY": {
       "type": "string",
       "writeOnly": true,
       "description": "A Tailscale auth key.",
-      "x-services": ["tailscale"],
+      "x-services": [
+        "tailscale"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "POSTGRES_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "Postgres's admin login, used only by the storage job and backups.",
-      "x-services": ["postgres", "backup", "storage"],
+      "x-services": [
+        "postgres",
+        "backup",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "KEYCLOAK_ADMIN_PASSWORD": {
       "type": "string",
       "writeOnly": true,
-      "description": "Keycloak's own admin's password, read by Keycloak on its first start (and by identity for one repair start).",
-      "x-services": ["keycloak"],
-      "x-via": { "identity": "infra/deploy/identity-repair.yml" },
+      "description": "Keycloak's own admin's password, read by Keycloak on its first start and by identity's realm job (keycloak-config) on every up.",
+      "x-services": [
+        "keycloak",
+        "keycloak-config"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "KEYCLOAK_ADMIN_USER": {
       "type": "string",
       "description": "Keycloak's own admin, the way back in if every deployment admin loses their one-time code.",
       "default": "keycloak-admin",
-      "x-services": ["keycloak"],
-      "x-via": { "identity": "infra/deploy/identity-repair.yml" },
+      "x-services": [
+        "keycloak",
+        "keycloak-config"
+      ],
       "x-docs": "docs/deploy.md#day-to-day"
     },
     "IDENTITY_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "Identity's own database login.",
-      "x-services": ["identity", "storage"],
+      "x-services": [
+        "identity",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "REGISTRY_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "The registry's own database login.",
-      "x-services": ["registry", "storage"],
+      "x-services": [
+        "registry",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "EVENTS_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "The events service's own database login.",
-      "x-services": ["events", "storage"],
+      "x-services": [
+        "events",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "MODELS_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "The model gateway's own database login.",
-      "x-services": ["models", "storage"],
+      "x-services": [
+        "models",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "KEYCLOAK_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "Keycloak's own database login.",
-      "x-services": ["keycloak", "storage"],
+      "x-services": [
+        "keycloak",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "GARAGE_RPC_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "Garage's nodes' shared secret.",
-      "x-services": ["garage"],
+      "x-services": [
+        "garage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "GARAGE_ADMIN_TOKEN": {
       "type": "string",
       "writeOnly": true,
       "description": "Garage's admin API token, which the storage job makes buckets with.",
-      "x-services": ["garage", "storage"],
+      "x-services": [
+        "garage",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "FRONTENDS_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "The registry's key to the bucket apps' frontends are kept in by version (64 hex).",
-      "x-services": ["registry", "storage"],
+      "x-services": [
+        "registry",
+        "storage"
+      ],
       "x-docs": "docs/upgrade.md#apps-frontends-by-version"
     },
     "APP_SECRETS_KEY": {
       "type": "string",
       "writeOnly": true,
       "description": "The key every app's database, bucket and sign-in secrets are worked out from; with the updater, it turns the app runner on.",
-      "x-services": ["storage"],
-      "x-via": { "updater": ".env" },
+      "x-services": [
+        "storage"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
     },
     "APP_PUBLISHERS": {
       "type": "string",
       "description": "Who else may sign the apps the app runner installs: owner/repo or owner/repo/.github/workflows/<file>, space separated.",
-      "x-via": { "updater": ".env" },
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/upgrade.md#the-app-runner"
     },
     "APPS_NETWORK": {
       "type": "string",
       "description": "The Docker network the app runner puts apps on (default: the updater's own, usually platform_default).",
-      "x-via": { "updater": ".env" },
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/upgrade.md#the-app-runner"
     },
     "IDENTITY_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "Identity's own sign-in.",
-      "x-services": ["keycloak", "identity"],
+      "x-services": [
+        "keycloak",
+        "identity"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "REGISTRY_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "The registry's own sign-in.",
-      "x-services": ["identity", "registry"],
+      "x-services": [
+        "keycloak-config",
+        "registry"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "EVENTS_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "The events service's own sign-in.",
-      "x-services": ["identity", "events"],
+      "x-services": [
+        "keycloak-config",
+        "events"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "MODELS_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "The model gateway's own sign-in; needed before models can be used.",
-      "x-services": ["identity", "models"],
+      "x-services": [
+        "keycloak-config",
+        "models"
+      ],
       "x-docs": "docs/agents.md#setting-up-the-model"
     },
     "UPDATER_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "The updater's own sign-in.",
-      "x-services": ["identity", "updater"],
+      "x-services": [
+        "keycloak-config",
+        "updater"
+      ],
       "x-docs": "docs/upgrade.md#the-updater"
     },
     "FOLIO_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "Artifacts' own sign-in.",
-      "x-services": ["identity", "folio"],
+      "x-services": [
+        "keycloak-config",
+        "folio"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "FOLIO_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "Artifacts' own database login.",
-      "x-services": ["folio", "folio-worker", "storage"],
+      "x-services": [
+        "folio",
+        "folio-worker",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "FOLIO_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "Artifacts' bucket key (64 hex).",
-      "x-services": ["folio", "folio-worker", "storage"],
+      "x-services": [
+        "folio",
+        "folio-worker",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "AUSPEX_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "Explorer's own sign-in.",
-      "x-services": ["identity", "auspex"],
+      "x-services": [
+        "keycloak-config",
+        "auspex"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "ATLAS_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "Data Atlas's own sign-in.",
-      "x-services": ["identity", "atlas"],
+      "x-services": [
+        "keycloak-config",
+        "atlas"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "ATLAS_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "Data Atlas's own database login.",
-      "x-services": ["atlas", "storage"],
+      "x-services": [
+        "atlas",
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "ATLAS_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,
       "description": "Data Atlas's bucket key (made for every app; Data Atlas keeps nothing there). Worked out from APP_SECRETS_KEY when unset.",
-      "x-services": ["storage"],
+      "x-services": [
+        "storage"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "PLATFORM_ADMIN_USER": {
       "type": "string",
       "description": "The first person who can sign in; identity gives them the deployment-admin role when nobody has it.",
-      "x-services": ["keycloak", "identity"],
+      "x-services": [
+        "keycloak",
+        "keycloak-config"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "PLATFORM_ADMIN_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "That person's password, for the first sign-in only.",
-      "x-services": ["keycloak"],
+      "x-services": [
+        "keycloak"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "PLATFORM_ADMIN_EMAIL": {
       "type": "string",
       "description": "That person's email address.",
-      "x-services": ["keycloak"],
+      "x-services": [
+        "keycloak"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "PLATFORM_ADMIN_FIRST_NAME": {
       "type": "string",
       "description": "That person's first name.",
-      "x-services": ["keycloak"],
+      "x-services": [
+        "keycloak"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "PLATFORM_ADMIN_LAST_NAME": {
       "type": "string",
       "description": "That person's last name.",
-      "x-services": ["keycloak"],
+      "x-services": [
+        "keycloak"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "PLATFORM_ADMIN_DEPARTMENT": {
       "type": "string",
       "description": "That person's department.",
       "default": "Platform",
-      "x-services": ["keycloak"],
+      "x-services": [
+        "keycloak"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "ORG_NAME": {
       "type": "string",
       "description": "What the top floor, the whole organisation, is called.",
       "default": "Organisation",
-      "x-services": ["identity"],
+      "x-services": [
+        "identity"
+      ],
       "x-docs": "docs/deploy.md#first-start"
     },
     "BACKUP_HOUR_UTC": {
       "type": "string",
       "description": "The hour (UTC) the nightly backup is taken.",
       "default": "2",
-      "x-services": ["backup"],
+      "x-services": [
+        "backup"
+      ],
       "x-docs": "docs/deploy.md#backups"
     },
     "BACKUP_KEEP_DAYS": {
       "type": "string",
       "description": "How many days of backups are kept.",
       "default": "14",
-      "x-services": ["backup"],
+      "x-services": [
+        "backup"
+      ],
       "x-docs": "docs/deploy.md#backups"
     },
     "RESTORE_TEST_WEEKDAY": {
       "type": "string",
       "description": "The day the weekly restore test runs (0 is Sunday).",
       "default": "0",
-      "x-services": ["backup"],
+      "x-services": [
+        "backup"
+      ],
       "x-docs": "docs/deploy.md#backups"
     },
     "MODEL_API_URL": {
       "type": "string",
       "description": "An OpenAI-style API for the model behind Agents, or stand-in; without it models stay off.",
-      "x-services": ["models"],
+      "x-services": [
+        "models"
+      ],
       "x-docs": "docs/agents.md#setting-up-the-model"
     },
     "MODEL_API_KEY": {
       "type": "string",
       "writeOnly": true,
       "description": "The key to MODEL_API_URL.",
-      "x-services": ["models"],
+      "x-services": [
+        "models"
+      ],
       "x-docs": "docs/agents.md#setting-up-the-model"
     },
     "MODEL_NAME": {
       "type": "string",
       "description": "Which model MODEL_API_URL serves.",
-      "x-services": ["models"],
+      "x-services": [
+        "models"
+      ],
       "x-docs": "docs/agents.md#setting-up-the-model"
     },
     "MODEL_EMBEDDING_NAME": {
       "type": "string",
       "description": "The model at MODEL_API_URL that turns text into vectors.",
-      "x-services": ["models"],
+      "x-services": [
+        "models"
+      ],
       "x-docs": "docs/agents.md#setting-up-the-model"
     },
     "MODEL_TIMEOUT_SECONDS": {
       "type": "string",
       "description": "How long the model gateway waits for the model to answer, in seconds.",
       "default": "60",
-      "x-services": ["models"],
+      "x-services": [
+        "models"
+      ],
       "x-docs": "docs/agents.md#setting-up-the-model"
     },
     "APP_STORAGE": {
       "type": "string",
       "description": "Other apps that keep their own schema and files here, space separated (the apps that ship with AUGUR are made without being named).",
-      "x-services": ["storage"],
+      "x-services": [
+        "storage"
+      ],
       "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
     },
     "API_RATE_PER_SECOND": {
       "type": "string",
       "description": "API requests a second from one address.",
       "default": "30",
-      "x-services": ["web"],
+      "x-services": [
+        "web"
+      ],
       "x-docs": "docs/deploy.md#limits-at-the-front-door"
     },
     "API_RATE_BURST": {
       "type": "string",
       "description": "API requests let through at once from one address.",
       "default": "200",
-      "x-services": ["web"],
+      "x-services": [
+        "web"
+      ],
       "x-docs": "docs/deploy.md#limits-at-the-front-door"
     },
     "SSO_RATE_PER_SECOND": {
       "type": "string",
       "description": "Sign-in requests a second from one address.",
       "default": "10",
-      "x-services": ["web"],
+      "x-services": [
+        "web"
+      ],
       "x-docs": "docs/deploy.md#limits-at-the-front-door"
     },
     "SSO_RATE_BURST": {
       "type": "string",
       "description": "Sign-in requests let through at once from one address.",
       "default": "50",
-      "x-services": ["web"],
+      "x-services": [
+        "web"
+      ],
       "x-docs": "docs/deploy.md#limits-at-the-front-door"
     },
     "MAX_UPLOAD_MB": {
       "type": "string",
       "description": "The largest upload, in MB.",
       "default": "2048",
-      "x-services": ["web"],
+      "x-services": [
+        "web"
+      ],
       "x-docs": "docs/deploy.md#limits-at-the-front-door"
     },
     "KEYCLOAK_CONSOLE": {
       "type": "string",
       "description": "open serves Keycloak's own admin console at PLATFORM_URL/sso/admin; it's closed otherwise.",
       "default": "closed",
-      "x-services": ["web"],
+      "x-services": [
+        "web"
+      ],
       "x-docs": "docs/deploy.md#limits-at-the-front-door"
     },
     "APP_ORIGINS": {
       "type": "string",
       "description": "Other sites apps may load their code from, space separated.",
-      "x-services": ["web"],
+      "x-services": [
+        "web"
+      ],
       "x-docs": "docs/deploy.md#day-to-day"
     },
     "KIT_URL": {
       "type": "string",
       "description": "Where the shell and every app load the UI kit from.",
       "default": "/kit/",
-      "x-services": ["web"],
+      "x-services": [
+        "web"
+      ],
       "x-docs": "docs/deploy.md#the-ui-kit"
     },
     "GITHUB_READ_USER": {
       "type": "string",
       "description": "The GitHub account the deployment's read key (secrets/github-read-key) belongs to.",
-      "x-services": ["registry", "updater"],
+      "x-services": [
+        "registry",
+        "updater"
+      ],
       "x-docs": "docs/upgrade.md#the-read-key"
     },
     "RELEASE_FEED_URL": {
       "type": "string",
       "description": "Where new AUGUR releases are listed (a mirror's feed), or off.",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/upgrade.md#the-updates-page"
     },
     "APP_FEED_URL": {
       "type": "string",
       "description": "Where new versions of apps are listed, or off.",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/upgrade.md#the-app-runner"
     },
     "FEED_SIGNER": {
       "type": "string",
       "description": "Who must sign the release feed, as a regular expression, for AUGUR published from a fork (default: the publisher's Feed workflow, or the one in the repository the feed comes from).",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/upgrade.md#the-signed-feed"
     },
     "SERVER_RING": {
       "type": "string",
       "description": "dev (the workbench), preview or production: what kind of server this is.",
       "default": "production",
-      "x-services": ["web", "registry"],
-      "x-via": { "updater": ".env" },
+      "x-services": [
+        "web",
+        "registry"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
       "x-docs": "docs/release-channels.md#server-rings"
     },
     "RELEASE_CHANNEL": {
       "type": "string",
       "description": "stable, beta or dev (default: by the server's ring).",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/release-channels.md#server-rings"
     },
     "DEPLOYMENT_TIME_ZONE": {
       "type": "string",
       "description": "The time zone upgrade windows are in, such as Europe/London (UTC by default).",
-      "x-services": ["web", "registry"],
+      "x-services": [
+        "web",
+        "registry"
+      ],
       "x-docs": "docs/upgrade.md#upgrades-follow-each-units-policy-and-window"
     },
     "PIPELINE_FEED_URL": {
       "type": "string",
       "description": "Where the pipeline feed is, or off.",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/release-channels.md#the-pipeline-feed"
     },
     "PORTAL_URL": {
       "type": "string",
       "description": "The company's Backstage, which the Upgrade Centre links to.",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/upgrade.md#reporting-to-backstage"
     },
     "DEPLOYMENT_ID": {
       "type": "string",
       "description": "This server's name in Backstage's catalog.",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/upgrade.md#reporting-to-backstage"
     },
     "DEPLOYMENT_REPORTING": {
       "type": "string",
       "description": "off turns reporting to Backstage off.",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/upgrade.md#reporting-to-backstage"
     },
     "ALLOW_PR_PREVIEWS": {
       "type": "string",
       "description": "on runs pull requests' builds for apps' developers on a production server too.",
-      "x-services": ["registry"],
+      "x-services": [
+        "registry"
+      ],
       "x-docs": "docs/release-channels.md#server-rings"
     },
     "COMPOSE_PROFILES": {
       "type": "string",
       "description": "Docker Compose's optional parts to run: updater, observability.",
-      "x-services": ["compose"],
+      "x-services": [
+        "compose"
+      ],
       "x-docs": "docs/upgrade.md#the-updater"
     },
     "PLATFORM_DIR": {
       "type": "string",
       "description": "The full path of infra/deploy on the server, for the updater.",
-      "x-services": ["compose", "updater"],
+      "x-services": [
+        "compose",
+        "updater"
+      ],
       "x-docs": "docs/upgrade.md#the-updater"
     },
     "IMAGE_PULL_USER": {
       "type": "string",
       "description": "Before read keys: the account a read:packages token in secrets/image-pull-token belongs to.",
-      "x-services": ["updater"],
+      "x-services": [
+        "updater"
+      ],
       "x-docs": "docs/upgrade.md#the-updater"
     },
     "IMAGE_SIGNER": {
       "type": "string",
       "description": "Who must sign AUGUR's images and the apps the runner installs, as a certificate identity pattern, for AUGUR published from a fork (default: the publisher's Release workflow).",
-      "x-services": ["updater"],
+      "x-services": [
+        "updater"
+      ],
       "x-docs": "docs/release-channels.md#signatures"
     },
     "IMAGE_SIGNER_ISSUER": {
       "type": "string",
       "description": "Who issues that identity's certificates (default: GitHub Actions).",
-      "x-services": ["updater"],
+      "x-services": [
+        "updater"
+      ],
       "x-docs": "docs/release-channels.md#signatures"
     },
     "AUGUR_DEV_SIGNER": {
       "type": "string",
       "description": "Who must sign AUGUR's dev builds, which only the workbench runs (default: the dev builds workflow in IMAGE_SIGNER's repository, or the publisher's).",
-      "x-services": ["updater"],
+      "x-services": [
+        "updater"
+      ],
       "x-docs": "docs/release-channels.md#signatures"
     },
     "DOMAIN_EVENTS_KEEP_DAYS": {
       "type": "string",
       "description": "How many days apps' domain events are kept.",
       "default": "30",
-      "x-services": ["events"],
+      "x-services": [
+        "events"
+      ],
       "x-docs": "docs/domain-events.md#following"
     },
     "CALLER_SIGNING_KEY": {
       "type": "string",
       "writeOnly": true,
       "description": "The key the gateway signs callers with (64 hex); without it a new one is made each start.",
-      "x-services": ["gateway"],
+      "x-services": [
+        "gateway"
+      ],
       "x-docs": "docs/signed-caller.md#where-the-key-comes-from"
     },
     "OTEL_EXPORTER_OTLP_ENDPOINT": {
       "type": "string",
       "description": "The OpenTelemetry collector every service sends to; without it they send nothing.",
-      "x-services": ["gateway", "identity", "registry", "events", "models", "folio", "auspex", "atlas", "updater"],
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ],
       "x-docs": "docs/observability.md#turn-it-on"
     },
     "OTEL_EXPORTER_OTLP_HEADERS": {
       "type": "string",
       "writeOnly": true,
       "description": "Headers sent to that collector, such as its key: key=value, comma separated.",
-      "x-services": ["gateway", "identity", "registry", "events", "models", "folio", "auspex", "atlas", "updater"],
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ],
       "x-docs": "docs/observability.md#turn-it-on"
     },
     "OTEL_TRACES_SAMPLER": {
       "type": "string",
       "description": "Which traces are kept, such as parentbased_traceidratio (default: all).",
-      "x-services": ["gateway", "identity", "registry", "events", "models", "folio", "auspex", "atlas", "updater"],
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ],
       "x-docs": "docs/observability.md#for-a-service"
     },
     "OTEL_TRACES_SAMPLER_ARG": {
       "type": "string",
       "description": "The sampler's argument, such as 0.1 to keep one trace in ten.",
-      "x-services": ["gateway", "identity", "registry", "events", "models", "folio", "auspex", "atlas", "updater"],
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ],
       "x-docs": "docs/observability.md#for-a-service"
     },
     "SEED_ALLOWED": {
       "type": "string",
       "description": "true lets a deployment admin fill this deployment with synthetic sample data (pnpm seed). Never where real people work.",
       "default": "false",
-      "x-services": ["gateway"],
+      "x-services": [
+        "gateway"
+      ],
       "x-docs": "docs/deploy.md#sample-data"
     },
     "GRAFANA_ADMIN_PASSWORD": {
       "type": "string",
       "writeOnly": true,
       "description": "Grafana's admin password, with the observability profile.",
-      "x-services": ["otel-lgtm"],
+      "x-services": [
+        "otel-lgtm"
+      ],
       "x-docs": "docs/observability.md#turn-it-on"
     },
     "NODE_ENV": {
       "type": "string",
       "description": "production in every image and compose service.",
       "x-internal": "compose",
-      "x-services": ["gateway", "identity", "registry", "events", "models", "updater"]
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ]
     },
     "PORT": {
       "type": "string",
       "description": "The port a service listens on.",
       "x-internal": "compose",
-      "x-services": ["identity", "registry", "events", "models"],
-      "x-via": { "gateway": "default" }
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models"
+      ],
+      "x-via": {
+        "gateway": "default"
+      }
     },
     "DATABASE_URL": {
       "type": "string",
       "writeOnly": true,
       "description": "A service's Postgres address and login, made from its *_DATABASE_PASSWORD.",
       "x-internal": "compose",
-      "x-services": ["identity", "registry", "events", "models", "storage", "folio", "atlas"]
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "storage",
+        "folio",
+        "atlas"
+      ]
     },
     "IDENTITY_URL": {
       "type": "string",
       "description": "Where the identity service is.",
       "x-internal": "compose",
-      "x-services": ["gateway", "registry", "events"],
-      "x-via": { "updater": "default" }
+      "x-services": [
+        "gateway",
+        "registry",
+        "events"
+      ],
+      "x-via": {
+        "updater": "default"
+      }
     },
     "REGISTRY_URL": {
       "type": "string",
       "description": "Where the registry is.",
       "x-internal": "compose",
-      "x-services": ["gateway", "identity", "events", "models", "updater"]
+      "x-services": [
+        "gateway",
+        "identity",
+        "events",
+        "models",
+        "updater"
+      ]
     },
     "EVENTS_URL": {
       "type": "string",
       "description": "Where the events service is.",
       "x-internal": "compose",
-      "x-services": ["gateway", "identity", "registry", "models"]
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "models"
+      ]
     },
     "MODELS_URL": {
       "type": "string",
       "description": "Where the model gateway is.",
       "x-internal": "compose",
-      "x-services": ["gateway"]
+      "x-services": [
+        "gateway"
+      ]
     },
     "GATEWAY_URL": {
       "type": "string",
       "description": "Where the gateway is, for the key it signs callers with.",
       "x-internal": "compose",
-      "x-services": ["identity", "registry", "events", "models", "auspex"]
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "auspex"
+      ]
     },
     "OIDC_ISSUER": {
       "type": "string",
       "description": "The sign-in service as tokens name it: PLATFORM_URL/sso/realms/platform.",
       "x-internal": "compose",
-      "x-services": ["gateway", "identity", "registry", "events", "models", "updater"]
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ]
     },
     "OIDC_INTERNAL_URL": {
       "type": "string",
       "description": "The sign-in service as services reach it inside Docker.",
       "x-internal": "compose",
-      "x-services": ["identity", "registry", "events", "models", "updater"]
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ]
     },
     "OIDC_JWKS_URL": {
       "type": "string",
       "description": "Where the sign-in service's signing keys are, as the gateway reaches them.",
       "x-internal": "compose",
-      "x-services": ["gateway"]
+      "x-services": [
+        "gateway"
+      ]
     },
     "OIDC_AUDIENCE": {
       "type": "string",
       "description": "The audience people's tokens are issued for.",
       "x-internal": "compose",
-      "x-services": ["gateway"]
+      "x-services": [
+        "gateway"
+      ]
     },
     "OIDC_TOKEN_URL": {
       "type": "string",
@@ -678,161 +984,223 @@
       "writeOnly": true,
       "description": "A service's own sign-in secret, from its *_CLIENT_SECRET.",
       "x-internal": "compose",
-      "x-services": ["identity", "registry", "events", "models", "folio", "auspex", "atlas", "updater"]
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ]
     },
     "SERVICE_CLIENT_SECRETS": {
       "type": "string",
       "writeOnly": true,
-      "description": "Every platform service's and shipped app's sign-in secret, for identity to make their Keycloak clients.",
+      "description": "Every platform service's and shipped app's sign-in secret, for identity's realm job (keycloak-config) to make their Keycloak clients.",
       "x-internal": "compose",
-      "x-services": ["identity"]
+      "x-services": [
+        "keycloak-config"
+      ]
     },
     "KEYCLOAK_URL": {
       "type": "string",
       "description": "Keycloak as identity reaches it.",
       "x-internal": "compose",
-      "x-services": ["identity"]
+      "x-services": [
+        "identity"
+      ]
     },
     "KEYCLOAK_REALM": {
       "type": "string",
       "description": "The Keycloak realm people sign in to: platform, an old id kept on purpose.",
       "x-internal": "default",
-      "x-via": { "identity": "default" }
+      "x-via": {
+        "identity": "default"
+      }
     },
     "BACKUP_DIR": {
       "type": "string",
       "description": "Where the backup container writes its results, for Status.",
       "x-internal": "compose",
-      "x-services": ["gateway"]
+      "x-services": [
+        "gateway"
+      ]
     },
     "PUBLIC_ACCESS_FILE": {
       "type": "string",
       "description": "What infra/deploy/public.sh writes when AUGUR is open to the internet, for Status.",
       "x-internal": "compose",
-      "x-services": ["gateway"]
+      "x-services": [
+        "gateway"
+      ]
     },
     "APP_UPSTREAMS": {
       "type": "string",
       "description": "The shipped apps' services, name=url, comma separated.",
       "x-internal": "compose",
-      "x-services": ["gateway"]
+      "x-services": [
+        "gateway"
+      ]
     },
     "PILLAR_APPS": {
       "type": "string",
       "description": "The apps that ship with AUGUR, which register themselves.",
       "x-internal": "compose",
-      "x-services": ["registry"]
+      "x-services": [
+        "registry"
+      ]
     },
     "FRONTENDS_S3_URL": {
       "type": "string",
       "description": "Where the frontends bucket is.",
       "x-internal": "compose",
-      "x-services": ["registry"]
+      "x-services": [
+        "registry"
+      ]
     },
     "FRONTENDS_BUCKET": {
       "type": "string",
       "description": "The bucket apps' frontends are kept in (augur-frontends).",
       "x-internal": "default",
-      "x-via": { "registry": "default" }
+      "x-via": {
+        "registry": "default"
+      }
     },
     "GITHUB_READ_KEY": {
       "type": "string",
       "writeOnly": true,
       "description": "The deployment's read key, read from secrets/github-read-key.",
       "x-internal": "default",
-      "x-via": { "registry": "default" }
+      "x-via": {
+        "registry": "default"
+      }
     },
     "GITHUB_READ_KEY_FILE": {
       "type": "string",
       "description": "Where the read key's file is (default /run/secrets/augur/github-read-key).",
       "x-internal": "default",
-      "x-via": { "registry": "default" }
+      "x-via": {
+        "registry": "default"
+      }
     },
     "RELEASE_FEED_TOKEN": {
       "type": "string",
       "writeOnly": true,
       "description": "Before read keys: a token for GitHub's releases API.",
       "x-internal": "default",
-      "x-via": { "registry": "default" }
+      "x-via": {
+        "registry": "default"
+      }
     },
     "RELEASE_FEED_TOKEN_FILE": {
       "type": "string",
       "description": "Before read keys: where that token's file is (default /run/secrets/augur/release-feed-token).",
       "x-internal": "default",
-      "x-via": { "registry": "default" }
+      "x-via": {
+        "registry": "default"
+      }
     },
     "AUGUR_BUILD": {
       "type": "string",
       "description": "source when the images are built from a checkout, for the Upgrade Centre.",
       "x-internal": "compose.build.yml",
-      "x-via": { "registry": "infra/deploy/compose.build.yml" }
+      "x-via": {
+        "registry": "infra/deploy/compose.build.yml"
+      }
     },
     "DOCKER_HOST": {
       "type": "string",
       "description": "The Docker API the updater drives (the docker-proxy).",
       "x-internal": "compose",
-      "x-services": ["updater"]
+      "x-services": [
+        "updater"
+      ]
     },
     "GARAGE_ADMIN_URL": {
       "type": "string",
       "description": "Garage's admin API, for the storage job.",
       "x-internal": "compose",
-      "x-services": ["storage"]
+      "x-services": [
+        "storage"
+      ]
     },
     "GARAGE_S3_URL": {
       "type": "string",
       "description": "Garage's S3 API, for the storage job (default http://garage:3900).",
       "x-internal": "default",
-      "x-via": { "storage": "default" }
+      "x-via": {
+        "storage": "default"
+      }
     },
     "PLATFORM_DATABASE_LOGINS": {
       "type": "string",
       "description": "The platform services that get a database login of their own.",
       "x-internal": "compose",
-      "x-services": ["storage"]
+      "x-services": [
+        "storage"
+      ]
     },
     "APP_DATABASE_HOST": {
       "type": "string",
       "description": "The database host apps are told to use (default: DATABASE_URL's).",
       "x-internal": "default",
-      "x-via": { "storage": "default" }
+      "x-via": {
+        "storage": "default"
+      }
     },
     "APP_STORAGE_DROP": {
       "type": "string",
       "description": "A pull request preview's scratch storage to take away, set by the app runner for one run of the storage job.",
       "x-internal": "updater",
-      "x-via": { "storage": "default" }
+      "x-via": {
+        "storage": "default"
+      }
     },
     "KEYCLOAK_DATABASE": {
       "type": "string",
       "description": "Keycloak's own database (keycloak).",
       "x-internal": "default",
-      "x-via": { "storage": "default" }
+      "x-via": {
+        "storage": "default"
+      }
     },
     "KEYCLOAK_DATABASE_USER": {
       "type": "string",
       "description": "Keycloak's own database login (keycloak).",
       "x-internal": "default",
-      "x-via": { "storage": "default" }
+      "x-via": {
+        "storage": "default"
+      }
     },
     "S3_ENDPOINT": {
       "type": "string",
       "description": "An app's bucket's S3 address.",
       "x-internal": "compose",
-      "x-services": ["folio", "folio-worker"]
+      "x-services": [
+        "folio",
+        "folio-worker"
+      ]
     },
     "S3_BUCKET": {
       "type": "string",
       "description": "An app's bucket.",
       "x-internal": "compose",
-      "x-services": ["folio", "folio-worker"]
+      "x-services": [
+        "folio",
+        "folio-worker"
+      ]
     },
     "S3_SECRET_ACCESS_KEY": {
       "type": "string",
       "writeOnly": true,
       "description": "An app's bucket secret, from its *_BUCKET_SECRET.",
       "x-internal": "compose",
-      "x-services": ["folio", "folio-worker"]
+      "x-services": [
+        "folio",
+        "folio-worker"
+      ]
     },
     "S3_ACCESS_KEY_ID": {
       "type": "string",
@@ -864,7 +1232,17 @@
       "type": "string",
       "description": "deployment.environment.name, from SERVER_RING.",
       "x-internal": "compose",
-      "x-services": ["gateway", "identity", "registry", "events", "models", "folio", "auspex", "atlas", "updater"]
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ]
     },
     "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": {
       "type": "string",
@@ -880,6 +1258,60 @@
       "type": "string",
       "description": "A service's name in traces (default: its package's).",
       "x-internal": "default"
+    },
+    "REALM_PASSWORD_MIN_LENGTH": {
+      "type": "string",
+      "description": "The shortest password Keycloak accepts; at least 15 (a deployment can be stricter, never looser).",
+      "default": "15",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#day-to-day"
+    },
+    "REALM_PASSWORD_DENYLIST": {
+      "type": "string",
+      "description": "The breached-password list, a file in infra/deploy/keycloak/password-blacklists.",
+      "default": "ncsc-top100k.txt",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#day-to-day"
+    },
+    "REALM_SESSION_IDLE_HOURS": {
+      "type": "string",
+      "description": "Hours unused after which a session ends; 8 at most.",
+      "default": "8",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#day-to-day"
+    },
+    "REALM_SESSION_MAX_HOURS": {
+      "type": "string",
+      "description": "Hours after which a session ends whatever; 10 at most.",
+      "default": "10",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#day-to-day"
+    },
+    "REALM_SIGN_IN_EVENT_DAYS": {
+      "type": "string",
+      "description": "Days Keycloak keeps sign-in events.",
+      "default": "90",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#day-to-day"
+    },
+    "REALM_ADMIN_EVENT_DAYS": {
+      "type": "string",
+      "description": "Days Keycloak keeps admins' changes.",
+      "default": "365",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#day-to-day"
     }
   }
 }

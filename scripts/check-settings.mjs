@@ -30,7 +30,7 @@ export const composeServices = (text) => {
   for (const [name, service] of Object.entries(doc.services ?? {})) {
     let env = service?.environment ?? {};
     if (Array.isArray(env)) env = Object.fromEntries(env.map((line) => [String(line).split('=')[0], String(line).split('=').slice(1).join('=')]));
-    services[name] = { environment: Object.fromEntries(Object.entries(env).map(([k, v]) => [k, v == null ? '' : String(v)])), envFile: Boolean(service?.env_file) };
+    services[name] = { image: service?.image, environment: Object.fromEntries(Object.entries(env).map(([k, v]) => [k, v == null ? '' : String(v)])), envFile: Boolean(service?.env_file) };
   }
   return services;
 };
@@ -175,13 +175,16 @@ export const settingsProblems = ({ schema, files, code }) => {
     else if (properties[key] && !new RegExp(`\\b${key}\\b`).test(text)) problems.push(`${key}: ${docs} doesn't mention it.`);
   }
 
-  // The services' code: everything it reads is described, for that service.
+  // The services' code: everything it reads is described, for that service, or for another compose
+  // service that runs the same image (identity's realm job runs as keycloak-config, ADR 0057).
+  const runningImage = (pkg) => [pkg, ...Object.entries(services).filter(([, s]) => new RegExp(`/${pkg}:`).test(String(s?.image ?? ''))).map(([name]) => name)];
   for (const [service, source] of Object.entries(code)) {
+    const names = runningImage(service);
     for (const key of keysRead(source)) {
       const setting = lookup(key);
       if (!setting) problems.push(`${key}: ${service} reads it, but it isn't in settings.schema.json.`);
-      else if (service !== 'service-kit' && !(setting['x-services'] ?? []).includes(service) && !(service in (setting['x-via'] ?? {})))
-        problems.push(`${key}: ${service} reads it, but the schema doesn't list ${service} (x-services or x-via).`);
+      else if (service !== 'service-kit' && !names.some((n) => (setting['x-services'] ?? []).includes(n) || n in (setting['x-via'] ?? {})))
+        problems.push(`${key}: ${service} reads it, but the schema doesn't list ${names.join(' or ')} (x-services or x-via).`);
     }
   }
 
