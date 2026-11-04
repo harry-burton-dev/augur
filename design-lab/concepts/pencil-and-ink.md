@@ -22,3 +22,5 @@ In [`2026-11-03-the-label`](../runs/2026-11-03-the-label/): suggested labels are
 In [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a model-drafted handover situation and background are pencil until the giver accepts them; the assessment and recommendation are never model-written.
 
 In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the model proposes links between lines from their notes, never codes; G changes no count (mapping V6).
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): an agent may propose a judgement lift in pencil; only a person signs it (ladder V5).

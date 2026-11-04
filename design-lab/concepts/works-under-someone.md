@@ -10,3 +10,5 @@ Every agent has a named supervisor and a deputy, an errand anyone affected can r
 First found in: [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/) (grammar V1 and V5, scope V6, combined V4).
 
 Could steer: Keys and doors (N), the switchboard (O), any service that acts for a person.
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): an agent's working set shows its supervisor, its mark and its mode line (combined V4).

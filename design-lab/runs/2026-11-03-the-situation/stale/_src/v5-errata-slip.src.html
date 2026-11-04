@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Stale V5 · The errata slip</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the set as it was printed, untouched, with an errata slip laid in. "For … read …", one line per change, dated ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,0.95fr);gap:var(--space-6);align-items:start}
+.page{position:relative;padding:var(--space-5) var(--space-6);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-pane);display:grid;gap:var(--space-2);max-height:100%;overflow:hidden}
+.page h1{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.page .imprint{font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);border-bottom:1px solid var(--hairline);padding-bottom:var(--space-2)}
+.page ol{display:grid;gap:var(--space-1);counter-reset:p}
+.page li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-2);counter-increment:p;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.page li::before{content:counter(p);font-family:var(--font-mono);color:var(--ink-muted)}
+.page li .m{width:var(--space-4);text-align:center;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--x-proposed-broken);opacity:0;transition:opacity var(--motion-base) var(--ease-out)}
+.slipped .page li .m{opacity:1}
+.slip{display:grid;gap:var(--space-2);padding:var(--space-4) var(--space-5);border:1px solid var(--x-proposed-broken);border-radius:var(--radius-key);background:var(--slate-deep);box-shadow:var(--shadow-raised);transform:translateY(var(--space-6)) rotate(-1deg);opacity:0;transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.slipped .slip{opacity:1;transform:rotate(-1deg)}
+.slip h2{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.slip .imprint{font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted)}
+.er{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.er .ref{font-family:var(--font-mono);color:var(--ink-muted)}
+.er .for{color:var(--ink-muted)}
+.er .for i,.er .read i{font-style:italic;color:var(--ink-muted);margin-right:var(--space-1)}
+.er .read{color:var(--light)}
+.er .rs{grid-column:2;color:var(--ink-muted);font-size:var(--x-proposed-type-micro)}
+.note{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:var(--space-2)}
+@media (prefers-reduced-motion: reduce){.slip,.slipped .slip{transform:none}}
+@media (max-width:1400px){.page{padding:var(--space-4)}.er .rs{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Stale · V5</b> the errata slip: the set as it was, untouched, with a dated slip laid in, “for … read …” · printers’ errata slips, corrigenda, editions</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { slipped: false };
+const MOVED = Object.keys(RO.changes);
+const no = id => DATA.pieces.findIndex(p => p.id === id) + 1;
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'As issued'], [['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap ${S.slipped ? 'slipped' : ''}">
+    <article class="page"><p class="eyebrow">Working set · as issued</p><h1>${T.title}</h1>
+      <p class="imprint">${T.id} · version ${T.version} · issued ${T.assembled}, ${T.assembledAt} · ${P(T.owner).name} · for ${P(T.decider).name}</p>
+      <ol>${DATA.pieces.map(p => `<li><span>${p.text}</span><span class="m">${MOVED.includes(p.id) ? '†' : ''}</span></li>`).join('')}</ol>
+      <p class="note">This page is never edited. What changed after it was issued goes on the slip, so anyone who read version ${T.version} can see exactly what they read, and what to read now.</p></article>
+    <aside class="slip"><h2>Errata</h2><p class="imprint">Laid in ${RO.on} by ${P(RO.by).name} · ${MOVED.length} lines · † marks each on the page</p>
+      ${MOVED.sort((a, b) => no(a) - no(b)).map(id => { const p = PC(id), c = CH(id); return `<div class="er"><span class="ref">${no(id)}</span><div><div class="for"><i>for</i>${p.text}</div><div class="read"><i>read</i>${c.now}</div></div><span class="rs">${c.on} · ${REASON[c.reason]}${c.state === 'gone' ? ' · no longer holds' : c.state === 'orphan' ? ' · its one source moved on' : ''}</span></div>`; }).join('')}
+      <div class="er"><span class="ref">+</span><div class="read"><i>add</i>${RO.added[0].text}</div></div>
+    </aside>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.slipped = false; render(); }, () => { S.slipped = true; $('.wrap').classList.add('slipped'); });
+</script>
+</body>
+</html>

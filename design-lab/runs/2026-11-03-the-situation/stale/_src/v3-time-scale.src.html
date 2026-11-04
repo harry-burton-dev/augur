@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Stale V3 · One time scale</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: the three weeks on one time scale. Each piece is a line from when it was added; an event cuts the lines it touched; the now line sweeps to today ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-3)}
+.board{min-height:0;display:grid;grid-template-columns:minmax(260px,32%) minmax(0,1fr);overflow:auto;scrollbar-width:thin;align-content:start}
+.ev{position:sticky;top:0;z-index:2;background:var(--slate-deep);height:calc(var(--space-7) + var(--space-5));border-bottom:1px solid var(--hairline-strong)}
+.ev.lab{display:flex;align-items:flex-end;padding:var(--space-2) 0}
+.axis{position:relative}
+.axis .e{position:absolute;bottom:var(--space-1);transform:translateX(-50%);display:grid;justify-items:center;gap:2px;width:120px;text-align:center;font-size:var(--x-proposed-type-micro);line-height:1.3;color:var(--ink-muted)}
+.axis .e b{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink)}
+.axis .e.past b{color:var(--x-proposed-broken)}
+.rowl{padding:var(--space-1) var(--space-3) var(--space-1) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);display:flex;gap:var(--space-2);align-items:center;min-height:calc(var(--space-6) - var(--space-2))}
+.rowl span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{position:relative;border-bottom:1px solid var(--hairline)}
+.track .ln{position:absolute;top:calc(50% - 1px);height:2px;background:var(--ink-muted);border-radius:1px}
+.track .cut{position:absolute;top:calc(50% - var(--space-2));height:var(--space-4);width:2px;background:var(--x-proposed-broken)}
+.track .after{position:absolute;top:calc(50% - 1px);height:2px;background:repeating-linear-gradient(90deg,var(--x-proposed-broken) 0 var(--space-1),transparent var(--space-1) var(--space-2))}
+.track .after.seam{background:var(--x-proposed-seam)}
+.vline{position:absolute;top:0;bottom:0;width:1px;background:var(--hairline)}
+.now{position:absolute;top:0;bottom:0;width:2px;background:var(--x-proposed-lit);z-index:3;transition:left var(--motion-run) var(--ease-standard)}
+.now span{position:absolute;top:var(--space-1);right:var(--space-2);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-lit);white-space:nowrap}
+.legend{display:flex;gap:var(--space-5);font-size:var(--type-small);color:var(--ink-muted);flex-wrap:wrap;align-items:center}
+.legend i{display:inline-block;width:var(--space-5);height:2px;vertical-align:middle;margin-right:var(--space-1)}
+@media (prefers-reduced-motion: reduce){.now{transition:none}}
+@media (max-width:1400px){.board{grid-template-columns:minmax(220px,30%) minmax(0,1fr)}.axis .e{width:90px}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Stale · V3</b> one time scale: each piece a line from when it was added; events cut the lines they touched; the now line sweeps to today · Marey’s train graph, one time scale (wear and time)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { t: 0 };
+/* days from 3 Nov (0) to 24 Nov (21) */
+const DAY = { '3 Nov': 0, '7 Nov': 4, '10 Nov': 7, '14 Nov': 11, '18 Nov': 15, '20 Nov': 17, '21 Nov': 18, '24 Nov': 21 };
+const SPAN = 22, x = d => (DAY[d] + 0.5) / SPAN * 100;
+const EV = [...new Set(Object.values(RO.changes).map(c => c.on))].sort((a, b) => DAY[a] - DAY[b]);
+const evWhat = { '10 Nov': `${R.changedRounds[1]} back on its old route`, '14 Nov': `${first('tom')} moves to ${P('tom').moves.to}`, '18 Nov': 'offer withdrawn', '20 Nov': 'count revised', '21 Nov': `November passes ${R.limit}` };
+function render() {
+  const nowDay = S.t ? DAY[RO.on.replace(' 2026', '')] : 0;
+  const rows = [...DATA.pieces, ...RO.added];
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Time'], [['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:end;gap:var(--space-4);flex-wrap:wrap"><div><p class="eyebrow">Stale context · ${T.id} · ${T.assembled.replace(' 2026', '')} to ${RO.on.replace(' 2026', '')}</p><h1 class="title">Three weeks, one scale</h1></div>
+      <p class="legend"><span><i style="background:var(--ink-muted)"></i>holds</span><span><i style="background:var(--x-proposed-seam)"></i>changed, repaired in place</span><span><i style="background:repeating-linear-gradient(90deg,var(--x-proposed-broken) 0 4px,transparent 4px 8px)"></i>no longer holds, or lost its source</span></p></div>
+    <div class="board">
+      <div class="ev lab"><span class="eyebrow">Piece</span></div>
+      <div class="ev axis">${EV.map((d, k) => `<span class="e ${DAY[d] <= nowDay ? 'past' : ''}" style="left:${x(d)}%;bottom:calc(var(--space-1) + ${k % 2} * var(--space-6))"><b>${d}</b>${evWhat[d]}</span>`).join('')}<span class="now" style="left:${(nowDay + 0.5) / SPAN * 100}%"><span>${S.t ? 'today, ' + RO.on.replace(' 2026', '') : T.assembled.replace(' 2026', '')}</span></span></div>
+      ${rows.map(p => { const c = CH(p.id), s = stateOf(p.id), start = p.at && DAY[p.at] !== undefined ? DAY[p.at] : 0;
+        const cutAt = c ? DAY[c.on] : null, shown = cutAt !== null && cutAt <= nowDay;
+        const end = shown ? cutAt : Math.max(start, nowDay);
+        return `<div class="rowl">${rm(p.rung, { word: false })}<span class="t" title="${p.text}">${p.text}</span></div>
+          <div class="track">${EV.map(d => `<span class="vline" style="left:${x(d)}%"></span>`).join('')}
+            ${s === 'new' ? (S.t ? `<span class="cut" style="left:${x(p.at)}%;background:var(--x-proposed-lit)"></span><span class="small" style="position:absolute;right:calc(100% - ${x(p.at)}% + var(--space-2));top:calc(50% - var(--space-2));color:var(--x-proposed-lit)">added ${p.at}</span>` : '') : `<span class="ln" style="left:${(start + 0.5) / SPAN * 100}%;width:${(end - start) / SPAN * 100}%"></span>`}
+            ${shown ? `<span class="cut" style="left:${x(c.on)}%"></span><span class="after ${s === 'changed' ? 'seam' : ''}" style="left:${x(c.on)}%;width:${(nowDay - cutAt) / SPAN * 100}%"></span>` : ''}</div>`; }).join('')}
+    </div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.t = 0; render(); }, () => { S.t = 1; render(); });
+</script>
+</body>
+</html>
