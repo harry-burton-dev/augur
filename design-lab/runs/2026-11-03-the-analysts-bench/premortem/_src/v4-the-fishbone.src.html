@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Premortem · V4 · The fishbone</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Premortem V4: the reasons on an Ishikawa diagram of the failure. Its fixed bones show what nobody thought of: an empty bone is a question, not a pass ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-3)}
+.fish{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(180px,.8fr);grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);min-height:0;column-gap:var(--space-3)}
+.bone{position:relative;padding:var(--space-2) var(--space-6) var(--space-2) var(--space-3);display:flex;flex-direction:column;gap:var(--space-1);min-height:0}
+.bone.bot{justify-content:flex-end}
+.bone > svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.bone > svg line{stroke:var(--hairline-strong);stroke-width:1.5}
+.bone.empty > svg line{stroke-dasharray:4 4}
+.bone h3{position:relative;font-weight:200;font-size:var(--type-lead);line-height:var(--leading-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light);margin:0}
+.bone .r{position:relative;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);background:var(--slate-deep);padding:2px var(--space-2);border-left:2px solid var(--ink-muted);transition:opacity var(--motion-calm) var(--ease-out);max-width:34ch}
+.bone .r.pen{font-style:italic;border-left-style:dotted}
+.hold .bone .r{opacity:0}
+.bone .ask{position:relative;font-size:var(--type-small);line-height:var(--leading-small);color:var(--x-proposed-lit);border:1px dashed var(--x-proposed-lit);border-radius:var(--radius-key);padding:var(--space-1) var(--space-2);max-width:34ch;transition:opacity var(--motion-calm) var(--ease-out)}
+.hold .bone .ask{opacity:0}
+.spine{grid-column:1/4;height:2px;background:var(--ink);align-self:center}
+.head{grid-row:1/4;grid-column:4;align-self:center;border:1.5px solid var(--ink);border-radius:0 var(--radius-card) var(--radius-card) 0;padding:var(--space-3) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);background:var(--x-proposed-future-wash)}
+.head .muted{display:block;font-size:var(--type-small)}
+.foot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Premortem · V4</b> the fishbone: reasons on fixed bones, so an empty bone asks what nobody thought of · Ishikawa (1968), the six Ms</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PM = DATA.premortem;
+/* the six bones are fixed (the six Ms in plain words); each reason group sits on one. Product grammar, not deployment data */
+const BONES = [
+  { id: 'vehicles', name: 'Vehicles', cls: ['veh'], ask: '' },
+  { id: 'people', name: 'People', cls: ['drivers', 'county'], ask: '' },
+  { id: 'method', name: 'The contract', cls: ['credit', 'tender'], ask: '' },
+  { id: 'material', name: 'Supplies', cls: [], ask: '' },
+  { id: 'measure', name: 'Watching', cls: ['owner'], ask: '' },
+  { id: 'place', name: 'The round and the depot', cls: ['homes', 'depot'], ask: '' }
+];
+const S = { shown: false };
+function render() {
+  const g = STATE.gateway, rs = PM.reasons.filter(r => g || !r.pencil);
+  const empty = BONES.filter(b => !rs.some(r => b.cls.includes(r.cl)));
+  const boneHTML = (b, bot) => { const mine = rs.filter(r => b.cls.includes(r.cl)), e = !mine.length;
+    return `<div class="bone ${bot ? 'bot' : ''} ${e ? 'empty' : ''}"><svg aria-hidden="true"><line x1="0" y1="${bot ? '100%' : '0'}" x2="100%" y2="${bot ? '0' : '100%'}" vector-effect="non-scaling-stroke"/></svg>
+      ${bot ? '' : `<h3>${b.name}</h3>`}${mine.map(r => `<span class="r ${r.pencil ? 'pen' : ''}">${r.say}</span>`).join('')}${e ? `<span class="ask">${I('circle-help', 12)} ${PM.asks[b.id] || 'Nobody named a reason here. Ask who would know.'}</span>` : ''}${bot ? `<h3>${b.name}</h3>` : ''}</div>`; };
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, T('pre').name, 'Fishbone'], [...STD]) +
+  `<main class="main"><div class="wrap ${S.shown ? '' : 'hold'}">
+    <div><p class="eyebrow">${T('pre').name} · ${PM.date} · ${plural(rs.length, 'reason')} on six fixed bones</p><p class="sent" style="max-width:84ch">The bones are the same for every failure. <b>${empty.length ? `${empty.map(b => b.name).join(' and ')} ${empty.length === 1 ? 'is' : 'are'} empty`  : 'Every bone has a reason'}</b>: ${empty.length ? 'nobody in the room thought of it, which is worth one more question.' : 'nothing was missed by kind.'}</p></div>
+    <div class="fish">${BONES.slice(0, 3).map(b => boneHTML(b, false)).join('')}<div class="head">${PM.headline}<span class="muted">imagined on ${PM.date}, dated ${PM.future}</span></div>
+      <div class="spine"></div>${BONES.slice(3).map(b => boneHTML(b, true)).join('')}</div>
+    <div class="foot">
+      <div class="card"><p class="lbl">Why fixed bones</p><p class="small">A free list grows where the room is expert. Fixed bones show where it isn’t: here, nobody from the depot stores was in the room.</p></div>
+      <div class="card"><p class="lbl">What happens to an empty bone</p><p class="small">It becomes one question to a named person before signing, not a reason. If they name a reason, it joins the bone and is sorted like the rest.</p></div>
+      <div class="card"><p class="lbl">Where this sits</p><p class="small">A view of the same reasons, not a second exercise. ${g ? 'The assistant’s reason sits on its bone in pencil.' : gatewayNote()}</p><span class="tk">Ishikawa 6M: machines, manpower, method, material, measurement, milieu</span></div>
+    </div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.shown = false; settle(); render(); later(() => { S.shown = true; $('.wrap').classList.remove('hold'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

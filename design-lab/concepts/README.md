@@ -109,6 +109,18 @@ app pattern took it), **dropped** (say why in the file).
 | [What only they know](what-only-they-know.md) | explored | 2026-11-03-the-situation |
 | [The bundle is its world](the-bundle-is-its-world.md) | explored | 2026-11-03-the-situation |
 | [Context is a working set](context-is-a-working-set.md) | explored | batch 6 research |
+| [What doesn't fit decides](what-doesnt-fit-decides.md) | explored | 2026-11-03-the-analysts-bench |
+| [Below the bar, with a hedge](hedged-below-the-bar.md) | explored | 2026-11-03-the-analysts-bench |
+| [Keep the score](keep-the-score.md) | explored | 2026-11-03-the-analysts-bench |
+| [The model widens, never narrows](the-model-widens-never-narrows.md) | explored | 2026-11-03-the-analysts-bench |
+| [Start from how it usually goes](start-from-the-reference-class.md) | explored | 2026-11-03-the-analysts-bench |
+| [Pause points](pause-points.md) | explored | 2026-11-03-the-analysts-bench |
 | [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
-| [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |
+| [The technique fits the question](the-technique-fits-the-question.md) | explored | batch 6 research |
+| [People mark moves, records mark positions](moves-and-positions.md) | explored | 2026-11-03-the-annotated-game |
+| [Judged as it stood](judged-as-it-stood.md) | explored | 2026-11-03-the-annotated-game |
+| [Own moves first](own-moves-first.md) | explored | 2026-11-03-the-annotated-game |
+| [The way back is recorded](the-way-back-is-recorded.md) | explored | 2026-11-03-the-annotated-game |
+| [The opening book](the-opening-book.md) | explored | 2026-11-03-the-annotated-game |
+| [Play it first](play-it-first.md) | explored | 2026-11-03-the-annotated-game |
 | [The warrant shows](the-warrant-shows.md) | to explore | batch 6 research |

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Assumptions · V2 · Load-bearing</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Assumptions V2: the plan as a beam on its assumptions. Width is how much rides on each, fill is how sure it is; a load-bearing weak column cracks the beam ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.stage{position:relative;display:flex;flex-direction:column;justify-content:flex-end;min-height:0;padding:0 var(--space-6)}
+.beam{position:relative;height:var(--space-6);border:1.5px solid var(--ink);border-radius:2px;display:flex;align-items:center;padding:0 var(--space-4);color:var(--light);font-size:var(--type-meta);background:var(--surface-raised);transition:transform var(--motion-calm) var(--ease-out)}
+.beam .crack{position:absolute;top:-1px;bottom:-1px;width:5px;background:var(--slate-deep);transform:skewX(-14deg);opacity:0;transition:opacity var(--motion-calm) var(--ease-out)}
+.cracked .beam .crack{opacity:1}
+.cols{display:flex;align-items:stretch;gap:var(--space-3);height:calc(var(--space-8) * 2.1)}
+.colm{position:relative;display:flex;flex-direction:column;align-items:center;gap:var(--space-2);min-width:0;text-align:center}
+.shaft{flex:1;width:100%;border:1.5px solid var(--ink);border-top:0;border-radius:0 0 2px 2px;position:relative;transition:transform var(--motion-calm) var(--ease-out)}
+.shaft.solid{background:color-mix(in srgb,var(--light) 75%,transparent);border-color:var(--light)}
+.shaft.caveats{background:linear-gradient(0deg,color-mix(in srgb,var(--ink) 45%,transparent) 55%,transparent 55%)}
+.shaft.unsupported{border-style:dashed;border-color:var(--ink-muted)}
+.shaft.gap{border:0;background:linear-gradient(var(--ink-muted),var(--ink-muted)) 0 0/var(--space-3) 1.5px no-repeat,linear-gradient(var(--ink-muted),var(--ink-muted)) 0 0/1.5px var(--space-3) no-repeat,linear-gradient(var(--ink-muted),var(--ink-muted)) 100% 100%/var(--space-3) 1.5px no-repeat,linear-gradient(var(--ink-muted),var(--ink-muted)) 100% 100%/1.5px var(--space-3) no-repeat}
+.shaft.hidden{border-color:var(--hairline-strong);background:var(--x-proposed-unseen)}
+.cracked .shaft.weak{transform:translateY(var(--space-2))}
+.colm .nm{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);max-width:100%}
+.colm.weak .nm{color:var(--light)}
+.colm .id{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.ground{height:2px;background:var(--hairline-strong);margin-top:0}
+.foot{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr);gap:var(--space-4)}
+.lgd{display:flex;gap:var(--space-4);flex-wrap:wrap}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Assumptions · V2</b> load-bearing: the plan as a beam; width is what rides on each assumption, fill is how sure · Dewar, Assumption-Based Planning (RAND, 1993)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const LOAD = { high: 3, medium: 2, low: 1 };
+const WEAK = ['unsupported', 'gap', 'hidden'];
+const S = { cracked: false, hot: null };
+function render() {
+  const as = DATA.assumptions, tot = sum(as, a => LOAD[a.load]);
+  const weak = as.filter(a => a.load === 'high' && WEAK.includes(markOf(a)));
+  let x = 0; const cracks = [];
+  as.forEach(a => { const w = LOAD[a.load] / tot * 100; if (weak.includes(a)) cracks.push(x + w / 2); x += w; });
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, T('kac').name, 'Load'], [...STD]) +
+  `<main class="main"><div class="wrap ${S.cracked ? 'cracked' : ''}">
+    <div><p class="eyebrow">${T('kac').name} · ${DATA.plan.id}</p><p class="sent" style="max-width:80ch">The plan rests on <b>${as.length} assumptions</b>. The wider the column, the more of the plan rides on it; the fuller, the surer. <b>${weak.length} load-bearing columns are not solid.</b></p></div>
+    <div class="stage">
+      <div class="beam">${DATA.plan.title}${cracks.map(c => `<span class="crack" style="left:${c}%"></span>`).join('')}</div>
+      <div class="cols">${as.map((a, i) => { const k = markOf(a), wk = weak.includes(a); return `<div class="colm ${wk ? 'weak' : ''}" style="flex:${LOAD[a.load]} 1 0"><div class="shaft ${k} ${wk ? 'weak' : ''}" title="${DATA.marks[k].word}"></div><span class="id">${a.id} · ${a.load}</span><span class="nm">${a.say}</span>${amk(k)}</div>`; }).join('')}</div>
+      <div class="ground"></div>
+    </div>
+    <div class="foot">
+      <div class="card"><p class="lbl">Where the beam cracks</p>${weak.map(a => `<p class="small"><b class="lite">${a.id}</b> ${a.say}: ${DATA.marks[markOf(a)].word.lc()}. ${a.sees ? 'Sign: ' + a.sign.lc() + '.' : 'AUGUR can’t watch it: ' + a.cant + '.'}</p>`).join('')}</div>
+      <div class="card"><p class="lbl">Wide and solid</p><p class="small">Nothing to do but keep watching: ${as.filter(a => markOf(a) === 'solid').map(a => a.say.lc()).join('; ')}.</p></div>
+      <div class="card"><p class="lbl">Read the columns</p><div class="lgd">${['solid', 'caveats', 'unsupported', 'gap', 'hidden'].map(k => amk(k)).join('')}</div><p class="small muted">Load is the planner’s call: “if this is false, does the plan fail (high), wobble (medium) or carry on (low)?”</p></div>
+    </div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.cracked = false; settle(); render(); later(() => { S.cracked = true; $('.wrap').classList.add('cracked'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

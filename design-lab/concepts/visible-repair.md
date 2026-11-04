@@ -22,3 +22,5 @@ In [`2026-11-03-the-label`](../runs/2026-11-03-the-label/): custody breaks stay 
 Also in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/) (ledger V2, V5, combined V4): one line through, the new value beside it, initials, a time and a reason where the value is read; a correction tells the stamps that covered the old value.
 
 In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): undo keeps the recipe line struck through; recipe versions carry the reason for each change; a late answer from the tray is a seam with who and how (combined V4).
+
+In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): a corrected mark is a new dated mark beside the old; a draft changed after a precedent keeps a seam naming the game (learning V6, combined V4).
