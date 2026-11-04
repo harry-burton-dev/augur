@@ -343,7 +343,7 @@ export interface Ref {
 export const resolveIntent: (manifest: AppManifestEntry[], intent: Intent) => AppManifestEntry | undefined;
 
 // @public
-export const SDK_VERSION = "1.10.0";
+export const SDK_VERSION: string;
 
 // @public
 export interface SearchAnswer {

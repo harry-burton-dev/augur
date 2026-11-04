@@ -1,6 +1,6 @@
 {
   "name": "@augur/contract-tests",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -12,12 +12,13 @@
     "freeze": "vite build && node freeze.mjs"
   },
   "dependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.6.0",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.6.1",
     "@augur/mfe-sdk": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.56.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.3.0",

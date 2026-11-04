@@ -165,12 +165,11 @@ describe('People', () => {
     gateway();
     const el = await open('/people');
     await openRow(el, 'Alex Rivera');
-    const toggle = document.querySelector('.augur-dialog [role="switch"], .augur-dialog input[type="checkbox"]') as HTMLElement;
-    expect(shut(toggle) || toggle.getAttribute('aria-readonly') === 'true' || toggle.hasAttribute('disabled')).toBe(true);
+    expect(shut(button('Turn off their sign-in'))).toBe(true);
     expect(document.querySelector('.augur-dialog')!.textContent).toContain('You can’t turn off your own sign-in.');
   });
 
-  it('keeps what acts at once apart from Save, and asks before turning a sign-in off or giving a new password', async () => {
+  it('keeps what acts at once apart from Save, and asks twice before turning a sign-in off or giving a new password', async () => {
     const samOn = { ...sam, enabled: true };
     const { sent } = gateway((method, url, body) => {
       if (url === '/api/identity/v1/admin/people' && method === 'GET') return Response.json([alex, samOn]);
@@ -185,18 +184,18 @@ describe('People', () => {
     expect(document.querySelector('.augur-dialog-fields')!.textContent).toContain('Nothing here changes until you press Save.');
     expect(live.closest('.augur-dialog-fields')).toBeNull();
 
-    // Turning off asks first, and nothing is sent until the admin says yes.
-    await press(live.querySelector('[role="switch"], input[type="checkbox"]'));
+    // Turning off asks twice in place, and nothing is sent until the second press.
+    await press(button('Turn off their sign-in'));
     expect(sent.some((c) => c.method === 'PATCH')).toBe(false);
-    expect(document.body.textContent).toContain('Turn off their sign-in?');
-    await press(button('Turn off'));
+    expect(live.textContent).toContain('Press again: they can’t sign in from now');
+    await press(live.querySelector('[data-armed]'));
     expect(sent.find((c) => c.method === 'PATCH')!.body).toEqual({ enabled: false });
     expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/Sign-in turned off/);
 
-    // A new password asks first too, then shows it once and says what happened.
+    // A new password asks twice too, then shows it once and says what happened.
     await press(button('Give them a new one-time password'));
     expect(sent.some((c) => c.url.endsWith('/u-2/password'))).toBe(false);
-    await press(button('Give a new password'));
+    await press(live.querySelector('[data-armed]'));
     expect(sent.some((c) => c.url.endsWith('/u-2/password'))).toBe(true);
     expect(document.querySelector('[data-password]')!.textContent!.trim()).toBe('pppp-qqqq-pppp');
     await press(button('Done'));

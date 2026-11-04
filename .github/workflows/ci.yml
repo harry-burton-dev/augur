@@ -142,6 +142,8 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
       # Every app's manifest, against the registry's own rules.
       - run: pnpm check:manifest
+      # Each API contract is what its service's route schemas say, and lints clean (ADR 0055).
+      - run: pnpm check:contracts
       # The kit bundle the shell serves is the one release/kit.json pins, whole, and serves what the SDK says.
       - run: pnpm check:kit
       - run: pnpm check:migrations

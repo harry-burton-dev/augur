@@ -1,5 +1,18 @@
 # @augur/gateway
 
+## 0.9.0
+
+### Minor Changes
+
+- 5458619: Status says whether this deployment allows sample data (`SEED_ALLOWED`, off unless set), and the realm gains the `platform-cli` client for signing in from a terminal (ADR 0056).
+
+### Patch Changes
+
+- b3060e0: Every platform service answers errors as RFC 9457 problem details (`application/problem+json`) with AUGUR's `reason` and `whoCanChange`, and keeps `error` and `message` for SDK 1.x clients. The service kit adds `problemDetails()`, `Problem`, `sendProblem` and `serviceFastifyOptions()`. A service's unexpected errors are logged and answered with a plain 500, never with their own words.
+- 8d48714: Fixes from the 2 Nov audit. In Admin → People, a person's sign-in (on or off, a new one-time password) sits in its own section that says it takes effect at once: each asks first, acts straight away and says what happened, while their name, email, department and roles change only on Save. Agents stay among the Shell's functions and say they aren't here yet, and Home keeps the card of an app this shell can't open, saying why and who can change it, instead of hiding either. Messages people read say AUGUR, not "the platform", and `pnpm check:reasons` now catches it. The centre menu's transitions stop for AUGUR's own reduced-motion setting as well as the system's and are timed from motion tokens; the lifecycle's divider uses the hairline token; overlay shadows use the shadow token. A new test holds the Lit kit and AUGUR's frontends to tokens only.
+- Updated dependencies [b3060e0]
+  - @augur/service-kit@0.12.0
+
 ## 0.8.0
 
 ### Minor Changes

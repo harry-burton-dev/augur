@@ -1,4 +1,4 @@
 // Written by scripts/versions.mjs from each frontend's package.json; don't edit by hand.
 
 /** The releases of the platform's own apps, which ship with the platform rather than registering themselves. */
-export const PLATFORM_APP_VERSIONS = { home: '0.3.2', admin: '0.12.2', upgrades: '0.1.2' } as const;
+export const PLATFORM_APP_VERSIONS = { home: '0.3.3', admin: '0.13.0', upgrades: '0.1.3' } as const;
