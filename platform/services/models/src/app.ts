@@ -1,4 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import {
   callerFromHeaders,
   GrantsUnavailable,
@@ -18,8 +19,10 @@ import {
   signedCallers,
   type CallerCheck,
 } from '@augur/service-kit';
-import { ProviderError, type ChatRequest, type ModelProvider } from './provider.ts';
-import { MemoryModelStore, type ModelSettings, type ModelStore } from './store.ts';
+import { describeApi } from './contract.ts';
+import { ProviderError, type ModelProvider } from './provider.ts';
+import { ChatAnswer, ChatRequest, Embeddings, EmbeddingsRequest, ModelsStatus, ref, refused, Settings, SettingsChange, UsageReport } from './schemas.ts';
+import { MemoryModelStore, type ModelStore } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -50,66 +53,6 @@ export interface ModelsOptions {
 export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry, workspace?: string) =>
   recordAudit({ eventsUrl, credentials, entry, workspace });
 
-const message = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['role', 'content'],
-  properties: {
-    role: { enum: ['system', 'user', 'assistant', 'tool'] },
-    content: { type: 'string', maxLength: 32_000 },
-    toolCalls: {
-      type: 'array',
-      maxItems: 8,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['id', 'name', 'arguments'],
-        properties: { id: { type: 'string', minLength: 1, maxLength: 100 }, name: { type: 'string', maxLength: 64 }, arguments: { type: 'object' } },
-      },
-    },
-    toolCallId: { type: 'string', minLength: 1, maxLength: 100 },
-  },
-} as const;
-
-const chatSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['messages'],
-  properties: {
-    /** For a person's call: which agent they are talking to. An app's service is known by its token instead. */
-    agent: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' },
-    messages: { type: 'array', minItems: 1, maxItems: 100, items: message },
-    tools: {
-      type: 'array',
-      maxItems: 32,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['name', 'description'],
-        properties: {
-          name: { type: 'string', pattern: '^[a-zA-Z0-9_-]{1,64}$' },
-          description: { type: 'string', minLength: 1, maxLength: 1024 },
-          parameters: { type: 'object' },
-        },
-      },
-    },
-  },
-} as const;
-
-const embeddingsSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['input'],
-  properties: { input: { type: 'array', minItems: 1, maxItems: 64, items: { type: 'string', minLength: 1, maxLength: 8000 } } },
-} as const;
-
-const settingsSchema = {
-  type: 'object',
-  additionalProperties: false,
-  minProperties: 1,
-  properties: { enabled: { type: 'boolean' }, dailyLimit: { type: 'integer', minimum: 0, maximum: 100_000 } },
-} as const;
-
 const workspaceOf = (req: FastifyRequest) => {
   const raw = req.headers[WORKSPACE_HEADERS.id];
   if (typeof raw !== 'string' || !raw) return undefined;
@@ -130,17 +73,20 @@ type Asker = { app: string; actor: NewAuditEntry['actor']; workspace?: string };
  * calls a day. It is off until an admin turns it on.
  */
 export const buildApp = async ({ store = new MemoryModelStore(), provider, verifyService, grants, audit, now = () => new Date(), callers }: ModelsOptions = {}) => {
-  const app = Fastify(serviceFastifyOptions());
+  const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
+  await describeApi(app, `/${API_VERSION}`);
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
-  app.get('/healthz', async () => health('models', version, API_VERSION));
+  app.get('/healthz', { schema: { hide: true } }, async () => health('models', version, API_VERSION));
 
   const today = () => now().toISOString().slice(0, 10);
   const daysAgo = (n: number) => new Date(now().getTime() - n * 86_400_000).toISOString().slice(0, 10);
 
+  // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
   await app.register(
-    async (app) => {
+    async (plain) => {
+      const app = plain.withTypeProvider<TypeBoxTypeProvider>();
       const admin = (req: FastifyRequest, reply: FastifyReply): Caller | undefined => {
         const caller = callerFromHeaders(req.headers);
         if (!caller) void reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
@@ -164,9 +110,9 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
 
       /**
        * An app's service, by its own token, for itself; or a person through the
-       * gateway, talking to an agent: the shell's own, or an AI app's.
+       * gateway, talking to `agent`: the shell's own, or an AI app's.
        */
-      const askerOf = async (req: FastifyRequest<{ Body: { agent?: string } }>, reply: FastifyReply, { people = true } = {}): Promise<Asker | undefined> => {
+      const askerOf = async (req: FastifyRequest, reply: FastifyReply, agent: string | undefined, { people = true } = {}): Promise<Asker | undefined> => {
         const workspace = workspaceOf(req);
         let service;
         try {
@@ -186,7 +132,6 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
         const caller = callerFromHeaders(req.headers);
         if (!caller) return void reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
         if (!people) return void reply.code(403).send({ error: 'forbidden', message: 'Only an app’s own service asks for this, as itself.' });
-        const agent = req.body.agent;
         if (!agent) return void reply.code(400).send({ error: 'bad_request', message: 'Name the agent you’re talking to.' });
         if (agent !== ASSISTANT) {
           const ok = await granted(req, reply, agent, caller.workspace?.id);
@@ -197,45 +142,89 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
       };
 
       // Whether the Agents surface should show, for anyone signed in.
-      app.get('/status', async (req, reply) => {
-        if (!callerFromHeaders(req.headers)) return reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
-        const { enabled } = await store.settings();
-        return { enabled: enabled && !!provider, ready: !!provider };
-      });
+      app.get(
+        '/status',
+        {
+          schema: {
+            summary: 'Whether models can be used, for anyone signed in (the shell shows Agents when enabled)',
+            response: { 200: ModelsStatus, 401: refused('No signed-in caller') },
+          },
+        },
+        async (req, reply) => {
+          if (!callerFromHeaders(req.headers)) return reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
+          const { enabled } = await store.settings();
+          return { enabled: enabled && !!provider, ready: !!provider };
+        },
+      );
 
-      app.get('/settings', async (req, reply) => {
-        if (!admin(req, reply)) return reply;
-        return { ...(await store.settings()), ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model, ...(provider.embeddingModel ? { embeddingModel: provider.embeddingModel } : {}) } : {}) };
-      });
+      app.get(
+        '/settings',
+        {
+          schema: {
+            summary: 'How models are used (admins)',
+            response: { 200: { ...ref(Settings), description: 'The settings' }, 401: refused('No signed-in caller'), 403: refused('Not an admin') },
+          },
+        },
+        async (req, reply) => {
+          if (!admin(req, reply)) return reply;
+          return { ...(await store.settings()), ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model, ...(provider.embeddingModel ? { embeddingModel: provider.embeddingModel } : {}) } : {}) };
+        },
+      );
 
-      app.put<{ Body: Partial<Pick<ModelSettings, 'enabled' | 'dailyLimit'>> }>('/settings', { schema: { body: settingsSchema } }, async (req, reply) => {
-        const caller = admin(req, reply);
-        if (!caller) return reply;
-        const before = await store.settings();
-        const next = { enabled: req.body.enabled ?? before.enabled, dailyLimit: req.body.dailyLimit ?? before.dailyLimit };
-        if (next.enabled && !before.enabled && !provider) {
-          return reply.code(409).send({ error: 'conflict', message: 'There’s no model to turn on: set MODEL_API_URL in the server’s settings first.' });
-        }
-        const changes: NewAuditEntry[] = [];
-        if (next.enabled !== before.enabled) changes.push({ actor: { id: caller.id, kind: 'user' }, app: 'models', action: next.enabled ? 'models.turned-on' : 'models.turned-off' });
-        if (next.dailyLimit !== before.dailyLimit)
-          changes.push({ actor: { id: caller.id, kind: 'user' }, app: 'models', action: 'models.limit-changed', detail: { from: before.dailyLimit, to: next.dailyLimit } });
-        try {
-          if (changes.length && !audit) throw new Error('the model gateway has nowhere to record it');
-          for (const entry of changes) await audit!(entry);
-        } catch (err) {
-          req.log.error({ err: (err as Error).message }, 'settings change not recorded');
-          return reply.code(503).send({ error: 'unavailable', message: 'The change can’t be recorded in the activity log right now, so it wasn’t made.' });
-        }
-        const saved = changes.length ? await store.saveSettings(next, caller.id) : before;
-        return { ...saved, ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model, ...(provider.embeddingModel ? { embeddingModel: provider.embeddingModel } : {}) } : {}) };
-      });
+      app.put(
+        '/settings',
+        {
+          schema: {
+            summary: "Turn models on or off, or set each app's calls a day (admins; audited)",
+            body: SettingsChange,
+            response: {
+              200: { ...ref(Settings), description: 'The settings now' },
+              400: refused('An invalid change'),
+              401: refused('No signed-in caller'),
+              403: refused('Not an admin'),
+              409: refused('Turning on with no model set up'),
+              503: refused("The change can't be recorded in the audit log, so it wasn't made"),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = admin(req, reply);
+          if (!caller) return reply;
+          const before = await store.settings();
+          const next = { enabled: req.body.enabled ?? before.enabled, dailyLimit: req.body.dailyLimit ?? before.dailyLimit };
+          if (next.enabled && !before.enabled && !provider) {
+            return reply.code(409).send({ error: 'conflict', message: 'There’s no model to turn on: set MODEL_API_URL in the server’s settings first.' });
+          }
+          const changes: NewAuditEntry[] = [];
+          if (next.enabled !== before.enabled) changes.push({ actor: { id: caller.id, kind: 'user' }, app: 'models', action: next.enabled ? 'models.turned-on' : 'models.turned-off' });
+          if (next.dailyLimit !== before.dailyLimit)
+            changes.push({ actor: { id: caller.id, kind: 'user' }, app: 'models', action: 'models.limit-changed', detail: { from: before.dailyLimit, to: next.dailyLimit } });
+          try {
+            if (changes.length && !audit) throw new Error('the model gateway has nowhere to record it');
+            for (const entry of changes) await audit!(entry);
+          } catch (err) {
+            req.log.error({ err: (err as Error).message }, 'settings change not recorded');
+            return reply.code(503).send({ error: 'unavailable', message: 'The change can’t be recorded in the activity log right now, so it wasn’t made.' });
+          }
+          const saved = changes.length ? await store.saveSettings(next, caller.id) : before;
+          return { ...saved, ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model, ...(provider.embeddingModel ? { embeddingModel: provider.embeddingModel } : {}) } : {}) };
+        },
+      );
 
-      app.get('/usage', async (req, reply) => {
-        if (!admin(req, reply)) return reply;
-        const { dailyLimit } = await store.settings();
-        return { dailyLimit, days: await store.usage(daysAgo(6)) };
-      });
+      app.get(
+        '/usage',
+        {
+          schema: {
+            summary: "Each app's use over the last seven days, newest first (admins)",
+            response: { 200: UsageReport, 401: refused('No signed-in caller'), 403: refused('Not an admin') },
+          },
+        },
+        async (req, reply) => {
+          if (!admin(req, reply)) return reply;
+          const { dailyLimit } = await store.settings();
+          return { dailyLimit, days: await store.usage(daysAgo(6)) };
+        },
+      );
 
       /**
        * What every call goes through: models on, a model set up, the app's calls for
@@ -259,43 +248,81 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
         return true;
       };
 
-      app.post<{ Body: ChatRequest & { agent?: string } }>('/chat', { schema: { body: chatSchema } }, async (req, reply) => {
-        const asker = await askerOf(req, reply);
-        if (!asker) return reply;
-        const { messages, tools } = req.body;
-        if (!(await mayCall(req, reply, asker, { model: provider?.model, messages: messages.length, ...(tools?.length ? { tools: tools.map((t) => t.name) } : {}) }))) return reply;
-        const day = today();
-        try {
-          const answer = await provider!.chat({ messages, ...(tools?.length ? { tools } : {}) });
-          await store.addTokens(asker.app, day, answer.usage.inputTokens, answer.usage.outputTokens);
-          req.log.info({ app: asker.app, model: answer.model, ...answer.usage, toolCalls: answer.message.toolCalls?.length ?? 0 }, 'model called');
-          return answer;
-        } catch (err) {
-          if (!(err instanceof ProviderError)) throw err;
-          req.log.error({ err: err.message, app: asker.app }, 'model call failed');
-          return reply.code(err.status).send({ error: 'provider', message: err.message });
-        }
-      });
+      app.post(
+        '/chat',
+        {
+          schema: {
+            summary: 'Ask the model',
+            body: ref(ChatRequest),
+            response: {
+              200: { ...ref(ChatAnswer), description: "The model's answer" },
+              400: refused("An invalid request, or a person's call without an agent"),
+              401: refused('Neither a signed-in person nor a service'),
+              403: refused("Models are off, or the app isn't granted models:use there"),
+              429: refused('The app has used its calls for today'),
+              502: refused('The model provider failed or refused; the message says what to check'),
+              503: refused("No model is set up, or grants or the audit log can't be reached"),
+              504: refused('The model took too long'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const asker = await askerOf(req, reply, req.body.agent);
+          if (!asker) return reply;
+          const { messages, tools } = req.body;
+          if (!(await mayCall(req, reply, asker, { model: provider?.model, messages: messages.length, ...(tools?.length ? { tools: tools.map((t) => t.name) } : {}) }))) return reply;
+          const day = today();
+          try {
+            const answer = await provider!.chat({ messages, ...(tools?.length ? { tools } : {}) });
+            await store.addTokens(asker.app, day, answer.usage.inputTokens, answer.usage.outputTokens);
+            req.log.info({ app: asker.app, model: answer.model, ...answer.usage, toolCalls: answer.message.toolCalls?.length ?? 0 }, 'model called');
+            return answer;
+          } catch (err) {
+            if (!(err instanceof ProviderError)) throw err;
+            req.log.error({ err: err.message, app: asker.app }, 'model call failed');
+            return reply.code(err.status).send({ error: 'provider', message: err.message });
+          }
+        },
+      );
 
       // Text into vectors, to match by meaning: for apps' services, as themselves. Each request is one call.
-      app.post<{ Body: { input: string[]; agent?: string } }>('/embeddings', { schema: { body: embeddingsSchema } }, async (req, reply) => {
-        const asker = await askerOf(req, reply, { people: false });
-        if (!asker) return reply;
-        if (provider && !provider.embed) {
-          return reply.code(503).send({ error: 'unavailable', message: 'No embedding model is set up on this server: set MODEL_EMBEDDING_NAME beside MODEL_API_URL.' });
-        }
-        if (!(await mayCall(req, reply, asker, { model: provider?.embeddingModel, texts: req.body.input.length }, 'model.embedded'))) return reply;
-        try {
-          const answer = await provider!.embed!(req.body.input);
-          await store.addTokens(asker.app, today(), answer.usage.inputTokens, 0);
-          req.log.info({ app: asker.app, model: answer.model, texts: answer.vectors.length }, 'texts embedded');
-          return answer;
-        } catch (err) {
-          if (!(err instanceof ProviderError)) throw err;
-          req.log.error({ err: err.message, app: asker.app }, 'embedding failed');
-          return reply.code(err.status).send({ error: 'provider', message: err.message });
-        }
-      });
+      app.post(
+        '/embeddings',
+        {
+          schema: {
+            summary: "Turn texts into vectors, to match by meaning (apps' services only, as themselves)",
+            body: EmbeddingsRequest,
+            response: {
+              200: Embeddings,
+              400: refused('An invalid request'),
+              401: refused('Neither a signed-in person nor a service'),
+              403: refused("Models are off, a person asked, or the app isn't granted models:use there"),
+              429: refused('The app has used its calls for today'),
+              502: refused('The model provider failed or refused; the message says what to check'),
+              503: refused("No model or no embedding model is set up, or grants or the audit log can't be reached"),
+              504: refused('The model took too long'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const asker = await askerOf(req, reply, undefined, { people: false });
+          if (!asker) return reply;
+          if (provider && !provider.embed) {
+            return reply.code(503).send({ error: 'unavailable', message: 'No embedding model is set up on this server: set MODEL_EMBEDDING_NAME beside MODEL_API_URL.' });
+          }
+          if (!(await mayCall(req, reply, asker, { model: provider?.embeddingModel, texts: req.body.input.length }, 'model.embedded'))) return reply;
+          try {
+            const answer = await provider!.embed!(req.body.input);
+            await store.addTokens(asker.app, today(), answer.usage.inputTokens, 0);
+            req.log.info({ app: asker.app, model: answer.model, texts: answer.vectors.length }, 'texts embedded');
+            return answer;
+          } catch (err) {
+            if (!(err instanceof ProviderError)) throw err;
+            req.log.error({ err: err.message, app: asker.app }, 'embedding failed');
+            return reply.code(err.status).send({ error: 'provider', message: err.message });
+          }
+        },
+      );
     },
     { prefix: `/${API_VERSION}` },
   );
