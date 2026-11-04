@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>App owner · V5 Floors and doors</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,22rem);gap:var(--space-5);height:100%}
+.bld{display:flex;flex-direction:column;gap:var(--space-2);justify-content:center}
+.fl{display:grid;grid-template-columns:9rem var(--target-md) minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border-radius:var(--radius-key);background:linear-gradient(90deg,color-mix(in srgb,var(--fc) 9%,transparent),transparent 45%);border-top:1px solid color-mix(in srgb,var(--fc) 40%,transparent);transition:box-shadow var(--motion-base)}
+.fl.sub{margin-left:var(--space-7)}
+.fl .nm{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.fl .nm b{display:block;font-weight:400;color:var(--fc)}
+.door{display:flex;align-items:center;justify-content:center;width:var(--target-md);height:var(--target-md);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink-muted)}
+.door.open{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit)}
+.door.shut{border-color:var(--x-proposed-blocked);color:var(--x-proposed-blocked);background:var(--x-proposed-blocked-wash)}
+.door.bell{border-style:dashed}
+.fl .w{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.fl .w small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.knocks{display:flex;gap:var(--space-1)}
+.knock{width:var(--space-3);height:var(--space-3);border-radius:50%;border:1px solid var(--x-proposed-blocked);opacity:0;transform:scale(1.6);transition:opacity var(--motion-quick),transform var(--motion-quick) var(--ease-out)}
+.knock.ok{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.knock.in{opacity:1;transform:none}
+.side{display:flex;flex-direction:column;gap:var(--space-3)}
+.side .pane{padding:var(--space-3) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.side .pane b{font-weight:400;color:var(--light)}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <section class="bld"><div><p class="eyebrow">Admin · Apps · Notices</p><h1 class="heading" id="h"></h1><p class="meta muted" style="margin-bottom:var(--space-4)">Each floor has a door for this app. A dot is one send last week: green went in, amber was turned away.</p></div><div id="floors" style="display:grid;gap:var(--space-2)"></div></section>
+    <aside class="side" id="side"></aside>
+  </div></main>
+</div>
+<div class="x-cap"><b>App owner · V5</b> floors and doors: where the app may send, where it knocked and was turned away · architectural section, keying charts, the light falls through floors</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const APP = 'repairs', app = A(APP), rs = ALL().filter(r => r.n.app === APP);
+$('#top').innerHTML = topHTML(['Admin', 'Apps', app.name, 'Floors'], [['R', 'replay'], ['T', 'technical words', 'h-t']], 'department');
+$('#h').textContent = `Where ${app.name} may send`;
+const admin = Object.keys(DATA.people).find(id => P(id).admin === 'department');
+const F = [
+  { tier: 'org', name: DATA.floors.org.name, word: 'Org', may: app.may.org === true, sends: rs.filter(r => r.n.floor === 'org'), people: Object.keys(DATA.people).length, why: app.may.org ? '' : `Not allowed. ${app.name} hasn’t asked for it.` },
+  { tier: 'department', name: DATA.floors.department.name, word: 'Department', may: app.may.department !== false, sends: rs.filter(r => r.n.floor === 'department'), people: DATA.teams.department.members.length, why: app.mayWhy },
+  ...Object.entries(DATA.teams).filter(([, t]) => t.floor === 'team').map(([id, t]) => ({ tier: 'team', sub: true, name: t.name, word: 'Team', may: app.may.team, bell: t.teamNotices.on, team: id, sends: rs.filter(r => r.n.floor === 'team' && ((r.n.to.team && r.n.to.team === id) || (!r.n.to.team && id === DATA.rota.team))), people: t.members.length, why: t.teamNotices.on ? `Team notices on since ${t.teamNotices.since} (${P(t.teamNotices.by).name}).` : `Team notices are off. ${P(t.lead).name}, its lead, can turn them on.` }))
+];
+$('#floors').innerHTML = F.map((f, i) => `<div class="fl ${f.sub ? 'sub' : ''}" data-tier="${f.tier}"><span class="nm"><b>${f.word}</b>${f.name}</span>
+  <span class="door ${f.may ? (f.bell === false ? 'bell' : 'open') : 'shut'}" title="${f.may ? 'allowed' : 'not allowed'}">${I(f.may ? (f.bell === false ? 'bell-off' : 'lock-open') : 'lock', 18)}</span>
+  <span class="w">${f.may ? (f.bell === false ? 'Allowed, but the team’s bell is off' : 'Allowed to send') : 'Not allowed to send'}<small>${f.why}</small><small>${f.people} ${f.people === 1 ? 'person' : 'people'} on this floor</small></span>
+  <span class="knocks">${f.sends.map(r => `<i class="knock ${r.blocked ? '' : 'ok'}" title="${at(r.t)} · ${r.n.title}"></i>`).join('')}</span></div>`).join('');
+const shut = F.find(f => !f.may && f.sends.length);
+$('#side').innerHTML = `<div class="pane"><p class="eyebrow">Turned away</p><p style="margin-top:var(--space-2)"><b>${shut.sends.length}</b> sends to ${shut.name}, which would have told <b>${shut.sends.reduce((a, r) => a + (r.blocked ? r.blocked.would : 0), 0)}</b> people.</p><p style="margin-top:var(--space-2)">Only ${P(admin).name}, the Department admin, can open that door, in Admin, Apps. <span class="tk">notifications:send on department · manifest scope</span></p><button class="btn sm" style="margin-top:var(--space-3)">${I('send', 14)} Ask ${first(P(admin).name)} to allow it</button></div>
+  <div class="pane"><p class="eyebrow">Or send lower</p><p style="margin-top:var(--space-2)">The empty-homes list could go to each team that needs it instead of the whole Department. Then the doors that are open would do.</p></div>
+  <div class="pane"><p class="eyebrow">Urgent</p><p style="margin-top:var(--space-2)">${app.urgent.perWeek} a week, on Team floors only, granted by ${P(app.urgent.grantedBy).name}.</p></div>`;
+function play() { clearLater(); document.body.classList.add('pre'); $$('.knock').forEach(k => k.classList.remove('in')); later(() => document.body.classList.remove('pre'), 60); $$('.knock').forEach((k, i) => later(() => k.classList.add('in'), 1200 + i * 90)); }
+document.addEventListener('keydown', e => commonKeys(e, play));
+Icons.hydrate(document.body); play();
+</script></body></html>

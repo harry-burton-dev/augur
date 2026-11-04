@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Team board V6 · The round</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: the lead walks the board once a day and turns each card: on track, or needs help. unturned cards say so ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.head{display:flex;gap:var(--space-5);align-items:flex-end}
+.head .tally{margin-left:auto;display:flex;gap:var(--space-5)}
+.tally div{display:grid;gap:2px;text-align:right}
+.tally b{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--light)}
+.tally span{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.grid{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:var(--space-3);align-content:start}
+.col{display:grid;gap:var(--space-2);align-content:start}
+.ch{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-meta);color:var(--light);border-bottom:1px solid var(--hairline-strong);padding-bottom:var(--space-2)}
+/* a two-faced card: the face shows the last turn. it flips once, in the round, and never on its own */
+.flip{perspective:calc(var(--space-8) * 6)}
+.flip .in{position:relative;display:grid;transition:transform var(--motion-slow) var(--ease-standard);transform-style:preserve-3d}
+.flip.turned .in{transform:rotateX(180deg)}
+.face{backface-visibility:hidden;grid-area:1/1;display:grid}
+.face.back{transform:rotateX(180deg)}
+.tcard .chk{display:flex;gap:var(--space-1);align-items:center;font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);color:var(--ink-muted)}
+.tcard.ok .chk{color:var(--x-proposed-lit)}
+.tcard.help .chk{color:var(--x-proposed-disagree)}
+.tcard.help{border-color:color-mix(in srgb,var(--x-proposed-disagree) 55%,transparent);border-top-color:var(--fc)}
+.tcard.unturned{border-style:dashed;border-top-style:solid}
+.foot{display:flex;gap:var(--space-4);align-items:flex-start;border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+@media (prefers-reduced-motion: reduce){.flip .in{transition:none}}
+@media (max-width:1400px){.grid{gap:var(--space-2)}.tcard .tc-t{font-size:var(--x-proposed-type-micro)}.head .tally b{font-size:var(--type-heading)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Team board · V6</b> the round: the lead turns each card to on track or needs help, initialled; unturned cards say so · kamishibai, the ward round</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* the round's verdicts, as Nkechi turns them; a verdict is a mark with a short reason */
+const HELP = { 'J-405': 'holder off sick, due today', 'J-408': 'tenant wants an evening; nobody works evenings', 'J-410': 'Tom off from tomorrow' };
+const S = { done: 0 };
+const order = B.jobs.filter(j => j.holder).sort((a, b) => DATA.team.indexOf(a.holder) - DATA.team.indexOf(b.holder) || a.h - b.h);
+function face(j, turned, i) {
+  const help = HELP[j.id];
+  if (!turned) return tcard(j, { cls: 'unturned', i, foot: `<span class="chk">${I('circle-dashed', 12)} not checked this round</span>` });
+  return tcard(j, { cls: help ? 'help' : 'ok', i, foot: `<span class="chk">${I(help ? 'hand' : 'circle-check', 12)}${help ? 'needs help · ' + help : 'on track'} · ${P('nkechi').ini}</span>` });
+}
+function tallyHTML() {
+  const turned = order.slice(0, S.done).map(j => j.id);
+  const nOk = turned.filter(id => !HELP[id]).length, nHelp = turned.filter(id => HELP[id]).length;
+  return `<div><b>${nOk}</b><span>on track</span></div><div><b>${nHelp}</b><span>needs help</span></div><div><b>${order.length - S.done}</b><span>not checked</span></div>`;
+}
+function render() {
+  const turned = order.slice(0, S.done).map(j => j.id);
+  const people = DATA.team.filter(id => jobsOf(id).length);
+  $('#app').innerHTML = topHTML(['Team', F('team').name, 'Board'], [['Space', 'turn the next card'], ['A', 'finish the round'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div class="head"><div><p class="eyebrow">${F('team').name} · ${P('nkechi').name}’s round, ${DATA.now.day}</p><h1 class="t" style="margin-top:var(--space-1)">The round</h1></div>
+        <div class="tally" id="tally">${tallyHTML()}</div></div>
+      <div class="grid scroll" style="--n:${people.length}">${people.map(id => `<section class="col"><div class="ch">${ini(id, 'sm')}${first(id)}</div>${jobsOf(id).sort((a, b) => a.h - b.h).map((j, i) => {
+        const t = turned.includes(j.id);
+        return `<div class="flip ${t ? 'turned' : ''}" data-j="${j.id}"><div class="in"><div class="face">${face(j, false, i)}</div><div class="face back">${face(j, true, i)}</div></div></div>`;
+      }).join('')}</section>`).join('')}</div>
+      <div class="foot">${I('info', 16)}<p class="note">A card is turned once a day, in the round, by the lead, and keeps the turn until the next round: a mark with initials, never a colour that changes by itself. A card the round didn’t reach says <b>not checked this round</b> rather than looking fine. “Needs help” is an ask with a reason, not a fault.</p></div>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function turn(n = 1) {
+  if (S.done >= order.length) return;
+  const to = Math.min(order.length, S.done + n);
+  for (let k = S.done; k < to; k++) $(`.flip[data-j="${order[k].id}"]`).classList.add('turned');
+  S.done = to; $('#tally').innerHTML = tallyHTML();
+}
+function replay() {
+  clearLater(); S.done = 0; render(); settle();
+  /* the moment: the round turns the first cards one after another, then stops, leaving the rest dashed */
+  const step = ms('--motion-instant') * 2;
+  for (let k = 0; k < 11; k++) later(() => turn(1), ms('--motion-run') + k * step);
+}
+onKeys({ r: replay, ' ': () => turn(1), a: () => turn(order.length) });
+replay();
+</script>
+</body>
+</html>

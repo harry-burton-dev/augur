@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Corrections V1 · The account</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: a fact kept as an account. every change is a numbered entry; the value is the running balance; nothing is erased ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-card);gap:var(--space-6)}
+.left{display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4);min-height:0}
+.head{display:flex;align-items:flex-end;gap:var(--space-5)}
+.bal{margin-left:auto;text-align:right;display:grid;gap:var(--space-1)}
+.bal b{font:200 var(--type-display)/1 var(--font-mono);color:var(--light)}
+.ledger tfoot td{border-bottom:3px double var(--hairline-strong);border-top:1px solid var(--hairline-strong);font-size:var(--type-small);color:var(--ink-muted)}
+.ledger tfoot td.v{font-size:var(--type-heading);color:var(--light)}
+.side{display:flex;flex-direction:column;gap:var(--space-4);border-left:1px solid var(--hairline);padding-left:var(--space-5)}
+.cite{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-2) var(--space-3);align-items:center;font-size:var(--type-small);color:var(--ink)}
+.told{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-lit)}
+@media (max-width:1400px){.ledger td{font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-2)}.ledger td.src,.ledger th.src{display:none}.bal b{font-size:var(--type-title)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Corrections · V1</b> the account: a fact as a ledger; every change is a numbered entry, the value is its running balance, nothing is erased · double-entry bookkeeping (Pacioli, 1494)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { posted: false };
+function render() {
+  const es = FT.entries.filter(e => S.posted || e.act !== 'correct'), bal = running();
+  const last = bal[es.length - 1];
+  $('#app').innerHTML = topHTML(['Data Atlas', FT.subject, FT.field], [['C', 'post the correction'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap"><div class="left">
+      <div class="head"><div><p class="eyebrow">${FT.id} · kept on the ${F(FT.floor).word} floor · steward ${P(FT.steward).name}</p><h1 class="t" style="margin-top:var(--space-1)">${FT.subject} · ${FT.field}</h1></div>
+        <div class="bal"><b>${last.v}</b>${last.disputed ? `<span class="disp">${I('scale', 12)} disputed: 2 sources disagree</span>` : `<span class="note">after entry ${es.length}</span>`}</div></div>
+      <div class="scroll"><table class="ledger"><thead><tr><th>No.</th><th>Date</th><th>Entry</th><th>By</th><th class="src">Source</th><th style="text-align:right">Value after</th></tr></thead>
+        <tbody>${es.map((e, i) => `<tr class="dep ${e.act === 'correct' ? 'new write' : ''}" style="--i:${i}"><td class="n">${e.n}</td><td class="d">${e.at}</td><td>${entryWords(e)}${e.counter ? `<br><span class="note">Countersigned by ${P(e.counter).name}, ${P(e.counter).role}.</span>` : ''}</td>
+          <td>${e.by === 'import' || e.by === 'rule' ? `<span class="muted">${byName(e)}</span>` : initialHTML(e.by, first(e.by))}</td><td class="src note">${e.src || '—'}</td><td class="v">${bal[i].v}${bal[i].disputed ? ' <span class="disp">?</span>' : ''}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td></td><td></td><td>Value now, carried from entry ${es.length}. Earlier values stay on their lines for good.</td><td></td><td class="src"></td><td class="v">${last.v}</td></tr></tfoot></table></div></div>
+      <aside class="side"><div><p class="eyebrow">Relying on this value</p><p class="note" style="margin-top:var(--space-1)">Documents that cite the fact. A correction posts one line to each, so their owners see it on the document, not in an inbox.</p></div>
+        ${FT.citedBy.map(c => `<div class="cite">${I('file-text', 16)}<span>${c.t}<br><span class="note">owner ${P(c.owner).name}</span></span>${S.posted ? `<span class="told">told ${FT.entries.find(e => e.act === 'correct').at.split(' ').pop()}</span>` : `<span class="note">cites ${FT.entries[0].v}</span>`}</div>`).join('')}
+        <div class="panel" style="display:grid;gap:var(--space-2)"><p class="eyebrow">The rules of the account</p>
+          <p class="note">1. An entry is never edited or removed. A mistake is put right by a new entry that says what it corrects.</p>
+          <p class="note">2. Every entry has a date, a name (or says it was a rule or an import), and a source.</p>
+          <p class="note">3. The value shown everywhere is the last line’s balance. Anyone can read how it got there.</p></div>
+      </aside></div></main>`;
+  Icons.hydrate($('#app'));
+}
+function post() { if (!S.posted) { S.posted = true; render(); } }
+function replay() {
+  clearLater(); S.posted = false; render(); settle();
+  /* the moment: entry 6 is posted. 2014 stays on lines 1 to 5; the balance moves to 2017 and the dispute closes */
+  later(post, ms('--motion-run'));
+}
+onKeys({ r: replay, c: post });
+replay();
+</script>
+</body>
+</html>

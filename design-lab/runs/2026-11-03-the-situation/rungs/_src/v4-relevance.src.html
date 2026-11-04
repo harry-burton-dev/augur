@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Rungs V4 · Relevance</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: the rules of evidence as the three rungs. Is it what it says? Does it move a likelihood? Is that of consequence here? ---- */
+.wrap{height:100%;display:flex;flex-direction:column;gap:var(--space-4)}
+.lede{max-width:100ch;color:var(--ink-muted);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.tbl{display:grid;grid-template-columns:minmax(0,1.25fr) repeat(3,minmax(0,1fr)) 150px;gap:0;flex:1;min-height:0;align-content:start}
+.tbl .h{display:grid;gap:var(--space-1);padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline-strong);align-content:end}
+.tbl .h b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.tbl .h span.q{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tbl .c{padding:var(--space-3);border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);display:grid;gap:var(--space-1);align-content:start}
+.tbl .c.pc0 p{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.tbl .t{opacity:0;transition:opacity var(--motion-base) var(--ease-out)}
+.tbl .t.in{opacity:1}
+.v{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);text-transform:uppercase;letter-spacing:var(--tracking-caps)}
+.v.yes{color:var(--x-proposed-lit)}
+.v.part{color:var(--x-proposed-disagree)}
+.v.no{color:var(--ink-muted)}
+.out{display:grid;gap:var(--space-1);align-content:start}
+.out .rm{opacity:1}
+.verdict{font-size:var(--type-small);line-height:var(--leading-small);color:var(--light)}
+.verdict.no{color:var(--ink-muted)}
+@media (max-width:1400px){.lede{display:none}.tbl{grid-template-columns:minmax(0,1.1fr) repeat(3,minmax(0,1fr)) 120px}.tbl .c{padding:var(--space-2)}.tbl .c .src{display:none}.tbl .h span.q{font-size:var(--x-proposed-type-micro)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Rungs · V4</b> relevance: authentic, probative, of consequence; said-not-checked is kept for the saying, not the truth · rules of evidence (relevance, hearsay), Wigmore</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { k: 0 };
+/* the three tests. Each one passed lifts a piece a rung; a piece stops at the first it fails */
+const TESTS = [
+  { rung: 'data', name: 'Is it what it says it is?', q: 'Where it was recorded, by whom, kept where. Authentic data.' },
+  { rung: 'info', name: 'Does it move a likelihood?', q: 'Does it make something more or less likely than without it? Information.' },
+  { rung: 'context', name: 'Is that of consequence here?', q: `Does it bear on the decision in ${T.id}? Context, for this task.` }
+];
+/* the run of each piece through the tests: [verdict, words] */
+const ROWS = [
+  { p: 'd1', t: [['yes', `Logged by crews; kept by ${P('mira').name}.`], ['yes', 'Alone, a count moves nothing. With July and the limit, it does.'], ['yes', `With ${R.limitWhere}, it decides whether the contract can end without penalty.`]] },
+  { p: 'i4', t: [['yes', `Query over the round log, by ${P('mira').name}.`], ['yes', 'Makes “our route change caused part of it” more likely.'], ['yes', 'Bears on renewing: part of the breach may be ours.']] },
+  { p: 'x1', t: [['yes', 'Same records, a different denominator.'], ['part', 'Makes “the service is mostly fine” more likely.'], ['no', PC('x1').why]] },
+  { p: 'i5', t: [['part', `Authentic as what ${P('kerry').name} said on 29 Oct. Not as a fact about drivers.`], ['part', 'Admitted for the saying, not the truth, until someone checks.'], ['part', 'Would bear on renewal once checked.']] },
+  { p: 'd4', t: [['yes', `Resident cases, kept by the ${P('cc').name.toLowerCase()}.`], ['yes', 'Makes “residents noticed” more likely.'], ['part', 'Bears on the service, not the contract’s terms: kept as background.']] }
+];
+const VW = { yes: 'passes', part: 'in part', no: 'fails' };
+function out(row) {
+  const v = row.t.map(x => x[0]);
+  const stop = v.indexOf('no');
+  if (stop === 0) return { r: null, w: 'Not data: excluded' };
+  if (stop > 0) return { r: TESTS[stop - 1].rung, w: 'Set aside for this task, with why', no: true };
+  if (v.every(x => x === 'yes')) return { r: 'context', w: 'In the set as context' };
+  if (PC(row.p).said) return { r: 'info', w: 'In the set as said, not checked' };
+  return { r: 'context', w: 'In the set, marked in part' };
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Relevance'], [['→', 'next test'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">One reading, three rungs · the rules of evidence</p><h1 class="title">Authentic, probative, of consequence</h1></div>
+    <p class="lede">A court asks three things of evidence: is it what it claims to be, does it make a fact more or less likely, and is that fact of consequence to the case. They are the three rungs. A piece climbs one rung per test it passes and stops at the first it fails, and someone’s word is kept as what they said, not as fact, until it is checked.</p>
+    <div class="tbl" role="table">
+      <div class="h" role="columnheader"><b>Piece</b><span class="q">For ${T.id} · ${T.title}</span></div>
+      ${TESTS.map(t => `<div class="h" role="columnheader">${rm(t.rung)}<b>${t.name}</b><span class="q">${t.q}</span></div>`).join('')}
+      <div class="h" role="columnheader"><b>So</b></div>
+      ${ROWS.map((row, ri) => { const p = PC(row.p), o = out(row); return `<div class="c pc0"><p class="${asRung(p.rung)}">${p.text}</p>${srcHTML(p.src)}${saidHTML(p)}</div>
+        ${row.t.map(([v, w], k) => `<div class="c t ${S.k > k ? 'in' : ''}" data-k="${k}" style="transition-delay:calc(var(--motion-instant) * ${ri})"><span class="v ${v}">${I(v === 'yes' ? 'check' : v === 'part' ? 'circle-dashed' : 'x', 12)} ${VW[v]}</span><span>${w}</span></div>`).join('')}
+        <div class="c out t ${S.k > 2 ? 'in' : ''}" data-k="2">${o.r ? rm(o.r) : ''}<span class="verdict ${o.no ? 'no' : ''}">${o.w}</span></div>`; }).join('')}
+    </div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.k = 0; render(); }, () => {
+  const step = ms('--motion-calm');
+  const show = () => $$('.t').forEach(el => el.classList.toggle('in', +el.dataset.k < S.k));
+  [1, 2, 3].forEach((k, j) => later(() => { S.k = k; show(); }, j * step));
+}, (e) => { if (e.key === 'ArrowRight') { S.k = Math.min(3, S.k + 1); render(); } if (e.key === 'ArrowLeft') { S.k = Math.max(0, S.k - 1); render(); } });
+</script>
+</body>
+</html>

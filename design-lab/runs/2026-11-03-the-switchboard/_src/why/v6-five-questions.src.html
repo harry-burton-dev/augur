@@ -1,0 +1,78 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why was I told? · V6 Five questions</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.cols{display:grid;grid-template-columns:minmax(0,24rem) minmax(0,1fr);gap:var(--space-6);height:100%;max-width:calc(var(--measure-wide) + 28rem);margin:0 auto;align-items:start;align-content:center}
+.card{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)}
+.qs{display:grid;grid-template-columns:minmax(0,15rem) minmax(0,1fr);gap:var(--space-5)}
+.qs nav{display:flex;flex-direction:column;gap:var(--space-1)}
+.qs nav button{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink-muted);border:1px solid transparent}
+.qs nav button[aria-selected="true"]{color:var(--light);border-color:var(--hairline-strong);background:var(--surface-raised)}
+.ans{min-height:22rem}
+.ans h2{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light);margin-bottom:var(--space-3)}
+.ans p.big{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink);max-width:var(--measure-read)}
+.ans ul{list-style:none;margin:var(--space-4) 0 0;padding:0;display:grid;gap:var(--space-2);max-width:var(--measure-read)}
+.ans li{display:grid;grid-template-columns:minmax(0,9rem) minmax(0,1fr);gap:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);padding-bottom:var(--space-2);border-bottom:1px solid var(--hairline)}
+.ans li .k{color:var(--ink-muted)}
+.ans li.off .k{opacity:var(--x-proposed-quiet)}
+.ans li b{font-weight:400;color:var(--light)}
+.ans .own{font-size:var(--type-small);color:var(--ink-muted)}
+.ans .dep{transition-delay:calc(var(--i) * var(--motion-instant))}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="cols">
+    <section class="pane card" id="card"></section>
+    <section class="qs"><nav id="nav" role="tablist" aria-label="Questions"></nav><div class="ans" id="ans" role="tabpanel" aria-live="polite"></div></section>
+  </div></main>
+</div>
+<div class="x-cap"><b>Why was I told? · V6</b> five fixed questions, answered from the route · SBAR, the five Ws of a news story, help-desk “why” articles</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const ME = DATA.me, NID = 'n30';
+const r = route(NID), n = r.n, d = r.deliveries.find(x => x.p === ME);
+const st = r.steps.find(s => s.k === d.step), si = r.steps.indexOf(st), nxt = r.steps.slice(si + 1);
+const prev = r.deliveries.filter(x => x.told < d.sent);
+const nextStep = nxt.find(s => !s.skipped), skipped = nxt.filter(s => s.skipped && s.at <= (nextStep ? nextStep.at : Infinity));
+const P0 = P(ME);
+const Q = [
+  { q: 'Why me?', icon: 'user-round', a: () => `<p class="big">${viaWords(d)}</p><ul>
+      <li><span class="k">It was for</span><span>${prev.map(x => `${who(x.p)} (${x.via === 'addressed' ? 'by name' : x.via})`).join(', ')}</span></li>
+      <li><span class="k">The rota</span><span>${DATA.rota.name}, kept by ${P(DATA.rota.setBy).name}: ${DATA.rota.byDay.slice(0, 5).map((p, i) => `${DAYS[i]} ${first(P(p).name)}`).join(' · ')}</span></li>
+      <li><span class="k">The policy</span><span>${DATA.policy.steps.map(s => s.label).join(' → ')}</span></li></ul>` },
+  { q: 'Why now?', icon: 'clock', a: () => `<p class="big">Its limit was <b>${hhmm(tm(n.limit))}</b>, four working hours after ${A(n.app).name} raised it at ${hhmm(r.t)}. At ${hhmm(d.sent)} you were inside your hours (${P0.hours.from} to ${P0.hours.to}), so it reached you at once.</p><ul>
+      <li><span class="k">Raised</span><span>${at(r.t)}</span></li><li><span class="k">Limit</span><span>${at(tm(n.limit))}</span></li><li><span class="k">Asked you</span><span><b>${at(d.told)}</b></span></li></ul>` },
+  { q: 'Why like this?', icon: 'radio-tower', a: () => { const has = c => d.ch.includes(c); return `<p class="big">It is <b>${CLASSES[classOf(n)].word.toLowerCase()}</b>: ${CLASSES[classOf(n)].promise.split('. ')[0].toLowerCase()}.</p><ul>
+      <li class="${has('inbox') ? '' : 'off'}"><span class="k">${chip('inbox', has('inbox'))}</span><span>Needs you always goes to the Inbox, with its limit.</span></li>
+      <li class="${has('band') ? '' : 'off'}"><span class="k">${chip('band', has('band'))}</span><span>${has('band') ? 'You were in your working hours.' : 'Not in your hours.'}</span></li>
+      <li class="${has('toast') ? '' : 'off'}"><span class="k">${chip('toast', has('toast'))}</span><span>${has('toast') ? 'You chose toasts for needs you.' : 'You haven’t chosen toasts for this.'}</span></li>
+      <li class="off"><span class="k">${chip('letterbox', false)}</span><span>Not urgent. Only urgent opens the Letterbox.</span></li>
+      <li class="off"><span class="k">${chip('email', false)}</span><span>You chose email for urgent only.</span></li></ul>`; } },
+  { q: 'What if I don’t?', icon: 'hourglass', a: () => `<p class="big">${nextStep ? `At <b>${at(nextStep.at)}</b> the policy asks ${who(nextStep.people[0])}, the ${nextStep.who === 'admin' ? 'Department admin' : nextStep.who === 'lead' ? 'team lead' : 'person on call'}.` : 'Nobody else is asked.'} You stay on it until someone takes it; nothing is dropped.</p><ul>
+      ${skipped.map(s => `<li><span class="k">Skipped</span><span>${s.who === 'lead' ? 'The team lead' : s.who}: ${who(s.people[0])} was already asked.</span></li>`).join('')}
+      <li><span class="k">If you take it</span><span>Everyone else asked is stood down, with your name.</span></li>
+      <li><span class="k">If you pass it on</span><span>The next step is asked now, with your note, instead of at ${hhmm(st.until)}.</span></li></ul>` },
+  { q: 'How do I change it?', icon: 'sliders-horizontal', a: () => `<p class="big">Three of these are yours. Two belong to ${P(DATA.rota.setBy).name}.</p><ul>
+      <li><span class="k">Pass it on now</span><span>Yours, on this item. <span class="own">Adds a note to the trail.</span></span></li>
+      <li><span class="k">Toasts</span><span>Yours, in My switchboard.</span></li>
+      <li><span class="k">Your hours</span><span>Yours. <span class="own">Outside them, it waits for you, and so does the policy’s clock.</span></span></li>
+      <li><span class="k">On call ${dayName(d.sent)}</span><span>${P(DATA.rota.setBy).name}’s rota. <span class="own">Ask to swap.</span></span></li>
+      <li><span class="k">The 2-hour wait</span><span>${P(DATA.policy.setBy).name}’s policy for ${DATA.teams[DATA.rota.team].name}.</span></li></ul>` }
+];
+let cur = 0;
+$('#top').innerHTML = topHTML(['Inbox', 'Why you?'], [['1–5', 'question'], ['R', 'replay'], ['T', 'technical words', 'h-t']]);
+$('#card').innerHTML = `<p class="eyebrow">${A(n.app).name} · ${DATA.floors[n.floor].name}</p>${lvl(n)}<h1 class="heading">${n.title}</h1><p class="meta muted">Asked you ${at(d.told)} · ${rcpt(d)}</p><div style="display:flex;gap:var(--space-2);flex-wrap:wrap"><button class="btn go">${I('hand', 14)} I have it</button><button class="btn">${I('forward', 14)} Pass it on</button></div>`;
+$('#nav').innerHTML = Q.map((q, i) => `<button role="tab" data-i="${i}" aria-selected="${i === cur}"><span class="kbd">${i + 1}</span>${I(q.icon, 16)}${q.q}</button>`).join('');
+function show(i) {
+  cur = i; $$('#nav button').forEach((b, k) => b.setAttribute('aria-selected', k === i));
+  $('#ans').innerHTML = `<h2>${Q[i].q}</h2>${Q[i].a()}`;
+  $$('#ans p, #ans li').forEach((x, k) => { x.classList.add('dep'); x.style.setProperty('--i', k); });
+  $('#ans').classList.add('pre'); requestAnimationFrame(() => requestAnimationFrame(() => $('#ans').classList.remove('pre')));
+  Icons.hydrate($('#ans'));
+}
+$('#nav').addEventListener('click', e => { const b = e.target.closest('button'); if (b) show(+b.dataset.i); });
+function play() { clearLater(); document.body.classList.add('pre'); $('#ans').innerHTML = ''; later(() => document.body.classList.remove('pre'), 60); later(() => show(0), 1200); }
+document.addEventListener('keydown', e => { if (commonKeys(e, play)) return; if (/^[1-5]$/.test(e.key)) show(+e.key - 1); if (e.key === 'ArrowDown') show(Math.min(4, cur + 1)); if (e.key === 'ArrowUp') show(Math.max(0, cur - 1)); });
+Icons.hydrate(document.body); play();
+</script></body></html>

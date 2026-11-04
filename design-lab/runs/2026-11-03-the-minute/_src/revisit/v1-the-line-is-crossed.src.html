@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Revisiting V1 · The line is crossed</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: a line set at the table is crossed. The decision is marked, the chair is asked once; nothing is reversed by a watch ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:var(--space-5)}
+.watch{min-height:0;display:flex;flex-direction:column;gap:var(--space-4);padding:var(--space-4) var(--space-5)}
+.chart{position:relative;flex:1;min-height:0}
+.chart svg{width:100%;height:100%;overflow:visible}
+.chart .ln{fill:none;stroke:var(--ink);stroke-width:1.5}
+.chart .tw{stroke:var(--x-proposed-warn);stroke-dasharray:4 4}
+.chart .twl{font:400 var(--type-small) var(--font-sans);fill:var(--x-proposed-warn)}
+.chart .ax{font:400 var(--x-proposed-type-micro) var(--font-mono);fill:var(--ink-muted)}
+.chart .pt{fill:var(--light)}
+.chart .hit{fill:var(--x-proposed-warn)}
+.chart .gl{stroke:var(--hairline)}
+.chart .lbl{font:400 var(--type-small) var(--font-mono);fill:var(--light)}
+.sees{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-4)}
+.sees ul{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1)}
+.sees li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}
+.sees li.no{color:var(--ink-muted)}
+.ask{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.dec{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline-strong);background:var(--surface-pane);transition:border-color var(--motion-calm) var(--ease-out)}
+.dec.review{border-color:var(--x-proposed-warn)}
+.dec p.t{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);margin-top:var(--space-1)}
+.item{padding:var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline-strong);background:var(--surface-overlay);box-shadow:var(--shadow-raised);display:grid;gap:var(--space-3);transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.item.pre-i{opacity:0;transform:translateY(var(--space-2))}
+.item .src{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.item .t{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.item p.b{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.opt{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);align-items:start;width:100%;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.opt:hover,.opt.hot{background:var(--surface-raised);border-color:var(--hairline-strong)}
+.opt.hot{border-color:var(--x-proposed-lit)}
+.opt span.s{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.calm{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.watch{padding:var(--space-3)}.sees{grid-template-columns:1fr}.sees .cant li:nth-child(n+3){display:none}.item .t{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Revisiting · V1</b> the line is crossed: a watch marks the decision and asks the chair once; it never reverses anything · tripwires, watches say what they can’t see</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = '2026-10-06';
+const D = Dn('D-118'), T = D.revisitIf[0], SER = DATA.series.overdue;
+const NEXT = DATA.meetings.find(m => ts(m.date) > ts(NOW));
+const S = { tripped: true, pick: 0 };
+function chart() {
+  const W = 600, H = 300, pts = SER.points, n = pts.length - 1, max = 8;
+  const X = i => 30 + i * (W - 60) / n, Y = v => H - 24 - v / max * (H - 48);
+  const upto = S.tripped ? pts.findIndex(p => p[0] === NOW.slice(0, 7)) : pts.findIndex(p => p[0] === NOW.slice(0, 7)) - 1;
+  const seen = pts.slice(0, upto + 1);
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${SER.label}, by month, with the revisit line at ${T.at}">
+    ${[0, 2, 4, 6, 8].map(v => `<line class="gl" x1="30" x2="${W - 30}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="0" y="${Y(v) + 4}">${v}</text>`).join('')}
+    <line class="tw" x1="30" x2="${W - 30}" y1="${Y(T.at)}" y2="${Y(T.at)}"/><text class="twl" x="36" y="${Y(T.at) - 8}">revisit if more than ${T.at} · set at the table, ${dt(meetingOf('D-118').date, 'short')}</text>
+    <polyline class="ln" points="${seen.map(([, v], i) => `${X(i)},${Y(v)}`).join(' ')}"/>
+    ${seen.map(([m, v], i) => `<circle class="${v > T.at ? 'hit' : 'pt'}" cx="${X(i)}" cy="${Y(v)}" r="${v > T.at ? 5 : 3}"/><text class="ax" x="${X(i)}" y="${H - 4}" text-anchor="middle">${dt(m, 'short')}</text>`).join('')}
+    ${S.tripped ? `<text class="lbl" x="${X(upto) + 10}" y="${Y(seen[upto][1]) + 4}">${seen[upto][1]} of ${SER.of} · ${dt(NOW, 'short')}</text>` : ''}
+  </svg>`;
+}
+const OPTS = () => [
+  ['calendar', `Put it on the next agenda`, `${NEXT.no}, ${dt(NEXT.date, 'short')}. The papers go out with this chart and the decision’s page.`],
+  ['calendar-clock', 'Bring the review forward', `The trial’s own review is ${dt(D.revisitIf[2].date, 'short')}. Asking the meeting to bring it forward is itself a decision.`],
+  ['check', 'Note it and keep it', 'Say why the line doesn’t matter this time. The mark stays until the next reading.']
+];
+function render() {
+  const st = statusAt('D-118', S.tripped ? NOW : '2026-09-30');
+  $('#app').innerHTML = topHTML(['Mandate', 'Decisions', 'D-118', 'Watch'], [['↑ ↓', 'choose'], ['T', 'record fields', 'h-t'], ['R', 'replay']], { as: NOW }) +
+    `<main class="main"><div class="wrap">
+    <section class="watch pane"><div><p class="eyebrow">A line set at the table · watched since ${dt(D.inForce)}</p><p class="h2">${SER.label}</p></div>
+      <div class="chart">${chart()}</div>
+      <div class="sees"><div><p class="lab" style="margin-bottom:var(--space-2)">This watch sees</p><ul>
+        <li>${I('check', 14)}<span>each new inspection record in Data Atlas</span></li><li>${I('check', 14)}<span>each van’s due date passing, every night</span></li><li>${I('check', 14)}<span>vans added or sold at the North depot</span></li></ul></div>
+        <div class="cant"><p class="lab" style="margin-bottom:var(--space-2)">It can’t see</p><ul>
+        <li class="no">${I('eye-off', 14)}<span>inspections booked but not yet done (Kestrel’s report counts them as done)</span></li><li class="no">${I('eye-off', 14)}<span>vans off the road for repair</span></li><li class="no">${I('eye-off', 14)}<span>anything kept on the Org floor’s incident register</span></li></ul></div></div>
+      <p class="tk">watch: decision=D-118 line=t1 query=overdue(site=north-depot) op=&gt; at=4 · runs on: inspection.recorded, clock.daily</p></section>
+    <section class="ask"><div class="dec dep ${st === 'review' ? 'review' : ''}"><p class="lab">${did('D-118')} ${stHTML(st)}</p><p class="t">${D.plain}</p><p class="small muted" style="margin-top:var(--space-1)">${st === 'review' ? 'Still in force. Only the meeting can change it.' : `In force since ${dt(D.inForce)}; kept by ${D.affirmedBy} on ${dt(D.affirmedOn, 'short')}.`}</p></div>
+      <div class="item ${S.tripped ? '' : 'pre-i'}"><p class="src">${I('inbox', 14)} ${P(B.chair).name}’s Inbox · one item · ${dt(NOW, 'short')}</p>
+        <p class="t">A line you set for D-118 has been crossed</p>
+        <p class="b">${seriesAt('overdue')} of ${SER.of} North depot vans are overdue for inspection. At the table on ${dt(meetingOf('D-118').date, 'short')} the meeting said it would revisit the decision if ${T.text}. What would you like to do?</p>
+        ${OPTS().map(([ic, w, s], i) => `<button class="opt ${S.pick === i ? 'hot' : ''}" data-i="${i}">${I(ic, 16)}<span>${w}</span><span class="s">${s}</span></button>`).join('')}</div>
+      <p class="calm">Nobody else is told. Owners of D-118’s open actions see the decision’s mark change on their items; they get no notice. The watch keeps reading; if the count falls back under the line, the item says so instead of disappearing.</p></section>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.opt').forEach(b => b.onclick = () => { S.pick = +b.dataset.i; render(); });
+}
+function replay() {
+  clearLater(); S.tripped = false; S.pick = 0; render(); settle();
+  /* the moment: October's count arrives above the line; the decision is marked and one item reaches the chair */
+  later(() => { S.tripped = true; render(); }, MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); S.pick = Math.min(2, S.pick + 1); render(); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); S.pick = Math.max(0, S.pick - 1); render(); }
+});
+replay();
+</script>
+</body>
+</html>

@@ -30,6 +30,7 @@ RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/a
  && cp -r platform/frontends/admin/dist /site/apps/admin \
  && cp -r platform/frontends/upgrades/dist /site/apps/upgrades \
  && if [ -d .shipped/frontends ]; then cp -r .shipped/frontends/. /site/apps/; fi \
+ && mkdir -p /site/legal && cp LICENSE /site/legal/licence.txt && cp THIRD_PARTY_NOTICES.md /site/legal/third-party.txt \
  && mv /site/index.template.html /index.template.html \
  && node scripts/kit.mjs check
 

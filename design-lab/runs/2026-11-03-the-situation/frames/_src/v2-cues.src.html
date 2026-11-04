@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Frames V2 · The cues each frame picks</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: one chart, two frames as lenses. Each lights the cues it picks and dims what it ignores. The average is refused ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--space-5)}
+.left{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.lenses{display:flex;gap:var(--space-2)}
+.stage{flex:1;min-height:0;position:relative;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.stage svg{position:absolute;inset:0;width:100%;height:100%}
+.lab{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro)}
+.cue{transition:opacity var(--motion-calm) var(--ease-out)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.fr{display:grid;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-left:3px solid var(--fc);border-radius:var(--radius-key)}
+.fr b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.fr p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.fr .ig{color:var(--ink-muted)}
+.avg{display:grid;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key)}
+.avg p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.avg s{color:var(--ink-muted)}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,1fr) 270px}.fr .ig{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Frames · V2</b> the cues each frame picks: one chart, two lenses; each lights what it reads and dims what it ignores; no average · Weick, Klein’s data/frame, map overlays</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { lens: 'both' };
+const [A, B] = DATA.frames;
+const ca = `var(--floor-${P(A.who).floor}-high)`, cb = `var(--floor-${P(B.who).floor}-high)`;
+function svg(w, h) {
+  const s = R.series, pad = 56, X = i => pad + i * (w - pad * 2) / (s.length - 1), max = 32, Y = v => h - 60 - v * (h - 110) / max;
+  const op = f => S.lens === 'both' || S.lens === f ? 1 : 0.12;
+  const pts = s.map((p, i) => `${X(i)},${Y(p.v)}`).join(' ');
+  const iJul = s.findIndex(x => x.m === 'Jul'), iSep = s.findIndex(x => x.m === 'Sep'), iOct = s.length - 1, bw = 14;
+  /* frame A's cues: months over the limit, the complaints */
+  const a = `<g class="cue" style="opacity:${op('A')}"><line x1="${pad}" x2="${w - pad}" y1="${Y(R.limit)}" y2="${Y(R.limit)}" stroke="${ca}" stroke-dasharray="6 4"/><text class="lab" x="${pad}" y="${Y(R.limit) - 6}" fill="${ca}">A · limit ${R.limit}: two months over</text>
+    ${[iSep, iOct].map(i => `<circle cx="${X(i)}" cy="${Y(s[i].v)}" r="9" fill="none" stroke="${ca}" stroke-width="2"/>`).join('')}
+    <text class="lab" x="${X(iOct) - 8}" y="${Y(s[iOct].v) - 24}" text-anchor="end" fill="${ca}">A · complaints ${R.complaints.Jul} → ${R.complaints.Oct}</text></g>`;
+  /* frame B's cues: the route change, and the split by round */
+  const b = `<g class="cue" style="opacity:${op('B')}"><line x1="${(X(iSep - 1) + X(iSep)) / 2}" x2="${(X(iSep - 1) + X(iSep)) / 2}" y1="40" y2="${h - 50}" stroke="${cb}" stroke-width="1.5"/><text class="lab" x="${(X(iSep - 1) + X(iSep)) / 2 + 6}" y="52" fill="${cb}">B · ${R.changedRounds.join(', ')} rerouted ${R.changedOn}</text>
+    ${[[iJul, R.byRound.Jul], [iOct, R.byRound.Oct]].map(([i, v]) => `<rect x="${X(i) - bw - 2}" y="${Y(v.changed)}" width="${bw}" height="${Y(0) - Y(v.changed)}" fill="${cb}" opacity=".7"/><rect x="${X(i) + 2}" y="${Y(v.other)}" width="${bw}" height="${Y(0) - Y(v.other)}" fill="none" stroke="${cb}"/><text class="lab" x="${X(i) - bw}" y="${Y(v.changed) - 4}" fill="${cb}">${v.changed}</text><text class="lab" x="${X(i) + 4}" y="${Y(v.other) - 4}" fill="${cb}">${v.other}</text>`).join('')}
+    <text class="lab" x="${X(iOct) - 50}" y="${h - 66}" text-anchor="end" fill="${cb}">B · solid: ${R.changedRounds.join('+')} · outline: the other ${R.rounds - 2} rounds</text></g>`;
+  const base = `<polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="2"/>${s.map((p, i) => `<circle cx="${X(i)}" cy="${Y(p.v)}" r="3" fill="var(--ink)"/><text class="lab" x="${X(i)}" y="${h - 34}" text-anchor="middle" fill="var(--ink-muted)">${p.m}</text><text class="lab" x="${X(i) + 6}" y="${Y(p.v) + 14}" fill="var(--ink)">${p.v}</text>`).join('')}`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${R.label} by month, with each frame's cues">${b}${a}${base}</svg>`;
+}
+function draw() { const st = $('#stage'); if (st) st.innerHTML = svg(Math.max(600, st.clientWidth), Math.max(320, st.clientHeight)); }
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Two frames'], [['A', 'frame A'], ['B', 'frame B'], ['2', 'both'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="left"><div><p class="eyebrow">Two frames · the cues each one picks</p><h1 class="title">Same chart, two lenses</h1></div>
+      <div class="lenses">${[['A', A], ['B', B]].map(([k, f]) => `<button class="tab" data-l="${k}" data-tier="${P(f.who).floor}" aria-pressed="${S.lens === k}"><span class="kbd">${k}</span>Frame ${k} · ${first(f.who)}</button>`).join('')}<button class="tab" data-l="both" aria-pressed="${S.lens === 'both'}"><span class="kbd">2</span>Both</button></div>
+      <div class="stage" id="stage"></div></div>
+    <aside class="side">${[A, B].map(f => `<div class="fr" data-tier="${P(f.who).floor}"><b>${f.id} · ${f.name}</b><p>${whoHTML(f.who, { role: true })}</p><p>Reads: ${f.reading}</p><p class="ig">Leaves in the dark: ${f.id === 'A' ? 'the split by round, and that the other seven rounds rose less' : 'the months over the limit, and that the other seven rounds rose too'}.</p></div>`).join('')}
+      <div class="avg"><span class="eyebrow">Not offered</span><p><s>“Missed collections rose for a mix of reasons.”</s></p><p>An average of the two frames is true and useless: it hides that the two readings predict different things, and that a test can tell them apart.</p></div></aside>
+  </div></main>`;
+  hydrate($('#app'));
+  draw();
+  $$('.lenses .tab').forEach(b => b.onclick = () => lens(b.dataset.l));
+}
+function lens(l) { S.lens = l; $$('.lenses .tab').forEach(b => b.setAttribute('aria-pressed', b.dataset.l === l)); draw(); }
+addEventListener('resize', draw);
+play(() => { S.lens = 'both'; render(); }, () => {
+  const step = ms('--motion-calm') * 1.4;
+  later(() => lens('A'), 0);
+  later(() => lens('B'), step);
+}, (e, k) => { if (k === 'a') lens('A'); if (k === 'b') lens('B'); if (k === '2') lens('both'); });
+</script>
+</body>
+</html>

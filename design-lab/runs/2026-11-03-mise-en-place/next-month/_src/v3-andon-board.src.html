@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Next month V3 · The andon board</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: every recipe line is a station on a board; normal is dark, a stop is the only light, one answer can clear two stations ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.top-b{display:flex;align-items:baseline;gap:var(--space-6);flex-wrap:wrap}
+.top-b .big{font:300 var(--type-title)/1 var(--font-mono);color:var(--light)}
+.top-b .big.stop{color:var(--x-proposed-stop)}
+.top-b span{font-size:var(--type-meta);color:var(--ink-muted)}
+.board{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:var(--space-3);min-height:0;padding:var(--space-4);border-radius:var(--radius-inset);background:var(--slate-deep);border:1px solid var(--hairline)}
+.st{position:relative;display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline);background:color-mix(in srgb,var(--slate) 40%,transparent);min-height:0;overflow:hidden;transition:background var(--motion-base) var(--ease-out),border-color var(--motion-base) var(--ease-out)}
+.st .no{font:300 var(--type-heading)/1 var(--font-mono);color:var(--ink-muted)}
+.st .w{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.st .c{margin-top:auto;font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.st .lamp{position:absolute;top:var(--space-3);right:var(--space-3);width:var(--space-3);height:var(--space-3);border-radius:50%;background:var(--hairline-strong)}
+.st.check{border-color:var(--x-proposed-disagree)}
+.st.check .lamp{background:var(--x-proposed-disagree)}
+.st.check .w{color:var(--ink)}
+.st.stop{border-color:var(--x-proposed-stop);background:var(--x-proposed-stop-wash)}
+.st.stop .lamp{background:var(--x-proposed-stop);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--x-proposed-stop) 70%,transparent)}
+.st.stop .no,.st.stop .w{color:var(--light)}
+.st.stop .c{color:var(--x-proposed-stop)}
+.st.ans{border-color:var(--hairline-strong)}
+.st.ans .lamp{background:var(--x-proposed-lit)}
+.st .why{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.st .why .rawv{font-size:var(--x-proposed-type-micro)}
+.st .acts{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.st .acts .btn{height:auto;padding:var(--space-1) var(--space-2);font-size:var(--type-small)}
+.st.wide{grid-column:span 2}
+.foot{display:flex;align-items:center;gap:var(--space-4);font-size:var(--type-meta);color:var(--ink)}
+.foot .btn{margin-left:auto}
+@media (max-width:1400px){.st{padding:var(--space-2)}.st .no{font-size:var(--type-lead)}.board{padding:var(--space-3);gap:var(--space-2)}.top-b .big{font-size:var(--type-title-s)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Next month · V3</b> the andon board: each recipe line a station, normal is dark, a stop is the only light · Toyota's andon board, dark cockpit</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DATA.december, steps = DATA.recipe.steps, F1 = DATA.files.nov;
+const S = { rename: false, word: false, lit: false };
+const answers = () => ({ ...(S.rename ? { rename: { [D.rename.from]: D.rename.to } } : {}), ...(S.word ? { value: { [D.newWord.value]: D.newWord.choice } } : {}) });
+function render() {
+  const N = run('nov', steps, answers()), PN = plate(N), N0 = run('nov');
+  const states = steps.map(st => { const s = stepState(st, N), s0 = stepState(st, N0); return s === 'stop' ? 'stop' : s === 'check' ? 'check' : s0 === 'stop' ? 'ans' : ''; });
+  const nStop = states.filter(x => x === 'stop').length, nCheck = states.filter(x => x === 'check').length;
+  const why = (st, s) => {
+    const x = N.st[st.id];
+    if (s === 'stop' && x.stop.kind === 'column') return x.stop.also ? `Same cause as station ${steps.find(y => N.st[y.id].stop && N.st[y.id].stop.want === x.stop.want && !N.st[y.id].stop.also).id.slice(1)}: no ${raw(x.stop.want)}.` : `No column ${raw(x.stop.want)}. ${raw(x.stop.guess)} is new and ${x.stop.fit} of ${x.stop.of} look like van numbers.`;
+    if (s === 'stop') return `${raw(x.stop.value)} on ${plural(x.stop.lines.length, 'line')}. No result ${DATA.app} keeps is like it.`;
+    if (s === 'check') return x.near.map(n => `${raw(n.raw)} joined ${DEPOT(n.to).name}`).join('; ');
+    if (s === 'ans') return st.op === 'result' ? `set aside, waiting on “${D.newWord.ask}”` : `reads ${raw(D.rename.to)} now`;
+    return '';
+  };
+  const acts = (st, s) => {
+    const x = N.st[st.id];
+    if (s !== 'stop' || x.stop.also) return '';
+    return x.stop.kind === 'column' ? `<div class="acts"><button class="btn go" data-a="rename">${D.rename.to} is ${D.rename.from}</button><button class="btn">Pick another</button></div>`
+      : `<div class="acts"><button class="btn go" data-a="word">Set aside, ask for “${D.newWord.ask}”</button><button class="btn">Not known yet</button></div>`;
+  };
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, DATA.recipe.name, `Run ${F1.run.n}`], [['1', 'answer next'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="top-b"><h1 class="t">${esc(F1.name)}</h1><span class="big ${nStop ? 'stop' : ''}">${nStop}</span><span>stations stopped</span><span class="big">${nCheck}</span><span>to check</span><span class="big">${steps.length - nStop - nCheck}</span><span>running as usual</span></div>
+    <div class="board" role="list">${steps.map((st, i) => { const s = S.lit ? states[i] : '', w = stepWords(st, N);
+      return `<div class="st ${s} ${s === 'stop' && !N.st[st.id].stop.also ? 'wide' : ''}" role="listitem"><span class="lamp" aria-hidden="true"></span><span class="no">${st.id.slice(1)}</span><span class="w">${w.w}</span>${s ? `<span class="why">${why(st, s)}</span>` : ''}${acts(st, s)}<span class="c">${stepCount(st, N)}</span></div>`; }).join('')}</div>
+    <div class="foot">${nStop ? `${I('hand', 14)} The line waits. Nothing has gone anywhere; ${PN.land} ${DATA.kinds.inspection.word}s are ready behind the stops.` : `${I('check', 14)} Nothing stopped. ${PN.land} ready, ${PN.aside.length} set aside, ${N.leftOut.length} column left out; the file says ${N.total.said}.`}${nStop ? '' : `<button class="btn go">${I('utensils', 14)} Go to the pass</button>`}</div>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-a]').forEach(b => b.onclick = () => { S[b.dataset.a === 'rename' ? 'rename' : 'word'] = true; render(); });
+}
+function replay() { clearLater(); Object.assign(S, { rename: false, word: false, lit: false }); render(); settle(); later(() => { S.lit = true; render(); }, ms('--motion-run')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === '1') { if (!S.rename) S.rename = true; else S.word = true; S.lit = true; render(); } });
+replay();
+</script>
+</body>
+</html>

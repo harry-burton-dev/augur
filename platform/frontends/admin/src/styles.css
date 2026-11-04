@@ -41,3 +41,9 @@
 .admin-line-head > span { padding: var(--space-2); color: var(--ink-muted); font-size: var(--type-small); }
 .admin-line-cell { display: flex; flex-direction: column; padding: var(--space-2); border-radius: var(--radius-inset); }
 .admin-line-cell[data-here] { background: var(--surface-inset); font-weight: 600; }
+
+/* A dialog's parts: what acts at once, set apart, and what waits for Save. */
+.admin-live { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-inset); }
+.admin-part-head { display: flex; flex-direction: column; gap: var(--space-1); }
+.admin-part-label { margin: 0; color: var(--ink-muted); font-size: var(--type-meta); line-height: var(--leading-meta); font-weight: 600; letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.admin-part-head .admin-muted { margin: 0; }

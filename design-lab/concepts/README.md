@@ -42,28 +42,85 @@ app pattern took it), **dropped** (say why in the file).
 | [The reader's minute](the-readers-minute.md) | explored | 2026-11-03-the-briefing |
 | [Watches say what they can't see](watches-say-what-they-cant-see.md) | explored | 2026-11-03-the-briefing |
 | [The overview rung](overview-rung.md) | explored | 2026-11-02-wear-and-time |
-| [Answer, don't announce](answer-not-announce.md) | to explore | 2026-11-03-room-tone |
+| [Works under someone](works-under-someone.md) | explored | 2026-11-03-the-apprentice |
+| [The maker's mark](makers-mark.md) | explored | 2026-11-03-the-apprentice |
+| [Now and next](now-and-next.md) | explored | 2026-11-03-the-apprentice |
+| [Silence is not a go](silence-is-not-a-go.md) | explored | 2026-11-03-the-apprentice |
+| [Trust changes the sample, not the signature](trust-changes-the-sample.md) | explored | 2026-11-03-the-apprentice |
+| [Trust by the kind](trust-by-the-kind.md) | explored | 2026-11-03-the-apprentice |
+| [Trust lapses](trust-lapses.md) | explored | 2026-11-03-the-apprentice |
+| [Mistakes have siblings](mistakes-have-siblings.md) | explored | 2026-11-03-the-apprentice |
+| [Stop the line](stop-the-line.md) | explored | 2026-11-03-the-apprentice |
+| [Answer, don't announce](answer-not-announce.md) | explored | 2026-11-03-room-tone |
 | [Attention as wear](attention-as-wear.md) | to explore | 2026-11-02-wear-and-time |
 | [Care is scheduled](care-is-scheduled.md) | to explore | batch 3 research |
 | [Changes before they bite](changes-before-they-bite.md) | to explore | 2026-11-02-wear-and-time |
-| [Data wears its label](data-wears-its-label.md) | to explore | batch 3 research |
+| [Data wears its label](data-wears-its-label.md) | explored | batch 3 research |
 | [Earned sound](earned-sound.md) | to explore | 2026-11-03-room-tone |
 | [Feel as a setting](feel-as-a-setting.md) | to explore | 2026-11-03-room-tone |
 | [Hear the reach](hear-the-reach.md) | to explore | 2026-11-03-room-tone |
-| [Mine versus ours](mine-versus-ours.md) | to explore | 2026-11-02-wear-and-time |
-| [One now](one-now.md) | to explore | 2026-11-02-wear-and-time |
+| [Mine versus ours](mine-versus-ours.md) | explored | 2026-11-02-wear-and-time |
+| [One now](one-now.md) | explored | 2026-11-02-wear-and-time |
 | [The past under water](past-under-water.md) | to explore | 2026-11-02-wear-and-time |
-| [Question and answer](question-and-answer.md) | to explore | 2026-11-03-room-tone |
-| [The recipe is the record](the-recipe-is-the-record.md) | to explore | batch 3 research |
+| [Question and answer](question-and-answer.md) | explored | 2026-11-03-room-tone |
+| [The recipe is the record](the-recipe-is-the-record.md) | explored | batch 3 research |
 | [The record has edges](the-record-has-edges.md) | to explore | 2026-11-02-wear-and-time |
-| [The shell owns loudness](shell-owns-loudness.md) | to explore | 2026-11-03-room-tone |
+| [The shell owns loudness](shell-owns-loudness.md) | explored | 2026-11-03-room-tone |
 | [The signal is the control](the-signal-is-the-control.md) | to explore | 2026-11-03-room-tone |
 | [Subtraction as cue](subtraction-as-cue.md) | to explore | 2026-11-03-room-tone |
-| [Time as an address](time-as-address.md) | to explore | 2026-11-02-wear-and-time |
+| [Time as an address](time-as-address.md) | explored | 2026-11-02-wear-and-time |
 | [Time is matter, light is need](time-is-matter.md) | to explore | 2026-11-02-wear-and-time |
 | [Turn-taking](turn-taking.md) | to explore | 2026-11-03-room-tone |
-| [Visible repair](visible-repair.md) | to explore | 2026-11-02-wear-and-time |
-| [Context is a working set](context-is-a-working-set.md) | to explore | batch 6 research |
+| [Visible repair](visible-repair.md) | explored | 2026-11-02-wear-and-time |
+| [The route is a trace](the-route-is-a-trace.md) | explored | 2026-11-03-the-switchboard |
+| [Returned to sender](returned-to-sender.md) | explored | 2026-11-03-the-switchboard |
+| [No gap between owners](no-gap-handover.md) | explored | 2026-11-03-the-switchboard |
+| [The next step is shown](the-next-step-is-shown.md) | explored | 2026-11-03-the-switchboard |
+| [News waits for the edition](news-waits-for-the-edition.md) | explored | 2026-11-03-the-switchboard |
+| [Quiet has named keys](quiet-has-named-keys.md) | explored | 2026-11-03-the-switchboard |
+| [Rehearse on last week](rehearse-on-last-week.md) | explored | 2026-11-03-the-switchboard |
+| [Status beside the words](status-beside-the-words.md) | explored | 2026-11-03-the-minute |
+| [Agreed in the room](agreed-in-the-room.md) | explored | 2026-11-03-the-minute |
+| [Decided versus said](decided-versus-said.md) | explored | 2026-11-03-the-minute |
+| [Revisit lines](revisit-lines.md) | explored | 2026-11-03-the-minute |
+| [The wake](the-wake.md) | explored | 2026-11-03-the-minute |
+| [Said another way](said-another-way.md) | explored | 2026-11-03-the-label |
+| [The strictest part wins, and says so](strictest-wins-and-says-why.md) | explored | 2026-11-03-the-label |
+| [Purpose is the key](purpose-is-the-key.md) | explored | 2026-11-03-the-label |
+| [Four kinds of no](four-kinds-of-no.md) | explored | 2026-11-03-the-label |
+| [Enforce what you can see](enforce-what-you-can-see.md) | explored | 2026-11-03-the-label |
+| [Copies know their source](copies-know-their-source.md) | explored | 2026-11-03-the-label |
+| [The policy is data](the-policy-is-data.md) | explored | 2026-11-03-the-label |
+| [Someone holds it](someone-holds-it.md) | explored | 2026-11-03-paper-and-the-desk |
+| [The readback moves it](the-readback-moves-it.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Say what you sign for](say-what-you-sign-for.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Shared work stays sharp](shared-work-stays-sharp.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Set aside, not flagged](set-aside-not-flagged.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Room you can see](room-you-can-see.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Status is a mark](status-is-a-mark.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Raw and kept](raw-and-kept.md) | explored | 2026-11-03-mise-en-place |
+| [Stop, don't guess](stop-dont-guess.md) | explored | 2026-11-03-mise-en-place |
+| [Every answer is a line](every-answer-is-a-line.md) | explored | 2026-11-03-mise-en-place |
+| [Rehearsed to the pass](rehearsed-to-the-pass.md) | explored | 2026-11-03-mise-en-place |
+| [Holds while](holds-while.md) | explored | 2026-11-03-the-situation |
+| [Context names its reader](context-names-its-reader.md) | explored | 2026-11-03-the-situation |
+| [Every lift is signed](every-lift-is-signed.md) | explored | 2026-11-03-the-situation |
+| [Frames, not averages](frames-not-averages.md) | explored | 2026-11-03-the-situation |
+| [What only they know](what-only-they-know.md) | explored | 2026-11-03-the-situation |
+| [The bundle is its world](the-bundle-is-its-world.md) | explored | 2026-11-03-the-situation |
+| [Context is a working set](context-is-a-working-set.md) | explored | batch 6 research |
+| [What doesn't fit decides](what-doesnt-fit-decides.md) | explored | 2026-11-03-the-analysts-bench |
+| [Below the bar, with a hedge](hedged-below-the-bar.md) | explored | 2026-11-03-the-analysts-bench |
+| [Keep the score](keep-the-score.md) | explored | 2026-11-03-the-analysts-bench |
+| [The model widens, never narrows](the-model-widens-never-narrows.md) | explored | 2026-11-03-the-analysts-bench |
+| [Start from how it usually goes](start-from-the-reference-class.md) | explored | 2026-11-03-the-analysts-bench |
+| [Pause points](pause-points.md) | explored | 2026-11-03-the-analysts-bench |
 | [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
-| [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |
+| [The technique fits the question](the-technique-fits-the-question.md) | explored | batch 6 research |
+| [People mark moves, records mark positions](moves-and-positions.md) | explored | 2026-11-03-the-annotated-game |
+| [Judged as it stood](judged-as-it-stood.md) | explored | 2026-11-03-the-annotated-game |
+| [Own moves first](own-moves-first.md) | explored | 2026-11-03-the-annotated-game |
+| [The way back is recorded](the-way-back-is-recorded.md) | explored | 2026-11-03-the-annotated-game |
+| [The opening book](the-opening-book.md) | explored | 2026-11-03-the-annotated-game |
+| [Play it first](play-it-first.md) | explored | 2026-11-03-the-annotated-game |
 | [The warrant shows](the-warrant-shows.md) | to explore | batch 6 research |

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.31.0
+  version: 1.33.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -17,8 +17,9 @@ paths:
         approved, set-here, set-above, blocked, not-for-this-kind,
         turned-off), the floor whose rule decides it (`by`) and who set that
         rule and when. An app a role keeps from the caller is listed with
-        `requiredRole` and `hasRole: false`. Only the floor the gateway
-        checked can be asked about.
+        `requiredRole` and `hasRole: false`. Each app carries its kind in
+        force (`category`, ADR 0032) and `ships` when it ships with AUGUR.
+        Only the floor the gateway checked can be asked about.
       parameters:
         - { name: workspace, in: query, required: true, schema: { type: string, maxLength: 100 } }
       responses:
@@ -42,7 +43,9 @@ paths:
                         icon: { type: string }
                         description: { type: string }
                         floors: { type: array, items: { type: string, enum: [personal, team, org] } }
-                        pillar: { type: boolean }
+                        category: { $ref: "#/components/schemas/AppCategory" }
+                        ships: { type: boolean, description: "Ships with AUGUR (PILLAR_APPS); only ever true" }
+                        pillar: { type: boolean, deprecated: true, description: "The old name for ships, with the same meaning; read ships" }
                         requiredRole: { type: string }
                         hasRole: { type: boolean }
                         state:
@@ -1656,12 +1659,27 @@ components:
         - type: object
           required: [platform, enabled]
           properties:
-            platform: { type: boolean, description: Ships with the platform and is always on }
-            pillar:
+            platform: { type: boolean, description: "Built into AUGUR (Home, Admin, the Upgrade Centre) and always on" }
+            ships:
               type: boolean
               description: >
                 Ships with AUGUR (PILLAR_APPS) but is an ordinary app: it registers itself, is given the
                 scopes its release asks for, changes version with the release, and can be turned off but not removed.
+                Only ever true.
+            pillar:
+              type: boolean
+              deprecated: true
+              description: The old name for ships, with the same meaning, kept for /v1 readers. Read ships.
+            categoryRefused:
+              type: object
+              required: [asked, why]
+              description: >
+                Set when the manifest claims a kind the registry doesn't honour (ADR 0032): only apps that ship
+                with AUGUR or that the app runner installed from the signed app feed may have one. `category`
+                is then absent, so the app is just an app.
+              properties:
+                asked: { $ref: "#/components/schemas/AppCategory" }
+                why: { type: string }
             enabled: { type: boolean }
             registeredBy: { type: string, description: The service or admin that last registered it }
             registeredAt: { type: string, format: date-time }
@@ -1719,6 +1737,10 @@ components:
                   setBy: { type: string }
                   setAt: { type: string, format: date-time }
                   optedIn: { type: integer, description: How many people turned it on }
+    AppCategory:
+      type: string
+      enum: [platform, pillar]
+      description: "platform: for using and managing AUGUR. pillar: the foundation of what AUGUR produces (ADR 0032). A reader treats a value it doesn't know as no kind."
     AppManifestEntry:
       type: object
       required: [id, name, route, entry, version, sdk]
@@ -1740,7 +1762,14 @@ components:
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
         orbit: { type: boolean, description: "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus" }
         sameOnEveryFloor: { type: boolean, description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)" }
+        followsAddress: { type: boolean, description: "true: the app follows the address itself, as the app kit's router does, so the shell keeps it mounted on Back and Forward inside its route and calls its navigated with the new path (SDK 1.11)" }
         focus: { type: boolean, description: "true: the app can narrow what it shows to a working context inside the floor, from ctx.focus (SDK 1.10). Reserved: the shell offers none yet (ADR 0029)" }
+        category:
+          $ref: "#/components/schemas/AppCategory"
+          description: >
+            What kind of app it is (SDK 1.11, ADR 0032). Any app may send it, and it is kept as sent, but it is
+            only in force for an app that ships with AUGUR or came from its signed app feed; the registry's own
+            apps are always platform. GET /manifest and GET /me/apps give only the kind in force.
         previews:
           type: array
           maxItems: 8
