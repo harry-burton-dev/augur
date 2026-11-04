@@ -52,6 +52,15 @@ For a fix that can't wait for what's on `main`: cut `release/<unit>-<major>.<min
 
 Releases are signed by the Release workflow on the branch it ran on. The updater and the mirror take a signature from `release.yml` on `main` or a `release/<unit>-<major>.<minor>` branch (`releaseIdentity` in `platform/services/updater/src/signers.ts`), and still refuse any other branch or workflow. `preview` and `production` stay on the list for the releases made on them up to 0.13.0, which a deployment may roll back to.
 
+Each image also carries two attestations, signed by the same workflow: an SBOM of what is inside it (SPDX, from Syft through BuildKit's `--sbom`) and SLSA build provenance (BuildKit's `--provenance`). An organisation's security review checks them with the image's own identity:
+
+```sh
+cosign verify-attestation --type spdxjson --certificate-identity-regexp '^https://github.com/harry-burton-dev/im-platform/.github/workflows/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com <image>@<digest> | jq -r .payload | base64 -d | jq .predicate
+```
+
+(`--type slsaprovenance` for the provenance; an app's release from its own repository names that repository instead.) The mirror's `cosign copy` carries them with the image, so an air-gapped deployment keeps them. A shipped app's image whose own build wrote none is released without them, with a warning in the release run.
+
 Dev builds are signed by `augur-dev.yml` (AUGUR) or `app-dev.yml` (apps) on `main`, which the updater takes only for a dev build, and only on the workbench ([AUGUR dev builds](#augur-dev-builds)). `dev` stays on that list until `main` replaces it.
 
 For AUGUR published from a fork, three settings in `.env` say whose signatures the updater takes instead, as certificate identity patterns: `IMAGE_SIGNER` for its images and the apps it installs (such as `^https://github\.com/acme/augur/\.github/workflows/release\.yml@refs/heads/main$`), `IMAGE_SIGNER_ISSUER` for who issues the certificates (GitHub Actions unless set), and `AUGUR_DEV_SIGNER` for its dev builds, which otherwise follows the repository `IMAGE_SIGNER` names. Leave all three unset to take the publisher's. The registry's `FEED_SIGNER` does the same for the release feed ([upgrade.md](upgrade.md#the-signed-feed)).

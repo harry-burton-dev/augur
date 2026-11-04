@@ -198,8 +198,9 @@ The rest lives in GitHub's settings, which a cloud session can't change. The own
   repositories (their releases and source) and Actions write on this one (an app's release starts the
   Release feed), set in this repository and each app repository, expiring after 90 days.
 
-The deploy test runs Trivy over every image a release runs, third-party ones included
-([deploy-test.md](deploy-test.md)).
+Each release image carries a signed SBOM and SLSA provenance
+([release-channels.md](release-channels.md#signatures)), and the deploy test runs Trivy over every image a
+release runs, third-party ones included ([deploy-test.md](deploy-test.md)).
 
 ## Adding or changing a job
 
