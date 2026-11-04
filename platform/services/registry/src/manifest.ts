@@ -25,6 +25,8 @@ export interface AppEntry {
   orbit?: boolean;
   /** true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why. */
   sameOnEveryFloor?: boolean;
+  /** true: the app follows the address itself, so the shell keeps it mounted on Back and Forward inside it (SDK 1.11). */
+  followsAddress?: boolean;
   /** true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029). */
   focus?: boolean;
   /** What the app's service asks to do on the platform, such as "notifications:send". */
@@ -200,6 +202,8 @@ export const platformApps: AppEntry[] = [
     category: 'platform',
     // people, departments, apps and the system are the organisation's, whichever floor you stand on
     sameOnEveryFloor: true,
+    // it moves between its sections itself, so Back and Forward keep it mounted
+    followsAddress: true,
     areas: [
       { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People and departments' },
       { id: 'system', label: 'System', icon: 'server', detail: 'Apps, status, updates and activity' },
@@ -254,6 +258,8 @@ export const platformApps: AppEntry[] = [
     category: 'platform',
     // what a deployment runs is the deployment's, whichever floor you stand on
     sameOnEveryFloor: true,
+    // it moves between its sections itself, so Back and Forward keep it mounted
+    followsAddress: true,
     // its sections are in its own rail (ADR 0030)
     orbit: false,
   },
@@ -363,6 +369,7 @@ export const appEntrySchema = {
     },
     orbit: { type: 'boolean' },
     sameOnEveryFloor: { type: 'boolean' },
+    followsAddress: { type: 'boolean' },
     focus: { type: 'boolean' },
     category: { enum: [...APP_CATEGORIES] },
     areas: {

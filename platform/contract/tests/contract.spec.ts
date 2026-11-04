@@ -103,6 +103,24 @@ test('leaving the app unmounts it', async ({ page }) => {
 });
 
 
+test('Back and Forward inside an app that follows the address keep it mounted, and it hears the new path', async ({ page }) => {
+  since('1.11'); // older builds have no navigated to hear it with
+  await page.goto('/@me/reference/claims/1');
+  await expect(check(page, 'path')).toHaveText('/claims/1');
+  // a link inside the app moves the address and tells the shell, as Admin's do
+  await page.evaluate(() => {
+    window.history.pushState(null, '', '/@me/reference/claims/2');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(check(page, 'path')).toHaveText('/claims/2');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/@me\/reference\/claims\/1$/);
+  await expect(check(page, 'path')).toHaveText('/claims/1');
+  await page.goForward();
+  await expect(check(page, 'path')).toHaveText('/claims/2');
+  expect(await page.evaluate(() => [window.referenceMounts, window.referenceUnmounts ?? 0])).toEqual([1, 0]);
+});
+
 // SDK 1.1: the floor the app is on, and requests that name it.
 test('mounts on the person’s own floor unless the address names another', async ({ page }) => {
   since('1.1');

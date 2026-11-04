@@ -23,7 +23,7 @@ export class MountError extends Error {
  * app that misbehaves on unmount can't leave anything behind for the next one.
  */
 export class AppMounter {
-  private current: { app: AppManifestEntry; mfe: MicroFrontend; el: HTMLElement } | null = null;
+  private current: { app: AppManifestEntry; mfe: MicroFrontend; el: HTMLElement; floor: string } | null = null;
   private loads = new Map<string, Promise<MicroFrontend>>();
   private generation = 0;
 
@@ -57,9 +57,29 @@ export class AppMounter {
     return pending;
   }
 
-  /** Unmounts whatever is open and mounts `app`. A newer call wins over a slower older one. */
-  async mount(app: AppManifestEntry, ctx: MountContext): Promise<void> {
+  /**
+   * Unmounts whatever is open and mounts `app`. A newer call wins over a slower older one.
+   *
+   * An app whose manifest sets `followsAddress` stays mounted instead when it is already open, from the
+   * same catalogue entry (so the same floor and previews), on the same floor, and nothing is waiting for
+   * it (an intent or a request): the shell tells it the new path. Resolves `'kept'` then, else `'mounted'`.
+   */
+  async mount(app: AppManifestEntry, ctx: MountContext): Promise<'mounted' | 'kept'> {
     const generation = ++this.generation;
+    const open = this.current;
+    if (open && app.followsAddress && open.app === app && open.floor === ctx.workspace.id && !ctx.intent && !ctx.reply) {
+      try {
+        open.mfe.navigated?.(open.el, ctx.path);
+      } catch {
+        // An app that trips over the news is mounted again, as one without the flag would be.
+        return this.mountFresh(app, ctx, generation);
+      }
+      return 'kept';
+    }
+    return this.mountFresh(app, ctx, generation);
+  }
+
+  private async mountFresh(app: AppManifestEntry, ctx: MountContext, generation: number): Promise<'mounted' | 'kept'> {
     let mfe: MicroFrontend;
     try {
       mfe = await this.resolve(app);
@@ -68,19 +88,20 @@ export class AppMounter {
       if (generation === this.generation) await this.unmount();
       throw err;
     }
-    if (generation !== this.generation) return;
+    if (generation !== this.generation) return 'mounted';
     await this.unmount();
     const el = document.createElement('div');
     el.dataset.app = app.id;
     el.style.display = 'contents';
     this.stage.append(el);
-    this.current = { app, mfe, el };
+    this.current = { app, mfe, el, floor: ctx.workspace.id };
     try {
       await mfe.mount(el, ctx);
     } catch {
       await this.unmount();
       throw new MountError(app, `${app.name} couldn't open. Nothing was lost; try again.`);
     }
+    return 'mounted';
   }
 
   async unmount(): Promise<void> {
