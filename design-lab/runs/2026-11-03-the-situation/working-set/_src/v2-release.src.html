@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Working set V2 · The release</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: a dispatch release. Every piece has a validity window; the release says which run out before the decision, and needs two names ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-3)}
+.hdr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:end;padding-bottom:var(--space-3);border-bottom:1px solid var(--hairline-strong)}
+.hdr h1{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.hdr .k{display:flex;gap:var(--space-5);font-size:var(--type-small);color:var(--ink-muted);flex-wrap:wrap}
+.hdr .k b{display:block;font:400 var(--type-meta)/var(--leading-meta) var(--font-mono);color:var(--light)}
+.board{min-height:0;overflow:auto;scrollbar-width:thin;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:0 var(--space-5);align-content:start}
+.scale,.row{display:contents}
+.scale .lab{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);padding:var(--space-1) 0}
+.axis{position:relative;height:var(--space-5)}
+.axis span{position:absolute;bottom:0;transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.axis span.dec{color:var(--light)}
+.grp{grid-column:1 / -1;font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);padding:var(--space-3) 0 var(--space-1);border-bottom:1px solid var(--hairline)}
+.row > div{padding:var(--space-1) 0;border-bottom:1px solid var(--hairline)}
+.pt{display:grid;gap:2px;font-size:var(--type-small);line-height:var(--leading-small)}
+.pt p{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.bar{position:relative}
+.bar .v{position:absolute;top:calc(50% - var(--space-1));height:var(--space-2);border-radius:1px;background:var(--ink-muted);transform-origin:left;transform:scaleX(0);transition:transform var(--motion-calm) var(--ease-out)}
+.drawn .bar .v{transform:scaleX(1)}
+.bar .v.open{background:linear-gradient(90deg,var(--ink-muted),transparent)}
+.bar .v.short{background:var(--x-proposed-broken)}
+.bar .dl{position:absolute;top:0;bottom:0;width:1px;background:var(--light);opacity:.6}
+.bar .now{position:absolute;top:0;bottom:0;width:1px;background:var(--x-proposed-lit)}
+.bar .why{position:absolute;top:calc(50% + var(--space-2));font-size:var(--x-proposed-type-micro);color:var(--x-proposed-broken);white-space:nowrap;opacity:0;transition:opacity var(--motion-base) var(--ease-out)}
+.flagged .bar .why{opacity:1}
+.sign{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr);gap:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--hairline-strong)}
+.sig{display:grid;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.sig .ln{font:italic 300 var(--type-lead)/var(--leading-lead) var(--font-sans);color:var(--light);border-bottom:1px solid var(--hairline-strong);min-height:calc(var(--leading-lead) * 1em)}
+.sig .ln.empty{color:var(--ink-muted);font-style:normal;font-size:var(--type-small)}
+.sig.need{border-style:dashed}
+.sig p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.verdict{display:grid;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px solid var(--x-proposed-broken);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small)}
+.verdict b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.hdr .k span:nth-child(n+4){display:none}.pt .src{display:none}.sig p{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Working set · V2</b> the release: every piece valid from and until; what runs out before the decision is flagged; two names to release · airline dispatch release, TAF validity, NOTAMs</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { drawn: false, flagged: false, signed: 0 };
+/* the calendar the release is drawn on. Dates as day numbers from 1 Oct, so the scale is honest */
+const D = { '1 Oct': 0, '20 Oct': 19, '1 Nov': 31, '3 Nov': 33, '19 Nov': 49, '30 Nov': 60, '1 Dec': 61, '31 Jan': 122 };
+const SPAN = 125, x = d => D[d] / SPAN * 100;
+/* validity of each piece: from, until (a date, or open), and the condition in words */
+const VALID = {
+  d1: ['1 Nov', null], d2: ['1 Nov', null], d3: ['1 Nov', null], d4: ['1 Nov', null], d5: ['3 Nov', null],
+  i1: ['1 Nov', null], i2: ['1 Nov', '1 Dec'], i3: ['1 Nov', null], i4: ['3 Nov', null], i5: ['3 Nov', null],
+  c1: ['3 Nov', '1 Dec'], c2: ['20 Oct', '19 Nov', 'The offer is valid for 30 days'], c3: ['3 Nov', '31 Jan'], c4: ['3 Nov', null]
+};
+const GROUPS = [['For the decision', 'context'], ['What they mean', 'info'], ['Readings', 'data']];
+const short = id => { const v = VALID[id]; return v[1] && D[v[1]] < D[T.decideBy.replace(' 2026', '')]; };
+function render() {
+  const dec = T.decideBy.replace(' 2026', '');
+  const flagged = DATA.pieces.filter(p => short(p.id));
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Release'], [['S', 'sign'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap ${S.drawn ? 'drawn' : ''} ${S.flagged ? 'flagged' : ''}">
+    <div class="hdr"><div><p class="eyebrow">Working set · release for decision</p><h1>${T.title}</h1></div>
+      <div class="k"><span>Set<b>${T.id} v${T.version}</b></span><span>Valid from<b>${T.assembled.replace(' 2026', '')}</b></span><span>Decision<b>${dec}</b></span><span>Pieces<b>${DATA.pieces.length}</b></span><span>Runs out first<b>${flagged.length ? VALID[flagged[0].id][1] : '—'}</b></span></div></div>
+    <div class="board">
+      <div class="scale"><span class="lab">Piece</span><div class="axis">${Object.keys(D).filter(d => !['19 Nov', '30 Nov', '20 Oct', '3 Nov'].includes(d)).map(d => `<span class="${d === dec ? 'dec' : ''}" style="left:${x(d)}%">${d === dec ? 'decision · ' : ''}${d}</span>`).join('')}</div></div>
+      ${GROUPS.map(([g, r]) => `<div class="grp">${rm(r)} ${g}</div>` + DATA.pieces.filter(p => p.rung === r).map(p => { const v = VALID[p.id]; const until = v[1]; const w = (until ? D[until] : SPAN) - D[v[0]]; return `<div class="row"><div class="pt"><p class="${p.rung === 'data' ? 'as-data' : ''}">${p.text}</p><span>${holdsHTML(p, S.flagged && short(p.id))}</span></div>
+        <div class="bar"><span class="now" style="left:${x('3 Nov')}%" title="today"></span><span class="dl" style="left:${x(dec)}%"></span><span class="v ${until ? '' : 'open'} ${S.flagged && short(p.id) ? 'short' : ''}" style="left:${x(v[0])}%;width:${w / SPAN * 100}%"></span>${short(p.id) ? `<span class="why" style="left:${x(v[0])}%">${v[2] || 'Runs out'} · until ${until}, before the decision</span>` : ''}</div></div>`; }).join('')).join('')}
+    </div>
+    <div class="sign">
+      <div class="sig"><span class="eyebrow">Assembled by</span><span class="ln ${S.signed > 0 ? '' : 'empty'}">${S.signed > 0 ? P(T.owner).name : 'not signed'}</span><p>${P(T.owner).role} · answers for what is in it and why</p></div>
+      <div class="sig ${S.signed > 1 ? '' : 'need'}"><span class="eyebrow">Released by</span><span class="ln ${S.signed > 1 ? '' : 'empty'}">${S.signed > 1 ? P(T.decider).name : `waiting for ${P(T.decider).name}`}</span><p>${P(T.decider).role} · the named person with release authority for ${T.intent}</p></div>
+      ${S.flagged && flagged.length ? `<div class="verdict fresh"><b>${flagged.length} piece${flagged.length > 1 ? 's' : ''} run out before the decision.</b>${flagged.map(p => `<span>${p.text}. ${VALID[p.id][2] || 'It runs'} until ${VALID[p.id][1]}.</span>`).join('')}<span class="muted">It can still be released. The release will say so, and the set will ask for a fresh piece on ${VALID[flagged[0].id][1]}.</span></div>` : '<div></div>'}
+    </div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.drawn = false; S.flagged = false; S.signed = 0; render(); }, () => {
+  const step = ms('--motion-calm');
+  $('.wrap').classList.add('drawn'); S.drawn = true;
+  later(() => { S.flagged = true; S.signed = 1; render(); }, step * 1.3);
+}, (e, k) => { if (k === 's') { S.signed = Math.min(2, S.signed + 1); render(); } });
+</script>
+</body>
+</html>

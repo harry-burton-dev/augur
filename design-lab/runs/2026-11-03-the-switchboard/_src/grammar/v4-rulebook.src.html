@@ -1,0 +1,114 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Routing sheet · V4 The rulebook</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-5);height:100%}
+.hd{display:flex;align-items:baseline;gap:var(--space-4);margin-bottom:var(--space-2)}
+.hd .title{font-size:var(--type-heading);line-height:var(--leading-heading)}
+.book{list-style:none;margin:var(--space-3) 0 0;padding:0;display:grid;gap:var(--space-1)}
+.book li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--surface-inset);transition:border-color var(--motion-base),background var(--motion-base),opacity var(--motion-base)}
+.book .no{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.book .if{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.book .then{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.book .by{grid-row:1 / span 2;grid-column:3;text-align:right;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.book .by b{display:block;font-weight:400;color:var(--ink)}
+.book li.pass{opacity:.5}
+.book li.hit{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash);opacity:1}
+.book li.hit.stop{border-color:var(--x-proposed-blocked);background:var(--x-proposed-blocked-wash)}
+.book li.skip{opacity:.28}
+.bench{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3);min-height:0}
+.pick{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-3);align-items:center;font-size:var(--type-meta)}
+select{font:inherit;font-size:var(--type-meta);color:var(--ink);background:var(--slate-deep);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);height:var(--target-sm);padding:0 var(--space-2);min-width:0;width:100%}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:2px;overflow:auto;min-height:0}
+.steps li{display:grid;grid-template-columns:var(--space-5) minmax(0,10rem) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-1) 0;color:var(--ink-muted);opacity:0;transition:opacity var(--motion-base)}
+.steps li.in{opacity:1}
+.steps li.hit{color:var(--light)}
+.steps li .mk{display:flex;justify-content:center}
+.steps li.hit .mk{color:var(--x-proposed-lit)}
+.steps li.hit.stop .mk{color:var(--x-proposed-blocked)}
+.res{border-top:1px solid var(--hairline);padding-top:var(--space-3);opacity:0;transition:opacity var(--motion-calm)}
+.res.in{opacity:1}
+.res .chs{display:flex;gap:var(--space-1);flex-wrap:wrap;margin:var(--space-2) 0}
+.res p{font-size:var(--type-meta);line-height:var(--leading-meta)}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="cols">
+    <section style="min-height:0;overflow:auto" class="scroll">
+      <div class="hd"><p class="eyebrow">Grammar</p><h1 class="title">The rulebook</h1></div>
+      <p class="meta muted measure">Tried top to bottom for each person a notice names. The first rule that applies decides. Three stop a notice before anyone is told; the rest decide the channel and the time.</p>
+      <ol class="book" id="book"></ol>
+    </section>
+    <section class="pane bench" aria-label="Test bench">
+      <p class="eyebrow">Test bench · try a notice from last week</p>
+      <div class="pick"><label for="nsel">Notice</label><select id="nsel"></select><label for="psel">Person</label><select id="psel"></select></div>
+      <ol class="steps" id="steps" aria-live="polite"></ol>
+      <div class="res" id="res"></div>
+    </section>
+  </div></main>
+</div>
+<div class="x-cap"><b>Routing sheet · V4</b> the rulebook, first match wins, with a test bench · mail filter rules, firewall chains, the sorting office</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const BOOK = {
+  permission: ['The app isn’t allowed to send on the notice’s floor', 'Nobody is told. The app’s owner sees it as returned.'],
+  teamoff:    ['It is sent to a team that hasn’t turned team notices on', 'Nobody is told. The owner sees which team and who can turn them on.'],
+  repeat:     ['The same app already sent news with the same key', 'Nobody is told again, read or not.'],
+  urgent:     ['It is urgent', 'Letterbox now; email if they aren’t in AUGUR. Quiet, away and mute don’t apply.'],
+  away:       ['The person is away', 'Their “while you were out” card. Needs you goes to their cover.'],
+  muted:      ['The person has muted the app', 'Their list (and Inbox) only. No pulse, no toast.'],
+  record:     ['It is for the record (info)', 'Their list without a pulse, and their next edition.'],
+  quiet:      ['It is outside the person’s working hours', 'Held until their next working hour, then band and list.'],
+  live:       ['Otherwise', 'Band and list now, a toast if they chose one, and the Inbox for needs you.']
+};
+const SETBY = { permission: ['Department admin', 'Admin, Apps'], teamoff: ['Team lead', 'team settings'], repeat: ['The sending app', 'its key'], urgent: ['Admin', 'urgency budget'], away: ['The person', 'My switchboard'], muted: ['The person', 'My switchboard'], record: ['The person', 'My switchboard'], quiet: ['The person', 'My switchboard'], live: ['', ''] };
+const ORDER = RULE_ORDER.filter(k => k !== 'nobody');
+$('#top').innerHTML = topHTML(['Notices', 'Routing sheet', 'Rulebook'], [['R', 'replay'], ['T', 'technical words', 'h-t']]);
+$('#book').innerHTML = ORDER.map((k, i) => `<li data-rule="${k}"><span class="no">${i + 1}</span><span class="if">${ruleChip(k)} <span>${BOOK[k][0]}</span></span><span class="then">${BOOK[k][1]}</span><span class="by">${SETBY[k][0] ? `<b>${SETBY[k][0]}</b>${SETBY[k][1]}` : ''}</span></li>`).join('');
+$('#nsel').innerHTML = DATA.notices.map(n => `<option value="${n.id}">${n.at} · ${n.title}</option>`).join('');
+function people(nid) { const r = route(nid); if (r.blocked) return recipients(r.n).map(x => x.p); return r.deliveries.map(d => d.p).filter((p, i, a) => a.indexOf(p) === i); }
+function fillPeople(nid, keep) { const ps = people(nid); $('#psel').innerHTML = ps.map(p => `<option value="${p}">${P(p).name}</option>`).join('') || '<option value="">nobody (it went to no one)</option>'; if (keep && ps.includes(keep)) $('#psel').value = keep; }
+function trace(nid, pid) {
+  const r = route(nid), n = r.n, app = A(n.app), d = r.deliveries.find(x => x.p === pid), h = pid ? P(pid).hours : null;
+  const out = [];
+  for (const k of ORDER) {
+    if (out.some(x => x.hit)) { out.push({ k, skip: true, why: 'not reached' }); continue; }
+    let hit = false, why = '';
+    if (k === 'permission') { hit = r.blocked?.rule === k; why = hit ? r.blocked.why : `${app.name} may send on ${n.floor ? DATA.floors[n.floor].name : 'every floor (global)'}.`; }
+    else if (k === 'teamoff') { hit = r.blocked?.rule === k; why = hit ? r.blocked.why : n.to.team ? `${DATA.teams[n.to.team].name} has team notices on.` : 'Not sent to a team.'; }
+    else if (k === 'repeat') { hit = r.blocked?.rule === k; why = hit ? r.blocked.why : n.key ? `First time with this key.` : 'No key: every send tells everyone it names.'; }
+    else if (!d) { why = 'not reached'; }
+    else if (k === 'urgent') { hit = d.rule === k; why = hit ? ruleWords(d) : 'Not urgent.'; }
+    else if (k === 'away') { hit = d.rule === k; why = hit ? ruleWords(d) : `Not away at ${at(d.sent)}.`; }
+    else if (k === 'muted') { hit = d.rule === k; why = hit ? ruleWords(d) : `Hasn’t muted ${app.name}.`; }
+    else if (k === 'record') { hit = d.rule === k; why = hit ? ruleWords(d) : `It is ${LEVELS[n.level].word.toLowerCase()}, not info.`; }
+    else if (k === 'quiet') { hit = d.rule === k; why = hit ? ruleWords(d) : `${hhmm(d.sent)} is inside ${h.from} to ${h.to}.`; }
+    else if (k === 'live') { hit = d.rule === k; why = hit ? ruleWords(d) : ''; }
+    out.push({ k, hit, why, stop: hit && ['permission', 'teamoff', 'repeat'].includes(k) });
+  }
+  return { out, r, d };
+}
+function run(animate = true) {
+  clearLater();
+  const nid = $('#nsel').value, pid = $('#psel').value, { out, r, d } = trace(nid, pid);
+  $$('#book li').forEach(li => li.className = '');
+  $('#steps').innerHTML = out.map((s, i) => `<li data-k="${s.k}" class="${s.hit ? 'hit' : ''} ${s.stop ? 'stop' : ''}"><span class="mk">${I(s.hit ? (s.stop ? 'octagon-x' : 'arrow-right') : s.skip ? 'minus' : 'circle', 14)}</span><span>${i + 1}. ${RULES[s.k].word}</span><span>${s.why}</span></li>`).join('');
+  $('#res').classList.remove('in');
+  const n = r.n;
+  $('#res').innerHTML = r.blocked
+    ? `<p class="eyebrow">Result</p><p style="margin-top:var(--space-2)">${ruleChip(r.blocked.rule)} Nobody was told. ${r.blocked.would} ${r.blocked.would === 1 ? 'person' : 'people'} would have been.</p>`
+    : `<p class="eyebrow">Result for ${P(pid).name}</p><div class="chs">${d.ch.map(c => chip(c)).join('')}</div><p>${viaWords(d)} ${ruleWords(d)}</p><p style="margin-top:var(--space-2)">${rcpt(d)}</p><p class="tk">level: ${n.level}${n.urgent ? ' + urgent' : ''} · class: ${r.cls} · rule: ${d.rule} · via: ${d.via} · key: ${n.key || '—'}</p>`;
+  out.forEach((s, i) => later(() => {
+    $(`#steps li[data-k="${s.k}"]`).classList.add('in');
+    const li = $(`#book li[data-rule="${s.k}"]`); li.classList.add(s.hit ? 'hit' : s.skip ? 'skip' : 'pass'); if (s.stop) li.classList.add('stop');
+    if (i === out.length - 1) $('#res').classList.add('in');
+  }, (animate ? 1200 : 0) + i * (animate ? 160 : 0)));
+  Icons.hydrate(document.body);
+}
+$('#nsel').addEventListener('change', () => { fillPeople($('#nsel').value); run(false); });
+$('#psel').addEventListener('change', () => run(false));
+function play() { document.body.classList.add('pre'); $('#nsel').value = 'n10'; fillPeople('n10', DATA.me); run(true); later(() => document.body.classList.remove('pre'), 60); }
+document.addEventListener('keydown', e => commonKeys(e, play));
+Icons.hydrate(document.body); play();
+</script></body></html>

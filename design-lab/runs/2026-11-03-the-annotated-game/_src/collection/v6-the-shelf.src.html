@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Collection V6 · The shelf</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Collection V6: the whole book as a shelf by floor. What you can't open stays on the shelf, hatched, with why and who to ask; your own drafts sit on a shelf only you see ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-card);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.shelves{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.shelf{padding:var(--space-3) var(--space-4) 0;border-bottom:3px solid var(--hairline-strong)}
+.shelf .h{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-2)}
+.books{display:flex;gap:var(--space-1);align-items:flex-end;min-height:calc(var(--space-8) + var(--space-5))}
+.spine{position:relative;width:calc(var(--space-6) + var(--space-1));border-radius:2px 2px 0 0;border:1px solid var(--hairline-strong);border-bottom:0;background:var(--surface-raised);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:var(--space-2) 0;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);transition:transform var(--motion-base) var(--ease-out),border-color var(--motion-base) var(--ease-out)}
+.spine .tt{writing-mode:vertical-rl;transform:rotate(180deg);font:400 var(--type-small)/1.1 var(--font-sans);color:var(--light);max-height:calc(var(--space-8) - var(--space-3));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spine .r{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill)}
+.spine .r.kept{background:var(--x-proposed-mark-good)}.spine .r.amended{background:var(--ink-muted)}.spine .r.reversed{background:var(--x-proposed-mark-bad)}
+.spine:hover,.spine.sel{transform:translateY(calc(var(--space-2) * -1));border-color:var(--light)}
+.spine.locked{background:var(--x-proposed-unseen),var(--surface-inset);color:var(--ink-muted)}
+.spine.locked .tt{color:var(--ink-muted)}
+.spine.mine{border-style:dotted;border-color:var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash)}
+.spine.mine .tt{font-style:italic;color:var(--ink)}
+.card{min-height:0;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}
+.card .t{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.card .rules{margin-top:auto;display:grid;gap:var(--space-2);color:var(--ink-muted)}
+.card .rules li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr)}
+@media (max-width:1400px){.books{min-height:calc(var(--space-8) + var(--space-2))}.shelves{gap:var(--space-2)}.shelf{padding-top:var(--space-2)}.spine .tt{max-height:calc(var(--space-8) - var(--space-5))}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Collection · V6</b> the shelf: the book by floor; reviews you can’t open stay on the shelf, hatched, saying why and whom to ask; your own drafts sit on a shelf only you see · library stacks, explain never hide, mine versus ours</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = DATA.later.today;
+const BK = DATA.book, ME = DATA.later.who;
+const MINE = [{ id: 'draft', title: 'Notes on R-07 for D-163', note: 'Your notes while reading R-07. Only you see them; they are never filed.' }];
+const S = { sel: 'R-07' };
+function spine(g) {
+  return `<button class="spine ${g.restricted ? 'locked' : ''} ${S.sel === g.id ? 'sel' : ''}" data-id="${g.id}" style="height:${g.restricted ? 70 : 72 + Math.min(28, (g.crit || 1) * 7)}%" aria-label="${g.id}${g.restricted ? ', you can’t open this one' : ': ' + g.title}"><span>${g.id}</span><span class="tt">${g.restricted ? g.unit : g.title}</span>${g.restricted ? I('lock', 12) : `<span class="r ${g.result}"></span>`}</button>`;
+}
+function render() {
+  const g = BK.games.find(x => x.id === S.sel);
+  const floors = [['department', 'Department floors'], ['org', 'Org floor']];
+  $('#app').innerHTML = topHTML(['Mandate', 'The book', 'Shelf'], [['click', 'a spine'], ['R', 'replay']], { as: NOW }) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">The shelf</h1><p class="lede">The whole book, by floor, as ${P(ME).name} sees it. Every review stays on the shelf, even one she can’t open, so she knows it exists and whom to ask. Her own reading notes sit on a shelf nobody else sees.</p></div>
+    <section class="shelves scroll">${floors.map(([f, w]) => { const gs = BK.games.filter(x => x.floor === f); return `<div class="shelf"><p class="h"><span class="fchip" data-tier="${f}">${w}</span><span class="small muted">${gs.length} reviews${gs.some(x => x.restricted) ? `, ${gs.filter(x => x.restricted).length} you can’t open` : ''}</span></p><div class="books">${gs.map(spine).join('')}</div></div>`; }).join('')}
+      <div class="shelf"><p class="h"><span class="fchip" data-tier="you">Yours</span><span class="small muted">only you see this shelf</span></p><div class="books">${MINE.map(m => `<button class="spine mine ${S.sel === m.id ? 'sel' : ''}" data-id="${m.id}" style="height:80%"><span>${I('pencil', 12)}</span><span class="tt">${m.title}</span><span></span></button>`).join('')}</div></div></section>
+    <aside class="card pane" aria-live="polite">${S.sel === 'draft' ? `<p class="lab">Yours</p><p class="t">${MINE[0].title}</p><p>${MINE[0].note}</p>` : g.restricted ? `<p class="lab">${g.id} · ${g.code} · ${g.year}</p><p class="t">${g.unit}</p><p><span class="unseen">${I('lock', 12)} not yours to open</span></p><p>${g.restricted.why}</p><p>Ask ${P(g.restricted.who).name}, ${P(g.restricted.who).role}. Its code and year are shown so you know a ${g.code} game exists.</p>`
+      : `<p class="lab">${g.id} · ${g.code} · ${g.year}</p><p class="t">${g.title}</p><p class="muted">${g.unit} · ${DATA.results[g.result].toLowerCase()} after ${g.days} days · ${g.crit} critical moments · edited by ${P(g.by).name}</p>${g.note ? `<p>“${g.note}”</p>` : ''}<p>${g.motifs.map(k => gl(BK.motifs[k].tone === 'good' ? '!' : '?') + ' ' + BK.motifs[k].name).join('<br>')}</p>`}
+      <ul class="rules"><li>${I('lock', 14)}<span>Reach follows the decision. If you can open it, you can read its review.</span></li><li>${I('users', 14)}<span>No shelf by person. The book can’t be searched by who played a move.</span></li><li>${I('pencil', 14)}<span>Your notes and guesses are never filed.</span></li></ul></aside>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.spine').forEach(b => b.onclick = () => { S.sel = b.dataset.id; render(); });
+}
+function replay() { clearLater(); S.sel = 'R-07'; render(); settle(); later(() => { S.sel = 'R-12'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { commonKeys(e, render, replay); });
+replay();
+</script>
+</body>
+</html>

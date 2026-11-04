@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Collection V5 · The explorer</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Collection V5: an opening explorer. At each step of a situation, the moves played next in the book, how often, and how those games ended, with the base always shown ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.path{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-2)}
+.step{display:grid;grid-template-columns:2em minmax(0,1fr);gap:var(--space-2);padding:var(--space-2);border-radius:var(--radius-key);font-size:var(--type-meta);line-height:var(--leading-meta);text-align:left}
+.step .n{font-family:var(--font-mono);color:var(--ink-muted)}
+.step.done{color:var(--ink)}
+.step.here{background:var(--surface-raised);box-shadow:inset 2px 0 0 var(--light);color:var(--light)}
+.step.next{color:var(--ink-muted);font-style:italic}
+.path .base{margin-top:auto;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tbl{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-2)}
+.hd,.row{display:grid;grid-template-columns:minmax(0,1.3fr) 3.5em minmax(0,1fr) 7em;gap:var(--space-3);align-items:center}
+.hd{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);padding-bottom:var(--space-2);border-bottom:1px solid var(--hairline-strong)}
+.row{padding:var(--space-3) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.row .pl{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.row .ct{font:300 var(--type-heading)/1 var(--font-mono);color:var(--light);text-align:right}
+.bar{display:flex;height:var(--space-4);border-radius:2px;overflow:hidden;border:1px solid var(--hairline-strong)}
+.bar i{display:block;height:100%;transition:width var(--motion-calm) var(--ease-out)}
+.bar i.kept{background:var(--x-proposed-mark-good)}
+.bar i.amended{background:var(--ink-muted)}
+.bar i.reversed{background:var(--x-proposed-mark-bad)}
+.row .ids{font:400 var(--type-small)/1.4 var(--font-mono);color:var(--ink-muted)}
+.row .mk{font-size:var(--type-small)}
+.key{display:flex;gap:var(--space-4);font-size:var(--type-small);color:var(--ink-muted)}
+.key span{display:inline-flex;align-items:center;gap:var(--space-1)}
+.key i{width:var(--space-3);height:var(--space-3);border-radius:2px}
+.warn-n{padding:var(--space-3) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small)}
+.warn-n b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.row{padding:var(--space-2) 0}.tbl,.path{padding:var(--space-3) var(--space-4)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Collection · V5</b> the explorer: at each step of a C3 situation, what the book’s games played next and how they ended; every bar shows its count, and small counts say so · opening explorers, the answer has a base</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = DATA.later.today;
+const BK = DATA.book, G = id => BK.games.find(g => g.id === id);
+/* the steps of a C3 game and what each game played at each. From the reviews' move lists (sample) */
+const STEPS = [
+  { at: 'A costing is on the table', next: [['Costing counts cover', ['R-01', 'R-11'], '!'], ['Costing leaves out cover', ['R-07', 'R-03', 'R-08'], '?!']] },
+  { at: 'The meeting decides', next: [['As a trial with an end date', ['R-07', 'R-11'], '!'], ['For good', ['R-01', 'R-03', 'R-08'], '']] },
+  { at: 'Something must be in place first', next: [['Secure it, then the one-way step', ['R-03', 'R-11', 'R-01'], '!'], ['The one-way step, then secure it', ['R-07', 'R-08'], '?']] },
+  { at: 'A line is crossed', next: [['Answered within a week', ['R-11'], '!'], ['Noted, no reason', ['R-07'], '?'], ['No line was set', ['R-03', 'R-08', 'R-01'], '?!']] }
+];
+const S = { i: 1 };
+function bar(ids) { const n = ids.length; return `<div class="bar" aria-label="${['kept', 'amended', 'reversed'].map(r => ids.filter(id => G(id).result === r).length + ' ' + r).join(', ')}">${['kept', 'amended', 'reversed'].map(r => { const k = ids.filter(id => G(id).result === r).length; return k ? `<i class="${r}" style="width:${k / n * 100}%"></i>` : ''; }).join('')}</div>`; }
+function render() {
+  const st = STEPS[S.i], total = [...new Set(STEPS.flatMap(s => s.next.flatMap(x => x[1])))].length;
+  $('#app').innerHTML = topHTML(['Mandate', 'The book', 'Explorer', 'C3'], [['← →', 'step'], ['R', 'replay']], { as: NOW }) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">The explorer</h1><p class="lede">An opening explorer shows, at each position, what was played next and how those games ended. Here it covers ${total} reviewed games that brought work in-house (${BK.codes.C3.toLowerCase()}, any variety). The bars are results, the numbers are games, and the numbers are small.</p></div>
+    <section class="path pane"><p class="eyebrow">The situation, step by step</p>${STEPS.map((s, i) => `<button class="step ${i < S.i ? 'done' : i === S.i ? 'here' : 'next'}" data-i="${i}"><span class="n">${i + 1}.</span><span>${s.at}</span></button>`).join('')}
+      <p class="base">${I('info', 12)} Each game is counted once per step. A game that skipped a step (no line set) is listed as that.</p></section>
+    <section class="tbl pane scroll" aria-live="polite"><p class="lab">At step ${S.i + 1}: ${st.at.toLowerCase()}</p>
+      <div class="hd"><span>Played next</span><span style="text-align:right">Games</span><span>How they ended</span><span>Which</span></div>
+      ${st.next.map(([w, ids, mk]) => `<div class="row"><span class="pl">${w} ${mk ? `<span class="mk">${gl(mk)}</span>` : ''}</span><span class="ct">${ids.length}</span>${bar(ids)}<span class="ids">${ids.join(' ')}</span></div>`).join('')}
+      <div class="key"><span><i style="background:var(--x-proposed-mark-good)"></i> kept</span><span><i style="background:var(--ink-muted)"></i> amended</span><span><i style="background:var(--x-proposed-mark-bad)"></i> reversed</span></div>
+      <div class="warn-n box"><b>${st.next.reduce((a, x) => a + x[1].length, 0)} games is not a rate.</b> The explorer shows what was played and what happened next; it doesn’t say one caused the other. Every count opens its games, and the marks beside each move are the reviewers’, not the bar’s.</div>
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.step').forEach(b => b.onclick = () => { S.i = +b.dataset.i; render(); });
+}
+function replay() { clearLater(); S.i = 1; render(); settle(); later(() => { S.i = 2; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowRight') { S.i = Math.min(STEPS.length - 1, S.i + 1); render(); }
+  if (e.key === 'ArrowLeft') { S.i = Math.max(0, S.i - 1); render(); }
+});
+replay();
+</script>
+</body>
+</html>

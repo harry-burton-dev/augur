@@ -283,3 +283,20 @@ describe('ui-centre-menu', () => {
     delete document.documentElement.dataset.motion;
   });
 });
+
+describe('reduced motion', () => {
+  it('stops its transitions for AUGUR’s own setting as well as the system’s, timing the rest from motion tokens', async () => {
+    expect(menu().classList.contains('reduce')).toBe(false);
+    document.documentElement.dataset.motion = 'reduce';
+    try {
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(menu().classList.contains('reduce')).toBe(true);
+    } finally {
+      delete document.documentElement.dataset.motion;
+    }
+    const css = (el.constructor as typeof UiCentreMenu & { styles: { cssText: string }[] }).styles.map((s) => s.cssText).join('');
+    expect(css).toContain('.menu.reduce');
+    expect(css).not.toMatch(/--wm-dur:\s*\d/);
+  });
+});

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Bring in V3 · The x-ray</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: the whole sheet at a glance, every cell a block by kind; the structure annotated in the margin ---- */
+:root{
+  /* needs token: one x-ray cell */
+  --x-proposed-xr-w: calc(var(--space-7) - var(--space-3));
+}
+.wrap{height:100%;display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1.1fr);gap:var(--space-5)}
+.film{position:relative;min-height:0;display:grid;align-content:start;gap:2px;padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--slate-deep);overflow:hidden}
+.film .row{display:grid;grid-template-columns:var(--space-5) repeat(var(--nc),var(--x-proposed-xr-w));gap:2px;align-items:center;height:calc(var(--space-4) + var(--space-1))}
+.film .row .n{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);text-align:right;padding-right:var(--space-1)}
+.film .row.on .n{color:var(--light)}
+.b{height:100%;border-radius:1px}
+.b.e{background:none}
+.b.t{background:color-mix(in srgb,var(--ink-muted) 45%,transparent)}
+.b.num{background:var(--ink-muted)}
+.b.date{background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 4px)}
+.b.van{background:var(--ink)}
+.b.m{grid-column:span var(--nc);background:color-mix(in srgb,var(--ink-muted) 30%,transparent);border:1px solid var(--hairline-strong)}
+.b.h{background:var(--light)}
+.b.odd{box-shadow:0 0 0 1px var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash)}
+.film .row.on .b:not(.e){outline:1px solid var(--light);outline-offset:1px}
+.marks{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.mk{display:grid;grid-template-columns:var(--space-7) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) var(--space-3);border:1px solid transparent;border-radius:var(--radius-key);text-align:left;transition:opacity var(--motion-calm) var(--ease-out)}
+.mk:hover{background:var(--surface-raised)}
+.mk.on{border-color:var(--hairline-strong);background:var(--surface-raised)}
+.mk .ln{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.mk b{display:block;font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.mk span.s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.mk.hide{opacity:0}
+.loupe{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.loupe .box .sheet{font-size:var(--x-proposed-type-micro)}
+.loupe .box{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-inset);overflow:hidden}
+.key{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);font-size:var(--type-small);color:var(--ink-muted)}
+.key span{display:inline-flex;align-items:center;gap:var(--space-2)}
+.key .b{display:inline-block;width:var(--space-5);height:var(--space-2)}
+@media (max-width:1400px){:root{--x-proposed-xr-w:calc(var(--space-6) - var(--space-2))}.film .row{height:var(--space-4)}.mk{padding:var(--space-1) var(--space-2)}.mk b{font-size:var(--type-small)}.mk span.s{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Bring in · V3</b> the x-ray: the whole sheet as blocks by kind, its structure named in the margin · radiographs, a sheet's shape before its words</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R), F0 = R.file, H = R.header, NC = Math.max(...F0.lines.map(c => c.length));
+function kind(l, i) {
+  const v = String(l.cells[i] ?? '').trim();
+  if (!v) return 'e';
+  if (l.n === STEP('s2').line) return 'h';
+  if (l.n === R.total.line) return /\d/.test(v) ? 'num' : 't';
+  const odd = (H[i] === R.st.s6.col && !readVan(v)) || (H[i] === R.st.s10.col && readMiles(v) == null);
+  if (dateShape(v)) return 'date' + (odd ? ' odd' : '');
+  if (readVan(v)) return 'van';
+  if (/^[\d,\s]+$/.test(v) || readMiles(v) != null) return 'num';
+  return 't' + (odd ? ' odd' : '');
+}
+const MARKS = [
+  { k: 'title', lines: R.lines.filter(l => l.role === 'title').map(l => l.n), b: 'A title across the top', s: `merged over ${F0.merged[0]}, then an empty line. Not visits.` },
+  { k: 'names', lines: [STEP('s2').line], b: 'Column names', s: `${H.length} of them: ${H.join(', ')}.` },
+  { k: 'visits', lines: dataLinesOf(R).map(l => l.n), b: `${dataLinesOf(R).length} lines of visits`, s: `lines ${STEP('s2').line + 1} to ${R.total.line - 1}, broken by ${R.st.s4.aside.length} empty lines.` },
+  { k: 'copy', lines: [PL.copies[0].of, PL.copies[0].n], b: 'Two lines the same', s: `line ${PL.copies[0].n} repeats line ${PL.copies[0].of} exactly.` },
+  { k: 'odd', lines: [PL.aside[0].n, PL.valuesAside[0].n], b: 'Two values out of shape', s: `“${esc(PL.aside[0].cells[0])}” where a van number goes; “${esc(PL.valuesAside[0].raw)}” where a reading goes.` },
+  { k: 'total', lines: [R.total.line], b: 'A total at the foot', s: `says ${R.total.said} visits. A check, not a visit.` }
+];
+const S = { on: null, shown: 0 };
+function render() {
+  const m = MARKS.find(x => x.k === S.on);
+  const lit = m ? m.lines : [];
+  const zoom = m ? [...new Set(m.lines.length > 6 ? m.lines.slice(0, 6) : m.lines)] : [];
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, F0.name, 'X-ray'], [['1–6', 'look closer'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="film" style="--nc:${NC}" aria-label="The whole sheet as blocks">${R.lines.map(l => {
+      const merged = l.cells.length === 1 && l.cells[0];
+      return `<div class="row ${lit.includes(l.n) ? 'on' : ''}"><span class="n">${l.n}</span>${merged ? '<span class="b m"></span>' : Array.from({ length: NC }, (_, i) => `<span class="b ${kind(l, i)}"></span>`).join('')}</div>`; }).join('')}</section>
+    <section class="marks"><div><h1 class="t">The shape of the sheet</h1><p class="lede" style="margin-top:var(--space-1)">Before reading a single word: where the title, the names, the visits and the total are, and what looks out of place.</p></div>
+      ${MARKS.map((x, i) => `<button class="mk ${S.on === x.k ? 'on' : ''} ${i >= S.shown ? 'hide' : ''}" data-k="${x.k}"><span class="ln">${x.lines.length > 2 ? `${x.lines[0]}–${x.lines[x.lines.length - 1]}` : x.lines.join(', ')}</span><span><b>${x.b}</b><span class="s">${x.s}</span></span></button>`).join('')}
+      <div class="key"><span><i class="b van"></i>van-like</span><span><i class="b date"></i>date-like</span><span><i class="b num"></i>number</span><span><i class="b t"></i>words</span><span><i class="b odd"></i>out of shape</span></div></section>
+    <section class="loupe"><p class="eyebrow">${I('scan-search', 12)} ${m ? `Closer: ${m.b.toLowerCase()}` : 'Pick a mark to look closer'}</p>
+      ${m ? `<div class="box">${sheetHTML(R, { lines: zoom.length ? [STEP('s2').line, ...zoom].filter((v, i, a) => a.indexOf(v) === i) : [], cell: (l, i) => m.k === 'odd' && kind(l, i).includes('odd') ? 'hit' : '' })}</div>${m.lines.length > 6 ? `<p class="lede">and ${m.lines.length - 6} more lines like these</p>` : ''}` : ''}
+      <p class="lede">The x-ray is drawn from the cells alone. Nothing has been read as van, date or place yet; the blocks only say what each value looks like.</p></section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.mk').forEach(b => b.onclick = () => { S.on = S.on === b.dataset.k ? null : b.dataset.k; render(); });
+}
+function replay() {
+  clearLater(); S.on = null; S.shown = 0; render(); settle();
+  const t = ms('--motion-run');
+  MARKS.forEach((_, i) => later(() => { S.shown = i + 1; render(); }, t + i * ms('--motion-instant') * 2));
+  later(() => { S.on = 'odd'; render(); }, t + MARKS.length * ms('--motion-instant') * 2 + ms('--motion-base'));
+}
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (/^[1-6]$/.test(e.key)) { clearLater(); S.shown = MARKS.length; S.on = MARKS[+e.key - 1].k; render(); } });
+replay();
+</script>
+</body>
+</html>

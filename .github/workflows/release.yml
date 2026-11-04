@@ -26,14 +26,14 @@ jobs:
       released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') }}
       augur: ${{ steps.augur.outputs.new == 'true' && steps.augur.outputs.version || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           # Pushes made with the built-in token don't start other workflows, so CI
           # would never run on the Version packages PR. RELEASE_TOKEN can (docs/versioning.md).
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -41,7 +41,7 @@ jobs:
       # While changesets are waiting, keeps one "Version packages" PR open that bumps versions and
       # writes changelogs. No publish step: packages aren't tagged or released one by one. The only
       # GitHub releases are the units a deployment installs, augur@<version> and app/<id>@<version>, made below.
-      - uses: changesets/action@v1
+      - uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         id: changesets
         with:
           title: ${{ startsWith(github.ref_name, 'release/') && format('Version packages ({0})', github.ref_name) || 'Version packages' }}
@@ -66,15 +66,15 @@ jobs:
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: node scripts/augur-release.mjs pending >> "$GITHUB_OUTPUT"
       - if: steps.augur.outputs.new == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - if: steps.augur.outputs.new == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - if: steps.augur.outputs.new == 'true'
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
       - name: Build, push and sign the images
         if: steps.augur.outputs.new == 'true'
         run: infra/release-images.sh "${{ steps.augur.outputs.version }}" "${{ steps.augur.outputs.channel }}" > "$RUNNER_TEMP/images.json"
@@ -95,17 +95,17 @@ jobs:
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: echo "pending=$(node scripts/app-release.mjs pending)" >> "$GITHUB_OUTPUT"
       - if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
       - if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1.2.4
       - name: Build, sign and release each app
         if: steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]'
         run: |

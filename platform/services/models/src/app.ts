@@ -7,7 +7,8 @@ import {
   packageVersion,
   recordAudit,
   ServiceAuthUnavailable,
-  serviceLogging,
+  problemDetails,
+  serviceFastifyOptions,
   WORKSPACE_HEADERS,
   type Caller,
   type GrantLookup,
@@ -129,7 +130,8 @@ type Asker = { app: string; actor: NewAuditEntry['actor']; workspace?: string };
  * calls a day. It is off until an admin turns it on.
  */
 export const buildApp = async ({ store = new MemoryModelStore(), provider, verifyService, grants, audit, now = () => new Date(), callers }: ModelsOptions = {}) => {
-  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  const app = Fastify(serviceFastifyOptions());
+  await app.register(problemDetails());
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', async () => health('models', version, API_VERSION));

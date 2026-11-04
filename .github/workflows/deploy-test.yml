@@ -1,8 +1,9 @@
 name: Deploy test
 # Does a new AUGUR release install, upgrade and go back? Once per release, with the images the
 # Release workflow just pushed, so nothing is built twice: a fresh server on the new release, then
-# the release before it upgraded to the new one with its data, then back (docs/deploy-test.md).
-# It boots the stack three times in about five minutes; it never runs on pull requests, to keep CI
+# the release before it upgraded to the new one with its data, then back, then a fresh one with the
+# updater, broken on purpose (docs/deploy-test.md).
+# It boots the stack four times in about seven minutes; it never runs on pull requests, to keep CI
 # minutes down. Run it by hand from Actions to try any two releases.
 on:
   workflow_call:
@@ -28,7 +29,7 @@ jobs:
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Two releases' images (the Artifacts worker carries its models) outgrow a hosted runner's
       # free disk, so drop the toolchains this job never uses first.
       - name: Make room for two releases' images
@@ -37,7 +38,7 @@ jobs:
           df -h / | tail -1
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           df -h / | tail -1
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -62,13 +63,22 @@ jobs:
           git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
           git checkout -q "augur@$TO"
           # The test script and Trivy's exceptions are this workflow's, so an older release is tested the same way.
-          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh .trivyignore
+          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-browser-check.mjs .trivyignore
         env:
           TO: ${{ steps.releases.outputs.to }}
       - name: A fresh server
         run: infra/deploy-test.sh fresh
         env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}
+          BROWSER_CHECK_OUT: ${{ runner.temp }}/browser-check
+      - name: Keep the browser check's screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-check-${{ steps.releases.outputs.to }}
+          path: ${{ runner.temp }}/browser-check
+          retention-days: 14
+          if-no-files-found: ignore
       # The release's images, now pulled, against known vulnerabilities (ADR 0043): a critical one
       # that has a fix fails the test. Accepted ones go in .trivyignore with a reason.
       - name: No critical vulnerabilities with a fix (Trivy)
@@ -89,4 +99,11 @@ jobs:
         run: infra/deploy-test.sh upgrade "$FROM"
         env:
           FROM: ${{ steps.releases.outputs.from }}
+          LOCAL_TAG: ${{ steps.releases.outputs.to }}
+      # The release's images are pulled already; this adds the updater's. Its watch must see AUGUR
+      # broken on purpose (a part stopped) and well again (docs/deploy-test.md, "Broken on purpose").
+      - name: Broken on purpose, seen by the updater
+        if: ${{ !cancelled() }}
+        run: infra/deploy-test.sh broken
+        env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}

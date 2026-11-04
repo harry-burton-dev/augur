@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Not for you V4 · Four kinds of answer</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: "not for you" depends on what for. Pick the purpose, and every value answers in one of four ways: may, ask someone, only the person it's about, no one can ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.ask{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--ink)}
+.ask b{font-weight:400;color:var(--light)}
+.pills{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.pill{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);font-size:var(--type-meta);color:var(--ink-muted)}
+.pill[aria-pressed="true"]{color:var(--light);border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.body{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:var(--space-6);min-height:0}
+.tbl{display:grid;grid-template-columns:auto minmax(170px,.8fr) minmax(0,1.5fr);align-content:start;overflow:auto}
+.tbl > *{padding:var(--space-2) var(--space-2);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.tbl .k{color:var(--ink-muted)}
+.ans{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);transition:opacity var(--motion-base) var(--ease-standard)}
+.ans > svg{margin-top:2px}
+.ans b{font-weight:400;color:var(--light)}
+.ans .s{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ans[data-a="may"] > svg{color:var(--x-proposed-lit)}
+.ans[data-a="none"] > svg{color:var(--x-proposed-stopped)}
+.ans[data-a="none"] b{color:var(--ink)}
+.swap .ans{opacity:0}
+.legend{display:grid;gap:var(--space-3);align-content:start}
+.lg{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.lg b{font-weight:400;color:var(--light)}
+.lg .n{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);margin-left:var(--space-2)}
+@media (max-width:1400px){.ask{font-size:var(--type-lead);line-height:var(--leading-lead)}.tbl > *{padding:var(--space-1) var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Not for you · V4</b> four kinds of answer: may, ask someone (named), only the person it's about, no one can (and whose policy says so) · CC deed, just-culture reporting (CHIRP), consent receipts</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = DATA.record, me = READERS.kofi;
+const S = { use: 'ops' };
+const PURPOSE = { ops: 'the winter rota review', safety: 'the Marlow Star investigation', report: 'the monthly Pilotage report', appraisal: 'Dafydd’s annual appraisal', model: 'a drafted summary from the assistant', outside: 'a letter to the pilots’ union' };
+function answer(f, u) {
+  const v = viewFact(f, me), lb = L(f.label), w = L(f.label).uses[u];
+  if (v.state === 'hidden') return null;
+  const consent = DATA.consents.find(c => c.facts.includes(f.id));
+  if (consent) return { a: 'person', icon: 'user-round', t: `Only ${P(consent.subject).name} can say yes`, s: `Given by consent to ${P(consent.to).name} for ${consent.purposeNote}. Only he can widen it.` };
+  if (w === 'no') return { a: 'none', icon: 'ban', t: 'No one can grant this', s: `${tpl(POL.clauses[u] || POL.clauses.marking)} To change the rule itself, ${P(POL.owner).name} owns the policy.` };
+  if (v.state === 'unseen') return { a: 'ask', icon: 'hand', t: `Ask ${P(v.ask).name}`, s: `${v.why} The label allows this purpose, so ${first(P(v.ask).name)} can say yes.` };
+  if (w === 'count') return { a: 'count', icon: 'hash', t: `Only as a count`, s: `Over ${POL.minGroup} or more, naming none.` };
+  if (w === 'ask') return { a: 'ask', icon: 'hand', t: `Ask ${P(askFor(lb, u)).name} first`, s: `The label allows it with ${first(P(askFor(lb, u)).name)}’s say-so.` };
+  return { a: 'may', icon: 'check', t: 'You may', s: v.via ? 'Shared with you.' : `It is kept on your floor (${F(f.keptOn).name}).` };
+}
+function render(swap) {
+  const rows = R.facts.map(f => ({ f, a: answer(f, S.use) })).filter(x => x.a);
+  const n = k => rows.filter(x => x.a.a === k).length;
+  $('#app').innerHTML = topHTML(['Data Atlas', R.title, 'Use it for…'], [['1–6', 'a purpose'], ...STD_HINTS], me.person) +
+  `<main class="main"><div class="wrap">
+    <p class="ask">${P(me.person).name} wants to use <b>${R.title}</b> for <b>${PURPOSE[S.use]}</b>.</p>
+    <div class="pills" role="group" aria-label="Purpose">${USE_IDS().map((u, i) => `<button class="pill" aria-pressed="${S.use === u}" data-u="${u}">${I(US(u).icon, 14)} ${i + 1} · ${US(u).word}</button>`).join('')}</div>
+    <div class="body">
+      <div class="tbl ${swap ? 'swap' : ''}" id="tbl">${rows.map(({ f, a }) => `<span>${whyBtn(f.label, pmHTML(f.label))}</span><span class="k">${f.k}</span><span class="ans" data-a="${a.a}">${I(a.icon, 16)}<b>${a.t}</b><span class="s">${a.s}</span></span>`).join('')}</div>
+      <aside class="legend"><p class="eyebrow">Four kinds of answer</p>
+        <p class="sub">“Not for you” is never one thing. It depends on what you want it for, and the answer always says who, if anyone, can change it.</p>
+        <div class="lg">${I('check', 16)}<span><b>You may.</b><span class="n">${n('may')}</span></span></div>
+        <div class="lg">${I('hash', 16)}<span><b>Only as a count.</b><span class="n">${n('count')}</span></span></div>
+        <div class="lg">${I('hand', 16)}<span><b>Ask someone, by name.</b> The label allows it; one person decides.<span class="n">${n('ask')}</span></span></div>
+        <div class="lg">${I('user-round', 16)}<span><b>Only the person it’s about.</b> Consent can be widened only by the one who gave it.<span class="n">${n('person')}</span></span></div>
+        <div class="lg">${I('ban', 16)}<span><b>No one can.</b> The policy forbids it. The answer names the clause and who owns the policy, so the rule can be argued with, not the clerk.<span class="n">${n('none')}</span></span></div>
+        <p class="who">${I('info', 12)} ${GLOMAR()}</p>
+      </aside>
+    </div>
+  </div></main>`;
+  afterRender();
+  $$('.pill').forEach(b => b.onclick = () => pick(b.dataset.u));
+  if (swap) requestAnimationFrame(() => requestAnimationFrame(() => $('#tbl').classList.remove('swap')));
+}
+function pick(u) { if (u === S.use) return; S.use = u; render(true); }
+function replay() { clearLater(); closeDeed(); S.use = 'ops'; settleIn(); render(); later(() => pick('appraisal'), MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-6]$/.test(e.key)) pick(USE_IDS()[+e.key - 1]);
+});
+replay();
+</script>
+</body>
+</html>

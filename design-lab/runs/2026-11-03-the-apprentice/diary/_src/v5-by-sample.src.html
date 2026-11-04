@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>While you were away · V5 · Signed by sample</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: acceptance sampling. Each batch is a lot; AUGUR draws a sample across issuers and kinds; one wrong sends the batch back ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,var(--measure-decision));gap:var(--space-6)}
+.left{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.lot{display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr);gap:var(--space-4);align-items:start;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.lot.cur{border-color:var(--hairline-strong);background:var(--surface-raised)}
+.lot.signed{border-color:var(--x-proposed-lit)}
+.lot.back{border-color:var(--x-proposed-disagree)}
+.lot h3{margin:0;font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.lot .s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cells{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.cell{position:relative;width:calc(var(--space-6) + var(--space-2));height:var(--space-6);border:1px dotted var(--x-proposed-pencil);border-radius:var(--radius-key);background:var(--x-proposed-pencil-wash);display:flex;flex-direction:column;justify-content:space-between;padding:2px var(--space-1);font-size:var(--x-proposed-type-micro);line-height:1.2;color:var(--ink-muted);overflow:hidden;transition:border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.cell i{position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--iss)}
+.cell b{font-weight:400;color:var(--ink);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell.pick{border:1.5px solid var(--light);background:var(--surface-raised)}
+.cell.ok{border:1px solid var(--x-proposed-lit)}
+.cell.bad{border:1px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash)}
+.cell.ink{border-style:solid;border-color:var(--hairline-strong);background:none}
+.cell.ink b{font-style:normal}
+.keyrow{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted);align-items:center}
+.keyrow span{display:inline-flex;gap:var(--space-2);align-items:center}
+.sw{display:inline-block;width:var(--space-4);height:2px;background:var(--iss)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.check{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-4);display:grid;gap:var(--space-3);background:var(--surface-pane)}
+.check h2{margin:0;font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.quote{font-family:var(--font-mono);font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-2) var(--space-3);border-left:2px solid var(--hairline-strong);color:var(--ink)}
+.prog{display:flex;gap:var(--space-1)}
+.prog i{flex:1;height:var(--space-1);border-radius:1px;background:var(--hairline-strong)}
+.prog i.ok{background:var(--x-proposed-lit)}
+.prog i.bad{background:var(--x-proposed-disagree)}
+.rule-t{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rule-t b{font-weight:400;color:var(--ink)}
+.btns{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.tbl{display:grid;grid-template-columns:repeat(6,auto);gap:2px var(--space-3);justify-content:start;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.tbl b{font-weight:400;color:var(--ink)}
+.tbl .on{color:var(--light)}
+@media (max-width:1400px){.cell{width:var(--space-6);height:calc(var(--space-5) + var(--space-2))}.cell span{display:none}.lot{grid-template-columns:var(--measure-drawer) minmax(0,1fr)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>While you were away · V5</b> signed by sample: a sample drawn across issuers, one wrong sends the batch back · acceptance sampling (ISO 2859)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const AG = 'a1', a = A(AG), M = DATA.batchMix;
+const ISS = ['var(--floor-org-high)', 'var(--floor-department-high)', 'var(--info)', 'var(--ink-muted)'];
+/* build each batch's details from its counts, deterministically */
+const LOTS = D.of('batch', AG).map((b, li) => ({ ...b, items: Array.from({ length: b.n }, (_, k) => {
+  const j = (k * 3 + li * 5) % M.vessels.length;
+  return { v: M.vessels[j], iss: (k + li) % M.issuers.length, det: M.details[(k * 3 + li) % M.details.length] };
+}) }));
+/* the sample: AUGUR walks the lot taking one from each issuer and kind in turn until it has its size from the table */
+const sizeFor = n => DATA.sampleTable.find(r => n <= r.upTo).n;
+function draw(lot) {
+  const want = lot.sample, picked = [], seenI = new Set(), seenD = new Set();
+  for (const pass of [0, 1, 2]) for (let k = 0; k < lot.items.length && picked.length < want; k++) {
+    const it = lot.items[k]; if (picked.includes(k)) continue;
+    if (pass === 0 && (seenI.has(it.iss) || seenD.has(it.det))) continue;
+    if (pass === 1 && seenI.has(it.iss)) continue;
+    picked.push(k); seenI.add(it.iss); seenD.add(it.det);
+  }
+  return picked;
+}
+const S = { lot: 0, drawn: false, done: {}, res: {}, at: 0, bad: false };
+function render() {
+  const lot = LOTS[S.lot], pick = S.drawn ? draw(lot) : [], cur = pick[S.at];
+  const res = S.res[S.lot] || [];
+  const signed = S.done[S.lot] === 'signed', back = S.done[S.lot] === 'back';
+  const it = cur !== undefined ? lot.items[cur] : null;
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Triage', a.name, 'Batches'], [['Y', 'right'], ['N', 'wrong'], ['↓', 'next batch'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="left scroll">
+      <div><p class="eyebrow">${a.name} · ${lvl(a.level)} · ${D.n('batch', AG)} details in ${LOTS.length} batches while you were away</p><h1 class="title">Signed by sample</h1></div>
+      ${LOTS.map((l, li) => { const pk = li === S.lot && S.drawn ? pick : []; const st = S.done[li]; return `<div class="lot dep ${li === S.lot ? 'cur' : ''} ${st === 'signed' ? 'signed' : st === 'back' ? 'back' : ''}" style="--i:${li}">
+        <div><h3>${l.day} · ${l.n} details</h3><p class="s">${l.reports} reports · run ${l.run}<br>${st === 'signed' ? `Signed by ${first(a.supervisor)}: ${l.n} in ink, ${l.sample} checked` : st === 'back' ? 'One wrong in the sample: the whole batch goes back to one by one' : `Check ${l.sample}, from the table`}</p></div>
+        <div class="cells">${l.items.map((x, k) => { const pi = pk.indexOf(k); const r = li === S.lot ? res[pi] : undefined; return `<span class="cell ${pi >= 0 ? 'pick' : ''} ${r === true ? 'ok' : r === false ? 'bad' : ''} ${st === 'signed' ? 'ink' : ''}" style="--iss:${ISS[x.iss]}" title="${x.v}: ${x.det} (${M.issuers[x.iss]})"><i></i><b>${x.v.replace('MV ', '')}</b><span>${x.det.split(' ')[0]}</span></span>`; }).join('')}</div></div>`; }).join('')}
+      <div class="keyrow">${M.issuers.map((m, i) => `<span><i class="sw" style="--iss:${ISS[i]}"></i>${m}</span>`).join('')}<span>${mm(AG)} each cell is one detail in pencil</span></div>
+    </section>
+    <aside class="side">
+      <div class="check">${!S.drawn ? `<p class="eyebrow">${lot.day}’s batch</p><h2>Drawing the sample…</h2>` : signed ? `<p class="eyebrow">${lot.day}’s batch</p><h2>Signed</h2><p class="rule-t">${lot.n} details are ink now. Each keeps ${mm(AG, true)} and says <b>accepted by ${P(a.supervisor).name} in a batch of ${lot.n}, ${lot.sample} checked</b>.</p>${S.lot < LOTS.length - 1 ? `<button class="btn go" data-next>${I('arrow-down', 14)} Next batch <span class="kbd">↓</span></button>` : ''}` : back ? `<p class="eyebrow">${lot.day}’s batch</p><h2>Back to one by one</h2><p class="rule-t">The sample found one wrong, so none of the ${lot.n} goes in on trust. They wait for you one by one, and the wrong one is marked with your reason.</p>` : `
+        <p class="eyebrow">${lot.day}’s batch · sample ${S.at + 1} of ${lot.sample}</p>
+        <div class="prog">${pick.map((_, i) => `<i class="${res[i] === true ? 'ok' : res[i] === false ? 'bad' : ''}"></i>`).join('')}</div>
+        <h2>${it.v}</h2>
+        <p class="pencil" style="padding:var(--space-2) var(--space-3)"><span class="muted">${it.det}</span> · <span class="pen">${it.det === 'Gross tonnage' ? '3,' + (100 + cur * 37) : it.det === 'Built' ? 2000 + (cur % 20) : it.det === 'Class' ? M.issuers[it.iss] : it.det === 'Owner' ? it.v.replace('MV ', '') + ' Shipping Ltd' : (10 + cur % 18) + ' Mar 2027'}</span> ${mm(AG)}</p>
+        <p class="quote">${M.issuers[it.iss]} survey, page ${1 + cur % 3}</p>
+        <div class="btns"><button class="btn go" data-y>${I('check', 14)} Right <span class="kbd">Y</span></button><button class="btn" data-n>${I('x', 14)} Wrong <span class="kbd">N</span></button></div>`}
+      </div>
+      <p class="rule-t"><b>How the sample is drawn.</b> The size comes from a fixed table, by batch size. AUGUR takes one from each issuer and each kind of detail first, then fills up, so no source is left out of the check by chance.</p>
+      <div class="tbl">${DATA.sampleTable.map(r => `<span class="${sizeFor(lot.n) === r.n ? 'on' : ''}">≤${r.upTo}: <b>${r.n}</b></span>`).join('')}</div>
+      <p class="rule-t"><b>Accept on zero.</b> All right: the batch is signed with one name. One wrong: the batch goes back to one by one. Signing records the sample with every detail, so a later mistake shows which sample let it through.</p>
+      <p class="tk">ISO 2859 style table, acceptance number 0 · stratified by issuer and detail kind · Triage batch accept with sample ids</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-y]') && ($('[data-y]').onclick = () => mark(true));
+  $('[data-n]') && ($('[data-n]').onclick = () => mark(false));
+  $('[data-next]') && ($('[data-next]').onclick = next);
+}
+function mark(ok) {
+  const lot = LOTS[S.lot]; if (!S.drawn || S.done[S.lot]) return;
+  (S.res[S.lot] = S.res[S.lot] || [])[S.at] = ok;
+  if (!ok) { S.done[S.lot] = 'back'; } else if (S.at + 1 >= lot.sample) { S.done[S.lot] = 'signed'; } else S.at++;
+  render();
+}
+function next() { if (S.lot < LOTS.length - 1) { S.lot++; S.at = 0; S.drawn = false; render(); later(() => { S.drawn = true; render(); }, ms('--motion-calm')); } }
+function replay() {
+  clearLater(); Object.assign(S, { lot: 0, drawn: false, done: {}, res: {}, at: 0 }); settle(); render();
+  /* the moment: the sample is drawn across the batch, then the first two checks pass */
+  later(() => { S.drawn = true; render(); }, MOMENT());
+  later(() => mark(true), MOMENT() + ms('--motion-run'));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  const k = e.key.toLowerCase();
+  if (k === 'y') mark(true); else if (k === 'n') mark(false); else if (e.key === 'ArrowDown') { e.preventDefault(); next(); }
+});
+replay();
+</script>
+</body>
+</html>

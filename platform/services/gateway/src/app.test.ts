@@ -210,7 +210,7 @@ describe('gateway', () => {
     it('refuses a body past the app’s limit before sending it on', async () => {
       const res = await upload(await gateway(), 'folio', Buffer.alloc(2 * MB + 1));
       expect(res.statusCode).toBe(413);
-      expect(res.json()).toEqual({ error: 'too_large', message: 'This is more than folio takes at once (2 MB).' });
+      expect(res.json()).toMatchObject({ error: 'too_large', message: 'This is more than folio takes at once (2 MB).' });
     });
 
     it('cuts off a streamed body once it passes the limit', async () => {
@@ -445,6 +445,16 @@ describe('gateway', () => {
       ['gateway', 'up', expect.any(String)],
       ['registry', 'up', '0.4.0'],
     ]);
+  });
+
+  it('says whether sample data may be seeded here, and is off unless the deployment allows it', async () => {
+    const ask = async (seedAllowed?: boolean) => {
+      const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }), ...(seedAllowed === undefined ? {} : { seedAllowed }) });
+      return (await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${await sign(ada)}` } })).json().seeding;
+    };
+    expect(await ask(true)).toEqual({ allowed: true });
+    expect(await ask(false)).toMatchObject({ allowed: false, whoCanChange: expect.stringContaining('SEED_ALLOWED') });
+    expect((await ask()).allowed).toBe(false);
   });
 
   it('keeps the platform’s status from people who aren’t admins, and from nobody signed in', async () => {

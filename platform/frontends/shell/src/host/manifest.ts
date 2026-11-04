@@ -30,9 +30,9 @@ export async function loadManifest(fetchImpl: typeof fetch, url: string, token: 
  */
 export const incompatibility = (app: AppManifestEntry, sdkVersion = SDK_VERSION): string | undefined => {
   const range = typeof app.sdk === 'string' ? semver.validRange(app.sdk) : null;
-  if (!range) return `${app.name} doesn't say which versions of the platform it works with, so it can't be opened. Its team needs to release it again.`;
+  if (!range) return `${app.name} doesn't say which versions of AUGUR it works with, so it can't be opened. Its team needs to release it again.`;
   if (semver.satisfies(sdkVersion, range, { includePrerelease: true })) return undefined;
   return semver.gtr(sdkVersion, range)
-    ? `${app.name} was made for an older version of the platform and hasn't been updated yet. Its team needs to release a version for this one.`
-    : `${app.name} needs a newer version of the platform than this one. Ask an admin to update the platform.`;
+    ? `${app.name} was made for an older version of AUGUR and hasn't been updated yet. Its team needs to release a version for this one.`
+    : `${app.name} needs a newer version of AUGUR than this one. Ask an admin to upgrade AUGUR.`;
 };

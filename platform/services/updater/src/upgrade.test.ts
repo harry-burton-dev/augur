@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { lookAfterWatch, runUpgrade, Withdrawn, type Report, type Server, type Target } from './upgrade.ts';
+import { checkOnce, lookAfterWatch, runUpgrade, Withdrawn, type Report, type Server, type Target } from './upgrade.ts';
 
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const image = (service: string, digest: string) => `ghcr.io/o/r/${service}@sha256:${digest}`;
@@ -339,3 +339,33 @@ describe('the watch after an upgrade (ADR 0020)', () => {
   });
 });
 
+describe('one look on demand (node dist/index.js check)', () => {
+  const parts = ['storage', 'identity', 'registry', 'folio', 'folio-worker', 'web'];
+
+  it('passes when sign-in works, every part answers and AUGUR’s calls succeed, and says what it looked at', async () => {
+    const result = await checkOnce(fakeServer().server, parts);
+    expect(result).toEqual({ ok: true, checked: { signIn: true, parts, calls: { minutes: 10, requests: 100, serverErrors: 0 } }, problems: [] });
+  });
+
+  it('fails and names each part that doesn’t answer, sign-in that doesn’t work and calls that fail', async () => {
+    const fake = fakeServer({ signIn: true, errors: true, storage: true });
+    fake.setEnv('PLATFORM_VERSION=0.3.0\n');
+    const server = { ...fake.server, health: async (service: string) => (service === 'identity' ? Promise.reject(new Error('connect ECONNREFUSED')) : { version: '1' }) };
+    const result = await checkOnce(server, parts);
+    expect(result.ok).toBe(false);
+    expect(result.problems).toEqual([
+      'Signing in doesn’t work: the sign-in service answered 503.',
+      '10 of the 100 calls to AUGUR’s services in the last 10 minutes failed, more than 5%.',
+      'storage stopped with an error (exit code 1); its logs say why.',
+      'identity doesn’t answer.',
+    ]);
+  });
+
+  it('counts a worker that stopped, and doesn’t judge errors when the gateway can’t say', async () => {
+    const fake = fakeServer({ worker: true });
+    fake.setEnv('PLATFORM_VERSION=0.3.0\n');
+    const result = await checkOnce({ ...fake.server, traffic: async () => undefined }, parts);
+    expect(result.checked.calls).toBeNull();
+    expect(result.problems).toEqual(['folio-worker stopped (exit code 1); its logs say why.']);
+  });
+});

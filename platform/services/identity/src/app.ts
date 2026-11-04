@@ -1,5 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, serviceLogging, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
+import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, problemDetails, serviceFastifyOptions, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
@@ -62,7 +62,8 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  */
 export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit, verifyService, callers, grants }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
-  const app = Fastify({ ...serviceLogging(), ajv: { customOptions: { removeAdditional: false } } });
+  const app = Fastify(serviceFastifyOptions());
+  await app.register(problemDetails());
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', async () => health('identity', version, API_VERSION));
@@ -74,7 +75,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       const platformOnly = async (req: FastifyRequest, reply: FastifyReply) => {
         try {
           if ((await identifyService(req.headers, verifyService))?.kind === 'platform') return true;
-          void reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can look floors up.' });
+          void reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can look floors up.' });
         } catch (err) {
           if (!(err instanceof ServiceAuthUnavailable)) throw err;
           void reply.code(503).send({ error: 'unavailable', message: err.message });
