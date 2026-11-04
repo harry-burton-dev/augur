@@ -1,0 +1,10 @@
+# Loads AUGUR's dashboards (ADR 0059) from the folder compose mounts them in, into the AUGUR folder.
+apiVersion: 1
+providers:
+  - name: augur
+    folder: AUGUR
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /otel-lgtm/augur-dashboards

@@ -93,7 +93,7 @@ if (!knownTimeZone(timeZone)) throw new Error(`DEPLOYMENT_TIME_ZONE is a time zo
 const portalUrl = process.env.PORTAL_URL?.replace(/\/+$/, '') || undefined;
 if (portalUrl && !/^https?:\/\//.test(portalUrl)) throw new Error('PORTAL_URL is an http(s) address.');
 updates.start();
-// What this deployment runs, signed and sent to Backstage after each change and once a day (ADR 0019).
+// What this deployment runs, signed and sent to Backstage after each change and every 15 minutes (ADRs 0019, 0059).
 const reporting = reportingFrom(process.env);
 
 // Live on the workbench loads apps only from machines on the workbench's own tailnet, the one in PLATFORM_URL.

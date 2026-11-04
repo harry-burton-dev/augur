@@ -1,0 +1,145 @@
+# AUGUR's alert rules (ADR 0059, alpha goal 23), provisioned into the observability profile's Grafana
+# (otel-lgtm). They read what the gateway records (docs/observability.md, "What the alert rules read")
+# and the shell's browser errors. Grafana evaluates them every 30 seconds, outside the gateway, the
+# notices and the mail path, so it still reports when those are down. Where they go: contact-points.yaml.
+#
+# A deployment that wants other thresholds edits its copy of this file; nothing in the code holds them.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: augur
+    folder: AUGUR
+    interval: 30s
+    rules:
+      # A part down for two health checks in a row. The gateway checks every 30 seconds and reports nothing
+      # for a part until its first check, so a start never fires this. No data at all means the gateway
+      # itself isn't reporting: that fires too.
+      - uid: augur-part-down
+        title: A part of AUGUR is down
+        condition: C
+        for: 1m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: '{{ if $labels.component }}{{ $labels.component }} isn’t answering{{ else }}Nothing is heard from the gateway{{ end }}'
+          description: '{{ if $labels.component }}{{ $labels.component }} ({{ $labels.kind }}) has failed its health checks for at least a minute.{{ else }}The gateway hasn’t reported its health checks: it may be down, or the collector may not be taking its metrics.{{ end }} Admin → Status shows each part.'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 120, to: 0 }
+            model:
+              refId: A
+              expr: min by (component, kind) (min_over_time(augur_component_up[1m]))
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      # Server errors (5xx) above 5% of at least 50 calls over 5 minutes, for AUGUR's own services and for
+      # apps apart: an app failing mustn't read as AUGUR failing.
+      - uid: augur-server-errors
+        title: Many calls are failing
+        condition: D
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: '{{ if eq $labels.part "apps" }}Apps’{{ else }}AUGUR’s{{ end }} calls are failing'
+          description: 'More than 5% of at least 50 calls to {{ if eq $labels.part "apps" }}apps{{ else }}AUGUR’s own services{{ end }} answered with a server error in the last 5 minutes.'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: sum by (part) (increase(augur_gateway_requests_total{status_class="5xx"}[5m]))
+              instant: true
+          - refId: B
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: B
+              expr: sum by (part) (increase(augur_gateway_requests_total[5m]))
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: math
+              expression: '($B >= 50) * ($A / $B)'
+          - refId: D
+            datasourceUid: __expr__
+            model:
+              refId: D
+              type: threshold
+              expression: C
+              conditions:
+                - evaluator: { type: gt, params: [0.05] }
+
+      # Errors thrown in people's browsers, from the shell's Faro (ADR 0059): more than 20 in 15 minutes.
+      - uid: augur-browser-errors
+        title: Errors in people’s browsers
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warn
+        annotations:
+          summary: 'People’s browsers are reporting errors'
+          description: '{{ $values.A.Value }} errors from the shell and its apps in the last 15 minutes. In Grafana: Explore, Loki, {service_name="augur-browser"}; each says its app.'
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange: { from: 900, to: 0 }
+            model:
+              refId: A
+              expr: sum(count_over_time({service_name="augur-browser"} | exception_type != "" [15m]))
+              queryType: instant
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [20] }
+
+      # Backups or the restore test can't be relied on, as the gateway reads the backup container's
+      # results (BACKUP_DIR). No data means the gateway isn't told where backups are: Status says so.
+      - uid: augur-backups
+        title: Backups can’t be relied on
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: 'Backups can’t be relied on'
+          description: 'The last backup or restore test failed, or none has run for too long. Admin → Status says which and why.'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: min(augur_backup_ok)
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }

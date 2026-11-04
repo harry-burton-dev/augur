@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.31.0
+  version: 1.32.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -1160,7 +1160,7 @@ components:
               enum:
                 - started
                 - changed
-                - daily
+                - heartbeat
                 - export
             ok:
               type: boolean
