@@ -483,7 +483,7 @@ export class AdminApi {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
-      throw new Error('The platform can’t be reached. Check your connection; nothing was changed.');
+      throw new Error('AUGUR can’t be reached. Check your connection; nothing was changed.');
     }
     if (res.status === 204) return undefined as T;
     const data = (await res.json().catch(() => ({}))) as T & { message?: string };

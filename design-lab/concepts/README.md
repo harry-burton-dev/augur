@@ -55,20 +55,20 @@ app pattern took it), **dropped** (say why in the file).
 | [Attention as wear](attention-as-wear.md) | to explore | 2026-11-02-wear-and-time |
 | [Care is scheduled](care-is-scheduled.md) | to explore | batch 3 research |
 | [Changes before they bite](changes-before-they-bite.md) | to explore | 2026-11-02-wear-and-time |
-| [Data wears its label](data-wears-its-label.md) | to explore | batch 3 research |
+| [Data wears its label](data-wears-its-label.md) | explored | batch 3 research |
 | [Earned sound](earned-sound.md) | to explore | 2026-11-03-room-tone |
 | [Feel as a setting](feel-as-a-setting.md) | to explore | 2026-11-03-room-tone |
 | [Hear the reach](hear-the-reach.md) | to explore | 2026-11-03-room-tone |
-| [Mine versus ours](mine-versus-ours.md) | to explore | 2026-11-02-wear-and-time |
-| [One now](one-now.md) | to explore | 2026-11-02-wear-and-time |
+| [Mine versus ours](mine-versus-ours.md) | explored | 2026-11-02-wear-and-time |
+| [One now](one-now.md) | explored | 2026-11-02-wear-and-time |
 | [The past under water](past-under-water.md) | to explore | 2026-11-02-wear-and-time |
 | [Question and answer](question-and-answer.md) | explored | 2026-11-03-room-tone |
-| [The recipe is the record](the-recipe-is-the-record.md) | to explore | batch 3 research |
+| [The recipe is the record](the-recipe-is-the-record.md) | explored | batch 3 research |
 | [The record has edges](the-record-has-edges.md) | to explore | 2026-11-02-wear-and-time |
 | [The shell owns loudness](shell-owns-loudness.md) | explored | 2026-11-03-room-tone |
 | [The signal is the control](the-signal-is-the-control.md) | to explore | 2026-11-03-room-tone |
 | [Subtraction as cue](subtraction-as-cue.md) | to explore | 2026-11-03-room-tone |
-| [Time as an address](time-as-address.md) | to explore | 2026-11-02-wear-and-time |
+| [Time as an address](time-as-address.md) | explored | 2026-11-02-wear-and-time |
 | [Time is matter, light is need](time-is-matter.md) | to explore | 2026-11-02-wear-and-time |
 | [Turn-taking](turn-taking.md) | to explore | 2026-11-03-room-tone |
 | [Visible repair](visible-repair.md) | explored | 2026-11-02-wear-and-time |
@@ -79,6 +79,29 @@ app pattern took it), **dropped** (say why in the file).
 | [News waits for the edition](news-waits-for-the-edition.md) | explored | 2026-11-03-the-switchboard |
 | [Quiet has named keys](quiet-has-named-keys.md) | explored | 2026-11-03-the-switchboard |
 | [Rehearse on last week](rehearse-on-last-week.md) | explored | 2026-11-03-the-switchboard |
+| [Status beside the words](status-beside-the-words.md) | explored | 2026-11-03-the-minute |
+| [Agreed in the room](agreed-in-the-room.md) | explored | 2026-11-03-the-minute |
+| [Decided versus said](decided-versus-said.md) | explored | 2026-11-03-the-minute |
+| [Revisit lines](revisit-lines.md) | explored | 2026-11-03-the-minute |
+| [The wake](the-wake.md) | explored | 2026-11-03-the-minute |
+| [Said another way](said-another-way.md) | explored | 2026-11-03-the-label |
+| [The strictest part wins, and says so](strictest-wins-and-says-why.md) | explored | 2026-11-03-the-label |
+| [Purpose is the key](purpose-is-the-key.md) | explored | 2026-11-03-the-label |
+| [Four kinds of no](four-kinds-of-no.md) | explored | 2026-11-03-the-label |
+| [Enforce what you can see](enforce-what-you-can-see.md) | explored | 2026-11-03-the-label |
+| [Copies know their source](copies-know-their-source.md) | explored | 2026-11-03-the-label |
+| [The policy is data](the-policy-is-data.md) | explored | 2026-11-03-the-label |
+| [Someone holds it](someone-holds-it.md) | explored | 2026-11-03-paper-and-the-desk |
+| [The readback moves it](the-readback-moves-it.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Say what you sign for](say-what-you-sign-for.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Shared work stays sharp](shared-work-stays-sharp.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Set aside, not flagged](set-aside-not-flagged.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Room you can see](room-you-can-see.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Status is a mark](status-is-a-mark.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Raw and kept](raw-and-kept.md) | explored | 2026-11-03-mise-en-place |
+| [Stop, don't guess](stop-dont-guess.md) | explored | 2026-11-03-mise-en-place |
+| [Every answer is a line](every-answer-is-a-line.md) | explored | 2026-11-03-mise-en-place |
+| [Rehearsed to the pass](rehearsed-to-the-pass.md) | explored | 2026-11-03-mise-en-place |
 | [Context is a working set](context-is-a-working-set.md) | to explore | batch 6 research |
 | [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
 | [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |

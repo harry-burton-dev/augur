@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Record V4 · The argument</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: the decision as an argument (Toulmin): grounds, so, unless, since, because of ---- */
+.wrap{position:relative;height:100%;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.8fr) minmax(0,1.15fr);grid-template-rows:auto minmax(0,auto) minmax(0,auto) 1fr;gap:var(--space-5) var(--space-6)}
+.ttl{grid-column:1 / -1;display:flex;align-items:end;justify-content:space-between;gap:var(--space-5)}
+.ttl p.l{max-width:var(--measure-wide);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.box{position:relative;z-index:1;align-self:start;padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline-strong);background:var(--surface-pane);transition:border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.box .k{display:flex;align-items:center;gap:var(--space-2);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);margin-bottom:var(--space-2)}
+.box p,.box li{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.box ul{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1)}
+.box li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2)}
+.box li .v{font-family:var(--font-mono);font-size:var(--type-small);white-space:nowrap}
+.box li .v s{color:var(--ink-muted)}
+.box.claim{border-color:var(--light)}
+.box.claim .res{font-size:var(--type-body);line-height:var(--leading-body)}
+.box.hit{border-color:var(--x-proposed-warn);background:color-mix(in srgb,var(--surface-pane) 80%,var(--x-proposed-warn-wash))}
+.box.hit .k{color:var(--x-proposed-warn)}
+.box .sub{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:var(--space-1)}
+.box .hitx{color:var(--x-proposed-warn)}
+.g{grid-column:1;grid-row:2}.q{grid-column:2;grid-row:2;align-self:center}.c{grid-column:3;grid-row:2}
+.w{grid-column:1;grid-row:3}.r{grid-column:2 / span 2;grid-row:3}
+.b{grid-column:1;grid-row:4}.a{grid-column:3;grid-row:4}
+svg.links{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;overflow:visible}
+svg.links path{fill:none;stroke:var(--hairline-strong);stroke-width:1.25}
+svg.links path.so{stroke:var(--ink-muted)}
+svg.links path.hit{stroke:var(--x-proposed-warn);stroke-dasharray:4 3}
+svg.links text{font:400 var(--x-proposed-type-micro) var(--font-mono);fill:var(--ink-muted);letter-spacing:var(--tracking-caps)}
+.as{display:flex;gap:var(--space-1)}
+.as button{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);padding:2px var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.as button[aria-pressed="true"]{border-color:var(--x-proposed-lit);color:var(--light)}
+@media (max-width:1400px){.wrap{gap:var(--space-4) var(--space-5)}.ttl p.l{display:none}.box{padding:var(--space-2) var(--space-3)}.box .sub{display:none}.box.hit .sub{display:block}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A decision record · V4</b> the argument: grounds, so, since, unless, drawn so you can see which leg gave way · Toulmin’s model of argument</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = Dn('D-118'), MT = meetingOf('D-118');
+const ASAT = [MT.date, '2026-10-20', DATA.today];
+const S = { as: MT.date };
+const ev = id => D.evidence.find(e => e.id === id);
+const nowOf = (e, at) => at === MT.date ? e.then : e.series === 'cost' ? `£${seriesAt('cost', at)}` : e.series === 'overdue' ? `${seriesAt('overdue', at)} of 18` : e.series === 'fitters' ? `${seriesAt('fitters', at)} in post` : e.now;
+/* the rule the argument takes for granted, written down at the table when the reasons were typed */
+const WARRANT = 'If our own fitters inspect for less than a contractor charges, and just as often, running costs fall and no van goes overdue.';
+function render() {
+  const at = S.as, crossed = D.revisitIf.filter(t => t.tripped && le(t.tripped, at)), st = statusAt('D-118', at);
+  const hitR = crossed.length > 0, hitW = seriesAt('overdue', at) > D.revisitIf[0].at;
+  const evRow = id => { const e = ev(id), nv = nowOf(e, at); return `<li><span>${e.label}${e.word ? ` <span class="muted">· ${e.word}</span>` : ''}</span><span class="v">${nv !== e.then ? `<s>${e.then}</s> ${nv}` : e.then}</span></li>`; };
+  $('#app').innerHTML = topHTML(['Mandate', 'Decisions', 'D-118', 'Argument'], [['A', 'as at'], ['T', 'record fields', 'h-t'], ['R', 'replay']], { as: at }) +
+    `<main class="main"><div class="wrap" id="map">
+    <div class="ttl"><div><p class="eyebrow">${did('D-118')} ${stHTML(st)}</p><p class="h1" style="margin-top:var(--space-1)">The argument</p></div><p class="l">Every decision is an argument: these facts, so this, since a rule we take for granted, unless something we assumed fails. Drawn this way, a reader sees which leg gave way, not only that the decision was reversed.</p>
+      <span class="as">${ASAT.map(d => `<button data-d="${d}" aria-pressed="${d === at}">${d === DATA.today ? 'today' : dt(d, 'short')}</button>`).join('')}</span></div>
+    <div class="box g dep" id="g" style="--i:1"><p class="k">${I('database', 14)} Grounds · the facts</p><ul>${['e1', 'e2', 'e6'].map(evRow).join('')}</ul></div>
+    <div class="box q dep" id="q" style="--i:2"><p class="k">${I('scale', 14)} So, probably</p><p>“${D.amendment.text}”</p><p class="sub">${Kd(D.kind).name} asks for <b class="lite" style="font-weight:400">${Kd(D.kind).bar}</b> or surer. Its weakest fact is “${ev('e2').label.toLowerCase()}”: ${ev('e2').word}.</p></div>
+    <div class="box claim c dep" id="c" style="--i:3"><p class="k">${I('stamp', 14)} Decided</p><p class="res">${D.plain}</p></div>
+    <div class="box w dep ${hitW ? 'hit' : ''}" id="w" style="--i:4"><p class="k">${I('link', 14)} Since · the rule it takes for granted</p><p>${WARRANT}</p>${hitW ? `<p class="sub hitx">Half of it failed: ${nowOf(ev('e4'), at)} vans are overdue, so “just as often” did not hold.</p>` : `<p class="sub">Nobody argued with this at the table. That is why it is written down.</p>`}</div>
+    <div class="box r dep ${hitR ? 'hit' : ''}" id="r" style="--i:5"><p class="k">${I('eye', 14)} Unless · what would undo it</p><ul>
+      <li><span>Assumed: ${ev('e3').label.toLowerCase()}</span><span class="v ${at !== MT.date ? 'hitx' : ''}">${at === MT.date ? 'assumed' : nowOf(ev('e3'), at)}</span></li>
+      ${D.revisitIf.map(t => { const x = t.tripped && le(t.tripped, at); return `<li><span>${t.text}</span><span class="v ${x ? 'hitx' : 'muted'}">${x ? 'crossed ' + dt(t.tripped, 'short') : 'watched'}</span></li>`; }).join('')}</ul></div>
+    <div class="box b dep" id="b" style="--i:6"><p class="k">${I('landmark', 14)} Because of · what the rule rests on</p><ul><li><span>Intent M-42: ${intentT('M-42')}</span><span class="v">Mandate</span></li><li><span>${did('D-097')} ${Dn('D-097').title}</span><span class="v">${dt(meetingOf('D-097').date, 'short')}</span></li></ul></div>
+    <div class="box a dep" id="a" style="--i:7"><p class="k">${I('circle-dot', 14)} So we will</p><ul>${D.actions.map(a => { const s = actionAt(a, at); return `<li><span>${amHTML(s.shown, 14)} ${Ac(a).text}</span><span class="v">${who(Ac(a).owner, { initials: true })}</span></li>`; }).join('')}</ul></div>
+    <svg class="links" id="links" aria-hidden="true"></svg>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.as button').forEach(b => b.onclick = () => { S.as = b.dataset.d; render(); });
+  requestAnimationFrame(() => links(hitR, hitW));
+}
+/* connectors drawn from the boxes' real positions */
+function links(hitR, hitW) {
+  const m = $('#map').getBoundingClientRect(), r = id => { const b = $('#' + id).getBoundingClientRect(); return { l: b.left - m.left, r: b.right - m.left, t: b.top - m.top, b: b.bottom - m.top, cx: (b.left + b.right) / 2 - m.left, cy: (b.top + b.bottom) / 2 - m.top }; };
+  const g = r('g'), q = r('q'), c = r('c'), w = r('w'), rr = r('r'), b = r('b'), a = r('a');
+  const p = [];
+  p.push(`<path class="so" d="M${g.r},${g.cy} L${q.l},${q.cy}"/><text x="${(g.r + q.l) / 2 - 8}" y="${g.cy - 6}">SO</text>`);
+  p.push(`<path class="so" d="M${q.r},${q.cy} L${c.l},${c.cy}"/>`);
+  p.push(`<path class="${hitW ? 'hit' : ''}" d="M${w.cx},${w.t} L${w.cx},${g.b}"/><text x="${w.cx + 6}" y="${(w.t + g.b) / 2 + 4}">SINCE</text>`);
+  p.push(`<path class="${hitR ? 'hit' : ''}" d="M${rr.cx},${rr.t} L${rr.cx},${q.b}"/><text x="${rr.cx + 6}" y="${(rr.t + q.b) / 2 + 4}">UNLESS</text>`);
+  p.push(`<path d="M${b.cx},${b.t} L${b.cx},${w.b}"/><text x="${b.cx + 6}" y="${(b.t + w.b) / 2 + 4}">BECAUSE OF</text>`);
+  p.push(`<path class="so" d="M${a.cx},${a.t} L${a.cx},${rr.b}"/>`);
+  $('#links').innerHTML = p.join('');
+}
+addEventListener('resize', () => render());
+function replay() {
+  clearLater(); S.as = MT.date; render(); settle();
+  /* the moment: the same argument read on 20 Oct. The legs that gave way turn to warning edges */
+  later(() => { S.as = '2026-10-20'; render(); }, MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key.toLowerCase() === 'a') { S.as = ASAT[(ASAT.indexOf(S.as) + 1) % ASAT.length]; render(); }
+});
+replay();
+</script>
+</body>
+</html>

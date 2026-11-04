@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Sharing V4 · Reach ruler</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: reach as a ruler. Audience size on one scale, floors as bands, and each paragraph's limit drawn on it before you choose ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-5)}
+.ruler{position:relative;height:calc(var(--space-8) + var(--space-5));margin:0 var(--space-5)}
+.track{position:absolute;left:0;right:0;top:var(--space-6);height:var(--space-2);border-radius:var(--radius-pill);background:var(--hairline)}
+.band{position:absolute;top:var(--space-6);height:var(--space-2);background:var(--fc);opacity:.55;border-radius:1px}
+.bandn{position:absolute;top:calc(var(--space-6) + var(--space-3));font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--fc)}
+.lim{position:absolute;top:var(--space-4);bottom:var(--space-4);border-left:2px solid var(--x-proposed-stopped)}
+.lim span{position:absolute;bottom:calc(100% + 2px);left:calc(var(--space-2) * -1);white-space:nowrap;font-size:var(--x-proposed-type-micro);color:var(--x-proposed-stopped)}
+.beyond{position:absolute;top:calc(var(--space-6) - var(--space-1));height:var(--space-4);background:var(--x-proposed-unseen);opacity:.7}
+.mark{position:absolute;top:calc(var(--space-6) - var(--space-3));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:var(--space-1)}
+.mark i{display:block;width:1px;height:var(--space-6);background:var(--hairline-strong)}
+.mark span{font-size:var(--x-proposed-type-micro);color:var(--ink-muted);white-space:nowrap}
+.knob{position:absolute;top:calc(var(--space-6) - var(--space-3));width:var(--space-5);height:calc(var(--space-5) + var(--space-3));margin-left:calc(var(--space-5) / -2);border-radius:var(--radius-key);border:1px solid var(--x-proposed-lit);background:var(--surface-overlay);box-shadow:0 0 var(--glow-blur) var(--x-proposed-lit-wash);transition:left var(--motion-calm) var(--ease-out)}
+.knob span{position:absolute;top:calc(100% + var(--space-5));left:50%;transform:translateX(-50%);white-space:nowrap;font:400 var(--type-meta)/1 var(--font-mono);color:var(--light)}
+.paras{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-3);align-content:start}
+.pa{display:grid;gap:var(--space-2);align-content:start;padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);transition:opacity var(--motion-base) var(--ease-standard),border-color var(--motion-base) var(--ease-standard)}
+.pa .lim-t{color:var(--ink-muted)}
+.pa.off{opacity:var(--x-proposed-quiet);border-color:var(--x-proposed-stopped);border-style:dashed}
+.pa.off .t{text-decoration:line-through;text-decoration-color:var(--x-proposed-stopped)}
+.picks{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+.picks button{padding:var(--space-1) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.picks button[aria-pressed="true"]{color:var(--light);border-color:var(--x-proposed-lit)}
+@media (max-width:1400px){.paras{gap:var(--space-2)}.pa{padding:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Sharing · V4</b> reach ruler: audience on one scale with the floors as bands; every paragraph's limit is drawn on the ruler before you choose · hear the reach (room tone), slide rules, Isotype scale</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const B = DATA.briefing;
+const S = { t: 't1' };
+/* a log scale from 1 person to the whole org, then one notch for outside */
+const MAXP = F('org').people;
+const pos = n => n == null ? 97 : (Math.log10(Math.max(1, n)) / Math.log10(MAXP) * 88).toFixed(2);
+/* where each paragraph's label stops it: worked out by sending it, notionally, to each target */
+function limitOf(p) {
+  const ordered = [...DATA.targets].sort((a, b) => (a.people ?? 1e9) - (b.people ?? 1e9));
+  let last = null;
+  for (const t of ordered) { const c = shareCheck(t)[B.paras.indexOf(p)]; if (c.v === 'stop') return { at: t, last, why: c.why }; last = t; }
+  return null;
+}
+function render() {
+  const t = TG(S.t), C = shareCheck(t), lb = paperLabel(C);
+  const lims = B.paras.map(limitOf);
+  const tightest = lims.filter(Boolean).sort((a, b) => (a.at.people ?? 1e9) - (b.at.people ?? 1e9))[0];
+  $('#app').innerHTML = topHTML(['Artifacts', B.title, 'Share'], [['← →', 'reach'], ['1–4', 'a target'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5)"><div><p class="eyebrow">Share ${B.title} · how far?</p><h1 class="title">Reach</h1></div>
+      <div class="picks">${DATA.targets.map((x, i) => `<button aria-pressed="${S.t === x.id}" data-t="${x.id}">${i + 1} · ${tgName(x)}</button>`).join('')}</div></div>
+    <div class="ruler" aria-label="Reach ruler">
+      <span class="track"></span>
+      ${[['pil', 'team'], ['mops', 'department'], ['org', 'org']].map(([f, tier], i, a) => `<span class="band" data-tier="${tier}" style="left:${i ? pos(F(a[i - 1][0]).people) : 0}%;width:calc(${pos(F(f).people)}% - ${i ? pos(F(a[i - 1][0]).people) : 0}%)"></span><span class="bandn" data-tier="${tier}" style="left:${i ? pos(F(a[i - 1][0]).people) : 0}%">${F(f).word} · ${F(f).people}</span>`).join('')}
+      ${lims.map((l, i) => l ? `<span class="lim" style="left:calc((${pos(l.last ? l.last.people : 1)}% + ${pos(l.at.people)}%) / 2);top:calc(var(--space-2) + ${i} * var(--space-1))"><span>${I('ban', 10)} ¶${i + 1}</span></span>` : '').join('')}
+      ${DATA.targets.map(x => `<span class="mark" style="left:${pos(x.people)}%"><i></i><span>${x.kind === 'outside' ? 'Outside' : tgName(x)}</span></span>`).join('')}
+      <span class="knob" id="knob" style="left:${pos(t.people)}%"><span>${t.people ? fmt(t.people) + ' people' : 'outside'}</span></span>
+    </div>
+    <div style="display:grid;gap:var(--space-3);align-content:start;min-height:0">
+      <p class="sub">At ${tgName(t)}, the paper arrives as ${markHTML(lb)} with ${C.filter(c => c.v !== 'stop').length} of ${C.length} paragraphs. Each card says how far its label lets it go.</p>
+      <div class="paras">${C.map((c, i) => { const l = lims[i]; return `<div class="pa ${c.v === 'stop' ? 'off' : ''}">${whyBtn(paraLabel(c.p) === L(c.p.label) ? c.p.label : 'lbOff', pmHTML(paraLabel(c.p)))}<span class="t">${c.p.text}</span><span class="lim-t">${I(l ? 'ruler' : 'infinity', 12)} ${l ? (l.last ? `goes as far as ${tgName(l.last)}` : 'goes nowhere beyond you') + `. ${l.why}` : 'may go anywhere on the ruler, with approval outside.'}</span></div>`; }).join('')}</div>
+    </div>
+  </div></main>`;
+  afterRender();
+  $$('.picks button').forEach(b => b.onclick = () => go(b.dataset.t));
+}
+function go(id) { S.t = id; const k = $('#knob'); if (k && !reduced) { k.style.left = pos(TG(id).people) + '%'; later(render, ms('--motion-calm')); } else render(); }
+function replay() { clearLater(); closeDeed(); S.t = 't1'; settleIn(); render(); later(() => go('t2'), MOMENT() * .8); later(() => go('t3'), MOMENT() + ms('--motion-calm')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-4]$/.test(e.key)) go(DATA.targets[+e.key - 1].id);
+  const ord = [...DATA.targets].sort((a, b) => (a.people ?? 1e9) - (b.people ?? 1e9)).map(x => x.id);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const i = ord.indexOf(S.t); go(ord[Math.max(0, Math.min(ord.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)))]); }
+});
+replay();
+</script>
+</body>
+</html>

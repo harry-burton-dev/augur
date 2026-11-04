@@ -14,3 +14,5 @@ Grown into [six ways to be empty](six-ways-to-be-empty.md) by [`2026-11-03-the-c
 Could steer: A, D.
 
 Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): editions list every source, even at zero.
+
+Used in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a card the round didn't reach says "not checked this round" (board V6).

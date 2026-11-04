@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Grammar V3 · A strip's day</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: marks are additive. one strip through a day: every gesture adds a mark to its back; none replaces another ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-6)}
+.left{display:flex;flex-direction:column;gap:var(--space-4);min-height:0}
+.tl{display:grid;gap:0;align-content:start;position:relative}
+.tl::before{content:"";position:absolute;left:calc(var(--space-7) + var(--space-3) + var(--space-2));top:var(--space-3);bottom:var(--space-3);width:1px;background:var(--hairline-strong)}
+.ev{display:grid;grid-template-columns:calc(var(--space-7) + var(--space-3)) var(--space-5) minmax(0,1fr);gap:var(--space-3);align-items:start;padding:var(--space-2) 0;transition:opacity var(--motion-base) var(--ease-out)}
+.ev .t{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);text-align:right}
+.ev .dot{position:relative;z-index:1;width:var(--space-5);height:var(--space-5);border-radius:var(--radius-pill);background:var(--slate-deep);border:1px solid var(--hairline-strong);display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.ev .w{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.ev .w small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ev.off{opacity:.18}
+.ev.cur .dot{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit)}
+.right{display:flex;flex-direction:column;gap:var(--space-4);min-height:0}
+.back{display:grid;gap:var(--space-2);padding:var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.mk{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-3);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-1) 0;border-bottom:1px dashed var(--hairline)}
+.mk .tm{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.mk.priv{color:var(--ink-muted);font-style:italic}
+.mk.lift{animation:fill var(--motion-calm) var(--ease-out)}
+@keyframes fill{from{background:var(--x-proposed-lit-wash);opacity:0}}
+@media (max-width:1400px){.ev .w small{display:none}.ev{padding:var(--space-1) 0}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V3</b> a strip's day: every gesture adds a mark to the back of the strip, and none replaces another · controllers' strip annotations, the ward day book</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const it = ITEM('M-212');
+/* one strip's day: who did what, in order. each line becomes a mark on the back */
+const DAY = [
+  ['09:55', 'tom', 'hand-helping', 'Offered to Amara Osei', 'Tom is off from tomorrow. Both names on the strip.', 'offered → AO'],
+  ['10:41', 'amara', 'message-square-quote', 'Read back and taken', '“4 of 6 done; A-11 and A-12 left; book both before Fri 13.”', 'taken · readback'],
+  ['11:30', 'amara', 'corner-down-right', 'Cocked: “ask Fran which day suits”', 'Only Amara sees this mark.', 'cocked', true],
+  ['13:05', 'fran', 'eye', 'Pointed out to Fran Doyle', 'It stays Amara’s; Fran sees it on her desk, faint.', 'pointed out → FD'],
+  ['13:20', 'fran', 'sticky-note', 'Note from Fran: “Thursday morning for both”', 'A note is a mark. Anyone who can see the strip can add one.', 'note · FD'],
+  ['14:02', 'amara', 'pen-line', 'Initialled the booking for A-11 and A-12', 'An initial says what it covers: the two bookings, nothing else.', 'initial · bookings'],
+  ['16:40', 'amara', 'corner-down-right', 'Uncocked', 'The cock and its note leave the strip with it. They were never anyone else’s.', 'uncocked', true]
+];
+const S = { n: 3 };
+function render() {
+  $('#app').innerHTML = topHTML(['Design lab', 'Desk language'], [['N', 'next mark'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <section class="left"><div><p class="eyebrow">Desk language · marks are additive</p><h1 class="t" style="margin-top:var(--space-1)">A strip’s day</h1></div>
+        ${stripHTML({ ...it, holder: S.n >= 2 ? 'amara' : 'tom', to: S.n >= 2 ? null : 'amara', cock: null, state: S.n >= 2 ? 'held by Amara Osei' : it.state, line: `${S.n} ${S.n === 1 ? 'mark' : 'marks'} on its back` }, { noCock: true, cocked: S.n >= 3 && S.n < 7, line: S.n >= 3 && S.n < 7 ? '<span class="cockline">cocked: ask Fran which day suits</span>' : undefined })}
+        <div class="tl">${DAY.map(([t, w, ic, h, sm], i) => `<div class="ev ${i >= S.n ? 'off' : ''} ${i === S.n - 1 ? 'cur' : ''}"><span class="t">${t}</span><span class="dot">${I(ic, 12)}</span><span class="w">${h} <span class="muted">· ${P(w).name}</span><small>${sm}</small></span></div>`).join('')}</div></section>
+      <section class="right"><div><p class="eyebrow">The back of the strip · Amara’s copy</p><h2 class="h" style="margin-top:var(--space-1)">${plural(DAY.slice(0, S.n).filter(d => !d[6]).length, 'mark')}, shared, none rubbed out</h2></div>
+        <div class="back">${DAY.slice(0, S.n).map((d, i) => `<div class="mk ${d[6] ? 'priv' : ''} ${i === S.n - 1 ? 'lift' : ''}">${ini(d[1], 'sm')}<span>${d[6] ? 'Only you see this · ' + d[3] : d[3]}</span><span class="tm">${d[0]}</span></div>`).join('')}</div>
+        <div class="panel" style="display:grid;gap:var(--space-2)"><p class="eyebrow">The rules for marks</p>
+          <p class="note">A mark has a name, a time and a kind, and is never edited. To take something back you add a mark that says so.</p>
+          <p class="note">Two marks are private to the person who makes them: a cock and its note. They live on your copy of the strip and leave with it.</p>
+          <p class="note">Marks are shown oldest first, so the back of a strip reads like a story. The front only ever shows the latest state.</p></div>
+      </section></div></main>`;
+  Icons.hydrate($('#app'));
+}
+function next() { if (S.n < DAY.length) { S.n++; render(); } }
+function replay() {
+  clearLater(); S.n = 3; render(); settle();
+  /* the moment: Fran's point-out, note and Amara's initial are added to the back, one after another */
+  [0, 1, 2].forEach(k => later(next, ms('--motion-run') + k * ms('--motion-calm')));
+}
+onKeys({ r: replay, n: next });
+replay();
+</script>
+</body>
+</html>

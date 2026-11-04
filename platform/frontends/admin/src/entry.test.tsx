@@ -169,6 +169,39 @@ describe('People', () => {
     expect(shut(toggle) || toggle.getAttribute('aria-readonly') === 'true' || toggle.hasAttribute('disabled')).toBe(true);
     expect(document.querySelector('.augur-dialog')!.textContent).toContain('You can’t turn off your own sign-in.');
   });
+
+  it('keeps what acts at once apart from Save, and asks before turning a sign-in off or giving a new password', async () => {
+    const samOn = { ...sam, enabled: true };
+    const { sent } = gateway((method, url, body) => {
+      if (url === '/api/identity/v1/admin/people' && method === 'GET') return Response.json([alex, samOn]);
+      if (url === '/api/identity/v1/admin/people/u-2' && method === 'PATCH') return Response.json({ ...samOn, ...(body as object) });
+      if (url === '/api/identity/v1/admin/people/u-2/password') return Response.json({ temporaryPassword: 'pppp-qqqq-pppp' });
+      return undefined;
+    });
+    const el = await open('/people');
+    await openRow(el, 'Sam Okafor');
+    const live = document.querySelector('[data-live]')!;
+    expect(live.textContent).toContain('Takes effect at once');
+    expect(document.querySelector('.augur-dialog-fields')!.textContent).toContain('Nothing here changes until you press Save.');
+    expect(live.closest('.augur-dialog-fields')).toBeNull();
+
+    // Turning off asks first, and nothing is sent until the admin says yes.
+    await press(live.querySelector('[role="switch"], input[type="checkbox"]'));
+    expect(sent.some((c) => c.method === 'PATCH')).toBe(false);
+    expect(document.body.textContent).toContain('Turn off their sign-in?');
+    await press(button('Turn off'));
+    expect(sent.find((c) => c.method === 'PATCH')!.body).toEqual({ enabled: false });
+    expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/Sign-in turned off/);
+
+    // A new password asks first too, then shows it once and says what happened.
+    await press(button('Give them a new one-time password'));
+    expect(sent.some((c) => c.url.endsWith('/u-2/password'))).toBe(false);
+    await press(button('Give a new password'));
+    expect(sent.some((c) => c.url.endsWith('/u-2/password'))).toBe(true);
+    expect(document.querySelector('[data-password]')!.textContent!.trim()).toBe('pppp-qqqq-pppp');
+    await press(button('Done'));
+    expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/New one-time password given/);
+  });
 });
 
 describe('Departments', () => {

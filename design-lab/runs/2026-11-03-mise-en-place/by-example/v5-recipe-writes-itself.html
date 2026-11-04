@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · By example V5 · The recipe writes itself</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens. All are mixes of kit tokens; listed as
+   "needs token" in notes.md. Marks carried from earlier runs,
+   then this run's own (raw, kept, seam, set aside, stop).
+   --------------------------------------------------------------- */
+:root{
+  /* six ways to be empty (catalogue run): corner ticks for not known yet */
+  --x-proposed-gap-ink: color-mix(in srgb, var(--ink-muted) 78%, transparent);
+  /* not yours to see: 135 degree hatch */
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  /* sources disagree / a check: a warning-tinted edge, never red */
+  --x-proposed-disagree: color-mix(in srgb, var(--warning) 70%, var(--ink));
+  --x-proposed-disagree-wash: color-mix(in srgb, var(--warning) 7%, transparent);
+  --x-proposed-quiet: .62;
+  --x-proposed-type-micro: .6875rem;
+  /* the lit next step (light language) */
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  /* pencil (reference desk): what a model or a rule proposed, until a person confirms it */
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 70%, transparent);
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--ink) 3%, transparent);
+  /* NEW this run ----------------------------------------------------------- */
+  /* raw: a value as the file holds it, on a faint ruled ground (typewriter on a form) */
+  --x-proposed-raw-ground: color-mix(in srgb, var(--slate-deep) 60%, transparent);
+  /* the seam a recipe line leaves on a value it changed (visible repair): ink, never glow */
+  --x-proposed-seam: color-mix(in srgb, var(--ink-muted) 55%, transparent);
+  /* set aside: a tray, dashed edge and a low wash, kept in view */
+  --x-proposed-aside-edge: color-mix(in srgb, var(--ink-muted) 50%, transparent);
+  --x-proposed-aside-wash: color-mix(in srgb, var(--ink-muted) 6%, transparent);
+  /* stop (jidoka andon): the line stopped and asks; warning, with the light that says "needs you" */
+  --x-proposed-stop: color-mix(in srgb, var(--warning) 82%, var(--light));
+  --x-proposed-stop-wash: color-mix(in srgb, var(--warning) 10%, transparent);
+  /* the pass: the plate rail's edge */
+  --x-proposed-pass-edge: color-mix(in srgb, var(--light) 40%, transparent);
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.eyebrow{display:flex;align-items:center;gap:var(--space-2);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--ink-muted)}
+.lite{color:var(--light)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hints .on{color:var(--x-proposed-lit)}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+
+/* floors */
+[data-tier="department"]{--fc:var(--floor-department-high);--fl:var(--floor-department-low)}
+[data-tier="team"]{--fc:var(--floor-team-high);--fl:var(--floor-team-low)}
+[data-tier="org"]{--fc:var(--floor-org-high);--fl:var(--floor-org-low)}
+[data-tier="you"]{--fc:var(--floor-you-high);--fl:var(--floor-you-low)}
+.fchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-4);height:2px;background:var(--fc);border-radius:1px}
+
+/* two registers: admin words one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:block}
+.tech .tk.inl{display:inline}
+
+/* six ways to be empty: not known yet */
+.mk-gap{display:inline-block;width:var(--space-5);height:var(--space-4);vertical-align:-3px;
+  --t:var(--space-1);
+  background:
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right top / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) left bottom / 1px var(--t) no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / var(--t) 1px no-repeat,
+    linear-gradient(var(--x-proposed-gap-ink),var(--x-proposed-gap-ink)) right bottom / 1px var(--t) no-repeat}
+.mk-unseen{display:inline-block;width:var(--space-4);height:var(--space-3);background:var(--x-proposed-unseen);border:1px solid var(--hairline);border-radius:2px;vertical-align:-1px}
+
+/* pencil and ink */
+.pencil{border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3)}
+.pencil .pt{font-style:italic;color:var(--ink)}
+.pencil .pl{display:flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);margin:0 0 var(--space-1)}
+.pencil.inked{border-style:solid;border-color:var(--hairline-strong);background:none}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);white-space:nowrap;transition:background var(--motion-quick) var(--ease-standard),border-color var(--motion-quick) var(--ease-standard)}
+.btn:hover{background:var(--surface-raised)}
+.btn.go{border-color:var(--x-proposed-lit);color:var(--light);background:var(--x-proposed-lit-wash)}
+.btn.sm{height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-3);font-size:var(--type-small)}
+.btn[aria-disabled="true"]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+.btn[aria-pressed="true"]{border-color:var(--light);color:var(--light)}
+
+/* app frame */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.top{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--slate-deep) 70%,transparent);min-width:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0;white-space:nowrap}
+.crumb{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);white-space:nowrap;min-width:0;overflow:hidden}
+.crumb b{font-weight:400;color:var(--light)}
+.crumb svg{opacity:var(--x-proposed-quiet);flex:none}
+.top .hints{margin-left:auto;justify-content:flex-end}
+.main{min-height:0;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-2));overflow:hidden}
+h1.t,h2.t{margin:0;font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);letter-spacing:var(--tracking-tight);color:var(--light)}
+.lede{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);max-width:72ch}
+
+/* ---------- raw and kept: the run's core grammar ---------- */
+/* raw = as the file holds it: mono, on a ruled ground. kept = as Data Atlas keeps it: Jost, plain */
+.rawv{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink);background:var(--x-proposed-raw-ground);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-1);white-space:pre}
+.rawv .emp{font-style:italic;color:var(--ink-muted)}
+.keptv{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);border-bottom:1px dotted var(--x-proposed-seam);white-space:nowrap}
+.pair{display:inline-flex;align-items:center;gap:var(--space-1);white-space:nowrap}
+.to{display:inline-flex;color:var(--ink-muted)}
+.sno{display:inline-flex;align-items:center;justify-content:center;min-width:var(--space-4);height:var(--space-4);padding:0 2px;border:1px solid var(--x-proposed-seam);border-radius:var(--radius-pill);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);flex:none}
+
+/* ---------- the sheet ---------- */
+.sheet{border-collapse:collapse;font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink);width:100%;table-layout:auto}
+.sheet th,.sheet td{border:1px solid var(--hairline);padding:2px var(--space-2);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:22ch}
+.sheet .ch th{font-weight:400;color:var(--ink-muted);background:var(--surface-inset);text-align:center}
+.sheet .rn{width:var(--space-6);font-weight:400;color:var(--ink-muted);background:var(--surface-inset);text-align:right}
+.sheet td.merged{text-align:center;color:var(--ink-muted);letter-spacing:var(--tracking-soft)}
+.sheet .r-header td{color:var(--light);background:color-mix(in srgb,var(--surface-raised) 60%,transparent)}
+.sheet .rg{font-family:var(--font-sans);color:var(--ink-muted);border-color:transparent;background:none;max-width:none}
+.sheet .rg svg{vertical-align:-2px}
+.sheet tr.dim td{opacity:var(--x-proposed-quiet)}
+.sheet tr.strike td{text-decoration:line-through;text-decoration-color:var(--ink-muted);color:var(--ink-muted)}
+.sheet tr.aside td{background:var(--x-proposed-aside-wash)}
+.sheet tr.aside th.rn{box-shadow:inset 2px 0 0 var(--x-proposed-aside-edge)}
+.sheet tr.stop td{background:var(--x-proposed-stop-wash)}
+.sheet tr.stop th.rn{box-shadow:inset 2px 0 0 var(--x-proposed-stop);color:var(--x-proposed-stop)}
+.sheet td.pr{box-shadow:inset 0 -2px 0 var(--x-proposed-disagree)}
+.sheet td.hit{background:color-mix(in srgb,var(--light) 9%,transparent);color:var(--light)}
+.sheet td.ex{outline:1px solid var(--light);outline-offset:-1px;color:var(--light)}
+.sheet td.pen{font-style:italic;color:var(--ink);background:var(--x-proposed-pencil-wash);box-shadow:inset 0 0 0 1px var(--x-proposed-pencil)}
+.sheet td.ok{color:var(--light);font-family:var(--font-sans)}
+.sheet td.stopc{color:var(--x-proposed-stop);box-shadow:inset 0 0 0 1px var(--x-proposed-stop)}
+.sheet td.lost{color:var(--ink-muted);text-decoration:line-through}
+.sheet tr.on th.rn{color:var(--light)}
+
+/* ---------- the recipe ---------- */
+.recipe{list-style:none;margin:0;padding:0;display:grid;gap:0;counter-reset:none}
+.rl{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto var(--space-4);gap:var(--space-2);align-items:start;padding:var(--space-2) 0;border-top:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.rl:first-child{border-top:0}
+.rl .rn{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);text-align:right}
+.rl .rw{color:var(--ink);min-width:0}
+.rl .rm{color:var(--ink-muted)}
+.rl .rex{display:block;margin-top:2px}
+.rl .rc{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);white-space:nowrap;text-align:right}
+.rl .rs{display:inline-flex;padding-top:2px;color:var(--ink-muted)}
+.rl.st-stop{background:linear-gradient(90deg,var(--x-proposed-stop-wash),transparent)}
+.rl.st-stop .rs,.rl.st-stop .rc{color:var(--x-proposed-stop)}
+.rl.st-check .rs,.rl.st-check .rc{color:var(--x-proposed-disagree)}
+.rl.st-todo .rw{color:var(--ink-muted)}
+.rl.on{box-shadow:inset 2px 0 0 var(--light)}
+.rl.on .rw{color:var(--light)}
+.recipe.tight .rl{padding:var(--space-1) 0}
+.recipe.tight .rex{display:none}
+
+/* ---------- set aside ---------- */
+.tray{border:1px dashed var(--x-proposed-aside-edge);background:var(--x-proposed-aside-wash);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4)}
+.tray ul{list-style:none;margin:var(--space-2) 0 0;padding:0;display:grid;gap:var(--space-2)}
+.tray li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-3);align-items:start;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.tray .tn{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.tray .tw{color:var(--ink);min-width:0}
+.tray .tw small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+
+/* panes */
+.pane{border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);min-height:0}
+.pane > .ph{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--hairline)}
+.pane > .pb{padding:var(--space-3) var(--space-4)}
+.stopbox{border:1px solid var(--x-proposed-stop);background:var(--x-proposed-stop-wash);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4)}
+.stopbox .eyebrow{color:var(--x-proposed-stop)}
+.heard{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--type-small)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-lit)}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant) / 2)}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+.x-cap{max-width:calc(100vw - 2 * var(--edge-tight))}
+
+/* ---- V5: every fix by example writes one line of the recipe, live, with its count, its example and an undo ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(380px,1fr);gap:var(--space-6)}
+.sheetbox{min-height:0;overflow:hidden;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.sheetbox .sheet td,.sheetbox .sheet th{padding:1px var(--space-2)}
+.sheetbox .sheet td.ok{border-bottom:1px dotted var(--x-proposed-seam)}
+.sheetbox .sheet td.ok.fresh{background:color-mix(in srgb,var(--light) 6%,transparent)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.side .recipe{flex:none}
+.rl.fresh{animation:land var(--motion-calm) var(--ease-out)}
+@keyframes land{from{opacity:0;transform:translateX(var(--space-2))}to{opacity:1;transform:none}}
+.rl.undone .rw{text-decoration:line-through;text-decoration-color:var(--ink-muted);color:var(--ink-muted)}
+.rl .u{grid-column:2 / span 3;display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--ink-muted)}
+.todo{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.todo li{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-small);color:var(--ink-muted)}
+.todo .btn{margin-left:auto}
+.side .foot{margin-top:auto;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline-strong);padding-top:var(--space-3)}
+.side .foot b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.sheetbox .sheet{font-size:var(--x-proposed-type-micro)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>By example · V5</b> every fix writes one recipe line, live, with its count, its example and an undo · Power Query's applied steps, Wrangler</div>
+<script>
+/* Sample data. Every name, label, count, file and floor below is deployment data:
+   nothing in the markup or the scripts repeats any of it. Counts on every page are
+   worked out by running the recipe over these lines (lib.js), never typed. */
+const DATA = {
+  org: 'Ridgeway Regional Services',
+  app: 'Data Atlas',
+  bench: 'Bring in',
+  me: 'p1',
+  myFloor: 'department',
+  today: '3 Nov 2026',
+  floors: {
+    org:        { name: 'Ridgeway Regional Services', word: 'Org' },
+    department: { name: 'Fleet and Facilities',       word: 'Department' },
+    team:       { name: 'North depot crew',           word: 'Team' }
+  },
+  floorOrder: ['org', 'department', 'team'],
+  people: {
+    p1: { name: 'Ade Mensah',    role: 'Fleet administrator', floor: 'department' },
+    p2: { name: 'Priya Nair',    role: 'Fleet lead, decides Triage for Fleet and Facilities', floor: 'department' },
+    p3: { name: 'Jo Barnes',     role: 'North depot keeper', floor: 'team' },
+    p4: { name: 'Dana Whitlock', role: 'Contracts manager', floor: 'org' },
+    p5: { name: 'Lena Ortiz',    role: 'Data Atlas admin, decides new words', floor: 'org' },
+    x1: { name: 'Mo Ridley',     role: 'Accounts, Kestrel Fleet Services', floor: null }
+  },
+  firm: { name: 'Kestrel Fleet Services', short: 'Kestrel', id: 'O-0031', keptOn: 'org' },
+
+  /* what Data Atlas keeps. plain word first, the admin word under it (T) */
+  kinds: {
+    inspection: { word: 'inspection', tech: 'InspectionEvent', icon: 'clipboard-check',
+      details: [
+        { id: 'van',      word: 'van',           tech: 'ofVehicle',     links: 'van' },
+        { id: 'depot',    word: 'depot',         tech: 'atSite',        links: 'depot' },
+        { id: 'on',       word: 'inspected on',  tech: 'occurredOn' },
+        { id: 'result',   word: 'result',        tech: 'outcome', words: ['passed', 'passed with advisory', 'failed'] },
+        { id: 'odometer', word: 'odometer',      tech: 'odometerMiles', unit: 'miles' },
+        { id: 'by',       word: 'inspected by',  tech: 'performedBy',   links: 'firm' },
+        { id: 'note',     word: 'note',          tech: 'comment' }
+      ],
+      links: [ { id: 'follows', word: 'follows up', tech: 'followsUp' } ] },
+    van:   { word: 'van',   tech: 'Vehicle',      icon: 'truck' },
+    depot: { word: 'depot', tech: 'Site',         icon: 'warehouse' },
+    firm:  { word: 'firm',  tech: 'Organisation', icon: 'building-2' }
+  },
+  /* a word sources asked for, waiting on an admin (the structure predicts its gaps) */
+  asked: [
+    { word: 'kind of visit', on: 'inspection', from: 'Type', values: ['Annual', 'Interim', 'Re-test'], by: 'p1', when: '3 Nov 2026', decides: 'p5' }
+  ],
+  depots: [
+    { id: 'S-N', name: 'North depot',     keptOn: 'department' },
+    { id: 'S-W', name: 'Westfield depot', keptOn: 'department' },
+    { id: 'S-H', name: 'Harbour store',   keptOn: 'department' }
+  ],
+  /* where the vans' kept details came from before any recipe */
+  register: { doc: 'D-1180', name: 'Fleet register 2026', by: 'p2', at: '3 Mar 2026' },
+  /* vans Data Atlas already holds: id, depot, last odometer (miles), last inspected */
+  vans: [
+    ['NV-01','S-N',40310,'14 May 2026'],['NV-02','S-N',37950,'2 Mar 2026'],['NV-03','S-N',51200,'19 May 2026'],
+    ['NV-04','S-N',60880,'28 Feb 2026'],['NV-05','S-N',11720,'22 May 2026'],['NV-06','S-N',11900,'3 Mar 2026'],
+    ['NV-07','S-N',44010,'30 May 2026'],['NV-08','S-N',28700,'7 May 2026'],['NV-09','S-N',35980,'27 Feb 2026'],
+    ['NV-10','S-N',46200,'12 May 2026'],['NV-11','S-N',39400,'1 Mar 2026'],['NV-12','S-N',33100,'15 May 2026'],
+    ['NV-13','S-N',29400,'20 May 2026'],['NV-14','S-N',39050,'6 Mar 2026'],['NV-15','S-N',26600,'2 Jun 2026'],
+    ['NV-16','S-N',44900,'9 Jun 2026'],['NV-17','S-N',31400,'4 Mar 2026'],['NV-18','S-N',52100,'11 Jun 2026'],
+    ['WF-01','S-W',27050,'8 Apr 2026'],['WF-02','S-W',32400,'16 Apr 2026'],['WF-03','S-W',29600,'24 Apr 2026'],
+    ['WF-04','S-W',22310,'5 May 2026'],['WF-05','S-W',23900,'13 May 2026'],['WF-06','S-W',25700,'21 May 2026'],
+    ['WF-07','S-W',29200,'29 May 2026'],['WF-08','S-W',34800,'6 Jun 2026'],
+    ['HB-01','S-H',18020,'10 Apr 2026'],['HB-02','S-H',20450,'18 Apr 2026'],['HB-03','S-H',25010,'26 Apr 2026'],
+    ['HB-04','S-H',18700,'4 May 2026'],['HB-05','S-H',15400,'12 May 2026']
+  ],
+  /* what the model gateway proposes when it is on: always pencil, never counted until a person confirms */
+  model: {
+    links: [
+      { from: 20, to: 7, link: 'follows', why: 'line 20 says “brakes re-test”; line 7 is the same van failing on brakes a week earlier' },
+      { from: 23, to: 22, link: 'note', why: 'its note says “loan van while WF-04 off road”; line 22 is WF-04 failing the same day' }
+    ],
+    spellings: [ { raw: 'W\u2019field', to: 'S-W', why: 'reads as a short form of Westfield' } ]
+  },
+  /* a van is overdue when its last inspection is more than this many months before today */
+  inspectEveryMonths: 6,
+  /* what reading this file will move elsewhere (consequence preview); counts are worked out, not typed */
+  downstream: [
+    { app: 'Artifacts', icon: 'file-text', what: 'Briefing “North depot vans overdue”', owner: 'p3', depot: 'S-N', kind: 'overdue' },
+    { app: 'Mandate', icon: 'target', what: 'Intent “Get North depot vans back in date”', owner: 'p2', depot: 'S-N', kind: 'intent', state: 'off track' },
+    { app: 'Data Atlas', icon: 'binoculars', what: 'Jo Barnes’s watch on overdue vans', owner: 'p3', depot: 'S-N', kind: 'watch' }
+  ],
+
+  /* the files. lines are as the spreadsheet holds them, row 1 first */
+  files: {
+    oct: {
+      name: 'Kestrel_Ridgeway_Oct26_FINAL v2.xlsx', from: 'x1', doc: { id: 'D-2291', library: 'Supplier files', floor: 'department' }, run: { n: 1, at: '3 Nov 2026, 10:44', triage: 'T-0583', decided: '3 Nov 2026, 11:20' }, received: '3 Nov 2026, 08:14', via: 'email to the Fleet and Facilities inbox',
+      month: 'October 2026', sheet: 'Oct', merged: ['A1:G1'], hidden: { cols: 0, lines: 0 }, formulas: 0, comments: [ { cell: 'E32', text: 'excl. duplicates' } ], subject: 'Ridgeway October visits (final v2)',
+      otherSheets: [ { name: 'Rates', lines: 14, what: 'prices per visit, not visits' }, { name: 'Sheet2', lines: 0, what: 'empty' } ],
+      lines: [
+        ['KESTREL FLEET SERVICES · RIDGEWAY ACCOUNT · OCTOBER 2026'],
+        [],
+        ['Reg','Depot','Date','Type','Result','Odometer','Notes'],
+        ['NV-01','North Depot','01/10/2026','Annual','Pass','41,220',''],
+        ['NV-02','North Depot','01/10/2026','Interim','Pass - advisory: tyres','38,904','front nearside 3mm'],
+        ['nv 03','Nth Depot','2026-10-02','Interim','PASS','52,118',''],
+        ['NV-04','North depot (Ridgeway)','02/10/2026','Annual','Fail - brakes','61,402','rear pads; rebooked 9/10'],
+        ['NV05','NORTH','46297','Interim','Pass','12400 mi',''],
+        ['NV-06','North Depot','3 Oct','Annual','pass','c.12k','odo not working'],
+        ['WF-01','Westfield','03/10/2026','Annual','Pass','27,770',''],
+        ['WF-02','W’field','2026-10-06','Interim','Pass (advisory: wipers)','33,050',''],
+        ['wf 03','Westfield Depot','06/10/2026','Interim','Pass','30 112',''],
+        ['NV-07','Ridgeway North','46302','Annual','FAIL','44,890','lights; fixed same day'],
+        ['NV-08','North Depot','07/10/2026','Interim','Pass','29,341',''],
+        [],
+        ['HB-01','Harbour Store','08/10/2026','Annual','Pass','18,560',''],
+        ['HB-02','Harbor store','2026-10-08','Interim','Pass - advisory: wipers','21,004',''],
+        ['HB-02','Harbor store','2026-10-08','Interim','Pass - advisory: wipers','21,004',''],
+        ['NV-09','Nth Depot','09/10/2026','Annual','Pass','36,700',''],
+        ['NV-04','North Depot','9 Oct','Re-test','Pass','61,455','brakes re-test'],
+        ['NV10','NORTH','13/10/2026','Interim','Pass','47,031',''],
+        ['WF-04','Westfield','14/10/2026','Annual','Fail – lights','22,980',''],
+        ['Spare/loan','Westfield','14/10/2026','Interim','Pass','—','loan van while WF-04 off road'],
+        ['WF-09','Westfield','2026-10-15','Annual','Pass','8,412','new to fleet'],
+        ['nv 11','North depot (Ridgeway)','16/10/2026','Interim','Pass','40,118',''],
+        ['HB-03','Harbour Store','20/10/2026','Annual','Pass','25,604',''],
+        ['NV-12','North Depot','21 Oct','Interim','pass','33,980',''],
+        [],
+        ['HB-04','Harbour Store','2026-10-22','Interim','Pass (advisory: tyres)','19,200',''],
+        ['WF-05','W’field','23/10/2026','Annual','Pass','24,450',''],
+        ['NV-13','North Depot','46320','Interim','Pass','30,016',''],
+        ['TOTAL','','','','25 visits','','']
+      ]
+    },
+    nov: {
+      name: 'Kestrel_Ridgeway_Nov26.xlsx', from: 'x1', doc: { id: 'D-2417', library: 'Supplier files', floor: 'department' }, run: { n: 2, at: '2 Dec 2026, 08:20', triage: 'T-0671', decided: '2 Dec 2026, 09:05' }, received: '2 Dec 2026, 07:58', via: 'email to the Fleet and Facilities inbox',
+      month: 'November 2026', sheet: 'Nov', merged: ['A1:H1'], hidden: { cols: 0, lines: 0 }, formulas: 1, comments: [], subject: 'Ridgeway November visits',
+      otherSheets: [ { name: 'Rates', lines: 14, what: 'prices per visit, not visits' } ],
+      lines: [
+        ['KESTREL FLEET SERVICES · RIDGEWAY ACCOUNT · NOVEMBER 2026'],
+        [],
+        ['Technician','Vehicle','Depot','Date','Type','Result','Odometer','Notes'],
+        ['A. Shah','NV-14','North Depot','03/11/2026','Annual','Pass','39,800',''],
+        ['A. Shah','NV-15','Nth Depot','03/11/2026','Interim','Pass','27,115',''],
+        ['R. Cole','nv 16','North Depot','2026-11-04','Annual','Pass - advisory: tyres','45,660',''],
+        ['R. Cole','NV-17','Nrth depot','04/11/2026','Interim','Pass','31,990',''],
+        ['A. Shah','NV-18','NORTH','46335','Annual','Deferred - parts on order','52,704','brake discs on order'],
+        ['R. Cole','WF-06','Westfield','05/11/2026','Annual','Pass','26,300',''],
+        ['R. Cole','WF-07','W’field','05/11/2026','Interim','Pass','29,881',''],
+        ['R. Cole','WF-08','Westfield Depot','2026-11-06','Annual','Fail - lights','35,412',''],
+        ['A. Shah','HB-05','Harbour Store','10/11/2026','Annual','Pass','16,050',''],
+        ['A. Shah','NV-04','North Depot','10/11/2026','Interim','Pass','61,990',''],
+        ['A. Shah','NV-01','North Depot','11 Nov','Interim','PASS','41,980',''],
+        ['R. Cole','WF-09','Westfield','12/11/2026','Interim','Pass','9,960',''],
+        ['R. Cole','WF-08','Westfield','2026-11-13','Re-test','Pass','35,430','lights re-test'],
+        ['A. Shah','NV-02','Nrth depot','17/11/2026','Annual','Pass','39,700',''],
+        ['A. Shah','HB-01','Harbor store','18/11/2026','Interim','Pass','19,104',''],
+        ['A. Shah','NV-06','North Depot','46345','Interim','Pass','12,960','odo replaced Oct'],
+        ['R. Cole','WF-01','Westfield','19/11/2026','Interim','Pass','28,410',''],
+        ['A. Shah','NV-09','North depot (Ridgeway)','20/11/2026','Interim','Deferred - parts on order','37,350','wiper motor on order'],
+        ['A. Shah','NV-03','Nth Depot','24/11/2026','Annual','Pass','53,002',''],
+        ['R. Cole','HB-02','Harbour Store','2026-11-24','Annual','Pass (advisory: tyres)','21,880',''],
+        ['A. Shah','NV-07','North Depot','25/11/2026','Interim','Pass','45,600',''],
+        ['R. Cole','WF-03','Westfield','26/11/2026','Annual','Pass','31,005',''],
+        ['A. Shah','NV-10','NORTH','27/11/2026','Annual','Pass','47,880',''],
+        ['TOTAL','','','','','23 visits','','']
+      ]
+    }
+  },
+
+  /* the recipe as Ade saved it on 3 Nov. op names are the engine's; words are built from them */
+  recipe: {
+    id: 'R-0007', name: 'Kestrel monthly visits', owner: 'p1', saved: '3 Nov 2026, 10:42', version: 1, runs: 1,
+    steps: [
+      { id: 's1',  op: 'skipTop', n: 2 },
+      { id: 's2',  op: 'header', line: 3 },
+      { id: 's3',  op: 'total', first: 'TOTAL' },
+      { id: 's4',  op: 'blank' },
+      { id: 's5',  op: 'copies' },
+      { id: 's6',  op: 'van', col: ['Reg'], example: ['nv 03', 'NV-03'], unreadable: 'aside', by: 'example' },
+      { id: 's7',  op: 'date', col: ['Date'], order: 'day first', year: 2026, example: ['3 Oct', '3 Oct 2026'], by: 'example' },
+      { id: 's8',  op: 'group', col: ['Depot'], near: true, by: 'confirmed',
+        groups: [
+          { to: 'S-N', from: ['North Depot', 'Nth Depot', 'North depot (Ridgeway)', 'NORTH', 'Ridgeway North'] },
+          { to: 'S-W', from: ['Westfield', 'W’field', 'Westfield Depot'] },
+          { to: 'S-H', from: ['Harbour Store', 'Harbor store'] }
+        ] },
+      { id: 's9',  op: 'result', col: ['Result'], example: ['Pass - advisory: tyres', 'passed with advisory · tyres'], by: 'example' },
+      { id: 's10', op: 'miles', col: ['Odometer'], unreadable: 'value', by: 'example', example: ['12400 mi', '12,400'] },
+      { id: 's11', op: 'match', col: ['Reg'], kind: 'van', newOk: true },
+      { id: 's12', op: 'map', kind: 'inspection',
+        cols: { Reg: 'van', Depot: 'depot', Date: 'on', Result: 'result', Odometer: 'odometer', Notes: 'note', Type: 'asked' },
+        firm: true }
+    ]
+  },
+  /* Ade's other saved recipes, for the December home view; each ran on its file's arrival and stopped at the pass */
+  otherRuns: [
+    { recipe: 'Fuel card statement', from: 'Fuelwise', file: 'ridgeway_fuel_2026-11.csv', arrived: '1 Dec 2026, 06:02', land: 212, aside: 0, kind: 'fuel purchase', lines: 12 },
+    { recipe: 'Tyre fitting log', from: 'Roadgrip Tyres', file: 'Roadgrip fittings Nov.xlsx', arrived: '28 Nov 2026, 16:40', land: 9, aside: 1, kind: 'tyre fitting', lines: 9 }
+  ],
+  /* later answers to October's tray, with who and how (a visible repair on the record) */
+  trayAnswers: [
+    { line: 9, van: 'NV-06', detail: 'odometer', value: 12010, how: 'typed from the workshop job card JC-5512, read when the new odometer was fitted', by: 'p1', at: '6 Nov 2026, 14:02', triage: 'T-0601' },
+    { line: 23, how: 'Mo Ridley replied: a hire van, not on our fleet; not a visit we keep', by: 'p1', at: '5 Nov 2026, 09:31', drop: true }
+  ],
+  /* what Priya says at Triage when she holds the new van */
+  triageHold: { by: 'p2', what: 'new', note: 'Is WF-09 on the fleet list yet? Holding it until Dana confirms the lease.', at: '3 Nov 2026, 11:20' },
+  /* the two answers Ade gives in December (next month's file) */
+  december: {
+    today: '2 Dec 2026',
+    rename: { from: 'Reg', to: 'Vehicle' },
+    newWord: { value: 'Deferred - parts on order', choice: 'aside', ask: 'deferred', decides: 'p5' },
+    newCol: { name: 'Technician', choice: 'leave' }
+  }
+};
+
+/* ---- shared helpers and the recipe engine (same in every variant) ---- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const I = (n, size = 16, stroke = 1.5) => Icons.svg(n, { size, stroke });
+const P = id => DATA.people[id];
+const F = id => DATA.floors[id];
+const fmt = n => n == null ? '' : n.toLocaleString('en-GB');
+const plural = (n, one, many) => `${fmt(n)} ${n === 1 ? one : (many || one + 's')}`;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ms = v => parseFloat(css(v)) || 0;
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const COLS = 'ABCDEFGHIJKLMNOP';
+const lc = s => s.charAt(0).toLowerCase() + s.slice(1);
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DEPOT = id => DATA.depots.find(d => d.id === id);
+const KD = id => DATA.kinds.inspection.details.find(d => d.id === id);
+const VAN = id => { const v = DATA.vans.find(x => x[0] === id); return v && { id: v[0], depot: v[1], odo: v[2], last: v[3] }; };
+const STEP = id => DATA.recipe.steps.find(s => s.id === id);
+const FIRM = DATA.firm;
+
+/* ---------- reading values: each returns null when it can't read, never a guess ---------- */
+const RE_VAN = /^\s*([A-Za-z]{2})[\s.\-]*(\d{1,2})\s*$/;
+function readVan(v) { const m = String(v || '').match(RE_VAN); return m ? `${m[1].toUpperCase()}-${m[2].padStart(2, '0')}` : null; }
+function dateShape(v) {
+  v = String(v || '').trim();
+  if (/^\d{5}$/.test(v)) return 'serial';
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v)) return 'd/m/y';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'y-m-d';
+  if (/^\d{1,2}\s+[A-Za-z]{3}$/.test(v)) return 'd Mon';
+  return null;
+}
+const SHAPE_WORD = { serial: 'a spreadsheet day number', 'd/m/y': 'day/month/year', 'y-m-d': 'year-month-day', 'd Mon': 'day and month, no year' };
+function readDate(v, year) {
+  v = String(v || '').trim(); const sh = dateShape(v); let d, m, y;
+  if (sh === 'serial') { const t = new Date(Date.UTC(1899, 11, 30) + (+v) * 864e5); d = t.getUTCDate(); m = t.getUTCMonth(); y = t.getUTCFullYear(); }
+  else if (sh === 'd/m/y') { const p = v.split('/'); d = +p[0]; m = +p[1] - 1; y = +p[2]; }
+  else if (sh === 'y-m-d') { const p = v.split('-'); y = +p[0]; m = +p[1] - 1; d = +p[2]; }
+  else if (sh === 'd Mon') { const p = v.split(/\s+/); d = +p[0]; m = MON.findIndex(x => x.toLowerCase() === p[1].toLowerCase()); y = year; }
+  else return null;
+  return { d, m, y, shape: sh, text: `${d} ${MON[m]} ${y}` };
+}
+function readResult(v) {
+  const s = String(v || '').replace(/[–—]/g, '-').trim();
+  const m = s.match(/^(pass|fail)\b(.*)$/i); if (!m) return null;
+  const rest = m[2].replace(/[()]/g, '').replace(/^\s*-\s*/, '').trim();
+  const adv = /^advisory\b/i.test(rest);
+  const note = rest.replace(/^advisory\s*:?\s*/i, '').trim();
+  return { result: /fail/i.test(m[1]) ? 'failed' : adv ? 'passed with advisory' : 'passed', note };
+}
+function readMiles(v) {
+  const s = String(v || '').replace(/\s*mi(les)?\.?$/i, '').replace(/[,\s]/g, '');
+  return /^\d+$/.test(s) ? +s : null;
+}
+const squash = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+function lev(a, b) { const d = Array.from({ length: a.length + 1 }, (_, i) => [i]); for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; }
+
+/* ---------- a first look at a column, before any recipe: shapes, blanks, distinct values ---------- */
+const shapeOf = v => String(v).trim().replace(/[A-Z]/g, 'A').replace(/[a-z]/g, 'a').replace(/[0-9]/g, '9').replace(/(.)\1+/g, '$1$1').replace(/\s+/g, ' ');
+function dataLinesOf(res) { return res.lines.filter(l => l.n > 3 && l.cells.some(c => String(c || '').trim()) && String(l.cells[0] || '').trim().toUpperCase() !== 'TOTAL'); }
+function profile(res, col) {
+  const i = res.header.indexOf(col), out = { col, i, shapes: {}, blanks: [], values: {}, n: 0 };
+  dataLinesOf(res).forEach(l => { const v = String(l.cells[i] ?? '').trim(); out.n++;
+    if (!v) { out.blanks.push(l.n); return; }
+    const sh = shapeOf(v); (out.shapes[sh] = out.shapes[sh] || { ex: v, lines: [] }).lines.push(l.n);
+    (out.values[v] = out.values[v] || []).push(l.n); });
+  out.ways = Object.keys(out.shapes).length; out.distinct = Object.keys(out.values).length;
+  return out;
+}
+
+/* ---------- the engine: run a recipe over a file. Nothing is dropped: every line ends with a role ---------- */
+/* roles: title, header, blank, total (not records); copy, aside (didn't fit); stop (waiting on a person); land (becomes a record) */
+function run(fileKey, steps = DATA.recipe.steps, answers = {}) {
+  const file = DATA.files[fileKey];
+  const L = file.lines.map((c, i) => ({ n: i + 1, cells: c.slice(), role: null, by: null, why: '' }));
+  const res = { fileKey, file, lines: L, header: [], st: {}, stops: [], recs: [], total: null, leftOut: [], checks: [] };
+  const S = id => res.st[id] || (res.st[id] = { changed: 0, values: [], aside: [], shapes: {}, groups: {}, near: [], stop: null, col: null, found: true });
+  const live = () => L.filter(l => !l.role || l.role === 'land' || l.role === 'stop');
+  const named = st => { const n = [...(st.col || [])]; if (answers.rename && answers.rename[n[0]]) n.push(answers.rename[n[0]]); return n; };
+  const col = st => { for (const n of named(st)) { const i = res.header.indexOf(n); if (i >= 0) return i; } return -1; };
+  const recOf = l => l.rec || (l.rec = { n: l.n, cells: l.cells, v: {}, flags: [] });
+  const stopCol = (st, s) => {
+    const want = named(st)[0];
+    const guess = res.header.map((h, i) => ({ h, i, fit: live().filter(l => st.op === 'van' || st.op === 'match' ? readVan(l.cells[i]) : true).length }))
+      .filter(x => !res.used.has(x.h)).sort((a, b) => b.fit - a.fit)[0];
+    s.found = false;
+    const stop = { step: st.id, kind: 'column', want, guess: guess && guess.h, fit: guess && guess.fit, of: live().length };
+    if (!res.stops.find(x => x.kind === 'column' && x.want === want)) res.stops.push(stop); else stop.also = true;
+    s.stop = stop;
+  };
+  res.used = new Set();
+  for (const st of steps) {
+    const s = S(st.id);
+    if (st.op === 'skipTop') { L.slice(0, st.n).forEach(l => { l.role = 'title'; l.by = st.id; }); s.aside = L.slice(0, st.n).map(l => l.n); }
+    else if (st.op === 'header') { const h = L[st.line - 1]; h.role = 'header'; h.by = st.id; res.header = h.cells.slice(); }
+    else if (st.op === 'total') {
+      live().filter(l => String(l.cells[0] || '').trim().toUpperCase() === st.first).forEach(l => {
+        l.role = 'total'; l.by = st.id; const m = l.cells.join(' ').match(/(\d+)\s+visits/i);
+        res.total = { said: m ? +m[1] : null, line: l.n, text: l.cells.filter(Boolean).join(' · ') }; s.aside.push(l.n);
+      });
+    }
+    else if (st.op === 'blank') live().filter(l => l.cells.every(c => !String(c || '').trim())).forEach(l => { l.role = 'blank'; l.by = st.id; s.aside.push(l.n); });
+    else if (st.op === 'copies') {
+      const seen = {};
+      live().forEach(l => { const k = l.cells.join('␟'); if (seen[k]) { l.role = 'copy'; l.by = st.id; l.of = seen[k]; l.why = `an exact copy of line ${seen[k]}`; s.aside.push(l.n); } else seen[k] = l.n; });
+    }
+    else if (st.op === 'van') {
+      const i = col(st); if (i < 0) { stopCol(st, s); continue; } s.col = res.header[i]; res.used.add(res.header[i]);
+      live().forEach(l => {
+        const raw = l.cells[i], out = readVan(raw);
+        if (!out) {
+          if (st.unreadable === 'aside') { l.role = 'aside'; l.by = st.id; l.why = `“${raw}” isn’t a van number`; s.aside.push(l.n); }
+          else { l.role = 'stop'; l.by = st.id; l.why = `“${raw}” isn’t a van number`; s.stop = s.stop || { step: st.id, kind: 'value', lines: [] }; s.stop.lines.push(l.n); if (!res.stops.includes(s.stop)) res.stops.push(s.stop); }
+          return;
+        }
+        const r = recOf(l); r.v.van = { raw, val: out, col: res.header[i], by: out !== raw ? [st.id] : [] };
+        if (out !== raw) { s.changed++; s.values.push([raw, out, l.n]); }
+      });
+    }
+    else if (st.op === 'date') {
+      const i = col(st); if (i < 0) { stopCol(st, s); continue; } s.col = res.header[i]; res.used.add(res.header[i]);
+      live().forEach(l => {
+        const raw = l.cells[i], d = readDate(raw, st.year);
+        if (!d) { l.role = 'stop'; l.by = st.id; l.why = `“${raw}” can’t be read as a date`; return; }
+        s.shapes[d.shape] = (s.shapes[d.shape] || 0) + 1;
+        const r = recOf(l); r.v.on = { raw, val: d.text, col: res.header[i], by: [st.id], shape: d.shape }; s.changed++; s.values.push([raw, d.text, l.n]);
+      });
+    }
+    else if (st.op === 'group') {
+      const i = col(st); if (i < 0) { stopCol(st, s); continue; } s.col = res.header[i]; res.used.add(res.header[i]);
+      const map = {}; st.groups.forEach(g => g.from.forEach(f => map[f] = g.to));
+      live().forEach(l => {
+        const raw = l.cells[i]; let to = map[raw], near = false;
+        if (!to && st.near) {
+          let best = null; Object.keys(map).forEach(k => { const dd = lev(squash(k), squash(raw)); if (dd <= 2 && (!best || dd < best.d)) best = { k, d: dd }; });
+          if (best) { to = map[best.k]; near = best.k; }
+        }
+        if (!to) { l.role = 'stop'; l.by = st.id; l.why = `“${raw}” isn’t one of the depots`; return; }
+        (s.groups[to] = s.groups[to] || {})[raw] = ((s.groups[to] || {})[raw] || 0) + 1;
+        if (near && !s.near.find(x => x.raw === raw)) s.near.push({ raw, like: near, to, lines: [] });
+        if (near) s.near.find(x => x.raw === raw).lines.push(l.n);
+        const r = recOf(l); r.v.depot = { raw, val: DEPOT(to).name, id: to, col: res.header[i], by: [st.id], near };
+        if (raw !== DEPOT(to).name) { s.changed++; s.values.push([raw, DEPOT(to).name, l.n]); }
+      });
+    }
+    else if (st.op === 'result') {
+      const i = col(st); if (i < 0) { stopCol(st, s); continue; } s.col = res.header[i]; res.used.add(res.header[i]);
+      live().forEach(l => {
+        const raw = l.cells[i], r0 = readResult(raw);
+        if (!r0) {
+          const ans = answers.value && answers.value[raw];
+          if (ans === 'aside') { l.role = 'aside'; l.by = st.id; l.why = `“${raw}” isn’t a result ${DATA.app} knows yet`; l.waiting = true; s.aside.push(l.n); }
+          else { l.role = 'stop'; l.by = st.id; l.why = `“${raw}” isn’t a result ${DATA.app} knows`; s.stop = s.stop || { step: st.id, kind: 'value', value: raw, lines: [] }; s.stop.lines.push(l.n); if (!res.stops.includes(s.stop)) res.stops.push(s.stop); }
+          return;
+        }
+        const r = recOf(l); r.v.result = { raw, val: r0.result, col: res.header[i], by: [st.id] };
+        if (r0.note) r.v.rnote = { raw, val: r0.note, col: res.header[i], by: [st.id] };
+        s.changed++; s.values.push([raw, r0.result + (r0.note ? ' · ' + r0.note : ''), l.n]);
+      });
+    }
+    else if (st.op === 'miles') {
+      const i = col(st); if (i < 0) { stopCol(st, s); continue; } s.col = res.header[i]; res.used.add(res.header[i]);
+      live().forEach(l => {
+        const raw = l.cells[i], m = readMiles(raw), r = recOf(l);
+        if (m == null) { r.v.odometer = { raw, val: null, col: res.header[i], by: [st.id], aside: true, why: `“${raw}” can’t be read as miles` }; s.aside.push(l.n); return; }
+        const out = fmt(m); r.v.odometer = { raw, val: out, num: m, col: res.header[i], by: out !== raw ? [st.id] : [] };
+        if (out !== raw) { s.changed++; s.values.push([raw, out, l.n]); }
+      });
+    }
+    else if (st.op === 'match') {
+      const i = col(st); if (i < 0) { stopCol(st, s); continue; }
+      s.matched = new Set(); s.fresh = new Set();
+      live().filter(l => l.rec && l.rec.v.van).forEach(l => {
+        const id = l.rec.v.van.val, v = VAN(id);
+        if (v) { l.rec.van = { id, status: 'match' }; s.matched.add(id); }
+        else { l.rec.van = { id, status: 'new' }; s.fresh.add(id); }
+      });
+    }
+    else if (st.op === 'map') {
+      const asked = Object.entries(st.cols).filter(([, d]) => d === 'asked').map(([c]) => c);
+      res.leftOut = res.header.filter(h => h && !(h in st.cols) && !res.used.has(h));
+      res.asked = asked;
+      if (!res.header.length) continue;
+      const iNote = res.header.indexOf('Notes'), iType = res.header.indexOf('Type');
+      live().filter(l => l.role !== 'stop').forEach(l => {
+        const r = recOf(l); l.role = 'land'; l.by = l.by || st.id;
+        const notes = [r.v.rnote && r.v.rnote.val, iNote >= 0 && l.cells[iNote]].filter(Boolean);
+        if (iType >= 0 && l.cells[iType]) r.v.kindOfVisit = { raw: l.cells[iType], val: l.cells[iType], col: 'Type', by: [st.id], waiting: true };
+        r.v.note = { raw: iNote >= 0 ? l.cells[iNote] : '', val: notes.join('; '), col: 'Notes', by: r.v.rnote ? ['s9'] : [] };
+        if (st.firm) r.v.by = { raw: '', val: FIRM.name, col: null, by: [st.id], fromFile: true };
+      });
+    }
+  }
+  res.recs = L.filter(l => l.role === 'land').map(l => l.rec);
+  L.filter(l => l.role === 'stop' && !res.stops.some(s => s.lines && s.lines.includes(l.n))).forEach(l => {
+    const s = res.st[l.by]; if (!s.stop) { s.stop = { step: l.by, kind: 'value', lines: [] }; res.stops.push(s.stop); } if (s.stop.lines) s.stop.lines.push(l.n);
+  });
+  return res;
+}
+
+/* what the run would send to Triage, and what it sets aside. All counted from the run */
+function plate(res) {
+  const data = res.lines.filter(l => !['title', 'header', 'blank', 'total'].includes(l.role));
+  const land = res.lines.filter(l => l.role === 'land'), aside = res.lines.filter(l => l.role === 'aside'), copies = res.lines.filter(l => l.role === 'copy'), stopped = res.lines.filter(l => l.role === 'stop');
+  const fresh = [...new Set(res.recs.filter(r => r.van && r.van.status === 'new').map(r => r.van.id))];
+  const latest = {}; res.recs.forEach(r => { if (r.van && r.van.status === 'match' && r.v.odometer && r.v.odometer.num != null) latest[r.van.id] = r; });
+  const odo = Object.values(latest).map(r => ({ id: r.van.id, was: VAN(r.van.id).odo, now: r.v.odometer.num, n: r.n })).filter(x => x.was !== x.now);
+  const valuesAside = res.recs.filter(r => r.v.odometer && r.v.odometer.aside).map(r => ({ n: r.n, raw: r.v.odometer.raw, why: r.v.odometer.why, van: r.v.van.val }));
+  const depots = [...new Set(res.recs.map(r => r.v.depot && r.v.depot.id).filter(Boolean))];
+  const spellings = res.recs.filter(r => r.v.depot && r.v.depot.raw !== r.v.depot.val).length;
+  const waiting = res.recs.filter(r => r.v.kindOfVisit).length;
+  return {
+    data: data.length, land: land.length, aside, copies, stopped, fresh, odo, valuesAside, depots, spellings, waiting,
+    vans: [...new Set(res.recs.map(r => r.van && r.van.id))].length,
+    notRecords: res.lines.filter(l => ['title', 'header', 'blank', 'total'].includes(l.role)),
+    balances: res.total ? res.total.said === land.length + aside.length + stopped.length : null
+  };
+}
+
+/* ---------- what landing a run would move elsewhere (consequence preview), worked out from the dates ---------- */
+const pd = s => { const p = String(s).split(/\s+/); return Date.UTC(+p[2], MON.indexOf(p[1]), +p[0]); };
+function overdue(depot, res, today = DATA.today) {
+  const t = new Date(pd(today)); t.setUTCMonth(t.getUTCMonth() - DATA.inspectEveryMonths);
+  const vans = DATA.vans.filter(v => v[1] === depot).map(v => VAN(v[0]));
+  const last = id => { let d = pd(VAN(id).last); (res ? res.recs : []).forEach(r => { if (r.van && r.van.id === id) d = Math.max(d, pd(r.v.on.val)); }); return d; };
+  return { of: vans.length, ids: vans.filter(v => last(v.id) < +t).map(v => v.id) };
+}
+function downstream(res) {
+  return DATA.downstream.map(d => {
+    const was = overdue(d.depot), now = overdue(d.depot, res), name = DEPOT(d.depot).name, cleared = was.ids.filter(x => !now.ids.includes(x));
+    if (d.kind === 'overdue') return { ...d, now: `${was.ids.length} of ${was.of} overdue`, after: `${now.ids.length} of ${now.of} overdue`, why: `${plural(cleared.length, 'overdue van')} (${cleared.join(', ')}) ${cleared.length === 1 ? 'was' : 'were'} inspected in this file` };
+    if (d.kind === 'intent') return { ...d, now: d.state, after: `${plural(res.recs.filter(r => r.v.depot.id === d.depot).length, 'inspection')} added as evidence; ${P(d.owner).name} decides its state`, why: `it is bound to the ${was.of} ${name} vans` };
+    return { ...d, now: 'quiet', after: `tells ${P(d.owner).name.split(' ')[0]} once: “something happened”`, why: `the count it watches moves from ${was.ids.length} to ${now.ids.length}` };
+  });
+}
+
+/* ---------- the recipe in words (plain first, admin words with T) ---------- */
+function stepWords(st, res) {
+  const s = res && res.st[st.id] || {}, c = (st.col || [])[0], used = s.col || c;
+  const g = st.groups ? st.groups.reduce((a, x) => a + x.from.length, 0) : 0;
+  switch (st.op) {
+    case 'skipTop': return { w: `Skip the first ${st.n} lines: a title, not visits`, tk: `skip_rows = ${st.n}`, icon: 'scissors' };
+    case 'header': return { w: `Use line ${st.line} as the column names`, tk: `header_row = ${st.line}`, icon: 'heading' };
+    case 'total': return { w: `Set the ${st.first} line aside, and check our count against it`, tk: `filter(A <> '${st.first}') · assert count = total`, icon: 'sigma' };
+    case 'blank': return { w: 'Set aside empty lines', tk: 'filter(not all_blank(row))', icon: 'rows-3' };
+    case 'copies': return { w: 'Set aside exact copies of a line', tk: 'distinct_on(all columns) · keep first', icon: 'copy' };
+    case 'van': return { w: `Write van numbers in ${used} like ${st.example[1]}`, ex: st.example, tk: `${used} := upper(letters) || '-' || lpad(digits, 2, '0')`, icon: 'truck', more: st.unreadable === 'aside' ? 'set aside a line with no van number' : '' };
+    case 'date': return { w: `Read ${used} ${st.order}, written like ${st.example[1]}`, ex: st.example, tk: `strptime(${used}, ['%d/%m/%Y','%Y-%m-%d','%d %b']) ∪ excel_serial · year ${st.year} if missing`, icon: 'calendar' };
+    case 'group': return { w: `Group ${g} spellings in ${used} into ${st.groups.length} depots`, tk: `cluster(${used}; fingerprint, distance ≤ 2) → Site`, icon: 'combine', more: st.near ? 'and near spellings of them' : '' };
+    case 'result': return { w: `Split ${used} into a result and a note`, ex: st.example, tk: `${used} → outcome ∈ {passed, passed with advisory, failed}, comment`, icon: 'split' };
+    case 'miles': return { w: `Read ${used} as miles`, ex: st.example, tk: `try_cast(replace(${used}, ',', '') as int)`, icon: 'gauge', more: 'set aside a reading that can’t be read' };
+    case 'match': return { w: `Match vans to the vans ${DATA.app} keeps, and propose new ones`, tk: `match Vehicle on id (exact) · else propose new`, icon: 'link' };
+    case 'map': return { w: `Make each line an ${DATA.kinds[st.kind].word} by ${FIRM.short}`, tk: `→ ${DATA.kinds[st.kind].tech}{${DATA.kinds[st.kind].details.map(d => d.tech).join(', ')}}`, icon: 'clipboard-check' };
+  }
+  return { w: st.op, tk: st.op, icon: 'circle' };
+}
+/* the count each line shows, from the run */
+function stepCount(st, res) {
+  const s = res.st[st.id]; if (!s) return '';
+  if (s.stop && s.stop.kind === 'column') return `can’t find ${s.stop.want}`;
+  if (s.stop && s.stop.lines) return `${plural(s.stop.lines.length, 'line')} stopped`;
+  switch (st.op) {
+    case 'skipTop': return plural(s.aside.length, 'line');
+    case 'header': return `${res.header.length} columns`;
+    case 'total': return res.total ? `it says ${res.total.said}` : 'none found';
+    case 'blank': case 'copies': return s.aside.length ? `${plural(s.aside.length, 'line')} set aside` : 'none';
+    case 'van': return s.changed || s.aside.length ? `${plural(s.changed, 'value')}${s.aside.length ? ` · ${s.aside.length} set aside` : ''}` : 'all fine as they came';
+    case 'date': return `${plural(s.changed, 'date')} · ${Object.keys(s.shapes).length} ways`;
+    case 'group': return `${plural(s.changed, 'value')}${s.near.length ? ` · ${s.near.length} new spelling` : ''}`;
+    case 'result': return `${plural(s.changed, 'value')}${s.aside.length ? ` · ${s.aside.length} set aside` : ''}`;
+    case 'miles': return s.changed || s.aside.length ? `${plural(s.changed, 'value')}${s.aside.length ? ` · ${s.aside.length} can’t read` : ''}` : 'all fine as they came';
+    case 'match': return s.matched ? `${s.matched.size} known · ${s.fresh.size} new` : '';
+    case 'map': return plural(res.recs.length, DATA.kinds[st.kind].word);
+  }
+  return '';
+}
+function stepState(st, res) { const s = res.st[st.id]; if (!s) return 'todo'; if (s.stop) return 'stop'; if (s.near && s.near.length) return 'check'; return 'ok'; }
+
+/* ---------- shared pieces of markup ---------- */
+function topHTML(crumbs, hints) {
+  const me = P(DATA.me), fl = F(DATA.myFloor);
+  return `<header class="top"><p class="brand">AUGUR</p>
+    <nav class="crumb" aria-label="Where you are">${crumbs.map((c, i) => (i ? I('chevron-right', 14) : '') + (i === crumbs.length - 1 ? `<b>${c}</b>` : `<span>${c}</span>`)).join('')}</nav>
+    <span class="fchip" data-tier="${DATA.myFloor}">${fl.name} · ${fl.word}</span>
+    <div class="hints">${hints.map(([k, w, id]) => `<span ${id ? `id="${id}"` : ''}><span class="kbd">${k}</span>${w}</span>`).join('')}</div></header>`;
+}
+/* raw value (as it came: typewriter) and kept value (as we keep it: set type) */
+const raw = v => `<span class="rawv">${v === '' || v == null ? '<i class="emp">empty</i>' : esc(v)}</span>`;
+const kept = v => `<span class="keptv">${esc(v)}</span>`;
+const arrow = () => `<span class="to" aria-label="becomes">${I('arrow-right', 12)}</span>`;
+const pair = (a, b) => `<span class="pair">${raw(a)}${arrow()}${kept(b)}</span>`;
+const stepNo = id => `<span class="sno" title="recipe line ${id.slice(1)}">${id.slice(1)}</span>`;
+const ROLE_WORD = { title: 'title, not a visit', header: 'column names', blank: 'empty line', total: 'the file’s own total', copy: 'exact copy', aside: 'set aside', stop: 'stopped: needs you', land: 'becomes an inspection' };
+const ROLE_ICON = { title: 'heading', header: 'heading', blank: 'minus', total: 'sigma', copy: 'copy', aside: 'archive', stop: 'hand', land: 'check' };
+
+/* the sheet as the file holds it. opts: lines (subset), cell(l, i) -> class, line(l) -> class, roles (show role gutter), cols */
+function sheetHTML(res, o = {}) {
+  const file = res.file, ncol = Math.max(...file.lines.map(c => c.length));
+  const lines = o.lines ? res.lines.filter(l => o.lines.includes(l.n)) : res.lines;
+  const head = `<tr class="ch"><th class="rn"></th>${Array.from({ length: ncol }, (_, i) => `<th>${COLS[i]}</th>`).join('')}${o.roles ? '<th class="rg">what it is</th>' : ''}</tr>`;
+  const body = lines.map(l => {
+    const merged = l.cells.length === 1 && l.cells[0] && ncol > 1;
+    const cells = merged ? `<td colspan="${ncol}" class="merged ${o.cell ? o.cell(l, 0) || '' : ''}">${esc(l.cells[0])}</td>`
+      : Array.from({ length: ncol }, (_, i) => `<td class="${o.cell ? o.cell(l, i) || '' : ''}">${esc(l.cells[i] || '')}</td>`).join('');
+    const rg = o.roles ? `<td class="rg">${l.role ? `${I(ROLE_ICON[l.role], 12)} ${o.roleWord ? o.roleWord(l) : ROLE_WORD[l.role]}` : ''}</td>` : '';
+    return `<tr data-n="${l.n}" class="r-${l.role || 'none'} ${o.line ? o.line(l) || '' : ''}"><th class="rn">${l.n}</th>${cells}${rg}</tr>`;
+  }).join('');
+  return `<table class="sheet ${o.cls || ''}" aria-label="${esc(file.name)}, sheet ${esc(file.sheet)}"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+/* the recipe as a numbered list of lines */
+function recipeHTML(res, o = {}) {
+  const steps = o.steps || DATA.recipe.steps;
+  return `<ol class="recipe ${o.cls || ''}">${steps.map((st, i) => {
+    const w = stepWords(st, res), state = o.state ? o.state(st) : (res ? stepState(st, res) : 'ok');
+    return `<li class="rl st-${state} ${o.on === st.id ? 'on' : ''} dep" style="--i:${i}" data-step="${st.id}">
+      <span class="rn">${st.id.slice(1)}</span>
+      <span class="rw">${w.w}${w.more ? `<span class="rm">, ${w.more}</span>` : ''}${o.examples !== false && w.ex ? `<span class="rex">${pair(w.ex[0], w.ex[1])}</span>` : ''}<span class="tk">${esc(w.tk)}</span></span>
+      <span class="rc">${res ? stepCount(st, res) : ''}</span>
+      <span class="rs" aria-label="${state}">${state === 'stop' ? I('hand', 14) : state === 'check' ? I('eye', 14) : state === 'todo' ? I('circle-dashed', 14) : I('check', 14)}</span></li>`;
+  }).join('')}</ol>`;
+}
+
+/* the set-aside tray: every line and value that didn't fit, counted, with why */
+function trayHTML(res, o = {}) {
+  const p = plate(res);
+  const rows = [
+    ...p.aside.map(l => ({ n: l.n, what: l.cells.filter(Boolean).slice(0, 3).join(' · '), why: l.why, by: l.by, kind: l.waiting ? 'waiting' : 'line' })),
+    ...p.copies.map(l => ({ n: l.n, what: l.cells.filter(Boolean).slice(0, 3).join(' · '), why: l.why, by: l.by, kind: 'copy' })),
+    ...p.valuesAside.map(v => ({ n: v.n, what: `${v.van} · odometer ${v.raw}`, why: v.why + '; the rest of the line lands, its odometer marked not known yet', by: 's10', kind: 'value' }))
+  ];
+  return `<div class="tray ${o.cls || ''}"><p class="eyebrow">${I('archive', 12)} Set aside · ${plural(rows.length, 'thing')}, none lost</p>
+    <ul>${rows.map((r, i) => `<li class="dep" style="--i:${i}"><span class="tn">line ${r.n}</span><span class="tw">${esc(r.what)}<small>${r.why}</small></span>${stepNo(r.by)}</li>`).join('')}</ul></div>`;
+}
+
+/* keys shared by every variant */
+const STATE = { tech: false, gateway: true };
+function commonKeys(e, rerender, replay) {
+  const k = e.key.toLowerCase();
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  if (k === 'r') { replay(); return true; }
+  if (k === 't') { STATE.tech = !STATE.tech; document.body.classList.toggle('tech', STATE.tech); $('#h-t')?.classList.toggle('on', STATE.tech); return true; }
+  if (k === 'g' && $('#h-g')) { STATE.gateway = !STATE.gateway; $('#h-g')?.classList.toggle('on', !STATE.gateway); rerender(); return true; }
+  return false;
+}
+/* timers for the auto demo, cleared on replay */
+let TIMERS = [];
+const later = (fn, t) => TIMERS.push(setTimeout(fn, reduced ? Math.min(t, 50) : t));
+const clearLater = () => { TIMERS.forEach(clearTimeout); TIMERS = []; };
+function settle(t) { document.body.classList.add('pre'); if (t) later(() => document.body.classList.remove('pre'), t); else requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre'))); }
+
+const BASE = DATA.recipe.steps.slice(0, 5), F0 = DATA.files.oct;
+const FIX = ['s6', 's7', 's9'].map(STEP);
+const KEY = { van: 'van', date: 'on', result: 'result' };
+const S = { done: [], undone: [], fresh: null };
+function current() { return run('oct', [...BASE, ...FIX.filter(f => S.done.includes(f.id) && !S.undone.includes(f.id))]); }
+function render() {
+  const R = current(), H = R.header;
+  const active = FIX.filter(f => S.done.includes(f.id) && !S.undone.includes(f.id));
+  const colOf = f => H.indexOf(f.col[0]);
+  const cell = (l, i) => { if (l.role && l.role !== 'land') return ''; const f = active.find(f => colOf(f) === i); if (!f || !l.rec) return ''; const v = l.rec.v[KEY[f.op]]; return v && v.val !== v.raw ? `ok ${S.fresh === f.id ? 'fresh' : ''}` : ''; };
+  let html = sheetHTML(R, { cell, line: l => l.role === 'aside' ? 'aside' : ['title', 'blank', 'total', 'copy'].includes(l.role) ? 'dim' : '' });
+  const tmp = document.createElement('div'); tmp.innerHTML = html;
+  $$('tbody tr', tmp).forEach(tr => { const l = R.lines[+tr.dataset.n - 1]; if (!l.rec) return; active.forEach(f => { const v = l.rec.v[KEY[f.op]]; if (v && v.val !== v.raw) { const td = tr.children[colOf(f) + 1]; td.textContent = v.val + (l.rec.v.rnote && f.op === 'result' ? ' · ' + l.rec.v.rnote.val : ''); td.title = `was “${v.raw}” · recipe line ${f.id.slice(1)}`; } }); });
+  html = tmp.innerHTML;
+  const shown = [...BASE, ...FIX.filter(f => S.done.includes(f.id))];
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, F0.name, 'Tidy'], [['1–3', 'fix one'], ['U', 'undo last'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="sheetbox scroll" aria-label="The file, as tidied so far">${html}</section>
+    <section class="side"><div><h1 class="t">The recipe so far</h1><p class="lede" style="margin-top:var(--space-1)">You never write a line. Each fix you make on the sheet writes one, in words, with how many values it changed. Lines 1–5 came from the first reading.</p></div>
+      <ol class="recipe">${shown.map((st, i) => { const w = stepWords(st, R), und = S.undone.includes(st.id);
+        return `<li class="rl ${und ? 'undone' : ''} ${S.fresh === st.id ? 'fresh' : ''} st-${und ? 'todo' : 'ok'}"><span class="rn">${st.id.slice(1)}</span><span class="rw">${w.w}${w.ex && !und ? `<span class="rex">${pair(w.ex[0], w.ex[1])}</span>` : ''}<span class="tk">${esc(w.tk)}</span></span><span class="rc">${und ? 'undone' : stepCount(st, R)}</span><span class="rs">${und ? I('undo-2', 14) : I('check', 14)}</span>
+          ${FIX.includes(st) ? `<span class="u">${und ? `kept struck through, so the next person sees it was tried · <button class="btn sm" data-redo="${st.id}">Redo</button>` : `taught by your example on line ${R.lines.find(l => l.cells[H.indexOf(st.col[0])] === st.example[0])?.n || '—'} · <button class="btn sm" data-undo="${st.id}">${I('undo-2', 12)} Undo</button>`}</span>` : ''}</li>`; }).join('')}</ol>
+      <ul class="todo">${FIX.filter(f => !S.done.includes(f.id)).map(f => `<li>${I('circle-dashed', 14)} ${raw(f.col[0])} still has ${Object.keys(profile(R, f.col[0]).shapes).length} shapes <button class="btn sm" data-fix="${f.id}">${I('pen-line', 12)} Fix ${raw(f.example[0])}</button></li>`).join('')}</ul>
+      <p class="foot"><b>Undo keeps the line.</b> An undone line stays in the recipe, struck through, with who tried it. Its values go back to how the file had them, and the seam goes with them. <b>Reorder</b> by dragging; the counts rerun at once.</p></section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-fix]').forEach(b => b.onclick = () => fix(b.dataset.fix));
+  $$('[data-undo]').forEach(b => b.onclick = () => { S.undone.push(b.dataset.undo); S.fresh = null; render(); });
+  $$('[data-redo]').forEach(b => b.onclick = () => { S.undone = S.undone.filter(x => x !== b.dataset.redo); S.fresh = b.dataset.redo; render(); });
+}
+function fix(id) { if (!S.done.includes(id)) S.done.push(id); S.undone = S.undone.filter(x => x !== id); S.fresh = id; render(); }
+function replay() { clearLater(); Object.assign(S, { done: [], undone: [], fresh: null }); render(); settle(); const t = ms('--motion-run'); later(() => fix('s6'), t); later(() => fix('s7'), t + ms('--motion-calm')); later(() => fix('s9'), t + ms('--motion-calm') * 2); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-3]$/.test(e.key)) { clearLater(); fix(FIX[+e.key - 1].id); }
+  if (e.key.toLowerCase() === 'u') { const last = [...S.done].reverse().find(x => !S.undone.includes(x)); if (last) { S.undone.push(last); S.fresh = null; render(); } }
+});
+replay();
+</script>
+</body>
+</html>

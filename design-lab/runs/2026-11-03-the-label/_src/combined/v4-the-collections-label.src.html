@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Combined V4 · The collection's label</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V4: a collection's label, read before use. The facts panel, what it's made of by weight, where it's thin, and the label read against what you mean to do ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(360px,var(--measure-decision)) minmax(0,1fr);gap:var(--space-6)}
+.panel{align-self:start;max-height:100%;overflow:auto;border:1px solid var(--light);padding:var(--space-2) var(--space-3);color:var(--light);background:var(--slate-deep)}
+.panel h1{font-weight:600;font-size:var(--type-heading);line-height:var(--leading-heading);margin:0}
+.panel .r{display:flex;justify-content:space-between;gap:var(--space-3);border-top:1px solid var(--ink-muted);padding:2px 0;font-size:var(--type-small);line-height:var(--leading-small)}
+.panel .r b{font-weight:600}
+.panel .hv{border-top:calc(var(--space-2) + 2px) solid var(--light)}
+.panel .md{border-top:var(--space-1) solid var(--light)}
+.panel .big{font-weight:600;font-size:var(--type-lead);line-height:var(--leading-lead)}
+.panel .mk{font-size:var(--x-proposed-type-micro);white-space:normal}
+.panel .r.on{background:var(--x-proposed-lit-wash)}
+.right{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4);min-height:0}
+.ask{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--ink-muted)}
+.ask b{font-weight:400;color:var(--light)}
+.pills{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.pills button{display:inline-flex;align-items:center;gap:var(--space-1);height:var(--target-sm);padding:0 var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.pills button[aria-pressed="true"]{color:var(--light);border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.grid{display:grid;grid-template-columns:minmax(170px,1fr) repeat(6,minmax(0,.55fr)) minmax(200px,1.4fr);gap:2px;align-content:start;overflow:auto}
+.grid .h{font:400 var(--x-proposed-type-micro)/var(--leading-label) var(--font-mono);color:var(--ink-muted);padding:var(--space-1);text-align:center}
+.grid .nm{display:flex;flex-direction:column;justify-content:center;padding:var(--space-1) var(--space-2) var(--space-1) 0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--light)}
+.cell{position:relative;min-height:calc(var(--space-6) + var(--space-1));border-radius:2px;background:var(--surface-inset);display:flex;align-items:flex-end;justify-content:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.cell .ink{position:absolute;left:var(--space-1);right:var(--space-1);bottom:var(--space-4);background:var(--ink);opacity:.75;border-radius:1px}
+.cell[data-k="none"]{background:repeating-linear-gradient(45deg,transparent 0 calc(var(--space-1) - 1px),var(--x-proposed-hatch) calc(var(--space-1) - 1px) var(--space-1)),var(--surface-inset)}
+.cell[data-k="na"]{background:none;border:1px dashed var(--hairline)}
+.cell[data-k="caution"]{box-shadow:inset 0 2px 0 var(--x-proposed-disagree)}
+.cell[data-k="gap"]{box-shadow:inset 0 0 0 1px var(--x-proposed-gap-ink)}
+.row-off .cell,.row-off.nm{opacity:.35}
+.vd{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-1) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);transition:opacity var(--motion-base) var(--ease-standard)}
+.vd[data-v="no"]{color:var(--ink-muted)}
+.vd[data-v="no"] svg{color:var(--x-proposed-stopped)}
+.vd[data-v="yes"] svg{color:var(--x-proposed-lit)}
+.vd[data-v="count"] svg{color:var(--x-proposed-said-other)}
+.sum{display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.sum .big{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+@media (max-width:1400px){.ask{font-size:var(--type-lead);line-height:var(--leading-lead)}.grid{grid-template-columns:minmax(140px,1fr) repeat(6,minmax(0,.5fr)) minmax(170px,1.3fr)}.wrap{gap:var(--space-4)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V4</b> the collection's label: the facts panel, its parts by weight, where it's thin, and the label read against what you mean to do, part by part · Dataset Nutrition Label, datasheets, coverage, fit for use</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DSET();
+const S = { u: 'safety' };
+const WHAT = { ops: 'plan next month’s rota', safety: 'look for patterns in fatigue and groundings', report: 'publish fatigue figures in the annual safety report', appraisal: 'review one pilot’s performance', model: 'have the assistant summarise near misses', outside: 'send it to a university study' };
+const MARKI = { none: 'circle-off', gap: 'square-dashed', na: 'minus', caution: 'triangle-alert' };
+function render() {
+  const lb = dsetLabel(), u = S.u, parts = [...D.parts].sort((a, b) => b.n - a.n);
+  const max = Math.max(...D.parts.flatMap(p => D.byYear[p.id].n));
+  const take = parts.filter(p => ['yes', 'count'].includes(L(p.label).uses[u]));
+  const n = take.reduce((a, p) => a + p.n, 0);
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Collections', D.title], [['1–6', 'what for'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <article class="panel" aria-label="Dataset facts"><h1>Dataset facts</h1>
+      <div class="r" style="border:0">${D.title}</div>
+      <div class="r hv"><span>Records</span><span class="big">${D.records}</span></div>
+      <div class="r md"><span><b>Made of</b>, heaviest first</span><span><b>% of expected</b></span></div>
+      ${parts.map(p => `<div class="r ${take.includes(p) ? 'on' : ''}"><span><b>${p.name}</b> ${p.n} · ${pct(p.n, D.records)}% ${pmHTML(p.label)}</span><span>${p.expected ? pct(p.n, p.expected) + '%' : 'n/a'}</span></div>`).join('')}
+      <div class="r hv"><span><b>Contains</b></span><span>${lb.desc.map(d => `<b>${DS(d).word}</b>`).join(', ')}</span></div>
+      <div class="r"><span><b>Consent</b></span><span>${(c => `${c.gave} of ${c.asked} pilots; ${c.withdrew} withdrew`)(D.parts.find(p => p.consent).consent)}</span></div>
+      <div class="r"><span><b>Licence</b></span><span>AIS: internal use only</span></div>
+      <div class="r"><span>Marking</span><span>${markHTML(lb)}</span></div>
+      <div class="r md"><span>Kept by</span><span>${P(D.keeper).name} · checked ${D.checked}</span></div>
+      <div class="r" style="border:0;color:var(--ink)">${D.issues[0]}</div>
+    </article>
+    <section class="right">
+      <p class="ask">I want to <b>${WHAT[u]}</b>.</p>
+      <div class="pills">${USE_IDS().map((x, i) => `<button aria-pressed="${u === x}" data-u="${x}">${I(US(x).icon, 14)} ${i + 1} · ${US(x).word}</button>`).join('')}</div>
+      <div style="display:grid;gap:var(--space-3);align-content:start;min-height:0">
+        <div class="sum"><span class="big">${n ? `${n} of ${D.records} records` : 'None of it'}</span><span class="who">${n ? `fit for this, ${take.some(p => L(p.label).uses[u] === 'count') ? 'some only as counts' : 'as they are'}` : D.usesWhy[u]}</span>${n ? `<button class="btn sm go">${I('database', 12)} Take what fits</button>` : ''}</div>
+        <div class="grid" role="table"><span></span>${D.years.map(y => `<span class="h">${y}</span>`).join('')}<span class="h" style="text-align:left">For this use</span>
+          ${parts.map(p => { const v = L(p.label).uses[u], b = D.byYear[p.id], off = !['yes', 'count'].includes(v);
+            return `<span class="nm ${off ? 'row-off' : ''}">${p.name}<span class="who">${pmHTML(p.label)}</span></span>` +
+              D.years.map((y, c) => { const m = b.marks[y], k = b.n[c]; return `<span class="cell ${off ? 'row-off' : ''}" data-k="${m ? m.k : ''}" title="${m && m.t ? m.t : ''}">${k ? `<span class="ink" style="height:calc((100% - var(--space-5)) * ${k / max})"></span>` : ''}${m ? I(MARKI[m.k], 10) : k}</span>`; }).join('') +
+              `<span class="vd" data-v="${v === 'ask' ? 'no' : v}">${I(v === 'yes' ? 'check' : v === 'count' ? 'hash' : 'ban', 14)}<span>${v === 'yes' ? 'Yes' : v === 'count' ? `As counts over ${POL.minGroup}+` : p.consent && u !== 'safety' ? 'No: consent is for the investigation only' : p.licence && ['model', 'outside'].includes(u) ? 'No: the licence forbids it' : 'No: ' + (POL.clauses[u] ? POL.clauses[u].split('.')[0].replace(/^§[\d.]+ /, '') : 'the label')}</span></span>`; }).join('')}
+        </div>
+        <p class="who">${I('square-dashed', 12)} a gap someone could fill · ${I('circle-off', 12)} no record, lost · ${I('minus', 12)} doesn’t apply · ${I('triangle-alert', 12)} read with care. Hover a mark for its sentence.</p>
+      </div>
+    </section>
+  </div></main>`;
+  afterRender();
+  $$('.pills button').forEach(b => b.onclick = () => { S.u = b.dataset.u; render(); });
+}
+function replay() { clearLater(); closeDeed(); S.u = 'safety'; settleIn(); render(); later(() => { S.u = 'report'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-6]$/.test(e.key)) { S.u = USE_IDS()[+e.key - 1]; render(); }
+});
+replay();
+</script>
+</body>
+</html>

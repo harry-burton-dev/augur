@@ -453,7 +453,7 @@ export const settingsProblem = (entry: AppEntry): string | undefined => {
 /** Why an app can't take the id or route it asked for, or undefined when it can. */
 export const conflictFor = (entry: AppEntry, others: AppEntry[]): string | undefined => {
   const platform = platformApps.find((a) => a.id === entry.id);
-  if (platform) return `"${entry.id}" is one of the platform's own apps.`;
+  if (platform) return `"${entry.id}" is one of AUGUR's own apps.`;
   const route = trimRoute(entry.route);
   const all = [...platformApps, ...others].filter((a) => a.id !== entry.id);
   const sameRoute = all.find((a) => trimRoute(a.route) === route);
@@ -500,7 +500,7 @@ export const entryOriginProblem = (entry: Pick<AppEntry, 'name' | 'entry'>, allo
   try {
     url = new URL(entry.entry);
   } catch {
-    return `${entry.name}'s entry "${entry.entry}" is neither a path on the platform nor a full web address.`;
+    return `${entry.name}'s entry "${entry.entry}" is neither a path on AUGUR's own address nor a full web address.`;
   }
   if (allowed.includes(url.origin)) return undefined;
   return `${entry.name} loads from ${url.origin}, which isn't a place apps are allowed to load from. An admin can allow it in Admin, Apps.`;

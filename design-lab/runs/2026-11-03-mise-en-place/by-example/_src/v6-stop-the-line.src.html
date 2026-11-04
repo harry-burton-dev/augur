@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · By example V6 · Stop the line</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: the example runs down the column; where a value doesn't fit, the line stops and asks (jidoka) ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.andon{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);transition:border-color var(--motion-base) var(--ease-out),background var(--motion-base) var(--ease-out)}
+.andon.stopped{border-color:var(--x-proposed-stop);background:var(--x-proposed-stop-wash)}
+.andon .lamp{width:var(--space-4);height:var(--space-4);border-radius:50%;background:var(--hairline-strong);transition:background var(--motion-base) var(--ease-out),box-shadow var(--motion-base) var(--ease-out)}
+.andon.running .lamp{background:var(--ink)}
+.andon.stopped .lamp{background:var(--x-proposed-stop);box-shadow:0 0 var(--glow-blur) color-mix(in srgb,var(--x-proposed-stop) 60%,transparent)}
+.andon.done .lamp{background:var(--x-proposed-lit)}
+.andon .say{font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.andon .say small{display:block;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.andon .prog{display:flex;gap:2px;align-items:center}
+.andon .prog i{width:var(--space-2);height:var(--space-4);border-radius:1px;background:var(--hairline)}
+.andon .prog i.ok{background:var(--ink-muted)}
+.andon .prog i.ch{background:var(--light)}
+.andon .prog i.st{background:var(--x-proposed-stop)}
+.andon .prog i.as{background:var(--x-proposed-aside-edge);outline:1px dashed var(--x-proposed-aside-edge)}
+.body{min-height:0;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(360px,1fr);gap:var(--space-6)}
+.col{min-height:0;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);overflow:hidden}
+.col .r{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr) var(--space-5) minmax(0,1fr) minmax(0,1.3fr);gap:var(--space-3);align-items:center;padding:2px var(--space-4);border-bottom:1px solid var(--hairline);font-size:var(--type-small);min-height:calc(var(--leading-small) + var(--space-2))}
+.col .r .n{font-family:var(--font-mono);color:var(--ink-muted);text-align:right}
+.col .r .nt{color:var(--ink-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.col .r.stop{background:var(--x-proposed-stop-wash);box-shadow:inset 2px 0 0 var(--x-proposed-stop)}
+.col .r.stop .n{color:var(--x-proposed-stop)}
+.col .r.wait{opacity:.4}
+.col .r .to{justify-content:center}
+.col .r .gapv{display:inline-flex;align-items:center;gap:var(--space-2);color:var(--ink-muted)}
+.ask{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.stopbox p{margin:0}
+.stopbox .q{font-size:var(--type-body);line-height:var(--leading-body);color:var(--light);margin:var(--space-2) 0}
+.stopbox .ctx{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.stopbox .opts{display:grid;gap:var(--space-2);margin-top:var(--space-3)}
+.stopbox .opts .btn{justify-content:flex-start;height:auto;padding:var(--space-2) var(--space-3);text-align:left}
+.stopbox .opts small{display:block;color:var(--ink-muted);font-size:var(--type-small)}
+.log{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.log li{display:flex;gap:var(--space-2);align-items:flex-start}
+.ask .foot{margin-top:auto;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ask .foot b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.col .r{min-height:var(--leading-small);padding:1px var(--space-3)}.stopbox .q{font-size:var(--type-meta);line-height:var(--leading-meta)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>By example · V6</b> the example runs down the column; where a value doesn't fit, the line stops and asks · Toyota's jidoka and andon cord</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct', DATA.recipe.steps.slice(0, 5)), F0 = R.file, st = STEP('s10'), colName = st.col[0], col = R.header.indexOf(colName), nCol = R.header.indexOf('Notes'), vCol = R.header.indexOf(STEP('s6').col[0]);
+const live = R.lines.filter(l => !l.role);
+const S = { pos: 0, answers: {}, running: false };
+const fits = l => readMiles(l.cells[col]) != null;
+const stoppedAt = () => { const l = live[S.pos]; return l && !fits(l) && !S.answers[l.n] ? l : null; };
+function step() {
+  if (stoppedAt() || S.pos >= live.length) { S.running = false; render(); return; }
+  S.pos++; render();
+  if (!stoppedAt() && S.pos < live.length) later(step, ms('--motion-instant'));
+  else { S.running = false; render(); }
+}
+function answer(k) { const l = stoppedAt(); if (!l) return; S.answers[l.n] = k; S.running = true; render(); later(step, ms('--motion-base')); }
+function render() {
+  const stop = stoppedAt(), done = S.pos >= live.length && !stop;
+  const changed = live.slice(0, S.pos).filter(l => fits(l) && fmt(readMiles(l.cells[col])) !== l.cells[col]).length;
+  const asideN = Object.values(S.answers).length;
+  const state = stop ? 'stopped' : done ? 'done' : S.running ? 'running' : '';
+  const OPTS = [['value', 'archive', 'Set aside just this reading', 'the visit lands; its odometer is not known yet, and the raw value waits in the tray'],
+    ['type', 'pen-line', 'Type the reading', 'you know it from elsewhere; your reading is marked as yours, not the file’s'],
+    ['line', 'archive-x', 'Set aside the whole line', 'the visit doesn’t land until someone answers']];
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, F0.name, 'Tidy', colName], [['1–3', 'answer'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="andon ${state}" role="status"><span class="lamp" aria-hidden="true"></span>
+      <span class="say">${stop ? `Stopped at line ${stop.n}: ${raw(stop.cells[col])} can’t be read as miles` : done ? `Done: ${plural(changed, 'reading')} rewritten, ${asideN} set aside with your answer` : S.running ? `Running your example down ${raw(colName)}…` : `Your example: ${pair(st.example[0], st.example[1])}`}
+        <small>${stop ? `${S.pos} of ${live.length} done. Nothing after it has changed; the line waits for you.` : done ? `Heard: recipe line ${st.id.slice(1)} now says what to do with readings like these, so next month it won’t stop for the same thing.` : `${live.length} readings to go`}</small></span>
+      <span class="prog" aria-hidden="true">${live.map((l, i) => `<i class="${i < S.pos ? (S.answers[l.n] ? 'as' : fmt(readMiles(l.cells[col])) !== l.cells[col] ? 'ch' : 'ok') : i === S.pos && stop ? 'st' : ''}"></i>`).join('')}</span></div>
+    <div class="body">
+      <section class="col scroll" aria-label="${colName}, line by line">${live.map((l, i) => { const v = l.cells[col], m = readMiles(v), isStop = stop === l, past = i < S.pos;
+        return `<div class="r ${isStop ? 'stop' : ''} ${!past && !isStop ? 'wait' : ''}"><span class="n">${l.n}</span><span>${raw(v)}</span><span class="to">${past || isStop ? I('arrow-right', 12) : ''}</span><span>${past ? (S.answers[l.n] ? `<span class="gapv"><span class="mk-gap"></span>${S.answers[l.n] === 'line' ? 'line set aside' : 'not known yet'}</span>` : kept(fmt(m))) : isStop ? `<span class="gapv" style="color:var(--x-proposed-stop)">${I('hand', 12)} needs you</span>` : ''}</span><span class="nt">${esc(l.cells[vCol])}${l.cells[nCol] ? ' · ' + esc(l.cells[nCol]) : ''}</span></div>`; }).join('')}</section>
+      <section class="ask">${stop ? `<div class="stopbox"><p class="eyebrow">${I('hand', 12)} The line stopped</p><p class="q">${raw(stop.cells[col])} on line ${stop.n} isn’t a reading in miles. What should happen to it?</p>
+        <p class="ctx">Van ${esc(stop.cells[vCol])}. ${stop.cells[nCol] ? `Its note says “${esc(stop.cells[nCol])}”.` : 'It has no note.'} Guessing would put a made-up number on a van, so the bench won’t.</p>
+        <div class="opts">${OPTS.map(([k, ic, w, s], i) => `<button class="btn ${i === 0 ? 'go' : ''}" data-a="${k}">${I(ic, 14)}<span>${i + 1} · ${w}<small>${s}</small></span></button>`).join('')}</div></div>` : ''}
+        <p class="eyebrow">${I('list', 12)} Answers so far</p>
+        <ul class="log">${Object.entries(S.answers).map(([n, k]) => `<li>${I('check', 12)}<span>line ${n}: ${raw(live.find(l => l.n === +n).cells[col])} → ${OPTS.find(o => o[0] === k)[2].toLowerCase()}</span></li>`).join('') || '<li>none yet</li>'}</ul>
+        <p class="foot"><b>Stop, don’t guess.</b> The example taught “strip the commas and the mi”. It can’t teach what “${esc(live.find(l => !fits(l)).cells[col])}” means, so the line stops at the first value it can’t read and everything after it waits. Each answer becomes part of recipe line ${st.id.slice(1)}, so a rerun only stops for something new.</p></section>
+    </div>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-a]').forEach(b => b.onclick = () => answer(b.dataset.a));
+}
+function replay() { clearLater(); Object.assign(S, { pos: 0, answers: {}, running: false }); render(); settle(); later(() => { S.running = true; step(); }, ms('--motion-run')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (/^[1-3]$/.test(e.key)) answer(['value', 'type', 'line'][+e.key - 1]); });
+replay();
+</script>
+</body>
+</html>

@@ -413,7 +413,7 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
             </Line>
           ))
         ) : (
-          <p>No other sites yet, so apps can only load from AUGUR itself.</p>
+          <p>No other sites yet, so apps can only load from AUGUR’s own address.</p>
         )}
       </div>
       <p>The server must allow a site too, so the browser will run its code; see Deploy in AUGUR’s guides.</p>

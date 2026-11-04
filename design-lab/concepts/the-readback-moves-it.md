@@ -1,0 +1,12 @@
+---
+name: the-readback-moves-it
+status: explored
+---
+
+# The readback moves it
+
+A handover is an offer with a fixed card (SBAR: situation and background from records, assessment and recommendation in the giver's words) that moves only when the taker reads it back. In the changeover zone both names show and the giver still answers; nothing is reassigned by a timer. Pointing out is a different verb from handing over.
+
+First found in: [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/) (handover V1, V3, V5 and V6, home V2, combined V1).
+
+Could steer: The apprentice (Q), the kitchen brigade (J), Mandate delegation.

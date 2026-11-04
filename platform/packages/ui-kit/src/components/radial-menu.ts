@@ -81,7 +81,7 @@ export class UiRadialMenu extends LitElement {
       :host(:not([open])) { visibility: hidden; }
       .veil {
         position: absolute; inset: 0; pointer-events: auto;
-        background: color-mix(in srgb, var(--slate-deep, #000) 55%, transparent);
+        background: color-mix(in srgb, var(--slate-deep) 55%, transparent);
         backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
         opacity: 0; transition: opacity var(--motion-base) var(--ease-out);
       }
@@ -95,7 +95,7 @@ export class UiRadialMenu extends LitElement {
         border-radius: 50%; color: var(--ink); background: var(--surface-overlay); border: 1px solid var(--hairline-strong);
         transform: translate(var(--from-x), var(--from-y)) scale(0.4); opacity: 0;
         transition: transform var(--motion-slow) var(--ease-spring), opacity var(--motion-base) var(--ease-out), background var(--motion-instant) var(--ease-standard), border-color var(--motion-instant) var(--ease-standard);
-        transition-delay: calc(var(--i) * 18ms);
+        transition-delay: calc(var(--i) * var(--motion-instant) / 4);
       }
       :host([open]) button { transform: none; opacity: 1; }
       button:hover, button:focus-visible { background: var(--surface-raised); border-color: var(--focus); outline: none; }

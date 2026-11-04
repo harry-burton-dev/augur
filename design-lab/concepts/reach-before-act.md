@@ -14,3 +14,5 @@ Could steer: Keys and doors (N), the switchboard (O), Artifacts publish.
 Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): corrections go to the owners of the places where the wrong number was read (mistake V4).
 
 Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): the app owner's dry run before sending.
+
+In [`2026-11-03-the-label`](../runs/2026-11-03-the-label/): a label verdict per recipient, and no silent partial sends.
