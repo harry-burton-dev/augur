@@ -11,7 +11,7 @@ export const info = {
   title: 'Events',
   version: '1.8.0',
   description: [
-    "Notifications for the Shell's stream, and the platform's audit log.",
+    "Notifications for the Shell's stream, and AUGUR's audit log.",
     'People reach it through the gateway, which passes the caller in x-user-*',
     'headers. Services call it on the internal network (see @augur/service-kit:',
     'notify, recordAudit). An app\'s service signs in as itself (a bearer token',
