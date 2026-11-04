@@ -206,6 +206,8 @@ test('Home places the app’s glance card for the floor, with a working context'
 
 // Find over apps' content: the shell asks each app that declares `search`, on the person's floor.
 const find = async (page: Page, q: string) => {
+  // The shell's model is set on its element once it has drawn; wait for it rather than racing the first render.
+  await page.waitForFunction(() => Boolean((document.querySelector('[data-shell]') as unknown as { shell?: unknown } | null)?.shell));
   await page.evaluate(() => ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { openView(id: string): void }).openView('find'));
   await page.locator('.aerie-shell .aerie-search input').fill(q);
 };
