@@ -143,7 +143,9 @@ services:
       retries: 20
 
   # A dump of the whole database every night into infra/deploy/backups, keeping 14 days,
-  # and once a week a test restore of the newest into a throwaway database.
+  # and once a week a test restore of the newest into a throwaway database. Once OFFSITE_REPOSITORY is
+  # set, each night's dump and apps' files are also copied off the server with restic, encrypted before
+  # they leave, and the weekly restore test restores from that copy (ADR 0060; docs/deploy.md, "Backups").
   backup:
     logging: *logging
     image: postgres:16-alpine
@@ -156,14 +158,37 @@ services:
       BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-2}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
       RESTORE_TEST_WEEKDAY: ${RESTORE_TEST_WEEKDAY:-0}
+      # The off-server copy: a restic repository in an S3-compatible bucket, its encryption password, and
+      # the bucket's key. Empty, nothing leaves the server.
+      RESTIC_REPOSITORY: ${OFFSITE_REPOSITORY:-}
+      RESTIC_PASSWORD: ${OFFSITE_PASSWORD:-}
+      AWS_ACCESS_KEY_ID: ${OFFSITE_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${OFFSITE_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${OFFSITE_REGION:-}
+      OFFSITE_KEEP_DAILY: ${OFFSITE_KEEP_DAILY:-30}
     volumes:
       - ./backup:/backup:ro
       - ./backups:/backups
       # Apps' files, read only: backed up beside the database.
       - garage-meta:/objects/meta:ro
       - garage-data:/objects/data:ro
+      # restic, put there by backup-tools.
+      - backup-tools:/tools:ro
     depends_on:
       postgres: { condition: service_healthy }
+      backup-tools: { condition: service_completed_successfully }
+
+  # Puts restic's binary (one static file) where the backup container runs it from, then stops. Runs on
+  # every `up`, so a new restic arrives with the image tag here.
+  backup-tools:
+    logging: *logging
+    image: restic/restic:0.19.1
+    restart: on-failure
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    entrypoint: ["/bin/sh", "-c", "cp /usr/bin/restic /tools/restic.new && mv /tools/restic.new /tools/restic"]
+    volumes:
+      - backup-tools:/tools
 
   # Apps' files: an S3-compatible object store, reached only inside the compose network.
   garage:
@@ -606,4 +631,6 @@ volumes:
   tailscale:
   garage-meta:
   garage-data:
+  # restic, for the backup container (backup-tools fills it on every `up`).
+  backup-tools:
   otel-lgtm:

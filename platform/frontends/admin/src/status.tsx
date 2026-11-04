@@ -123,8 +123,21 @@ export function Status({ api, openUpgrades }: { api: AdminApi; openUpgrades: () 
             items={[
               { label: 'Last backup', value: backups.lastBackup ? (backups.lastBackup.ok ? when(backups.lastBackup.at) : 'Failed') : 'Never' },
               ...(backups.lastBackup?.ok && backups.lastBackup.bytes !== undefined ? [{ label: 'Size', value: size(backups.lastBackup.bytes) }] : []),
+              {
+                label: 'Copy off the server',
+                value: backups.offsite ? (backups.offsite.ok ? `${when(backups.offsite.at)}, ${backups.offsite.keepDays ?? 30} days kept` : 'Failed') : 'Not set up',
+              },
               { label: 'Last restore test', value: backups.lastRestoreTest ? when(backups.lastRestoreTest.at) : 'Never' },
-              ...(backups.lastRestoreTest ? [{ label: 'Result', value: backups.lastRestoreTest.ok ? `Restored, ${backups.lastRestoreTest.people ?? 0} people` : 'Failed' }] : []),
+              ...(backups.lastRestoreTest
+                ? [
+                    {
+                      label: 'Result',
+                      value: backups.lastRestoreTest.ok
+                        ? `Restored ${backups.lastRestoreTest.from === 'offsite' ? 'from the copy off the server' : 'from this server'}, ${backups.lastRestoreTest.people ?? 0} people`
+                        : 'Failed',
+                    },
+                  ]
+                : []),
             ]}
           />
           {backups.problem ? <p className="admin-flat">{backups.problem}</p> : null}

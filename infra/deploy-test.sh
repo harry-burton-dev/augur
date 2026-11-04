@@ -156,7 +156,7 @@ on_version() {
 # A container that keeps restarting is a failure even when its neighbours look fine.
 no_restarts() {
   local bad
-  bad=$(pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and (.Service != "keycloak-config") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]')
+  bad=$(pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and (.Service != "keycloak-config") and (.Service != "backup-tools") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]')
   if [ -n "$bad" ]; then echo "$bad" >&2; return 1; fi
 }
 
@@ -253,7 +253,7 @@ counted_apart() {
 }
 
 if [ "${BUILD:-}" = 1 ]; then
-  pc build $(services | grep -vx -e postgres -e backup -e garage -e docker-proxy) >&2
+  pc build $(services | grep -vx -e postgres -e backup -e backup-tools -e garage -e docker-proxy) >&2
   # The build cache isn't needed again, and on a CI runner its space is.
   docker builder prune -af >/dev/null
 fi

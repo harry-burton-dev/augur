@@ -45,15 +45,28 @@ export const PublicAccess = Type.Object(
   },
 );
 
+export const OffsiteCopy = Type.Object(
+  {
+    at: Type.String({ format: 'date-time' }),
+    ok: Type.Boolean(),
+    snapshot: Type.Optional(Type.String({ description: "The database copy's restic snapshot, its first 8 characters" })),
+    keepDays: Type.Optional(Type.Integer({ description: 'How many days of copies the bucket keeps' })),
+    problem: Type.Optional(Type.String()),
+  },
+  { $id: 'OffsiteCopy', description: "The last copy of the night's backup off the server, with restic (ADR 0060)" },
+);
+
 export const BackupStatus = Type.Object(
   {
     state: Type.Enum(['ok', 'attention'], { description: '"attention" when backups cannot be relied on right now' }),
     problem: Type.Optional(Type.String({ description: 'Why, in words an admin can act on' })),
     lastBackup: Type.Optional(ref(BackupRun)),
+    offsite: Type.Optional(ref(OffsiteCopy)),
     lastRestoreTest: Type.Optional(
       Type.Intersect([
         ref(BackupRun),
         Type.Object({
+          from: Type.Optional(Type.Enum(['local', 'offsite'], { description: 'Restored from the backup on this server, or from the off-server copy' })),
           seconds: Type.Optional(Type.Integer()),
           people: Type.Optional(Type.Integer({ description: 'People in the restored sign-in realm' })),
           apps: Type.Optional(Type.Integer()),
@@ -122,4 +135,4 @@ export const Refusal = Type.Unsafe<{ error: string; message: string; [extension:
 export const refused = (description: string) => ({ description, content: { 'application/problem+json': { schema: ref(Refusal) } } });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, BackupStatus, Seeding];
+export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, OffsiteCopy, BackupStatus, Seeding];
