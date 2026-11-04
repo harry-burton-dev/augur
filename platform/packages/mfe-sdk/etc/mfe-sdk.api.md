@@ -28,6 +28,7 @@ export interface AppManifestEntry {
     entry: string;
     floors?: WorkspaceKind[];
     focus?: boolean;
+    followsAddress?: boolean;
     handles?: string[];
     icon?: string;
     // (undocumented)
@@ -257,6 +258,7 @@ export interface Marking {
 export interface MicroFrontend {
     // (undocumented)
     mount(el: HTMLElement, ctx: MountContext): void | Promise<void>;
+    navigated?(el: HTMLElement, path: string): void;
     surfaces?: Record<string, Surface>;
     // (undocumented)
     unmount?(el: HTMLElement): void | Promise<void>;

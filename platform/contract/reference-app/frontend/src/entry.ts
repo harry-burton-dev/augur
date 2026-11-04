@@ -12,10 +12,12 @@ import { Glance, Reference } from './view.js';
 declare global {
   interface Window {
     referenceUnmounts?: number;
+    referenceMounts?: number;
   }
 }
 
 const roots = new WeakMap<HTMLElement, Root>();
+const contexts = new WeakMap<HTMLElement, MountContext>();
 const draw = (el: HTMLElement, view: ReactElement) => {
   const root = createRoot(el);
   roots.set(el, root);
@@ -28,10 +30,18 @@ const clear = (el: HTMLElement) => {
 
 export default defineMicroFrontend({
   mount(el: HTMLElement, ctx: MountContext) {
+    window.referenceMounts = (window.referenceMounts ?? 0) + 1;
+    contexts.set(el, ctx);
     draw(el, createElement(Reference, { ctx }));
+  },
+  // SDK 1.11: its manifest sets followsAddress, so Back and Forward inside it keep it mounted and the shell says where it is now.
+  navigated(el: HTMLElement, path: string) {
+    const ctx = contexts.get(el);
+    if (ctx) roots.get(el)?.render(createElement(Reference, { ctx: { ...ctx, path } }));
   },
   unmount(el: HTMLElement) {
     clear(el);
+    contexts.delete(el);
     window.referenceUnmounts = (window.referenceUnmounts ?? 0) + 1;
   },
   // SDK 1.2: a glance card, which Home places on the person's own floor.

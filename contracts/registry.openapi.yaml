@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.32.0
+  version: 1.33.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 # Paths below are relative to the server: the major of info.version is the path prefix.
 # A breaking change bumps the major and is served under /v2 beside /v1.
@@ -1762,6 +1762,7 @@ components:
         ai: { type: boolean, description: The app is an AI; the menus draw it as a bubble }
         orbit: { type: boolean, description: "false: the app keeps its menu inside it, so the shell never shows its Orbit; its root opens the app, Title still lists its areas, and the band's Home and All apps are the way back to the shell's menus" }
         sameOnEveryFloor: { type: boolean, description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open, staying in view and saying why (SDK 1.6)" }
+        followsAddress: { type: boolean, description: "true: the app follows the address itself, as the app kit's router does, so the shell keeps it mounted on Back and Forward inside its route and calls its navigated with the new path (SDK 1.11)" }
         focus: { type: boolean, description: "true: the app can narrow what it shows to a working context inside the floor, from ctx.focus (SDK 1.10). Reserved: the shell offers none yet (ADR 0029)" }
         category:
           $ref: "#/components/schemas/AppCategory"

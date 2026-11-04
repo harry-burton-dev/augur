@@ -155,6 +155,9 @@ describe('registry', () => {
     expect((await put({ ...library, sameOnEveryFloor: true })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, sameOnEveryFloor: true, maxUpload: 10 });
     expect((await put({ ...library, sameOnEveryFloor: 'yes' })).statusCode).toBe(400);
+    expect((await put({ ...library, followsAddress: true })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, followsAddress: true, maxUpload: 10 });
+    expect((await put({ ...library, followsAddress: 'yes' })).statusCode).toBe(400);
     expect((await put({ ...library, focus: true })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, focus: true, maxUpload: 10 });
     expect((await put({ ...library, focus: 'yes' })).statusCode).toBe(400);

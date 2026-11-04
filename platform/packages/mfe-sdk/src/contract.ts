@@ -97,6 +97,15 @@ export interface AppManifestEntry {
    */
   focus?: boolean;
   /**
+   * `true`: the app follows the address itself, as the app kit's router does,
+   * so Back and Forward inside its route don't mount it again (SDK 1.11). While
+   * the same app stays open on the same floor and no intent is waiting for it,
+   * the shell keeps it mounted and calls its `navigated` with the new path.
+   * An app without `navigated` is mounted again on every move, flag or not.
+   * Without the flag, every move mounts the app again at the new path.
+   */
+  followsAddress?: boolean;
+  /**
    * What kind of app this is (SDK 1.11, ADR 0032): `platform`, for using and
    * managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only
    * apps that ship with AUGUR or come from its signed app feed can be either;
@@ -323,6 +332,16 @@ export interface IntentReply {
 export interface MicroFrontend {
   mount(el: HTMLElement, ctx: MountContext): void | Promise<void>;
   unmount?(el: HTMLElement): void | Promise<void>;
+  /**
+   * The shell kept the app mounted through a move inside its route, Back or
+   * Forward or a link, because its manifest sets `followsAddress` (SDK 1.11).
+   * `path` is below the app's route, as `ctx.path` is at mount; `ctx.path`
+   * keeps the path it was mounted at. A router that reads the address itself
+   * still needs telling: the shell's own moves (Find, menus, notifications)
+   * push the address without a popstate. Without it the shell mounts the app
+   * again on every move.
+   */
+  navigated?(el: HTMLElement, path: string): void;
   /**
    * The app's smaller pieces the shell places outside the app itself, by the
    * `module` its manifest's `surfaces` name (SDK 1.2): a glance card on Home,
