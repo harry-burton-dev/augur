@@ -27,6 +27,8 @@ import {
   type UnitRef,
   isMarkingOrNone,
   isRef,
+  APP_CATEGORIES,
+  type AppCategory,
 } from './index.js';
 
 describe('event bus', () => {
@@ -252,5 +254,14 @@ describe('refs and markings (SDK 1.10)', () => {
   it('accepts no marking at all', () => {
     expect(isMarkingOrNone(undefined)).toBe(true);
     expect(isMarkingOrNone(null)).toBe(false);
+  });
+});
+
+describe('app categories (SDK 1.11)', () => {
+  it('has exactly the two kinds ADR 0032 names, so a change to the contract is seen', () => {
+    expect(APP_CATEGORIES).toEqual(['platform', 'pillar']);
+    const kind: AppCategory = 'pillar';
+    const entry: AppManifestEntry = { id: 'a', name: 'A', route: '/a', entry: '/a.js', version: '1.0.0', sdk: '^1.11.0', category: kind };
+    expect(APP_CATEGORIES).toContain(entry.category);
   });
 });

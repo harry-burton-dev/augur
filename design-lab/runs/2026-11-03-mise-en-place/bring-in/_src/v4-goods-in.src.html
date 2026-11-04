@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Bring in V4 · Goods in</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: the kitchen's goods-in check: the delivery against the docket, before it goes on the shelf ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(320px,1fr) minmax(0,2fr);gap:var(--space-6)}
+.dlv{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.mail{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);padding:var(--space-4);display:grid;gap:var(--space-2)}
+.mail dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);margin:0;font-size:var(--type-small);line-height:var(--leading-small)}
+.mail dt{color:var(--ink-muted)}
+.mail dd{margin:0;color:var(--ink)}
+.att{display:flex;align-items:center;gap:var(--space-3);border-top:1px solid var(--hairline);padding-top:var(--space-3);font-size:var(--type-meta)}
+.att b{font-weight:400;color:var(--light)}
+.att small{display:block;font-size:var(--type-small);color:var(--ink-muted)}
+.receipt{border:1px dashed var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.receipt b{font-weight:400;color:var(--ink)}
+.dlv .acts{margin-top:auto;display:grid;gap:var(--space-2)}
+.dlv .acts .btn{justify-content:center}
+.dlv .acts p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.chk{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.it{display:grid;grid-template-columns:var(--space-5) minmax(180px,.8fr) minmax(0,1.4fr) minmax(0,1.3fr);gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--hairline);align-items:start;transition:opacity var(--motion-calm) var(--ease-out)}
+.it.wait{opacity:.2}
+.it .st{display:inline-flex;margin-top:2px;color:var(--ink-muted)}
+.it.ok .st{color:var(--x-proposed-lit)}
+.it.look .st{color:var(--x-proposed-disagree)}
+.it .q{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.it .f{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.it .f .rawv{font-size:var(--x-proposed-type-micro)}
+.it .m{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tot{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-meta);color:var(--ink);border-top:1px solid var(--hairline-strong);padding-top:var(--space-3)}
+.tot b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.it{grid-template-columns:var(--space-5) minmax(140px,.8fr) minmax(0,1.5fr) minmax(0,1fr);padding:var(--space-1) 0}.it .q,.it .f{font-size:var(--type-small);line-height:var(--leading-small)}.mail{padding:var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Bring in · V4</b> goods in: check the delivery against the docket before it goes on the shelf · kitchen goods-in, HACCP receiving checks</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R), F0 = R.file, H = R.header, from = P(F0.from);
+const DL = dataLinesOf(R);
+const S = { shown: 0 };
+const notesCol = H.indexOf('Notes');
+const CHECKS = [
+  { q: 'Who sent it', f: `${from.name}, ${from.role.split(', ')[1]}`, m: `a firm ${DATA.app} keeps (${FIRM.id}), on the ${F(FIRM.keptOn).word} floor`, st: 'ok' },
+  { q: 'What arrived', f: `a spreadsheet with ${F0.otherSheets.length + 1} sheets: ${raw(F0.sheet)} ${F0.otherSheets.map(s => raw(s.name)).join(' ')}`, m: `${F0.sheet} holds the visits. ${F0.otherSheets.map(s => `${s.name}: ${s.what}`).join('; ')}. Only ${F0.sheet} is brought in, and the pass will say so.`, st: 'look' },
+  { q: 'Kept as it came', f: `${F0.doc.id} in ${F0.doc.library}`, m: `the ${F(F0.doc.floor).word} floor library in Artifacts. Every later step reads from this copy; nobody edits it.`, st: 'ok' },
+  { q: 'Where the visits start', f: `line ${STEP('s2').line}, under a title`, m: `the title is merged across ${F0.merged[0]}; line 2 is empty; line ${STEP('s2').line} holds ${H.length} column names.`, st: 'ok' },
+  { q: 'How many', f: `${DL.length} lines of visits`, m: `between line ${STEP('s2').line + 1} and line ${R.total.line - 1}, with ${R.st.s4.aside.length} empty lines among them.`, st: 'ok' },
+  { q: 'Its own count', f: `TOTAL says ${R.total.said} visits`, m: `${DL.length} lines, one an exact copy (line ${PL.copies[0].n} of ${PL.copies[0].of}): ${DL.length} − ${PL.copies.length} = ${DL.length - PL.copies.length}. ${DL.length - PL.copies.length === R.total.said ? 'It agrees.' : 'It doesn’t agree.'}`, st: DL.length - PL.copies.length === R.total.said ? 'ok' : 'look' },
+  { q: 'Hidden in the sheet', f: `${F0.hidden.cols} hidden columns · ${F0.hidden.lines} hidden lines · ${F0.formulas} formulas · ${plural(F0.comments.length, 'comment')}`, m: F0.comments.length ? F0.comments.map(c => `a cell comment on ${c.cell}: “${esc(c.text)}”`).join('; ') + '. Kept as a note on the pass’s check, not as data.' : 'nothing hidden.', st: F0.comments.length ? 'look' : 'ok' },
+  { q: 'People’s names', f: 'none found', m: `checked every column, including ${H[notesCol]}. If a name turns up, the bench says where before anything lands.`, st: 'ok' },
+  { q: 'Seen before', f: 'first file like this', m: `no recipe matches its columns yet. After tidying, the steps can be saved as a recipe for next month.`, st: 'look' }
+];
+function render() {
+  const ok = CHECKS.slice(0, S.shown).filter(c => c.st === 'ok').length, look = CHECKS.slice(0, S.shown).filter(c => c.st === 'look').length;
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, 'Goods in'], [['N', 'next check'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="dlv"><div><h1 class="t">A delivery from ${FIRM.short}</h1><p class="lede" style="margin-top:var(--space-1)">Checked against what was expected before anything is unpacked, the way a kitchen checks a delivery against its docket.</p></div>
+      <div class="mail"><dl><dt>From</dt><dd>${from.name}, ${FIRM.name}</dd><dt>To</dt><dd>${F0.via.replace('email to the ', '')}</dd><dt>When</dt><dd>${F0.received}</dd><dt>Subject</dt><dd>${esc(F0.subject)}</dd></dl>
+        <div class="att">${I('file-spreadsheet', 22)}<div><b>${esc(F0.name)}</b><small>${F0.otherSheets.length + 1} sheets · ${F0.lines.length} lines on ${F0.sheet}</small></div></div></div>
+      <div class="receipt">${I('receipt', 12)} <b>Receipt.</b> Kept as ${F0.doc.id}. Anyone on the ${F(F0.doc.floor).word} floor can open the original; whatever is made from it will point back here.</div>
+      <div class="acts"><button class="btn go">${I('package-open', 14)} Unpack: start tidying</button><button class="btn">${I('mail', 14)} Ask ${from.name.split(' ')[0]} a question first</button><p>Nothing is unpacked until you choose. Sending it back keeps the receipt.</p></div></section>
+    <section class="chk"><p class="eyebrow">${I('clipboard-list', 12)} Goods-in check · ${S.shown} of ${CHECKS.length}</p>
+      <ol class="list">${CHECKS.map((c, i) => `<li class="it ${i < S.shown ? c.st : 'wait'}"><span class="st">${i < S.shown ? (c.st === 'ok' ? I('check', 14) : I('eye', 14)) : I('circle-dashed', 14)}</span><span class="q">${c.q}</span><span class="f">${c.f}</span><span class="m">${c.m}</span></li>`).join('')}</ol>
+      <p class="tot">${I('check', 14)} <b>${ok} as expected</b> · ${I('eye', 14)} <b>${look} to look at</b> · nothing refused. ${look ? 'The things to look at come with you to the bench.' : ''}</p></section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() { clearLater(); S.shown = 0; render(); settle(); const t = ms('--motion-run'); CHECKS.forEach((_, i) => later(() => { S.shown = i + 1; render(); }, t + i * ms('--motion-instant') * 2)); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 'n') { clearLater(); S.shown = Math.min(CHECKS.length, S.shown + 1); render(); } });
+replay();
+</script>
+</body>
+</html>

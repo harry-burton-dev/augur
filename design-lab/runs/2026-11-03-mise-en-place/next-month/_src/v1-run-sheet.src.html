@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Next month V1 · The run sheet</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the saved recipe reruns line by line beside last month's counts; a line that can't run stops and asks ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:var(--space-6)}
+.sheet-run{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.hd,.ln{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) minmax(9ch,.32fr) minmax(9ch,.32fr) var(--space-6);gap:var(--space-3);align-items:start}
+.hd{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);padding:0 var(--space-3) var(--space-1)}
+.ln{padding:var(--space-2) var(--space-3);border-top:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);transition:opacity var(--motion-base) var(--ease-out)}
+.ln.todo{opacity:.3}
+.ln .n{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);text-align:right}
+.ln .w{color:var(--ink)}
+.ln .c{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.ln .c.now{color:var(--ink)}
+.ln .v{display:inline-flex;align-items:center;justify-content:flex-end;gap:var(--space-1);font-size:var(--type-small);color:var(--ink-muted)}
+.ln.same .v{color:var(--ink-muted)}
+.ln.check{background:var(--x-proposed-disagree-wash)}
+.ln.check .v{color:var(--x-proposed-disagree)}
+.ln.stop{background:var(--x-proposed-stop-wash);box-shadow:inset 2px 0 0 var(--x-proposed-stop)}
+.ln.stop .v,.ln.stop .c.now{color:var(--x-proposed-stop)}
+.ln.fixed{box-shadow:inset 2px 0 0 var(--x-proposed-lit)}
+.ln .sub{grid-column:2 / span 4;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ln .sub .rawv{font-size:var(--x-proposed-type-micro)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.file{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-meta)}
+.file small{display:block;color:var(--ink-muted);font-size:var(--type-small)}
+.stopbox p{margin:0}
+.stopbox .q{font-size:var(--type-body);line-height:var(--leading-body);color:var(--light);margin:var(--space-2) 0}
+.stopbox .ctx{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.stopbox .opts{display:grid;gap:var(--space-2);margin-top:var(--space-3)}
+.stopbox .opts .btn{justify-content:flex-start;height:auto;padding:var(--space-2) var(--space-3);text-align:left}
+.stopbox .opts small{display:block;color:var(--ink-muted);font-size:var(--type-small)}
+.side .sum{margin-top:auto;display:grid;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);border-top:1px solid var(--hairline-strong);padding-top:var(--space-3)}
+.side .sum p{margin:0}
+@media (max-width:1400px){.ln{padding:var(--space-1) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}.ln .sub{display:none}.ln.stop .sub,.ln.check .sub{display:block}.stopbox .q{font-size:var(--type-meta);line-height:var(--leading-meta)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Next month · V1</b> the run sheet: the saved recipe reruns line by line beside last month's counts; a line that can't run stops · a production run sheet, jidoka</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const OCT = run('oct'), D = DATA.december, steps = DATA.recipe.steps, F1 = DATA.files.nov;
+const S = { ran: 0, rename: false, word: false };
+const answers = () => ({ ...(S.rename ? { rename: { [D.rename.from]: D.rename.to } } : {}), ...(S.word ? { value: { [D.newWord.value]: D.newWord.choice } } : {}) });
+function render() {
+  const N = run('nov', steps, answers()), PN = plate(N);
+  const firstStop = steps.findIndex(st => stepState(st, N) === 'stop');
+  const upto = firstStop >= 0 ? Math.min(S.ran, firstStop + 1) : S.ran;
+  const stopSt = firstStop >= 0 && upto > firstStop ? steps[firstStop] : null, stop = stopSt && N.st[stopSt.id].stop;
+  const verdict = (st, i) => {
+    if (i >= upto) return { cls: 'todo', v: '' };
+    const s = stepState(st, N), a = stepCount(st, OCT), b = stepCount(st, N);
+    if (s === 'stop') return { cls: 'stop', v: `${I('hand', 12)} stopped` };
+    if (s === 'check') return { cls: 'check', v: `${I('eye', 12)} check` };
+    if ((st.op === 'van' || st.op === 'match') && S.rename) return { cls: 'fixed', v: `${I('check', 12)} with your answer` };
+    if (st.op === 'result' && S.word) return { cls: 'fixed', v: `${I('check', 12)} with your answer` };
+    return { cls: 'same', v: `${I('check', 12)} ${a === b ? 'same' : 'ran'}` };
+  };
+  const sub = (st, cls) => {
+    const s = N.st[st.id];
+    if (cls === 'stop' && s.stop.kind === 'column') return `The file has no column called ${raw(s.stop.want)}. ${raw(s.stop.guess)} is new, and ${s.stop.fit} of ${s.stop.of} of its values look like van numbers.`;
+    if (cls === 'stop') return `${plural(s.stop.lines.length, 'line')} (${s.stop.lines.join(', ')}) say ${raw(s.stop.value)}; no result ${DATA.app} keeps is like it.`;
+    if (cls === 'check') return s.near.map(x => `${raw(x.raw)} is new; joined ${DEPOT(x.to).name} because it is near ${raw(x.like)} (lines ${x.lines.join(', ')}). Undo if wrong.`).join(' ');
+    if (cls === 'fixed' && st.op === 'van') return `reads ${raw(D.rename.to)} where it read ${raw(D.rename.from)}; recipe version ${DATA.recipe.version + 1}`;
+    if (cls === 'fixed' && st.op === 'result') return `${raw(D.newWord.value)} is set aside until “${D.newWord.ask}” exists; ${P(D.newWord.decides).name} asked`;
+    if (st.op === 'map' && N.leftOut.length && upto > steps.indexOf(st)) return `${N.leftOut.map(raw).join(' ')} is new and not brought in; the pass will say so`;
+    return '';
+  };
+  const OPT = stop && stop.kind === 'column'
+    ? [['rename', 'columns-3', `Yes, ${stop.guess} is ${stop.want} now`, `lines ${steps.filter(s => (s.col || [])[0] === stop.want).map(s => s.id.slice(1)).join(' and ')} read either name from now on`], ['no', 'x', 'No, look again', 'pick the column yourself']]
+    : stop ? [['word', 'archive', `Set those ${stop.lines.length} lines aside, and ask for “${D.newWord.ask}”`, `${P(D.newWord.decides).name} decides the word; the lines wait in the tray`], ['note', 'sticky-note', 'Land them as “not known yet”, with the words in the note', 'the result would be empty on those inspections']] : [];
+  const done = upto === steps.length && firstStop < 0;
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, DATA.recipe.name, `Run ${F1.run.n}`], [['1–2', 'answer'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="sheet-run"><div><h1 class="t">“${DATA.recipe.name}” on ${F1.month}’s file</h1><p class="lede" style="margin-top:var(--space-1)">The recipe you saved, line by line, with what it did last month and what it does now. Lines that run as before say “same” and stay quiet.</p></div>
+      <div class="hd"><span></span><span>recipe line</span><span>${OCT.file.month.split(' ')[0]}</span><span>${F1.month.split(' ')[0]}</span><span></span></div>
+      ${steps.map((st, i) => { const v = verdict(st, i), w = stepWords(st, i < upto ? N : OCT), sb = i < upto ? sub(st, v.cls) : '';
+        return `<div class="ln ${v.cls}"><span class="n">${st.id.slice(1)}</span><span class="w">${w.w}<span class="tk">${esc(w.tk)}</span></span><span class="c">${stepCount(st, OCT)}</span><span class="c now">${i < upto ? stepCount(st, N) : ''}</span><span class="v">${v.v}</span>${sb ? `<span class="sub">${sb}</span>` : ''}</div>`; }).join('')}</section>
+    <aside class="side"><div class="file">${I('file-spreadsheet', 22)}<div>${esc(F1.name)}<small>from ${P(F1.from).name} · ${F1.received} · kept as ${F1.doc.id}</small></div></div>
+      ${stop ? `<div class="stopbox"><p class="eyebrow">${I('hand', 12)} Recipe line ${stopSt.id.slice(1)} stopped</p><p class="q">${stop.kind === 'column' ? `Is ${raw(stop.guess)} the column that used to be called ${raw(stop.want)}?` : `What should happen to ${raw(stop.value)}?`}</p>
+        <p class="ctx">${sub(stopSt, 'stop')} Nothing after this line has run.</p>
+        <div class="opts">${OPT.map(([k, ic, w, s], i) => `<button class="btn ${i === 0 ? 'go' : ''}" data-a="${k}">${I(ic, 14)}<span>${i + 1} · ${w}<small>${s}</small></span></button>`).join('')}</div></div>`
+      : done ? `<p><span class="heard">${I('check', 12)} ran to the pass</span></p><p class="lede">${PN.land} ${DATA.kinds.inspection.word}s ready, ${PN.aside.length} set aside, ${N.leftOut.length} column left out. The file says ${N.total.said}: ${PN.land} + ${PN.aside.length} ${PN.balances ? '✓' : '≠'}.</p><button class="btn go" style="align-self:flex-start">${I('utensils', 14)} Go to the pass</button>` : `<p class="lede">Running…</p>`}
+      <div class="sum"><p class="eyebrow">This run so far</p><p>${steps.slice(0, upto).filter((st, i) => verdict(st, i).cls === 'same').length} lines the same as last month · ${[S.rename, S.word].filter(Boolean).length} answered · ${firstStop >= 0 && upto > firstStop ? 1 : 0} waiting on you</p></div></aside>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-a]').forEach(b => b.onclick = () => answer(b.dataset.a));
+}
+function go() { const N = run('nov', steps, answers()); const fs = steps.findIndex(st => stepState(st, N) === 'stop'); if (S.ran < steps.length && (fs < 0 || S.ran <= fs)) { S.ran++; render(); later(go, ms('--motion-instant')); } }
+function answer(k) { if (k === 'rename') S.rename = true; if (k === 'word') S.word = true; render(); later(go, ms('--motion-base')); }
+function replay() { clearLater(); Object.assign(S, { ran: 0, rename: false, word: false }); render(); settle(); later(go, ms('--motion-run')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === '1') { const b = $('[data-a]'); if (b) answer(b.dataset.a); } });
+replay();
+</script>
+</body>
+</html>

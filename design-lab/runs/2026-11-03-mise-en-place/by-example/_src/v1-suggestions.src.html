@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · By example V1 · Fix one, see three readings</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: fix one value; the bench offers readings of what you meant, previewed on the sheet in pencil ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);gap:var(--space-6)}
+.sheetbox{min-height:0;overflow:hidden;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.sheetbox .sheet td,.sheetbox .sheet th{padding:1px var(--space-2)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.youdid{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--light);border-radius:var(--radius-inset)}
+.youdid .lab{font-size:var(--type-small);color:var(--ink-muted)}
+.sug{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.sg{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);text-align:left;width:100%}
+.sg:hover{background:var(--surface-raised)}
+.sg[aria-pressed="true"]{border-color:var(--hairline-strong);background:var(--surface-raised)}
+.sg .k{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.sg .w{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.sg .c{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.sg .d{grid-column:2 / span 2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center}
+.sg .d .rawv{font-size:var(--x-proposed-type-micro)}
+.sg .miss{color:var(--x-proposed-disagree)}
+.acts{display:flex;gap:var(--space-2);align-items:center;margin-top:auto}
+.acts .muted{font-size:var(--type-small)}
+.heardline{border-top:1px solid var(--hairline-strong);padding-top:var(--space-3)}
+@media (max-width:1400px){.sheetbox .sheet{font-size:var(--x-proposed-type-micro)}.sg{padding:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>By example · V1</b> fix one value; three readings of what you meant, previewed in pencil · Wrangler's predictive interaction</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct', DATA.recipe.steps.slice(0, 5)), F0 = R.file, H = R.header;
+const st = STEP('s6'), col = H.indexOf(st.col[0]), [exFrom, exTo] = st.example;
+const exLine = R.lines.find(l => l.cells[col] === exFrom);
+const live = R.lines.filter(l => !l.role);
+/* three readings of one example; each is a rule the bench can run on the whole column */
+const SUG = [
+  { w: `Write every van number like ${exTo}`, f: v => readVan(v), tk: `letters → upper, then '-', then 2 digits` },
+  { w: `Change only “${exFrom}”`, f: v => v === exFrom ? exTo : v, tk: `replace(${st.col[0]}, '${exFrom}', '${exTo}')` },
+  { w: `Make ${st.col[0]} upper case`, f: v => v.toUpperCase(), tk: `upper(${st.col[0]})` }
+];
+function effect(s) {
+  const ch = [], miss = [];
+  live.forEach(l => { const v = l.cells[col], o = s.f(v); if (o == null) miss.push(l); else if (o !== v) ch.push([l, o]); });
+  const still = live.filter(l => { const o = s.f(l.cells[col]); return o != null && !/^[A-Z]{2}-\d{2}$/.test(o); });
+  return { ch, miss, still };
+}
+const S = { on: null, done: false };
+function cellCls(l, i) {
+  if (i !== col || l.role) return '';
+  if (l === exLine) return 'ex';
+  if (S.on == null) return '';
+  const o = SUG[S.on].f(l.cells[i]);
+  if (o == null) return 'stopc';
+  return o !== l.cells[i] ? (S.done ? 'ok' : 'pen') : '';
+}
+function sheet() {
+  const html = sheetHTML(R, { cell: cellCls });
+  if (S.on == null) return html.replace(`>${esc(exFrom)}</td>`, `>${esc(exTo)}</td>`);
+  /* show the previewed value in place of the raw one */
+  const tmp = document.createElement('div'); tmp.innerHTML = html;
+  $$('tbody tr', tmp).forEach(tr => { const l = R.lines[+tr.dataset.n - 1]; if (l.role) return; const td = tr.children[col + 1]; const o = SUG[S.on].f(l.cells[col]); td.textContent = l === exLine ? exTo : o == null ? l.cells[col] : o; if (o == null) td.title = 'can’t be read this way'; });
+  return tmp.innerHTML;
+}
+function render() {
+  const e = S.on != null ? effect(SUG[S.on]) : null;
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, F0.name, 'Tidy'], [['1–3', 'preview'], ['Enter', 'use it'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="sheetbox scroll" aria-label="The file">${sheet()}</section>
+    <section class="side">
+      <div class="youdid"><span class="lab">You changed line ${exLine.n}</span>${pair(exFrom, exTo)}</div>
+      <p class="lede">Three readings of what you might have meant. Each is previewed on the sheet in pencil; nothing changes until you pick one.</p>
+      <ol class="sug">${SUG.map((s, i) => { const x = effect(s);
+        return `<li><button class="sg" data-i="${i}" aria-pressed="${S.on === i}"><span class="k">${i + 1}</span><span class="w">${s.w}<span class="tk">${esc(s.tk)}</span></span><span class="c">${plural(x.ch.length, 'value')}</span>
+          <span class="d">${x.ch.slice(0, 3).map(([l, o]) => pair(l.cells[col], o)).join('')}${x.ch.length > 3 ? `<span>+${x.ch.length - 3}</span>` : ''}${x.miss.length ? `<span class="miss">${I('hand', 12)} ${x.miss.map(l => `“${esc(l.cells[col])}”`).join(', ')} can’t be read this way</span>` : ''}${x.still.length && i ? `<span>${plural(x.still.length, 'value')} still not like ${exTo}</span>` : ''}</span></button></li>`; }).join('')}</ol>
+      ${S.done ? `<p class="heardline"><span class="heard">${I('check', 12)} heard</span> recipe line ${st.id.slice(1)}: ${lc(stepWords(st, run('oct')).w)}. ${e.miss.length ? `Line ${e.miss[0].n} waits for you: ${raw(e.miss[0].cells[col])} isn’t a van number.` : ''}</p>` : ''}
+      <div class="acts"><button class="btn go" ${S.on == null ? 'aria-disabled="true"' : ''} data-use>${I('check', 14)} Use reading ${S.on != null ? S.on + 1 : ''}</button><span class="muted">${e ? `${plural(e.ch.length, 'value')} will change; ${e.miss.length ? `${e.miss.length} will stop and ask` : 'none will stop'}` : 'Pick a reading to preview it'}</span></div>
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.sg').forEach(b => b.onclick = () => { S.on = +b.dataset.i; S.done = false; render(); });
+  $('[data-use]').onclick = () => { if (S.on != null) { S.done = true; render(); } };
+}
+function replay() { clearLater(); Object.assign(S, { on: null, done: false }); render(); settle(); later(() => { S.on = 0; render(); }, ms('--motion-run')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-3]$/.test(e.key)) { clearLater(); S.on = +e.key - 1; S.done = false; render(); }
+  if (e.key === 'Enter' && S.on != null && !e.target.closest('button')) { S.done = true; render(); }
+});
+replay();
+</script>
+</body>
+</html>

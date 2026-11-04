@@ -12,3 +12,5 @@ First found in: [`2026-11-02-wear-and-time`](../runs/2026-11-02-wear-and-time/) 
 Could steer: Presence and collaboration; notifications.
 
 Used in [`2026-11-03-the-label`](../runs/2026-11-03-the-label/) as a custody rule: acts are named, looks are counted (never below the policy's minimum group); your own trace is exact.
+
+Advanced in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): cocks are private and stay out of the audit log; the stamp book is private as a whole while each mark stays public; showing neighbours' bays and presence needs a rule (home V2, board V5).
