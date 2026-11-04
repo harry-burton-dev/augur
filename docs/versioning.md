@@ -103,7 +103,17 @@ A server can always go back to the release before the one it's on, so its tables
 - **A migration that shipped in a release never changes and is never removed.** Servers have run it. Fix forward with a new migration.
 - **Within a major version, migrations only add**: new tables, new columns with a default, new indexes. A migration that drops, renames, truncates, deletes rows, changes a column's type or makes a column required needs a **major** changeset for its service. That makes the AUGUR release breaking, so nobody skips the release before it. The usual way is to expand, then contract: add the new column and use it in one release, then remove the old one in a later major.
 
-Each service's migrations are the `migrations` export of its `src/store.ts`. After adding one, run `pnpm build && pnpm sync:migrations` and commit `release/migrations.lock.json`, which records each migration's fingerprint; the released one is compared against it.
+Each service's migrations are the `migrations` export of its `src/store.ts`, applied at start by the service kit's `runMigrations(pool, { schema, migrations })`: in one transaction, under an advisory lock so several instances can start at once, making the schema if it's missing. After adding one, run `pnpm build && pnpm sync:migrations` and commit `release/migrations.lock.json`, which records each migration's fingerprint; the released one is compared against it.
+
+Every migration that hasn't shipped is linted with [Squawk](https://squawkhq.com/docs/rules) (ADR 0053), with the rules in `.squawk.toml` at the root; `pnpm install` brings it. The check also looks for three things Squawk has no rule for: `truncate` (`augur-truncate`), `delete from` (`augur-delete-rows`) and an `update` with no `where` (`augur-bulk-update`). Each problem names its rule and line. When a reviewer agrees the release before is fine with a statement, such as an `update` that fills a column added in the same migration, or a `drop index` whose replacement follows, say why on a comment line and name the rule on the line just above the statement:
+
+```sql
+-- Fills the column added above; the release before doesn't read it.
+-- squawk-ignore augur-bulk-update
+update registry.apps set granted_scopes = '{}';
+```
+
+`-- squawk-ignore a, b` names several rules; `-- squawk-ignore-file <rule>` covers the whole migration. Use them for what is safe, not to skip a major changeset.
 
 ## HTTP APIs
 

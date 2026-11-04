@@ -129,6 +129,8 @@ app.get('/claims', async (req, reply) => {
 
 From the service kit, `notify` puts a notification on someone's stream (see [Notifications](notifications.md)) and `recordAudit` writes to the platform's audit log (each entry also keeps which service wrote it, from its signed token, so an entry that names someone as the actor still shows it came from your app); see [apps/README](../apps/README.md). A breaking API change goes under `/v2` beside `/v1`, as in [Versioning](versioning.md#http-apis).
 
+Background and scheduled work goes through the service kit's `createJobs`: durable, run once across instances, and recorded in the audit log ([Jobs](jobs.md)). Don't use `setInterval`.
+
 ### Errors
 
 Every AUGUR service answers an error as an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details body (`application/problem+json`): `type`, `title`, `status`, `detail`, and AUGUR's own `reason` and `whoCanChange`. `reason` is a stable code a client can switch on (`forbidden`, `not_found`, `conflict`, `unavailable`, `bad_request`, `internal`, …). `whoCanChange` says in plain words who can fix it, when someone can, so a screen can say why something can't be done and who to ask. `type` is `about:blank` unless a problem has its own page, so `title` is the status's phrase and the meaning is in `reason`. Each body also carries `error` (the same as `reason`) and `message` (the same as `detail`), which SDK 1.x clients read.

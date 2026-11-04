@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import type { Migration } from '@augur/service-kit';
 import { DirectoryError } from './directory.ts';
 
 /**
@@ -263,7 +264,7 @@ export class MemoryWorkspaceStore implements WorkspaceStore {
  * `path` is an ltree of ids from the root, so "everything under Finance" is
  * one indexed query.
  */
-export const workspaceMigrations: { id: string; sql: string }[] = [
+export const workspaceMigrations: Migration[] = [
   {
     id: '002_workspaces',
     sql: `
