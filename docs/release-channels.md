@@ -54,6 +54,8 @@ Releases are signed by the Release workflow on the branch it ran on. The updater
 
 Dev builds are signed by `augur-dev.yml` (AUGUR) or `app-dev.yml` (apps) on `main`, which the updater takes only for a dev build, and only on the workbench ([AUGUR dev builds](#augur-dev-builds)). `dev` stays on that list until `main` replaces it.
 
+For AUGUR published from a fork, three settings in `.env` say whose signatures the updater takes instead, as certificate identity patterns: `IMAGE_SIGNER` for its images and the apps it installs (such as `^https://github\.com/acme/augur/\.github/workflows/release\.yml@refs/heads/main$`), `IMAGE_SIGNER_ISSUER` for who issues the certificates (GitHub Actions unless set), and `AUGUR_DEV_SIGNER` for its dev builds, which otherwise follows the repository `IMAGE_SIGNER` names. Leave all three unset to take the publisher's. The registry's `FEED_SIGNER` does the same for the release feed ([upgrade.md](upgrade.md#the-signed-feed)).
+
 ## Server rings
 
 Each server says what kind it is with `SERVER_RING` in `.env`. It is set there and not in Admin, so no admin session can change it.
@@ -93,7 +95,7 @@ AUGUR itself gets a dev build of every merge into `main` that changes the platfo
 
 Only the workbench takes them. With `SERVER_RING=dev`, the registry follows the dev channel by default (`RELEASE_CHANNEL=dev`), which holds dev builds and every release. When a dev build is next and nothing needs a person (no breaking change, and no new required setting the updater can't make up), the registry asks the updater for it by itself, and it runs as any upgrade: backup first, then roll forward, rolling back if it doesn't come up. The history says **By itself**. A dev build that didn't finish, or that an admin took back or went back from, is never asked for again by itself: it waits for an admin, as does a release. A dev build with something that needs you waits on Updates, saying what.
 
-The updater checks a dev build's images against the AUGUR dev builds workflow on `refs/heads/main` (`AUGUR_DEV_SIGNER` in the updater overrides it), not the Release workflow, and refuses one unless `.env` says `SERVER_RING=dev`. On a preview or production server `RELEASE_CHANNEL=dev` is ignored, and Updates says so.
+The updater checks a dev build's images against the AUGUR dev builds workflow on `refs/heads/main` (`AUGUR_DEV_SIGNER` in `.env` overrides it; [Signatures](#signatures)), not the Release workflow, and refuses one unless `.env` says `SERVER_RING=dev`. On a preview or production server `RELEASE_CHANNEL=dev` is ignored, and Updates says so.
 
 ## The pipeline feed
 
