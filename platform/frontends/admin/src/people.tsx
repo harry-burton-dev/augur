@@ -1,4 +1,4 @@
-import { Button, Checkbox, CheckboxGroup, Dialog, Select, Status, Table, TextField, Toggle, type TableColumn, type TableRow } from '@augur/app-kit';
+import { AskTwice, Button, Checkbox, CheckboxGroup, Dialog, Select, Status, Table, TextField, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
 import { departmentPath, fullName, type AdminApi, type Department, type Person, type Role } from './api.js';
 import { Page, PasswordNote, Problem, statusOf } from './parts.js';
@@ -14,9 +14,6 @@ const columns: TableColumn[] = [
   { key: 'roles', label: 'Roles' },
   { key: 'signIn', label: 'Sign-in', sortable: true, format: (v, row) => <Status status={row.signInStatus as ReturnType<typeof statusOf>['status']} label={String(v)} />, text: (v) => String(v) },
 ];
-
-/** A live action waiting for the admin to say yes. */
-type Ask = { kind: 'turn-off' | 'reset'; person: Person };
 
 /**
  * Everyone who can sign in: add someone, change their name, department and
@@ -37,7 +34,6 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   const [editing, setEditing] = useState<string>();
   const [password, setPassword] = useState<{ name: string; value: string; reset: boolean }>();
   const [chosenRoles, setChosenRoles] = useState<string[]>([]);
-  const [ask, setAsk] = useState<Ask>();
   const [liveResult, setLiveResult] = useState('');
   const [liveError, setLiveError] = useState('');
 
@@ -206,18 +202,29 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
               </h3>
               <p className="admin-muted">These change their sign-in now, without Save.</p>
             </div>
-            <Toggle
-              label="Can sign in"
-              hint={person.id === me ? undefined : 'Turned off, they can’t sign in; nothing of theirs is removed.'}
-              checked={person.enabled}
-              disabled={person.id === me}
-              reason="You can’t turn off your own sign-in."
-              onChange={(enabled) => (enabled ? void setSignIn(person, true).catch((err: Error) => setLiveError(err.message)) : setAsk({ kind: 'turn-off', person }))}
-            />
-            <div>
-              <Button kind="tertiary" size="sm" onPress={() => setAsk({ kind: 'reset', person })}>
+            <p className="admin-muted" data-sign-in>
+              {person.enabled ? 'They can sign in.' : 'Their sign-in is off: they can’t sign in. Nothing of theirs is removed.'}
+            </p>
+            <div className="admin-live-actions">
+              {person.enabled ? (
+                <AskTwice
+                  size="sm"
+                  confirm="Press again: they can’t sign in from now"
+                  busyLabel="Turning off…"
+                  disabled={person.id === me}
+                  reason="You can’t turn off your own sign-in."
+                  onPress={() => setSignIn(person, false).catch((err: Error) => setLiveError(err.message))}
+                >
+                  Turn off their sign-in
+                </AskTwice>
+              ) : (
+                <Button kind="secondary" size="sm" busyLabel="Turning on…" onPress={() => setSignIn(person, true).catch((err: Error) => setLiveError(err.message))}>
+                  Turn their sign-in on
+                </Button>
+              )}
+              <AskTwice size="sm" confirm="Press again: their current password stops working" busyLabel="Making one…" onPress={() => resetPassword(person).catch((err: Error) => setLiveError(err.message))}>
                 Give them a new one-time password
-              </Button>
+              </AskTwice>
             </div>
             {liveResult ? (
               <p role="status" className="admin-muted" data-live-result>
@@ -227,26 +234,6 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
             <Problem>{liveError}</Problem>
           </section>
         </Dialog>
-      ) : null}
-      {/* The confirmation before a live action. When the kit's AskTwice danger button lands, it replaces this dialog: each live button asks twice itself. */}
-      {ask ? (
-        <Dialog
-          open
-          size="glance"
-          danger
-          eyebrow={fullName(ask.person)}
-          heading={ask.kind === 'turn-off' ? 'Turn off their sign-in?' : 'Give them a new one-time password?'}
-          summary={
-            ask.kind === 'turn-off'
-              ? 'They can’t sign in from now until it’s turned on again. Nothing of theirs is removed.'
-              : 'Their current password stops working now. You’ll see the new one once, to give them.'
-          }
-          actionLabel={ask.kind === 'turn-off' ? 'Turn off' : 'Give a new password'}
-          busyLabel={ask.kind === 'turn-off' ? 'Turning off…' : 'Making one…'}
-          cancelLabel={ask.kind === 'turn-off' ? 'Keep it on' : 'Not now'}
-          onSubmit={() => (ask.kind === 'turn-off' ? setSignIn(ask.person, false) : resetPassword(ask.person))}
-          onClose={() => setAsk(undefined)}
-        />
       ) : null}
       {password ? <PasswordNote {...password} onClose={() => setPassword(undefined)} /> : null}
     </Page>

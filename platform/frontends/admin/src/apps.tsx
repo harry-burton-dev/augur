@@ -1,4 +1,4 @@
-import { Button, Details, Dialog, Heading, Rows, Select, Status, Table, TextField, Toggle, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
+import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table, TextField, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
 import { InstallsSection, RunnerControls, useInstalls, type Installs } from './app-runner.js';
@@ -136,7 +136,18 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
       {app.platform ? (
         <p>Built-in apps are always on.</p>
       ) : (
-        <Toggle label="Offered to people" hint={s.why ?? 'Everyone it’s meant for sees it in Apps and Title.'} checked={app.enabled} onChange={async (enabled) => took(await api.setAppEnabled(app.id, enabled))} />
+        <div className="admin-live-actions" data-offered>
+          <p className="admin-muted">{app.enabled ? (s.why ?? 'Offered to people: everyone it’s meant for sees it in Apps and Title.') : 'Turned off: nobody is offered it. Nothing of its data is removed.'}</p>
+          {app.enabled ? (
+            <AskTwice size="sm" confirm="Press again: nobody is offered it from now" busyLabel="Turning off…" onPress={() => act(() => api.setAppEnabled(app.id, false))}>
+              Turn it off
+            </AskTwice>
+          ) : (
+            <Button kind="secondary" size="sm" busyLabel="Turning on…" onPress={() => act(() => api.setAppEnabled(app.id, true))}>
+              Offer it to people
+            </Button>
+          )}
+        </div>
       )}
       {app.awaitingScopes?.length ? (
         <>
@@ -404,9 +415,9 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
             <Line
               key={o.origin}
               end={
-                <Button kind="tertiary" size="sm" busy={working} onPress={() => void remove(o.origin)}>
+                <AskTwice size="sm" busy={working} confirm="Press again: apps from here stop loading" onPress={() => void remove(o.origin)}>
                   Remove
-                </Button>
+                </AskTwice>
               }
             >
               {o.origin} <Quiet>since {day(o.addedAt)}</Quiet>
