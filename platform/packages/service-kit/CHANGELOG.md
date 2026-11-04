@@ -1,5 +1,11 @@
 # @augur/service-kit
 
+## 0.12.0
+
+### Minor Changes
+
+- b3060e0: Every platform service answers errors as RFC 9457 problem details (`application/problem+json`) with AUGUR's `reason` and `whoCanChange`, and keeps `error` and `message` for SDK 1.x clients. The service kit adds `problemDetails()`, `Problem`, `sendProblem` and `serviceFastifyOptions()`. A service's unexpected errors are logged and answered with a plain 500, never with their own words.
+
 ## 0.11.0
 
 ### Minor Changes
