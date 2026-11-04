@@ -12,3 +12,5 @@ First found in: [`2026-11-02-wear-and-time`](../runs/2026-11-02-wear-and-time/).
 Could steer: A.
 
 Used in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a fact as an account with the value after each entry (ledger V1).
+
+In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): a decision's history replayed as moves; its review becomes part of the record (replay V1, combined V1).

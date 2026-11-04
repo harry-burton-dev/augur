@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Grammar V5 · The critical moment</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Grammar V5: what makes a moment critical, who finds it, and the one line of commentary it earns ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.finders{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-2)}
+.f{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);align-items:start;padding:var(--space-3) 0;border-top:1px solid var(--hairline)}
+.f .t{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.f .s{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.f .hits{grid-row:1 / 3;grid-column:3;display:flex;gap:var(--space-1);flex-wrap:wrap;justify-content:flex-end;max-width:12em}
+.hit{font:400 var(--type-small)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);padding:3px var(--space-2);color:var(--ink)}
+.hit.on{border-color:var(--x-proposed-warn);color:var(--light)}
+.f .who{grid-column:2;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink-muted);text-decoration:none}
+.tally{margin-top:auto;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tally b{font-weight:400;color:var(--light)}
+.spec{position:relative;min-height:0;padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4)}
+.mvbig{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap}
+.mvbig .n{font:300 var(--type-title)/1 var(--font-mono);color:var(--ink-muted)}
+.mvbig .san{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.marks{display:grid;gap:var(--space-2)}
+.mark{display:grid;grid-template-columns:3em minmax(0,1fr);gap:var(--space-3);align-items:baseline;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.mark .by{font-size:var(--type-small);color:var(--ink-muted)}
+.anat{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+.part{padding:var(--space-3);border-radius:var(--radius-inset);border:1px solid var(--hairline);display:grid;gap:var(--space-1);align-content:start;transition:border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.part .k{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.part p{font-size:var(--type-small);line-height:var(--leading-small)}
+.lit .part{border-color:var(--hairline-strong);background:var(--surface-inset)}
+.lit .part.key{border-color:var(--x-proposed-warn);background:var(--x-proposed-warn-wash)}
+.bound{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:auto}
+@media (max-width:1400px){.anat{grid-template-columns:repeat(2,minmax(0,1fr))}.spec{padding:var(--space-4);gap:var(--space-3)}.f{padding:var(--space-2) 0}.mvbig .san{font-size:var(--type-lead);line-height:var(--leading-lead)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V5</b> the critical moment: found by four finders, two of them people; commentary only there, one line each · de Groot, Kasparov’s annotations, after-action review</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { lit: false };
+const FINDERS = [
+  { icon: 'trending-down', t: 'The position falls two steps', s: 'From the records: the weakest line loses room fast.', who: 'the records', hits: () => MOVES.filter((m, i) => i && posOfMove(m.n).rank - posOfMove(MOVES[i - 1].n).rank >= 2).map(m => m.n) },
+  { icon: 'eye', t: 'A line is crossed', s: 'From the records: a line the decision set at the table.', who: 'the records', hits: () => MOVES.filter((m, i) => i && posOfMove(m.n).crossed > posOfMove(MOVES[i - 1].n).crossed).map(m => m.n) },
+  { icon: 'door-closed', t: 'A step that can’t be undone', s: 'From the records, if the step was recorded as one-way when it was taken.', who: 'the records, when told', hits: () => MOVES.filter(m => m.door).map(m => m.n) },
+  { icon: 'user-round', t: 'A person marks it', s: 'A reviewer’s ?, ?? or !? with a line, or a mover who says “this is where I’d go back to”.', who: 'people', hits: () => peopleCritical() }
+];
+function render() {
+  const m = MV(6);
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', DEC.id, 'Critical moments'], [['T', 'the rules', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">The critical moment</h1><p class="lede">Annotated games comment only where the game turned. Most moves get a mark or nothing. A review earns a line of commentary only where one of four finders points.</p></div>
+    <section class="finders pane"><p class="eyebrow">Four finders, and what they found in ${DEC.id}</p>
+      ${FINDERS.map((f, i) => `<div class="f dep" style="--i:${i}">${I(f.icon, 18)}<span class="t">${f.t}</span><span class="hits">${f.hits().map(n => `<span class="hit ${S.lit && n === 6 ? 'on' : ''}">${n}</span>`).join('')}</span><span class="s">${f.s}</span><span class="who">found by ${f.who}</span></div>`).join('')}
+      <p class="tally">Found: moves <b>${[...new Set(FINDERS.flatMap(f => f.hits()))].sort((a, b) => a - b).join(', ')}</b> of ${MOVES.length}. Commentary on <b>${peopleCritical().length}</b>. The records alone would have found <b>${[...new Set(FINDERS.slice(0, 2).flatMap(f => f.hits()))].join(' and ')}</b>; both are where the trouble <i>showed</i>, not where it was <i>made</i>.</p>
+      <p class="tk">critical := rank drop ≥ 2 ∨ crossed↑ ∨ door ∨ (mark ∈ {?, ??, !?} ∧ line)</p>
+    </section>
+    <section class="spec pane ${S.lit ? 'lit' : ''}"><p class="eyebrow">A specimen · move ${m.n}, found twice</p>
+      <div class="mvbig"><span class="n">${m.n}.</span><span class="san">${m.san}</span>${gl(m.sign, 'big')}<span class="door">${I('door-closed', 20)}</span>${posGl(posOfMove(m.n).s, 'big')}</div>
+      <div class="marks">${ANN(m.n).map(a => `<div class="mark">${gl(a.g, 'big')}<span>${a.line}<br><span class="by">${P(a.by).name}${a.self ? ', on her own move' : ', reviewer'}</span></span></div>`).join('')}</div>
+      <div class="anat">
+        <div class="part"><p class="k">Known then</p><p>${MV(4).san.split(': ')[1]}, assumed, not tested. Kestrel’s notice: three months.</p></div>
+        <div class="part"><p class="k">Chosen</p><p>${m.opts[0].san}.</p></div>
+        <div class="part key"><p class="k">Instead, on the record</p><p>${m.opts[1].san}: ${m.opts[1].from}.</p></div>
+        <div class="part"><p class="k">${gl('∆')} With the idea</p><p>To keep inspections with Kestrel until both fitters were in post.</p></div>
+      </div>
+      <p class="bound">One line per mark, and the four parts underneath only at critical moments. If a reviewer can’t name what else was on the record, the mark is ${gl('?!')} at most: ${gl('?')} means “avoidable with what was known”.</p>
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() { clearLater(); S.lit = false; render(); settle(); later(() => { S.lit = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { commonKeys(e, render, replay); });
+replay();
+</script>
+</body>
+</html>
