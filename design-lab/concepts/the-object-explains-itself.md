@@ -12,3 +12,5 @@ Proposed by batch 1 research. Explored in [`2026-11-02-wear-and-time`](../runs/2
 Could steer: A, C.
 
 Extended in [`2026-11-03-the-label`](../runs/2026-11-03-the-label/): every marking opens its deed (plain words, the policy clause, who may loosen it).
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): each working-set piece shows its full record, field by field (combined V2).

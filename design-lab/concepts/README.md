@@ -102,7 +102,13 @@ app pattern took it), **dropped** (say why in the file).
 | [Stop, don't guess](stop-dont-guess.md) | explored | 2026-11-03-mise-en-place |
 | [Every answer is a line](every-answer-is-a-line.md) | explored | 2026-11-03-mise-en-place |
 | [Rehearsed to the pass](rehearsed-to-the-pass.md) | explored | 2026-11-03-mise-en-place |
-| [Context is a working set](context-is-a-working-set.md) | to explore | batch 6 research |
+| [Holds while](holds-while.md) | explored | 2026-11-03-the-situation |
+| [Context names its reader](context-names-its-reader.md) | explored | 2026-11-03-the-situation |
+| [Every lift is signed](every-lift-is-signed.md) | explored | 2026-11-03-the-situation |
+| [Frames, not averages](frames-not-averages.md) | explored | 2026-11-03-the-situation |
+| [What only they know](what-only-they-know.md) | explored | 2026-11-03-the-situation |
+| [The bundle is its world](the-bundle-is-its-world.md) | explored | 2026-11-03-the-situation |
+| [Context is a working set](context-is-a-working-set.md) | explored | batch 6 research |
 | [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
 | [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |
 | [The warrant shows](the-warrant-shows.md) | to explore | batch 6 research |

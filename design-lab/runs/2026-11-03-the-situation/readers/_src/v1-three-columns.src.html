@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Readers V1 · Three columns, one band</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the shared information as one band across the top; under it, each reader's own context, question, horizon and reach ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-3)}
+.band{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.band p{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.band .chart{display:block}
+.cols{min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4);border:1px solid var(--hairline);border-top:2px solid var(--fc);border-radius:var(--radius-inset);background:var(--surface-pane);overflow:auto;scrollbar-width:thin}
+.col .who{font-size:var(--type-meta)}
+.col .ask{font-style:italic;color:var(--ink-muted);font-size:var(--type-meta);line-height:var(--leading-meta);display:flex;gap:var(--space-2)}
+.col .nut{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);border-left:2px solid var(--fc);padding-left:var(--space-3)}
+.col h3{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.col ul{display:grid;gap:var(--space-1)}
+.col li{display:flex;gap:var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.col li svg{flex:none;transform:translateY(2px);color:var(--ink-muted)}
+.reach{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:auto;padding-top:var(--space-2);border-top:1px solid var(--hairline)}
+.reach .bar{display:flex;gap:2px}
+.reach .bar i{flex:1;height:var(--space-2);border-radius:1px;background:var(--ink)}
+.reach .bar i.no{background:var(--x-proposed-unseen);outline:1px solid var(--hairline);outline-offset:-1px}
+.col.in{animation:land var(--motion-calm) var(--ease-out) both;animation-delay:calc(var(--i) * var(--motion-quick))}
+@media (max-width:1400px){.band .chart{display:none}.band p{font-size:var(--type-body);line-height:var(--leading-body)}.col{padding:var(--space-3)}.col .nut{font-size:var(--type-body);line-height:var(--leading-body)}.col li:nth-child(n+4){display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Readers · V1</b> three columns, one band: the information shared once, each reader’s context under it · common operational picture filtered by role, the nut graf</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { in: false };
+const i2 = PC('i2');
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Readers'], [['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">Same information, three readers · ${T.id}</p></div>
+    <div class="band">${rm('info', { lg: true })}<p>${PC('i1').text}. ${i2.text}.</p>${chart({ w: 260, h: 64, hi: ['Jul', 'Oct'] })}</div>
+    <div class="cols">${DATA.readers.map((r, k) => { const p = P(r.id), it = INTENT(r.intent); const uses = r.uses.map(PC); const open = uses.filter(u => canOpen(u.src, r.id)).length;
+      return `<section class="col ${S.in ? 'in' : ''}" style="--i:${k}" data-tier="${p.floor}">
+        ${whoHTML(r.id, { role: true })}
+        <p class="ask">${I('circle-help', 16)} ${r.asks}</p>
+        <p class="nut">${r.nut}</p>
+        <h3>What they can do · by ${r.horizon}</h3><ul>${r.does.map(d => `<li>${I('arrow-right', 12)}${d}</li>`).join('')}</ul>
+        <h3>Serves</h3><ul><li>${I('target', 12)}${it.id} · ${it.title}</li></ul>
+        <h3>Drawn from</h3><ul>${uses.map(u => `<li>${rm(u.rung, { word: false })}<span>${u.text}</span></li>`).join('')}</ul>
+        <div class="reach"><span>${p.name.split(' ')[0]} can open <b class="lite">${open} of ${uses.length}</b> records behind it.${open < uses.length ? ` The rest: ${[...new Set(uses.filter(u => !canOpen(u.src, r.id)).map(u => P(u.src.keeper).name))].map(n => 'ask ' + n).join(', ')}.` : ''}</span><span class="bar">${uses.map(u => `<i class="${canOpen(u.src, r.id) ? '' : 'no'}" title="${u.src.title}"></i>`).join('')}</span></div>
+      </section>`; }).join('')}</div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.in = false; render(); }, () => { S.in = true; render(); });
+</script>
+</body>
+</html>

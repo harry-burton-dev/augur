@@ -10,3 +10,5 @@ A handover is an offer with a fixed card (SBAR: situation and background from re
 First found in: [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/) (handover V1, V3, V5 and V6, home V2, combined V1).
 
 Could steer: The apprentice (Q), the kitchen brigade (J), Mandate delegation.
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): a working set changes owner only on readback, with the agent's supervision moving with it (combined V1).

@@ -10,3 +10,5 @@ Wherever automation works, one line says what it is doing now (in words: “Hold
 First found in: [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/) (grammar V6, diary V4, combined V1 and V2).
 
 Could steer: The Upgrade Centre (rollouts), the switchboard (O), jobs in Admin.
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): a clause citing outside an agent's bundle boxes its mode line (combined V4).

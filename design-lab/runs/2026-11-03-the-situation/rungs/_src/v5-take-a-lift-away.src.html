@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Rungs V5 · Take a lift away</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the climb as a recipe of steps. Turn one off and see what it was holding up ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(360px,34%) minmax(0,1fr);gap:var(--space-6)}
+.recipe{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.recipe h2{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.st-row{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);transition:opacity var(--motion-base) var(--ease-out),border-color var(--motion-base) var(--ease-out)}
+.st-row .no{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.st-row p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.st-row .by{font-size:var(--x-proposed-type-micro);color:var(--ink-muted);font-family:var(--font-mono)}
+.st-row.off{opacity:var(--x-proposed-quiet);border-style:dashed}
+.st-row.idle{opacity:var(--x-proposed-quiet)}
+.st-row.idle p::after{content:" · holds nothing up now";color:var(--x-proposed-broken)}
+.sw{width:calc(var(--space-6) - var(--space-2));height:var(--space-5);border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:calc(var(--space-5) - 8px);height:calc(var(--space-5) - 8px);border-radius:var(--radius-pill);background:var(--ink-muted);transition:transform var(--motion-quick) var(--ease-out),background var(--motion-quick) var(--ease-out)}
+.sw[aria-pressed="true"]{border-color:var(--x-proposed-lit)}
+.sw[aria-pressed="true"]::after{transform:translateX(calc(var(--space-6) - var(--space-2) - var(--space-5)));background:var(--x-proposed-lit)}
+.sw[disabled]{opacity:.5;cursor:default}
+.res{min-height:0;display:flex;flex-direction:column;gap:var(--space-4);padding-top:var(--space-4)}
+.big{display:flex;align-items:center;gap:var(--space-4)}
+.big b{font-weight:200;font-size:var(--type-display);line-height:var(--leading-display);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);transition:color var(--motion-base) var(--ease-out)}
+.sent{font-weight:300;font-size:var(--type-heading);line-height:1.45;color:var(--light);max-width:48ch}
+.sent.as-context{padding-left:var(--space-4)}
+.sent span.f{font-family:var(--font-mono);font-weight:400}
+.fell{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--x-proposed-broken);border-radius:var(--radius-key);max-width:72ch}
+.fell p{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.fell b{font-weight:400;color:var(--light)}
+.fell ul{display:grid;gap:var(--space-1)}
+.fell li{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(320px,38%) minmax(0,1fr);gap:var(--space-5)}.sent{font-size:var(--type-lead);line-height:var(--leading-lead)}.big b{font-size:var(--type-title)}.st-row{padding:var(--space-1) var(--space-2)}.st-row .by{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Rungs · V5</b> take a lift away: the climb is a recipe of steps; turn one off and see what it held up · Power Query applied steps, the recipe is the record, Frické</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { on: { comparison: true, threshold: true, rate: true, question: true, projection: true, situation: true } };
+const STEPS = [
+  { k: 'read', fixed: true, w: `Read ${R.label.toLowerCase()} for October`, by: PC('d1').src.app },
+  { k: 'comparison', w: 'Compare with July', by: 'template' },
+  { k: 'threshold', w: `Hold against ${R.limitWhere}`, by: 'template' },
+  { k: 'rate', w: 'Split by round', by: P('mira').name },
+  { k: 'question', w: `Ask it of the renewal, for ${P(T.decider).name}`, by: P(T.owner).name },
+  { k: 'projection', w: 'Say what happens next', by: P(T.owner).name, needs: 'threshold' },
+  { k: 'situation', w: 'Add the offer on the table', by: P(T.owner).name, needs: 'question' }
+];
+const on = k => k === 'read' || S.on[k];
+function parts() {
+  const p = [];
+  if (on('question')) p.push(`For ${first(T.decider)}’s renewal decision by ${T.decideBy.replace(' 2026', '')}:`);
+  p.push(`<span class="f">${R.series.at(-1).v}</span> ${R.unit} in October`);
+  if (on('comparison')) p.push(`, twice July’s <span class="f">13</span>`);
+  if (on('threshold')) p.push(`, over the limit of <span class="f">${R.limit}</span> for the second month`);
+  if (on('rate')) p.push(`, <span class="f">11</span> of them on ${R.changedRounds.join(' and ')}`);
+  p.push('.');
+  if (on('projection') && on('threshold')) p.push(on('question') ? ' One more month over and the contract can end without penalty.' : ' One more month over is a service failure under the contract.');
+  if (on('situation') && on('question')) p.push(` ${T.supplierShort} offers to renew at 6% a year more.`);
+  return p.join('');
+}
+function rung() {
+  const info = on('comparison') || on('threshold') || on('rate');
+  if (info && on('question')) return 'context';
+  return info ? 'info' : 'data';
+}
+function fell() {
+  const r = rung(), lost = [];
+  if (!on('question')) { lost.push(['user-round', `Nobody it is for: it is true, and for nobody in particular.`]); if (on('situation')) lost.push(['layers', 'The offer on the table now holds nothing up: there is no decision for it to bear on.']); }
+  if (!on('threshold') && on('projection')) lost.push(['telescope', 'What happens next needs the threshold it projects from.']);
+  if (r === 'data') lost.push(['git-compare', 'No comparison, no threshold, no rate: a reading with nothing to differ from.']);
+  return lost;
+}
+function render() {
+  const r = rung(), lost = fell();
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Recipe'], [['1–6', 'turn a step off'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="recipe"><p class="eyebrow">One reading, three rungs · the recipe</p><h2>The steps it took</h2>
+      ${STEPS.map((s, k) => { const idle = s.needs && on(s.k) && !on(s.needs); return `<div class="st-row ${!on(s.k) ? 'off' : ''} ${idle ? 'idle' : ''}"><span class="no">${k ? k : '·'}</span><div><p>${s.w}</p><span class="by">${s.k === 'read' ? rm('data') : liftHTML({ k: s.k, w: DATA.lifts[s.k].word })} ${s.by === 'template' ? 'by rule · template' : 'by ' + s.by}</span></div><button class="sw" ${s.fixed ? 'disabled' : ''} data-k="${s.k}" aria-pressed="${on(s.k)}" aria-label="${s.w}"></button></div>`; }).join('')}
+      <p class="small muted">The first step can’t be turned off: the reading is always there. Every other step can be, by anyone reviewing the set, to see what it was holding up.</p>
+    </section>
+    <section class="res">
+      <div class="big">${rm(r, { lg: true, word: false })}<b>${RUNG[r].word}</b></div>
+      <p class="sent ${r === 'context' ? 'as-context' : ''}" ${r === 'context' ? `data-tier="${P(T.decider).floor}"` : ''}>${parts()}</p>
+      ${lost.length ? `<div class="fell fresh"><p><b>What fell.</b> With ${STEPS.filter(s => !on(s.k)).map(s => `“${s.w}”`).join(' and ')} off, this is ${RUNG[r].word.toLowerCase()}:</p><ul>${lost.map(([ic, w]) => `<li>${I(ic, 14)}${w}</li>`).join('')}</ul></div>` : `<p class="small muted">Every step on. Turn one off to see what it holds up.</p>`}
+    </section>
+  </div></main>`;
+  hydrate($('#app'));
+  $$('.sw:not([disabled])').forEach(b => b.onclick = () => { S.on[b.dataset.k] = !S.on[b.dataset.k]; render(); });
+}
+play(() => { Object.keys(S.on).forEach(k => S.on[k] = true); render(); }, () => { S.on.question = false; render(); }, (e, k) => { const s = STEPS[+k]; if (s && !s.fixed) { S.on[s.k] = !S.on[s.k]; render(); } });
+</script>
+</body>
+</html>
