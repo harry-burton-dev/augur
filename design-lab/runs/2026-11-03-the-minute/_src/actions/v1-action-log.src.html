@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Actions V1 · The action log</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the action log. The chair's table of every action; the owner's own rows beside it ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-card);gap:var(--space-5)}
+.chair{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.sum{display:flex;gap:var(--space-5);flex-wrap:wrap;font-size:var(--type-meta);color:var(--ink-muted)}
+.sum b{font:300 var(--type-heading)/1 var(--font-mono);color:var(--light);margin-right:var(--space-1)}
+.sum .w b{color:var(--x-proposed-warn)}
+.tbl{min-height:0;padding:0 var(--space-3)}
+table{width:100%;border-collapse:collapse}
+th{position:sticky;top:0;background:var(--slate-deep);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);text-align:left;padding:var(--space-3) var(--space-2) var(--space-2);border-bottom:1px solid var(--hairline-strong);font-weight:400;white-space:nowrap}
+td{padding:var(--space-2);border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);vertical-align:top}
+td.id,td.d{font-family:var(--font-mono);white-space:nowrap}
+td.t{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+tr.closed td{opacity:var(--x-proposed-quiet)}
+tr.waiting td.s{color:var(--x-proposed-lit)}
+tr.mine td:first-child{box-shadow:inset 2px 0 0 var(--fc)}
+tr.hot td{background:var(--x-proposed-lit-wash)}
+.grp td{padding-top:var(--space-3);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);border-bottom-color:var(--hairline-strong)}
+.grp td .did{text-transform:none;letter-spacing:var(--tracking-soft)}
+.owner{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4)}
+.mine-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);padding:var(--space-3);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-inset)}
+.mine-row .t{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.mine-row .m{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.mine-row .acts{grid-column:2;display:flex;gap:var(--space-2);margin-top:var(--space-1);flex-wrap:wrap}
+.mine-row.late{border-color:var(--x-proposed-warn)}
+.mine-row .m .stw{white-space:normal}
+.pick{display:flex;gap:var(--space-1);flex-wrap:wrap}
+.pick button{font-size:var(--type-small);padding:2px var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-pill);color:var(--ink-muted)}
+.pick button[aria-pressed="true"]{border-color:var(--x-proposed-lit);color:var(--light)}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,1fr) 300px;gap:var(--space-4)}th.age,td.age,th.set,td.set{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Actions · V1</b> the action log: one owner, one date, one state, traced to its decision; the owner’s own rows beside it · RAID logs</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = '2026-11-02';
+const OWNERS = [...new Set(Object.values(DATA.actions).map(a => a.owner))];
+const S = { me: 'p3', hot: null };
+function rows() {
+  return Object.keys(DATA.actions).map(id => ({ id, a: Ac(id), s: actionAt(id) })).filter(r => r.s);
+}
+function render() {
+  const R = rows(), open = R.filter(r => r.s.open), late = R.filter(r => r.s.late), waiting = R.filter(r => r.s.s === 'done');
+  const byDec = [...new Set(R.map(r => r.a.from))].sort((a, b) => b.localeCompare(a));
+  const mine = R.filter(r => r.a.owner === S.me && r.s.s !== 'discharged');
+  $('#app').innerHTML = topHTML(['Mandate', B.short, 'Action log'], [['O', 'next owner'], ['T', 'record fields', 'h-t'], ['R', 'replay']], { as: NOW }) +
+    `<main class="main"><div class="wrap">
+    <section class="chair"><div><p class="eyebrow">The chair’s view · ${P(B.chair).name}</p><p class="h1">Action log</p></div>
+      <div class="sum dep"><span><b>${open.length}</b>open</span><span class="w"><b>${late.length}</b>past their date</span><span><b>${waiting.length}</b>done, waiting for you to close</span><span><b>${R.filter(r => r.s.s === 'discharged').length}</b>closed this year</span></div>
+      <div class="tbl pane scroll"><table><thead><tr><th>Action</th><th></th><th>Owner</th><th>Due</th><th>State</th><th class="set">Set</th><th class="age">Open for</th></tr></thead><tbody>
+      ${byDec.map(d => `<tr class="grp"><td colspan="7">${did(d)} ${Dn(d).title} · ${stHTML(statusAt(d))}</td></tr>` + R.filter(r => r.a.from === d).map((r, i) => {
+        const s = r.s, cls = [s.s === 'discharged' ? 'closed' : '', s.s === 'done' ? 'waiting' : '', r.a.owner === S.me ? 'mine' : '', S.hot === r.id ? 'hot' : ''].join(' ');
+        return `<tr class="${cls}" data-tier="${P(r.a.owner).floor}"><td class="t">${r.a.text}<span class="tk">${r.id}</span></td><td>${amHTML(s.shown, 16)}</td><td>${who(r.a.owner)}</td>
+          <td class="d">${dt(s.due, 'short')}${s.due !== r.a.due ? ` <span class="seam"><s>${dt(r.a.due, 'short')}</s></span>` : ''}</td>
+          <td class="s">${s.late ? `<span class="late">${s.late} days late</span>` : s.s === 'done' ? 'done · close it?' : AS[s.shown].s}</td><td class="d set">${dt(r.a.set, 'short')}</td><td class="d age">${s.open ? days(r.a.set, NOW) + ' days' : ''}</td></tr>`;
+      }).join('')).join('')}</tbody></table></div></section>
+    <aside class="owner pane"><p class="eyebrow">The owner’s view</p><div class="pick">${OWNERS.map(p => `<button data-p="${p}" aria-pressed="${p === S.me}">${first(p)}</button>`).join('')}</div>
+      <p class="h2">${P(S.me).name}</p><p class="small muted">${P(S.me).role}. Only your rows, the ones still yours to answer. Each opens its decision.</p>
+      ${mine.length ? mine.map((r, i) => `<div class="mine-row dep ${r.s.late ? 'late' : ''}" style="--i:${i}">${amHTML(r.s.shown, 18)}<span class="t">${r.a.text}</span>
+        <span class="m">${r.s.late ? `<span class="late">${r.s.late} days past ${dt(r.s.due, 'short')}</span>` : `by ${dt(r.s.due)}`} · from ${did(r.a.from)} ${stHTML(statusAt(r.a.from))}</span>
+        <span class="acts">${r.s.s === 'done' ? `<span class="small muted">You said done on ${dt(r.s.on, 'short')}. ${first(r.a.setBy)} closes it.</span>` : `<button class="btn sm">${I('check', 12)} Done</button><button class="btn sm">${I('message-square', 12)} Update</button><button class="btn sm">${I('calendar-clock', 12)} Ask to move</button>`}</span></div>`).join('') : `<p class="mk-gap">nothing open</p>`}
+      <p class="small muted" style="margin-top:auto">“Ask to move” goes to ${P(B.chair).name} with a reason; the date only moves if he agrees, and the old date stays as a seam.</p></aside>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.pick button').forEach(b => b.onclick = () => { S.me = b.dataset.p; render(); });
+}
+function replay() {
+  clearLater(); S.me = 'p3'; S.hot = null; render(); settle();
+  /* the moment: the owner's late row lights in the chair's table too: one record, two views */
+  later(() => { S.hot = 'A-302'; render(); }, MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key.toLowerCase() === 'o') { S.me = OWNERS[(OWNERS.indexOf(S.me) + 1) % OWNERS.length]; render(); }
+});
+replay();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 ---
 name: one-now
-status: to explore
+status: explored
 ---
 
 # One now
@@ -10,3 +10,5 @@ One time scale and one now line shared by every time display in AUGUR, drawn onc
 First found in: [`2026-11-02-wear-and-time`](../runs/2026-11-02-wear-and-time/) (grammar V2, intents V6, combined V4).
 
 Could steer: A shell 'Ahead' screen; a run on scheduling and capacity.
+
+Explored in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): one rail for a decision's six months and one now line for a floor's actions (combined V1, actions V6, record V6).

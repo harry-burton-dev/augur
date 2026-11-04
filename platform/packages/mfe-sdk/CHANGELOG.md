@@ -1,5 +1,17 @@
 # @augur/mfe-sdk
 
+## 1.11.0
+
+### Minor Changes
+
+- 2c37293: Apps that ship with AUGUR now say what kind they are (ADR 0032). SDK 1.11 adds an optional `category` to the manifest (`platform` or `pillar`), with `AppCategory` and `APP_CATEGORIES`. The registry counts Home, Admin and the Upgrade Centre as platform apps, honours the kind only for apps that ship with AUGUR or come from the signed app feed, and reports the kind in force in `/v1/manifest`, `/v1/me/apps` and `/v1/apps`, which also gain `ships` (the old `pillar` stays, deprecated). Admin → Apps shows a Kind column, says the kind in each app's dialog and explains a claim it doesn't honour, and says AUGUR instead of "platform" in what it shows.
+- 2ad8555: `ctx.fetch` adds the person's token and the floor only to requests for AUGUR's own origin (the gateway); a request to another site goes without them, so an app fetching a public resource never hands it the person's sign-in. The production import map's `react/jsx-dev-runtime` now has a working `jsxDEV` (made from `jsx`), so an app built in development mode renders against a production shell.
+- 5ad27cc: Back and Forward inside an app no longer throw away what it holds (PER-308). SDK 1.11 adds `followsAddress` to the manifest, for an app that follows the address itself, and `navigated(el, path)` on the app. While an app with both stays open on the same floor and nothing is waiting for it, the shell keeps it mounted on a move inside its route and calls `navigated` with the new path; an intent, a request, another floor or a changed preview still mounts it again. An app without `navigated` is mounted again as before, since the shell's own moves push the address without a popstate. The registry accepts the flag (contract 1.33.0).
+- 8a89c6f: Adds `@augur/mfe-sdk/testing`, so an app can be tested without a running AUGUR: `fakeContext` gives a whole mount context that records what the app raised, requested and notified, and `contractHandlers` turns an OpenAPI contract into MSW handlers that answer with its examples.
+- 49a631f: `SDK_VERSION` is typed as a string, so the SDK's API report no longer holds its value. Version packages PRs no longer fail the API check whenever the SDK's version moves.
+
+  Not breaking: the value is unchanged, and code that compared it to a string or passed it on as one compiles as before.
+
 ## 1.10.0
 
 ### Minor Changes

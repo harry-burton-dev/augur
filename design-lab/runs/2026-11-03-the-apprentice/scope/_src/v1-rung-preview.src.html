@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Scope and level · V1 · The rung, previewed</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: each kind of work on its own ladder. Move a rung and see last week replayed at it before you decide ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:var(--space-6)}
+.kinds{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.kd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2) var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);text-align:left;width:100%}
+.kd.sel{border-color:var(--light)}
+.kd b{display:block;font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.kd .s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.lad{display:flex;gap:var(--space-1)}
+.rg{min-width:calc(var(--space-7) + var(--space-3));padding:var(--space-1) var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:center}
+.rg.at{border-color:var(--ink);color:var(--light);background:var(--surface-raised)}
+.rg.try{border-color:var(--info);color:var(--light);border-style:dashed}
+.rg.capped{border-style:dashed;opacity:.45;cursor:not-allowed;background:var(--x-proposed-unseen)}
+.prev{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.cmp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-3)}
+.col{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset)}
+.col.try{border-color:var(--info);border-style:dashed}
+.col h3{margin:0 0 var(--space-2);font-weight:400;font-size:var(--type-meta);color:var(--light)}
+.col dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.col dt{font-family:var(--font-mono);color:var(--light);text-align:right}
+.col dd{margin:0;color:var(--ink-muted)}
+.why{display:grid;gap:var(--space-2)}
+.why textarea{width:100%;min-height:calc(var(--space-7) + var(--space-2));resize:none;background:var(--surface-inset);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);font:inherit;font-size:var(--type-meta);padding:var(--space-2) var(--space-3)}
+.why textarea:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+.ceil{border-top:3px solid var(--x-proposed-ceiling);padding-top:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ceil b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.rg{min-width:var(--space-7);font-size:var(--x-proposed-type-micro)}.kd .s{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Scope and level · V1</b> the rung, previewed: move a kind of work up or down and see last week replayed at it · consequence preview, SAE J3016</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const AG = 'a1', a = A(AG), M = DATA.minutes;
+const S = { k: 'k3', try: null };
+/* what a week of this kind of work costs a person at a rung: worked out, never guessed */
+function week(kd, rung) {
+  const n = kd.perWeek, runs = 7;
+  if (rung === 0) return { each: 0, batches: 0, sample: 0, after: 0, mins: 0, kept: 0, note: 'nothing kept; compared with your own work' };
+  if (rung === 1) return { each: n, batches: 0, sample: 0, after: 0, mins: Math.round(n * M.each), kept: n, note: 'every piece waits for you' };
+  if (rung === 2) { const per = Math.ceil(n / runs), smp = DATA.sampleTable.find(r => per <= r.upTo).n * runs; return { each: 0, batches: runs, sample: Math.min(n, smp), after: 0, mins: Math.round(Math.min(n, smp) * M.sample + runs * M.sign), kept: n, note: 'a batch a night, checked by sample' }; }
+  const smp = Math.ceil(n / 10); return { each: 0, batches: 0, sample: smp, after: n, mins: Math.round(smp * M.sample), kept: n, note: `done at once; you check ${smp} in the diary; undo for ${DATA.undoDays} days` };
+}
+function colHTML(kd, rung, title, cls = '') {
+  const w = week(kd, rung);
+  return `<div class="col ${cls}"><h3>${title}: ${lvl(rung, kd.cap)}</h3><dl>
+    <dt>${w.each}</dt><dd>wait for you one by one</dd><dt>${w.batches}</dt><dd>batches to sign</dd><dt>${w.sample}</dt><dd>to check by sample</dd><dt>${w.after}</dt><dd>done before you see them</dd><dt>${w.mins}</dt><dd>minutes of yours a week</dd></dl><p class="small muted" style="margin-top:var(--space-2)">${w.note}</p></div>`;
+}
+function render() {
+  const kd = K(S.k), t = S.try;
+  const err = kd.chg + kd.rej, tot = kd.acc + err;
+  $('#app').innerHTML = topHTML(['Admin', 'Agents', a.name, 'Scope and level'], [['↑ ↓', 'kind'], ['← →', 'try a rung'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="kinds scroll"><div><p class="eyebrow">${mm(AG)} ${a.name} · works under ${P(a.supervisor).name}</p><h1 class="title">Scope and level</h1></div>
+      ${DATA.kinds.map(k => `<div class="kd dep ${S.k === k.id ? 'sel' : ''}" data-k="${k.id}" role="group" aria-label="${k.w}"><span><b>${k.w}</b><span class="s">${fmt(k.perWeek)} a week · ${k.acc + k.chg + k.rej ? `${fmt(k.acc)} of ${fmt(k.acc + k.chg + k.rej)} accepted as read` : 'no record yet'}${k.why ? ' · ' + k.why : ''}</span></span>
+        <span class="lad">${DATA.ladder.map(r => `<button class="rg ${r.n === k.level ? 'at' : ''} ${S.k === k.id && t === r.n && r.n !== k.level ? 'try' : ''} ${r.n > k.cap ? 'capped' : ''}" data-k="${k.id}" data-r="${r.n}" ${r.n > k.cap ? `aria-disabled="true" title="This kind of work can’t go above rung ${k.cap}: ${k.why || 'set by AUGUR'}"` : ''}>${r.n} ${r.short}</button>`).join('')}</span></div>`).join('')}
+    </section>
+    <section class="prev">
+      <p class="eyebrow">${kd.w} · last week, replayed</p>
+      <div class="cmp">${colHTML(kd, kd.level, 'Now')}${t !== null && t !== kd.level ? colHTML(kd, t, t > kd.level ? 'If widened' : 'If narrowed', 'try') : `<div class="col"><h3>Try a rung</h3><p class="small muted">Point at another rung on the left to see last week at it. Nothing changes until you save with a reason.</p></div>`}</div>
+      <p class="small">${tot ? `Its record for this kind: <b class="num">${fmt(kd.acc)}</b> accepted as read, <b class="num">${kd.chg}</b> corrected, <b class="num">${kd.rej}</b> rejected; <b class="num">${kd.run}</b> in a row.` : 'No record for this kind of work yet: try Shadow first.'}</p>
+      ${t !== null && t !== kd.level ? `<div class="why"><label class="small muted" for="why">Why (kept on its record, with your name)</label><textarea id="why" placeholder="${t > kd.level ? 'For example: 58 of 67 accepted as read; the rejects were all sister ships' : 'For example: two wrong owners this week'}"></textarea>
+        <div style="display:flex;gap:var(--space-2)"><button class="btn ${t > kd.level ? 'go' : ''}" aria-disabled="true" title="Write why first">${I(t > kd.level ? 'arrow-up' : 'arrow-down', 14)} ${t > kd.level ? 'Widen' : 'Narrow'} to rung ${t}</button>${t > kd.level ? `<button class="btn">${I('history', 14)} Replay a month first</button>` : ''}</div></div>` : ''}
+      <div class="ceil"><b>Above every rung:</b> ${DATA.ceiling.slice(0, 4).map(c => c.w.toLowerCase()).join('; ')}; and ${DATA.ceiling.length - 4} more. No rung changes these.</div>
+      <p class="tk">grant.kinds[${kd.id}].level = ${t ?? kd.level} (cap ${kd.cap}) · audit agent.level.changed { by, from, to, why } · takes effect at the next run (grants at start)</p>
+    </section></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.kd').forEach(b => b.onclick = () => { if (S.k !== b.dataset.k) { S.k = b.dataset.k; S.try = null; render(); } });
+  $$('.rg').forEach(b => { const go = e => { e.stopPropagation(); if (b.getAttribute('aria-disabled')) return; S.k = b.dataset.k; S.try = +b.dataset.r; render(); }; b.onclick = go; b.onmouseenter = go; });
+}
+function replay() { clearLater(); S.k = 'k3'; S.try = null; settle(); render(); later(() => { S.try = 2; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.target.closest('textarea')) return;
+  const ids = DATA.kinds.map(k => k.id), i = ids.indexOf(S.k), kd = K(S.k);
+  if (e.key === 'ArrowDown') { S.k = ids[(i + 1) % ids.length]; S.try = null; render(); }
+  if (e.key === 'ArrowUp') { S.k = ids[(i - 1 + ids.length) % ids.length]; S.try = null; render(); }
+  if (e.key === 'ArrowRight') { S.try = Math.min(kd.cap, (S.try ?? kd.level) + 1); render(); }
+  if (e.key === 'ArrowLeft') { S.try = Math.max(0, (S.try ?? kd.level) - 1); render(); }
+});
+replay();
+</script>
+</body>
+</html>

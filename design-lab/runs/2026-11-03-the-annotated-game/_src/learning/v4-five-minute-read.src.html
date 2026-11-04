@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Learning V4 · Five minutes with R-07</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Learning V4: the game as a five-minute read: the opening in one line, four positions at the critical moments, and what to keep and change ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-3)}
+.open{padding:var(--space-3) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.open b{font-weight:400;color:var(--light)}
+.cards{min-height:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+.cd{padding:var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-pane);display:flex;flex-direction:column;gap:var(--space-2);transition:border-color var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+.cd.read{opacity:var(--x-proposed-quiet)}
+.cd.on{border-color:var(--light)}
+.cd .n{display:flex;align-items:baseline;gap:var(--space-2)}
+.cd .n .no{font:300 var(--type-heading)/1 var(--font-mono);color:var(--ink-muted)}
+.cd .n .d{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink-muted)}
+.cd .s{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.cd .p{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.cd .p .eb{height:var(--space-5);min-height:0}
+.cd .ln{font-size:var(--type-small);line-height:var(--leading-small)}
+.cd .lesson{margin-top:auto;padding-top:var(--space-2);border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--light)}
+.kc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-3)}
+.kc .box{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.kc li{display:grid;grid-template-columns:2em minmax(0,1fr)}
+.prog{display:flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+@media (max-width:1400px){.cd{padding:var(--space-3);gap:var(--space-1)}.cards{gap:var(--space-2)}.cd .ln{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Learning · V4</b> five minutes with R-07: the opening in a line, four positions where it turned, a lesson under each, and what to keep and change · annotated game collections, after-action review “keep and change”</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = DATA.later.today;
+const L = DATA.later, R = DATA.review;
+const CRIT = peopleCritical();
+const LESSON = { 4: 'Test what a decision assumes before anything depends on it.', 6: 'Secure what it depends on before the step you can’t undo.', 11: 'A crossed line needs an answer or a reason, the same week.', 13: 'Name the risk you keep. Two reviewers disagreed; read both.' };
+const S = { at: 0 };
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', 'The book', 'R-07', 'Read'], [['→', 'next moment'], ['R', 'replay']], { as: NOW }) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">Five minutes with R-07</h1><p class="lede">The game as a read for someone about to play the same position. Thirteen quiet moves become one line; the four that turned get a card each. ${P(R.facilitator).name}’s review, agreed on ${dt(R.agreed)}.</p></div>
+    <p class="open pane"><b>The opening.</b> ${MOVES.slice(0, 3).map(m => m.san).join(' · ')} · then the meeting decides ${DEC.id}, 4 for and 1 abstaining. ${DEC.intended}</p>
+    <section class="cards">${CRIT.map((n, i) => { const m = MV(n), p = posOfMove(n), r = reviewMarks(n);
+      return `<div class="cd ${i < S.at ? 'read' : ''} ${i === S.at ? 'on' : ''}"><p class="n"><span class="no">${n}.</span><span class="d">${dt(m.on, 'short')}</span>${r.map(a => gl(a.g, 'big')).join('')}</p><p class="s">${m.san}</p>
+        <p class="p">${evalBar(p.h)} ${posGl(p.s)} ${p.w}</p><p class="ln">${r[0].line}${r[1] ? ` <span class="muted">${first(r[1].by)}: ${r[1].line}</span>` : ''}</p><p class="lesson">${LESSON[n]}</p></div>`; }).join('')}</section>
+    <div class="kc"><div class="box"><p class="lab">Keep</p><ul>${R.keep.map(x => `<li>${gl(mainMark(x.move).g)}<span>${x.text} <span class="muted">(move ${x.move})</span></span></li>`).join('')}</ul></div>
+      <div class="box"><p class="lab">Change</p><ul>${R.change.map(x => `<li>${gl((mainMark(x.move) || {}).g || '?')}<span>${x.text} <span class="muted">(move ${x.move})</span></span></li>`).join('')}</ul></div></div>
+    <p class="prog">${I('eye-off', 12)} ${S.at} of ${CRIT.length} read · only you see how far you got</p>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() { clearLater(); S.at = 0; render(); settle(); later(() => { S.at = 1; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === 'ArrowRight') { S.at = Math.min(CRIT.length, S.at + 1); render(); } if (e.key === 'ArrowLeft') { S.at = Math.max(0, S.at - 1); render(); } });
+replay();
+</script>
+</body>
+</html>

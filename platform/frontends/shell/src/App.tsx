@@ -76,6 +76,7 @@ import {
   type ServerNotification,
   type Session,
 } from './host/index.js';
+import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { pageKit, versionLine } from './host/kit.js';
 
 export interface HostProps {
@@ -99,10 +100,15 @@ type Problem = { title: string; summary: string; retry: () => void; action?: str
 const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai, sameOnEveryFloor: a.sameOnEveryFloor });
 
 /**
- * What the Shell offers. Agents stay off until they are designed and have
- * something behind them; floors replace Switch workspace.
+ * Agents aren't built yet: they are still being designed and have nothing
+ * behind them. Rather than hiding them (Nothing is obtuse, docs/shell-principles.md),
+ * the Shell keeps them in its functions under an id it doesn't open itself, and
+ * pressing them says why. Once Aerie's functions take `unavailable` as its navs
+ * do, this becomes that.
  */
-const alphaFunctions = defaultFunctions.filter((f) => f.id !== 'agents');
+export const AGENTS_UNAVAILABLE = 'agents-unavailable';
+/** What the Shell offers; floors replace Switch workspace. */
+export const alphaFunctions = defaultFunctions.map((f) => (f.id === 'agents' ? { ...f, id: AGENTS_UNAVAILABLE } : f));
 /** For an app's developers: its pull requests' previews, to switch to for themselves. */
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
@@ -159,6 +165,7 @@ export function Host({
   /** Apps' feature previews, and whether each is on for this person (SDK 1.7). */
   const [featureApps, setFeatureApps] = useState<FeaturePreviewApp[]>([]);
   const [previewsOpen, setPreviewsOpen] = useState(false);
+  const [agentsWhy, setAgentsWhy] = useState(false);
   const [switching, setSwitching] = useState(false);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
@@ -665,6 +672,15 @@ export function Host({
     };
   }, [bus, manifest, floor, home, session, contextFor, importEntry]);
 
+  // Domain events on this floor, for the apps here, each on the bus by its topic: apps' `refreshOn` hears them.
+  const followed = manifest && floor ? topicsFor(manifest).join(',') : '';
+  useEffect(() => {
+    if (!followed) return;
+    const stream = new DomainEventStream({ getToken: session.getToken, fetchImpl, baseUrl: eventsUrl, floor: floorId, topics: followed.split(','), bus });
+    stream.start();
+    return () => stream.stop();
+  }, [floorId, followed, session, fetchImpl, eventsUrl, bus]);
+
   // The person's notifications: what is unread now, then each new one as it arrives.
   useEffect(() => {
     const shell = shellRef.current;
@@ -783,6 +799,7 @@ export function Host({
       const { id } = (e as CustomEvent<{ id: string }>).detail;
       if (id === 'sign-out') void session.signOut();
       else if (id === 'previews') setPreviewsOpen(true);
+      else if (id === AGENTS_UNAVAILABLE) setAgentsWhy(true);
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
@@ -931,6 +948,14 @@ export function Host({
       >
         <div ref={setRequestStage} className="request-stage" />
       </Dialog>
+      <Dialog
+        open={agentsWhy}
+        onClose={() => setAgentsWhy(false)}
+        size="glance"
+        heading="Agents aren’t here yet"
+        summary="They’re still being designed, so nothing is behind them yet. They arrive with a later release of AUGUR: until then nobody can turn them on, here or in Settings."
+        cancelLabel="Close"
+      />
       <Dialog
         open={previewsOpen}
         onClose={() => setPreviewsOpen(false)}

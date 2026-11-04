@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Pass V1 · The ticket rail</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: what will reach Triage as tickets on a rail, one per kind of change; the tray and the left-out hang on it too ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-4)}
+.rail{position:relative;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--space-3);padding-top:var(--space-3)}
+.rail::before{content:"";position:absolute;left:calc(var(--space-2) * -1);right:calc(var(--space-2) * -1);top:0;height:var(--space-1);border-radius:var(--radius-pill);background:linear-gradient(var(--hairline-strong),var(--hairline))}
+.tk-card{position:relative;display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-3);border:1px solid var(--hairline);border-top:0;border-radius:0 0 var(--radius-key) var(--radius-key);background:var(--surface-pane);text-align:left;min-height:calc(var(--space-8) + var(--space-3));transform-origin:top center}
+.tk-card::before{content:"";position:absolute;left:var(--space-3);right:var(--space-3);top:0;height:1px;background:repeating-linear-gradient(90deg,var(--hairline-strong) 0 var(--space-1),transparent var(--space-1) var(--space-2))}
+.tk-card:hover{background:var(--surface-raised)}
+.tk-card[aria-pressed="true"]{border-color:var(--x-proposed-pass-edge);background:var(--surface-raised)}
+.tk-card .v{display:flex;align-items:center;gap:var(--space-2);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.tk-card .n{font:300 var(--type-title-s)/1 var(--font-mono);color:var(--light)}
+.tk-card .w{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.tk-card.aside{border-style:dashed;border-top:0;border-color:var(--x-proposed-aside-edge);background:var(--x-proposed-aside-wash)}
+.tk-card.said .n,.tk-card.wait .n{color:var(--ink)}
+.bal{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-meta);color:var(--ink);padding:var(--space-2) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset)}
+.bal b{font-weight:400;color:var(--light);font-family:var(--font-mono)}
+.bal .ok{margin-left:auto;display:inline-flex;align-items:center;gap:var(--space-1);color:var(--x-proposed-lit)}
+.detail{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.5fr);gap:var(--space-5)}
+.list{min-height:0;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.list table{width:100%;border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small)}
+.list th,.list td{text-align:left;padding:var(--space-1) var(--space-3);border-bottom:1px solid var(--hairline);white-space:nowrap}
+.list th{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);position:sticky;top:0;background:var(--slate-deep)}
+.list td .keptv{font-size:var(--type-small)}
+.list td.m{color:var(--ink-muted)}
+.about{display:flex;flex-direction:column;gap:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.about p{margin:0}
+.about .muted{font-size:var(--type-small);line-height:var(--leading-small)}
+.go{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--space-4);border:1px solid var(--x-proposed-pass-edge);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.go p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.go .btn{margin-left:auto}
+@media (max-width:1400px){.tk-card{min-height:var(--space-8);padding:var(--space-2)}.tk-card .n{font-size:var(--type-heading)}.tk-card .w{font-size:var(--type-small);line-height:var(--leading-small)}.detail{grid-template-columns:minmax(0,1fr) minmax(240px,.5fr)}.wrap{gap:var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Pass · V1</b> the ticket rail: one ticket per kind of change, the tray and the left-out on the same rail · a kitchen's ticket rail at the pass</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R), recs = R.recs, K = DATA.kinds.inspection, ask = DATA.asked[0], F0 = R.file;
+const notRec = PL.notRecords, links = PL.depots.length + 1;
+const TK = [
+  { id: 'make', cls: '', v: 'make', ic: 'plus', n: recs.length, w: `new ${K.word}s`, rows: () => recs.map(r => [r.n, `${r.v.van.val} · ${r.v.on.val}`, r.v.result.val, r.v.depot.val]), cols: ['line', K.word, KD('result').word, KD('depot').word], about: `One per line of visits. Each points back to its line in ${F0.doc.id} and the recipe lines that made it.` },
+  { id: 'van', cls: '', v: 'make', ic: 'truck', n: PL.fresh.length, w: `new ${DATA.kinds.van.word}`, rows: () => PL.fresh.map(id => { const r = recs.find(x => x.van.id === id); return [r.n, id, r.v.depot.val, `${r.v.odometer.val} miles`]; }), cols: ['line', DATA.kinds.van.word, KD('depot').word, KD('odometer').word], about: `Weighed against the nearest numbers when mapping; proposed with that reason. If Triage turns it down, its ${K.word} waits too.` },
+  { id: 'odo', cls: '', v: 'change', ic: 'pencil-line', n: PL.odo.length, w: 'odometers', rows: () => PL.odo.map(o => [o.n, o.id, fmt(o.was), fmt(o.now)]), cols: ['line', DATA.kinds.van.word, 'kept now', 'after'], about: `The latest reading in the file for each van it already keeps. ${PL.odo.filter(o => o.now < o.was).length ? `${PL.odo.filter(o => o.now < o.was).length} are lower than the reading kept now, and are marked.` : 'None is lower than the reading kept now; one that was would be marked here.'}` },
+  { id: 'link', cls: '', v: 'link', ic: 'link', n: links, w: 'kept things linked, not changed', rows: () => [...PL.depots.map(id => ['—', DEPOT(id).name, `${recs.filter(r => r.v.depot.id === id).length} ${K.word}s`, `${Object.keys(R.st.s8.groups[id]).length} spellings`]), ['—', FIRM.name, `${recs.length} ${K.word}s`, FIRM.id]], cols: ['', 'kept as', 'linked from', ''], about: `Nothing about these changes. They gain ${K.word}s that point at them.` },
+  { id: 'aside', cls: 'aside', v: 'set aside', ic: 'archive', n: PL.aside.length + PL.valuesAside.length, w: `${plural(PL.aside.length, 'line')}, ${plural(PL.valuesAside.length, 'value')}`, rows: () => [...PL.aside.map(l => [l.n, l.cells[0], l.why, `line ${l.by.slice(1)}`]), ...PL.valuesAside.map(v => [v.n, v.van, `odometer “${v.raw}” can’t be read`, 'line 10'])], cols: ['line', 'what', 'why', 'by recipe'], about: `In the tray, counted, each with its reason. They don’t reach Triage. ${P(DATA.me).name} can answer them later and send them on their own.` },
+  { id: 'said', cls: 'said', v: 'not brought in', ic: 'eye-off', n: PL.copies.length + notRec.length + F0.otherSheets.length, w: 'lines and sheets, said', rows: () => [...PL.copies.map(l => [l.n, 'exact copy', l.why, 'line 5']), ...notRec.map(l => [l.n, ROLE_WORD[l.role], l.cells.filter(Boolean).join(' · ').slice(0, 40), `line ${l.by.slice(1)}`]), ...F0.otherSheets.map(s => ['—', `sheet ${s.name}`, s.what, 'not read'])], cols: ['line', 'what', '', 'by recipe'], about: `Not records, and not lost: listed here so nobody wonders where they went.` },
+  { id: 'wait', cls: 'said', v: 'waiting', ic: 'message-circle-question-mark', n: recs.length, w: `waiting on “${ask.word}”`, rows: () => ask.values.map(v => ['—', v, `${recs.filter(r => r.v.kindOfVisit && r.v.kindOfVisit.val === v).length} ${K.word}s`, 'kept in the note']), cols: ['', ask.from, '', ''], about: `${P(ask.decides).name} decides the word. Until then each ${K.word} lands with ${ask.from} in its note; when it exists, only that recipe line reruns.` }
+];
+const S = { on: 'make', hung: 0, sent: false };
+function render() {
+  const t = TK.find(x => x.id === S.on), rows = t.rows();
+  const proposals = recs.length + PL.fresh.length + PL.odo.length;
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, F0.name, 'The pass'], [['←→', 'ticket'], ['S', 'send'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div><h1 class="t">The pass</h1><p class="lede" style="margin-top:var(--space-1)">Everything this run would send to Triage, and everything it wouldn’t, on one rail. Nothing has left the bench.</p></div>
+    <div class="rail">${TK.map((x, i) => `<button class="tk-card ${x.cls}" data-t="${x.id}" aria-pressed="${S.on === x.id}" style="opacity:${i < S.hung ? 1 : 0};transition:opacity var(--motion-base) var(--ease-out)"><span class="v">${I(x.ic, 12)} ${x.v}</span><span class="n">${x.n}</span><span class="w">${x.w}</span></button>`).join('')}</div>
+    <div class="detail"><div class="list scroll"><table><thead><tr>${t.cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td class="${i === 0 || i === 3 ? 'm' : ''}">${i === 1 ? kept(String(c)) : esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <div class="about"><p class="eyebrow">${I(t.ic, 12)} ${t.v} · ${t.n} ${t.w}</p><p>${t.about}</p>
+        <div class="bal"><span>File says <b>${R.total.said}</b> visits</span><span>=</span><span><b>${PL.land}</b> land</span><span>+</span><span><b>${PL.aside.length}</b> set aside</span><span class="ok">${PL.balances ? I('check', 14) + ' balances' : 'doesn’t balance'}</span></div>
+        <p class="muted">The exact copy is the difference between ${PL.data} lines of visits and ${R.total.said} visits; the file’s own comment says its total excludes it.</p></div></div>
+    <div class="go">${S.sent ? `<span class="heard">${I('check', 14)} heard</span><p>${plural(proposals, 'proposal')} are in ${P('p2').name}’s Triage. The tray stays with you: ${plural(PL.aside.length + PL.valuesAside.length, 'thing')} to answer.</p>`
+      : `<p>${plural(proposals, 'proposal')} to Triage for ${F(DATA.myFloor).name}: ${recs.length} ${K.word}s, ${PL.fresh.length} van, ${PL.odo.length} changes. ${P('p2').name} decides.</p><button class="btn go" data-send>${I('send', 14)} Send to Triage</button>`}</div>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-t]').forEach(b => b.onclick = () => { S.on = b.dataset.t; render(); });
+  $('[data-send]') && ($('[data-send]').onclick = () => { S.sent = true; render(); });
+}
+function replay() { clearLater(); Object.assign(S, { on: 'make', hung: 0, sent: false }); render(); const t = ms('--motion-run'); TK.forEach((_, i) => later(() => { S.hung = i + 1; render(); }, t + i * ms('--motion-instant'))); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const i = TK.findIndex(x => x.id === S.on);
+  if (e.key === 'ArrowRight') { S.on = TK[(i + 1) % TK.length].id; S.hung = TK.length; render(); }
+  if (e.key === 'ArrowLeft') { S.on = TK[(i - 1 + TK.length) % TK.length].id; S.hung = TK.length; render(); }
+  if (e.key.toLowerCase() === 's') { S.sent = true; S.hung = TK.length; render(); }
+});
+replay();
+</script>
+</body>
+</html>

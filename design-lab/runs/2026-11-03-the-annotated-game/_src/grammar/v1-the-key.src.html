@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Grammar V1 · The key</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Grammar V1: the key, printed like the back cover of an annotated games book ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.cols{min-height:0;display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:var(--space-4)}
+.col{min-height:0;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)}
+.col h2{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.col .by{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-bottom:var(--space-2)}
+.k{display:grid;grid-template-columns:3.2em minmax(0,1fr);gap:var(--space-1) var(--space-3);align-items:baseline;padding:var(--space-2) 0;border-top:1px solid var(--hairline)}
+.k .g{grid-row:span 2;text-align:center}
+.k .w{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.k .s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.k .ex{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
+.k .ex b{font-weight:400;color:var(--ink)}
+.rule{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:auto;padding-top:var(--space-2)}
+.line{padding:var(--space-3) var(--space-4);display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:baseline;font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink)}
+.line .t{color:var(--ink-muted);letter-spacing:var(--tracking-caps);text-transform:uppercase;margin-right:var(--space-2)}
+.line .m{white-space:nowrap}
+.line .m .gl{min-width:0;transition:opacity var(--motion-base) var(--ease-out)}
+.line .m .gl.off{opacity:0}
+.line .m.world{color:var(--ink-muted);font-style:italic}
+@media (max-width:1400px){.k{padding:var(--space-1) 0}.k .ex{display:none}.col{padding:var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V1</b> the key: six marks for moves, four signs, five positions from the records · Chess Informant’s language-free key, Nimzowitsch</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* one example per mark, taken from the game where it exists */
+function exampleFor(g) {
+  for (const m of MOVES) { const a = ANN(m.n).find(x => x.g === g); if (a) return `<b>${m.n}. ${m.san}</b>${a.line ? ': “' + a.line + '”' : ''} (${first(a.by)}${a.self ? ', on their own move' : ''})`; }
+  return 'Not used in this game. Kept rare on purpose.';
+}
+function render(lit = 0) {
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', 'The key'], [['T', 'record names', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">The key</h1><p class="lede">Learned in a minute, read in a second. People mark <b class="lite">moves</b>; the records mark <b class="lite">positions</b>. The marks are the same in every deployment, only their words can change.</p></div>
+    <div class="cols">
+      <section class="col pane"><h2>Moves</h2><p class="by">Marked by people, always about the choice as it was made, with what was known then.</p>
+        ${DATA.markOrder.map(g => `<div class="k dep" style="--i:${DATA.markOrder.indexOf(g)}">${gl(g, 'big g')}<span class="w">${MK(g).w}</span><span class="s">${MK(g).say}</span><span class="ex">${exampleFor(g)}</span></div>`).join('')}
+      </section>
+      <section class="col pane"><h2>Signs</h2><p class="by">Set beside a move. They say what the move was played under.</p>
+        ${Object.keys(DATA.signs).map((g, i) => `<div class="k dep" style="--i:${i + 6}">${gl(g, 'big g')}<span class="w">${MK(g).w}</span><span class="s">${MK(g).say}</span><span class="ex">${exampleFor(g).startsWith('Not') ? (MOVES.find(m => m.sign === g) ? `<b>${MOVES.find(m => m.sign === g).n}. ${MOVES.find(m => m.sign === g).san}</b>` : 'Used in commentary: “∆ to keep inspections with Kestrel until both fitters are in post.”') : exampleFor(g)}</span></div>`).join('')}
+        <div class="k dep" style="--i:10"><span class="g gl big">${I('door-closed', 20)}</span><span class="w">Can’t be undone</span><span class="s">A one-way step. Recorded when it is taken, not found at review.</span><span class="ex"><b>${MOVES.filter(m => m.door).map(m => m.n + '. ' + m.san).join(' · ')}</b></span></div>
+      </section>
+      <section class="col pane"><h2>Positions</h2><p class="by">Read from the lines the decision set for itself, as at the date of each move. Never typed.</p>
+        ${DATA.positions.map((p, i) => `<div class="k dep" style="--i:${i + 11}">${posGl(p.s, 'big g')}<span class="w">${p.w}</span><span class="s">${p.say}</span></div>`).join('')}
+        <div class="k dep" style="--i:16">${gl(DATA.unclear.s, 'big g')}<span class="w">${DATA.unclear.w}</span><span class="s">The one position mark a person may add. It lowers the records’ certainty; it never moves their number.</span></div>
+        <p class="tk">positions: min(headroom on lines L1…L3) → sign; two lines crossed → ∓</p>
+      </section>
+    </div>
+    <section class="line pane" aria-label="The game in notation"><span class="t">${DEC.id} in notation</span>${MOVES.map(m => { const r = mainMark(m.n); return `<span class="m ${m.side}">${m.n}. ${m.san.split(':')[0]}${m.sign ? ' ' + m.sign : ''}${r ? gl(r.g, lit ? '' : 'off') : ''}</span>`; }).join('')}<span class="m">· ${DATA.results[DEC.result].toLowerCase()} after ${DEC.days} days</span></section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() { clearLater(); render(0); settle(); later(() => $$('.line .gl.off').forEach((g, i) => later(() => g.classList.remove('off'), i * ms('--motion-instant'))), MOMENT()); }
+document.addEventListener('keydown', e => { commonKeys(e, () => render(1), replay); });
+replay();
+</script>
+</body>
+</html>

@@ -1,7 +1,8 @@
 {
   "name": "@augur/upgrades",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL.",
   "scripts": {
@@ -10,8 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.3.0",
-    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.2.0",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.6.1",
+    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.7.0",
     "@augur/mfe-sdk": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

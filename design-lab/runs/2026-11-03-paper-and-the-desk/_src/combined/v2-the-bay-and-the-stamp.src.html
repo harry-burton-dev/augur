@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="x-shot-wait" content="4200">
+<title>Desk · Combined V2 · The bay and the stamp</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- C2: Home as a strip bay; the back of a strip is where you act on it. here: initial an approval, noting what nobody checked ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);gap:var(--space-6)}
+.rack{min-height:0;display:grid;align-content:start;gap:var(--space-4);padding-right:var(--x-proposed-cock)}
+.rack .strip{cursor:pointer}
+.rack .strip.leave{opacity:0;transform:translateX(var(--space-6))}
+.back{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);border-left:1px solid var(--hairline);padding-left:var(--space-5)}
+.route{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+.route .stamp{min-width:0;padding:var(--space-1) var(--space-2)}
+.route svg{color:var(--ink-muted)}
+.scope{display:grid;gap:var(--space-1)}
+.sc{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-1) 0}
+.box{display:inline-flex;align-items:center;justify-content:center;width:var(--space-4);height:var(--space-4);border:1px solid var(--hairline-strong);border-radius:2px;color:var(--x-proposed-lit)}
+.box.on{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2)}
+.ch{display:grid;gap:var(--space-1);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);text-align:left;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ch b{font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink)}
+.ch[aria-checked="true"]{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.ch[aria-checked="true"] b{color:var(--x-proposed-lit)}
+.note-in{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key);padding:var(--space-2) var(--space-3)}
+.note-in.ink{border-style:solid;border-color:var(--hairline-strong);background:none}
+.go{display:flex;gap:var(--space-3);align-items:center;border-top:1px solid var(--hairline);padding-top:var(--space-3);margin-top:auto}
+.done{display:grid;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key)}
+@media (max-width:1400px){.rack .strip .ln{font-size:var(--x-proposed-type-micro)}.rack{gap:var(--space-3)}.back{gap:var(--space-2)}.ch{font-size:var(--x-proposed-type-micro)}.route .stamp .d{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V2</b> the bay and the stamp: act on the back of a strip; initial what you checked, note what nobody did · home V1, approvals V1 V2 V6</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const me = DATA.me, mine = AP.route.find(r => r.who === me), next = AP.route[3].who;
+const S = { sel: 'A-118', pick: 1, stamped: false, gone: false };
+const U = AP.sections.find(x => x.n === AP.uncovered[0]), RET = AP.route[1].who;
+const NOTE = `Section ${U.n}, ${U.t}, is new and nobody on the row checked it. ${P(AP.uncoveredWho).name} could.`;
+const held = () => DATA.items.filter(x => x.holder === me && !(S.gone && x.id === 'A-118')).sort((a, b) => a.h - b.h);
+function rack() {
+  const h = held(), coming = DATA.items.filter(x => x.to === me || x.next === me), pointed = DATA.items.filter(x => x.pointedBy);
+  const bay = (t, x, list, o = {}) => `<section class="bay"><div class="bay-h"><p class="eyebrow">${t}</p><span class="c">${list.length}</span><span class="x">${x}</span></div>${list.map((it, i) => stripHTML(it, { tag: 'button', i, sel: S.sel === it.id, ghost: !!it.next || !!it.pointedBy, cls: S.stamped && it.id === 'A-118' ? 'leave' : '' })).join('')}</section>`;
+  return `<div><p class="eyebrow">Your bay · ${DATA.now.day}, ${DATA.now.time}</p><h1 class="t" style="margin-top:var(--space-1)">What needs you</h1></div>
+    ${bay('You hold', S.gone ? `A-118 passed to ${first(next)} · stub ${AP.book[0].no + 1}` : 'in time order', h)}${bay('Coming to you', 'not yours until you take them', coming)}${bay('Pointed out to you', 'someone else holds these', pointed)}`;
+}
+function back() {
+  const donePanel = `<div class="done">
+    <p class="note">It is with <b>${P(next).name}</b> now. It left your bay; stub <b>${AP.book[0].no + 1}</b> is in your stamp book. If she returns it, it goes back to ${first(RET)}, not to you.</p></div>`;
+  const C = [['Initial', 'you checked what you were asked'], ['Initial, noting', 'and put something on the record'], ['Return', `to ${P(RET).name}, with a note`]];
+  return `<div><p class="eyebrow">The back of the strip · approval</p><h2 class="h" style="margin-top:var(--space-1)">${AP.doc}, ${AP.version}</h2>
+      <p class="note" style="margin-top:var(--space-1)">To publish to <b>${AP.library}</b>: ${fmt(AP.readers)} readers on the ${F(AP.floor).word} floor.</p></div>
+    <div class="route">${AP.route.map(r => r.at ? stampHTML(r.who, 'Initialled', r.at.split(' ').slice(0, 3).join(' ')) : r.who === me ? (S.stamped ? stampHTML(me, 'Initialled', DATA.now.time, 'land') : `<span class="stamp next" data-tier="team"><span class="w">You</span><span class="n">${ME().name}</span><span class="d">next</span></span>`) : `<span class="stamp empty" data-tier="${P(r.who).floor}"><span class="w">Publish</span><span class="n">${P(r.who).name}</span><span class="d">after you</span></span>`).join(I('chevron-right', 14))}</div>
+    <div class="scope"><p class="eyebrow">What you sign for</p>${AP.sections.filter(s => s.ch !== 'same').map(s => {
+      const m = mine.covers.includes(s.n), by = signedFor(s.n);
+      return `<div class="sc"><span class="box ${m ? 'on' : ''}">${m ? I('check', 12) : ''}</span><span><b style="font-weight:400;color:var(--light)">${s.n} ${s.t}</b> · ${s.words}</span><span>${by.concat(m && S.stamped ? [me] : []).map(w => ini(w, 'sm')).join('') || (m ? '' : '<span class="nobody">nobody</span>')}</span></div>`;
+    }).join('')}</div>
+    ${S.gone ? stampHTML(me, C[S.pick][0] === 'Initial' ? 'Initialled' : 'Initialled, noting', DATA.now.day + ' ' + DATA.now.time) + donePanel : `<div class="choices" role="radiogroup">${C.map(([w, d], i) => `<button class="ch" role="radio" aria-checked="${S.pick === i}" data-i="${i}"><b>${w}</b>${d}</button>`).join('')}</div>
+    ${S.pick ? `<div class="note-in ${S.stamped ? 'ink' : ''}">${NOTE}</div>` : ''}
+    <div class="go"><button class="btn go">${I('stamp', 14)} ${S.pick === 2 ? 'Return it' : 'Hold S to initial 3 and 5'}</button><span class="note">${S.pick === 2 ? `Goes back to ${P(RET).name} with your note.` : `Then it goes to ${P(next).name}, who stamps it for ${fmt(AP.readers)} readers.`}</span></div>`}`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Home', 'What needs you'], [['↑ ↓', 'move'], ['1 2 3', 'stamp'], ['S', 'initial'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap"><div class="rack scroll">${rack()}</div><aside class="back scroll" aria-live="polite">${back()}</aside></div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.ch').forEach(b => b.onclick = () => { S.pick = +b.dataset.i; render(); });
+  $$('.rack .strip').forEach(b => b.onclick = () => { S.sel = b.dataset.id; render(); });
+}
+function stamp() { if (S.stamped) return; S.stamped = true; render(); later(() => { S.gone = true; render(); }, ms('--motion-calm') * 1.5); }
+function replay() {
+  clearLater(); S.pick = 0; S.stamped = false; S.gone = false; S.sel = 'A-118'; render(); settle();
+  /* the moment: you pick "initial, noting"; your initial lands; the strip leaves your bay for Helen's */
+  later(() => { S.pick = 1; render(); }, ms('--motion-run'));
+  later(stamp, ms('--motion-run') + ms('--motion-calm') * 1.5);
+}
+onKeys({ r: replay, s: stamp, 1: () => { S.pick = 0; render(); }, 2: () => { S.pick = 1; render(); }, 3: () => { S.pick = 2; render(); } });
+replay();
+</script>
+</body>
+</html>

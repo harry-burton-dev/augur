@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Grammar V3 · The score sheet</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Grammar V3: the whole decision as a text record anyone can copy, like a game score with its tags ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.sheet{min-height:0;padding:var(--space-4) var(--space-5);font:400 var(--type-meta)/1.75 var(--font-mono);color:var(--ink)}
+.sheet .tags{color:var(--ink-muted);margin-bottom:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.sheet .tags b{font-weight:400;color:var(--ink)}
+.sheet .n{color:var(--ink-muted)}
+.sheet .w{color:var(--ink-muted);font-style:italic}
+.sheet .c{color:var(--ink-muted);font-family:var(--font-sans);font-size:var(--type-small)}
+.sheet .v{color:var(--x-proposed-mark-info);font-size:var(--type-small)}
+.sheet span{transition:background var(--motion-base) var(--ease-out),box-shadow var(--motion-base) var(--ease-out);border-radius:2px}
+.sheet.show-c .c,.sheet.show-v .v,.sheet.show-w .w,.sheet.show-g .gl{background:var(--surface-raised);box-shadow:0 0 0 2px var(--surface-raised)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.key{padding:var(--space-4);display:grid;gap:var(--space-2)}
+.key button{display:grid;grid-template-columns:5.5em minmax(0,1fr);gap:var(--space-3);align-items:baseline;padding:var(--space-2);border-radius:var(--radius-key);text-align:left;font-size:var(--type-small);line-height:var(--leading-small)}
+.key button:hover,.key button.on{background:var(--surface-raised)}
+.key .sx{font:400 var(--type-meta)/1 var(--font-mono);color:var(--light)}
+.why{padding:var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);display:grid;gap:var(--space-2)}
+.why b{font-weight:400;color:var(--light)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V3</b> the score sheet: a reviewed decision as plain text, tags, moves, marks, commentary and lines not played · PGN, Informator</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { show: '' };
+const dot = iso => iso.replace(/-/g, '.');
+function sheetHTML() {
+  const R = DATA.review;
+  const tags = [['Decision', DEC.id], ['Title', DEC.title], ['Body', DATA.body.name], ['Played', dot(MOVES[0].on) + ' – ' + dot(DEC.ended)], ['Code', 'C3.2 ' + DATA.book.codes['C3.2']], ['Result', DATA.results[DEC.result] + ' by ' + DEC.reversedBy], ['Annotator', P(R.facilitator).name + '; own moves by ' + list([...new Set(Object.values(DATA.annotations).flat().filter(a => a.self).map(a => first(a.by)))])], ['Agreed', dot(R.agreed)]];
+  const body = MOVES.map(m => {
+    const marks = ANN(m.n).map(a => gl(a.g, a.self ? 'second' : '')).join('');
+    const short = m.san.replace(/^(\w[\w ]*?):.*$/, '$1');
+    const opt = (m.opts || []).filter(o => !o.played).slice(0, 1).map(o => ` <span class="v">(${m.n}. ${o.san})</span>`).join('');
+    const c = (ANN(m.n).find(a => a.crit && a.line) || {}).line;
+    return `<span class="n">${m.n}.</span> ${m.side === 'world' ? `<span class="w">${m.san}</span>` : m.san}${m.sign ? ' ' + gl(m.sign) : ''}${marks ? ' ' + marks : ''}${opt}${c ? ` <span class="c">{${c}}</span>` : ''}`;
+  }).join(' ');
+  return `<div class="tags">${tags.map(([k, v]) => `[${k} “<b>${v}</b>”]`).join('<br>')}</div>${body} <span class="n">${DATA.results[DEC.result].toLowerCase()}</span>`;
+}
+const KEY = [
+  ['w', '<i>italic</i>', 'The world’s moves: what happened to us. Never marked.'],
+  ['g', '! ? !? ?!', 'Marks. The quieter one first is the mover’s own; the reviewer’s follows.'],
+  ['c', '{ … }', 'A line of commentary. Only at critical moments: four lines in seventeen moves.'],
+  ['v', '( … )', 'A line not played, from the record at the time: here, clause 9’s break and Kestrel’s ad hoc price.']
+];
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', DEC.id, 'Score sheet'], [['1–4', 'show each part'], ['C', 'copy as text'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">The score sheet</h1><p class="lede">A reviewed decision fits in a paragraph. It pastes into a message, a minute or a search box, and reads the same everywhere. The page view is drawn from this; nothing on it says more.</p></div>
+    <section class="sheet pane scroll ${S.show ? 'show-' + S.show : ''}" id="sheet" aria-label="${DEC.id} as text">${sheetHTML()}</section>
+    <aside class="side">
+      <div class="key pane"><p class="eyebrow">How to read it</p>${KEY.map(([k, sx, w], i) => `<button data-k="${k}" class="${S.show === k ? 'on' : ''}"><span class="sx">${sx}</span><span>${w}</span></button>`).join('')}</div>
+      <div class="why pane"><p class="eyebrow">Why a text record</p>
+        <p><b>Many deployments.</b> The marks are language-free; tag names and codes come from the deployment’s own book.</p>
+        <p><b>It travels.</b> A game score has been copied by hand for two centuries. A review that only exists as a screen can’t be quoted in a minute.</p>
+        <p><b>It can be checked.</b> Every move number points at a dated record in Mandate. The text can’t say a thing the records don’t.</p></div>
+    </aside>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.key button').forEach(b => b.onclick = () => { S.show = S.show === b.dataset.k ? '' : b.dataset.k; render(); });
+}
+function replay() { clearLater(); S.show = ''; render(); settle(); later(() => { S.show = 'c'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const i = '1234'.indexOf(e.key); if (i >= 0) { S.show = KEY[i][0]; render(); }
+  if (e.key.toLowerCase() === 'c') { try { navigator.clipboard.writeText($('#sheet').innerText).catch(() => {}); } catch (err) {} }
+});
+replay();
+</script>
+</body>
+</html>

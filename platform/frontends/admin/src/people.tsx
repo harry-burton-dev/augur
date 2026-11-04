@@ -1,4 +1,4 @@
-import { Button, Checkbox, CheckboxGroup, Dialog, Select, Status, Table, TextField, Toggle, type TableColumn, type TableRow } from '@augur/app-kit';
+import { AskTwice, Button, Checkbox, CheckboxGroup, Dialog, Select, Status, Table, TextField, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
 import { departmentPath, fullName, type AdminApi, type Department, type Person, type Role } from './api.js';
 import { Page, PasswordNote, Problem, statusOf } from './parts.js';
@@ -18,6 +18,11 @@ const columns: TableColumn[] = [
 /**
  * Everyone who can sign in: add someone, change their name, department and
  * roles, turn their sign-in off or on, and give them a new one-time password.
+ *
+ * A person's dialog keeps two kinds of control apart. Their details (name,
+ * email, department, roles) are a form that changes nothing until Save.
+ * Their sign-in (on or off, a new one-time password) acts at once, in its own
+ * section that says so, each action with its own result line.
  */
 export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: string; adding?: boolean }) {
   const [people, setPeople] = useState<Person[]>([]);
@@ -29,7 +34,8 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   const [editing, setEditing] = useState<string>();
   const [password, setPassword] = useState<{ name: string; value: string; reset: boolean }>();
   const [chosenRoles, setChosenRoles] = useState<string[]>([]);
-  const [resetError, setResetError] = useState('');
+  const [liveResult, setLiveResult] = useState('');
+  const [liveError, setLiveError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,7 +57,8 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   const person = people.find((p) => p.id === editing);
 
   const open = (id?: string) => {
-    setResetError('');
+    setLiveResult('');
+    setLiveError('');
     setChosenRoles(people.find((p) => p.id === id)?.roles ?? []);
     if (id) setEditing(id);
     else setAdding(true);
@@ -66,6 +73,12 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
 
   const fields = (p?: Person) => (
     <>
+      {p ? (
+        <div className="admin-part-head">
+          <h3 className="admin-part-label">Their details</h3>
+          <p className="admin-muted">Nothing here changes until you press Save.</p>
+        </div>
+      ) : null}
       <TextField name="firstName" label="First name" required defaultValue={p?.firstName ?? ''} />
       <TextField name="lastName" label="Last name" required defaultValue={p?.lastName ?? ''} />
       <TextField name="email" type="email" label="Email" required defaultValue={p?.email ?? ''} validate={emailCheck} />
@@ -106,16 +119,22 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
     setDepartments(await api.departments().catch(() => departments));
   };
 
+  /** Turns someone's sign-in on or off straight away, and says what happened. A failure shows where it was asked: in the confirmation, or under the toggle. */
+  const setSignIn = async (p: Person, enabled: boolean) => {
+    setLiveResult('');
+    setLiveError('');
+    replace(await api.updatePerson(p.id, { enabled }));
+    setLiveResult(enabled ? 'Sign-in turned on: they can sign in again.' : 'Sign-in turned off: they can’t sign in until it’s turned on again.');
+  };
+
+  /** Gives someone a new one-time password straight away, and shows it once. */
   const resetPassword = async (p: Person) => {
-    setResetError('');
-    try {
-      const { temporaryPassword } = await api.resetPassword(p.id);
-      replace({ ...p, invited: true });
-      setEditing(undefined);
-      setPassword({ name: fullName(p), value: temporaryPassword, reset: true });
-    } catch (err) {
-      setResetError((err as Error).message);
-    }
+    setLiveResult('');
+    setLiveError('');
+    const { temporaryPassword } = await api.resetPassword(p.id);
+    replace({ ...p, invited: true });
+    setPassword({ name: fullName(p), value: temporaryPassword, reset: true });
+    setLiveResult('New one-time password given: their old password no longer works.');
   };
 
   const rows: TableRow[] = people
@@ -176,20 +195,44 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
           onClose={() => setEditing(undefined)}
           fields={fields(person)}
         >
-          <Toggle
-            label="Can sign in"
-            hint={person.id === me ? undefined : 'Turned off, they can’t sign in; nothing of theirs is removed.'}
-            checked={person.enabled}
-            disabled={person.id === me}
-            reason="You can’t turn off your own sign-in."
-            onChange={async (enabled) => replace(await api.updatePerson(person.id, { enabled }))}
-          />
-          <div>
-            <Button kind="tertiary" size="sm" onPress={() => void resetPassword(person)}>
-              Give them a new one-time password
-            </Button>
-          </div>
-          <Problem>{resetError}</Problem>
+          <section className="admin-live" aria-labelledby="admin-live-label" data-live>
+            <div className="admin-part-head">
+              <h3 id="admin-live-label" className="admin-part-label">
+                Takes effect at once
+              </h3>
+              <p className="admin-muted">These change their sign-in now, without Save.</p>
+            </div>
+            <p className="admin-muted" data-sign-in>
+              {person.enabled ? 'They can sign in.' : 'Their sign-in is off: they can’t sign in. Nothing of theirs is removed.'}
+            </p>
+            <div className="admin-live-actions">
+              {person.enabled ? (
+                <AskTwice
+                  size="sm"
+                  confirm="Press again: they can’t sign in from now"
+                  busyLabel="Turning off…"
+                  disabled={person.id === me}
+                  reason="You can’t turn off your own sign-in."
+                  onPress={() => setSignIn(person, false).catch((err: Error) => setLiveError(err.message))}
+                >
+                  Turn off their sign-in
+                </AskTwice>
+              ) : (
+                <Button kind="secondary" size="sm" busyLabel="Turning on…" onPress={() => setSignIn(person, true).catch((err: Error) => setLiveError(err.message))}>
+                  Turn their sign-in on
+                </Button>
+              )}
+              <AskTwice size="sm" confirm="Press again: their current password stops working" busyLabel="Making one…" onPress={() => resetPassword(person).catch((err: Error) => setLiveError(err.message))}>
+                Give them a new one-time password
+              </AskTwice>
+            </div>
+            {liveResult ? (
+              <p role="status" className="admin-muted" data-live-result>
+                {liveResult}
+              </p>
+            ) : null}
+            <Problem>{liveError}</Problem>
+          </section>
         </Dialog>
       ) : null}
       {password ? <PasswordNote {...password} onClose={() => setPassword(undefined)} /> : null}
