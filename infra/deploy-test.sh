@@ -189,6 +189,22 @@ kept() {
 
 up() { pc up -d --no-build --remove-orphans $(services) >&2; }
 
+# The first admin signs in in a real browser, and Home and each app that ships with AUGUR render with
+# the kit from KIT_URL (infra/deploy-browser-check.mjs, in Playwright's own image). BROWSER_CHECK=0 skips it;
+# BROWSER_CHECK_OUT keeps its screenshots.
+PLAYWRIGHT=1.56.1
+browser_check() {
+  # It changes the first admin's password, which THEN's command still has to change itself.
+  [ "${BROWSER_CHECK:-1}" = 1 ] && [ -z "${THEN:-}" ] || return 0
+  local env=$deploy/.env apps shots="${BROWSER_CHECK_OUT:-$work/browser-check}"
+  apps="home $( [ -e "$here/../release/shipped-apps.json" ] && jq -r '.apps | keys | join(" ")' "$here/../release/shipped-apps.json")"
+  mkdir -p "$shots"
+  docker run --rm --network host --ipc=host -e OUT=/out -v "$shots:/out" \
+    -v "$here/deploy-browser-check.mjs:/check/check.mjs:ro" "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble" \
+    sh -c 'cd /check && npm install --silent --no-save --no-audit --no-fund "playwright@$0" >/dev/null && node check.mjs "$@"' \
+    "$PLAYWRIGHT" "http://localhost:$port" "$(sed -n 's/^PLATFORM_ADMIN_USER=//p' "$env")" "$(sed -n 's/^PLATFORM_ADMIN_PASSWORD=//p' "$env")" $apps >&2
+}
+
 # One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
 # wanted: `pass`, or `fail <part>`, which must be named among the problems. Its exit code must agree.
 check_until() {
@@ -242,6 +258,7 @@ case "$mode" in
     wait_ready "Fresh install of this checkout"
     no_restarts
     on_version "$local_tag"
+    browser_check
     # THEN runs once the install is ready, before it is removed, with its address and the first admin's
     # sign-in (whose password must be changed at first sign-in). Its exit status is the test's.
     if [ -n "${THEN:-}" ]; then
