@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Replay V3 · The clocks</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Replay V3: every clock the decision ran against, on one rail, and how long each of the world's moves waited for an answer ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4) var(--space-5)}
+.intro{grid-column:1 / -1}
+.clocks{position:relative;min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.rail{position:relative;flex:1;min-height:0}
+.axis{position:absolute;left:0;right:0;bottom:0;height:var(--space-5);border-top:1px solid var(--hairline-strong)}
+.axis span{position:absolute;top:var(--space-1);transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.ck{position:absolute;left:0;right:0;height:var(--space-6)}
+.ck .nm{position:absolute;left:0;top:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.ck .nm .gl{font-size:var(--type-small);min-width:0}
+.ck .bar{position:absolute;top:calc(var(--leading-small) + var(--space-1));height:var(--space-2);border-radius:2px;background:color-mix(in srgb,var(--light) 30%,transparent)}
+.ck .bar.door{background:var(--x-proposed-warn)}
+.ck .bar.old{background:none;border:1px dashed var(--ink-muted);height:var(--space-2)}
+.ck .end{position:absolute;top:calc(var(--leading-small) + var(--space-3) + 2px);transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.ck .dot{position:absolute;top:calc(var(--leading-small) - 1px);width:var(--space-3);height:var(--space-3);border-radius:var(--radius-pill);transform:translateX(-50%);background:var(--light);border:2px solid var(--slate-deep)}
+.nowl{position:absolute;top:0;bottom:var(--space-5);width:1px;background:var(--light);transition:left var(--motion-hold) linear}
+.nowl b{position:absolute;top:calc(var(--space-5) * -1 + var(--space-2));left:var(--space-1);font:400 var(--type-small)/1 var(--font-mono);color:var(--light);white-space:nowrap;font-weight:400}
+.lesson{padding:var(--space-3) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta);opacity:0;transition:opacity var(--motion-calm) var(--ease-out)}
+.lesson.on{opacity:1}
+.answers{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-2)}
+.an{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.an .w{color:var(--ink-muted);font-style:italic}
+.an .r{grid-column:1}
+.an .dd{grid-row:1 / 3;grid-column:2;font:300 var(--type-heading)/1 var(--font-mono);color:var(--light);text-align:right}
+.an .dd small{display:block;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted)}
+.an.slow .dd{color:var(--x-proposed-warn)}
+@media (max-width:1400px){.clocks,.answers{padding:var(--space-3) var(--space-4)}.an{padding:var(--space-1) 0}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Replay · V3</b> the clocks: every deadline on one rail; the notice clock ran out before the hiring clock, and each world move waited for an answer · chess clocks and time trouble, critical path</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const FROM = '2026-05-01', TO = '2026-11-15';
+const X = d => ((ts(d) - ts(FROM)) / (ts(TO) - ts(FROM)) * 100).toFixed(2) + '%';
+const A302 = DATA.actions.find(a => a.id === 'A-302');
+const CLOCKS = [
+  { nm: `${gl('⊕')} Kestrel’s notice, for 1 September`, from: '2026-05-12', to: '2026-06-01', door: true, dot: MV(6).on, end: 'notice by 1 Jun' },
+  { nm: 'Hiring two fitters (A-302)', from: '2026-05-12', to: A302.due[0][1], moved: A302.due.slice(1).map(d => d[1]), dot: '2026-09-09', end: 'due 30 Jun, moved twice' },
+  { nm: 'Line L2: two fitters on 1 August', from: '2026-05-12', to: '2026-08-01', dot: '2026-08-01', end: 'crossed 1 Aug' },
+  { nm: 'Kestrel to breakdown cover', from: '2026-06-01', to: '2026-09-01', door: true, end: 'from 1 Sep' },
+  { nm: 'The trial, to its review', from: '2026-07-01', to: '2026-11-03', dot: '2026-11-03', end: 'reviewed 3 Nov (planned 10 Nov)' }
+];
+/* each of the world's moves, and the first of our moves that changed something in answer */
+const ANSWERS = [[7, 8, 'moved the action’s date, not the line'], [10, 13, 'the line was noted on the day; the meeting looked 38 days later'], [12, 13, 'the meeting a week later'], [15, 16, 'the meeting a week later']];
+const S = { at: '2026-05-12', lesson: false };
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', DEC.id, 'The clocks'], [['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">The clocks</h1><p class="lede">Chess players lose games on time. A decision runs against several clocks at once, and the order they run out in can force a move. Every deadline on one rail; one-way steps in warning.</p></div>
+    <section class="clocks pane"><div class="rail" id="rail">
+      ${CLOCKS.map((c, i) => `<div class="ck" style="top:calc(${i * 17}% + var(--space-4))"><span class="nm">${c.nm}</span>
+        ${(c.moved || []).map(d => `<span class="bar old" style="left:${X(c.from)};width:calc(${X(d)} - ${X(c.from)})"></span>`).join('')}
+        <span class="bar ${c.door ? 'door' : ''}" style="left:${X(c.from)};width:calc(${X(c.to)} - ${X(c.from)})"></span>
+        <span class="end" style="left:${X(c.to)}">${c.end}</span>${c.dot ? `<span class="dot" style="left:${X(c.dot)}" title="${dt(c.dot)}"></span>` : ''}</div>`).join('')}
+      <div class="axis">${[5, 6, 7, 8, 9, 10, 11].map(mo => { const d = `2026-${String(mo).padStart(2, '0')}-01`; return `<span style="left:${X(d)}">${dt(d.slice(0, 7), 'short')}</span>`; }).join('')}</div>
+      <div class="nowl" id="nowl" style="left:${X(S.at)}"><b>${dt(S.at, 'short')}</b></div>
+    </div>
+    <div class="lesson box warn ${S.lesson ? 'on' : ''}">${I('timer', 14)} On ${dt(MV(6).on, 'short')} the notice clock had ${days(MV(6).on, '2026-06-01')} days left and the hiring clock ${days(MV(6).on, '2026-06-30')}. The one-way step’s clock ran out first, so it was taken first. Nobody chose that order; the dates did. A rule worth learning: <b class="lite">when a one-way clock ends before the clock it depends on, move one of them at the table.</b></div></section>
+    <section class="answers pane scroll"><p class="eyebrow">Answer times · the world moved, we answered</p>
+      ${ANSWERS.map(([w, u, why]) => { const d = days(MV(w).on, MV(u).on); return `<div class="an ${d > 21 ? 'slow' : ''}"><span class="w">${w}. ${MV(w).san}</span><span class="dd">${d}<small>days</small></span><span class="r">→ ${u}. ${MV(u).san} ${(mainMark(u) ? gl(mainMark(u).g) : '')}<br><span class="muted">${why}</span></span></div>`; }).join('')}
+      <p class="small muted" style="margin-top:auto">“Answered” means a move that changed something. Noting a crossed line without a reason doesn’t count as an answer; it stops nothing.</p>
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() {
+  clearLater(); S.at = '2026-05-12'; S.lesson = false; render(); settle();
+  later(() => { S.at = MV(6).on; const n = $('#nowl'); n.style.transitionDuration = css('--motion-calm'); n.style.left = X(S.at); n.querySelector('b').textContent = dt(S.at, 'short'); }, MOMENT());
+  later(() => { S.lesson = true; $('.lesson').classList.add('on'); }, MOMENT() + ms('--motion-calm'));
+}
+document.addEventListener('keydown', e => { commonKeys(e, render, replay); });
+replay();
+</script>
+</body>
+</html>

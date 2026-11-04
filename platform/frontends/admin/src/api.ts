@@ -27,10 +27,14 @@ export interface Role {
 }
 
 export interface CatalogueApp extends AppManifestEntry {
-  /** Ships with the platform; can't be turned off. */
+  /** Built into AUGUR (Home, Admin, the Upgrade Centre); can't be turned off. */
   platform: boolean;
   /** Ships with AUGUR but is an ordinary app: turned off rather than removed, and its version comes with the release. */
+  ships?: boolean;
+  /** @deprecated The registry's old name for `ships`, read only from a registry that doesn't send `ships`. */
   pillar?: boolean;
+  /** The kind its manifest claims when the registry doesn't honour it (ADR 0032), and why. `category` is then absent. */
+  categoryRefused?: { asked: string; why: string };
   enabled: boolean;
   registeredBy?: string;
   registeredAt?: string;

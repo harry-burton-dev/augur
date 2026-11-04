@@ -14,3 +14,5 @@ Could steer: Type (C): the urgent sentence as a headline inside the frame.
 Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): a standby whose go-by falls before the supervisor's next look opens the Letterbox, by the shell's rule, never the agent's choice (standby V2, combined V3).
 
 Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): urgent at night in the Letterbox, with the bars carrying the escalation schedule (escalation V6).
+
+In [`2026-11-03-the-label`](../runs/2026-11-03-the-label/): the Letterbox's governance use, for sharing outside the organisation only.

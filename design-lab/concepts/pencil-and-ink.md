@@ -14,3 +14,17 @@ Used in [`2026-11-03-the-briefing`](../runs/2026-11-03-the-briefing/): the model
 Could steer: The apprentice (Q), the briefing (M), Mandate drafting, every place the model gateway writes.
 
 Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): agent work is pencil until a person accepts it, then keeps its maker's mark; the model is one step of six, and G removes it without changing a number (proposal V3, grammar V4).
+
+Used in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): the model hears a meeting in pencil; only the room's read-back inks the minute (live V2, combined V3).
+
+In [`2026-11-03-the-label`](../runs/2026-11-03-the-label/): suggested labels are pencil until inked; the model gateway refuses labelled values.
+
+In [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a model-drafted handover situation and background are pencil until the giver accepts them; the assessment and recommendation are never model-written.
+
+In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the model proposes links between lines from their notes, never codes; G changes no count (mapping V6).
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): an agent may propose a judgement lift in pencil; only a person signs it (ladder V5).
+
+Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): the model's explanation arrives as an empty column that only people mark (explanations V6, grammar V6).
+
+In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): the records' account is by template; the model only drafts lines in pencil and never marks (marking V6, voices V2).

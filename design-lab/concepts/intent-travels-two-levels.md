@@ -10,3 +10,5 @@ Every intent says its purpose, end state and limits, and leaves the method open.
 Proposed by batch 6 research.
 
 Could steer: the intent (AC), Mandate, Home "what needs you", approvals.
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): a reader's context is information placed against their floor's intent and the one above (readers V4).

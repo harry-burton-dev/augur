@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Explanations · V2 · Ruled out</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Explanations V2: no grid. Facts arrive one at a time and notch the explanations they are against; what is left standing is the answer ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.q{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.cards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-3)}
+.hc{border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-3);display:grid;gap:var(--space-2);align-content:start;background:var(--surface-pane);transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-base) var(--ease-standard),transform var(--motion-calm) var(--ease-out);min-height:calc(var(--space-8) + var(--space-6))}
+.hc .nm{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.hc .say{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.notches{display:flex;gap:3px;flex-wrap:wrap;min-height:var(--space-4)}
+.notches i{width:var(--space-2);height:var(--space-4);border-radius:1px;background:var(--x-proposed-against);transform-origin:bottom}
+.notches i.new{animation:notch var(--motion-base) var(--ease-out)}
+.notches i.half{opacity:.5}
+@keyframes notch{from{transform:scaleY(0)}to{transform:none}}
+.hc.out{opacity:var(--x-proposed-quiet);transform:translateY(var(--space-2));border-style:dashed}
+.hc.out .nm{text-decoration:line-through;text-decoration-color:var(--x-proposed-against);text-decoration-thickness:2px}
+.hc.stand{border-color:var(--x-proposed-lit);box-shadow:0 0 var(--space-5) color-mix(in srgb,var(--x-proposed-lit) 18%,transparent)}
+.hc.pen{border-style:dotted;background:var(--x-proposed-pencil-wash)}
+.hc.pen .nm{font-style:italic}
+.hc .st{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.hc.stand .st{color:var(--x-proposed-lit)}
+.feed{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,var(--measure-drawer));gap:var(--space-5)}
+.facts{display:grid;gap:var(--space-1);align-content:start}
+.fa{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto minmax(0,.9fr);gap:var(--space-3);align-items:center;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);transition:color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.fa.seen{color:var(--ink)}
+.fa.now{background:var(--x-proposed-lit-wash);color:var(--light)}
+.fa .hits{color:var(--x-proposed-against)}
+.fa:not(.seen) .yw,.fa:not(.seen) .hits{opacity:0}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Explanations · V2</b> ruled out: facts arrive one by one and notch what they are against; the standing ones are the answer · Heuer (1999), differential diagnosis</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { n: 0 };
+function render() {
+  const hs = hypsShown(), seen = X.rows.slice(0, S.n), done = S.n >= X.rows.length;
+  const a = h => against(h.id, seen), minA = Math.min(...hs.filter(h => tested(h.id)).map(a));
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, T('ach').name], [['← →', 'one fact'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">${T('ach').name} · ${mins(T('ach').minutes)} · each fact is asked of every explanation: is it against?</p><p class="q">${X.question}</p></div>
+    <div class="cards">${hs.map(h => { const v = a(h), out = v >= 4, stand = done && tested(h.id) && v === minA;
+      return `<div class="hc ${h.pencil ? 'pen' : ''} ${out ? 'out' : ''} ${stand ? 'stand' : ''}">
+        <span class="st">${h.pencil ? 'from the assistant, untested' : out ? 'set aside, kept' : stand ? 'still standing' : 'standing'}</span>
+        <span class="nm">${h.short}</span><span class="say">${h.say}${h.pencil ? '' : ` · ${h.by}`}</span>
+        <span class="notches" aria-label="${v} against">${seen.map((r, k) => MW[r.m[h.id]] ? Array(MW[r.m[h.id]]).fill(`<i class="${markWeight(r, h.id) < MW[r.m[h.id]] ? 'half' : ''} ${k === S.n - 1 ? 'new' : ''}"></i>`).join('') : '').join('')}</span></div>`; }).join('')}</div>
+    <div class="feed"><div class="facts scroll">${X.rows.map((r, i) => { const hits = hs.filter(h => MW[r.m[h.id]]);
+      return `<div class="fa ${i < S.n ? 'seen' : ''} ${i === S.n - 1 ? 'now' : ''}"><span class="num">${i + 1}</span><span>${DATA.facts[r.fact].say}</span>${yw(r.fact)}<span class="hits">${hits.length ? 'against ' + hits.map(h => h.short.lc() + (r.m[h.id] === 'II' ? ' (rules out)' : '')).join(', ') : '<span class="muted">against none: tells nothing apart</span>'}</span></div>`; }).join('')}</div>
+      <div class="card"><p class="lbl">${done ? 'After every fact' : `After ${S.n} of ${X.rows.length} facts`}</p>
+        <p class="small">${done ? `<b class="lite">${hs.filter(h => tested(h.id) && a(h) === minA).map(h => h.short).join(' and ')}</b> stand with nothing against them. ${X.result}` : 'Keep going: an explanation only falls on what is against it, never on how much fits.'}</p>
+        <p class="small muted">Four notches sets an explanation aside. It stays on the page, struck through, with the facts that set it aside.</p>
+        ${STATE.gateway ? '' : gatewayNote()}</div></div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.n = 0; settle(); render(); X.rows.forEach((_, i) => later(() => { S.n = i + 1; render(); }, MOMENT() * .6 + i * ms('--motion-base'))); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.key === 'ArrowRight') { clearLater(); S.n = Math.min(X.rows.length, S.n + 1); render(); }
+  if (e.key === 'ArrowLeft') { clearLater(); S.n = Math.max(0, S.n - 1); render(); }
+});
+replay();
+</script>
+</body>
+</html>

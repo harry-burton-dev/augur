@@ -11,8 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.5.1",
-    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.5.0",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.6.0",
+    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.6.0",
     "@augur/mfe-sdk": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

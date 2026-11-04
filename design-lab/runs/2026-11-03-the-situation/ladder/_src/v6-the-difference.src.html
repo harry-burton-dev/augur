@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Ladder V6 · The difference</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: information is a difference from something; context is a difference to something someone will do ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.halves{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:var(--space-5)}
+.half{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4) var(--space-5);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.half h2{display:flex;align-items:center;gap:var(--space-3);font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.half .sub{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+/* difference from: the reading on one line, its bases under it */
+.line{position:relative;height:calc(var(--space-4) * 5);margin:var(--space-2) var(--space-2) 0}
+.line .ax{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--hairline-strong)}
+.line .pt{position:absolute;bottom:0;top:calc(var(--k) * var(--space-4));display:flex;flex-direction:column;align-items:flex-start;font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);color:var(--ink-muted);white-space:nowrap;border-left:1px solid var(--ink-muted);padding-left:var(--space-1);transition:left var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+.line .pt.me{color:var(--light);font-size:var(--type-small);border-left:2px solid var(--light);flex-direction:column}
+.line .pt.right{transform:translateX(-100%);border-left:0;border-right:1px solid var(--ink-muted);padding:0 var(--space-1) 0 0;align-items:flex-end}
+.diffs{display:grid;gap:var(--space-2)}
+.df{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:var(--space-3);align-items:center;padding:var(--space-2) 0;border-top:1px solid var(--hairline)}
+.df p{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.df .bar{height:var(--space-2);background:var(--hairline);border-radius:1px;position:relative}
+.df .bar b{position:absolute;left:0;top:0;bottom:0;background:var(--ink);border-radius:1px;transition:width var(--motion-calm) var(--ease-out)}
+.df .d{font:400 var(--type-small)/1 var(--font-mono);color:var(--light)}
+.df.none p{color:var(--ink-muted)}
+/* difference to: the options, each piece pinned for or against */
+.opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);align-content:start}
+.opt{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key)}
+.opt h3{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.pin{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);opacity:0;transform:translateY(var(--space-1));transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.pin.in{opacity:1;transform:none}
+.pin svg{margin-top:2px}
+.pin.for svg{color:var(--x-proposed-lit)}
+.pin.against svg{color:var(--x-proposed-disagree)}
+.nod{padding:var(--space-2) var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.nod b{font-weight:400;color:var(--ink)}
+@media (prefers-reduced-motion: reduce){.pin{transform:none}}
+@media (max-width:1400px){.half{padding:var(--space-3) var(--space-4)}.df p{font-size:var(--type-small);line-height:var(--leading-small)}.half .sub{display:none}.opt{padding:var(--space-2)}.pin span.muted{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Ladder · V6</b> the difference: information differs from something, context differs to what someone will do · Bateson (1972), value of information</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { on: false };
+const now = R.series.at(-1).v;
+/* information: the same reading against each base. A difference that is nobody's question is kept, and says so */
+const BASES = [
+  { v: R.series.find(x => x.m === 'Jul').v, w: 'July', p: 'i1', d: `+${now - 13}`, k: 1 },
+  { v: R.limit, w: 'limit', p: 'i2', d: `+${now - R.limit}`, k: 4 },
+  { v: R.supplierCount, w: 'Brightwell', p: 'i3', d: `+${now - R.supplierCount}`, k: 3, right: true },
+  { v: R.byRound.Jul.changed + R.byRound.Oct.other, w: 'without N4, N7', p: 'i4', d: `+${now - (R.byRound.Jul.changed + R.byRound.Oct.other)}`, k: 2, right: true }
+];
+/* context: what each piece does to the options on the table */
+const OPTS = [
+  { name: 'Renew for three years', pins: [['c1', 'against', 'A service failure would let us decline'], ['c2', 'against', '6% a year more'], ['i4', 'for', 'Part of the rise is ours to fix']] },
+  { name: 'Extend 6 months (clause 7.4)', pins: [['c3', 'for', 'Allowed once, at today’s prices'], ['c4', 'for', 'Bridges a retender'], ['i1', 'for', 'Time to see if the routes recover']] },
+  { name: 'Let it end and retender', pins: [['c4', 'against', 'A retender takes about 9 months'], ['c1', 'for', 'No penalty if November is over'], ['d4', 'for', 'Residents noticed']] }
+];
+function render() {
+  const max = 30;
+  $('#app').innerHTML = topHTML(['Grammar', 'The ladder'], [['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">Grammar · a difference which makes a difference</p><h1 class="title">Different from, different to</h1></div>
+    <div class="halves">
+      <section class="half"><h2>${rm('info', { lg: true, word: false })} Different from</h2>
+        <p class="sub">Information is the reading set against a base. Each base gives a different difference; choosing the base is the lift.</p>
+        <div class="line" aria-hidden="true"><span class="ax"></span>${BASES.map((b, k) => `<span class="pt ${b.right ? 'right' : ''}" style="--k:${b.k};left:${(S.on ? b.v : now) / max * 100}%;opacity:${S.on ? 1 : 0}">${b.w} ${b.v}</span>`).join('')}<span class="pt me" style="--k:0;left:${now / max * 100}%">October ${now}</span></div>
+        <div class="diffs">${BASES.map((b, k) => { const p = PC(b.p); return `<div class="df dep" style="--i:${k}"><div><p>${p.text}</p><span class="small">${liftsHTML(p)}</span></div><div><span class="d">${b.d}</span><div class="bar"><b style="width:${S.on ? (now - b.v) / now * 100 : 0}%"></b></div></div></div>`; }).join('')}
+          <div class="df none dep" style="--i:5"><div><p>${PC('x1').text}</p><span class="small muted">a rate, but nobody’s question here: <q class="pen">${PC('x1').why}</q></span></div><div><span class="d muted">—</span></div></div></div>
+      </section>
+      <section class="half"><h2>${rm('context', { lg: true, word: false })} Different to</h2>
+        <p class="sub">Context is information that would change what someone does. For ${whoHTML(T.decider, { role: true })}, each piece pins to an option, for or against.</p>
+        <div class="opts">${OPTS.map((o, k) => `<div class="opt"><h3>${o.name}</h3>${o.pins.map(([id, side, w], j) => `<div class="pin ${side} ${S.on ? 'in' : ''}" style="transition-delay:calc(var(--motion-instant) * ${k * 3 + j})">${I(side === 'for' ? 'circle-plus' : 'circle-minus', 14)}<span>${w}<br><span class="muted">${rm(PC(id).rung, { word: false })} ${PC(id).text}</span></span></div>`).join('')}</div>`).join('')}</div>
+        <p class="nod"><b>No difference, no context.</b> A piece that pins to no option is information for this task, however true. <br>${rm('data', { word: false })} ${PC('d2').text}: matters only through the comparison it makes.<br>${rm('info', { word: false })} ${PC('i5').text} ${saidHTML(PC('i5'))}: would pin to “renew” only once someone checks it.</p>
+      </section>
+    </div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.on = false; render(); }, () => { S.on = true; render(); });
+</script>
+</body>
+</html>

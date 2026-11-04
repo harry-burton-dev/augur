@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Custody V3 · Told in sentences</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: the chain told as a short story, one sentence per hand; acts named, looks counted, and the admin line one step down ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,30%);gap:var(--space-7)}
+.story{min-height:0;overflow:auto;display:grid;gap:var(--space-3);align-content:start;max-width:calc(var(--measure-read) + var(--space-8))}
+.s{display:grid;grid-template-columns:calc(var(--space-7) + var(--space-3)) minmax(0,1fr);gap:var(--space-4);padding-left:var(--space-3);border-left:2px solid var(--fc, var(--hairline));font-weight:300;font-size:var(--type-lead);line-height:calc(var(--leading-lead) + var(--space-1));color:var(--ink)}
+.s .d{font:400 var(--type-small)/var(--leading-lead) var(--font-mono);color:var(--ink-muted)}
+.s b{font-weight:400;color:var(--light)}
+.s .note{display:block;font-size:var(--type-meta);line-height:var(--leading-meta);margin-top:var(--space-1)}
+.s .note.brk{color:var(--x-proposed-disagree)}
+.s .note.rep{color:var(--x-proposed-seam)}
+.s.reads{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);border-left-style:dotted}
+.s .tk{font-size:var(--x-proposed-type-micro)}
+.side{display:grid;gap:var(--space-4);align-content:start}
+.mine{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.mine b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.s{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Custody · V3</b> told in sentences: one sentence per hand, acts named, looks counted, T for the admin line under each · said in a sentence, two registers, mine versus ours</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const K = DATA.custody, f = FACT('f5');
+function sentence(k) {
+  if (k.act === 'read') return `It was read <b>${k.reads} times</b> by people in ${F(k.readFloor).name}. Who read it isn’t shown. You read it <b>${k.mine} times</b>.`;
+  const who = `<b>${handName(k.hand)}</b>`;
+  const base = { recorded: () => `${who} recorded ${k.what}.`, wrote: () => `${who} wrote it into ${k.where}: ${k.what}, and labelled it ${markWord(k.label)}.`, proposed: () => `${who} proposed it as ${k.what}.`, accepted: () => `${who} accepted ${k.what}.`,
+    shared: () => `${who} shared ${k.what} with <b>${toName(k)}</b> for ${US(k.purpose).long.toLowerCase()}${k.until ? `, until ${k.until}` : ''}.`, counted: () => `${who} counted it ${k.what}, in ${k.where}. <span class="said">${k.said}</span>.`, quoted: () => `${who} quoted ${k.what} in ${k.where}.` }[k.act]();
+  return base + (k.gap ? `<span class="note brk">${I('unlink', 12)} ${k.gap}</span>` : '') + (k.repair ? `<span class="note rep">${I('link', 12)} ${k.repair}</span>` : '');
+}
+function render() {
+  const rd = K.find(k => k.act === 'read');
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.record.title, f.k, 'Custody'], [...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <section style="display:flex;flex-direction:column;gap:var(--space-4);min-height:0"><div><p class="eyebrow">${f.k} · ${f.v} ${pmHTML(f.label)}</p><h1 class="title">How it got here</h1></div>
+      <div class="story">${K.map((k, i) => `<p class="s dep ${k.act === 'read' ? 'reads' : ''}" style="--i:${i}" data-tier="${tierOf(k.floor || k.readFloor)}"><span class="d">${k.on}${k.at ? '<br>' + k.at : ''}</span><span>${sentence(k)}<span class="tk">${k.tech}</span></span></p>`).join('')}</div></section>
+    <aside class="side"><p class="eyebrow">Mine and ours</p>
+      <div class="mine"><p><b>Your trace is exact.</b> You read it ${rd.mine} times, last on 31 Oct, and you counted, quoted and shared it.</p></div>
+      <div class="mine"><p><b>Others’ looks are a count.</b> ${rd.reads} reads in ${F(rd.readFloor).name}; no names, and nothing under ${POL.minGroup}.</p></div>
+      <div class="mine"><p><b>Acts carry names.</b> Writing, labelling, accepting, sharing and quoting are decisions someone answers for, so the story names them.</p></div>
+      <p class="who">The colour on each line’s edge is the floor where it happened. Press T for the record the story is written from.</p>
+    </aside>
+  </div></main>`;
+  afterRender();
+}
+function replay() { clearLater(); closeDeed(); settleIn(); render(); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>
