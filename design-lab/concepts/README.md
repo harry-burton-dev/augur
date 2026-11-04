@@ -91,6 +91,13 @@ app pattern took it), **dropped** (say why in the file).
 | [Enforce what you can see](enforce-what-you-can-see.md) | explored | 2026-11-03-the-label |
 | [Copies know their source](copies-know-their-source.md) | explored | 2026-11-03-the-label |
 | [The policy is data](the-policy-is-data.md) | explored | 2026-11-03-the-label |
+| [Someone holds it](someone-holds-it.md) | explored | 2026-11-03-paper-and-the-desk |
+| [The readback moves it](the-readback-moves-it.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Say what you sign for](say-what-you-sign-for.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Shared work stays sharp](shared-work-stays-sharp.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Set aside, not flagged](set-aside-not-flagged.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Room you can see](room-you-can-see.md) | explored | 2026-11-03-paper-and-the-desk |
+| [Status is a mark](status-is-a-mark.md) | explored | 2026-11-03-paper-and-the-desk |
 | [Context is a working set](context-is-a-working-set.md) | to explore | batch 6 research |
 | [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
 | [The technique fits the question](the-technique-fits-the-question.md) | to explore | batch 6 research |

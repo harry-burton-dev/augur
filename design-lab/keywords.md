@@ -20,7 +20,7 @@ then write the prompt with "what to take from each".
 | Sound and listening | earcon, auditory icon, sonification, room tone, worldizing, aural alert | Brewster earcon guidelines; Apple Audio Graphs; Murch | alerts, ambient, a11y | room tone (run 3) |
 | Typography and editorial | standfirst, kicker, measure, baseline grid, optical size, grade axis | Bringhurst; Müller-Brockmann; Kinneir and Calvert | hierarchy, tables | batch 1 (C, queued); batch 6 (Y, partly) |
 | Cartography | hillshade, hypsometric tint, contour, plan oblique, soundings, unsurveyed, generalisation | Imhof; nautical charts; Beck | Explorer, Data Atlas | batch 1 (D, queued) |
-| Paper tools for high-stakes work | flight progress strip, cocked strip, SBAR handover, T-card board, double entry | NATS EFPS; Sellen and Harper | handover, approvals | batch 1 (W1, queued); the apprentice (SBAR, partly); the switchboard (strips, SBAR) |
+| Paper tools for high-stakes work | flight progress strip, cocked strip, SBAR handover, T-card board, double entry | NATS EFPS; Sellen and Harper | handover, approvals | batch 1 (W1, queued); the apprentice (SBAR, partly); the switchboard (strips, SBAR); paper and the desk (run) |
 | Process control rooms | high-performance HMI, ISA-101, grey-scale HMI, alarm rationalisation, alarm flood, shelving, EEMUA 191, situation awareness levels | ISA-101; EEMUA 191; Endsley | notices, Admin, Upgrade Centre | batch 2 (E); batch 6 (AB, partly) |
 | Music notation and scores | graphic score, Treatise, part and full score, conductor's score, cue, rehearsal mark, tacet | Cardew's *Treatise*; Feldman; orchestral scores | Mandate, team work, rollouts | batch 2 (F); the minute (actions V2) |
 | Movement notation | Labanotation, Benesh, Eshkol-Wachman, staff, motif, phrasing | Laban; *Designing Gestural Interfaces* ch. 5 | gestures, radial menu, flows | batch 2 (F, partly) |
@@ -28,13 +28,13 @@ then write the prompt with "what to take from each".
 | Weaving and textiles | warp and weft, draft, threading, treadling, Jacquard card, selvedge, floats | Anni Albers *On Weaving*; Jacquard; handweaving drafts | structure, floors, brand | batch 2 (W2) |
 | Kitchen brigade | mise en place, the pass, expediting, ticket rail, "heard", fire and hold | Escoffier brigade; restaurant expo practice | urgency, handover, queues | batch 3 (J) |
 | Transit operations | train graph (Marey), headway, dwell, block signalling, dispatcher board | railway timetabling; signalling manuals | scheduling, capacity | the switchboard (train graph); the minute (Marey) |
-| Hospital and ward | early warning score (NEWS2), observation chart, track-and-trigger, whiteboard | NHS NEWS2 chart; ward boards | escalation, thresholds | the switchboard (bleep, whiteboard, partly) |
+| Hospital and ward | early warning score (NEWS2), observation chart, track-and-trigger, whiteboard | NHS NEWS2 chart; ward boards | escalation, thresholds | the switchboard (bleep, whiteboard, partly); paper and the desk (partly) |
 | Museum and exhibition | object label, didactic panel, sightline, vitrine, wayfinding, interpretation hierarchy | V&A label guidelines; Serrell *Exhibit Labels* | Artifacts, explain in place | |
 | Gardening and cultivation | succession planting, pruning, dormancy, seasonal calendar, companion planting | RHS guides; Japanese garden *ma* | care cycles, attention as wear | batch 3 (K) |
 | Ritual and ceremony | threshold, procession, liturgy, rite of passage, call and response | van Gennep; Victor Turner | onboarding, approvals, floors | |
 | Architecture and space | prospect-refuge, *A Pattern Language*, threshold, enfilade, light from two sides | Alexander; Kahn; Pallasmaa | floors, layout, focus | |
 | Weather forecasting | synoptic chart, ensemble, cone of uncertainty, nowcast, warnings matrix | Met Office warnings impact matrix | forecasts, risk, Upgrade Centre | |
-| Libraries and archives | finding aid, provenance (respect des fonds), shelf list, accession register | archival description standards (ISAD(G)) | Artifacts, provenance | batch 3 (H, partly); the label (closure periods, partly) |
+| Libraries and archives | finding aid, provenance (respect des fonds), shelf list, accession register | archival description standards (ISAD(G)) | Artifacts, provenance | batch 3 (H, partly); the label (closure periods, partly); paper and the desk (Zettelkasten, partly) |
 | Telecoms and switchboards | patch panel, busy lamp field, line status, operator console | historic switchboard manuals | presence, routing | batch 4 (O); the switchboard (run) |
 | Theatre stagecraft | prompt book, cue sheet, standby/go, blocking, lighting state | stage management handbooks | sequenced actions, approvals | the apprentice (standby); the minute (live V6) |
 | Library classification | faceted classification, PMEST, Colon Classification, UDC, catalogue card, authority file, controlled vocabulary | Ranganathan; Wikidata item pages | Data Atlas structure, finding | batch 3 (H) |
@@ -77,6 +77,10 @@ then write the prompt with "what to take from each".
 | Disclosure control | statistical disclosure control, minimum cell size, small-number suppression, differencing, k-anonymity, Five Safes | ONS SDC guidance; UK Data Service Five Safes | counts, privacy, Explorer | the label |
 | Just culture and safety reporting | just culture, confidential reporting, CHIRP, ASRS, no-blame, safety data protection | CHIRP Maritime; NASA ASRS; Dekker *Just Culture* | approvals, purpose limits, Mandate | the label |
 | Freedom of information and redaction | FOI exemption codes, redaction, Glomar response, neither confirm nor deny, closure period | UK FOI Act guidance (ICO); The National Archives closure | not for you, hidden existence | the label |
+| Clinical handover | I-PASS, SBAR, ISBAR, closed-loop communication, readback, synthesis by receiver | Starmer et al., NEJM 2014; WHO High 5s | handover, delegation | paper and the desk (partly) |
+| Regulated records | ALCOA+, good documentation practice, single-line correction, attributable, contemporaneous, audit trail review, 21 CFR Part 11 | MHRA and FDA data integrity guidance | corrections, audit, e-signatures | paper and the desk (partly) |
+| Lean visual management | kamishibai, heijunka box, andon, gemba walk, leader standard work, obeya | Toyota; Lean Enterprise Institute | team board, status, rounds | paper and the desk (partly) |
+| Railway safeworking | token working, Tyer's tablet, staff and ticket, block instrument, interlocking, permissive working | railway rule books; signalling histories | ownership, locks, concurrency | paper and the desk (partly) |
 
 ## Techniques worth a search on their own
 consequence preview · small multiples · sparkline · micro/macro reading ·
