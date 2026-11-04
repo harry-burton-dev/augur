@@ -91,6 +91,8 @@ for service in gateway identity events models storage; do
 done
 build registry -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry --target registry
 build updater -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater
+# Keycloak with AUGUR's sign-in and email theme (ADR 0041).
+build keycloak -f infra/service.Dockerfile --target keycloak
 
 for app in $(jq -r 'keys[]' <<< "$shipped"); do
   service=$(jq -r --arg a "$app" '.[$a].service' <<< "$shipped")

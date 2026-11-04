@@ -6,6 +6,7 @@
 | `home/` | Home (`@augur/home`, at `/home`): what needs you, and apps' glance cards. Built as one ES module at `dist/entry.js`. |
 | `admin/` | Admin (`@augur/admin`, at `/admin`, admins only): people, departments and apps. Its screens call identity's `/v1/admin/*` and the registry's `/v1/apps` and `/v1/origins` through the gateway, never Keycloak. |
 | `upgrades/` | Upgrade Centre (`@augur/upgrades`, React, at `/upgrades`, admins only, ADR 0030): what this deployment runs, a page for AUGUR and each app, and the history. Changes still go through Admin's Upgrade Centre page until its change flow ships. See its [README](upgrades/README.md). |
+| `sign-in-theme/` | AUGUR's sign-in and email theme for Keycloak (`@augur/sign-in-theme`, React with Keycloakify, ADR 0041): Keycloak's pages and emails in Common's look, shipped as a jar in AUGUR's Keycloak image. See its [README](sign-in-theme/README.md). |
 
 Product apps keep their own frontends under `apps/<app>/frontend`.
 

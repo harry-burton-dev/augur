@@ -334,10 +334,19 @@ export class KeycloakDirectory implements Directory {
 
   /** One admin API call. `notFound` names what a 404 means. Also used for apps' clients (clients.ts). */
   async call<T = unknown>(method: string, path: string, body?: unknown, notFound = 'That isn’t in the directory any more.'): Promise<{ data: T; location?: string }> {
+    return this.request<T>(method, `${this.base}${path}`, body, notFound);
+  }
+
+  /** Reads Keycloak's server-wide admin API (`/admin/<path>`), such as `/serverinfo`: what this Keycloak has. */
+  async server<T = unknown>(path: string): Promise<T> {
+    return (await this.request<T>('GET', `${this.config.url.replace(/\/$/, '')}/admin${path}`)).data;
+  }
+
+  private async request<T>(method: string, url: string, body?: unknown, notFound = 'That isn’t in the directory any more.'): Promise<{ data: T; location?: string }> {
     const token = await this.accessToken();
     let res: Response;
     try {
-      res = await this.fetchImpl(`${this.base}${path}`, {
+      res = await this.fetchImpl(url, {
         method,
         headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
         body: body === undefined ? undefined : JSON.stringify(body),

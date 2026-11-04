@@ -64,6 +64,22 @@ ENV NODE_ENV=production
 USER node
 CMD ["node", "dist/index.js"]
 
+# AUGUR's Keycloak (ADR 0041): Keycloak with AUGUR's sign-in and email theme (platform/frontends/sign-in-theme)
+# in its providers. The realm job turns the theme on.
+#   NODE_AUTH_TOKEN=<read:packages token> docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/service.Dockerfile --target keycloak .
+# Keycloakify packs the theme into a jar with Maven, so this stage alone adds a JDK and Maven.
+FROM deps AS sign-in-theme
+RUN apk add --no-cache openjdk21-jdk maven
+COPY . .
+RUN pnpm --filter @augur/sign-in-theme run jar
+
+# The Keycloak AUGUR runs: a Keycloak upgrade is a change to this line (docs/upgrade.md).
+FROM quay.io/keycloak/keycloak:26.8.1 AS keycloak
+LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
+COPY --from=sign-in-theme /repo/platform/frontends/sign-in-theme/dist_keycloak/augur-theme.jar /opt/keycloak/providers/augur-theme.jar
+
+# The default target, and so the last stage: a service by package name (the top of this file).
 FROM node:22-alpine AS service
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
@@ -73,3 +89,4 @@ ENV NODE_ENV=production
 # The image's own unprivileged user: the service only reads its files and talks over the network.
 USER node
 CMD ["node", "dist/index.js"]
+

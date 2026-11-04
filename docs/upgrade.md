@@ -54,6 +54,10 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### AUGUR's sign-in pages and emails
+
+Keycloak now runs from AUGUR's own image (`ghcr.io/harry-burton-dev/im-platform/keycloak`, tagged and signed like the others) instead of Keycloak's, with the same Keycloak version and AUGUR's sign-in and email theme (ADR 0041). The realm job turns the theme on. Nothing to do: the pages show `ORG_NAME`, as identity does. Optional, in `.env`: `ORG_LOGO_URL` for a logo on the sign-in pages, and `REALM_LANGUAGES` (say `en,de,fr`) to offer more languages than English (docs/deploy.md, "What's in it"). Going back to a release before this one puts Keycloak's own image back: sign-in shows Keycloak's own look again, and Keycloak's log says it can't find the `augur` theme each time a page is shown, which is harmless.
+
 ### Log limits, memory limits and healthchecks
 
 Every container's log is now capped at three files of 10 MB, and Keycloak, Artifacts' rendition worker and the observability stack have memory limits (2 GB, 4 GB and 2 GB). Keycloak and Garage have healthchecks, and the containers that need them wait until they're healthy. Nothing to do on most servers: the upgrade recreates each container with its limits. Existing logs bigger than the cap go when the container is recreated. On a server with less than 8 GB of memory, set `KEYCLOAK_MEM_LIMIT` and `FOLIO_WORKER_MEM_LIMIT` lower in `.env` first (docs/deploy.md, "Logs, memory and health").
