@@ -37,6 +37,30 @@ if [ -n "${BUILDX_CACHE:-}" ]; then
   fi
 fi
 
+# What is inside an image and how it was built, signed beside its signature (PER-270): BuildKit writes a
+# Syft SBOM (SPDX) and SLSA provenance into every image it pushes (--sbom, --provenance), and cosign attests
+# both keylessly as this workflow, so `cosign verify-attestation --type spdxjson|slsaprovenance` checks
+# them with the same identity as the image. attest <ref> [required|optional]: an image copied from an
+# app's release carries what that release's build wrote; one without says so and goes on.
+attest() {
+  local ref=$1 need=${2:-required} dir sbom provenance
+  dir=$(mktemp -d)
+  sbom=$(docker buildx imagetools inspect "$ref" --format '{{ json .SBOM.SPDX }}' 2>/dev/null || true)
+  provenance=$(docker buildx imagetools inspect "$ref" --format '{{ json .Provenance.SLSA }}' 2>/dev/null || true)
+  for kind in sbom provenance; do
+    local value=${!kind}
+    if [ -z "$value" ] || [ "$value" = null ]; then
+      if [ "$need" = required ]; then echo "::error::$ref has no $kind: build it with --sbom=true --provenance=true." >&2; return 1; fi
+      echo "::warning::$ref carries no $kind from its own build, so none is attested for it." >&2
+      continue
+    fi
+    printf '%s' "$value" > "$dir/$kind.json"
+  done
+  if [ -s "$dir/sbom.json" ]; then cosign attest --yes --type spdxjson --predicate "$dir/sbom.json" "$ref" >&2; fi
+  if [ -s "$dir/provenance.json" ]; then cosign attest --yes --type slsaprovenance --predicate "$dir/provenance.json" "$ref" >&2; fi
+  rm -rf "$dir"
+}
+
 # Builds an image from this checkout, or from another folder: build <name> [--context <dir>] <docker args>...
 build() {
   local name=$1 context=.
@@ -49,6 +73,7 @@ build() {
   local digest
   digest=$(jq -r '."containerimage.digest"' "$out/$name.json")
   cosign sign --yes "$repo/$name@$digest" >&2
+  attest "$repo/$name@$digest"
   jq -n --arg name "$name" --arg ref "$repo/$name@$digest" '{($name): $ref}' > "$out/$name.ref.json"
 }
 
@@ -60,6 +85,7 @@ reuse() {
   local digest
   digest=$(docker buildx imagetools inspect "$from" --format '{{json .Manifest}}' | jq -r .digest)
   cosign sign --yes "$repo/$name@$digest" >&2
+  attest "$repo/$name@$digest" optional
   jq -n --arg name "$name" --arg ref "$repo/$name@$digest" '{($name): $ref}' > "$out/$name.ref.json"
 }
 
