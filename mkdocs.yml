@@ -91,4 +91,5 @@ nav:
       - "0055. Each API has one source: TypeBox schemas on its routes, with the contract generated from them": decisions/0055-schema-first-apis-with-typebox.md
       - 0056. Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal: decisions/0056-seed-through-public-apis.md
       - 0057. The realm is kept as code and applied by identity's realm job, which alone holds Keycloak's admin: decisions/0057-realm-as-code-applied-by-identitys-realm-job.md
+      - 0058. Quill's Editor is built on Tiptap, and keeps writing the same small Markdown: decisions/0058-editor-on-tiptap.md
       - 0063. Accessibility is checked by axe in CI, failing on serious findings: decisions/0063-accessibility-checked-by-axe.md
