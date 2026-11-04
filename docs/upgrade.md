@@ -54,6 +54,10 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### AUGUR's sign-in pages and emails
+
+Keycloak now runs from AUGUR's own image (`ghcr.io/harry-burton-dev/im-platform/keycloak`, tagged and signed like the others) instead of Keycloak's, with the same Keycloak version and AUGUR's sign-in and email theme (ADR 0041). The realm job turns the theme on. Nothing to do: the pages show `ORG_NAME`, as identity does. Optional, in `.env`: `ORG_LOGO_URL` for a logo on the sign-in pages, and `REALM_LANGUAGES` (say `en,de,fr`) to offer more languages than English (docs/deploy.md, "What's in it"). Going back to a release before this one puts Keycloak's own image back: sign-in shows Keycloak's own look again, and Keycloak's log says it can't find the `augur` theme each time a page is shown, which is harmless.
+
 ### Log limits, memory limits and healthchecks
 
 Every container's log is now capped at three files of 10 MB, and Keycloak, Artifacts' rendition worker and the observability stack have memory limits (2 GB, 4 GB and 2 GB). Keycloak and Garage have healthchecks, and the containers that need them wait until they're healthy. Nothing to do on most servers: the upgrade recreates each container with its limits. Existing logs bigger than the cap go when the container is recreated. On a server with less than 8 GB of memory, set `KEYCLOAK_MEM_LIMIT` and `FOLIO_WORKER_MEM_LIMIT` lower in `.env` first (docs/deploy.md, "Logs, memory and health").
@@ -81,6 +85,12 @@ pc stop tailscale web gateway identity registry events keycloak backup
 gunzip -c infra/deploy/backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
 pc up -d --remove-orphans
 ```
+
+### Artifacts, Explorer and Data Atlas come from their own repositories
+
+Since augur@0.17.0, AUGUR no longer builds Artifacts, Explorer and Data Atlas itself. Each one is released in its own repository (`augur-folio`, `augur-auspex`, `augur-atlas`), and AUGUR's release takes the release `release/shipped-apps.json` pins, checks that repository signed it, and signs it again as AUGUR's ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)). Nothing changes on the server: the images keep their names under `PLATFORM_IMAGES`, they still come with each AUGUR release, and the apps keep their tables and buckets. An app the app runner installs (Mandate) moves the same way, and the updater takes a backup before its first release from the new repository (docs/ship-an-app.md, "An app in its own repository").
+
+**Going back** to a release that built them here (0.16.x) is the usual code step in [Going back](#going-back): check out `augur@0.16.1`, set `PLATFORM_VERSION=0.16.1`, `pc up -d --remove-orphans`. No restore is needed. Neither 0.17.0 nor the apps' releases in it are breaking, so their migrations only add ([versioning.md](versioning.md#database-migrations)), and 0.17.0's deploy test went from 0.16.1 to 0.17.0 and back on the same data. Going back past 0.18.0 is the exception: Keycloak 26.8's database needs the restore in "Keycloak 26.8 and the realm job" first.
 
 ### Sample data, where you allow it
 

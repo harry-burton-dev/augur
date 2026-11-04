@@ -134,7 +134,7 @@ describe('the app runner', () => {
     expect(await t.run(install('1.0.0'))).toBe('done');
     expect(t.did).toEqual([`verify ${releaseIdentity('o/r/.github/workflows/release.yml')}`, 'storage notes', 'start app-notes-blue']);
     expect(t.calls.did).toEqual([`credential notes ${appSecretFor(KEY, 'notes', 'sign-in').slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
-    expect(t.state().apps.notes).toEqual({ active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: true, bucket: false }, manifest: expect.objectContaining({ id: 'notes', version: '1.0.0' }) } });
+    expect(t.state().apps.notes).toEqual({ active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: true, bucket: false }, manifest: expect.objectContaining({ id: 'notes', version: '1.0.0' }), repository: 'o/r' } });
     expect(t.reports.at(-1)).toMatchObject({ step: 'retire', outcome: 'done', message: 'Notes 1.0.0 is installed.' });
     expect(t.envFiles()['app-notes-blue']).toContain(`DATABASE_URL=postgres://app_notes:${appSecretFor(KEY, 'notes', 'database')}@postgres:5432/platform`);
     expect(t.envFiles()['app-notes-blue']).toContain('APP_REGISTERED_BY=runner');
@@ -210,6 +210,27 @@ describe('the app runner', () => {
     expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
     expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-blue:8080');
     expect(t.state().apps.notes.active?.version).toBe('1.0.0');
+  });
+
+  it('takes a backup before the first release from another repository, and not for the next ones', async () => {
+    const own = { signer: { repository: 'o/notes', workflow: '.github/workflows/release.yml' } };
+    const t = setup(`${ENV}APP_PUBLISHERS=o/notes/.github/workflows/release.yml\n`);
+    t.versions.set(image('c'), '1.2.0');
+    t.versions.set(image('d'), '1.3.0');
+    expect(await t.run(install('1.0.0'))).toBe('done');
+    expect(t.did).not.toContain('backup');
+
+    // Notes moves to its own repository: its data passes to that repository's release, so a backup comes first.
+    expect(await t.run(install('1.2.0', 'c', own))).toBe('done');
+    expect(t.did.filter((d) => d === 'backup')).toHaveLength(1);
+    expect(t.reports.find((r) => r.step === 'verify' && r.state === 'done' && r.message)?.message).toBe(
+      'Signed in o/notes, where notes now comes from. Backup platform-20261030-0100.sql.gz taken first.',
+    );
+    expect(t.state().apps.notes.active).toMatchObject({ version: '1.2.0', repository: 'o/notes' });
+
+    // From then on it's an ordinary update.
+    expect(await t.run(install('1.3.0', 'd', own))).toBe('done');
+    expect(t.did.filter((d) => d === 'backup')).toHaveLength(1);
   });
 
   it('trusts an app in its own repository from there, and only for that app', async () => {
