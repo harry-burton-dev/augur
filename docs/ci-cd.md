@@ -65,7 +65,7 @@ everything.
 
 | Job | Pull request runs it when it changes | On a push | What it does |
 |---|---|---|---|
-| `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, script tests, the hotfix rule, a changeset, build, the API reports and (when `platform/packages` changed) publint and Are the Types Wrong on the packed packages (ADR 0052), manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
+| `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, licences, repository security (below), script tests, the hotfix rule, a changeset, build, the API reports and (when `platform/packages` changed) publint and Are the Types Wrong on the packed packages (ADR 0052), manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
 | `scan` | always | never | gitleaks on the pull request's commits; OSV-Scanner, failing only on vulnerabilities the pull request brings in (ADR 0043) |
 | `contract` | `platform/frontends` (not Admin or the Upgrade Centre), `platform/packages`, `platform/contract`, the Folio pin (`release/shipped-apps.json`, `infra/shipped-app.sh`), the root `package.json` or the lockfile | never | the reference app, today's build and frozen ones from earlier SDK releases, mounted by the real shell in Chromium, with Folio (from the release AUGUR ships) on and off, and axe on the shell once (ADR 0063) |
 | `app-scaffold` | the app template, `create-app`, the shared packages, the registry, or the scripts that check apps | never | `pnpm create-app` still makes an app that builds, passes its tests and is accepted |
@@ -173,6 +173,34 @@ so it never lands in a layer.
 `lockfile.yml` brings `pnpm-lock.yaml` up to date on a branch (Actions → Lockfile → Run workflow). Use it
 for a change that adds or bumps a kit package, made where no package token is set, such as a cloud
 session: pnpm can't resolve those packages there.
+
+## Repository security
+
+`pnpm check:repo-security` (`scripts/check-repo-security.mjs`, in `build-test`) holds the rules a
+pull request could otherwise quietly undo:
+
+- every action a workflow uses is pinned to a full commit SHA, with its version in a comment
+  (Renovate keeps the pins current);
+- every workflow has a top-level `permissions:` block;
+- no `run:` script expands text someone else chose (a branch name, a title, a comment) with `${{ }}`;
+  it goes through `env:` and is used as `"$NAME"`;
+- CI tests on the Postgres major that `infra/deploy/compose.yml` runs. Local dev
+  (`infra/docker-compose.yml`) stays on its own major so existing dev data still starts; moving
+  servers to a new major needs an upgrade note in [upgrade.md](upgrade.md) first.
+
+The rest lives in GitHub's settings, which a cloud session can't change. The owner keeps them:
+
+- a ruleset on `main` in this repository, augur-kit, each app repository and the app template: no
+  force pushes or deletion, changes through a pull request with CI green;
+- a ruleset on `release/**` that lets only the owner create, push or delete those branches, since
+  the updater and the registry trust signatures from any `release/<unit>-<x>.<y>` branch;
+- `APP_RELEASES_TOKEN` as a fine-grained token with only what it is used for: Contents read on the app
+  repositories (their releases and source) and Actions write on this one (an app's release starts the
+  Release feed), set in this repository and each app repository, expiring after 90 days.
+
+Each release image carries a signed SBOM and SLSA provenance
+([release-channels.md](release-channels.md#signatures)), and the deploy test runs Trivy over every image a
+release runs, third-party ones included ([deploy-test.md](deploy-test.md)).
 
 ## Adding or changing a job
 

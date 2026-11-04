@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { kitDir, readKit } from '@augur/kit-bundle';
 import { isSharedModule } from '@augur/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
-import { defineConfig, normalizePath, type Plugin, type ProxyOptions } from 'vite';
+import { defineConfig, normalizePath, type HtmlTagDescriptor, type Plugin, type ProxyOptions } from 'vite';
 
 /**
  * Local stand-in for where apps are hosted: /apps/<id>/* is served from that
@@ -71,6 +71,12 @@ const serveApps = (): Plugin => ({
  * shell's own imports of them resolve to those same files rather than to Vite's copies.
  */
 export const KIT_URL_PLACEHOLDER = '@KIT_URL@';
+/**
+ * The product's name in the page (its title, and the `augur-product` meta the shell reads for the tab):
+ * the web container fills it in from ORG_PRODUCT_NAME, as it does KIT_URL. index.html and dev have AUGUR.
+ */
+export const PRODUCT_NAME_PLACEHOLDER = '@PRODUCT_NAME@';
+const DEFAULT_PRODUCT_NAME = 'AUGUR';
 const kit = readKit();
 const sharedModulesMap = (): Plugin => {
   const dir = fileURLToPath(new URL('./shared-build/', import.meta.url));
@@ -140,9 +146,9 @@ const sharedModulesMap = (): Plugin => {
       }
       this.emitFile({ type: 'asset', fileName: `kit/${kit.version}/kit.json`, source: readFileSync(join(kitDir, 'kit.json')) });
     },
-    transformIndexHtml: () => {
+    transformIndexHtml: (html) => {
       const base = kitBase();
-      return [
+      const tags: HtmlTagDescriptor[] = [
         { tag: 'script', attrs: { type: 'importmap' }, children: JSON.stringify(importMap()), injectTo: 'head-prepend' },
         // Where the kit is, for the shell to show (Settings, About) and to name when it can't be loaded.
         { tag: 'meta', attrs: { name: 'augur-kit', content: JSON.stringify({ version: kit.version, url: base }) }, injectTo: 'head-prepend' },
@@ -153,14 +159,15 @@ const sharedModulesMap = (): Plugin => {
         })),
         { tag: 'script', children: KIT_FAILED, injectTo: 'head-prepend' },
       ];
+      return { html: dev ? html.replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME) : html, tags };
     },
-    // index.template.html keeps the placeholder for the web container; index.html has the default, /kit/.
+    // index.template.html keeps the placeholders for the web container; index.html has the defaults.
     writeBundle() {
       const page = join(outDir, 'index.html');
       if (dev || !existsSync(page)) return;
       const html = readFileSync(page, 'utf8');
       writeFileSync(join(outDir, 'index.template.html'), html);
-      writeFileSync(page, html.replaceAll(KIT_URL_PLACEHOLDER, '/kit/'));
+      writeFileSync(page, html.replaceAll(KIT_URL_PLACEHOLDER, '/kit/').replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME));
     },
   };
 };
@@ -169,7 +176,7 @@ const sharedModulesMap = (): Plugin => {
  * If the shell's code or the kit can't be loaded, nothing of the shell runs, so a small script in the
  * page says why instead of leaving it blank, and names the setting and who can change it.
  */
-const KIT_FAILED = `addEventListener('error',function(e){var t=e.target,m=document.querySelector('meta[name="augur-kit"]');if(!m||!t||!(t.tagName==='SCRIPT'&&t.type==='module'||t.tagName==='LINK'&&t.rel==='stylesheet'))return;if(document.getElementById('augur-kit-failed'))return;var k=JSON.parse(m.content),p=document.createElement('p');p.id='augur-kit-failed';p.setAttribute('role','alert');p.style.cssText='font:16px/1.5 system-ui,sans-serif;max-width:40em;margin:4em auto;padding:0 1em';p.textContent='AUGUR could not load its UI kit '+k.version+' from '+k.url+': the address could not be reached, or what it sent was not the kit this release pinned. A deployment admin can change KIT_URL in the .env file on the server.';(document.body||document.documentElement).appendChild(p)},true);`;
+const KIT_FAILED = `addEventListener('error',function(e){var t=e.target,m=document.querySelector('meta[name="augur-kit"]');if(!m||!t||!(t.tagName==='SCRIPT'&&t.type==='module'||t.tagName==='LINK'&&t.rel==='stylesheet'))return;if(document.getElementById('augur-kit-failed'))return;var k=JSON.parse(m.content),p=document.createElement('p');p.id='augur-kit-failed';p.setAttribute('role','alert');p.style.cssText='font:16px/1.5 system-ui,sans-serif;max-width:40em;margin:4em auto;padding:0 1em';var n=document.querySelector('meta[name="augur-product"]');p.textContent=(n&&n.content||'AUGUR')+' could not load its UI kit '+k.version+' from '+k.url+': the address could not be reached, or what it sent was not the kit this release pinned. A deployment admin can change KIT_URL in the .env file on the server.';(document.body||document.documentElement).appendChild(p)},true);`;
 
 /**
  * `pnpm dev:app <id>` sets DEV_APP to the app's folder: the shell opens with

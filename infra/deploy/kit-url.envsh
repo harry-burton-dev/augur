@@ -30,7 +30,12 @@ export KIT_URL
 export KIT_ORIGIN=""
 case "$KIT_URL" in https://*) KIT_ORIGIN=$(printf '%s' "$KIT_URL" | sed -E 's#^(https://[^/]+).*$#\1#') ;; esac
 
-sed "s#@KIT_URL@#${KIT_URL}#g" "$template" > "$page"
+# The product's name (ORG_PRODUCT_NAME, default AUGUR), for the page's title and the shell's tab: escaped
+# for HTML, then for sed's replacement (the # delimiter, & and backslashes).
+PRODUCT_NAME=$(printf '%s' "${ORG_PRODUCT_NAME:-AUGUR}" | tr -d '\n\r' | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&#39;/g" -e 's/[#&\\]/\\&/g')
+[ -n "$PRODUCT_NAME" ] || PRODUCT_NAME=AUGUR
+
+sed -e "s#@KIT_URL@#${KIT_URL}#g" -e "s#@PRODUCT_NAME@#${PRODUCT_NAME}#g" "$template" > "$page"
 
 # The hash of each inline script in the page (the import map, and the note shown if the kit can't be
 # loaded), as the CSP takes it: base64 of the sha256 of its exact text. busybox has sha256sum but no

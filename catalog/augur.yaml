@@ -534,7 +534,7 @@ metadata:
   name: tailscale
   description: "Tailscale sidecar: the way in, on the tailnet, with Funnel for public access"
   annotations:
-    augur.dev/image: tailscale/tailscale:v1.76.6
+    augur.dev/image: tailscale/tailscale:v1.104.4
 spec:
   type: network
   owner: group:default/augur-core

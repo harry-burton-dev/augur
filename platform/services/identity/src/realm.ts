@@ -228,10 +228,21 @@ export type Changes = string[];
 
 type Execution = { id: string; level: number; index: number; requirement: string; displayName: string; providerId?: string; authenticationFlow?: boolean; flowId?: string; authenticationConfig?: string };
 
-/** Applies `realmSettings` and `realmAttributes`, and says whether anything differed. */
-export const applyRealmSettings = async (kc: KeycloakDirectory, s: RealmSettings, changes: Changes) => {
+/** What AUGUR is called where it doesn't say otherwise; a deployment names its own product in ORG_PRODUCT_NAME. */
+export const DEFAULT_PRODUCT_NAME = 'AUGUR';
+
+/** The product's name from a deployment's environment: ORG_PRODUCT_NAME, or AUGUR when it is empty. */
+export const productNameFromEnv = (env: Record<string, string | undefined>) => env.ORG_PRODUCT_NAME?.trim() || DEFAULT_PRODUCT_NAME;
+
+/**
+ * Applies `realmSettings` and `realmAttributes`, and says whether anything differed. `productName`
+ * becomes the realm's display name, which Keycloak's emails (their subjects and AUGUR's layout), the
+ * sign-in pages and passkey prompts show; without it the realm keeps the one it has.
+ */
+export const applyRealmSettings = async (kc: KeycloakDirectory, s: RealmSettings, changes: Changes, productName?: string) => {
   const { data: realm } = await kc.call<Record<string, unknown> & { attributes?: Record<string, string>; displayName?: string }>('GET', '');
-  const want = realmSettings(s, realm.displayName);
+  const displayName = productName ?? realm.displayName;
+  const want = { ...realmSettings(s, displayName), ...(productName ? { displayName: productName } : {}) };
   const attributes = realmAttributes(s);
   const differs = Object.entries(want).filter(([k, v]) => realm[k] !== v).map(([k]) => k);
   const attributesDiffer = Object.entries(attributes).filter(([k, v]) => realm.attributes?.[k] !== v).map(([k]) => k);
@@ -381,6 +392,8 @@ export const applyServiceAccountRights = async (kc: KeycloakDirectory, clientId:
 
 export interface ApplyOptions {
   settings: RealmSettings;
+  /** The product's name (`productNameFromEnv`), set as the realm's display name. */
+  productName?: string;
   /** The sign-in pages' theme and languages. */
   look?: RealmLook;
   /** Where to say what the job can't do, such as a Keycloak without AUGUR's theme. */
@@ -400,7 +413,7 @@ export interface ApplyOptions {
  */
 export const applyRealm = async (kc: KeycloakDirectory, options: ApplyOptions): Promise<Changes> => {
   const changes: Changes = [];
-  await applyRealmSettings(kc, options.settings, changes);
+  await applyRealmSettings(kc, options.settings, changes, options.productName);
   if (options.look) await applyLook(kc, options.look, changes, options.warn);
   await applyRequiredActions(kc, changes);
   await applyRoles(kc, changes);

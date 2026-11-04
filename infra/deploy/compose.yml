@@ -80,7 +80,7 @@ services:
   # (tailscale/start.sh; docs/deploy.md, "Open AUGUR to the internet for a while").
   tailscale:
     logging: *logging
-    image: tailscale/tailscale:v1.76.6
+    image: tailscale/tailscale:v1.104.4
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/config/start.sh"]
     hostname: ${TS_HOSTNAME:-platform}
@@ -110,6 +110,8 @@ services:
       APP_ORIGINS: ${APP_ORIGINS:-}
       # Where the UI kit is loaded from: this server's /kit/ unless set (docs/deploy.md, "The UI kit").
       KIT_URL: ${KIT_URL:-/kit/}
+      # The product's name in the browser tab (docs/deploy.md, "First start"); AUGUR unless set.
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
       # The front door's limits (docs/deploy.md, "Limits at the front door"); the image's defaults when unset.
       API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
       API_RATE_BURST: ${API_RATE_BURST:-200}
@@ -246,7 +248,7 @@ services:
       PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:?set PLATFORM_ADMIN_LAST_NAME in .env}
       PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Platform}
       # Shown on the sign-in pages and in emails: the organisation's name (as identity has it) and, if
-      # set, a link to its logo. The product's name is the realm's display name.
+      # set, a link to its logo. The product's name is the realm's display name (keycloak-config sets it).
       ORG_NAME: ${ORG_NAME:-Organisation}
       ORG_LOGO_URL: ${ORG_LOGO_URL:-}
     # Its share of the server's memory: Keycloak sizes its Java heap from it.
@@ -295,6 +297,8 @@ services:
       REALM_ADMIN_EVENT_DAYS: ${REALM_ADMIN_EVENT_DAYS:-}
       # The languages offered at sign-in, comma separated, the first the default (default en).
       REALM_LANGUAGES: ${REALM_LANGUAGES:-}
+      # The product's name, as the realm's display name: the sign-in pages, emails and passkeys show it.
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
     depends_on:
       keycloak: { condition: service_healthy }
 
