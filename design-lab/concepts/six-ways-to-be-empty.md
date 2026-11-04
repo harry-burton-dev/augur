@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-catalogue`](../runs/2026-11-03-the-catalogue/) 
 Extended by [the empty knows its errand](the-empty-knows-its-errand.md) in [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-reference-desk/).
 
 Could steer: Kit (one empty mark set for Quill and Aerie), Data Atlas, Artifacts metadata, the label (L), the groundskeeper (K).
+
+Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): editions list every source, even at zero.

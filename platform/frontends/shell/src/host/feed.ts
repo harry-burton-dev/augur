@@ -45,20 +45,20 @@ export interface FeedOptions {
   maxRetryMs?: number;
 }
 
-/** Splits a server-sent-events body into its notification events. */
-export function parseEvents(buffer: string): { events: ServerNotification[]; rest: string } {
+/** Splits a server-sent-events body into its events of one name: notifications unless asked for another. */
+export function parseEvents<T = ServerNotification>(buffer: string, name = 'notification'): { events: T[]; rest: string } {
   const blocks = buffer.split('\n\n');
   const rest = blocks.pop() ?? '';
-  const events: ServerNotification[] = [];
+  const events: T[] = [];
   for (const block of blocks) {
     const lines = block.split('\n');
-    if (!lines.includes('event: notification')) continue;
+    if (!lines.includes(`event: ${name}`)) continue;
     const data = lines
       .filter((l) => l.startsWith('data: '))
       .map((l) => l.slice(6))
       .join('\n');
     try {
-      events.push(JSON.parse(data) as ServerNotification);
+      events.push(JSON.parse(data) as T);
     } catch {
       // A malformed event is skipped; the next list load corrects anything missed.
     }

@@ -41,6 +41,8 @@ FROM node:22-alpine AS updater
 RUN apk add --no-cache docker-cli docker-cli-compose cosign
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
+# A copy of the image carries its licence and the open-source notices (docs/licensing.md).
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/augur/
 WORKDIR /app
 COPY --from=build /out .
 # This release's deploy files: the updater of the release before writes them onto the server when it
@@ -58,6 +60,8 @@ FROM node:22-alpine AS registry
 RUN apk add --no-cache cosign
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
+# A copy of the image carries its licence and the open-source notices (docs/licensing.md).
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/augur/
 WORKDIR /app
 COPY --from=build /out .
 ENV NODE_ENV=production
@@ -83,6 +87,8 @@ COPY --from=sign-in-theme /repo/platform/frontends/sign-in-theme/dist_keycloak/a
 FROM node:22-alpine AS service
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
 LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
+# A copy of the image carries its licence and the open-source notices (docs/licensing.md).
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/augur/
 WORKDIR /app
 COPY --from=build /out .
 ENV NODE_ENV=production

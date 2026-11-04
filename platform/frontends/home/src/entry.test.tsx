@@ -107,6 +107,18 @@ describe('home', () => {
     expect(asked.at(-1)).toBe('unmount');
   });
 
+  it('shows the card of an app that can’t be opened, with why, and doesn’t mount it', async () => {
+    const why = 'Old was made for an older version of AUGUR and hasn’t been updated yet. Its team needs to release a version for this one.';
+    const { bus, asked } = shell({ needs: [], cards: [{ app: 'old', name: 'Old', unavailable: why }] });
+    const el = document.body.appendChild(document.createElement('div'));
+    mount(el, ctx(bus));
+    expect(asked).toEqual([]);
+    const tile = el.querySelector('[data-unavailable="old"]')!;
+    expect(tile.textContent).toContain('Old');
+    expect(tile.textContent).toContain(why);
+    unmount(el);
+  });
+
   it('says nothing needs you when there’s nothing and no cards, or the shell doesn’t answer', async () => {
     const el = document.createElement('div');
     mount(el, ctx(shell({ needs: [], cards: [] }).bus));

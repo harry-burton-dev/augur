@@ -106,7 +106,7 @@ export class MemoryDirectory implements Directory {
 
   constructor(
     roles: Role[] = [
-      { name: 'admin', description: 'Runs the platform; sees the Admin app' },
+      { name: 'admin', description: 'Runs AUGUR; sees the Admin app' },
       { name: 'editor', description: 'Can publish to libraries' },
       PUBLISHER_ROLE,
       DEPLOYMENT_ADMIN_ROLE,

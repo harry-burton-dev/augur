@@ -5,6 +5,7 @@
 #   infra/deploy-test.sh fresh                    # a new server on the images built from this checkout
 #   infra/deploy-test.sh upgrade <from-version>   # that release first, with data, then this checkout, then back
 #   infra/deploy-test.sh broken                   # a fresh install with the updater, broken on purpose: its check must see it
+#   THEN='<command>' infra/deploy-test.sh fresh   # a fresh install that allows sample data, with <command> run against it
 #
 # The release under test is PLATFORM_VERSION=$LOCAL_TAG: a published release's version, whose images
 # are pulled, or (default "ci") images built from this checkout first, which BUILD=1 does. Tailscale isn't started: the front door is published on
@@ -70,6 +71,9 @@ cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_de
   esac
   echo "$key=$value"
 done > "$deploy/.env"
+
+# A command run against a fresh install (the run suite's dry run) seeds it first, so the install allows sample data.
+if [ -n "${THEN:-}" ]; then echo 'SEED_ALLOWED=true' >> "$deploy/.env"; fi
 
 # Broken mode runs the updater too (its profile), which reads the deploy folder at its path here and
 # signs in with its own secret, as on a server that turned it on (docs/upgrade.md, "The updater").
@@ -245,6 +249,14 @@ case "$mode" in
     wait_ready "Fresh install of this checkout"
     no_restarts
     on_version "$local_tag"
+    # THEN runs once the install is ready, before it is removed, with its address and the first admin's
+    # sign-in (whose password must be changed at first sign-in). Its exit status is the test's.
+    if [ -n "${THEN:-}" ]; then
+      setting() { grep -m1 "^$1=" "$deploy/.env" | cut -d= -f2-; }
+      echo "Running against the fresh install: $THEN" >&2
+      AUGUR_URL="http://localhost:$port" AUGUR_ADMIN_USER=$(setting PLATFORM_ADMIN_USER) AUGUR_ADMIN_PASSWORD=$(setting PLATFORM_ADMIN_PASSWORD) bash -c "$THEN"
+      no_restarts
+    fi
     ;;
   upgrade)
     [ -n "$from" ] || { echo "upgrade needs the release to start from, such as 0.13.1" >&2; exit 2; }

@@ -1,0 +1,57 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>App owner · V2 Returned to sender</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{max-width:calc(var(--measure-wide) + var(--space-8) * 2);margin:0 auto;display:flex;flex-direction:column;gap:var(--space-4);height:100%;overflow:auto}
+.ret{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,15rem);gap:var(--space-4);padding:var(--space-4) var(--space-5);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:linear-gradient(170deg,var(--surface-raised),var(--surface-inset));overflow:hidden}
+.ret.warn{border-left:3px solid var(--x-proposed-blocked)}
+.ret.note{border-left:3px solid var(--hairline-strong)}
+.ret h2{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);display:flex;gap:var(--space-2);align-items:center}
+.ret h2 svg{color:var(--x-proposed-blocked)}
+.ret.note h2 svg{color:var(--ink-muted)}
+.ret p{font-size:var(--type-meta);line-height:var(--leading-meta);margin-top:var(--space-2)}
+.ret ul{list-style:none;margin:var(--space-2) 0 0;padding:0;display:flex;flex-wrap:wrap;gap:var(--space-1)}
+.ret li{font:400 var(--type-small)/1.4 var(--font-mono);color:var(--ink-muted);border:1px solid var(--hairline);border-radius:var(--radius-key);padding:0 var(--space-2)}
+.side{display:flex;flex-direction:column;gap:var(--space-2);align-items:flex-start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-left:1px solid var(--hairline);padding-left:var(--space-4)}
+.side b{font-weight:400;color:var(--ink);font-size:var(--type-meta)}
+.big{font:300 var(--type-title-s)/1 var(--font-mono);color:var(--light)}
+.stamp{position:absolute;right:calc(15rem + var(--space-8));top:var(--space-4);font:500 var(--type-small)/1.2 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-blocked);border:1.5px solid currentColor;border-radius:var(--radius-key);padding:var(--space-1) var(--space-2);transform:rotate(-6deg) scale(1.2);opacity:0;transition:opacity var(--motion-quick),transform var(--motion-quick) var(--ease-out);pointer-events:none}
+.stamp.in{opacity:.75;transform:rotate(-6deg) scale(1)}
+.ret.note .stamp{color:var(--ink-muted)}
+@media (max-width:1400px){.stamp{right:calc(15rem + var(--space-5))}}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap scroll">
+    <div><p class="eyebrow">Admin · Apps · Notices</p><h1 class="heading" id="h"></h1><p class="meta muted" id="lead"></p></div>
+    <div id="list" style="display:grid;gap:var(--space-3)"></div>
+  </div></main>
+</div>
+<div class="x-cap"><b>App owner · V2</b> returned to sender: every notice that reached nobody, why, and who can change it · the dead letter office, bounce messages</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const APP = 'repairs', app = A(APP), rs = ALL().filter(r => r.n.app === APP);
+$('#top').innerHTML = topHTML(['Admin', 'Apps', app.name, 'Returned'], [['R', 'replay'], ['T', 'technical words', 'h-t']], 'department');
+$('#h').textContent = `${app.name}: returned to sender`;
+const groups = {};
+rs.filter(r => r.blocked).forEach(r => { const k = r.blocked.rule + ':' + (r.n.to.team || ''); (groups[k] = groups[k] || []).push(r); });
+const items = Object.values(groups).map(g => {
+  const r = g[0], rule = r.blocked.rule, would = g.reduce((a, x) => a + x.blocked.would, 0);
+  const fixer = rule === 'permission' ? P(app.may && Object.keys(DATA.people).find(id => P(id).admin === 'department')) : rule === 'teamoff' ? P(DATA.teams[r.n.to.team].lead) : null;
+  return { cls: 'warn', icon: RULES[rule].icon, stamp: 'Returned', title: rule === 'permission' ? `Not allowed to send on ${DATA.floors[r.n.floor].name}` : `${DATA.teams[r.n.to.team].name} has team notices off`,
+    body: `${r.blocked.why} ${g.length > 1 ? `${app.name} sent “${r.n.title}” ${g.length} times, at ${hhmm(r.t)} each weekday.` : `“${r.n.title}”, ${at(r.t)}.`}`,
+    when: g.map(x => at(x.t)), n: would, nw: `${would === 1 ? 'person' : 'people'} would have been told`, fixer, where: RULES[rule].where, tk: `${rule === 'permission' ? `POST /notifications → 403 notifications:send on ${r.n.floor}` : 'toTeam refused: team notices off'}` };
+});
+const nokey = rs.filter(r => !r.n.key);
+if (nokey.length) items.push({ cls: 'note', icon: 'key-round', stamp: 'No key', title: `${nokey.length} notices were sent without a key`, body: `Nothing was stopped, but without a key a retry, or a restart of your service, tells everyone again. Contractor updates are the likely case: give each a key such as the job number.`, when: nokey.map(r => at(r.t)), n: nokey.reduce((a, r) => a + r.deliveries.length, 0), nw: 'people were told once; a retry would tell them twice', fixer: P(app.owner), where: 'your service’s notify call', tk: 'notify({ …, key }) · ADR 0044' });
+const unseen = rs.filter(r => !r.blocked && r.deliveries.length && r.deliveries.every(d => d.seen == null));
+if (unseen.length) items.push({ cls: 'note', icon: 'eye-off', stamp: 'Unopened', title: `${unseen.length} delivered, opened by nobody`, body: `They reached people and wait in their lists. AUGUR doesn’t say who hasn’t opened them, only that nobody has.`, when: unseen.map(r => at(r.t)), n: unseen.reduce((a, r) => a + r.deliveries.length, 0), nw: 'people have it unopened', fixer: null, where: '', tk: '' });
+$('#lead').textContent = `${items.filter(i => i.cls === 'warn').reduce((a, i) => a + i.n, 0)} people were never told last week. Each entry says why and who can change it. Today a refused send only shows in your service’s log.`;
+$('#list').innerHTML = items.map((it, i) => `<article class="ret ${it.cls} dep" style="--i:${i * 2}"><div><h2>${I(it.icon, 18)}${it.title}</h2><p>${it.body}</p><ul>${it.when.map(w => `<li>${w}</li>`).join('')}</ul><p class="tk">${it.tk}</p></div>
+  <div class="side"><span class="big">${it.n}</span><span>${it.nw}</span>${it.fixer ? `<b>${it.fixer.name}</b><span>${it.fixer.role}${it.where ? ` · ${it.where}` : ''}</span>${it.fixer.name !== P(app.owner).name ? `<button class="btn sm">${I('send', 14)} Ask ${first(it.fixer.name)}</button>` : `<button class="btn sm">${I('key-round', 14)} How to add a key</button>`}` : ''}</div>
+  <span class="stamp">${it.stamp}</span></article>`).join('');
+function play() { clearLater(); document.body.classList.add('pre'); $$('.stamp').forEach(s => s.classList.remove('in')); later(() => document.body.classList.remove('pre'), 60); $$('.stamp').forEach((s, i) => later(() => s.classList.add('in'), 1200 + i * 240)); }
+document.addEventListener('keydown', e => commonKeys(e, play));
+Icons.hydrate(document.body); play();
+</script></body></html>

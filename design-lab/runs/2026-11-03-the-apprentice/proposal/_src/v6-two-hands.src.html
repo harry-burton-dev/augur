@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A proposal waiting · V6 · Two hands in Triage</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: Triage with people's and agents' proposals in one queue, and the seven ways they differ ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:var(--space-6)}
+.q{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.row{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);text-align:left;width:100%;border:1px solid var(--hairline);background:var(--surface-inset)}
+.row.agent{border-style:dotted;border-color:var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash)}
+.row.sel{outline:1.5px solid var(--light);outline-offset:-1px}
+.row b{display:block;font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.row .s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.row .pen{font-style:italic}
+.row .av{display:inline-grid;place-items:center;width:var(--space-6);height:var(--space-6);border-radius:50%;border:1px solid var(--hairline-strong);font:400 var(--type-small)/1 var(--font-sans);color:var(--ink)}
+.row .r{font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted);text-align:right;white-space:nowrap}
+.grp{font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);margin-top:var(--space-2)}
+.diff{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+table{width:100%;border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small)}
+th,td{padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);text-align:left;vertical-align:top}
+thead th{font-weight:400;font-size:var(--type-meta);color:var(--light)}
+tbody th{font-weight:400;color:var(--ink-muted);white-space:nowrap}
+td{color:var(--ink)}
+td.on,th.on{background:var(--surface-raised)}
+.inbox{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3)}
+.ib{padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ib b{display:block;font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.row{padding:var(--space-2) var(--space-3)}.row .r{display:none}th,td{padding:var(--space-1) var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A proposal waiting · V6</b> two hands in Triage: people's and agents' proposals in one queue, and how they differ · the editor's in-tray, maker's marks</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PR = DATA.proposal, AG = PR.agent, a = A(AG), pp = PR.people;
+const d = id => DATA.diary.find(x => x.id === id);
+const ITEMS = () => [
+  { who: 'agent', grp: true, t: `${d('d10').n} details from ${d('d10').reports} reports`, s: `run ${d('d10').run} · batch · check ${d('d10').sample}`, r: d('d10').t },
+  { who: 'person', t: pp.what, s: `${P(pp.who).name} · ${pp.from}`, r: pp.when },
+  { who: 'agent', t: d('d5').text.replace(/^a /, 'A '), s: `run ${d('d5').run} · ${d('d5').why}`, r: d('d5').t },
+  { who: 'agent', t: d('d8').text, s: `run ${d('d8').run} · two answers`, r: d('d8').t, dis: true },
+  { who: 'person', t: 'Owner for MV Guillemot: Skerry Lines Ltd', s: `${P('p3').name} · from a pilot’s report`, r: 'Fri 16:05' }
+];
+const ROWS = [
+  ['Who wrote it', `${P(pp.who).name}, by name`, `${a.name} ${mm(AG)}, an agent, with its supervisor ${P(a.supervisor).name} named`],
+  ['How it looks', 'Plain, upright: a person vouches for it', 'Pencil: dotted, italic, until a person accepts it'],
+  ['How it comes', 'One at a time', 'By run: a batch at rung 2, one by one at rung 1'],
+  ['What it carries', 'The source the person names, if any', 'Its workings: the page, the passage, both readings, the model call'],
+  ['Who may accept', 'Any reviewer on the floor, not the author', `Only a person: ${first(a.supervisor)} or their deputy. Never an agent, not even another one`],
+  ['After it’s accepted', 'Ink, with the author’s name', `Ink, keeps ${mm(AG, true)} and “accepted by …”, and counts on ${a.name}’s record`],
+  ['In the Inbox', 'One item for the floor’s reviewers', `One item per run for ${first(a.supervisor)}, not one per detail`]
+];
+const S = { sel: 0 };
+function render() {
+  const it = ITEMS(), cur = it[S.sel], col = cur.who === 'agent' ? 2 : 1;
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Triage'], [['↑ ↓', 'proposal'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="q scroll"><div><p class="eyebrow">${F('team').name} · ${it.length} waiting</p><h1 class="title">Triage</h1></div>
+      ${it.map((x, i) => `<button class="row dep ${x.who} ${S.sel === i ? 'sel' : ''}" style="--i:${i}" data-i="${i}">${x.who === 'agent' ? mm(AG, false, true) : `<span class="av">${P(x.s.includes(P('p3').name) ? 'p3' : pp.who).name.split(' ').map(w => w[0]).join('')}</span>`}<span><b class="${x.who === 'agent' ? 'pen' : ''}">${x.t}${x.dis ? ' <span class="mk-disagree"></span>' : ''}</b><span class="s">${x.s}</span></span><span class="r">${x.r}</span></button>`).join('')}
+    </section>
+    <section class="diff"><p class="eyebrow">How a person’s proposal and an agent’s differ</p>
+      <table><thead><tr><th></th><th class="${col === 1 ? 'on' : ''}">A person’s</th><th class="${col === 2 ? 'on' : ''}">An agent’s</th></tr></thead>
+      <tbody>${ROWS.map(r => `<tr><th>${r[0]}</th><td class="${col === 1 ? 'on' : ''}">${r[1]}</td><td class="${col === 2 ? 'on' : ''}">${r[2]}</td></tr>`).join('')}</tbody></table>
+      <p class="eyebrow" style="margin-top:var(--space-3)">The same work in ${first(DATA.me)}’s Inbox</p>
+      <div class="inbox"><div class="ib"><b>Review: ${pp.what.split(':')[0]}</b>${P(pp.who).name} · for the floor’s reviewers</div><div class="ib"><b>${mm(AG)} ${a.name}: ${D.of('batch', AG).length} batches, ${D.n('held', AG) + D.n('disagree', AG)} one by one</b>for ${P(a.supervisor).name} · one item, opens the run</div></div>
+      <p class="tk">Triage proposal.proposedBy { kind: person | agent, id, supervisor } · Inbox item owner = supervisor, ref = run</p>
+    </section></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.row').forEach(b => b.onclick = () => { S.sel = +b.dataset.i; render(); });
+}
+function replay() { clearLater(); S.sel = 0; settle(); render(); later(() => { S.sel = 1; render(); }, MOMENT()); later(() => { S.sel = 0; render(); }, MOMENT() + ms('--motion-still')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.key === 'ArrowDown') { S.sel = (S.sel + 1) % ITEMS().length; render(); }
+  if (e.key === 'ArrowUp') { S.sel = (S.sel - 1 + ITEMS().length) % ITEMS().length; render(); }
+});
+replay();
+</script>
+</body>
+</html>

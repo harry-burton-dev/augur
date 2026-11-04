@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A mistake · V5 · The scope review</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: after a mistake, the supervisor decides the rung for the kind of work that failed. Four options, each with what it costs, none chosen by AUGUR ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,1fr);gap:var(--space-6)}
+.opts{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.op{display:grid;grid-template-columns:var(--target-sm) minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);text-align:left;width:100%}
+.op .dot{width:var(--space-4);height:var(--space-4);border-radius:50%;border:1.5px solid var(--ink-muted);justify-self:center}
+.op.sel{border-color:var(--light)}
+.op.sel .dot{background:var(--light);border-color:var(--light);box-shadow:0 0 0 3px var(--slate-deep) inset}
+.op b{display:block;font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.op .s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.op .ld{text-align:right;font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink);white-space:nowrap}
+.op .pen{font-family:var(--font-sans)}
+.sugg{display:inline-flex;gap:var(--space-1);align-items:center;margin-left:var(--space-2);padding:0 var(--space-2);border:1px dotted var(--x-proposed-pencil);border-radius:var(--radius-pill);font-size:var(--x-proposed-type-micro);font-style:italic;color:var(--ink-muted)}
+.right{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.kinds{display:grid;gap:var(--space-1)}
+.kr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.kr.ch{background:var(--x-proposed-lit-wash)}
+.why textarea{width:100%;min-height:var(--space-8);resize:none;background:var(--surface-inset);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--ink);font:inherit;font-size:var(--type-meta);padding:var(--space-2) var(--space-3)}
+.why textarea:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A mistake · V5</b> the scope review: narrow only what failed, see what each choice costs, decide with a reason · clinical supervision after an incident</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const MK = DATA.mistake, AG = 'a1', a = A(AG);
+const S = { sel: null };
+/* what each option does to each kind's rung */
+const after = id => DATA.kinds.map(k => { let lv = k.id === 'k2' ? 2 : k.level; if (id === 'narrow' && k.id === 'k2') lv = 1; if (id === 'all' && k.cap === 2) lv = 1; if (id === 'pause') lv = -1; return { ...k, lv, was: k.id === 'k2' ? 2 : k.level }; });
+function render() {
+  const op = S.sel ? MK.options.find(o => o.id === S.sel) : null;
+  $('#app').innerHTML = topHTML(['Admin', 'Agents', a.name, 'Scope review'], [['1–4', 'an option'], ['R', 'replay'], ['T', 'ADR words']]) +
+  `<main class="main"><div class="wrap">
+    <section class="opts"><div><p class="eyebrow">${mm(AG)} After the recall · ${MK.siblings.filter(s => s.proposed !== s.right).length} of ${MK.siblings.length} wrong · ${MK.lot.rule}</p><h1 class="title">The scope review</h1></div>
+      ${MK.options.map((o, i) => `<button class="op dep ${S.sel === o.id ? 'sel' : ''}" style="--i:${i}" data-o="${o.id}" role="radio" aria-checked="${S.sel === o.id}"><span class="dot"></span><span><b>${o.w}${o.rec ? `<span class="sugg">${I('pencil', 10)} AUGUR suggests</span>` : ''}</b><span class="s">${o.then}</span></span><span class="ld">${o.load ? `+${o.load} a week` : o.id === 'pause' ? 'reports wait' : 'no change'}</span></button>`).join('')}
+      <p class="small muted">AUGUR’s suggestion is pencil: the narrowest change that covers what failed. It never narrows, widens or pauses anything itself. ${MK.back}.</p>
+    </section>
+    <aside class="right"><p class="eyebrow">${op ? `If you ${op.w.toLowerCase()}` : 'Pick an option to see its rungs'}</p>
+      <div class="kinds">${after(S.sel).map(k => `<div class="kr ${S.sel && k.lv !== k.was ? 'ch' : ''}"><span>${k.w}</span><span>${k.lv < 0 ? '<span class="muted">paused</span>' : lvl(k.lv, k.cap)}</span></div>`).join('')}</div>
+      ${op ? `<div class="why"><label class="small muted" for="w">Why (kept on its record)</label><textarea id="w">${op.id === 'narrow' ? `Read net tonnage as gross on ${MK.siblings.filter(s => s.proposed !== s.right).length} of ${MK.siblings.length} older Nordhavn certificates.` : ''}</textarea></div>
+        <button class="btn go" style="align-self:flex-start">${I('signature', 14)} Decide, as ${P(a.supervisor).name}</button>` : ''}
+      <p class="tk">grant.kinds[k2].level 2 → 1 · audit agent.level.changed { by, why, after: review } · takes effect at the next run</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.op').forEach(b => b.onclick = () => { S.sel = b.dataset.o; render(); });
+}
+function replay() { clearLater(); S.sel = null; settle(); render(); later(() => { S.sel = 'narrow'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('textarea')) return;
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (/^[1-4]$/.test(e.key)) { S.sel = MK.options[+e.key - 1].id; render(); }
+});
+replay();
+</script>
+</body>
+</html>
