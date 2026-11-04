@@ -28,7 +28,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/techdocs-ref: dir:..
     augur.dev/release-unit: augur
-    augur.dev/version: 0.17.0
+    augur.dev/version: 0.18.0
 spec:
   owner: group:default/augur-core
   domain: augur
@@ -43,7 +43,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/admin/
     augur.dev/package: "@augur/admin"
-    augur.dev/version: 0.12.2
+    augur.dev/version: 0.13.0
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -61,7 +61,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/home/
     augur.dev/package: "@augur/home"
-    augur.dev/version: 0.3.2
+    augur.dev/version: 0.3.3
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -79,7 +79,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/shell/
     augur.dev/package: "@augur/shell"
-    augur.dev/version: 0.14.0
+    augur.dev/version: 0.15.0
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -97,7 +97,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/upgrades/
     augur.dev/package: "@augur/upgrades"
-    augur.dev/version: 0.1.2
+    augur.dev/version: 0.1.3
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -115,7 +115,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/app-tools/
     augur.dev/package: "@augur/app-tools"
-    augur.dev/version: 0.2.0
+    augur.dev/version: 0.2.1
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -133,7 +133,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/mfe-sdk/
     augur.dev/package: "@augur/mfe-sdk"
-    augur.dev/version: 1.10.0
+    augur.dev/version: 1.11.0
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -169,7 +169,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/service-kit/
     augur.dev/package: "@augur/service-kit"
-    augur.dev/version: 0.11.0
+    augur.dev/version: 0.12.0
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -187,7 +187,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/ui-kit/
     augur.dev/package: "@augur/ui-kit"
-    augur.dev/version: 1.9.1
+    augur.dev/version: 1.9.2
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -204,7 +204,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/events/
     augur.dev/package: "@augur/events"
-    augur.dev/version: 0.6.0
+    augur.dev/version: 0.7.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -230,7 +230,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/gateway/
     augur.dev/package: "@augur/gateway"
-    augur.dev/version: 0.8.0
+    augur.dev/version: 0.9.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -255,11 +255,11 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/identity/
     augur.dev/package: "@augur/identity"
-    augur.dev/version: 0.10.0
+    augur.dev/version: 1.0.0
     augur.dev/release-unit: augur
 spec:
   type: service
-  lifecycle: experimental
+  lifecycle: production
   owner: group:default/augur-core
   system: augur-platform
   providesApis:
@@ -282,7 +282,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/models/
     augur.dev/package: "@augur/models"
-    augur.dev/version: 0.3.2
+    augur.dev/version: 0.3.3
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -308,7 +308,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/registry/
     augur.dev/package: "@augur/registry"
-    augur.dev/version: 0.14.0
+    augur.dev/version: 0.15.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -334,7 +334,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/storage/
     augur.dev/package: "@augur/storage"
-    augur.dev/version: 0.4.0
+    augur.dev/version: 0.4.1
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -355,7 +355,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/updater/
     augur.dev/package: "@augur/updater"
-    augur.dev/version: 0.8.0
+    augur.dev/version: 0.8.1
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -377,7 +377,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/im-platform
     backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/contract/
     augur.dev/package: "@augur/contract-tests"
-    augur.dev/version: 0.1.13
+    augur.dev/version: 0.1.14
     augur.dev/release-unit: augur
 spec:
   type: tool

@@ -1,5 +1,26 @@
 # @augur/registry
 
+## 0.15.0
+
+### Minor Changes
+
+- 2c37293: Apps that ship with AUGUR now say what kind they are (ADR 0032). SDK 1.11 adds an optional `category` to the manifest (`platform` or `pillar`), with `AppCategory` and `APP_CATEGORIES`. The registry counts Home, Admin and the Upgrade Centre as platform apps, honours the kind only for apps that ship with AUGUR or come from the signed app feed, and reports the kind in force in `/v1/manifest`, `/v1/me/apps` and `/v1/apps`, which also gain `ships` (the old `pillar` stays, deprecated). Admin → Apps shows a Kind column, says the kind in each app's dialog and explains a claim it doesn't honour, and says AUGUR instead of "platform" in what it shows.
+- ef9976f: A deployment admin can install a release its publisher halted, on request, to prove AUGUR goes back by itself from a broken release (ADR 0051): `PUT /v1/platform/upgrade/halted` with the exact version and a reason, after a fresh sign-in, on dev and preview servers only. The release must be newer, able to upgrade from the running one and have no breaking release between. Every request, allowed or refused, is audited, and the Updates page says whether this server allows it (`haltedInstall`).
+- 5ad27cc: Back and Forward inside an app no longer throw away what it holds (PER-308). SDK 1.11 adds `followsAddress` to the manifest, for an app that follows the address itself, and `navigated(el, path)` on the app. While an app with both stays open on the same floor and nothing is waiting for it, the shell keeps it mounted on a move inside its route and calls `navigated` with the new path; an intent, a request, another floor or a changed preview still mounts it again. An app without `navigated` is mounted again as before, since the shell's own moves push the address without a popstate. The registry accepts the flag (contract 1.33.0).
+
+### Patch Changes
+
+- b3060e0: Every platform service answers errors as RFC 9457 problem details (`application/problem+json`) with AUGUR's `reason` and `whoCanChange`, and keeps `error` and `message` for SDK 1.x clients. The service kit adds `problemDetails()`, `Problem`, `sendProblem` and `serviceFastifyOptions()`. A service's unexpected errors are logged and answered with a plain 500, never with their own words.
+- 8d48714: Fixes from the 2 Nov audit. In Admin → People, a person's sign-in (on or off, a new one-time password) sits in its own section that says it takes effect at once: each asks first, acts straight away and says what happened, while their name, email, department and roles change only on Save. Agents stay among the Shell's functions and say they aren't here yet, and Home keeps the card of an app this shell can't open, saying why and who can change it, instead of hiding either. Messages people read say AUGUR, not "the platform", and `pnpm check:reasons` now catches it. The centre menu's transitions stop for AUGUR's own reduced-motion setting as well as the system's and are timed from motion tokens; the lifecycle's divider uses the hairline token; overlay shadows use the shadow token. A new test holds the Lit kit and AUGUR's frontends to tokens only.
+- Updated dependencies [2c37293]
+- Updated dependencies [2ad8555]
+- Updated dependencies [5ad27cc]
+- Updated dependencies [b3060e0]
+- Updated dependencies [8a89c6f]
+- Updated dependencies [49a631f]
+  - @augur/mfe-sdk@1.11.0
+  - @augur/service-kit@0.12.0
+
 ## 0.14.0
 
 ### Minor Changes
