@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { aliasDependencies, distTag, libraries, publishedManifest, publishedName } from './publish-packages.mjs';
+import { aliasDependencies, cssEntrypoints, distTag, libraries, publishedManifest, publishedName } from './publish-packages.mjs';
 
 test('an @augur package publishes under the owner scope, lower-cased', () => {
   assert.equal(publishedName('@augur/mfe-sdk', 'Harry-Burton-Dev'), '@harry-burton-dev/augur-mfe-sdk');
@@ -43,4 +43,9 @@ test('main publishes as latest; a hotfix line gets its own dist-tag', () => {
 test('every library in platform/packages is found', () => {
   const names = libraries().map(({ pkg }) => pkg.name);
   for (const name of ['@augur/mfe-sdk', '@augur/records', '@augur/service-kit', '@augur/ui-kit']) assert.ok(names.includes(name), name);
+});
+
+test('stylesheet exports are left out of the type check', () => {
+  assert.deepEqual(cssEntrypoints({ exports: { '.': './dist/index.js', './tokens.css': './dist/tokens.css' } }), ['./tokens.css']);
+  assert.deepEqual(cssEntrypoints({ main: 'x.js' }), []);
 });

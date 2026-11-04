@@ -15,8 +15,21 @@ export function Reference({ ctx }: { ctx: MountContext }) {
   const [fetched, setFetched] = useState('');
   const [opened, setOpened] = useState('');
   const [picked, setPicked] = useState('');
+  const [following, setFollowing] = useState(false);
+  const [thing, setThing] = useState('');
 
   useEffect(() => ctx.bus.on<string>('reference.ping', setBus), [ctx]);
+  // As the app kit's `useData(…, { refreshOn: ['reference.thing.changed'] })` does: load, then load again on each event.
+  useEffect(() => {
+    if (!following) return;
+    const load = () =>
+      ctx.fetch('/api/reference/v1/thing').then(
+        async (res) => setThing(await res.text()),
+        () => setThing('failed'),
+      );
+    void load();
+    return ctx.bus.on('reference.thing.changed', () => void load());
+  }, [ctx, following]);
   useEffect(() => {
     void ctx.getToken().then((t) => setToken(typeof t === 'string' ? 'ok' : 'missing'));
   }, [ctx]);
@@ -73,6 +86,8 @@ export function Reference({ ctx }: { ctx: MountContext }) {
         <dd data-check="focus">{ctx.focus ? ctx.focus.label : 'none'}</dd>
         <dt>Previews</dt>
         <dd data-check="previews">{PREVIEWS.map((id) => `${id}:${ctx.previewOn(id) ? 'on' : 'off'}`).join(' ')}</dd>
+        <dt>Thing</dt>
+        <dd data-check="thing">{thing}</dd>
         <dt>React</dt>
         <dd data-check="react">{version}</dd>
       </dl>
@@ -107,6 +122,9 @@ export function Reference({ ctx }: { ctx: MountContext }) {
           </Button>
           <Button data-action="emit" onPress={() => ctx.bus.emit('reference.ping', 'pong')}>
             Emit
+          </Button>
+          <Button data-action="follow" onPress={() => setFollowing(true)}>
+            Follow
           </Button>
           <Button data-action="open-document" onPress={() => void openOne()}>
             Open a document

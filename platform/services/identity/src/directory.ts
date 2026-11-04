@@ -64,10 +64,10 @@ export const PUBLISHER_ROLE: Role = { name: 'publisher', description: 'Publishes
  */
 export const DEPLOYMENT_ADMIN_ROLE: Role = { name: 'deployment-admin', description: 'Runs the deployment: settings, secrets, updates and backups' };
 
-/** The roles the platform itself relies on, made in Keycloak at start when they're missing (its realm file is read only when it first starts). */
+/** The roles the platform itself relies on, made by the realm job when they're missing (Keycloak reads its realm file only when it first starts). */
 export const PLATFORM_ROLES: readonly Role[] = [PUBLISHER_ROLE, DEPLOYMENT_ADMIN_ROLE];
 
-/** The realm's sign-in flow once a role must use one-time codes: Keycloak's browser flow plus that rule. */
+/** The realm's sign-in flow: Keycloak's browser flow plus the admin roles' second step (realm.ts). */
 export const SIGN_IN_FLOW = 'augur browser';
 
 /** A refusal the admin can act on (404, 409), or the directory being out of reach (503). */
@@ -106,7 +106,7 @@ export class MemoryDirectory implements Directory {
 
   constructor(
     roles: Role[] = [
-      { name: 'admin', description: 'Runs the platform; sees the Admin app' },
+      { name: 'admin', description: 'Runs AUGUR; sees the Admin app' },
       { name: 'editor', description: 'Can publish to libraries' },
       PUBLISHER_ROLE,
       DEPLOYMENT_ADMIN_ROLE,
@@ -217,34 +217,21 @@ export interface KeycloakConfig {
   realm: string;
   /**
    * How identity signs in to Keycloak's admin API: as its own client (`platform-identity`), whose
-   * service account manages this realm alone, or as an admin of Keycloak's master realm, which
-   * identity uses only at start, to give its own client those rights (`grantRealmAdmin`).
+   * service account has only the rights in `IDENTITY_RIGHTS` (realm.ts), or as an admin of Keycloak's
+   * master realm, which only the realm job (realm-job.ts) and a local stack without secrets use.
    */
   signIn: { client: { id: string; secret: string } } | { admin: { user: string; password: string } };
   fetchImpl?: typeof fetch;
 }
 
 /**
- * What identity's own client may do in the realm (Keycloak's realm-management roles): people,
- * departments, roles and the realm's sign-in policy, and the sign-ins of services and apps. Nothing
- * in any other realm, Keycloak's master realm included.
+ * Held through the admin roles (a composite the realm job sets up), never given by hand: everyone
+ * who has it signs in with a code app or a passkey as well as their password (ADR 0038).
  */
-export const REALM_ADMIN_ROLES = ['view-realm', 'manage-realm', 'view-users', 'query-users', 'manage-users', 'query-groups', 'view-clients', 'query-clients', 'manage-clients'] as const;
+export const TWO_STEP_ROLE: Role = { name: 'two-step-sign-in', description: 'Signs in with a code app or a passkey as well as a password. Comes with the admin roles; not given by hand.' };
 
-/** How the realm treats wrong passwords: a growing wait after 10 in a row, up to 15 minutes, never a permanent lock. */
-export const BRUTE_FORCE_POLICY = {
-  bruteForceProtected: true,
-  permanentLockout: false,
-  failureFactor: 10,
-  waitIncrementSeconds: 60,
-  maxFailureWaitSeconds: 900,
-  maxDeltaTimeSeconds: 43200,
-  quickLoginCheckMilliSeconds: 1000,
-  minimumQuickLoginWaitSeconds: 60,
-} as const;
-
-/** Roles every Keycloak realm has; they aren't the platform's to hand out. */
-const builtInRole = (name: string, realm: string) => name === `default-roles-${realm}` || name === 'offline_access' || name === 'uma_authorization';
+/** Roles every Keycloak realm has, and the one the admin roles carry; they aren't the platform's to hand out. */
+const builtInRole = (name: string, realm: string) => name === `default-roles-${realm}` || name === 'offline_access' || name === 'uma_authorization' || name === TWO_STEP_ROLE.name;
 
 interface KcUser {
   id: string;
@@ -261,20 +248,6 @@ interface KcGroup {
   name: string;
   parentId?: string;
   subGroupCount?: number;
-}
-interface KcClient {
-  id: string;
-  clientId: string;
-}
-interface KcExecution {
-  id: string;
-  level: number;
-  index: number;
-  requirement: string;
-  displayName: string;
-  providerId?: string;
-  authenticationFlow?: boolean;
-  flowId?: string;
 }
 interface KcRole {
   id: string;
@@ -325,11 +298,11 @@ export class KeycloakDirectory implements Directory {
   }
 
   /**
-   * Whether this sign-in already holds every role in `REALM_ADMIN_ROLES`, read from its own token.
+   * Whether this sign-in holds each of `rights` (realm-management roles), read from its own token.
    * False when Keycloak refuses the sign-in (no such client yet, or a wrong secret); throws only
    * when Keycloak can't be reached, so the caller can try again.
    */
-  async hasRealmAdmin(): Promise<boolean> {
+  async hasRights(rights: readonly string[]): Promise<boolean> {
     this.token = undefined;
     let token: string;
     try {
@@ -342,37 +315,7 @@ export class KeycloakDirectory implements Directory {
     if (!part) return false;
     const claims = JSON.parse(Buffer.from(part, 'base64url').toString('utf8')) as { resource_access?: Record<string, { roles?: string[] }> };
     const held = new Set(claims.resource_access?.['realm-management']?.roles ?? []);
-    return REALM_ADMIN_ROLES.every((r) => held.has(r));
-  }
-
-  /** Signs in again on the next call, for rights given since the last sign-in. */
-  forgetSignIn() {
-    this.token = undefined;
-  }
-
-  /**
-   * Gives a client's service account the realm-management roles in `REALM_ADMIN_ROLES` that it lacks,
-   * and says which it gave. Needs a sign-in that may grant them (Keycloak's master admin).
-   */
-  async grantRealmAdmin(clientId: string): Promise<string[]> {
-    const client = (await this.call<KcClient[]>('GET', `/clients?clientId=${encodeURIComponent(clientId)}`)).data[0];
-    if (!client) throw new DirectoryError(`There is no ${clientId} client to give the realm's admin rights to.`, 404);
-    const { data: account } = await this.call<{ id: string }>('GET', `/clients/${client.id}/service-account-user`);
-    const management = (await this.call<KcClient[]>('GET', '/clients?clientId=realm-management')).data[0];
-    if (!management) throw new DirectoryError('The realm has no realm-management client.', 404);
-    const mappings = `/users/${account.id}/role-mappings/clients/${management.id}`;
-    const have = new Set((await this.call<KcRole[]>('GET', mappings)).data.map((r) => r.name));
-    const roles = (await this.call<KcRole[]>('GET', `/clients/${management.id}/roles`)).data.filter((r) => (REALM_ADMIN_ROLES as readonly string[]).includes(r.name) && !have.has(r.name));
-    if (roles.length) await this.call('POST', mappings, roles);
-    return roles.map((r) => r.name);
-  }
-
-  /** Makes sure the realm slows down repeated wrong passwords (`BRUTE_FORCE_POLICY`); true when it changed it. */
-  async ensureSignInPolicy(): Promise<boolean> {
-    const { data: realm } = await this.call<Record<string, unknown>>('GET', '');
-    if (realm.bruteForceProtected) return false;
-    await this.call('PUT', '', { ...BRUTE_FORCE_POLICY });
-    return true;
+    return rights.every((r) => held.has(r));
   }
 
   /**
@@ -386,60 +329,6 @@ export class KeycloakDirectory implements Directory {
     if (!user) throw new DirectoryError(`There is no ${username} to give the ${role} role to.`, 404);
     const { data: rep } = await this.call<KcRole>('GET', `/roles/${encodeURIComponent(role)}`);
     await this.call('POST', `/users/${user.id}/role-mappings/realm`, [rep]);
-    return true;
-  }
-
-  /**
-   * Makes everyone with `role` sign in with a one-time code as well as their password, setting one up
-   * the first time if they have none. Keycloak's browser flow already asks for a code from anyone who
-   * has one; this copies it as `SIGN_IN_FLOW`, asks holders of `role` for theirs in a step of its own,
-   * leaves them out of the usual step (so they're asked once), and makes the copy the realm's sign-in.
-   * Returns whether it changed the realm.
-   */
-  async ensureOtpFor(role: string): Promise<boolean> {
-    const flows = (await this.call<{ alias: string }[]>('GET', '/authentication/flows')).data;
-    if (!flows.some((f) => f.alias === SIGN_IN_FLOW)) {
-      await this.call('POST', '/authentication/flows/browser/copy', { newName: SIGN_IN_FLOW });
-    }
-    const executionsOf = async (alias: string) => (await this.call<KcExecution[]>('GET', `/authentication/flows/${encodeURIComponent(alias)}/executions`)).data;
-    const flowAlias = async (id: string) => (await this.call<{ alias: string }>('GET', `/authentication/flows/${id}`)).data.alias;
-    const setRequirement = (exec: KcExecution, requirement: string) =>
-      this.call('PUT', `/authentication/flows/${encodeURIComponent(SIGN_IN_FLOW)}/executions`, { ...exec, requirement });
-    const addCondition = async (alias: string, config: Record<string, string>, name: string) => {
-      const { location } = await this.call('POST', `/authentication/flows/${encodeURIComponent(alias)}/executions/execution`, { provider: 'conditional-user-role' });
-      const id = location?.split('/').pop();
-      const exec = (await executionsOf(SIGN_IN_FLOW)).find((e) => e.id === id);
-      if (!exec) throw new DirectoryError('The sign-in service didn’t add the one-time code rule.', 503);
-      await setRequirement(exec, 'REQUIRED');
-      await this.call('POST', `/authentication/executions/${exec.id}/config`, { alias: name, config });
-    };
-    const roleRule = `${role} code`;
-    let all = await executionsOf(SIGN_IN_FLOW);
-    if (all.some((e) => e.displayName === roleRule)) return false;
-
-    // The usual code step (a conditional sub-flow holding the OTP form) and the forms step around it.
-    const otpAt = all.findIndex((e) => e.providerId === 'auth-otp-form');
-    const usual = all.slice(0, otpAt).reverse().find((e) => e.authenticationFlow && e.level === all[otpAt]!.level - 1);
-    const forms = all.slice(0, otpAt).reverse().find((e) => e.authenticationFlow && e.level === all[otpAt]!.level - 2);
-    if (!usual?.flowId || !forms?.flowId) throw new DirectoryError('The sign-in flow isn’t shaped as expected, so one-time codes weren’t set up.', 503);
-    const formsAlias = await flowAlias(forms.flowId);
-    await addCondition(await flowAlias(usual.flowId), { condUserRole: role, negate: 'true' }, `not ${role}`);
-
-    await this.call('POST', `/authentication/flows/${encodeURIComponent(formsAlias)}/executions/flow`, {
-      alias: roleRule,
-      type: 'basic-flow',
-      provider: 'registration-page-form',
-      description: `Everyone with the ${role} role signs in with a one-time code.`,
-    });
-    all = await executionsOf(SIGN_IN_FLOW);
-    const step = all.find((e) => e.displayName === roleRule)!;
-    await setRequirement(step, 'CONDITIONAL');
-    await addCondition(roleRule, { condUserRole: role, negate: 'false' }, `has ${role}`);
-    const { location } = await this.call('POST', `/authentication/flows/${encodeURIComponent(roleRule)}/executions/execution`, { provider: 'auth-otp-form' });
-    const otp = (await executionsOf(SIGN_IN_FLOW)).find((e) => e.id === location?.split('/').pop())!;
-    await setRequirement(otp, 'REQUIRED');
-
-    await this.call('PUT', '', { browserFlow: SIGN_IN_FLOW });
     return true;
   }
 
@@ -493,7 +382,7 @@ export class KeycloakDirectory implements Directory {
 
   /** Makes any of these realm roles that don't exist yet; returns the ones it made. */
   async ensureRoles(roles: readonly Role[]): Promise<string[]> {
-    const have = new Set((await this.realmRoles()).map((r) => r.name));
+    const have = new Set((await this.call<KcRole[]>('GET', '/roles?briefRepresentation=true')).data.map((r) => r.name));
     const made: string[] = [];
     for (const role of roles.filter((r) => !have.has(r.name))) {
       await this.call('POST', '/roles', { name: role.name, ...(role.description ? { description: role.description } : {}) });

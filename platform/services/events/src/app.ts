@@ -27,8 +27,8 @@ import {
   type CallerCheck,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
-import { AuditEntry, DomainEvent, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
-import { MemoryEventStore, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
+import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
+import { MemoryEventStore, topicMatches, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -86,6 +86,19 @@ const workspaceOf = (req: FastifyRequest) => {
     return raw;
   }
 };
+
+/** Most topics, or families of them, one browser stream may follow. */
+const STREAM_TOPICS = 100;
+
+/** Whether each of a comma-separated list is a topic or a family such as "folio.*"; the first that isn't, or the list. */
+const topicList = (raw: string): { topics: string[] } | { bad: string } => {
+  const topics = [...new Set(raw.split(',').map((t) => t.trim()).filter(Boolean))];
+  const bad = topics.find((t) => !new RegExp(TOPIC).test(t.endsWith('.*') ? `${t.slice(0, -2)}.x` : t));
+  return bad === undefined ? { topics } : { bad };
+};
+
+/** What a browser hears of a domain event: who published what, where, with the publisher's ids. */
+const forBrowser = ({ seq, topic, id, publisher, at, workspace, payload }: DomainEvent) => ({ seq, topic, id, publisher, at, ...(workspace ? { workspace } : {}), payload });
 
 /** What the Shell receives: a person never sees whom else a notification went to. */
 const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
@@ -207,7 +220,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         if (!toTeam && !principals && !notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Name the recipients, or send to the team.' });
         if (principals) {
           // Reaching people by role or across the org is the platform's: an app names the people it means.
-          if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services send to an audience. Name the recipients.' });
+          if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services send to an audience. Name the recipients.' });
           if (toTeam || notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Send to an audience, the team or recipients: one of them.' });
           try {
             // Like a team, an audience is asked as it's sent: someone who has since lost the role isn't told.
@@ -394,7 +407,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const service = await fromService(req, reply, owner === 'platform' ? undefined : owner, 'events:publish');
         if (!service) return reply;
         if ((service.kind === 'platform') !== (owner === 'platform')) {
-          return reply.code(403).send({ error: 'forbidden', message: service.kind === 'platform' ? 'Platform services publish on "platform." topics.' : '"platform." topics belong to the platform.' });
+          return reply.code(403).send({ error: 'forbidden', message: service.kind === 'platform' ? 'AUGUR’s own services publish on "platform." topics.' : '"platform." topics belong to AUGUR’s own services.' });
         }
         const places = new Map<string, EventFloor>();
         for (const id of new Set(req.body.events.flatMap((e) => (e.workspace ? [e.workspace] : [])))) {
@@ -433,7 +446,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
               limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),
             }),
             response: {
-              200: Type.Object({ events: Type.Array(ref(DomainEvent)), next: Type.String() }, { description: 'The next events, and the cursor after them' }),
+              200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor after them' }),
               400: refused('A topic that is not a topic, nor a family such as folio.*'),
               403: refused('Not a service, or no events:subscribe scope'),
               503: refused("Grants can't be checked right now"),
@@ -441,13 +454,67 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
           },
         },
         async (req, reply) => {
-          const topics = req.query.topics.split(',').map((t) => t.trim()).filter(Boolean);
-          const bad = topics.find((t) => !new RegExp(TOPIC).test(t.endsWith('.*') ? `${t.slice(0, -2)}.x` : t));
-          if (bad) return reply.code(400).send({ error: 'bad_request', message: `"${bad}" is not a topic, or a family of topics such as "folio.*".` });
+          const list = topicList(req.query.topics);
+          if ('bad' in list) return reply.code(400).send({ error: 'bad_request', message: `"${list.bad}" is not a topic, or a family of topics such as "folio.*".` });
+          const { topics } = list;
           if (!(await fromService(req, reply, undefined, 'events:subscribe'))) return reply;
           const limit = req.query.limit ?? 100;
           const events = await store.readEvents({ topics, after: req.query.after, limit });
           return { events, next: events.at(-1)?.seq ?? req.query.after ?? '0' };
+        },
+      );
+
+      /**
+       * Server-sent events for the shell: each domain event on the floor the person stands on (as the
+       * gateway checked it), on the topics asked for, as it's published. A hint to refresh what's on
+       * screen, so it carries what events carry (ids), and anything missed while away is simply
+       * loaded fresh: there is no catching up. Events on no floor, or on another, never reach it.
+       */
+      app.get(
+        '/domain-events/stream',
+        {
+          schema: {
+            summary: 'Domain events on the caller\'s floor, as server-sent events (people, for the shell)',
+            description: [
+              'Each domain event on the topics asked for, published on the floor the caller',
+              'stands on (x-workspace-id, checked by the gateway), as it is published.',
+              'Events on no floor or on another floor never reach it. Events are named',
+              '"domain-event" and carry a DomainEvent as JSON. It is a hint to refresh what',
+              'is on screen, not a record: there is no catching up, so after a reconnect',
+              'load fresh. Comment lines are keep-alives. Read with fetch so the sign-in',
+              'token can be sent.',
+            ].join(' '),
+            querystring: Type.Object({
+              topics: Type.String({ minLength: 1, maxLength: 4000, description: 'Comma separated topics, or families such as folio.*; at most 100' }),
+            }),
+            response: {
+              200: { description: 'An open event stream', content: { 'text/event-stream': { schema: {} } } },
+              400: refused('A topic that is not a topic, too many topics, or no floor named'),
+              401: refused('No signed-in caller'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = signedIn(req, reply);
+          if (!caller) return reply;
+          const list = topicList(req.query.topics);
+          if ('bad' in list) return reply.code(400).send({ error: 'bad_request', message: `"${list.bad}" is not a topic, or a family of topics such as "folio.*".` });
+          if (list.topics.length > STREAM_TOPICS) return reply.code(400).send({ error: 'bad_request', message: `Follow at most ${STREAM_TOPICS} topics or families at once.` });
+          const floor = caller.workspace?.id;
+          if (!floor) return reply.code(400).send({ error: 'bad_request', message: 'Name the floor you’re on (X-Workspace-Id): the stream carries that floor’s events.' });
+          const { topics } = list;
+          reply.hijack();
+          const res = reply.raw;
+          res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
+          res.write(': connected\n\n');
+          const stop = store.onEvent((e) => {
+            if (e.workspace?.id === floor && topicMatches(e.topic, topics)) res.write(`event: domain-event\ndata: ${JSON.stringify(forBrowser(e))}\n\n`);
+          });
+          const heartbeat = setInterval(() => res.write(': still here\n\n'), heartbeatMs);
+          req.raw.on('close', () => {
+            clearInterval(heartbeat);
+            stop();
+          });
         },
       );
 

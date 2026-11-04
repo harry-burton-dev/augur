@@ -97,7 +97,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "The storage the app keeps on the platform: its own database schema, its own bucket. See docs/app-storage.md"
+      "description": "The storage the app keeps on AUGUR: its own database schema, its own bucket. See docs/app-storage.md"
     },
     "maxUpload": {
       "type": "integer",
@@ -208,7 +208,7 @@
       },
       "uniqueItems": true,
       "maxItems": 6,
-      "description": "What the app's service asks to do on the platform, such as \"notifications:send\". An app may always register itself."
+      "description": "What the app's service asks to do on AUGUR, such as \"notifications:send\". An app may always register itself."
     },
     "floors": {
       "type": "array",
@@ -266,7 +266,7 @@
           },
           "rollup": {
             "type": "boolean",
-            "description": "Shows this floor and the teams below it that the person is on, using the platform's roll-up"
+            "description": "Shows this floor and the teams below it that the person is on, using AUGUR's roll-up"
           }
         },
         "additionalProperties": false
@@ -282,9 +282,20 @@
       "type": "boolean",
       "description": "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why (SDK 1.6)"
     },
+    "followsAddress": {
+      "type": "boolean",
+      "description": "true: the app follows the address itself, so the shell keeps it mounted on Back and Forward inside it (SDK 1.11)"
+    },
     "focus": {
       "type": "boolean",
       "description": "true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029)"
+    },
+    "category": {
+      "enum": [
+        "platform",
+        "pillar"
+      ],
+      "description": "The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed"
     },
     "areas": {
       "type": "array",

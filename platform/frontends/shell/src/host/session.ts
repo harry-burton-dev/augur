@@ -63,12 +63,12 @@ async function loadMe(fetchImpl: typeof fetch, url: string, token: string): Prom
   try {
     res = await fetchImpl(url, { headers: { authorization: `Bearer ${token}`, accept: 'application/json' } });
   } catch {
-    throw new SessionError("Can't reach the platform to finish signing in. Try again.");
+    throw new SessionError("Can't reach AUGUR to finish signing in. Try again.");
   }
-  if (res.status === 401) throw new SessionError('The platform did not accept your sign-in. Sign in again.');
-  if (!res.ok) throw new SessionError(`Signing in failed: the platform answered ${res.status}. Try again.`);
+  if (res.status === 401) throw new SessionError('AUGUR did not accept your sign-in. Sign in again.');
+  if (!res.ok) throw new SessionError(`Signing in failed: AUGUR answered ${res.status}. Try again.`);
   const me = (await res.json()) as Partial<User>;
-  if (typeof me.id !== 'string' || typeof me.name !== 'string') throw new SessionError('The platform sent an answer the shell could not read.');
+  if (typeof me.id !== 'string' || typeof me.name !== 'string') throw new SessionError('AUGUR sent an answer this page could not read. Try again.');
   return { ...me, id: me.id, name: me.name, departments: me.departments ?? [], roles: me.roles ?? [] };
 }
 

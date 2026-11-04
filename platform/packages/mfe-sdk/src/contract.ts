@@ -1,5 +1,15 @@
 import type { Focus } from './refs.js';
 
+/**
+ * The kinds of app that ship with AUGUR (SDK 1.11, ADR 0032): `platform`, for
+ * using and managing AUGUR, and `pillar`, the foundation of what AUGUR
+ * produces. Every other app is just an app and has no kind. A later kind is
+ * added in a minor, so a reader treats a value it doesn't know as no kind.
+ */
+export const APP_CATEGORIES = ['platform', 'pillar'] as const;
+/** One of `APP_CATEGORIES` (SDK 1.11). */
+export type AppCategory = (typeof APP_CATEGORIES)[number];
+
 /** One entry in the registry manifest the shell loads at startup. */
 export interface AppManifestEntry {
   id: string;
@@ -86,6 +96,23 @@ export interface AppManifestEntry {
    * doesn't offer a working context yet, so this changes nothing today.
    */
   focus?: boolean;
+  /**
+   * `true`: the app follows the address itself, as the app kit's router does,
+   * so Back and Forward inside its route don't mount it again (SDK 1.11). While
+   * the same app stays open on the same floor and no intent is waiting for it,
+   * the shell keeps it mounted and calls its `navigated` with the new path.
+   * An app without `navigated` is mounted again on every move, flag or not.
+   * Without the flag, every move mounts the app again at the new path.
+   */
+  followsAddress?: boolean;
+  /**
+   * What kind of app this is (SDK 1.11, ADR 0032): `platform`, for using and
+   * managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only
+   * apps that ship with AUGUR or come from its signed app feed can be either;
+   * every other app is just an app. The registry gives the shell the kind in
+   * force, so an app's claim the registry doesn't honour arrives as no kind.
+   */
+  category?: AppCategory;
 }
 
 /** A feature an app is trying out (SDK 1.7). */
@@ -305,6 +332,16 @@ export interface IntentReply {
 export interface MicroFrontend {
   mount(el: HTMLElement, ctx: MountContext): void | Promise<void>;
   unmount?(el: HTMLElement): void | Promise<void>;
+  /**
+   * The shell kept the app mounted through a move inside its route, Back or
+   * Forward or a link, because its manifest sets `followsAddress` (SDK 1.11).
+   * `path` is below the app's route, as `ctx.path` is at mount; `ctx.path`
+   * keeps the path it was mounted at. A router that reads the address itself
+   * still needs telling: the shell's own moves (Find, menus, notifications)
+   * push the address without a popstate. Without it the shell mounts the app
+   * again on every move.
+   */
+  navigated?(el: HTMLElement, path: string): void;
   /**
    * The app's smaller pieces the shell places outside the app itself, by the
    * `module` its manifest's `surfaces` name (SDK 1.2): a glance card on Home,

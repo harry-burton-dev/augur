@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Stale V1 · Since 3 Nov</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the set reopened. Every piece says whether it still holds, changed, no longer holds, or lost its source; each change gives its reason ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-3)}
+.sum{display:flex;gap:var(--space-5);align-items:center;flex-wrap:wrap;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-inset);font-size:var(--type-small);color:var(--ink-muted)}
+.sum b{font:300 var(--type-heading)/1 var(--font-mono);color:var(--light);margin-right:var(--space-1)}
+.sum .grow{flex:1}
+.list{min-height:0;overflow:auto;scrollbar-width:thin;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);align-content:start}
+.pc2{display:grid;gap:var(--space-1);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--surface-inset);transition:border-color var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+.pc2 .h{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+.pc2 p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.pc2 .now{color:var(--light)}
+.pc2 .why{color:var(--ink-muted)}
+.pc2.holds{opacity:var(--x-proposed-quiet)}
+.pc2.changed{border-left:2px solid var(--x-proposed-seam)}
+.pc2.gone{border-left:2px solid var(--x-proposed-broken);background:var(--x-proposed-stale),var(--surface-inset)}
+.pc2.orphan{border-left:2px dashed var(--x-proposed-broken)}
+.pc2.new{border-left:2px solid var(--x-proposed-lit)}
+.unmarked .stc{opacity:0}
+.stc{transition:opacity var(--motion-base) var(--ease-out)}
+.acts{display:flex;gap:var(--space-2);flex-wrap:wrap}
+@media (max-width:1400px){.list{grid-template-columns:minmax(0,1fr)}.pc2 .why{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Stale · V1</b> since 3 Nov: every piece says if it still holds, changed, no longer holds or lost its source, with the reason · five reasons an answer moves, visible repair</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { marked: false };
+const ORDER = { gone: 0, orphan: 1, changed: 2, new: 3, holds: 4 };
+function cardHTML(p) {
+  const s = stateOf(p.id), c = CH(p.id);
+  return `<article class="pc2 ${s}"><div class="h">${rm(p.rung)} ${stateChip(p.id)} ${c ? `<span class="small muted">${REASON[c.reason]}</span>` : ''}</div>
+    ${c ? `<p class="was">${p.text}</p><p class="now">${c.now}</p><p class="why">${c.why}</p>${s === 'gone' && c.replace ? `<div class="acts"><button class="btn sm go">${I('replace', 14)} Use “${c.replace}”</button><button class="btn sm">${I('archive', 14)} Set aside</button></div>` : ''}${s === 'orphan' ? `<div class="acts"><button class="btn sm">${I('send', 14)} Ask ${P('kerry').name}</button><button class="btn sm">${I('message-circle', 14)} Ask ${P('tom').name}</button></div>` : ''}`
+      : `<p class="${s === 'new' ? 'now' : ''}">${p.text}</p>${s === 'new' ? `<p class="why"><q>${p.reason}</q> ${P(p.by).name}</p>` : ''}`}
+  </article>`;
+}
+function render() {
+  const all = [...DATA.pieces, ...RO.added].sort((a, b) => ORDER[stateOf(a.id)] - ORDER[stateOf(b.id)]);
+  const n = s => all.filter(p => stateOf(p.id) === s).length;
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id], [['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap ${S.marked ? '' : 'unmarked'}">
+    <div><p class="eyebrow">Stale context · ${T.id} · reopened ${RO.on} by ${P(RO.by).name}</p><h1 class="title">Since ${T.assembled.replace(' 2026', '')}</h1></div>
+    <div class="sum"><span>Assembled ${T.assembled} by ${whoHTML(T.owner)} · ${RO.weeks} weeks ago</span><span class="grow"></span>
+      ${['gone', 'orphan', 'changed', 'new', 'holds'].map(s => `<span><b>${n(s)}</b>${STATEW[s].toLowerCase()}</span>`).join('')}</div>
+    <div class="list">${all.map(cardHTML).join('')}</div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.marked = false; render(); }, () => { S.marked = true; $('.wrap').classList.remove('unmarked'); });
+</script>
+</body>
+</html>

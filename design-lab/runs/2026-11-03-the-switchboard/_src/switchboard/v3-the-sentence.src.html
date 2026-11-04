@@ -1,0 +1,75 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My switchboard · V3 The sentence</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{max-width:calc(var(--measure-wide) + var(--space-8));margin:0 auto;display:flex;flex-direction:column;justify-content:center;gap:var(--space-5);height:100%}
+.para{font-weight:300;font-size:var(--type-heading);line-height:calc(var(--leading-heading) * 1.25);color:var(--ink)}
+.para p + p{margin-top:var(--space-3)}
+.c{display:inline;font:inherit;color:var(--light);border-bottom:1px solid var(--x-proposed-lit);padding:0 2px;border-radius:2px;cursor:pointer}
+.c:hover{background:var(--x-proposed-lit-wash)}
+.c.chg{background:var(--x-proposed-lit-wash)}
+.fixed{color:var(--ink-muted);border-bottom:1px dashed var(--hairline-strong);cursor:help}
+.tally{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-3)}
+.tally div{padding:var(--space-3);border-top:1px solid var(--hairline-strong)}
+.tally b{display:block;font:300 var(--type-title-s)/1 var(--font-mono);color:var(--light)}
+.tally span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tally .d{font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-lit);margin-left:var(--space-1)}
+.hint{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cur{display:inline-block;width:1px;height:1.1em;background:var(--x-proposed-lit);vertical-align:-3px;margin-left:1px;animation:none}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <p class="eyebrow" id="eb"></p>
+    <div class="para" id="para" aria-live="polite"></div>
+    <div class="tally" id="tally"></div>
+    <p class="hint">Underlined words are yours: click one, or Tab to it and press Enter, to change it. Dashed words are someone else’s, and say whose. The numbers rerun last week’s notices through your words.</p>
+  </div></main>
+</div>
+<div class="x-cap"><b>My switchboard · V3</b> settings as one paragraph you can read back · reactive documents (Bret Victor), standing orders, “said in a sentence”</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const ME = DATA.me, p0 = JSON.parse(JSON.stringify(P(ME)));
+const OPT = {
+  from: ['07:30', '08:00', '08:30', '09:00'], to: ['16:00', '17:00', '17:30', '18:00'],
+  toasts: [['needs'], ['needs', 'failed'], []], urgent: [true, false], record: ['edition', 'email'], mute: [[], ['atlas'], ['artifacts']], cover: ['p3', 'p5', 'p2']
+};
+const W = {
+  toasts: v => v.length === 0 ? 'nothing' : v.map(l => LEVELS[l].word.toLowerCase()).join(' and '),
+  urgent: v => v ? 'emails me as well' : 'waits for me in the Letterbox',
+  record: v => v === 'edition' ? `my ${p0.digest} edition` : `my ${p0.digest} edition, and email me a copy`,
+  mute: v => v.length ? v.map(a => A(a).name).join(', ') : 'nothing', cover: v => P(v).name
+};
+let S = { from: p0.hours.from, to: p0.hours.to, toasts: p0.toasts, urgent: p0.email.urgent, record: p0.email.digest ? 'email' : 'edition', mute: p0.muted, cover: 'p3' };
+const S0 = JSON.parse(JSON.stringify(S));
+const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+$('#top').innerHTML = topHTML(['My switchboard', 'In words'], [['Tab', 'next choice'], ['Enter', 'change'], ['R', 'replay'], ['T', 'technical words', 'h-t']]);
+$('#eb').textContent = `My switchboard · ${P(ME).name}`;
+const c = (k, txt) => `<button class="c ${eq(S[k], S0[k]) ? '' : 'chg'}" data-k="${k}">${txt}</button>`;
+const fx = (txt, whose) => `<span class="fixed" title="${whose}">${txt}</span>`;
+function para() {
+  const days = P(ME).hours.days.map(d => DAYS[d]);
+  $('#para').innerHTML = `<p>On ${days[0]} to ${days[days.length - 1]}, from ${c('from', S.from)} to ${c('to', S.to)}, tell me when it happens, with a toast for ${c('toasts', W.toasts(S.toasts))}.</p>
+  <p>Outside those hours, hold everything until I start. Urgent ${c('urgent', W.urgent(S.urgent))}${fx(', and always gets through', 'Urgent always gets through: set for every deployment')}.</p>
+  <p>Put things for the record in ${c('record', W.record(S.record))}. Mute ${c('mute', W.mute(S.mute))}.</p>
+  <p>When I’m away, ask ${c('cover', W.cover(S.cover))} to cover what needs me. On the days I’m ${fx('on call', `${P(DATA.rota.setBy).name}’s rota for ${DATA.teams[DATA.rota.team].name}`)}, ${fx('the team’s policy may ask me after two hours', `${P(DATA.policy.setBy).name}’s escalation policy`)}.</p>`;
+}
+function tally() {
+  const run = s => whatIf(D => { const q = D.people[ME]; q.hours.from = s.from; q.hours.to = s.to; q.toasts = s.toasts; q.email.urgent = s.urgent; q.email.digest = s.record === 'email'; q.muted = s.mute; }, () => {
+    const ds = forPerson(ME); return { live: ds.filter(d => d.ch.includes('band') && !d.held).length, toast: ds.filter(d => d.ch.includes('toast')).length, held: ds.filter(d => d.held).length, ed: ds.filter(d => d.rule === 'record').length, silent: ds.filter(d => d.rule === 'muted').length };
+  });
+  const a = run(S), b = run(S0), dl = k => a[k] === b[k] ? '' : `<span class="d">${a[k] > b[k] ? '+' : ''}${a[k] - b[k]}</span>`;
+  $('#tally').innerHTML = [['live', 'pulsed the band while you worked'], ['toast', 'came with a toast'], ['held', 'waited for your start'], ['ed', 'went into an edition'], ['silent', 'reached only your list (muted)']].map(([k, w]) => `<div><b>${a[k]}${dl(k)}</b><span>${w}</span></div>`).join('');
+}
+function cycle(k) { const o = OPT[k], i = o.findIndex(x => eq(x, S[k])); S[k] = o[(i + 1) % o.length]; para(); tally(); $(`.c[data-k="${k}"]`)?.focus(); }
+$('#para').addEventListener('click', e => { const b = e.target.closest('.c'); if (b) cycle(b.dataset.k); });
+function play() {
+  clearLater(); S = JSON.parse(JSON.stringify(S0)); document.body.classList.add('pre'); para(); tally();
+  later(() => document.body.classList.remove('pre'), 60);
+  /* the moment: one choice changes by itself, so the reader sees the numbers answer */
+  later(() => { S.to = '16:00'; para(); tally(); }, 1200);
+}
+document.addEventListener('keydown', e => commonKeys(e, play));
+Icons.hydrate(document.body); play();
+</script></body></html>

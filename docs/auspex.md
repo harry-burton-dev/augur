@@ -26,7 +26,7 @@ Every screen answers three questions: what am I looking at (the heading), what c
 | What | From | As |
 | --- | --- | --- |
 | Your floors, closed teams, members and leads | identity `GET /v1/me/map` | the person, through the gateway |
-| Each app on a floor and why | registry `GET /v1/me/apps?workspace=` | the person, on that floor (the gateway checks they can stand there) |
+| Each app on a floor and why, and its kind (`category`, `ships`) | registry `GET /v1/me/apps?workspace=` | the person, on that floor (the gateway checks they can stand there) |
 | What changed on a floor | Explorer `GET /v1/changes` | the person, on that floor |
 | Names of whoever set a rule | Explorer `GET /v1/names` | the person |
 | Each part's health, and the backups (plant room) | gateway `GET /v1/status` | an admin |
@@ -52,7 +52,7 @@ The app sends who it lets in, as it already shows them; Explorer adds what it kn
 
 ## Running it
 
-In a deployment it's the `auspex` container, with one setting: `AUSPEX_CLIENT_SECRET`, its sign-in, which identity makes in Keycloak. It needs the `people:read` and `events:subscribe` scopes, which pillar apps are given. It lives in its own repository, [augur-auspex](https://github.com/harry-burton-dev/augur-auspex), and every AUGUR release ships the release of it `release/shipped-apps.json` pins ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)); run it locally from there.
+In a deployment it's the `auspex` container, with one setting: `AUSPEX_CLIENT_SECRET`, its sign-in, which the realm job makes in Keycloak. It needs the `people:read` and `events:subscribe` scopes, which apps that ship with AUGUR are given. It lives in its own repository, [augur-auspex](https://github.com/harry-burton-dev/augur-auspex), and every AUGUR release ships the release of it `release/shipped-apps.json` pins ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)); run it locally from there.
 
 ## Next
 

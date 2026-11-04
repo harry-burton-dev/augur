@@ -76,7 +76,7 @@ describe('startSession', () => {
   it('says so plainly when the platform turns the sign-in down', async () => {
     const denied = vi.fn(async () => new Response('{}', { status: 401 })) as unknown as typeof fetch;
     await expect(startSession(fakeAuth({ access_token: 't' }), { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: denied })).rejects.toThrow(
-      new SessionError('The platform did not accept your sign-in. Sign in again.'),
+      new SessionError('AUGUR did not accept your sign-in. Sign in again.'),
     );
   });
 

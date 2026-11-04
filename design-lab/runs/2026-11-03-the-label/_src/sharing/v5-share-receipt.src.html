@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Sharing V5 · The share receipt</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: every share leaves a receipt. The sender keeps one, the readers get a notice, and the keepers of values inside are told where their values went ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr);gap:var(--space-5);align-items:start}
+.rc{display:grid;gap:0;border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-pane);box-shadow:var(--shadow-raised);overflow:hidden}
+.rc .hd{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px dashed var(--hairline-strong)}
+.rc .hd h2{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.rc .ln{display:grid;grid-template-columns:calc(var(--space-8) - var(--space-4)) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.rc .ln .h{font:400 var(--type-label)/var(--leading-small) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.rc .ln b{font-weight:400;color:var(--light)}
+.rc .ft{display:flex;justify-content:space-between;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4)}
+.print .rc.main-r .ln{animation:print var(--motion-base) var(--ease-out) both;animation-delay:calc(var(--i) * var(--motion-instant))}
+@keyframes print{from{opacity:0;transform:translateY(calc(var(--space-1) * -1))}}
+.side{opacity:0;transform:translateY(var(--travel-near));transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.shown .side{opacity:1;transform:none}
+.shown .side.two{transition-delay:var(--motion-slow)}
+.revoke{display:flex;gap:var(--space-2);align-items:flex-start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding:var(--space-3) var(--space-4);border-top:1px dashed var(--hairline-strong)}
+@media (prefers-reduced-motion: reduce){.print .rc.main-r .ln{animation:none}.side{transform:none}}
+@media (max-width:1400px){.wrap{gap:var(--space-3)}.rc .ln{grid-template-columns:var(--space-8) minmax(0,1fr);padding:var(--space-1) var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Sharing · V5</b> the share receipt: the sender keeps a receipt, the readers get a notice, the keepers upstream are told; any of them can see how to withdraw · Kantara consent receipts, delivery notes, chain of custody</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const B = DATA.briefing, t = TG('t1'), C = shareCheck(t), lb = paperLabel(C), g = DATA.groups[t.ref];
+const k9 = DATA.custody.find(k => k.id === 'k9');
+const S = { shown: false };
+function render() {
+  const sent = C.filter(c => c.v !== 'stop'), left = C.filter(c => c.v === 'stop');
+  const ln = (i, h, v) => `<div class="ln" style="--i:${i}"><span class="h">${h}</span><span>${v}</span></div>`;
+  $('#app').innerHTML = topHTML(['Artifacts', B.title, 'Receipt ' + k9.receipt], [...STD_HINTS]) +
+  `<main class="main"><div class="wrap print">
+    <article class="rc main-r"><div class="hd"><h2>Share receipt</h2><span class="mono muted">${k9.receipt}</span></div>
+      ${ln(0, 'Shared', `<b>${B.title}</b>, ${sent.length} of ${C.length} paragraphs`)}
+      ${ln(1, 'By', `${P(B.by).name}, ${P(B.by).role}`)}
+      ${ln(2, 'With', `<b>${g.name}</b> · ${g.people} people · chaired by ${P(g.chair).name}`)}
+      ${ln(3, 'For', `${I(US(k9.purpose).icon, 12)} ${US(k9.purpose).long}`)}
+      ${ln(4, 'Until', '31 Mar 2027, then it closes to them; their own notes stay theirs')}
+      ${ln(5, 'Label', `${markHTML(lb)} <span class="who">${usesHTML(lb, { only: ['no', 'count'] })}</span>`)}
+      ${ln(6, 'Left out', left.map(c => `¶${B.paras.indexOf(c.p) + 1}, by the label: ${c.why}`).join('<br>'))}
+      ${ln(7, 'Inside it', `¶3 is a count made from ${DATA.answer.of} pilots’ time on duty, kept by ${F('pil').name}. ${P('p2').name} is told.`)}
+      ${ln(8, 'When', `${k9.on} 2026, ${k9.at}`)}
+      <div class="revoke">${I('undo-2', 12)} <span><b class="lite" style="font-weight:400">Withdraw</b>: the committee’s copies close at once and each says when and by whom. What they already read can’t be unread; anything they quoted keeps a seam.</span></div>
+      <div class="ft"><span class="who">Kept with the paper’s custody, for as long as the paper.</span><button class="btn sm">${I('undo-2', 12)} Withdraw</button></div>
+    </article>
+    <article class="rc side"><div class="hd"><h2>Their notice</h2><span class="who">${g.name}</span></div>
+      ${ln(0, 'From', P(B.by).name)}${ln(1, 'Paper', B.title)}${ln(2, 'Label', markHTML(lb))}
+      ${ln(3, 'For', US(k9.purpose).long)}${ln(4, 'Until', '31 Mar 2027')}
+      ${ln(5, 'Not for', usesHTML(lb, { only: ['no'] }))}
+      ${ln(6, 'Left out', `${left.length} paragraph by the label, with why`)}
+      <div class="ft"><span class="who">${I('info', 12)} Forwarding it is a new share, with its own receipt and its own check.</span></div>
+    </article>
+    <article class="rc side two"><div class="hd"><h2>Upstream</h2><span class="who">to ${P('p2').name}</span></div>
+      ${ln(0, 'Your values', `${FACT('f5').k}, on ${DATA.answer.of} groundings`)}
+      ${ln(1, 'Went', `into ${B.title} ¶3, as a count, none named`)}
+      ${ln(2, 'To', `${g.name}, ${g.people} people, for ${US(k9.purpose).word.toLowerCase()}`)}
+      ${ln(3, 'Rule', tpl(POL.clauses.count))}
+      <div class="ft"><span class="who">No action needed. You can see the whole chain on the value (custody).</span><button class="btn sm">${I('link', 12)} Custody</button></div>
+    </article>
+  </div></main>`;
+  afterRender(); document.body.classList.toggle('shown', S.shown);
+}
+function replay() { clearLater(); closeDeed(); S.shown = false; settleIn(); render(); later(() => { S.shown = true; document.body.classList.add('shown'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

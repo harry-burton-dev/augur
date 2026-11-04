@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { MemoryEventStore, PgEventStore, type EventStore, type Notification } from './store.ts';
+import { MemoryEventStore, PgEventStore, type DomainEvent, type EventStore, type Notification } from './store.ts';
 
 const review = { app: 'library', recipients: ['u-1', 'u-2'], level: 'needs' as const, title: 'Review the budget paper', link: '/doc/7' };
 
@@ -112,6 +112,15 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect(await store.audit({ limit: 10, since: '2000-01-01T00:00:00.000Z', until: '2999-01-01T00:00:00.000Z' })).toHaveLength(5);
   });
 
+  it('tells listeners of each event it adds, and not of one sent again', async () => {
+    const heard: DomainEvent[] = [];
+    const stop = store.onEvent((e) => heard.push(e));
+    await store.publish('folio', [{ topic: 'folio.document.published', id: 'h1', payload: { document: 'd1' } }]);
+    await store.publish('folio', [{ topic: 'folio.document.published', id: 'h1', payload: { document: 'd1' } }]);
+    await expect.poll(() => heard.map((e) => [e.id, e.publisher])).toEqual([['h1', 'folio']]);
+    stop();
+  });
+
   it('keeps domain events once per publisher id, and hands them out in order by topic', async () => {
     const finance = { id: 'w-finance', path: ['w-org', 'w-finance'] };
     expect(await store.publish('folio', [
@@ -190,6 +199,19 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
         { timeout: 10_000, interval: 500 },
       )
       .toBe(true);
+    stop();
+  });
+
+  it('tells another instance of each event published, even one too big to send whole', async () => {
+    const heard: DomainEvent[] = [];
+    const stop = other.onEvent((e) => heard.push(e));
+    await store.publish('folio', [{ topic: 'folio.document.published', id: 'live', payload: { document: 'd1' }, floor: { id: 'w1', path: ['w0', 'w1'] } }]);
+    await store.publish('folio', [{ topic: 'folio.document.published', id: 'live', payload: { document: 'd1' } }]);
+    await store.publish('folio', [{ topic: 'folio.document.published', id: 'big', payload: { note: 'é'.repeat(5000) } }]);
+    await expect.poll(() => heard.map((e) => e.id)).toEqual(['live', 'big']);
+    expect(heard[0]).toMatchObject({ topic: 'folio.document.published', publisher: 'folio', workspace: { id: 'w1', path: ['w0', 'w1'] }, payload: { document: 'd1' } });
+    expect(heard[0].at).toMatch(/Z$/);
+    expect((heard[1].payload as { note: string }).note).toHaveLength(5000);
     stop();
   });
 

@@ -51,7 +51,7 @@ export const defaultUpstreams = (env = process.env): Upstreams => {
   const apps = parseUpstreams(env.APP_UPSTREAMS);
   // A platform name in APP_UPSTREAMS would quietly send that service's traffic to an app.
   const taken = Object.keys(apps).filter((name) => PLATFORM_SERVICES.includes(name) || name === 'gateway');
-  if (taken.length) throw new Error(`APP_UPSTREAMS can't name ${taken.join(', ')}: ${taken.length === 1 ? 'that name belongs' : 'those names belong'} to the platform.`);
+  if (taken.length) throw new Error(`APP_UPSTREAMS can't name ${taken.join(', ')}: ${taken.length === 1 ? 'that name belongs' : 'those names belong'} to AUGUR’s own services.`);
   return {
     identity: env.IDENTITY_URL ?? 'http://localhost:8081',
     registry: env.REGISTRY_URL ?? 'http://localhost:8082',
@@ -179,7 +179,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
 
   // The gateway's own API: whether every part of the platform is answering, for admins.
   app.get(`/api/gateway/${API_VERSION}/status`, async (req, reply) => {
-    if (!req.caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only admins can see the platform’s status.' });
+    if (!req.caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only admins can see AUGUR’s status.' });
     return {
       components: statusMonitor.snapshot({ version, api: API_VERSION }),
       ...(backupDir ? { backups: await backupStatus(backupDir) } : {}),

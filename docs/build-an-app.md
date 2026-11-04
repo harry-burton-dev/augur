@@ -36,6 +36,7 @@ Nothing else of the platform runs, so the shell stands in for it:
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
 - The catalogue is Home and your app. Home (`/@me/home`) shows what your app's `ctx.notify({ needsYou: true })` sends, and your glance card if you have one. `ctx.raise` and `ctx.request` reach your app when it `handles` the intent, and otherwise fail the way they do when no app handles one.
 - Notifications from `ctx.notify` appear in the stream. Ones your service sends with `notify` from the service kit don't, because there's no events service.
+- Nor do the domain events your service publishes. To try your `refreshOn`, send one from the browser console: `dispatchEvent(new CustomEvent('augur:dev-domain-event', { detail: { topic: 'expenses.claim.approved', payload: { claim: 'c1' } } }))`. It reaches your app on the floor you're on (`workspace` names another).
 
 To try your app with the rest of the platform, use the full local stack (see the [README](../README.md)) and register it as in step 7.
 
@@ -66,12 +67,12 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.path` | Where in your app they are, below its route: `/reports/q3` for `/expenses/reports/q3` |
 | `ctx.getToken()` | A current token to send as `Authorization: Bearer …` to `/api/<id>/…` |
 | `ctx.workspace`, `ctx.getWorkspace()` | The floor the person is on: their own (`personal`), a `team` or the `org`, with its `name`, `slug`, `path` from the org down and their `role`. A team also has its `level`, what its level is called ("Department" right below the org, "Team" below that, unless an admin renamed them, SDK 1.9): say it where you'd say "team". The `kind` stays `team` at every level. SDK 1.1 |
-| `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on, and a call to your app on a floor where it's off for them (a call naming no floor is checked on the organisation's). SDK 1.1 |
+| `ctx.fetch(path, init?)` | `fetch` with the token and the floor (`X-Workspace-Id`) added; the gateway refuses a floor the person isn't on, and a call to your app on a floor where it's off for them (a call naming no floor is checked on the organisation's). Only a request to AUGUR's own origin carries them: since SDK 1.11 a URL on another site is fetched without the token or the floor, so fetching a public resource never hands it the person's sign-in. SDK 1.1 |
 | `ctx.notify({ title, body?, needsYou?, actions? })` | A notification on the shell's stream. `actions` (SDK 1.2) is up to two `{ label, intent }` buttons on it; pressing one raises the intent through the shell, as `ctx.raise` does |
 | `ctx.raise(intent)` | Open whichever app handles an intent, such as `{ type: 'document.open', payload: { id } }` |
 | `ctx.request(intent)` | Ask whichever app handles an intent for an answer; it opens over yours. Rejects with `isIntentCancelled(err)` when the person closes it |
 | `ctx.intent`, `ctx.reply` | Present when your app was opened to handle an intent, or to answer a request (`reply.respond(result)`) |
-| `ctx.bus` | Events within the page |
+| `ctx.bus` | Events within the page. The shell also puts every domain event on your floor from the apps the person has there, and the platform's, on it under its topic: `ctx.bus.on('folio.document.published', …)`, or `useData(…, { refreshOn: [topic] })` in the app kit ([domain-events.md](domain-events.md#in-the-browser)) |
 
 **What your app can reach.** Your app runs in the shell's own window with the signed-in person's session, so it can call anything that person can, admin routes included. That's why only apps the deployment's own team wrote or reviewed are installed this way ([ADR 0024](decisions/0024-apps-are-trusted-code.md)). Apps from anyone else will run sandboxed, with a token limited to their own upstreams. Your service still only gets the scopes the registry granted it, and the gateway still applies floor rules on every call.
 
@@ -183,9 +184,10 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 - `version` is copied from the frontend's `package.json` on release; don't edit it.
 - `sdk` is the range of SDK releases the app works with. The shell refuses an app outside it.
 - `icon` and menu `icon`s are the kit's icon names (see Storybook's Icons).
-- `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit, and `areas` (SDK 1.5) names the broad parts of the app Title lists under it, each menu group naming its `area`; an app that draws its own menu inside it sets `"orbit": false` (SDK 1.4) to open straight away; an app that shows the same on every floor, as Admin does, sets `"sameOnEveryFloor": true` (SDK 1.6), and the shell's floor gauge rests while it's open, saying why; see [platform/frontends](../platform/frontends/README.md#title-and-orbit). How the shell draws menus follows the [shell principles](shell-principles.md).
+- `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit, and `areas` (SDK 1.5) names the broad parts of the app Title lists under it, each menu group naming its `area`; an app that draws its own menu inside it sets `"orbit": false` (SDK 1.4) to open straight away; an app that shows the same on every floor, as Admin does, sets `"sameOnEveryFloor": true` (SDK 1.6), and the shell's floor gauge rests while it's open, saying why; an app that follows the address itself, as one built on the app kit's `placeRoutes` does, sets `"followsAddress": true` and gives `navigated(el, path)` (SDK 1.11), and the shell keeps it mounted on Back, Forward and its own links while it stays open on the same floor, calling `navigated` with the new path (it needs both: the shell's own moves, such as Find, push the address without a popstate) (an intent, a request, another floor or a changed preview still mounts it again); see [platform/frontends](../platform/frontends/README.md#title-and-orbit). How the shell draws menus follows the [shell principles](shell-principles.md).
 - `previews` (SDK 1.7) lists features the app is trying before they're everyone's: `[{ "id": "board-view", "name": "Board view", "detail": "Tasks as columns.", "until": "2027-01-31" }]`. Ask `ctx.previewOn('board-view')` and keep working when it's false; admins decide who gets each, and people turn opt-in ones on in the shell's Previews ([release-channels.md](release-channels.md#feature-previews)).
 - `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`), `models:use` to ask an AI model through the model gateway (`askModel`, see [Agents and models](agents.md)), `events:publish` and `events:subscribe` to tell other services what happened and hear what they did (see [Domain events](domain-events.md)), `people:read` to ask who someone stands for and find people and teams to share with (see [Sharing](#sharing)). Scopes are checked on the floor your service names (`X-Workspace-Id`, which the service kit's calls take as `workspace`); a call that names none is checked on the organisation's floor, as the gateway does. So if your app is off for the organisation and on only for some teams, name the team's floor when you notify or audit for it. An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope. A new version that asks for more scopes is still served, but gets the new ones only once an admin allows them in Admin, Apps.
+- `category` (SDK 1.11) says what kind of app it is ([ADR 0032](decisions/0032-platform-apps-and-pillar-apps.md)): `platform`, for using and managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only apps that ship with AUGUR (`PILLAR_APPS`) or that the app runner installed from the signed app feed can be either, and the registry's own apps (Home, Admin, the Upgrade Centre) are always platform apps. Any other app may send it and still registers, but it's just an app: the shell and `GET /v1/me/apps` get no kind for it, and Admin, Apps shows the claim and why it isn't used. Leave it out unless your app is one of those. Ask for `"sdk": "^1.11.0"` when you set it, so an older deployment refuses the release with a reason instead of the registry refusing the manifest. A value other than the two is refused when the app registers.
 - `floors` is the kinds of floor the app works on: `personal` (someone's own), `team` (any team, at any depth) and `org`. Leave it out for all three. The shell never offers the app on another kind.
 - `surfaces` says what the app shows on each kind of floor, for the shell to place: a `page`, a `card` on the floor's page, a `panel`, the floor's `settings` or `admin`, each from a `module` the entry exposes. `role` limits one to members or leads there; `rollup` means it shows the floor and the teams below it that the person is on (identity's `GET /v1/me/workspaces/{id}/rollup`). Each surface's floor must be in `floors`. When several match, the most specific floor wins, then a role condition, then manifest order. The shell places `card`s on Home (SDK 1.2); the other slots are checked and kept, and placed later.
 
@@ -354,6 +356,35 @@ The platform has a **publisher** role for people who may put things out beyond t
 ### Records like Artifacts'
 
 If your app keeps things people organise, version and publish, keep them the way Artifacts does: levels, a lifecycle on each version, grants that reach down, tags, relationships and publishing up the floors with one owner. [App patterns](app-patterns.md) sets out each one and the tables to keep, and `@augur/records` holds the rules.
+
+### Testing without AUGUR
+
+`@augur/mfe-sdk/testing` lets an app's tests run with no shell, gateway or services. It needs [MSW](https://mswjs.io) 2 or 3 as a dev dependency, and is for tests only: never import it from the app itself.
+
+- **`fakeContext(options?)`** is a whole `MountContext`: a person, their own floor (pass `workspace` for a team or the org), a real event bus, and a `ctx.fetch` that adds the token and `X-Workspace-Id` as the shell does and sends relative paths to `http://augur.test` (`TEST_BASE`; change it with `base`). It records what the app did in `ctx.raised`, `ctx.requested` and `ctx.notified`. `ctx.request` answers from `answers`, by intent type (a value, or a function of the intent), and rejects with an `IntentError` for a type with no answer, as the shell does when no app handles it; throw an `IntentCancelled` from an answer to act as if the person closed the picker. `reply: true` mounts the app as a picker: `ctx.reply.responses` and `ctx.reply.cancels` show what it answered. `previews` lists the previews that are on, and `ctx.moveTo(floor)` moves the fake shell to another floor.
+- **`contractHandlers(document, { base?, answers? })`** turns an OpenAPI 3.x contract, such as one from `contracts/` or your own service's, into MSW handlers: one per operation, answering with the example documented for its first 2xx response. Load the YAML yourself and pass the parsed document. `base` is where the service sits behind the gateway (`http://augur.test/api/registry`), and the contract's server path (`/v1`) goes after it. `answers` overrides an operation by its `operationId`, or by `METHOD /path` as the contract writes it (`GET /me/apps`), with a JSON body, a `Response`, or a function of the request. An operation with neither an answer nor an example answers 501 with a problem body that names it, and an answer for an operation the contract doesn't have throws.
+
+```ts
+import { readFileSync } from 'node:fs';
+import { setupServer } from 'msw/node';
+import { parse } from 'yaml';
+import { contractHandlers, fakeContext } from '@augur/mfe-sdk/testing';
+import app from './entry.js';
+
+const registry = parse(readFileSync('contracts/registry.openapi.yaml', 'utf8'));
+const server = setupServer(
+  ...contractHandlers(registry, { base: 'http://augur.test/api/registry', answers: { 'GET /me/apps': { workspace: 'ws-me', apps: [] } } }),
+);
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+afterAll(() => server.close());
+
+it('opens a document when one is picked', async () => {
+  const ctx = fakeContext({ answers: { 'document.pick': { app: 'folio', id: 'd1', title: 'Brief' } } });
+  await app.mount(document.createElement('div'), ctx);
+  // … press the app's Pick button, then:
+  expect(ctx.raised).toContainEqual(expect.objectContaining({ type: 'document.open' }));
+});
+```
 
 ## 6. Before you open a pull request
 

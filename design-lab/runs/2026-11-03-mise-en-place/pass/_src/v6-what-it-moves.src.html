@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Pass V6 · What it moves</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: the pass shows what landing would move beyond Data Atlas: briefings, intents, watches, and who is told ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(260px,.7fr) minmax(0,1.6fr) minmax(260px,.75fr);gap:var(--space-5)}
+.src{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.src .big{font:300 var(--type-display)/1 var(--font-mono);color:var(--light)}
+.src p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.src p.muted{font-size:var(--type-small);line-height:var(--leading-small)}
+.fx{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.c{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr);gap:var(--space-2) var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);transition:border-color var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+.c.lit{border-color:var(--x-proposed-pass-edge)}
+.c.wait{opacity:.3}
+.c .ic{display:inline-flex;align-items:center;justify-content:center;width:var(--space-6);height:var(--space-6);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);color:var(--ink)}
+.c .apn{grid-column:2;font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.c .what{grid-column:2;font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.c .mv{grid-column:2;display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;font-size:var(--type-meta)}
+.c .mv .was{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--hairline-strong)}
+.c .mv .now{color:var(--light);border-bottom:1px dotted var(--x-proposed-seam)}
+.c .why{grid-column:2;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.c .told{grid-column:2;display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);color:var(--ink)}
+.c .told svg{color:var(--ink-muted)}
+.still{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.still ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-3)}
+.still li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.still li svg{color:var(--ink-muted);margin-top:2px}
+.still li b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.c{padding:var(--space-2) var(--space-3)}.c .what{font-size:var(--type-meta);line-height:var(--leading-meta)}.src .big{font-size:var(--type-title)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Pass · V6</b> what it moves: briefings, intents and watches that landing would change, and who is told · consequence preview, reach before act</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R), recs = R.recs, K = DATA.kinds.inspection, DS = downstream(R);
+const nv = PL.valuesAside[0], loan = PL.aside[0], newVan = PL.fresh[0];
+const S = { lit: -1 };
+function render() {
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, R.file.name, 'The pass', 'What it moves'], [['1–3', 'look'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="src"><p class="eyebrow">${I('send', 12)} If ${P('p2').name} keeps it all</p><span class="big">${recs.length + PL.fresh.length + PL.odo.length}</span><p>proposals land in ${DATA.app}: ${recs.length} ${K.word}s, ${PL.fresh.length} van, ${PL.odo.length} odometers.</p>
+      <p class="muted">Other apps read what ${DATA.app} keeps. These are the ones that read these vans, worked out from their bindings and watches, before anything is sent.</p></section>
+    <section class="fx"><h1 class="t">What it moves, beyond ${DATA.app}</h1>${DS.map((d, i) => `<div class="c ${S.lit === i ? 'lit' : ''} ${S.lit < i ? 'wait' : ''}"><span class="ic">${I(d.icon, 16)}</span><span class="apn">${d.app} · ${P(d.owner).name}’s</span><span class="what">${d.what}</span>
+      <span class="mv"><span class="was">${d.now}</span>${I('arrow-right', 14)}<span class="now">${d.after}</span></span><span class="why">${d.why}</span>
+      <span class="told">${I(d.kind === 'watch' ? 'bell' : d.kind === 'intent' ? 'target' : 'file-text', 12)} ${d.kind === 'watch' ? `${P(d.owner).name} is told once, with the reason` : d.kind === 'intent' ? `${P(d.owner).name} sees the evidence on the intent; nobody is notified` : `its readers see the new number with a seam until ${P(d.owner).name.split(' ')[0]} republishes`}</span></div>`).join('')}</section>
+    <aside class="still"><p class="eyebrow">${I('archive', 12)} What doesn’t move, and why</p>
+      <ul><li>${I('gauge', 14)}<span><b>${nv.van}’s odometer</b> stays at ${fmt(VAN(nv.van).odo)} miles: “${esc(nv.raw)}” was set aside, so ${DATA.app} keeps the reading it had and marks this month not known.</span></li>
+        <li>${I('truck', 14)}<span><b>Line ${loan.n}, ${esc(loan.cells[0])}</b>, isn’t counted anywhere. It waits in the tray for ${P(R.file.from).name}’s answer.</span></li>
+        <li>${I('plus', 14)}<span><b>If ${newVan} is held</b> in Triage, its ${K.word} waits with it, and ${DEPOT(recs.find(r => r.van.id === newVan).v.depot.id).name}’s counts don’t include it yet.</span></li>
+        <li>${I('message-circle-question-mark', 14)}<span><b>“${DATA.asked[0].word}”</b> can’t be counted by anything until ${P(DATA.asked[0].decides).name} adds the word.</span></li></ul></aside>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() { clearLater(); S.lit = -1; render(); settle(); DS.forEach((_, i) => later(() => { S.lit = i; render(); }, ms('--motion-run') + i * ms('--motion-calm'))); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (/^[1-3]$/.test(e.key)) { clearLater(); S.lit = +e.key - 1; render(); } });
+replay();
+</script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why was I told? · V4 The lit path</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-3);height:100%}
+.hd{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.hd .nt{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.pick{margin-left:auto;display:flex;gap:var(--space-1)}
+.pick button{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);padding:var(--space-1) var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted)}
+.pick button[aria-pressed="true"]{color:var(--light);border-color:var(--x-proposed-lit)}
+.dia{position:relative;display:grid;grid-template-columns:7rem repeat(8,minmax(0,1fr));grid-template-rows:repeat(4,minmax(0,1fr));column-gap:var(--space-3);min-height:0}
+.dia > svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.fl{grid-column:1;display:flex;flex-direction:column;justify-content:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline)}
+.fl b{font-weight:400;color:var(--fc);font-size:var(--type-meta)}
+.band{grid-column:2 / -1;border-top:1px solid var(--hairline);background:linear-gradient(90deg,color-mix(in srgb,var(--fc) 6%,transparent),transparent 40%)}
+.cell{position:relative;z-index:1;display:flex;align-items:center;justify-content:center}
+.gate{width:100%;max-width:9.5rem;background:var(--slate-deep);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);opacity:.45;transition:opacity var(--motion-base),border-color var(--motion-base),box-shadow var(--motion-base)}
+.gate .g{display:flex;align-items:center;gap:var(--space-1);color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.gate.pass{opacity:1;border-color:color-mix(in srgb,var(--green) 45%,var(--hairline-strong))}
+.gate.dec{opacity:1;border-color:var(--x-proposed-lit);box-shadow:0 0 var(--space-4) color-mix(in srgb,var(--green) 30%,transparent)}
+.gate.dec.hold{background:var(--x-proposed-held),var(--slate-deep)}
+.gate.src{opacity:1;border-color:var(--hairline-strong)}
+.gate.end{opacity:1;max-width:none}
+.gate.end .chs{display:flex;flex-direction:column;gap:2px;align-items:flex-start;margin-top:var(--space-1)}
+.gate .setby{display:block;margin-top:2px;font-size:var(--x-proposed-type-micro);opacity:.85}
+path.lane{fill:none;stroke:var(--hairline-strong);stroke-width:1.5}
+path.streak{fill:none;stroke:var(--x-proposed-lit);stroke-width:2;stroke-linecap:round;filter:drop-shadow(0 0 4px var(--green))}
+.say{padding:var(--space-3) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.say b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.dia{grid-template-columns:5.5rem repeat(8,minmax(0,1fr));column-gap:var(--space-2)}.gate{padding:var(--space-1)}.gate .g{font-size:var(--type-small)}.gate .setby{display:none}}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <div class="hd"><p class="eyebrow">The path it took</p><span class="nt" id="nt"></span><div class="pick" id="pick"></div></div>
+    <div class="dia" id="dia"><svg id="svg" aria-hidden="true"></svg></div>
+    <p class="say pane" id="say"></p>
+  </div></main>
+</div>
+<div class="x-cap"><b>Why was I told? · V4</b> the lit path: from the app’s floor down to you, through each gate · light language (streak), lit path navigation, floor section</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const ME = DATA.me;
+const PICKS = ['n16', 'n10', 'n05', 'n27', 'n29', 'n38'];
+let cur = 0;
+const FLOORS = ['org', 'department', 'team', 'you'];
+const FW = { org: DATA.floors.org, department: DATA.floors.department, team: DATA.floors.team, you: { name: P(ME).name, word: 'You' } };
+$('#top').innerHTML = topHTML(['Notifications', 'Why you?'], [['←→', 'another notice'], ['R', 'replay'], ['T', 'technical words', 'h-t']]);
+$('#pick').innerHTML = PICKS.map((id, i) => `<button data-i="${i}">${N(id).at}</button>`).join('');
+FLOORS.forEach((f, i) => $('#dia').insertAdjacentHTML('beforeend', `<div class="fl" data-tier="${f}" style="grid-row:${i + 1}"><b>${FW[f].word}</b>${FW[f].name}</div><div class="band" data-tier="${f}" style="grid-row:${i + 1}"></div>`));
+function gates(id) {
+  const r = route(id), n = r.n, d = r.deliveries.find(x => x.p === ME), app = A(n.app), F = n.floor || 'org';
+  const fr = FLOORS.indexOf(F) + 1, you = 4, order = ['away', 'muted', 'record', 'quiet'];
+  const decided = d.rule, di = order.indexOf(decided);
+  const st = k => k === decided ? 'dec' + (d.held || k === 'record' ? ' hold' : '') : (di < 0 || order.indexOf(k) < di) ? 'pass' : '';
+  const G = [
+    { c: 2, r: fr, cls: 'src', g: `${I(app.icon, 14)}${app.name}`, s: `${LEVELS[n.level].word}${n.urgent ? ', urgent' : ''} · ${hhmm(r.t)} ${dayName(r.t)}` },
+    { c: 3, r: fr, cls: 'pass', g: `${I('lock-open', 14)}May send here`, s: n.floor ? DATA.floors[n.floor].name : 'every floor', setby: 'Department admin' },
+    { c: 4, r: fr, cls: 'pass', g: `${I('route', 14)}Addressed`, s: addressOf(n).words.replace('you by name', 'you, by name'), setby: A(n.app).name },
+    { c: 4, r: you, cls: 'pass', g: `${I(d.via === 'escalation' ? 'arrow-up-right' : d.via === 'rota' ? 'phone' : d.via === 'team' ? 'users' : 'user-round', 14)}Reaches you`, s: d.via === 'escalation' ? 'asked next' : d.via === 'rota' ? `on call ${dayName(d.sent)}` : d.via === 'team' ? 'on the team' : 'by name', setby: d.via === 'escalation' || d.via === 'rota' ? `${first(P(DATA.policy.setBy).name)}’s rota` : '' },
+    { c: 5, r: you, cls: st('away'), g: `${I('plane', 14)}Away?`, s: d.rule === 'away' ? 'yes' : 'no', setby: 'you' },
+    { c: 6, r: you, cls: st('muted'), g: `${I('bell-off', 14)}Muted?`, s: d.rule === 'muted' ? `yes, ${app.name}` : 'no', setby: 'you' },
+    { c: 7, r: you, cls: st('record'), g: `${I('newspaper', 14)}For the record?`, s: d.rule === 'record' ? `yes: ${hhmm(d.edition)} edition` : di >= 0 && di < 2 ? '' : 'no', setby: 'you' },
+    { c: 8, r: you, cls: st('quiet'), g: `${I('moon', 14)}Your hours?`, s: d.rule === 'quiet' ? `out: held to ${at(d.told)}` : d.rule === 'live' ? `in (${P(ME).hours.from}–${P(ME).hours.to})` : '', setby: 'you' },
+    { c: 9, r: you, cls: 'end', g: `${I('bell', 14)}${d.rule === 'record' ? at(d.edition) : at(d.told)}`, s: `<span class="chs">${d.ch.map(c => chip(c)).join('')}</span>` }
+  ];
+  return { r, d, G };
+}
+function render() {
+  const { r, d, G } = gates(PICKS[cur]);
+  $$('.pick button').forEach((b, i) => b.setAttribute('aria-pressed', i === cur));
+  $('#nt').innerHTML = `${lvl(r.n)} ${r.n.title}`;
+  $$('.cell').forEach(x => x.remove());
+  G.forEach((g, i) => $('#dia').insertAdjacentHTML('beforeend', `<div class="cell" style="grid-column:${g.c};grid-row:${g.r}"><div class="gate ${g.cls}" data-i="${i}"><span class="g">${g.g}</span>${g.s}${g.setby ? `<span class="setby">set by ${g.setby}</span>` : ''}</div></div>`));
+  $('#say').innerHTML = `<b>${viaWords(d)}</b> ${ruleWords(d)} <span class="tk">rule=${d.rule} via=${d.via}</span>`;
+  Icons.hydrate(document.body);
+  requestAnimationFrame(lane);
+}
+function lane() {
+  const b = $('#dia').getBoundingClientRect();
+  const pts = $$('.gate').map(g => { const r = g.getBoundingClientRect(); return [r.left + r.width / 2 - b.left, r.top + r.height / 2 - b.top]; });
+  const p = pts.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ');
+  $('#svg').innerHTML = `<path class="lane" d="${p}"/><path class="streak" id="streak" d="${p}"/>`;
+  const s = $('#streak'), L = s.getTotalLength(); s.style.strokeDasharray = L; s.style.strokeDashoffset = L;
+  return L;
+}
+function play() {
+  clearLater(); document.body.classList.add('pre'); render();
+  later(() => document.body.classList.remove('pre'), 60);
+  const gs = $$('.gate'); gs.forEach(g => g.style.visibility = 'hidden');
+  gs.forEach((g, i) => later(() => g.style.visibility = '', 200 + i * 60));
+  later(() => { const s = $('#streak'); if (!s) return; s.style.transition = reduced ? 'none' : `stroke-dashoffset var(--motion-run) var(--ease-standard)`; s.style.strokeDashoffset = 0; }, 1200);
+}
+function go(i) { cur = (i + PICKS.length) % PICKS.length; render(); const s = $('#streak'); s.style.strokeDashoffset = 0; }
+$('#pick').addEventListener('click', e => { const b = e.target.closest('button'); if (b) go(+b.dataset.i); });
+document.addEventListener('keydown', e => { if (commonKeys(e, play)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+addEventListener('resize', () => { lane(); $('#streak').style.strokeDashoffset = 0; });
+Icons.hydrate(document.body); play();
+</script></body></html>

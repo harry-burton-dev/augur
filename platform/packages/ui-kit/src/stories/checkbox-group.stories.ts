@@ -19,7 +19,7 @@ export const States: Story = {
         label="Roles"
         optional
         .options=${[
-          { value: 'admin', label: 'admin', detail: 'Runs the platform' },
+          { value: 'admin', label: 'admin', detail: 'Runs AUGUR' },
           { value: 'editor', label: 'editor', detail: 'Can publish' },
           { value: 'auditor', label: 'auditor', detail: 'Not yet', disabled: true },
         ]}

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Grammar V2 · Two lifecycles</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: the states of a decision and of an action, and who may move each one ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) minmax(0,1fr);gap:var(--space-4)}
+.intro{display:flex;align-items:end;gap:var(--space-5);justify-content:space-between}
+.intro p.l{max-width:var(--measure-wide);color:var(--ink-muted);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.life{min-height:0;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr);gap:var(--space-5);padding:var(--space-4) var(--space-5)}
+.life .side .h2{margin:var(--space-1) 0 var(--space-2)}
+.life .side p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.pick{display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap}
+.pick button{display:inline-flex;align-items:center;gap:var(--space-1);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);padding:2px var(--space-2);font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.pick button[aria-pressed="true"]{border-color:var(--x-proposed-lit);color:var(--light)}
+.rail{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);grid-template-rows:auto auto;gap:var(--space-2) var(--space-5);align-content:start}
+.node{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 var(--space-2);align-items:center;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);transition:border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard),opacity var(--motion-base) var(--ease-standard)}
+.node b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.node .by{grid-column:1 / -1;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:2px}
+.node .on{grid-column:1 / -1;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--x-proposed-lit);min-height:1.5em}
+.node .stw{gap:var(--space-2)}
+.mn .node::after{content:"";position:absolute;left:100%;top:50%;width:var(--space-5);height:1px;background:var(--hairline-strong)}
+.mn .node.last::after{display:none}
+.alt{opacity:.8;border-style:dashed}
+.alt::after{display:none}
+.alt::before{content:"";position:absolute;left:var(--space-4);bottom:100%;height:var(--space-2);width:1px;background:var(--hairline-strong)}
+.node.lit{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash);opacity:1}
+.node.lit::after{background:var(--x-proposed-lit)}
+.dimmed .node:not(.lit){opacity:var(--x-proposed-quiet)}
+.blank{visibility:hidden}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.strip{grid-column:1 / -1;position:relative;height:calc(var(--space-6) + var(--space-5));margin-top:var(--space-2);border-top:1px solid var(--hairline)}
+.strip .tick{position:absolute;top:0;height:var(--space-1);width:1px;background:var(--hairline-strong)}
+.strip .tl{position:absolute;top:var(--space-1);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);transform:translateX(-50%)}
+.strip .now{position:absolute;top:calc(var(--space-2) * -1);bottom:0;width:1px;background:var(--light)}
+.strip .now span{position:absolute;top:calc(var(--space-4) * -1);left:var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--light);white-space:nowrap}
+.strip .ev{position:absolute;top:calc(var(--space-1) * -1 - 1px);width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--x-proposed-lit);transform:translateX(-50%);opacity:0;transition:opacity var(--motion-base) var(--ease-out)}
+.strip .ev.on{opacity:1}
+.strip .ev.warn{background:var(--x-proposed-warn)}
+.strip .el{position:absolute;top:var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);transform:translateX(-50%);white-space:nowrap;opacity:0;transition:opacity var(--motion-base) var(--ease-out)}
+.strip .el.on{opacity:1}
+@media (max-width:1400px){.life{grid-template-columns:200px minmax(0,1fr);padding:var(--space-3) var(--space-4);gap:var(--space-4)}.rail{column-gap:var(--space-4)}.mn .node::after{width:var(--space-4)}.node .by{display:none}.node.lit .by{display:block}.strip .el{font-size:var(--x-proposed-type-micro)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Minute sheet · V2</b> two lifecycles: who may move a decision or an action, and D-118’s path through both · ADR status, RAID logs, question and answer</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* each column: the main state, then the states that branch from it. by = who may move it there */
+const DEC = [
+  [{ s: 'motion', by: 'Moved and seconded at a meeting' }, { s: 'lost', w: 'Lost or withdrawn', by: 'The meeting votes it down; the motion is kept' }],
+  [{ s: 'in force', by: 'The meeting agrees the words' }, [{ s: 'spent', by: 'Its work is done' }, { s: 'lapsed', by: 'Its end date passes' }]],
+  [{ s: 'review', by: 'A revisit line is crossed; a watch says so' }, { s: 'kept', w: 'Kept', by: 'A later decision affirms it' }],
+  [{ s: 'reversed', by: 'A later decision reverses it; both point at each other' }, { s: 'amended', by: 'A later decision changes a term' }]
+];
+const ACT = [
+  [{ a: 'given', by: 'The chair sets it, with one owner and one date' }, { a: 'handed', w: 'Handed on', by: 'The owner passes it, the chair agrees' }],
+  [{ a: 'accepted', by: 'The owner says “mine”' }, { a: 'moved', w: 'Date moved', by: 'The chair agrees; a reason is required' }],
+  [{ a: 'part', by: 'The owner reports progress' }, { a: 'overdue', by: 'The calendar: its date passes' }],
+  [{ a: 'done', by: 'The owner says it is done, with what shows it' }, { a: 'sent', w: 'Sent back', by: 'The chair says “not yet”, with a reason' }],
+  [{ a: 'discharged', by: 'The chair closes it. Only the person who asked can' }, { a: 'overtaken', by: 'A later decision withdraws it' }]
+];
+/* D-118's path, from its record */
+const D = Dn('D-118');
+const DPATH = [
+  { k: 'motion', on: '2026-05-12', w: 'moved 10:41' }, { k: 'in force', on: '2026-05-12', w: 'agreed 10:52' },
+  { k: 'review', on: D.revisitIf[1].tripped, w: 'one fitter, not two' }, { k: 'kept', on: D.affirmedOn, w: 'kept by D-128' },
+  { k: 'review', on: D.revisitIf[0].tripped, w: '5 vans overdue' }, { k: 'reversed', on: D.reversedOn, w: 'reversed by D-131' }
+];
+const S = { act: 'A-302', step: 99, dstep: 99 };
+function apath(id) {
+  const a = Ac(id), out = [];
+  a.history.forEach(([on, st, n]) => out.push({ k: st, on, w: n ? n.split(/[,:]/)[0] : AS[st] ? AS[st].s : st }));
+  (a.moves || []).forEach(m => { const x = out.find(o => o.k === 'moved' && o.on === m.on); if (x) x.w = `${dt(m.from, 'short')} → ${dt(m.to, 'short')}`; });
+  return out.sort((x, y) => ts(x.on) - ts(y.on));
+}
+function nodeHTML(n, i, lit, alt, last) {
+  const label = n.s ? (n.w || (ST[n.s] ? ST[n.s].w : n.s)) : (n.w || AS[n.a].s);
+  const mark = n.s ? (ST[n.s] ? `<i class="dm ${ST[n.s].cls}"></i>` : `<i class="dm st-spent"></i>`) : (AS[n.a] ? amHTML(n.a, 14) : `<span class="am">${I(n.a === 'moved' ? 'calendar-clock' : n.a === 'sent' ? 'undo-2' : 'forward', 14)}</span>`);
+  return `<div class="node dep ${alt ? 'alt' : ''} ${lit ? 'lit' : ''} ${last ? 'last' : ''}" style="--i:${i}">${mark}<b>${label}</b><span class="by">${n.by}</span><span class="on">${lit || ''}</span></div>`;
+}
+function railHTML(cols, path, upto) {
+  const seen = {};
+  path.slice(0, upto).forEach(p => { (seen[p.k] = seen[p.k] || []).push(dt(p.on, 'short')); });
+  const key = n => n.s || n.a;
+  return `<div class="rail ${upto ? 'dimmed' : ''}">${cols.map((col, ci) => [0, 1].map(r => { const n = col[r]; if (!n) return `<div class="blank"></div>`; if (Array.isArray(n)) return `<div class="pair">${n.map(m => nodeHTML(m, ci + r, seen[key(m)] ? seen[key(m)].join(', ') : '', true)).join('')}</div>`; const lit = seen[key(n)] ? seen[key(n)].join(', ') : ''; return r === 0 ? `<div class="mn">${nodeHTML(n, ci, lit, false, ci === cols.length - 1)}</div>` : nodeHTML(n, ci + r, lit, true); }).join('')).join('')}</div>`;
+}
+function stripHTML(path, upto, from, to) {
+  const W = 1000, X = scaleX(from, to, 100);
+  const months = []; for (let m = dP(from).m; m <= dP(to).m; m++) months.push(`${dP(from).y}-${String(m).padStart(2, '0')}-01`);
+  return `<div class="strip">${months.map(m => `<span class="tick" style="left:${X(m)}%"></span><span class="tl" style="left:${X(m)}%">${dt(m.slice(0, 7), 'short')}</span>`).join('')}
+    <span class="now" style="left:${X(NOW)}%"><span>now · ${dt(NOW, 'short')}</span></span>
+    ${path.map((p, i) => `<span class="ev ${i < upto ? 'on' : ''} ${p.k === 'review' || p.k === 'overdue' ? 'warn' : ''}" style="left:${X(p.on)}%"></span>`).join('')}
+    ${path.filter((p, i) => i < upto && (i === 0 || p.on !== path[i - 1].on)).map((p, j) => `<span class="el on" style="left:${Math.min(92, Math.max(4, X(p.on)))}%;top:${j % 2 ? 'calc(var(--space-5) + var(--leading-small))' : 'var(--space-5)'}">${p.w}</span>`).join('')}</div>`;
+}
+function render() {
+  const ap = apath(S.act);
+  $('#app').innerHTML = topHTML(['Mandate', 'Decisions', 'Lifecycles'], [['1 2 3', 'pick an action'], ['T', 'record fields', 'h-t'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div class="intro"><div><p class="eyebrow">Minute sheet · states</p><h1 class="h1">Two lifecycles</h1></div>
+      <p class="l">A decision and an action each have a small fixed set of states, and each state can only be reached by one kind of person or event. Nobody “edits” a decision into another state: the room, a watch, the calendar or a later decision moves it. The lit path is ${did('D-118')} and one of its actions, from their records.</p></div>
+      <section class="life pane" aria-label="The life of a decision"><div class="side"><p class="eyebrow">A decision</p><p class="h2">Agreed once</p><p>Its words never change. Its status moves beside them. “Kept” and “amended” are new decisions that point back.</p><p class="tk">decision.status ∈ {motion, in_force, review, spent, lapsed, amended, reversed}</p></div>
+        <div>${railHTML(DEC, DPATH, S.dstep)}${stripHTML(DPATH, S.dstep, '2026-05-01', '2026-11-30')}</div></section>
+      <section class="life pane" aria-label="The life of an action"><div class="side"><p class="eyebrow">An action</p><p class="h2">An open question</p><p>It stays open until the person who asked closes it. “Done” is the owner’s answer; “closed” is the chair’s.</p>
+        <div class="pick">${DPATH && D.actions.map((a, i) => `<button data-a="${a}" aria-pressed="${S.act === a}">${i + 1} · ${a}</button>`).join('')}</div>
+        <p class="small" style="margin-top:var(--space-2);color:var(--ink)">${Ac(S.act).text} · ${who(Ac(S.act).owner)}</p><p class="tk">action.state ∈ {given, accepted, part, done, discharged, overtaken} · overdue is derived</p></div>
+        <div>${railHTML(ACT, ap, S.step)}${stripHTML(ap, S.step, '2026-05-01', '2026-11-30')}</div></section>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.pick button').forEach(b => b.onclick = () => { S.act = b.dataset.a; S.step = 99; render(); });
+}
+function replay() {
+  clearLater(); S.step = 0; S.dstep = 0; render(); settle();
+  /* the moment: D-118's path lights one state at a time, then its action's path does */
+  const t = MOMENT(), q = ms('--motion-quick');
+  DPATH.forEach((_, i) => later(() => { S.dstep = i + 1; render(); }, t + i * q));
+  apath(S.act).forEach((_, i) => later(() => { S.step = i + 1; render(); }, t + i * q));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const n = +e.key; if (n >= 1 && n <= 3) { S.act = D.actions[n - 1]; S.step = 99; render(); }
+});
+replay();
+</script>
+</body>
+</html>

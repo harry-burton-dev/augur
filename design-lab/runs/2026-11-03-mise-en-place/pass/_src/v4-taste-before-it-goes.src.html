@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Pass V4 · Taste before it goes</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: the head chef tastes some plates: every plate a person's answer touched, plus a few at random, each against its raw line ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,.85fr);gap:var(--space-6)}
+.plates{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.pl{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr) minmax(0,1.25fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane)}
+.pl.ok{border-color:var(--hairline);background:none}
+.pl.bad{border-color:var(--x-proposed-stop);background:var(--x-proposed-stop-wash)}
+.pl.now{border-color:var(--x-proposed-pass-edge)}
+.pl .n{font:400 var(--type-small)/1.2 var(--font-mono);color:var(--ink-muted)}
+.pl .n b{display:block;font:300 var(--type-lead)/1 var(--font-mono);color:var(--light)}
+.pl .raw{display:flex;flex-wrap:wrap;gap:2px}
+.pl .raw .rawv{font-size:var(--x-proposed-type-micro)}
+.pl .plt{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.pl .plt b{font-weight:400;color:var(--light);border-bottom:1px dotted var(--x-proposed-seam)}
+.pl .plt .why{display:block;color:var(--ink-muted)}
+.pl .acts{display:flex;gap:var(--space-2)}
+.pl .tag{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.meter{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:2px}
+.meter i{height:var(--space-2);border-radius:1px;background:var(--hairline)}
+.meter i.pick{background:var(--ink-muted)}
+.meter i.ok{background:var(--x-proposed-lit)}
+.side p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.side p.muted{font-size:var(--type-small);line-height:var(--leading-small)}
+.side p b{font-weight:400;color:var(--light)}
+.side .btn{align-self:flex-start}
+@media (max-width:1400px){.pl{grid-template-columns:var(--space-5) minmax(0,1fr) minmax(0,1.2fr) auto;gap:var(--space-2);padding:var(--space-1) var(--space-2)}.pl .raw .rawv:nth-child(n+6){display:none}.side p{font-size:var(--type-small);line-height:var(--leading-small)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Pass · V4</b> taste before it goes: every plate an answer touched, plus three at random, each against its raw line · the head chef at the pass, acceptance sampling</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R), recs = R.recs, K = DATA.kinds.inspection, F0 = R.file;
+const RANDOM = 3;
+/* plates a person's answer touched: a new van, a value set aside, a spelling joined by hand */
+const touched = [
+  ...recs.filter(r => r.van.status === 'new').map(r => ({ r, why: 'you chose “new van”' })),
+  ...recs.filter(r => r.v.odometer.aside).map(r => ({ r, why: 'you set its odometer aside' })),
+  ...recs.filter(r => DATA.model.spellings.some(s => s.raw === r.v.depot.raw)).map(r => ({ r, why: `you joined “${r.v.depot.raw}” by hand` }))
+];
+/* three more, spread through the file, the same three on every replay (a seeded pick, so a reviewer can repeat it) */
+const rest = recs.filter(r => !touched.some(t => t.r === r));
+const seed = F0.doc.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+const random = Array.from({ length: RANDOM }, (_, i) => rest[(seed * (i + 1) * 7) % rest.length]).filter((r, i, a) => a.indexOf(r) === i).map(r => ({ r, why: 'picked at random' }));
+const PICK = [...touched, ...random];
+const S = { done: {}, at: 0 };
+function plateText(r) {
+  const v = r.v;
+  return `<b>${v.van.val}</b> · ${v.depot.val} · ${v.on.val} · <b>${v.result.val}</b>${v.note.val ? ` (${esc(v.note.val)})` : ''} · ${v.odometer.val ? `${v.odometer.val} miles` : '<span class="mk-gap"></span> miles not known yet'}`;
+}
+function render() {
+  const nOk = Object.values(S.done).filter(x => x === 'ok').length, nBad = Object.values(S.done).filter(x => x === 'bad').length;
+  const all = PICK.length === nOk;
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, F0.name, 'The pass', 'Taste'], [['Y', 'same'], ['N', 'not right'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="plates"><div><h1 class="t">Taste ${PICK.length} of ${recs.length} before they go</h1><p class="lede" style="margin-top:var(--space-1)">Read each plate against the line it came from. These aren’t chosen to look good: every plate one of your answers touched is here, and ${RANDOM} more picked at random.</p></div>
+      ${PICK.map((p, i) => { const st = S.done[p.r.n];
+        return `<div class="pl ${st || ''} ${!st && i === S.at ? 'now' : ''} dep" style="--i:${i}"><span class="n"><b>${p.r.n}</b>line</span><span class="raw">${p.r.cells.map(c => raw(c)).join('')}</span>
+          <span class="plt">${plateText(p.r)}<span class="why"><span class="tag">${p.why === 'picked at random' ? 'random' : 'your answer'}</span> · ${p.why}</span></span>
+          <span class="acts">${st === 'ok' ? `<span class="heard">${I('check', 12)} same</span>` : st === 'bad' ? `<span class="heard" style="color:var(--x-proposed-stop)">${I('hand', 12)} stopped</span>` : `<button class="btn sm" data-y="${p.r.n}">${I('check', 12)} Same</button><button class="btn sm" data-n="${p.r.n}">Not right</button>`}</span></div>`; }).join('')}</section>
+    <aside class="side"><p class="eyebrow">${I('utensils', 12)} Tasted ${nOk + nBad} of ${PICK.length}</p>
+      <div class="meter" style="--n:${recs.length}" aria-hidden="true">${recs.map(r => `<i class="${S.done[r.n] === 'ok' ? 'ok' : PICK.some(p => p.r === r) ? 'pick' : ''}"></i>`).join('')}</div>
+      <p><b>Why these.</b> A plate is most likely wrong where a person made a call: ${plural(touched.length, 'plate')} here came from your answers. The other ${RANDOM}, picked at random, check the rules nobody looked at.</p>
+      <p><b>If one is not right,</b> the pass stops. It shows which recipe line made the wrong value, and every other plate that line made, before anything goes.</p>
+      <p class="muted">The random pick is seeded by the file, so ${P('p2').name} can taste the same plates in Triage and see what you saw.</p>
+      ${all ? `<p><span class="heard">${I('check', 12)} heard</span> All ${PICK.length} the same. The other ${recs.length - PICK.length} go on the same recipe.</p><button class="btn go">${I('send', 14)} Send to Triage</button>` : nBad ? '' : `<button class="btn" aria-disabled="true">${I('send', 14)} Send when tasted</button>`}</aside>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-y]').forEach(b => b.onclick = () => mark(+b.dataset.y, 'ok'));
+  $$('[data-n]').forEach(b => b.onclick = () => mark(+b.dataset.n, 'bad'));
+}
+function mark(n, v) { S.done[n] = v; S.at = PICK.findIndex(p => !S.done[p.r.n]); render(); }
+function replay() { clearLater(); S.done = {}; S.at = 0; document.body.classList.add('pre'); render(); settle(ms('--motion-quick')); const t = ms('--motion-run'); later(() => mark(PICK[0].r.n, 'ok'), t); later(() => mark(PICK[1].r.n, 'ok'), t + ms('--motion-calm')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const p = PICK.find(x => !S.done[x.r.n]); if (!p) return;
+  if (e.key.toLowerCase() === 'y') mark(p.r.n, 'ok');
+  if (e.key.toLowerCase() === 'n') mark(p.r.n, 'bad');
+});
+replay();
+</script>
+</body>
+</html>
