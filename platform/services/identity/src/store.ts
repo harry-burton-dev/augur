@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { runMigrations, type Migration } from '@augur/service-kit';
 import { workspaceMigrations } from './workspaces.ts';
 
 /** What someone has chosen for the shell. Every field is optional: what's missing takes the shell's default. */
@@ -41,7 +42,7 @@ export class MemoryPreferenceStore implements PreferenceStore {
  * Schema changes, applied in order and recorded so each runs once. Identity
  * owns the `identity` schema; no other service reads or writes it.
  */
-export const migrations: { id: string; sql: string }[] = [
+export const migrations: Migration[] = [
   {
     id: '001_preferences',
     sql: `
@@ -65,27 +66,7 @@ export class PgPreferenceStore implements PreferenceStore {
 
   /** Brings the schema up to date. Safe to run from several instances at once. */
   async migrate() {
-    const client = await this.pool.connect();
-    try {
-      await client.query('begin');
-      await client.query("select pg_advisory_xact_lock(hashtext('identity.migrate'))");
-      // On a server the storage job makes the schema for identity's own login, which may not create schemas.
-      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'identity'");
-      if (!hasSchema) await client.query('create schema identity');
-      await client.query('create table if not exists identity.migrations (id text primary key, applied_at timestamptz not null default now())');
-      const { rows } = await client.query<{ id: string }>('select id from identity.migrations');
-      const applied = new Set(rows.map((r) => r.id));
-      for (const m of migrations.filter((m) => !applied.has(m.id))) {
-        await client.query(m.sql);
-        await client.query('insert into identity.migrations (id) values ($1)', [m.id]);
-      }
-      await client.query('commit');
-    } catch (err) {
-      await client.query('rollback');
-      throw err;
-    } finally {
-      client.release();
-    }
+    await runMigrations(this.pool, { schema: 'identity', migrations });
   }
 
   async get(person: string) {
