@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Rungs V3 · From observation to warning</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: impact-based warnings. Observation (data), forecast (information), warning for whom (context) ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:var(--space-6)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.stage{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.stage .lab{grid-column:1 / -1;display:flex;gap:var(--space-3);align-items:center}
+.stage .lab > b{font-weight:300;font-size:var(--type-lead);color:var(--light);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.stage p{grid-column:1 / -1;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.stage .chart{width:100%;height:auto;grid-column:1 / -1}
+.cw{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--type-small);color:var(--light)}
+.cw .yd{display:inline-grid;grid-template-columns:repeat(7,var(--space-1));gap:1px}
+.cw .yd i{height:var(--space-2);background:var(--hairline-strong);border-radius:1px}
+.cw .yd i.on{background:var(--ink)}
+/* the matrix: likelihood across, impact up. Three levels of warning, one tint each */
+.mx{display:grid;grid-template-columns:110px repeat(4,minmax(0,1fr));grid-template-rows:repeat(4,minmax(64px,1fr)) auto;gap:2px;flex:1;min-height:0}
+.mx .cell{position:relative;border-radius:2px;background:var(--surface-inset);display:flex;flex-wrap:wrap;align-content:flex-start;gap:var(--space-1);padding:var(--space-1)}
+.mx .cell[data-w="1"]{background:color-mix(in srgb,var(--warning) 10%,var(--surface-inset))}
+.mx .cell[data-w="2"]{background:color-mix(in srgb,var(--warning) 24%,var(--surface-inset))}
+.mx .cell[data-w="3"]{background:color-mix(in srgb,var(--danger) 26%,var(--surface-inset))}
+.mx .ax{font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);color:var(--ink-muted);display:flex;align-items:center}
+.mx .ax.x{justify-content:center;text-align:center;padding-top:var(--space-1)}
+.mx .ax.y{justify-content:flex-end;text-align:right;padding-right:var(--space-2)}
+.mk{display:inline-flex;align-items:center;gap:var(--space-1);padding:2px var(--space-2);border:1px solid var(--fc);border-radius:var(--radius-pill);background:var(--slate-deep);font-size:var(--type-small);color:var(--light);white-space:nowrap;opacity:0;transform:scale(.9);transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.mk.in{opacity:1;transform:none}
+.warns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2)}
+.wn{display:grid;gap:var(--space-1);padding:var(--space-3);border:1px solid var(--hairline);border-top:2px solid var(--fc);border-radius:var(--radius-key)}
+.wn .lvl{display:inline-flex;align-items:center;gap:var(--space-2);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink)}
+.wn .lvl i{display:inline-block;width:var(--space-3);height:var(--space-3);border-radius:2px;background:var(--surface-inset);border:1px solid var(--hairline-strong)}
+.wn .lvl i[data-w="1"]{background:color-mix(in srgb,var(--warning) 30%,var(--surface-inset))}
+.wn .lvl i[data-w="2"]{background:color-mix(in srgb,var(--warning) 60%,var(--surface-inset))}
+.wn p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+@media (prefers-reduced-motion: reduce){.mk{transform:none}}
+@media (max-width:1400px){.wrap{gap:var(--space-4)}.title{font-size:var(--type-heading);line-height:var(--leading-heading)}.wn p:not(.muted){display:none}.mx{grid-template-columns:80px repeat(4,minmax(0,1fr));grid-template-rows:repeat(4,minmax(44px,1fr)) auto}.stage{padding:var(--space-2) var(--space-3)}.stage p{font-size:var(--type-small);line-height:var(--leading-small)}.wn p.muted{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Rungs · V3</b> from observation to warning: the same forecast is a different warning for each reader’s impact · Met Office impact-based warnings, Endsley level 3</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { placed: false };
+/* the forecast and its likelihood, worked out by rule (the briefing's yardstick); never typed */
+const YARD = ['Remote chance', 'Highly unlikely', 'Unlikely', 'Realistic possibility', 'Likely', 'Highly likely', 'Almost certain'];
+const FORECAST = { text: `November is over ${R.limit} too`, word: 4, basis: `Over in September and October; ${R.changedRounds.join(' and ')} still on their new routes; nothing booked to change it.` };
+/* impact differs by reader. 0..3 = very low, low, medium, high. Likelihood column 2 = medium-high */
+const LIKELY_COL = 3;
+const IMPACT = { grace: { i: 3, w: 2, why: 'It decides whether the contract can end without penalty.' },
+                 mira:  { i: 2, w: 1, why: 'Her rounds are half of it; the fix is hers.' },
+                 owen:  { i: 0, w: 0, why: 'One contract of 14; the decision is not the board’s unless it retenders.' } };
+const LEVEL = ['No warning: for information', 'Be aware', 'Be prepared', 'Take action'];
+const IMP = ['Very low', 'Low', 'Medium', 'High'], LIK = ['Very low', 'Low', 'Medium', 'High'];
+/* warning level for a cell: the Met Office matrix shape */
+const W = (imp, lik) => [[0, 0, 0, 0], [0, 1, 1, 1], [0, 1, 2, 2], [1, 2, 2, 3]][imp][lik];
+function cwHTML(i) { return `<span class="cw"><span class="yd" aria-hidden="true">${YARD.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</span>${YARD[i]}</span>`; }
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id], [['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="col">
+      <div><p class="eyebrow">One reading, three rungs · observation, forecast, warning</p><h1 class="title">A warning is for someone</h1></div>
+      <section class="stage dep" style="--i:0"><div class="lab">${rm('data', { word: false })}<b>Observation</b><span class="small muted">${srcHTML(PC('d1').src)}</span></div><p class="as-data">${PC('d1').text}</p></section>
+      <section class="stage dep" style="--i:1"><div class="lab">${rm('info', { word: false })}<b>Forecast</b>${liftHTML({ k: 'projection', w: 'from the last two months' })}</div>
+        ${chart({ w: 520, h: 120, values: true, hi: ['Sep', 'Oct'] })}
+        <p>${cwHTML(FORECAST.word)} that ${FORECAST.text}. <span class="muted">${FORECAST.basis} The word is worked out by rule, not typed.</span></p></section>
+      <section class="stage dep" style="--i:2"><div class="lab">${rm('context', { word: false })}<b>Warning</b>${liftHTML({ k: 'reader', w: 'impact for each reader' })}</div><p class="muted">The forecast is the same for everyone. The warning depends on what it would do to each reader, so each gets their own level, and the Org gets none.</p></section>
+    </div>
+    <div class="col">
+      <p class="eyebrow">Impact for the reader × likelihood</p>
+      <div class="mx">${[3, 2, 1, 0].map(imp => `<span class="ax y">${IMP[imp]} impact</span>${[0, 1, 2, 3].map(lik => `<div class="cell" data-w="${W(imp, lik)}">${DATA.readers.filter(r => IMPACT[r.id].i === imp && lik === LIKELY_COL).map(r => `<span class="mk ${S.placed ? 'in' : ''}" data-tier="${P(r.id).floor}">${whoHTML(r.id)}</span>`).join('')}</div>`).join('')}`).join('')}
+        <span></span>${LIK.map(l => `<span class="ax x">${l} likelihood</span>`).join('')}</div>
+      <div class="warns">${DATA.readers.map(r => { const m = IMPACT[r.id]; return `<div class="wn dep" style="--i:${3 + DATA.readers.indexOf(r)}" data-tier="${P(r.id).floor}"><span class="lvl"><i data-w="${m.w}"></i>${LEVEL[m.w]}</span>${whoHTML(r.id)}<p>${m.why}</p><p class="muted">${r.does[0]} · by ${r.horizon}</p></div>`; }).join('')}</div>
+    </div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+play(() => { S.placed = false; render(); }, () => { S.placed = true; render(); });
+</script>
+</body>
+</html>

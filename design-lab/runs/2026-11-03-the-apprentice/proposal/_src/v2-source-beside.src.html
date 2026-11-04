@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A proposal waiting · V2 · The source beside the claim</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: the page it read, beside what it proposes, tied line to passage. Like an exhibit with its marked passage ---- */
+.wrap{position:relative;height:100%;display:grid;grid-template-columns:minmax(0,1fr) var(--space-7) minmax(0,1fr);gap:0}
+.doc{min-height:0;padding:var(--space-5) var(--space-6);background:color-mix(in srgb,var(--ink) 7%,var(--slate-deep));border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-family:var(--font-mono);font-size:var(--type-small);line-height:var(--leading-meta);color:var(--ink);overflow:hidden}
+.doc .hd{display:flex;justify-content:space-between;border-bottom:1px solid var(--hairline-strong);padding-bottom:var(--space-2);margin-bottom:var(--space-3);color:var(--ink-muted)}
+.doc .t{font-family:var(--font-sans);font-size:var(--type-lead);color:var(--light);margin-bottom:var(--space-3)}
+.doc .ln{white-space:pre;padding:0 var(--space-2);border-radius:2px;overflow:hidden;text-overflow:ellipsis}
+.doc .ln.hl{background:color-mix(in srgb,var(--light) 9%,transparent);outline:1px dotted var(--x-proposed-pencil)}
+.doc .ln.hl.on{background:color-mix(in srgb,var(--light) 16%,transparent);outline:1px solid var(--light)}
+.doc .ln.dim{color:var(--ink-muted)}
+.claims{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.cl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-3) var(--space-4);text-align:left;width:100%}
+.cl .k{font-size:var(--type-small);color:var(--ink-muted)}
+.cl .v{font-size:var(--type-lead);line-height:var(--leading-lead);font-style:italic;color:var(--light)}
+.cl .m{grid-column:1 / -1;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-3);flex-wrap:wrap}
+.cl.on{outline:1px solid var(--light);outline-offset:-1px}
+.cl.inked .v{font-style:normal}
+.acts{display:flex;gap:var(--space-1);align-items:start}
+.ib{display:inline-grid;place-items:center;width:var(--target-sm);height:var(--target-sm);border:1px solid var(--hairline-strong);border-radius:var(--radius-key)}
+.ib.y{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit)}
+svg.ties{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+svg.ties path{fill:none;stroke:var(--x-proposed-pencil);stroke-width:1;stroke-dasharray:2 3}
+svg.ties path.on{stroke:var(--light);stroke-dasharray:none;stroke-width:1.25}
+.chain{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}
+.chain b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.doc{padding:var(--space-4)}.cl .v{font-size:var(--type-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A proposal waiting · V2</b> the source beside the claim, tied passage to detail · exhibit marking, chain of custody</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PR = DATA.proposal, AG = PR.agent, a = A(AG);
+/* the page as text: the quoted lines are the passages; the rest is the page around them (sample data, kept here as layout filler) */
+const PAGE = [
+  [1, `${PR.doc.issuer.toUpperCase()}`], [1, 'CERTIFICATE OF CLASS · ANNUAL SURVEY'], [1, ''], [1, `Name of ship: ${PR.entity.name.replace('MV ', '')}`], [1, `${PR.entity.ids}`],
+  ...PR.lines.filter(l => l.page === 1).map(l => [1, l.quote, l.id]), [1, 'Port of registry: Bergen'], [1, ''],
+  [2, 'PARTICULARS'], ...PR.lines.filter(l => l.page === 2).map(l => [2, l.quote, l.id]), [2, 'Net tonnage (NT) .............. 1 024'], [2, 'Deadweight ..................... 4 310 t'],
+  [2, ''], [2, 'Annual survey completed: 02.11.2026'], [2, 'Surveyor: H. Lindgren'], [2, 'Remarks: none']
+];
+const S = { on: 'L1', st: {} };
+function render() {
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Triage', PR.entity.name], [['↑ ↓', 'detail'], ['A', 'accept'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="doc scroll" aria-label="${PR.doc.title}">
+      <div class="hd"><span>${PR.doc.library} · Artifacts</span><span>pages 1–2 of ${PR.doc.pages}</span></div>
+      <div class="t">${PR.doc.title}</div>
+      ${PAGE.map(([pg, t, id]) => `<div class="ln ${id ? 'hl' : t ? 'dim' : ''} ${id && id === S.on ? 'on' : ''}" ${id ? `data-q="${id}"` : ''}>${t || ' '}</div>`).join('')}
+    </section>
+    <span></span>
+    <section class="claims">
+      <div><p class="eyebrow">${mm(AG)} ${a.name} proposes · from this page only</p><h1 class="title" style="font-size:var(--type-heading);line-height:var(--leading-heading)">${PR.entity.name}</h1></div>
+      ${PR.lines.map(l => { const st = S.st[l.id]; return `<div class="cl ${st ? 'pencil inked' : 'pencil'} ${S.on === l.id ? 'on' : ''}" data-c="${l.id}">
+        <span><span class="k">${l.k} · page ${l.page}</span><br><span class="v">${l.v}</span></span>
+        <span class="acts">${st ? `<span class="small muted">accepted ${mm(AG, true)}</span>` : `<button class="ib y" data-acc="${l.id}" aria-label="Accept">${I('check', 16)}</button><button class="ib" aria-label="Change">${I('pen-line', 16)}</button><button class="ib" aria-label="Reject">${I('x', 16)}</button>`}</span>
+        <span class="m">${l.disagrees ? `<span><span class="mk-disagree"></span> the record says ${l.disagrees}</span>` : '<span>new detail</span>'}<span>${l.rule === '—' ? 'read by the model only' : l.agree ? 'read the same by pattern' : 'pattern read it differently'}</span></span></div>`; }).join('')}
+      <p class="chain">${I('link', 14)} <b>Chain:</b> arrived in ${PR.doc.library} ${PR.doc.arrived} · read in run ${PR.run} · proposed ${DATA.today} 00:40 · nothing else touched it</p>
+    </section>
+    <svg class="ties" aria-hidden="true"></svg>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys(); tie();
+  $$('[data-c]').forEach(c => c.onmouseenter = () => { if (S.on !== c.dataset.c) { S.on = c.dataset.c; render(); } });
+  $$('[data-acc]').forEach(b => b.onclick = () => { S.st[b.dataset.acc] = 'acc'; render(); });
+}
+/* draw a tie from each detail to its passage, measured after layout */
+function tie() {
+  const w = $('.wrap').getBoundingClientRect(), svg = $('svg.ties');
+  svg.setAttribute('viewBox', `0 0 ${w.width} ${w.height}`);
+  svg.innerHTML = PR.lines.map(l => {
+    const q = $(`[data-q="${l.id}"]`), c = $(`[data-c="${l.id}"]`); if (!q || !c) return '';
+    const a1 = q.getBoundingClientRect(), b1 = c.getBoundingClientRect();
+    const x1 = a1.right - w.left, y1 = a1.top + a1.height / 2 - w.top, x2 = b1.left - w.left, y2 = b1.top + b1.height / 2 - w.top, mx = (x1 + x2) / 2;
+    return `<path class="${S.on === l.id ? 'on' : ''}" d="M${x1} ${y1} C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}"/>`;
+  }).join('');
+}
+function replay() { clearLater(); S.on = null; S.st = {}; settle(); render(); later(() => { S.on = 'L1'; render(); }, MOMENT()); }
+addEventListener('resize', tie);
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  const ids = PR.lines.map(l => l.id), i = ids.indexOf(S.on);
+  if (e.key === 'ArrowDown') { S.on = ids[(i + 1) % ids.length]; render(); }
+  if (e.key === 'ArrowUp') { S.on = ids[(i - 1 + ids.length) % ids.length]; render(); }
+  if (e.key.toLowerCase() === 'a' && S.on) { S.st[S.on] = 'acc'; render(); }
+});
+replay();
+</script>
+</body>
+</html>

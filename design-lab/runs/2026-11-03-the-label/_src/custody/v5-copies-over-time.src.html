@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Custody V5 · Every copy, over time</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: every copy of the value, as a tree from its source, and a date you can move. Shares end, keep-untils pass, copies go; a count outlives the values it was made from ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.scrub{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-4);align-items:center}
+.scrub .d{font:400 var(--type-heading)/var(--leading-heading) var(--font-mono);color:var(--light);min-width:calc(var(--space-8) + var(--space-6))}
+.rail{position:relative;height:var(--space-6);margin:0 var(--space-6)}
+.rail .tr{position:absolute;left:0;right:0;top:50%;height:2px;background:var(--hairline-strong)}
+.rail .st{position:absolute;top:50%;width:2px;height:var(--space-4);margin-top:calc(var(--space-2) * -1);background:var(--hairline-strong)}
+.rail .st span{position:absolute;top:calc(100% + 2px);left:0;transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.rail .kn{position:absolute;top:50%;width:var(--space-4);height:var(--space-4);margin:calc(var(--space-2) * -1) 0 0 calc(var(--space-2) * -1);border-radius:var(--radius-pill);background:var(--x-proposed-lit);box-shadow:0 0 var(--glow-blur) var(--x-proposed-lit-wash);transition:left var(--motion-calm) var(--ease-out)}
+.tree{display:grid;gap:var(--space-1);align-content:start;overflow:auto}
+.node{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-1) var(--space-4);align-items:center;margin-left:calc(var(--d) * var(--space-6));padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-left:2px solid var(--fc, var(--hairline-strong));border-radius:var(--radius-key);font-size:var(--type-meta);line-height:var(--leading-meta);transition:opacity var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.node b{font-weight:400;color:var(--light)}
+.node .s{grid-column:1 / -1;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.node.gone{opacity:var(--x-proposed-quiet);border-style:dashed;background:var(--x-proposed-unseen)}
+.node.gone b{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--x-proposed-seam)}
+.node.closed{border-style:dashed}
+.state{font:400 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.node.gone .state{color:var(--x-proposed-seam)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Custody · V5</b> every copy, over time: the copies as a tree from the source; move the date and shares end, keep-untils pass, copies go, and a count outlives the values it was made from · retention schedules, archival disposal, family trees</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* dates the value's copies change state, from shares, keep rules and the investigation (expected to close 31 Dec 2026) */
+const STEPS = [
+  { d: DATA.today, w: 'today' },
+  { d: '31 Dec 2026', w: 'share SR-0193 ends · investigation closes' },
+  { d: '31 Mar 2027', w: 'committee share ends' },
+  { d: '31 Dec 2032', w: '6 years after closing' },
+  { d: '12 Oct 2036', w: '10 years after the grounding' }
+];
+const S = { i: 0 };
+function tree(i) {
+  const at = k => i >= k;
+  return [
+    { d: 0, n: 'Duty roster row 88412', s: 'The roster system keeps its own rows; AUGUR holds an import.', tier: 'team', gone: at(3), why: 'removed with the value it fed' },
+    { d: 1, n: `${DATA.doc.title} ${FACT('f5').src}`, s: `${DATA.doc.app} · ${F('pil').name}`, tier: 'team', gone: at(3), why: `§3 removed in place; the report stays with a mark` },
+    { d: 2, n: `Fact: ${FACT('f5').k}`, s: `${DATA.record.app} · ${F('pil').name} · ${markWord('lbHours')}`, tier: 'team', gone: at(3), why: keepWord('lbHours') },
+    { d: 3, n: `Shared with ${P('p1').name}`, s: `${DATA.shares[0].id} · for ${US('safety').word.toLowerCase()}`, tier: 'department', closed: at(1), why: 'share ended' },
+    { d: 3, n: `Answer ${DATA.answer.id}, as a count`, s: `${P('p1').name} · Explorer · counted over ${DATA.answer.of}, none named`, tier: 'department', count: true },
+    { d: 4, n: `${DATA.briefing.title} ¶3`, s: `${DATA.doc.app} · kept ${POL.keepRules[DATA.briefing.keep]}`, tier: 'department', count: true },
+    { d: 5, n: `${DATA.groups.sc.name}’s copies`, s: `share SR-0201 · ${DATA.groups.sc.people} people`, tier: 'org', closed: at(2), why: 'share ended; their notes stay theirs' },
+    { d: 2, n: `Fact: ${FACT('f1').k}`, s: `the grounding itself, ${markWord('lbOff')}`, tier: 'department', gone: at(4), why: keepWord('lbOff') }
+  ];
+}
+function render() {
+  const T = tree(S.i), st = STEPS[S.i];
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.record.title, FACT('f5').k, 'Copies'], [['← →', 'move the date'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-5)"><div><p class="eyebrow">${FACT('f5').k} · ${FACT('f5').v} · and everything made from it</p><h1 class="title">Every copy</h1></div>
+      <p class="sub">Each copy keeps its source’s keep-until. When it passes, the copy goes everywhere, and each place says so. A count made from the value stays, because it no longer names anyone.</p></div>
+    <div class="scrub"><span class="d">${st.d}</span>
+      <div class="rail" role="slider" aria-valuemin="0" aria-valuemax="${STEPS.length - 1}" aria-valuenow="${S.i}" aria-valuetext="${st.d}" tabindex="0"><span class="tr"></span>${STEPS.map((x, j) => `<span class="st" style="left:${j / (STEPS.length - 1) * 100}%"><span>${x.d}</span></span>`).join('')}<span class="kn" style="left:${S.i / (STEPS.length - 1) * 100}%"></span></div>
+      <span class="who">${st.w}</span></div>
+    <div class="tree">${T.map((n, j) => `<div class="node dep ${n.gone ? 'gone' : ''} ${n.closed ? 'closed' : ''}" style="--d:${n.d};--i:${j}" data-tier="${n.tier}"><span><b>${n.n}</b></span><span class="state">${n.gone ? `${I('trash-2', 12)} removed · ${n.why}` : n.closed ? `${I('lock', 12)} closed · ${n.why}` : n.count ? `${I('hash', 12)} stays: a count` : `${I('check', 12)} held`}</span><span class="s">${n.s}</span></div>`).join('')}</div>
+  </div></main>`;
+  afterRender();
+}
+function go(i) { S.i = Math.max(0, Math.min(STEPS.length - 1, i)); render(); }
+function replay() { clearLater(); closeDeed(); S.i = 0; settleIn(); render(); later(() => go(3), MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowRight') go(S.i + 1); if (e.key === 'ArrowLeft') go(S.i - 1);
+});
+replay();
+</script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Readers V3 · Relate to the reader</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: one paragraph template; the slots that change with the reader light up, and the digits are checked to be the same ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:var(--space-6)}
+.main-col{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.tabs{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.para{font-weight:300;font-size:var(--type-heading);line-height:1.55;color:var(--light);max-width:46ch;padding-left:var(--space-4);border-left:2px solid var(--fc)}
+.para .slot{border-bottom:1px solid var(--fc);transition:background var(--motion-calm) var(--ease-out)}
+.para .slot.ch{background:color-mix(in srgb,var(--fc) 18%,transparent)}
+.para .fix{color:var(--ink)}
+.para .d{font-family:var(--font-mono);font-weight:400}
+.legend{display:flex;gap:var(--space-5);font-size:var(--type-small);color:var(--ink-muted);flex-wrap:wrap}
+.legend span{display:inline-flex;gap:var(--space-2);align-items:center}
+.legend i{display:inline-block;width:var(--space-5);height:var(--space-3);border-bottom:1px solid var(--fc)}
+.legend i.fixed{border-bottom:1px solid var(--ink-muted)}
+.check{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.check h2{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.check table{border-collapse:collapse;font-size:var(--type-small)}
+.check th,.check td{padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline);text-align:left}
+.check th{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);color:var(--ink-muted);text-transform:uppercase}
+.check td.n{font-family:var(--font-mono);color:var(--light);text-align:right}
+.check td.n.miss{color:var(--ink-muted)}
+.ok{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--x-proposed-lit)}
+.note{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,1fr) 290px;gap:var(--space-5)}.para{font-size:var(--type-lead);line-height:1.55}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Readers · V3</b> relate to the reader: one template, the slots that change lit, the digits checked to be the same in every copy · Tilden (1957), audience labels, same digits at every height</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { who: 'mira', prev: null };
+/* one paragraph template. Fixed parts are the information; slots are filled per reader from DATA. Every digit is a fixed part */
+const d = n => `<span class="d">${n}</span>`;
+const FIX = {
+  a: `${R.place} missed ${d(R.series.at(-1).v)} collections in October, up from ${d(13)} in July, and over the limit of ${d(R.limit)} for a second month.`
+};
+const SLOTS = {
+  mira:  { lead: 'For your crews:', mean: `${d(11)} of them were on ${R.changedRounds.join(' and ')}, the rounds changed on ${R.changedOn}.`, so: 'That part is yours to change this week.', ask: `${P('mira').name} can open every record behind it.` },
+  grace: { lead: 'For your decision:', mean: `one more month over is a service failure under ${R.limitWhere}.`, so: `You can decline to renew without penalty if November is over too; you decide by ${T.decideBy.replace(' 2026', '')}.`, ask: `Some records are kept on the Team floor; ask ${P('mira').name}.` },
+  owen:  { lead: 'For the Org:', mean: `it is ${d(1)} of ${d(R.otherContracts)} service contracts over its limit.`, so: `The decision is the Department’s; it reaches the board only if it retenders, by 15 Jan.`, ask: `Most records are kept on lower floors; ask ${P('grace').name}.` }
+};
+const digits = h => (h.match(/<span class="d">(\d+)<\/span>/g) || []).map(x => x.replace(/\D/g, ''));
+function paraHTML(id) {
+  const s = SLOTS[id];
+  return `<span class="slot" data-k="lead">${s.lead}</span> <span class="fix">${FIX.a}</span> <span class="slot" data-k="mean">${s.mean[0].toUpperCase() + s.mean.slice(1)}</span> <span class="slot" data-k="so">${s.so}</span>`;
+}
+function render(changed) {
+  const fixedDigits = digits(FIX.a);
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Readers'], [['1 2 3', 'reader'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="main-col"><div><p class="eyebrow">Same information, three readers · relate it to the reader</p><h1 class="title">One template, three readers</h1></div>
+      <div class="tabs">${DATA.readers.map((r, k) => `<button class="tab" data-w="${r.id}" data-tier="${P(r.id).floor}" aria-pressed="${S.who === r.id}"><span class="kbd">${k + 1}</span>${P(r.id).name} · ${F(P(r.id).floor).word}</button>`).join('')}</div>
+      <p class="para" data-tier="${P(S.who).floor}">${paraHTML(S.who)}</p>
+      <p class="note">${rm('context')} for ${whoHTML(S.who, { role: true })} · ${SLOTS[S.who].ask}</p>
+      <div class="legend" data-tier="${P(S.who).floor}"><span><i></i> a slot: chosen for this reader (lit when it changed)</span><span><i class="fixed"></i> the information: the same words for everyone</span></div>
+    </div>
+    <aside class="check"><h2>Same digits?</h2><p class="note">Every number in the shared part is checked across the three copies. A slot may add a number of its own, but may not restate a shared one differently.</p>
+      <table><thead><tr><th>Shared</th>${DATA.readers.map(r => `<th>${first(r.id)}</th>`).join('')}</tr></thead>
+      <tbody>${fixedDigits.map(n => `<tr><td>${n}</td>${DATA.readers.map(r => { const has = digits(paraHTML(r.id)).includes(n); return `<td class="n ${has ? '' : 'miss'}">${has ? n : '—'}</td>`; }).join('')}</tr>`).join('')}</tbody></table>
+      <p class="ok">${I('check', 14)} The shared digits are the same in all three copies.</p>
+      <p class="note">Tilden: information alone is not interpretation; relate it to the visitor. Here only the slots relate. The paragraph never changes what was counted.</p></aside>
+  </div></main>`;
+  hydrate($('#app'));
+  if (changed) $$('.para .slot').forEach(el => el.classList.add('ch'));
+  $$('.tab').forEach(b => b.onclick = () => go(b.dataset.w));
+}
+function go(id) { S.prev = S.who; S.who = id; render(true); }
+play(() => { S.who = 'mira'; render(); }, () => {
+  const step = ms('--motion-calm') * 2;
+  later(() => go('grace'), 0);
+  later(() => go('owen'), step);
+}, (e, k) => { const r = DATA.readers[+k - 1]; if (r) go(r.id); });
+</script>
+</body>
+</html>

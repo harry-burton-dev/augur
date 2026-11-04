@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Combined V1 · From the move to the next player</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V1: one contract decision followed end to end: the move as recorded, the reversal, the replay and marks, the book, and a year later the new colleague who meets it ---- */
+.wrap{height:100%;display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr) var(--measure-rail);grid-template-rows:minmax(0,1fr) auto;gap:var(--space-4) var(--space-5)}
+.game{min-height:0;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)}
+.game .t{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.game .life{display:grid;gap:var(--space-2)}
+.game .life li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);transition:color var(--motion-calm) var(--ease-out)}
+.game .life li.on{color:var(--ink)}
+.game .life li.on svg{color:var(--light)}
+.game .life li.now{color:var(--light)}
+.scene{min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.scene .when{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap}
+.scene .when .d{font:300 var(--type-heading)/var(--leading-heading) var(--font-mono);color:var(--light)}
+.scene h2{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light)}
+.scene .p{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);max-width:var(--measure-wide)}
+.bx{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline-strong);background:var(--surface-inset);display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}
+.bx.lit{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.bx.warn{border-color:var(--x-proposed-warn);background:var(--x-proposed-warn-wash)}
+.bx .k{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.bx .m{display:grid;grid-template-columns:2.6em minmax(0,1fr);gap:var(--space-2);align-items:baseline}
+.bx .by{color:var(--ink-muted)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-3)}
+.sheet{min-height:0;padding:var(--space-3);display:flex;flex-direction:column;gap:1px}
+.sheet .mv{padding:2px var(--space-2);grid-template-columns:1.8em var(--space-1) minmax(0,1fr) auto}
+.sheet .mv .mv-san{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail{grid-column:1 / -1;position:relative;height:calc(var(--space-7) + var(--space-1));margin:0 var(--space-3)}
+.rail .seg{position:absolute;top:var(--space-5);height:1px;background:var(--hairline-strong)}
+.rail .gap{position:absolute;top:calc(var(--space-5) - var(--space-2));font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);transform:translateX(-50%);white-space:nowrap;text-align:center}
+.rail .gap::before{content:"";display:block;width:var(--space-6);height:1px;margin:var(--space-2) auto var(--space-1);border-top:1px dashed var(--ink-muted)}
+.rail button.sc{position:absolute;top:calc(var(--space-5) - var(--space-2));transform:translateX(-50%);width:var(--space-4);height:var(--space-4);border-radius:var(--radius-pill);border:1px solid var(--ink-muted);background:var(--slate-deep)}
+.rail button.sc.seen{border-color:var(--light);background:var(--light)}
+.rail button.sc.cur{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit);box-shadow:0 0 0 var(--focus-gap) var(--x-proposed-lit-wash)}
+.rail .sl{position:absolute;top:0;transform:translateX(-50%);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);white-space:nowrap}
+.rail .sl.cur{color:var(--light)}
+.rail .dl{position:absolute;top:calc(var(--space-6) + var(--space-1));transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+@media (max-width:1400px){.wrap{grid-template-columns:calc(var(--measure-rail) - var(--space-5)) minmax(0,1fr) calc(var(--measure-rail) - var(--space-4));gap:var(--space-3) var(--space-4)}.scene{padding:var(--space-3) var(--space-4);gap:var(--space-2)}.scene h2{font-size:var(--type-heading);line-height:var(--leading-heading)}.game{padding:var(--space-3)}.rail .sl{font-size:var(--x-proposed-type-micro)}.bx{padding:var(--space-2) var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V1</b> from the move to the next player: a contract decision played, reversed, replayed, marked, filed, and met a year later by a new colleague facing the same renewal · replay V2 V4, marking V2 V4, voices V1 V5, collection V1, learning V1 V2 V5 V6</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const L = DATA.later, D = L.draft, R = DATA.review, m6 = MV(6);
+/* seven scenes, each a date. What the game record shows is read from the records on that date */
+const SC = [
+  { on: m6.on, w: 'The move', title: 'Notice to Kestrel, recorded as one-way', life: 0,
+    body: () => `<p class="p">${P('p4').name} gives Kestrel notice for 1 September. AUGUR records it as she sends it: a step that can’t be undone, what it depends on (A-302, the hiring) and the clock it ran against. Nobody judges it today.</p>
+      <div class="two"><div class="bx"><p class="k">Recorded with the move</p><p>${I('door-closed', 14)} One-way: way back is a quick tender</p><p>${I('link', 14)} Depends on: two fitters (A-302), 0 of 2 in post</p><p>${gl('⊕')} Clock: notice due by 1 June</p></div>
+      <div class="bx"><p class="k">The records today</p><p>${posGl(posAt(m6.on).s, 'big')} ${posAt(m6.on).w}</p><p class="by">With the dependency recorded, the records add one line on the day: “a one-way step taken before what it depends on”. Quiet: it goes on the decision, not to anyone’s Inbox.</p></div></div>` },
+  { on: DEC.ended, w: 'Game over', title: 'Reversed after 175 days', life: 1,
+    body: () => `<p class="p">${DEC.happened}</p><div class="bx"><p class="k">Result</p><p>${DATA.results[DEC.result]} by ${DEC.reversedBy} · the minute run’s record of it stays whole, with seams where it was cited.</p><p class="by">A reversal starts a review automatically for decisions of this kind (“change a contract”), led by someone outside the moves: ${P(R.facilitator).name}.</p></div>` },
+  { on: R.held, w: 'Replay', title: 'Replayed as it stood, own moves first', life: 2,
+    body: () => `<p class="p">Three weeks later the people who played it replay it move by move. Moves still to come are out of focus. Each person marks their own moves before seeing the reviewer’s.</p>
+      <div class="bx warn"><p class="k">Move 6 · ${m6.san}</p>${ANN(6).map(a => `<div class="m">${gl(a.g, 'big')}<span>${a.line} <span class="by">· ${first(a.by)}${a.self ? ', own move' : ''}</span></span></div>`).join('')}</div>
+      <div class="bx"><p class="k">Two voices</p><p>The records read ${posGl(posAt(m6.on).s)} that day and ${posGl(posAt(MV(7).on).s)} a month on. The reviewer’s ${gl('∞')} hatches the stretch to 1 August: the records couldn’t see the way back close.</p></div>` },
+  { on: R.agreed, w: 'Filed', title: 'Agreed in the room, filed in the book', life: 3,
+    body: () => `<p class="p">The meeting agrees the review the way it agrees a minute; each person present answers. Move 13 keeps two marks. The review is filed under its situation, not its subject.</p>
+      <div class="two"><div class="bx lit"><p class="k">${I('book-open', 12)} The book · C3.2</p><p>${DATA.book.codes['C3.2']}</p><p class="by">Motifs: ${DATA.book.games[0].motifs.map(k => DATA.book.motifs[k].name.toLowerCase()).join(', ')}.</p></div>
+      <div class="bx"><p class="k">Theory added</p><p>Secure what it depends on before the step you can’t undo. <span class="by">(move 6, and R-03 played it)</span></p><p>Count cover in any in-house costing. <span class="by">(move 1)</span></p></div></div>` },
+  { on: L.today, w: 'A year on', title: `${first(L.who)} drafts the same kind of renewal`, life: 4,
+    body: () => `<p class="p">${P(L.who).name} joined in September. ${D.contractor}’s contract for the south depot ends ${dt(D.ends, 'short')} ${dt(D.ends).slice(-4)}; she is drafting ${D.id}, to move its ${D.vans} vans to the North bay. AUGUR recognises the position from her answers: ${D.code}.</p>
+      <div class="bx">${D.moves.map(x => `<div class="m"><span class="mono muted">${x.n}.</span><span>${x.san} ${x.door ? I('door-closed', 12) : ''} <span class="by">· ${x.like === 6 ? `<b style="font-weight:400;color:var(--x-proposed-warn)">R-07 played this, marked ${mainMark(6).g}</b>` : 'in book, R-07 move ' + x.like}</span></span></div>`).join('')}</div>
+      <div class="bx warn"><p class="k">${I('book-open', 12)} The margin, at her move 3</p><p>“${mainMark(6).line}” <span class="by">· ${P(mainMark(6).by).name}, R-07</span></p><p>${gl('!')} The book line: hire first, then give notice (R-03, kept).</p></div>` },
+  { on: L.today, w: 'Her move', title: 'She plays move 6 herself, then asks', life: 5,
+    body: () => `<p class="p">Before reading on, she plays R-07’s critical moment as it stood on ${dt(m6.on, 'short')} ${m6.on.slice(0, 4)}. Her choice is private. Then she sees what was played, both marks, and Dana’s own ${gl('□')}; and asks Dana, now her manager, one question with the move attached.</p>
+      <div class="two"><div class="bx"><p class="k">Your move · private</p>${L.puzzle.choices.map(c => `<p>${c.k.toUpperCase()}. ${c.san} ${c.played ? '<span class="by">· played, ' + mainMark(6).g + '</span>' : c.best ? '<span class="by">· R-03, kept</span>' : ''}</p>`).join('')}</div>
+      <div class="bx"><p class="k">${face('p4', 'sm')} Asked · answered</p><p>“Would you give notice before the fitters are in post again?”</p><p class="by">“No. I’d renew with the break and write the day the second fitter signs. I did what the decision said; the order was nobody’s choice. Make it yours.” · ${first('p4')}</p></div></div>` },
+  { on: D.meets, w: 'The meeting', title: `${D.id} goes to the meeting with the lesson in it`, life: 6,
+    body: () => `<p class="p">Her draft keeps two seams that say what changed and which game it came from. The meeting sees the question and her answer. When ${D.id} is reviewed in its turn, its replay will show that move as the book line.</p>
+      <div class="bx lit"><p class="k">${D.id} · as it goes to ${D.meeting}</p><div class="m"><span class="mono muted">1.</span><span>Paper: £131 a van, cover counted <span class="by">· changed after R-07 move 1</span></span></div><div class="m"><span class="mono muted">3.</span><span>Renew ${D.contractor} for six months with a break; notice once both fitters are in post <span class="by">· changed after R-07 move 6</span></span></div><div class="m"><span class="mono muted">4.</span><span>Line: revisit if more than 3 south depot vans are overdue</span></div></div>` }
+];
+const LIFE = ['Played', 'Reversed', 'Replayed and marked', 'Agreed and filed in the book', 'Recognised in a new draft', 'Read and asked about', 'Cited by the next decision'];
+const S = { i: 4 };
+/* a broken rail: 2026 May to Dec, a gap, 2027 Nov to Dec */
+const XS = d => d < '2027' ? 3 + (ts(d) - ts('2026-05-15')) / (ts('2026-12-15') - ts('2026-05-15')) * 52 : 70 + (ts(d) - ts('2027-11-01')) / (ts('2027-12-20') - ts('2027-11-01')) * 27;
+function render() {
+  const sc = SC[S.i];
+  const shownMoves = S.i >= 2 ? MOVES : MOVES.filter(m => le(m.on, sc.on));
+  $('#app').innerHTML = topHTML(['Mandate', 'The book', 'R-07'], [['← →', 'scene'], ['P', 'play from the start'], ['R', 'replay']], { as: sc.on }) +
+  `<main class="main"><div class="wrap">
+    <section class="game pane" aria-label="The game"><p class="eyebrow">The game</p><p class="lab">${DEC.id} · R-07 · ${DATA.book.games[0].code}</p><p class="t">${DEC.title}</p>
+      <ul class="life">${LIFE.map((w, i) => `<li class="${i < sc.life ? 'on' : ''} ${i === sc.life ? 'now' : ''}">${I(i <= sc.life ? 'circle-check' : 'circle', 14)}<span>${w}</span></li>`).join('')}</ul>
+      <p class="small muted" style="margin-top:auto">One record from the move to the next player. Nothing is copied: the book, the margin and the next decision all point at the same review.</p></section>
+    <section class="scene pane scroll fade" aria-live="polite"><div class="when"><span class="d">${dt(sc.on)}</span><span class="lab">${S.i + 1} of ${SC.length} · ${sc.w}</span></div><h2>${sc.title}</h2>${sc.body()}</section>
+    <section class="sheet pane scroll" aria-label="Moves"><p class="eyebrow" style="padding:var(--space-1) var(--space-2) var(--space-2)">${S.i >= 2 ? 'The annotated game' : 'The moves so far'}</p>${shownMoves.map(x => moveRow(x, { sel: 6, marks: S.i >= 2 })).join('')}</section>
+    <div class="rail" aria-label="Eighteen months"><span class="seg" style="left:3%;width:52%"></span><span class="gap" style="left:63.5%">11 months</span><span class="seg" style="left:72%;width:27%"></span>
+      ${SC.map((s, i) => { const x = [5, 21, 37, 53, 74, 86, 97][i]; return `<span class="sl ${i === S.i ? 'cur' : ''}" style="left:${x}%">${s.w}</span><button class="sc ${i < S.i ? 'seen' : ''} ${i === S.i ? 'cur' : ''}" style="left:${x}%" data-i="${i}" aria-label="${s.w}, ${dt(s.on)}"></button><span class="dl" style="left:${x}%">${dt(s.on, 'month')}</span>`; }).join('')}</div>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.rail button.sc').forEach(b => b.onclick = () => { clearLater(); S.i = +b.dataset.i; render(); });
+}
+function play() { clearLater(); S.i = 0; render(); SC.forEach((_, i) => i && later(() => { S.i = i; render(); }, i * ms('--motion-hold'))); }
+function replay() { clearLater(); S.i = 0; render(); settle(); later(() => { S.i = 4; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowRight') { clearLater(); S.i = Math.min(SC.length - 1, S.i + 1); render(); }
+  if (e.key === 'ArrowLeft') { clearLater(); S.i = Math.max(0, S.i - 1); render(); }
+  if (e.key.toLowerCase() === 'p') play();
+});
+replay();
+</script>
+</body>
+</html>

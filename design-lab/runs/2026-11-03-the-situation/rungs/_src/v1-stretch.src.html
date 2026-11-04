@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Rungs V1 · One sentence that climbs</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: stretchtext. One sentence grows a clause per lift; the rung mark climbs beside it ---- */
+.wrap{height:100%;display:grid;grid-template-columns:150px minmax(0,1fr) minmax(300px,26%);gap:var(--space-6)}
+.ladder{display:flex;flex-direction:column-reverse;justify-content:flex-end;gap:var(--space-3);padding-top:var(--space-7)}
+.lr{display:grid;gap:var(--space-1);padding:var(--space-3);border-left:2px solid var(--hairline);color:var(--ink-muted);transition:border-color var(--motion-base) var(--ease-out),color var(--motion-base) var(--ease-out)}
+.lr.on{border-left-color:var(--light);color:var(--light)}
+.lr.past{border-left-color:var(--ink-muted)}
+.lr b{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.mid{min-height:0;display:flex;flex-direction:column;gap:var(--space-5);padding-top:var(--space-4)}
+.sent{font-weight:300;font-size:var(--type-title-s);line-height:1.4;color:var(--light);max-width:34ch;letter-spacing:var(--tracking-tight)}
+.sent .cl{transition:opacity var(--motion-calm) var(--ease-out),color var(--motion-calm) var(--ease-out)}
+.sent .cl[data-l]{border-bottom:1px dashed var(--x-proposed-lift-edge)}
+.sent .cl.new{color:var(--x-proposed-lit)}
+.sent .cl.hide{display:none}
+.sent .fig{font-family:var(--font-mono);font-weight:400}
+.who-line{display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.steps{display:flex;gap:var(--space-2);align-items:center}
+.steps button{width:var(--space-5);height:var(--space-1);border-radius:1px;background:var(--hairline-strong)}
+.steps button.on{background:var(--light)}
+.adds{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.adds h2{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light);margin-bottom:var(--space-2)}
+.add{display:grid;gap:var(--space-1);padding:var(--space-2) var(--space-3);border-left:2px solid var(--hairline);opacity:var(--x-proposed-quiet);transition:opacity var(--motion-base) var(--ease-out),border-color var(--motion-base) var(--ease-out)}
+.add.on{opacity:1;border-left-color:var(--hairline-strong)}
+.add.cur{border-left-color:var(--x-proposed-lit)}
+.add p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.add .by{font-size:var(--type-small);color:var(--ink-muted)}
+.note{margin-top:auto;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+@media (max-width:1400px){.wrap{grid-template-columns:120px minmax(0,1fr) minmax(260px,27%);gap:var(--space-5)}.sent{font-size:var(--type-heading);line-height:1.45}.lr b{font-size:var(--type-body)}.add .by{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Rungs · V1</b> one sentence that climbs: a clause per lift, the rung mark beside it · stretchtext (Nelson), Ackoff, the nut graf</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { k: 0 };
+const nov = R.series.find(x => x.m === 'Jul').v;
+/* each clause: its text, the lift that adds it, the rung the sentence reaches, who chose it */
+const CL = [
+  { t: `<span class="fig">${R.series.at(-1).v}</span> ${R.unit} in October`, rung: 'data', by: 'Data Atlas', why: 'The reading, as the crews logged it.', src: PC('d1').src },
+  { t: `, twice July’s <span class="fig">${nov}</span>`, l: 'comparison', rung: 'info', by: 'template', why: 'Compared with the last month before the rounds changed.' },
+  { t: `, and over the contract’s limit of <span class="fig">${R.limit}</span> for the second month running.`, l: 'threshold', rung: 'info', by: 'template', why: `Against ${R.limitWhere}: ${R.limitRule}.` },
+  { t: ` For ${first(T.decider)}’s renewal decision on ${T.decideBy.replace(' 2026', '')}, that matters:`, l: 'question', rung: 'context', by: P(T.owner).name, why: 'The question it is for, and who will decide.' },
+  { t: ` one more month over makes it a service failure, and the contract can end without penalty.`, l: 'projection', rung: 'context', by: P(T.owner).name, why: 'What happens next, from the contract’s own rule.' },
+  { t: ` ${T.supplierShort}’s own count is <span class="fig">${R.supplierCount}</span>; it leaves out “no access” calls.`, l: 'situation', rung: 'context', by: P(T.owner).name, why: 'What else is going on: the other side’s number, and why it differs.' }
+];
+function render() {
+  const rung = CL[S.k].rung;
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id], [['← →', 'climb'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="ladder">${RUNGS.map(r => `<div class="lr ${r === rung ? 'on' : RUNG[r].n < RUNG[rung].n ? 'past' : ''}">${rm(r, { lg: true, word: false })}<b>${RUNG[r].word}</b></div>`).join('')}</div>
+    <div class="mid">
+      <div><p class="eyebrow">One reading, three rungs</p></div>
+      <p class="sent">${CL.map((c, k) => `<span class="cl ${k > S.k ? 'hide' : ''} ${k === S.k && k ? 'new' : ''}" ${c.l ? `data-l="${c.l}"` : ''}>${c.t}</span>`).join('')}</p>
+      <div class="who-line">${rm(rung)}${S.k >= 3 ? `<span class="as-context" data-tier="${P(T.decider).floor}">for ${whoHTML(T.decider, { role: true })}</span>` : '<span>for nobody in particular yet</span>'}<span>· ${srcHTML(PC('d1').src)}</span></div>
+      <div class="steps" role="group" aria-label="Steps">${CL.map((c, k) => `<button class="${k <= S.k ? 'on' : ''}" data-k="${k}" aria-label="Step ${k + 1}"></button>`).join('')}</div>
+      <p class="note">Each clause is a template filled from the working set; only the words that join them are chosen. Remove a clause and the sentence drops back a rung, never to nothing: the reading is always there.</p>
+    </div>
+    <aside class="adds scroll"><h2>What each clause adds</h2>
+      ${CL.map((c, k) => `<div class="add ${k <= S.k ? 'on' : ''} ${k === S.k ? 'cur' : ''}">${c.l ? liftHTML({ k: c.l, w: DATA.lifts[c.l].word }) : rm('data')}<p>${c.why}</p><span class="by">${c.by === 'template' ? 'by rule · template' : c.by === 'Data Atlas' ? 'as read · Data Atlas' : 'chosen by ' + c.by}</span></div>`).join('')}
+    </aside>
+  </div></main>`;
+  hydrate($('#app'));
+  $$('.steps button').forEach(b => b.onclick = () => { S.k = +b.dataset.k; render(); });
+}
+play(() => { S.k = 0; render(); }, () => {
+  const step = ms('--motion-calm') * 0.6;
+  CL.forEach((c, k) => k && later(() => { S.k = k; render(); }, (k - 1) * step));
+}, (e, k) => { if (e.key === 'ArrowRight') { S.k = Math.min(CL.length - 1, S.k + 1); render(); } if (e.key === 'ArrowLeft') { S.k = Math.max(0, S.k - 1); render(); } });
+</script>
+</body>
+</html>

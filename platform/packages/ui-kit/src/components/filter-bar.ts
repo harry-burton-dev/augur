@@ -200,7 +200,7 @@ export class UiFilterBar extends LitElement {
       .panel {
         position: fixed; inset: auto; margin: 0; min-width: 220px; max-width: 320px; padding: var(--space-1);
         background: var(--surface-overlay); backdrop-filter: blur(var(--surface-blur));
-        border: 1px solid var(--hairline-strong); border-radius: var(--radius-card); box-shadow: var(--shadow-overlay, 0 12px 32px rgba(0, 0, 0, 0.35)); color: var(--ink);
+        border: 1px solid var(--hairline-strong); border-radius: var(--radius-card); box-shadow: var(--shadow-overlay); color: var(--ink);
       }
       .panel[hidden] { display: none; }
       .options { max-height: 280px; overflow-y: auto; }
