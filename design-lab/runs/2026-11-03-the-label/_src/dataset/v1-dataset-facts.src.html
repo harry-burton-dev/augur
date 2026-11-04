@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Dataset V1 · Dataset facts</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the nutrition facts panel. Heavy rules, a fixed order, "% of expected" where food has "% daily value" ---- */
+:root{
+  /* NEW: the heavy and medium rules of a facts panel (needs token) */
+  --x-proposed-rule-heavy: calc(var(--space-2) + 2px);
+  --x-proposed-rule-mid: var(--space-1);
+}
+.wrap{height:100%;display:grid;grid-template-columns:minmax(380px,var(--measure-glance)) minmax(0,1fr);gap:var(--space-7);justify-content:center}
+.panel{align-self:start;max-height:100%;overflow:auto;border:1px solid var(--light);padding:var(--space-2) var(--space-3);color:var(--light);background:var(--slate-deep)}
+.panel h1{font-weight:600;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-tight);margin:0}
+.panel .r{display:flex;justify-content:space-between;gap:var(--space-3);border-top:1px solid var(--ink-muted);padding:2px 0;font-size:var(--type-meta);line-height:var(--leading-meta)}
+.panel .r.ind{padding-left:var(--space-4)}
+.panel .r b{font-weight:600}
+.panel .hv{border-top:var(--x-proposed-rule-heavy) solid var(--light)}
+.panel .md{border-top:var(--x-proposed-rule-mid) solid var(--light)}
+.panel .big{font-weight:600;font-size:var(--type-heading);line-height:var(--leading-heading)}
+.panel .dv{font-weight:600;text-align:right;min-width:calc(var(--space-7) - var(--space-3))}
+.panel .small{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-1) 0}
+.panel .mk{font-size:var(--x-proposed-type-micro)}
+.panel .bar{display:inline-block;width:calc(var(--space-7) + var(--space-3));height:var(--space-2);background:var(--hairline);vertical-align:1px;margin-right:var(--space-2)}
+.panel .bar i{display:block;height:100%;background:var(--light);transform-origin:left;transition:transform var(--motion-calm) var(--ease-out)}
+.pre-fill .panel .bar i{transform:scaleX(0)}
+.side{display:grid;gap:var(--space-4);align-content:start;max-width:var(--measure-read)}
+.side .row{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.side .row b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.wrap{gap:var(--space-5);grid-template-columns:minmax(380px,var(--measure-glance)) minmax(0,1fr)}.panel .r{font-size:var(--type-small);line-height:var(--leading-small)}.panel h1{font-size:var(--type-heading);line-height:var(--leading-heading)}}
+</style>
+</head>
+<body class="pre pre-fill">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Dataset · V1</b> dataset facts: a fixed panel with heavy rules; "% of expected" where food has "% daily value", contains and not-for in bold · US Nutrition Facts panel, the Dataset Nutrition Label (2018)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DSET();
+function render() {
+  const lb = dsetLabel();
+  const exp = D.parts.filter(p => p.expected);
+  const no = USE_IDS().filter(u => lb.uses[u] === 'no').map(u => `<b>${US(u).word.toLowerCase()}</b>`);
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Collections', D.title], [...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <article class="panel" aria-label="Dataset facts">
+      <h1>Dataset facts</h1>
+      <div class="r small" style="border:0">${D.title}</div>
+      <div class="r hv"><span>Records</span><span class="big">${fmt(D.records)}</span></div>
+      <div class="r"><span>One record is</span><span>a shift, a report or a track</span></div>
+      <div class="r md"><span></span><span class="dv">% of expected*</span></div>
+      ${D.parts.map((p, i) => `<div class="r dep" style="--i:${i}"><span><b>${p.name}</b> ${p.n}</span><span class="dv">${p.expected ? `<span class="bar"><i style="transform:scaleX(${p.n / p.expected})"></i></span>${pct(p.n, p.expected)}%` : '<span class="muted">n/a</span>'}</span></div>
+        <div class="r ind"><span class="small" style="padding:0">${p.origin}</span><span>${pmHTML(p.label)}</span></div>`).join('')}
+      <div class="r hv"><span><b>Contains</b></span><span>${lb.desc.map(d => `<b>${DS(d).word}</b>`).join(', ')}</span></div>
+      <div class="r"><span><b>Not for</b></span><span style="text-align:right">${andList(no)}</span></div>
+      <div class="r"><span>Reporting</span><span>${POL.useWords[lb.uses.report]}${lb.uses.report === 'no' ? ' as a whole; parts as counts' : ''}</span></div>
+      <div class="r"><span>Marking</span><span>${markHTML(lb)}</span></div>
+      <div class="r"><span>Kept by</span><span>${P(D.keeper).name} · ${F(D.keptOn).name}</span></div>
+      <div class="r md"><span>Checked</span><span>${D.checked}</span></div>
+      <div class="r small" style="border:0">* % of expected: records held against records that should exist, where the source says how many. Near-miss reports have no expected number: nobody knows how many went unreported.</div>
+    </article>
+    <aside class="side"><p class="eyebrow">A collection’s own label</p><h1 class="title">What it is made of</h1>
+      <p class="sub">${D.why}</p>
+      <div class="row">${I('triangle-alert', 16)}<span><b>Known issues.</b> ${D.issues.join(' ')}</span></div>
+      <div class="row">${I('ban', 16)}<span><b>Why not for appraisal.</b> ${D.usesWhy.appraisal}</span></div>
+      <div class="row">${I('bot', 16)}<span><b>Why not for model use.</b> ${D.usesWhy.model}</span></div>
+      <div class="row">${I('shield', 16)}<span><b>The marking is the strictest part’s.</b> ${tpl(POL.rules[1])}</span></div>
+    </aside>
+  </div></main>`;
+  afterRender();
+}
+function replay() { clearLater(); closeDeed(); document.body.classList.add('pre-fill'); settleIn(); render(); later(() => document.body.classList.remove('pre-fill'), MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

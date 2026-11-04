@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Not for you V2 · Redacted, with reasons</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: the document with what you may not read taken out: a bar of fixed length, a code in the margin, the plain reason and who could lift it ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,32%);gap:var(--space-6)}
+.paper{min-height:0;display:flex;flex-direction:column;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);overflow:hidden}
+.paper .in{flex:1;min-height:0;padding:var(--space-5) var(--space-6);display:grid;gap:var(--space-4);align-content:start}
+.paper h1{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light)}
+.sec{display:grid;grid-template-columns:minmax(0,1fr) calc(var(--space-8) - var(--space-3));gap:var(--space-4)}
+.sec h3{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.sec p{font-weight:300;font-size:var(--type-lead);line-height:calc(var(--leading-lead) + var(--space-1));color:var(--ink)}
+/* a redaction: always the same length, so it gives nothing away by its size */
+.bar{display:inline-flex;align-items:center;gap:var(--space-1);vertical-align:-2px;width:calc(var(--space-8) - var(--space-4));height:calc(var(--leading-lead) - var(--space-1));padding:0 var(--space-2);border-radius:2px;background:var(--slate-deep);border:1px solid var(--hairline-strong);color:var(--ink-muted);font:500 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-soft);transition:background var(--motion-base) var(--ease-standard),border-color var(--motion-base) var(--ease-standard)}
+.bar.on,.bar:hover{border-color:var(--x-proposed-lit);color:var(--light)}
+.bars-pre .bar{background:transparent;border-color:transparent;color:transparent}
+.code{display:grid;gap:var(--space-1);align-content:start;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-left:1px solid var(--hairline);padding-left:var(--space-3)}
+.code b{font:500 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--ink)}
+.notes{display:grid;gap:var(--space-3);align-content:start}
+.note{display:grid;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);font-size:var(--type-meta);line-height:var(--leading-meta);transition:border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.note.on{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.note .h{display:flex;gap:var(--space-2);align-items:center;font:500 var(--type-small)/var(--leading-small) var(--font-mono);color:var(--light)}
+@media (max-width:1400px){.sec p{font-size:var(--type-body);line-height:var(--leading-body)}.bar{height:var(--leading-body)}.paper .in{padding:var(--space-4)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Not for you · V2</b> redacted, with reasons: fixed-length bars, a code in the margin, the plain reason and who could lift it · FOI redaction with exemption codes, GSC portion marking</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DATA.doc, me = READERS.sam;
+const S = { on: null, shown: false };
+/* redactions come from the values' labels: every labelled value inside the prose that this reader can't open */
+function redact(sec) {
+  let t = sec.text; const found = [];
+  DATA.record.facts.forEach(f => {
+    if (!t.includes(f.v)) return;
+    const v = viewFact(f, me); if (v.state === 'open') return;
+    const lb = L(f.label), code = `${MK(lb.marking).short}·${lb.desc.map(d => DS(d).short).join('')}`;
+    found.push({ f, v, code });
+    if (v.state === 'said') { t = t.replace(f.v, `<span class="said" data-r="${f.id}">${v.text}</span>`); return; }
+    t = t.replace(f.v, `<button class="bar why-r ${S.on === f.id ? 'on' : ''}" data-r="${f.id}" aria-label="Withheld: ${f.k}">${I('lock', 10)} ${code}</button>`);
+  });
+  return { t, found };
+}
+function render() {
+  const all = D.sections.map(s => ({ s, ...redact(s) }));
+  const notes = all.flatMap(x => x.found);
+  $('#app').innerHTML = topHTML(['Artifacts', D.library, D.title], [['↑ ↓', 'a withheld part'], ...STD_HINTS], me.person) +
+  `<main class="main"><div class="wrap">
+    <article class="paper ${S.shown ? '' : 'bars-pre'}">
+      <div class="banner" data-rank="0">${MK('off').word} <span class="r">· your copy · ${notes.filter(n => n.v.state !== 'said').length} parts withheld, ${notes.filter(n => n.v.state === 'said').length} said another way</span></div>
+      <div class="in scroll">
+        <div><p class="eyebrow">${D.id} · by ${P(D.by).name} · ${D.on} · read through ${DATA.record.title}</p><h1>${D.title}</h1></div>
+        ${all.map((x, i) => `<section class="sec dep" style="--i:${i}"><div><h3>${x.s.n} ${x.s.h}</h3><p>${x.t}</p></div><div class="code">${x.found.map(r => `<span><b>${r.code}</b> ${r.f.k.toLowerCase()}</span>`).join('') || '<span class="muted">nothing withheld</span>'}</div></section>`).join('')}
+      </div>
+    </article>
+    <aside class="notes"><p class="eyebrow">Why each part is withheld</p>
+      <p class="sub">Every bar is the same length, so its size says nothing. Its code is the label that withheld it, and each one says who could lift it. Nothing else in the paper is changed.</p>
+      ${notes.map(r => `<div class="note ${S.on === r.f.id ? 'on' : ''}" data-n="${r.f.id}"><span class="h">${I(r.v.state === 'said' ? 'corner-down-right' : 'lock', 12)} ${r.code} · ${r.f.k}${r.v.state === 'said' ? ' · said another way' : ''}</span><span>${r.v.why}</span>${r.v.state === 'said' ? `<span class="who">Who could change it: <b>${P(whoChanges(r.f.label)).name}</b>, ${P(whoChanges(r.f.label)).role}.</span>` : `<span class="who">Who could lift it: <b>${P(r.v.ask).name}</b>${r.v.askWhy ? `, ${r.v.askWhy}` : `, ${P(r.v.ask).role}`}.${r.v.counted ? ' You will see it inside counts.' : ''}</span>`}</div>`).join('')}
+    </aside>
+  </div></main>`;
+  afterRender();
+  $$('.bar').forEach(b => { b.onclick = () => light(b.dataset.r); b.onmouseenter = () => light(b.dataset.r); });
+}
+function light(id) { S.on = id; $$('.bar').forEach(b => b.classList.toggle('on', b.dataset.r === id)); $$('.note').forEach(n => n.classList.toggle('on', n.dataset.n === id)); }
+function replay() {
+  clearLater(); S.on = null; S.shown = false; settleIn(); render();
+  later(() => { S.shown = true; $('.paper').classList.remove('bars-pre'); }, MOMENT() * .6);
+  later(() => light('f5'), MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const ids = $$('.bar').map(b => b.dataset.r); const i = ids.indexOf(S.on); light(ids[(i + (e.key === 'ArrowDown' ? 1 : -1) + ids.length) % ids.length]); }
+});
+replay();
+</script>
+</body>
+</html>
