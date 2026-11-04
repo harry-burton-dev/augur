@@ -26,5 +26,10 @@ export default defineConfig({
   ],
   // One React for the pages and Common's parts.
   resolve: { dedupe: ['react', 'react-dom'] },
-  test: { environment: 'happy-dom', include: ['src/**/*.test.tsx', 'scripts/*.test.mjs'] },
+  test: {
+    environment: 'happy-dom',
+    // The pages add Keycloak's own scripts to the head, which happy-dom doesn't load: count them as loaded.
+    environmentOptions: { happyDOM: { settings: { handleDisabledFileLoadingAsSuccess: true } } },
+    include: ['src/**/*.test.tsx', 'scripts/*.test.mjs'],
+  },
 });
