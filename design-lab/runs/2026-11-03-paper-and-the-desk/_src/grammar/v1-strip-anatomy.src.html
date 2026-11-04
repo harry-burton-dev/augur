@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Grammar V1 · The strip</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the one shape for "a thing someone holds", part by part, and its six states ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.spec{position:relative;padding:var(--space-6) 0 var(--space-6)}
+.spec .strip{max-width:calc(var(--measure-wide) + var(--space-8))}
+.call{position:absolute;display:grid;gap:2px;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);max-width:calc(var(--measure-rail) - var(--space-4))}
+.call b{font:400 var(--x-proposed-type-micro)/1.3 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-lit);font-weight:400}
+.call::before{content:"";position:absolute;width:1px;background:var(--x-proposed-lit);opacity:.6}
+.call.up{bottom:calc(100% - var(--space-6) + var(--space-1))}.call.up::before{top:100%;height:var(--space-2);left:0}
+.call.dn{top:calc(100% - var(--space-6) + var(--space-1))}.call.dn::before{bottom:100%;height:var(--space-2);left:0}
+.states{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4) var(--space-5);align-content:start}
+.st{display:grid;gap:var(--space-2);align-content:start}
+.st h3{margin:0;font-weight:400;font-size:var(--type-meta);color:var(--light);display:flex;gap:var(--space-2);align-items:baseline}
+.st h3 .kbd{margin-left:auto}
+.st .strip{min-height:var(--target-md)}
+.st .strip .ln{display:none}
+.st p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.st .never{color:var(--ink-muted)}
+.st .never b{font-weight:400;color:var(--x-proposed-disagree)}
+.st .tok{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted)}
+.st.cockrow .strip{margin-right:var(--x-proposed-cock)}
+@media (max-width:1400px){.states{gap:var(--space-3) var(--space-4)}.st .tok{display:none}.call{max-width:calc(var(--measure-rail) - var(--space-6))}.spec{padding:var(--space-6) 0 calc(var(--space-6) + var(--space-3))}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V1</b> the strip: one shape for a thing someone holds, its five fields and six states, each with what it must never mean · flight progress strips</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const it = ITEM('M-207');
+const S = { cock: false };
+const CALLS = [
+  ['up', 0, 'Floor band', 'The floor the thing belongs to, in its colour. Never its urgency.'],
+  ['dn', 2, 'Kind and id', 'An icon for the kind, never a colour. The id is how people say it aloud.'],
+  ['up', 22, 'What, and its state', 'Plain words. The second line is the state, or your cock note.'],
+  ['dn', 62, 'Who holds it', 'Initials, ringed in their floor colour. Two sets when it is offered.'],
+  ['up', 74, 'Its time', 'When it falls due. Past it: warm ink, not an alarm.']
+];
+const STATES = [
+  ['Held', '', {}, 'One person holds it and answers for it.', 'urgency, or that anyone else may act on it', '--x-proposed-strip · solid hairline'],
+  ['Cocked', 'C', { cocked: true }, 'Its holder set it aside to come back to. The note is theirs alone.', 'a flag for anyone else, a priority, or overdue', '--x-proposed-cock · translateX, no motion at rest'],
+  ['Offered', 'H', { to: 'tom' }, 'Handed on, not yet taken. Both names; the giver still holds it.', 'that it has moved, or that nobody holds it', '--x-proposed-transit · dashed outline'],
+  ['Coming to you', '', { holder: 'dev', next: 'amara', ghost: true }, 'Someone else holds it now; it is on its way to you.', 'that it is yours yet', '--x-proposed-quiet · opacity'],
+  ['Pointed out', 'P', { holder: 'mo', pointedBy: 'mo', ghost: true }, 'Someone else holds it and wanted you to know.', 'that you must act, or that it is yours', 'eye mark + --x-proposed-quiet'],
+  ['Selected', '↑↓', { sel: true }, 'Where your keyboard is. Nothing else.', 'importance, or a change of holder', '--x-proposed-lit · 1px edge']
+];
+function render() {
+  const states = STATES.map(([w, k, o, means, never, tok], i) => {
+    const s = { ...it, cock: o.cocked ? it.cock : null, to: o.to || null, holder: o.holder || it.holder, next: o.next, pointedBy: o.pointedBy };
+    return `<div class="st dep ${o.cocked ? 'cockrow' : ''}" style="--i:${i}"><h3>${w}${k ? `<span class="kbd">${k}</span>` : ''}</h3>${stripHTML(s, { cocked: !!o.cocked && S.cock, ghost: o.ghost, sel: o.sel, noCock: !o.cocked })}
+      <p>${means}</p><p class="never"><b>Never means</b> ${never}.</p><span class="tok">${tok}</span></div>`;
+  }).join('');
+  $('#app').innerHTML = topHTML(['Design lab', 'Desk language'], [['C', 'cock the specimen'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div><p class="eyebrow">Desk language · the strip</p><h1 class="t" style="margin-top:var(--space-1)">One shape for a thing someone holds</h1></div>
+      <div class="spec" id="spec">${stripHTML({ ...it, cock: null }, { noCock: true })}
+        ${CALLS.map(([d, x, w, t]) => `<span class="call ${d}" style="left:${x}%"><b>${w}</b>${t}</span>`).join('')}</div>
+      <div class="states">${states}</div>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() {
+  clearLater(); S.cock = false; render(); settle();
+  /* the moment: the cocked specimen steps out of line by one fixed distance, and stays */
+  later(() => { S.cock = true; $('.cockrow .strip').classList.add('cocked'); }, ms('--motion-run'));
+}
+onKeys({ r: replay, c: () => { S.cock = !S.cock; $('.cockrow .strip').classList.toggle('cocked', S.cock); } });
+replay();
+</script>
+</body>
+</html>

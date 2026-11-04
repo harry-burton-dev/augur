@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Combined V2 · The review board</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V2: the review board that could ship: the score sheet with both voices, the position as it stood, and the marking panel with own moves first ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;gap:var(--space-3) var(--space-4)}
+.sheet{min-height:0;padding:var(--space-3);display:flex;flex-direction:column;gap:1px}
+.sheet .hd{display:flex;justify-content:space-between;align-items:baseline;padding:var(--space-1) var(--space-2) var(--space-2)}
+.sheet .mv{grid-template-columns:2em var(--space-1) minmax(0,1fr) auto auto var(--space-4)}
+.sheet .mv .sp{color:var(--x-proposed-warn);display:inline-flex}
+.sheet .mv.diff{background:var(--x-proposed-warn-wash)}
+.sheet .mv.sel.diff{background:color-mix(in srgb,var(--warning) 12%,var(--surface-raised))}
+.sheet .mv.future{filter:blur(var(--x-proposed-future-blur)) saturate(0)}
+.pos{min-height:0;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)}
+.pos .d{display:flex;align-items:baseline;gap:var(--space-3)}
+.pos .d b{font:300 var(--type-heading)/var(--leading-heading) var(--font-mono);color:var(--light);font-weight:300}
+.ln{display:grid;grid-template-columns:minmax(0,1fr) 5.5em;gap:var(--space-1) var(--space-3);align-items:center;font-size:var(--type-small);line-height:var(--leading-small)}
+.ln .v{font-family:var(--font-mono);color:var(--ink-muted)}
+.ln .eb{grid-row:1 / 3;grid-column:2}
+.rec{display:grid;grid-template-columns:4.2em minmax(0,1fr);gap:var(--space-1) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}
+.rec .dd{font-family:var(--font-mono);color:var(--ink-muted)}
+.pv{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-3)}
+.pv .w{font-size:var(--type-meta);color:var(--light)}
+.mark{min-height:0;padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)}
+.mark .san{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.an{display:grid;grid-template-columns:2.8em minmax(0,1fr);gap:var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);border:1px solid var(--hairline)}
+.an.pen{border-style:dotted;border-color:var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash)}
+.an .by{color:var(--ink-muted)}
+.keys{display:flex;gap:var(--space-1);flex-wrap:wrap}
+.keys button{display:inline-flex;align-items:center;gap:var(--space-1);padding:var(--space-1) var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--x-proposed-type-micro);color:var(--ink-muted)}
+.keys button.on{border-color:var(--light);color:var(--light);background:var(--surface-raised)}
+.parts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2)}
+.parts div{padding:var(--space-2);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small)}
+.parts b{display:block;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--ink-muted);font-weight:400}
+.cvp{grid-column:1 / -1;padding:var(--space-2) var(--space-4)}
+.cvp .lg{display:flex;gap:var(--space-4);font-size:var(--type-small);color:var(--ink-muted);margin-top:var(--space-1)}
+.pm{fill:var(--slate-deep);stroke:var(--x-proposed-mark-bad);stroke-width:1.5}
+@media (max-width:1400px){.pos,.mark{padding:var(--space-3);gap:var(--space-2)}.sheet .mv{padding:1px var(--space-2)}.an{padding:var(--space-1) var(--space-2)}.parts div{padding:var(--space-1) var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V2</b> the review board: score sheet with both voices and the splits, the position as it stood, a marking panel where the mover marks first; candidates on the curve · replay V1 V2, voices V1 V5, marking V1 V2 V6</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = DATA.review;
+const SPLIT = [4, 6, 9, 13];
+const S = { n: 5, hind: false, as: true };
+function render() {
+  const m = MV(S.n), at = m.on, p = posAt(at);
+  $('#app').innerHTML = topHTML(['Mandate', DEC.id, 'Review'], [['↑ ↓', 'move'], ['F', S.as ? 'show later moves' : 'as it stood', 'h-f'], ['H', 'hindsight', 'h-h'], ['R', 'replay']], { as: at }) +
+  `<main class="main"><div class="wrap">
+    <section class="sheet pane scroll" aria-label="Moves"><div class="hd"><span class="eyebrow">${DEC.id} · ${MOVES.length} moves</span><span class="small muted">people · records</span></div>
+      ${MOVES.map(x => moveRow(x, { sel: S.n, pos: true, cls: (SPLIT.includes(x.n) ? 'diff ' : '') + (S.as && x.n > S.n ? 'future' : ''), marks: !(S.as && x.n > S.n) }).replace('</button>', `<span class="sp">${SPLIT.includes(x.n) && !(S.as && x.n > S.n) ? I('split', 13) : ''}</span></button>`)).join('')}</section>
+    <section class="pos pane scroll" aria-live="polite"><div class="d"><b>${dt(at)}</b><span class="lab">as it stood</span></div>
+      <div class="pv box ${p.crossed ? 'warn' : ''}">${posGl(p.s, 'big')}<span class="w">${p.w}</span>${posMark(S.n) ? `<span class="unseen">${gl('∞')} the records can’t see this</span>` : ''}</div>
+      ${DATA.lines.map(Lx => { const l = p.lines.find(x => x.id === Lx.id); return `<div class="ln"><span>${Lx.text}</span>${evalBar(l.h, { flat: true })}<span class="v">${Lx.kind === 'aim' ? '£' + l.v : l.v}${l.crossed ? ' · crossed' : ''}</span></div>`; }).join('')}
+      <p class="lab">On the record</p><div class="rec">${recordAt(at).slice(-3).map(r => `<span class="dd">${dt(r.on, 'short')}</span><span>${r.w}</span>`).join('')}</div>
+      ${DATA.hindsight[S.n] ? (S.hind ? `<p class="hind"><span class="hl">${I('history', 11)} known later</span>${DATA.hindsight[S.n]}</p>` : `<p class="small muted">${I('eye-off', 12)} Hindsight is kept apart. H shows it, after you mark.</p>`) : ''}</section>
+    <section class="mark pane scroll"><p class="lab">Move ${m.n} · ${m.side === 'world' ? 'the world' : P(m.by).name}</p><p class="san">${m.san} ${m.sign ? gl(m.sign) : ''} ${m.door ? I('door-closed', 16) : ''}</p>
+      ${m.side === 'world' ? `<p class="small muted">The world’s move. Not marked: mark the move that answered it.</p>` : `
+      ${selfMark(S.n) ? `<div class="an"><span>${gl(selfMark(S.n).g, 'big')}</span><span>${selfMark(S.n).line} <span class="by">· ${P(selfMark(S.n).by).name}, own move, released</span></span></div>` : m.by !== 'body' ? `<div class="an"><span></span><span class="by">${P(m.by).name} hasn’t marked this move. The reviewer’s mark waits until she does or declines.</span></div>` : ''}
+      ${reviewMarks(S.n).map(a => `<div class="an ${S.n === 11 ? '' : ''}"><span>${gl(a.g, 'big')}</span><span>${a.line || '<span class="by">mark only</span>'} <span class="by">· ${P(a.by).name}</span></span></div>`).join('')}
+      ${posMark(S.n) ? `<div class="an"><span>${gl('∞', 'big')}</span><span>${posMark(S.n).line} <span class="by">· ${P(posMark(S.n).by).name}</span></span></div>` : ''}
+      <div class="keys">${DATA.markOrder.map((g, i) => `<button class="${(mainMark(S.n) || {}).g === g ? 'on' : ''}">${i + 1} ${gl(g)}</button>`).join('')}<button>${gl('∞')}</button></div>
+      ${m.opts ? `<div class="parts"><div><b>Known then</b>${recordAt(at).slice(-1)[0].w}</div><div><b>Chosen</b>${m.opts.find(o => o.played).san}</div><div><b>Instead, on the record</b>${m.opts.filter(o => !o.played && !/not on the record/.test(o.from)).map(o => o.san).join(' · ')}</div><div><b>${gl('∆')} with the idea</b>${S.n === 6 ? 'Keep Kestrel until both fitters are in post.' : '—'}</div></div>` : ''}`}
+      <p class="small muted" style="margin-top:auto">${I('users', 12)} Agreed by the meeting on ${dt(R.agreed, 'short')}. Marks are ink; a correction is a new dated mark beside the old.</p></section>
+    <div class="cvp pane" id="cvp"></div>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  const o = { w: $('#cvp').clientWidth - 32, h: Math.max(44, Math.min(70, innerHeight * .07)), sel: S.n, upto: S.as ? at : undefined };
+  const pc = peopleCritical().filter(n => !S.as || n <= S.n).map(n => `<rect x="${curveX(o, MV(n).on) - 3.5}" y="${o.h - 12}" width="7" height="7" class="pm"/>`).join('');
+  $('#cvp').innerHTML = curve(o).replace('</svg>', pc + '</svg>') + `<p class="lg"><span><svg width="10" height="10"><circle cx="5" cy="5" r="3.5" class="cv-crit"/></svg> found by the records</span><span><svg width="10" height="10"><rect x="1.5" y="1.5" width="7" height="7" class="pm"/></svg> found by people</span>${S.as ? `<span>${I('eye-off', 12)} the curve stops at ${dt(at, 'short')}: as it stood</span>` : ''}</p>`;
+  Icons.hydrate($('#cvp'));
+  $$('.sheet .mv').forEach(b => b.onclick = () => { clearLater(); S.n = +b.dataset.n; render(); });
+  $('#h-f')?.classList.toggle('on', !S.as); $('#h-h')?.classList.toggle('on', S.hind);
+}
+function replay() { clearLater(); Object.assign(S, { n: 5, hind: false, as: true }); render(); settle(); later(() => { S.n = 6; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const k = e.key.toLowerCase();
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); clearLater(); S.n = Math.max(1, Math.min(MOVES.length, S.n + (e.key === 'ArrowDown' ? 1 : -1))); render(); }
+  if (k === 'f') { S.as = !S.as; render(); }
+  if (k === 'h') { S.hind = !S.hind; render(); }
+});
+addEventListener('resize', render);
+replay();
+</script>
+</body>
+</html>

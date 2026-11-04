@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Corrections V4 · The day book</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: one journal for the team's day, in time order, in sentences. each line is posted to the thing it is about ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) var(--measure-card);gap:var(--space-6)}
+.left{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-3);min-height:0}
+.filters{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.filters button{display:inline-flex;gap:var(--space-2);align-items:center;height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.filters button[aria-pressed="true"]{border-color:var(--x-proposed-lit);color:var(--light);background:var(--x-proposed-lit-wash)}
+.jr{display:grid;gap:0;align-content:start}
+.ln{display:grid;grid-template-columns:calc(var(--space-7) - var(--space-2)) var(--space-5) minmax(0,1fr) calc(var(--space-8) + var(--space-2));gap:var(--space-3);align-items:baseline;padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);transition:opacity var(--motion-base) var(--ease-standard)}
+.ln .t{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.ln .w b{font-weight:400;color:var(--light)}
+.ln .fo{font:400 var(--x-proposed-type-micro)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);text-align:right;white-space:nowrap}
+.ln.dim{opacity:.32}
+.ln.new{background:var(--x-proposed-lit-wash)}
+.ln.write{animation:fill var(--motion-calm) var(--ease-out)}
+.acct{display:grid;gap:var(--space-2);align-content:start}
+.acct .ln{grid-template-columns:calc(var(--space-7) - var(--space-2)) minmax(0,1fr);font-size:var(--type-small);line-height:var(--leading-small)}
+.side{display:flex;flex-direction:column;gap:var(--space-4);border-left:1px solid var(--hairline);padding-left:var(--space-5);min-height:0}
+@media (max-width:1400px){.ln{grid-template-columns:calc(var(--space-7) - var(--space-3)) var(--space-4) minmax(0,1fr);font-size:var(--type-small);line-height:var(--leading-small)}.ln .fo{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Corrections · V4</b> the day book: the team's marks in time order, in sentences; each line posted to the thing it is about, and back · the journal and ledger, the ward's day book</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { n: DATA.daybook.length - 2, on: 'F-3301' };
+const label = on => on === 'board' ? 'Team board' : (ITEM(on) || {}).title || (FT.id === on ? FT.subject + ' · ' + FT.field : (B.jobs.find(j => j.id === on) || {}).t + ', ' + (B.jobs.find(j => j.id === on) || {}).home);
+function who(e) { return e.by === 'rule' ? `<span class="muted">${I('cog', 14)}</span>` : ini(e.by, 'sm'); }
+function words(e) { return `${e.by === 'rule' ? '<b>AUGUR</b>' : `<b>${P(e.by).name}</b>`} ${e.by === 'rule' && e.act === 'failed' ? e.w.charAt(0).toLowerCase() + e.w.slice(1) : e.w}${e.counter ? `, countersigned by ${P(e.counter).name}` : ''}.`; }
+function render() {
+  const es = DATA.daybook.slice(0, S.n);
+  const ons = [...new Set(es.map(e => e.on))];
+  const acct = S.on ? FT.entries.filter(e => S.n === DATA.daybook.length || e.act !== 'correct') : [];
+  $('#app').innerHTML = topHTML(['Team', F('team').name, 'Day book'], [['F', 'filter to F-3301'], ['A', 'all'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap"><div class="left">
+      <div><p class="eyebrow">${F('team').name} · ${DATA.now.day} · ${plural(es.length, 'mark')} so far</p><h1 class="t" style="margin-top:var(--space-1)">The day book</h1></div>
+      <div class="filters"><button aria-pressed="${!S.on}" data-on="">Everything</button>${ons.map(o => `<button aria-pressed="${S.on === o}" data-on="${o}">${o === 'board' ? 'Team board' : o}</button>`).join('')}</div>
+      <div class="jr scroll">${es.map((e, i) => `<div class="ln dep ${S.on && e.on !== S.on ? 'dim' : ''} ${i >= DATA.daybook.length - 2 && S.n === DATA.daybook.length ? 'new write' : ''}" style="--i:${i}"><span class="t">${e.at}</span>${who(e)}<span class="w">${words(e)}</span><span class="fo">→ ${e.on}</span></div>`).join('')}</div></div>
+      <aside class="side"><div><p class="eyebrow">Posted to · ${S.on || 'pick a thing'}</p><h2 class="h" style="margin-top:var(--space-1);font-size:var(--type-lead);line-height:var(--leading-lead)">${S.on ? label(S.on) : 'Each line belongs to a thing'}</h2></div>
+        ${S.on === FT.id ? `<div class="acct">${acct.map(e => `<div class="ln"><span class="t">${e.at}</span><span>${entryWords(e)}</span></div>`).join('')}</div>` : `<p class="note">Pick a filter to read one thing’s own account, entry by entry.</p>`}
+        <p class="note" style="margin-top:auto">Two books, one set of marks. The day book reads across everything in time order; a thing’s account reads one thing from the start. A line is written once and appears in both. Your cocks and private notes appear in neither: they are yours.</p></aside>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.filters button').forEach(b => b.onclick = () => { S.on = b.dataset.on; render(); });
+}
+function replay() {
+  clearLater(); S.n = DATA.daybook.length - 2; S.on = FT.id; render(); settle();
+  /* the moment: the correction and its posting are written at the foot of the day book, and into the fact's own account */
+  later(() => { S.n = DATA.daybook.length; render(); }, ms('--motion-run'));
+}
+onKeys({ r: replay, f: () => { S.on = FT.id; render(); }, a: () => { S.on = ''; render(); } });
+replay();
+</script>
+</body>
+</html>

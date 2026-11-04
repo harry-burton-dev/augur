@@ -5,7 +5,7 @@ Every package, service and app in the monorepo has its own [semver](https://semv
 | Version | Where it lives | Answers |
 | --- | --- | --- |
 | Release | each `package.json`, bumped by [Changesets](https://github.com/changesets/changesets) | Which build of this service, package or app is deployed? |
-| API | each `contracts/<service>.openapi.yaml` `info.version`; its major is the path prefix (`/v1`) and the service's `API_VERSION` | Can a caller keep calling this service the way it does? |
+| API | each `contracts/<service>.openapi.yaml` `info.version`, set in the service's `src/contract.ts` ([api-contracts.md](api-contracts.md)); its major is the path prefix (`/v1`) and the service's `API_VERSION` | Can a caller keep calling this service the way it does? |
 | SDK range | each app's `manifest.json` `sdk`, a range over `@augur/mfe-sdk` releases | Can this shell open this app? |
 
 ## Releases
@@ -64,7 +64,7 @@ The Upgrade Centre reads these releases. The registry knows which release it shi
 
 Two GitHub settings the workflow needs: Settings → Actions → General → Workflow permissions must allow **Read and write**, and **Allow GitHub Actions to create and approve pull requests** must be on. GitHub doesn't start other workflows from anything done with the workflow's built-in token, so the Release workflow uses a `RELEASE_TOKEN` secret instead; with it, CI runs on the Version packages PR by itself. To set it up, create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) for this repository only, with **Contents: Read and write** and **Pull requests: Read and write**, and save it under Settings → Secrets and variables → Actions as `RELEASE_TOKEN`. Renew it before it expires. Without the secret the workflow falls back to the built-in token, and CI on the Version packages PR only starts once you push a commit to its branch.
 
-When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @augur/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)).
+When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @augur/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)). A build byte-for-byte the newest kept one isn't kept: `freeze` says so, and that folder stands for both minors. At SDK 2.0, a major that 1.x apps don't run on, the 1.x builds retire from the contract tests, and each 2.x minor is frozen from then on.
 
 To do the same by hand: `pnpm version-packages`, review, commit, merge, then let the Release workflow make the AUGUR and app releases.
 
@@ -129,6 +129,16 @@ The registry refuses a manifest without a semver `version` and a valid `sdk` ran
 
 When the SDK makes a breaking change it goes to `2.0.0`. Apps keep `^1.0.0` and the new shell refuses them until each app's team updates the app and widens its range (`^1.0.0 || ^2.0.0` while it works with both). `pnpm check:versions` fails if any app in this repo has a range the current SDK doesn't satisfy, so a breaking SDK change and the apps' updates land together here.
 
+### The API report (ADR 0052)
+
+What the SDK exports is written down, by API Extractor, in `platform/packages/mfe-sdk/etc/*.api.md`: one report per entry point (`@augur/mfe-sdk` and `@augur/mfe-sdk/build`). The reports are committed, so a reviewer sees every change to the contract as a diff. `pnpm check:api`, in CI's `build-test`, fails when:
+
+- a report doesn't match the built types: run `pnpm build && pnpm api:update` and commit the report with the change;
+- a report names a type from another package: the SDK wraps third-party libraries in its own types, so their next major never forces an SDK major;
+- a pull request changes a report without a changeset of the right size for the package: a minor for additions, a major for anything removed or changed. When a change only looks breaking (a widened type, say), a minor changeset with a line starting `Not breaking:` that says why will do.
+
+A library joins by adding an `api-extractor*.json` beside its `package.json`. Before any library is published, and on every pull request that touches `platform/packages`, `scripts/publish-packages.mjs --check` packs each one and runs publint and Are the Types Wrong on it.
+
 ## The shared kit
 
 Apps don't bundle the UI kit or Lit: the shell serves one copy of each through an import map, and every app on the page uses it (see [platform/frontends](../platform/frontends/README.md#one-kit-for-everyone)). So the kit is part of the contract an app's `sdk` range covers, and it keeps the same promise as the SDK:
@@ -179,7 +189,8 @@ Renovate proposes dependency updates (ADR 0033, `renovate.json`). It runs once a
 
 1. Merge fresh `main` into it and let CI run.
 2. Check its changeset. The **Renovate changeset** workflow adds one to each Renovate PR: a patch for every package whose files it changes, or an empty one when it only changes tooling outside the packages (workflows, the root lockfile). Change it by hand if a unit should be released that it missed. The workflow pushes with a deploy key, because a push with the workflow's own token starts no CI: a repository admin adds a deploy key with write access (Settings, Deploy keys) and puts its private key in the `RENOVATE_CHANGESET_KEY` secret. Until then the workflow says so on the PR, and the changeset is added by hand (`pnpm changeset`).
-3. If it's labelled `needs-upgrade-note` (a major update to Postgres, pgvector, Keycloak or Garage), write the note in docs/upgrade.md first, including how to go back.
+3. If it's the kit's PR (`renovate/augur-kit`, labelled `kit`), check that `release/kit.json` moved with it. Renovate opens it as soon as augur-kit releases a kit, not on Monday, with every kit package together. The same workflow installs the new kit, re-pins it (`node scripts/kit.mjs pin`) and rewrites the open-source notices; without the deploy key, run **Actions → Lockfile** on its branch instead. CI's `pnpm check:kit` fails while the pin names another kit, so the pin can't fall behind the packages. Renovate reads the kit from GitHub Packages through a host rule: in Renovate's settings (developer.mend.io, the organisation's **Credentials**), a host rule for `npm.pkg.github.com` with a classic token that has `read:packages`. Without it Renovate can't see new kits and opens no kit PR.
+4. If it's labelled `needs-upgrade-note` (a major update to Postgres, pgvector, Keycloak or Garage), write the note in docs/upgrade.md first, including how to go back.
 
 ## Going back to an earlier app version
 

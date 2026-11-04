@@ -1,11 +1,15 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import Type from 'typebox';
 import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, problemDetails, serviceFastifyOptions, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
+import { describeApi } from './contract.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
 import { mapFor } from './map.ts';
 import { peopleRoutes, principalsOf } from './people.ts';
-import { MemoryPreferenceStore, type PreferenceStore, type Preferences } from './store.ts';
+import { Caller, choice, Floor, IdParams, PersonMap, Preferences, ref, refused } from './schemas.ts';
+import { MemoryPreferenceStore, type PreferenceStore } from './store.ts';
 import { TeamDirectory } from './teams.ts';
 import { floorsFor, MemoryWorkspaceStore, rollupFor, type WorkspaceStore } from './workspaces.ts';
 
@@ -15,21 +19,6 @@ const ORG_FLOOR = 'org';
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
-
-/** Refused, not dropped, when unknown: a misspelt setting should fail loudly, not vanish. */
-export const preferencesSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    reduceMotion: { type: 'boolean' },
-    density: { type: 'string', enum: ['comfortable', 'compact'] },
-    areaTitles: { type: 'boolean' },
-    toasts: { type: 'boolean' },
-    away: { type: 'boolean' },
-    recent: { type: 'array', maxItems: 12, items: { type: 'string', minLength: 1, maxLength: 64 } },
-    muted: { type: 'array', maxItems: 100, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 64 } },
-  },
-} as const;
 
 export interface IdentityOptions {
   store?: PreferenceStore;
@@ -62,20 +51,22 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  */
 export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit, verifyService, callers, grants }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
-  const app = Fastify(serviceFastifyOptions());
+  const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
+  await describeApi(app, `/${API_VERSION}`);
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
-  app.get('/healthz', async () => health('identity', version, API_VERSION));
+  app.get('/healthz', { schema: { hide: true } }, async () => health('identity', version, API_VERSION));
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
   await app.register(
-    async (app) => {
+    async (plain) => {
+      const app = plain.withTypeProvider<TypeBoxTypeProvider>();
       /** True for the platform's own services; otherwise the reply is sent. */
       const platformOnly = async (req: FastifyRequest, reply: FastifyReply) => {
         try {
           if ((await identifyService(req.headers, verifyService))?.kind === 'platform') return true;
-          void reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can look floors up.' });
+          void reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can look floors up.' });
         } catch (err) {
           if (!(err instanceof ServiceAuthUnavailable)) throw err;
           void reply.code(503).send({ error: 'unavailable', message: err.message });
@@ -90,26 +81,71 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
        * starts from, a personal floor included. `org` in place of an id names
        * the organisation's own floor, for a call that names no floor.
        */
-      app.get<{ Params: { id: string } }>('/workspaces/:id', async (req, reply) => {
-        if (!(await platformOnly(req, reply))) return reply;
-        await teams?.ready();
-        const org = await workspaces.org();
-        const floor = req.params.id === ORG_FLOOR ? org : await workspaces.workspace(req.params.id);
-        if (!floor) return reply.code(404).send({ error: 'not_found', message: 'There is no such floor.' });
-        return { id: floor.id, kind: floor.kind, path: floor.path, org: org.id, ...(floor.archivedAt ? { archivedAt: floor.archivedAt } : {}) };
-      });
+      app.get(
+        '/workspaces/:id',
+        {
+          schema: {
+            summary: 'Where a floor sits (platform services only)',
+            description: [
+              "For AUGUR's own services, signed in as themselves, which store only",
+              "a floor's id. Archived teams are still found, so old records resolve.",
+              `"${ORG_FLOOR}" in place of an id names the organisation's own floor.`,
+            ].join(' '),
+            params: IdParams,
+            response: {
+              200: Type.Object(
+                {
+                  id: Type.String(),
+                  kind: choice(['org', 'personal', 'team']),
+                  path: Type.Array(Type.String(), { description: "Ids from the floor's root down to it; a personal floor is alone on its path" }),
+                  org: Type.String({ description: "The org's id, which every rule starts from" }),
+                  archivedAt: Type.Optional(Type.String({ format: 'date-time' })),
+                },
+                { description: "The floor's place in the tree" },
+              ),
+              403: refused('Not a platform service'),
+              404: refused('No such floor'),
+              503: refused("The caller's token can't be checked right now"),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!(await platformOnly(req, reply))) return reply;
+          await teams?.ready();
+          const org = await workspaces.org();
+          const floor = req.params.id === ORG_FLOOR ? org : await workspaces.workspace(req.params.id);
+          if (!floor) return reply.code(404).send({ error: 'not_found', message: 'There is no such floor.' });
+          return { id: floor.id, kind: floor.kind, path: floor.path, org: org.id, ...(floor.archivedAt ? { archivedAt: floor.archivedAt } : {}) };
+        },
+      );
 
       // Everyone who can stand on a team: its members and those of the teams below it. For team notices.
-      app.get<{ Params: { id: string } }>('/workspaces/:id/people', async (req, reply) => {
-        if (!(await platformOnly(req, reply))) return reply;
-        await teams?.ready();
-        const all = await workspaces.teams();
-        const team = all.find((t) => t.id === req.params.id);
-        if (!team) return reply.code(404).send({ error: 'not_found', message: 'There is no such team.' });
-        const below = new Set(all.filter((t) => t.path.includes(team.id)).map((t) => t.id));
-        const people = new Set((await workspaces.memberships()).filter((m) => below.has(m.workspace)).map((m) => m.person));
-        return { workspace: team.id, people: [...people].sort() };
-      });
+      app.get(
+        '/workspaces/:id/people',
+        {
+          schema: {
+            summary: 'Everyone who can stand on a team (platform services only)',
+            description: 'Its members and those of the teams below it. Events asks this as each team notice is sent.',
+            params: IdParams,
+            response: {
+              200: Type.Object({ workspace: Type.String(), people: Type.Array(Type.String()) }, { description: 'Person ids, sorted' }),
+              403: refused('Not a platform service'),
+              404: refused('No such team'),
+              503: refused("The caller's token can't be checked right now"),
+            },
+          },
+        },
+        async (req, reply) => {
+          if (!(await platformOnly(req, reply))) return reply;
+          await teams?.ready();
+          const all = await workspaces.teams();
+          const team = all.find((t) => t.id === req.params.id);
+          if (!team) return reply.code(404).send({ error: 'not_found', message: 'There is no such team.' });
+          const below = new Set(all.filter((t) => t.path.includes(team.id)).map((t) => t.id));
+          const people = new Set((await workspaces.memberships()).filter((m) => below.has(m.workspace)).map((m) => m.person));
+          return { workspace: team.id, people: [...people].sort() };
+        },
+      );
 
       await app.register(peopleRoutes({ workspaces, teams, verifyService, grants }));
       await app.register(appRunnerRoutes({ clients: appClients, audit, verifyService }), { prefix: '/admin/apps' });
@@ -118,25 +154,76 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
   );
 
   await app.register(
-    async (app) => {
+    async (plain) => {
+      const app = plain.withTypeProvider<TypeBoxTypeProvider>();
       app.addHook('onRequest', async (req, reply) => {
         if (!callerFromHeaders(req.headers)) return reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
       });
+      const unauthenticated = refused('No signed-in caller');
 
-      app.get('/me', async (req) => callerFromHeaders(req.headers)!);
+      app.get(
+        '/me',
+        {
+          schema: {
+            summary: 'The signed-in caller',
+            response: { 200: { ...ref(Caller), description: 'Who is calling, with their departments and roles' }, 401: unauthenticated },
+          },
+        },
+        async (req) => callerFromHeaders(req.headers)!,
+      );
 
-      app.get('/me/preferences', async (req) => store.get(callerFromHeaders(req.headers)!.id));
+      app.get(
+        '/me/preferences',
+        {
+          schema: {
+            summary: 'What the caller has chosen for the shell',
+            response: { 200: { ...ref(Preferences), description: 'Their preferences; empty when they have chosen nothing' }, 401: unauthenticated },
+          },
+        },
+        async (req) => store.get(callerFromHeaders(req.headers)!.id),
+      );
 
-      app.put<{ Body: Preferences }>('/me/preferences', { schema: { body: preferencesSchema } }, async (req) => {
-        await store.put(callerFromHeaders(req.headers)!.id, req.body);
-        return req.body;
-      });
+      app.put(
+        '/me/preferences',
+        {
+          schema: {
+            summary: "Replace the caller's preferences",
+            body: ref(Preferences),
+            response: {
+              200: { ...ref(Preferences), description: 'Saved, as sent' },
+              400: refused("A field it doesn't know, or a value out of range"),
+              401: unauthenticated,
+            },
+          },
+        },
+        async (req) => {
+          await store.put(callerFromHeaders(req.headers)!.id, req.body);
+          return req.body;
+        },
+      );
 
       // Every floor the caller can stand on; their own is made the first time they ask.
-      app.get('/me/workspaces', async (req) => {
-        await teams?.ready();
-        return { workspaces: await floorsFor(workspaces, callerFromHeaders(req.headers)!) };
-      });
+      app.get(
+        '/me/workspaces',
+        {
+          schema: {
+            summary: 'Every floor the caller can stand on',
+            description: [
+              'Their own floor (made the first time they ask), the org, each team they',
+              "are on, and every team above those. Being on a team doesn't put you on",
+              'the teams below it. Ordered own floor, org, then teams in tree order.',
+            ].join(' '),
+            response: {
+              200: Type.Object({ workspaces: Type.Array(ref(Floor)) }, { description: "The caller's floors" }),
+              401: unauthenticated,
+            },
+          },
+        },
+        async (req) => {
+          await teams?.ready();
+          return { workspaces: await floorsFor(workspaces, callerFromHeaders(req.headers)!) };
+        },
+      );
 
       // The caller's map of the org, for Auspex: their floors with who's there and why they can come in, and every other team as a closed door.
       let names: { list: { id: string; name: string }[]; at: number } | undefined;
@@ -147,27 +234,63 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
         names = { list, at: Date.now() };
         return list;
       };
-      app.get('/me/map', async (req) => {
-        await teams?.ready();
-        const caller = callerFromHeaders(req.headers)!;
-        const [own, org, all, memberships, folks] = await Promise.all([workspaces.personal(caller.id, caller.name), workspaces.org(), workspaces.teams(), workspaces.memberships(), everyone()]);
-        const nameOf = new Map(folks.map((p) => [p.id, p.name]));
-        nameOf.set(caller.id, caller.name);
-        const mine = memberships.filter((m) => m.person === caller.id).map((m) => m.workspace);
-        return mapFor({
-          person: caller, own, org, teams: all, memberships, names: nameOf,
-          people: folks.length ? folks.map((p) => p.id) : [caller.id],
-          principals: principalsOf(caller.id, all, mine),
-        });
-      });
+      app.get(
+        '/me/map',
+        {
+          schema: {
+            summary: "The caller's map of the org",
+            description: [
+              'For Auspex. Every floor the caller can stand on, with who is there and',
+              'why they can come in; the teams inside ones they lead (and, for admins,',
+              'every team) to see into without standing on; and every other team as a',
+              'closed door that names only itself, where it sits and its leads, so the',
+              'caller knows who can add them. Nothing inside a closed team is said:',
+              'not its people, how many, or what it uses. Floors are the org, then',
+              "teams depth first, then the caller's own floor.",
+            ].join(' '),
+            response: { 200: { ...ref(PersonMap), description: "The caller's map" }, 401: unauthenticated },
+          },
+        },
+        async (req) => {
+          await teams?.ready();
+          const caller = callerFromHeaders(req.headers)!;
+          const [own, org, all, memberships, folks] = await Promise.all([workspaces.personal(caller.id, caller.name), workspaces.org(), workspaces.teams(), workspaces.memberships(), everyone()]);
+          const nameOf = new Map(folks.map((p) => [p.id, p.name]));
+          nameOf.set(caller.id, caller.name);
+          const mine = memberships.filter((m) => m.person === caller.id).map((m) => m.workspace);
+          return mapFor({
+            person: caller, own, org, teams: all, memberships, names: nameOf,
+            people: folks.length ? folks.map((p) => p.id) : [caller.id],
+            principals: principalsOf(caller.id, all, mine),
+          });
+        },
+      );
 
       // A floor and every team below it the caller can stand on: what an app rolls up when someone asks to include sub-teams.
-      app.get<{ Params: { id: string } }>('/me/workspaces/:id/rollup', async (req, reply) => {
-        await teams?.ready();
-        const floors = await floorsFor(workspaces, callerFromHeaders(req.headers)!);
-        if (!floors.some((f) => f.id === req.params.id)) return reply.code(404).send({ error: 'not_found', message: 'You’re not on that floor, or it no longer exists.' });
-        return { workspace: req.params.id, workspaces: rollupFor(floors, req.params.id) };
-      });
+      app.get(
+        '/me/workspaces/:id/rollup',
+        {
+          schema: {
+            summary: 'A floor and every team below it the caller is on',
+            description: [
+              'What an app rolls up when someone asks to include sub-teams. Access',
+              'flows down only, so a team below appears only if the caller is on it.',
+            ].join(' '),
+            params: IdParams,
+            response: {
+              200: Type.Object({ workspace: Type.String(), workspaces: Type.Array(ref(Floor)) }, { description: 'The floor first, then the teams below it in tree order' }),
+              401: unauthenticated,
+              404: refused("The caller isn't on that floor"),
+            },
+          },
+        },
+        async (req, reply) => {
+          await teams?.ready();
+          const floors = await floorsFor(workspaces, callerFromHeaders(req.headers)!);
+          if (!floors.some((f) => f.id === req.params.id)) return reply.code(404).send({ error: 'not_found', message: 'You’re not on that floor, or it no longer exists.' });
+          return { workspace: req.params.id, workspaces: rollupFor(floors, req.params.id) };
+        },
+      );
 
       await app.register(adminRoutes({ directory: teams, workspaces, audit }), { prefix: '/admin' });
       await app.register(appClientRoutes({ clients: appClients, audit }), { prefix: '/admin/apps' });

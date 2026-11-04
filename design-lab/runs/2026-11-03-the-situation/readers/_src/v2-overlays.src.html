@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Readers V2 · One picture, three overlays</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: one shared picture of the situation; each reader lays their own acetate over it. Overlays add, never change, the base ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:var(--space-5)}
+.pic{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.stage{position:relative;flex:1;min-height:0;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.stage svg{position:absolute;inset:0;width:100%;height:100%}
+.ov{opacity:0;transition:opacity var(--motion-calm) var(--ease-out)}
+.ov.on{opacity:1}
+.lab{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.acet{display:grid;gap:var(--space-1);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-left:3px solid var(--fc);border-radius:var(--radius-key);text-align:left;transition:background var(--motion-base) var(--ease-out)}
+.acet[aria-pressed="true"]{background:var(--surface-raised);border-color:var(--hairline-strong);border-left-color:var(--fc)}
+.acet b{font-weight:400;color:var(--light);font-size:var(--type-meta);display:flex;gap:var(--space-2);align-items:center}
+.acet p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.acet .adds{color:var(--ink-muted)}
+.base{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+@media (max-width:1400px){.acet .adds{display:none}.acet{padding:var(--space-2) var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Readers · V2</b> one picture, three overlays: the shared situation underneath, each reader’s acetate on top · common operational picture, map overlays on acetate</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { on: { mira: false, grace: false, owen: false } };
+/* months on the picture (Apr..Jan), and where each date sits */
+const M = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'];
+/* what each acetate draws: marks at months (fractional), with words */
+const OV = {
+  mira:  { adds: 'Her rounds: the route change, the two rounds’ share, the revert.', marks: [[5.03, `${R.changedRounds.join(', ')} rerouted ${R.changedOn}`], [7.3, `N7 back ${R.revertedN7}`]], bars: true },
+  grace: { adds: 'Her decision: the contract’s limit and its third strike, the offer’s validity, the decision date.', marks: [[7.97, `decide by ${T.decideBy.replace(' 2026', '')}`], [9.97, `contract ends ${T.ends.replace(' 2027', '')}`]], limit: true, offer: [6.63, 7.6] },
+  owen:  { adds: 'His view: one of the Org’s contracts, and the board date if it retenders.', marks: [[9.45, 'board, if retender · 15 Jan']], strip: true }
+};
+function svg(w, h) {
+  const pad = 46, X = i => pad + i * (w - pad * 2) / (M.length - 1), max = 32, Y = v => h - 60 - v * (h - 120) / max;
+  const s = R.series, pts = s.map((p, i) => `${X(i)},${Y(p.v)}`).join(' ');
+  const base = `<g>${M.map((m, i) => `<line x1="${X(i)}" x2="${X(i)}" y1="40" y2="${h - 50}" stroke="var(--hairline)"/><text class="lab" x="${X(i)}" y="${h - 32}" text-anchor="middle" fill="var(--ink-muted)">${m}</text>`).join('')}
+    <polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="2"/>${s.map((p, i) => `<circle cx="${X(i)}" cy="${Y(p.v)}" r="3" fill="var(--ink)"/><text class="lab" x="${X(i)}" y="${Y(p.v) - 10}" text-anchor="middle" fill="var(--ink)">${p.v}</text>`).join('')}
+    <text class="lab" x="${X(7)}" y="${Y(R.limit) + 20}" text-anchor="middle" fill="var(--ink-muted)">Nov: not in yet</text></g>`;
+  const mk = (who, [x, w], k) => `<g><line x1="${X(x)}" x2="${X(x)}" y1="${40 + k * 16}" y2="${h - 50}" stroke="var(--floor-${P(who).floor}-high)" stroke-width="1.5" stroke-dasharray="${who === 'owen' ? '4 3' : ''}"/><text class="lab" x="${X(x) + 6}" y="${52 + k * 16}" fill="var(--floor-${P(who).floor}-high)">${w}</text></g>`;
+  const mira = `<g class="ov ${S.on.mira ? 'on' : ''}">${OV.mira.marks.map((m, k) => mk('mira', m, k)).join('')}${[[3, R.byRound.Jul.changed], [6, R.byRound.Oct.changed]].map(([i, v]) => `<rect x="${X(i) - 8}" y="${Y(v)}" width="16" height="${Y(0) - Y(v)}" fill="var(--floor-team-high)" opacity=".45"/><text class="lab" x="${X(i) + 12}" y="${Y(v) + 12}" fill="var(--floor-team-high)">${v} on ${R.changedRounds.join('+')}</text>`).join('')}</g>`;
+  const grace = `<g class="ov ${S.on.grace ? 'on' : ''}"><line x1="${pad}" x2="${w - pad}" y1="${Y(R.limit)}" y2="${Y(R.limit)}" stroke="var(--floor-department-high)" stroke-dasharray="6 4"/><text class="lab" x="${pad + 4}" y="${Y(R.limit) - 6}" fill="var(--floor-department-high)">limit ${R.limit} · ${R.limitWhere} · third month over = service failure</text>
+    <rect x="${X(OV.grace.offer[0])}" y="${h - 50}" width="${X(OV.grace.offer[1]) - X(OV.grace.offer[0])}" height="6" fill="var(--floor-department-high)" opacity=".7"/><text class="lab" x="${X(OV.grace.offer[0])}" y="${h - 56}" fill="var(--floor-department-high)">offer valid 20 Oct–19 Nov</text>${OV.grace.marks.map((m, k) => mk('grace', m, k + 2)).join('')}</g>`;
+  const owen = `<g class="ov ${S.on.owen ? 'on' : ''}">${OV.owen.marks.map((m, k) => mk('owen', m, k + 4)).join('')}<g transform="translate(${w - pad - 14 * 18},${h - 22})">${Array.from({ length: R.otherContracts }, (_, i) => `<rect x="${i * 18}" y="0" width="14" height="8" fill="${i === 3 ? 'var(--floor-org-high)' : 'none'}" stroke="var(--floor-org-high)"/>`).join('')}<text class="lab" x="-8" y="8" text-anchor="end" fill="var(--floor-org-high)">1 of ${R.otherContracts} service contracts over its limit</text></g></g>`;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${R.label} by month with each reader's overlay">${base}${mira}${grace}${owen}</svg>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Picture'], [['1 2 3', 'an overlay'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="pic"><div><p class="eyebrow">Same information, three readers · one picture</p><h1 class="title">The base, and three acetates</h1></div>
+      <div class="stage" id="stage"></div></div>
+    <aside class="side"><p class="base">${rm('info')} <b class="lite">The base</b> is shared and never changes: ${R.label.toLowerCase()} by month, as counted. Each reader lays their own acetate over it; together they make the common picture.</p>
+      ${DATA.readers.map((r, k) => `<button class="acet" data-w="${r.id}" data-tier="${P(r.id).floor}" aria-pressed="${S.on[r.id]}"><b><span class="kbd">${k + 1}</span>${P(r.id).name} · ${F(P(r.id).floor).word}</b><p>${r.asks}</p><p class="adds">${OV[r.id].adds}</p></button>`).join('')}
+      <p class="base">An acetate adds marks; it can’t move the base. Two readers’ marks can sit over the same month without either being wrong.</p></aside>
+  </div></main>`;
+  hydrate($('#app'));
+  draw();
+  $$('.acet').forEach(b => b.onclick = () => toggle(b.dataset.w));
+}
+function draw() { const st = $('#stage'); st.innerHTML = svg(Math.max(600, st.clientWidth), Math.max(300, st.clientHeight)); }
+function toggle(id) { S.on[id] = !S.on[id]; $$('.acet').forEach(b => b.setAttribute('aria-pressed', S.on[b.dataset.w])); const g = $$('.ov')[['mira', 'grace', 'owen'].indexOf(id)]; g && g.classList.toggle('on', S.on[id]); }
+addEventListener('resize', draw);
+play(() => { S.on = { mira: false, grace: false, owen: false }; render(); }, () => {
+  const step = ms('--motion-calm');
+  ['mira', 'grace', 'owen'].forEach((id, k) => later(() => toggle(id), k * step));
+}, (e, k) => { const r = DATA.readers[+k - 1]; if (r) toggle(r.id); });
+</script>
+</body>
+</html>

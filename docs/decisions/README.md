@@ -57,5 +57,11 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0049](0049-pillar-apps-shipped-from-their-releases.md) | AUGUR ships the pinned releases of its pillar apps, made in their own repositories | Accepted | 2026-11-03 |
 | [0050](0050-alpha-proving-run.md) | Alpha is proved by a build gate and a 48-hour run on staging | Accepted | 2026-11-03 |
 | [0051](0051-install-a-halted-release-on-request.md) | A deployment admin can install a halted release on request, on dev and preview servers only | Accepted | 2026-11-03 |
+| [0052](0052-api-reports-publint-and-attw.md) | The SDK's surface is an API Extractor report, and packages are checked by publint and attw | Proposed | 2026-11-03 |
+| [0054](0054-app-frontend-starter-libraries.md) | App frontends use TanStack Query and Router and openapi-fetch, wrapped by the app kit | Accepted | 2026-11-03 |
+| [0055](0055-schema-first-apis-with-typebox.md) | Each API has one source: TypeBox schemas on its routes, with the contract generated from them | Accepted | 2026-11-03 |
+| [0056](0056-seed-through-public-apis.md) | Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal | Proposed | 2026-11-03 |
+| [0057](0057-realm-as-code-applied-by-identitys-realm-job.md) | The realm is kept as code and applied by identity's realm job, which alone holds Keycloak's admin | Proposed | 2026-11-03 |
+| [0063](0063-accessibility-checked-by-axe.md) | Accessibility is checked by axe in CI, failing on serious findings | Proposed | 2026-11-04 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

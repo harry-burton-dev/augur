@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import Type from 'typebox';
 import { GrantsUnavailable, identifyService, ServiceAuthUnavailable, type GrantLookup, type ServiceVerifier } from '@augur/service-kit';
 import type { Person } from './directory.ts';
+import { refused } from './schemas.ts';
 import type { TeamDirectory } from './teams.ts';
 import type { Workspace, WorkspaceStore } from './workspaces.ts';
 
@@ -10,6 +13,7 @@ export const PEOPLE_SCOPE = 'people:read';
 /** How long the directory's list of people is kept: the sign-in service is slow to ask, and a new person shows within this. */
 const PEOPLE_TTL_MS = 30_000;
 const MAX_RESULTS = 50;
+const DEFAULT_RESULTS = 20;
 
 export interface PeopleOptions {
   workspaces: WorkspaceStore;
@@ -71,7 +75,8 @@ const fold = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLocale
  */
 export const peopleRoutes =
   ({ workspaces, teams, verifyService, grants, now = Date.now }: PeopleOptions) =>
-  async (app: FastifyInstance) => {
+  async (plain: FastifyInstance) => {
+    const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     let people: { list: Person[]; at: number } | undefined;
     const everyone = async () => {
       if (!teams) return [];
@@ -100,21 +105,75 @@ export const peopleRoutes =
       return false;
     };
 
-    app.get<{ Params: { id: string } }>('/people/:id/principals', { schema: { params: { type: 'object', properties: { id: { type: 'string', minLength: 1, maxLength: 100 } } } } }, async (req, reply) => {
-      if (!(await allowed(req, reply))) return reply;
-      await teams?.ready();
-      const [all, mine] = await Promise.all([workspaces.teams(), workspaces.memberships({ person: req.params.id })]);
-      return { person: req.params.id, principals: principalsOf(req.params.id, all, mine.map((m) => m.workspace)) };
-    });
+    const notAllowed = {
+      403: refused('Not a platform service, or an app without people:read'),
+      503: refused("The caller's token or the app's grants can't be checked right now"),
+    };
 
-    app.get<{ Querystring: { q?: string; ids?: string; limit?: number } }>(
+    app.get(
+      '/people/:id/principals',
+      {
+        schema: {
+          summary: 'Who a person stands for (platform services, and apps with people:read)',
+          description: [
+            "The principals an app matches against who may see something: person:<id>;",
+            "team:<id> for each team they're on; tree:<id> for each of those teams and",
+            'every team above it (shared with a team and the teams below it); and org,',
+            "which everyone is in. Archived teams don't count. Apps keep each answer",
+            'for 30 seconds (identityPrincipals in the service kit).',
+          ].join(' '),
+          params: Type.Object({ id: Type.String({ minLength: 1, maxLength: 100 }) }),
+          response: {
+            200: Type.Object({ person: Type.String(), principals: Type.Array(Type.String()) }, { description: 'Their principals' }),
+            400: refused('An id longer than 100 characters'),
+            ...notAllowed,
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!(await allowed(req, reply))) return reply;
+        await teams?.ready();
+        const [all, mine] = await Promise.all([workspaces.teams(), workspaces.memberships({ person: req.params.id })]);
+        return { person: req.params.id, principals: principalsOf(req.params.id, all, mine.map((m) => m.workspace)) };
+      },
+    );
+
+    app.get(
       '/directory',
       {
         schema: {
-          querystring: {
-            type: 'object',
-            additionalProperties: false,
-            properties: { q: { type: 'string', maxLength: 100 }, ids: { type: 'string', maxLength: 4000 }, limit: { type: 'integer', minimum: 1, maximum: MAX_RESULTS } },
+          summary: 'Find people and teams (platform services, and apps with people:read)',
+          description: [
+            "For sharing: people whose name, email or username has `q` in it, and teams",
+            'whose name does, each sorted by name, first `limit` of each. With `ids`',
+            'instead, the people and teams with those ids, so an app can name who it',
+            "has shared with. People whose sign-in is turned off aren't listed.",
+          ].join(' '),
+          querystring: Type.Object(
+            {
+              q: Type.Optional(Type.String({ maxLength: 100 })),
+              ids: Type.Optional(Type.String({ maxLength: 4000, description: 'Comma-separated person and team ids' })),
+              limit: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_RESULTS, default: DEFAULT_RESULTS })),
+            },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Object(
+              {
+                people: Type.Array(Type.Object({ id: Type.String(), name: Type.String(), email: Type.Optional(Type.String()) })),
+                teams: Type.Array(
+                  Type.Object({
+                    id: Type.String(),
+                    name: Type.String(),
+                    within: Type.Array(Type.String(), { description: 'Names of the teams it sits in, from the top down' }),
+                    path: Type.Optional(Type.Array(Type.String(), { description: 'The ids of those teams, then its own (1.9)' })),
+                  }),
+                ),
+              },
+              { description: 'People and teams' },
+            ),
+            400: refused('A query it does not know, or a value out of range'),
+            ...notAllowed,
           },
         },
       },
@@ -125,7 +184,7 @@ export const peopleRoutes =
         const byId = new Map(all.map((t) => [t.id, t]));
         const ids = req.query.ids !== undefined ? new Set(req.query.ids.split(',').map((s) => s.trim()).filter(Boolean)) : undefined;
         // Names asked for by id all come back; a search gives the first `limit` of each.
-        const limit = ids ? undefined : (req.query.limit ?? 20);
+        const limit = ids ? undefined : (req.query.limit ?? DEFAULT_RESULTS);
         const q = fold(req.query.q?.trim() ?? '');
         const matches = (...words: (string | undefined)[]) => !q || words.some((w) => w && fold(w).includes(q));
         const found = folks
@@ -145,11 +204,28 @@ export const peopleRoutes =
       },
     );
 
-    app.get<{ Querystring: { principals: string } }>(
+    app.get(
       '/members',
       {
         schema: {
-          querystring: { type: 'object', additionalProperties: false, required: ['principals'], properties: { principals: { type: 'string', minLength: 1, maxLength: 4000 } } },
+          summary: 'Who an audience reaches (platform services, and apps with people:read)',
+          description: [
+            'The ids of everyone who stands for at least one of the principals',
+            '(person:, team:, tree: or org), so an app can tell an audience that',
+            'something was published to it. People whose sign-in is turned off',
+            "aren't listed. Since 1.9. Platform services may also name",
+            'role:<realm role>, such as role:deployment-admin (1.14, ADR 0044); an',
+            'app that does is refused with 403.',
+          ].join(' '),
+          querystring: Type.Object(
+            { principals: Type.String({ minLength: 1, maxLength: 4000, description: 'Comma-separated principals' }) },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Object({ people: Type.Array(Type.String()) }, { description: 'Person ids, sorted' }),
+            400: refused('No principals, or a query it does not know'),
+            ...notAllowed,
+          },
         },
       },
       async (req, reply) => {
@@ -158,7 +234,7 @@ export const peopleRoutes =
         const principals = req.query.principals.split(',').map((s) => s.trim()).filter(Boolean);
         // Who holds a role is the platform's business: an app tells people, not "every admin".
         if (asker !== 'platform' && principals.some((p) => p.startsWith('role:'))) {
-          return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can reach people by role.' });
+          return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can reach people by role.' });
         }
         await teams?.ready();
         const [all, folks, members] = await Promise.all([workspaces.teams(), everyone(), workspaces.memberships()]);

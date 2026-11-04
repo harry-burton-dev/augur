@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Choosing · V5 · What paid before</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Choosing V5: the offer comes from the organisation's own record: which technique changed a line on decisions of this kind ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:var(--space-6)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.tally{display:grid;gap:var(--space-2)}
+.tl{display:grid;grid-template-columns:minmax(200px,1fr) minmax(0,1.4fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);transition:background var(--motion-base) var(--ease-standard)}
+.tl.lead{background:var(--x-proposed-lit-wash);outline:1px solid var(--x-proposed-lit)}
+.dots{display:flex;gap:var(--space-1);flex-wrap:wrap}
+.dots i{width:var(--space-4);height:var(--space-4);border-radius:2px;border:1.5px solid var(--ink-muted)}
+.dots i.paid{background:var(--ink);border-color:var(--ink)}
+.dots i.hid{border-color:var(--hairline-strong);background:var(--x-proposed-unseen)}
+.runs{display:grid;gap:0}
+.run{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto minmax(0,1.4fr);gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);align-items:baseline}
+.run .muted{color:var(--ink-muted)}
+.run.hid{background:var(--x-proposed-unseen);color:var(--ink-muted);padding-left:var(--space-2)}
+.offer{transition:opacity var(--motion-calm) var(--ease-out)}
+.offer.hold{opacity:0}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Choosing · V5</b> what paid before: the offer comes from the floors’ own record on decisions of this kind · Tetlock and Gardner (2015), case-based reasoning</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PR = DATA.precedent;
+const S = { lead: false };
+function render() {
+  const by = {};
+  PR.runs.forEach(r => { (by[r.tid] = by[r.tid] || []).push(r); });
+  const rows = Object.entries(by).map(([tid, rs]) => ({ tid, rs, seen: rs.filter(r => !r.hidden), paid: rs.filter(r => r.paid).length }))
+    .sort((a, b) => (b.paid / b.seen.length) - (a.paid / a.seen.length) || b.paid - a.paid);
+  const best = rows.find(r => r.seen.length >= 2);
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, 'Test a judgement'], [...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="col scroll"><p class="eyebrow">Bench runs on “${PR.kind}” decisions since ${PR.since}</p>
+      <p class="sent">On decisions like yours, <b>which technique changed a line?</b> A filled square paid: it moved a term, a date or a condition. An empty one changed nothing.</p>
+      <div class="tally">${rows.map(r => `<div class="tl ${S.lead && r === best ? 'lead' : ''}">${tq(r.tid, 14)}<span class="dots">${r.rs.map(x => `<i class="${x.hidden ? 'hid' : x.paid ? 'paid' : ''}" title="${x.hidden ? 'Not yours to see' : x.q}"></i>`).join('')}</span><span class="small num">${r.paid} of ${r.seen.length} paid${r.rs.length > r.seen.length ? ` · ${r.rs.length - r.seen.length} not yours to see` : ''}</span></div>`).join('')}</div>
+      <div class="runs">${PR.runs.map(r => r.hidden
+        ? `<div class="run hid"><span>${I('lock', 12)} A run on the ${F(r.floor).name} floor</span><span>${T(r.tid).name}</span><span></span><span>Not yours to see. Ask that floor’s lead to share it.</span></div>`
+        : `<div class="run"><span>“${r.q}”</span><span class="muted">${F(r.floor).name} · ${r.year}</span><span class="num muted">${r.took} min</span><span>${r.paid ? I('check', 12) : I('minus', 12)} ${r.what}</span></div>`).join('')}</div>
+    </section>
+    <aside class="col">${offerHTML(best.tid, `On ${PR.kind.lc()} decisions it paid ${best.paid} times out of ${best.seen.length}, the best record with more than one run.`, { cls: S.lead ? '' : 'hold' })}
+      <div class="card"><p class="lbl">What “paid” means, and doesn’t</p><p class="small">Paid means the technique changed a line of the decision. It does <b class="lite">not</b> mean the decision went well: that is scored later, against what happened.</p><p class="small muted">Eight runs is a small record. With fewer than two runs you can see, AUGUR shows the record but doesn’t choose by it; it falls back to the kind of question.</p></div>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.lead = false; settle(); render(); later(() => { S.lead = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

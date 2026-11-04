@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Next month V5 · The pattern changes, not the cloth</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: answering a stop changes the recipe, not the data: version 1 and version 2 side by side, with the runs each made ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,.8fr);gap:var(--space-6)}
+.diff{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.dh,.dl{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) minmax(0,1fr);gap:var(--space-4)}
+.dh{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted);padding:0 var(--space-3)}
+.dl{padding:var(--space-1) var(--space-3);border-top:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.dl .n{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);text-align:right}
+.dl.ch{color:var(--ink);background:color-mix(in srgb,var(--light) 3%,transparent)}
+.dl.ch .v2{color:var(--light)}
+.dl .v1 del{text-decoration-color:var(--ink-muted)}
+.dl .v2 ins{text-decoration:none;border-bottom:1px solid var(--light)}
+.dl .why{grid-column:3;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:flex-start}
+.dl .why svg{flex:none;margin-top:2px}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.ver{display:grid;gap:var(--space-2)}
+.ver .v{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset)}
+.ver .v.cur{border-color:var(--hairline-strong);background:var(--surface-pane)}
+.ver .v b{font:300 var(--type-heading)/1 var(--font-mono);color:var(--light);grid-row:span 2}
+.ver .v span{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.ver .v small{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rows{display:grid;gap:var(--space-2)}
+.rows .r{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);font-size:var(--type-small);color:var(--ink-muted)}
+.rows .st{display:flex;flex-wrap:wrap;gap:2px;grid-column:1 / span 2}
+.rows .st i{width:var(--space-2);height:var(--space-2);border-radius:1px;background:var(--ink-muted)}
+.rows .st i.v2{background:var(--light)}
+.rows .st i.as{background:none;outline:1px dashed var(--x-proposed-aside-edge);outline-offset:-1px}
+.side p{margin:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.side p b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.dl{font-size:var(--type-small);line-height:var(--leading-small)}.ver .v{padding:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Next month · V5</b> the pattern changes, not the cloth: a stop's answer becomes a new recipe version, with the runs each made · knitting patterns and their errata</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DATA.december, REC = DATA.recipe, F0 = DATA.files.oct, F1 = DATA.files.nov;
+const v1 = REC.steps;
+/* version 2 is version 1 plus Ade's two December answers, nothing else */
+const v2 = REC.steps.map(st => {
+  if ((st.col || [])[0] === D.rename.from) return { ...st, col: [D.rename.from, D.rename.to] };
+  if (st.op === 'map') return { ...st, cols: { ...st.cols, [D.newCol.name]: 'left out' } };
+  return st;
+});
+const ANS = { rename: { [D.rename.from]: D.rename.to }, value: { [D.newWord.value]: D.newWord.choice } };
+const R1 = run('oct', v1), R2 = run('nov', v2, ANS), P1 = plate(R1), P2 = plate(R2);
+const S = { show: false };
+function lineWords(st, ver) {
+  const w = stepWords(st, ver === 2 ? R2 : R1).w;
+  if (ver === 2 && (st.col || [])[1] === D.rename.to) return w.replace(D.rename.to, `${D.rename.from} or <ins>${D.rename.to}</ins>`);
+  if (ver === 2 && st.op === 'result') return `${w}<ins>; set aside “${esc(D.newWord.value)}” until “${D.newWord.ask}” exists</ins>`;
+  if (ver === 2 && st.op === 'map') return `${w}<ins>; leave ${D.newCol.name} out</ins>`;
+  return w;
+}
+const changed = st => { const i = v1.indexOf(st); return lineWords(st, 1) !== lineWords(v2[i], 2); };
+const why = st => st.op === 'result' ? `${D.newWord.value} stopped this line on ${F1.month.split(' ')[0]}’s file. ${P(DATA.me).name} answered: set aside, and asked ${P(D.newWord.decides).name}.` : st.op === 'map' ? `${D.newCol.name} was new on ${F1.month.split(' ')[0]}’s file. ${P(DATA.me).name} answered: leave it out.` : `${D.rename.from} wasn’t in ${F1.month.split(' ')[0]}’s file. ${P(DATA.me).name} answered: ${D.rename.to} is ${D.rename.from}.`;
+function render() {
+  const nCh = v1.filter(changed).length;
+  $('#app').innerHTML = topHTML([DATA.app, DATA.bench, 'Recipes', REC.name, 'Versions'], [['V', S.show ? 'only changes' : 'every line'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <section class="diff"><div><h1 class="t">Version ${REC.version} and version ${REC.version + 1}</h1><p class="lede" style="margin-top:var(--space-1)">Answering a stop doesn’t touch the data; it changes the recipe. ${plural(nCh, 'line')} changed, each with the stop that changed it. Like a knitting pattern’s errata: the pattern is corrected, and the cloth already knitted keeps the row it was made with.</p></div>
+      <div class="dh"><span></span><span>version ${REC.version} · ${REC.saved.split(',')[0]}</span><span>version ${REC.version + 1} · ${D.today}</span></div>
+      ${v1.map((st, i) => { const c = changed(st); if (!c && !S.show) return ''; return `<div class="dl ${c ? 'ch' : ''} dep" style="--i:${i}"><span class="n">${st.id.slice(1)}</span><span class="v1">${c ? `<del>${lineWords(st, 1)}</del>` : lineWords(st, 1)}</span><span class="v2">${c ? lineWords(v2[i], 2) : '<span class="muted">same</span>'}</span>${c ? `<span class="why">${I('corner-down-right', 12)} ${why(st)}</span>` : ''}</div>`; }).join('')}
+      ${S.show ? '' : `<div class="dl"><span></span><span class="muted">${v1.length - nCh} other lines are the same in both versions</span><span></span></div>`}</section>
+    <aside class="side"><p class="eyebrow">${I('history', 12)} Versions and the runs they made</p>
+      <div class="ver"><div class="v"><b>${REC.version}</b><span>run ${F0.run.n} · ${F0.month}</span><small>${P(REC.owner).name} · ${REC.saved}</small></div>
+        <div class="v cur"><b>${REC.version + 1}</b><span>run ${F1.run.n} · ${F1.month}</span><small>${P(DATA.me).name} · ${F1.run.at}</small></div></div>
+      <div class="rows"><div class="r"><span>${F0.month}: ${P1.land} landed, made by version ${REC.version}</span></div><span class="st">${R1.recs.map(() => '<i></i>').join('')}${P1.aside.map(() => '<i class="as"></i>').join('')}</span>
+        <div class="r"><span>${F1.month}: ${P2.land} landed, made by version ${REC.version + 1}</span></div><span class="st">${R2.recs.map(() => '<i class="v2"></i>').join('')}${P2.aside.map(() => '<i class="as"></i>').join('')}</span></div>
+      <p><b>Nothing knitted is unpicked.</b> October’s ${P1.land} ${DATA.kinds.inspection.word}s keep “made by version ${REC.version}”. Version ${REC.version + 1} gives the same answer for every October line, so the bench offers no rerun; if it didn’t, it would show the difference first.</p>
+      <p><b>Going back</b> to version ${REC.version} is allowed, and is itself a new version. Next month’s file would stop at the same two lines again.</p></aside>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() { clearLater(); S.show = false; document.body.classList.add('pre'); render(); settle(ms('--motion-run')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 'v') { S.show = !S.show; render(); } });
+replay();
+</script>
+</body>
+</html>

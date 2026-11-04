@@ -61,7 +61,7 @@ export class UiLifecycle extends LitElement {
       :host { display: flex; flex-direction: column; gap: var(--space-3); }
       ol { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin: 0; padding: 0; list-style: none; }
       li { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--type-meta); line-height: var(--leading-meta); color: var(--ink-muted); }
-      li + li::before { content: ''; width: var(--space-4); height: 1px; background: var(--rule); }
+      li + li::before { content: ''; width: var(--space-4); height: 1px; background: var(--hairline); }
       .disc { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink-muted); }
       .passed .disc { background: var(--ink-muted); }
       .here { color: var(--ink); font-weight: 600; }
