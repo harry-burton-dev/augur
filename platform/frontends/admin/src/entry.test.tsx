@@ -242,7 +242,12 @@ describe('Status', () => {
 
   it('shows every part, what to check for one that’s down, that AUGUR is open to the internet, and that a release is out', async () => {
     const components = [part('gateway', 'up', { kind: 'gateway', version: '0.2.0' }), part('library', 'down', { kind: 'app', problem: 'It can’t be reached.' })];
-    const backups = { state: 'ok', lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 }, lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, people: 3 } };
+    const backups = {
+      state: 'ok',
+      lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 },
+      offsite: { at: '2026-10-22T02:01:00Z', ok: true, keepDays: 30 },
+      lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, from: 'offsite', people: 3 },
+    };
     gateway((_m, url) =>
       url === '/api/gateway/v1/status'
         ? Response.json({ components, backups, publicAccess: { open: true, until: '2026-10-28T18:00:00Z' } })
@@ -253,6 +258,8 @@ describe('Status', () => {
     const el = await open('/status');
     expect(title(el)).toBe('1 part is down');
     expect(el.textContent).toContain('Backups restore cleanly');
+    expect(el.textContent).toContain('30 days kept');
+    expect(el.textContent).toContain('Restored from the copy off the server, 3 people');
     expect(el.querySelector('[data-public]')!.textContent).toContain('infra/deploy/public.sh off');
     expect(el.textContent).toContain('AUGUR 0.13.2 is out.');
     await openRow(el, 'library');

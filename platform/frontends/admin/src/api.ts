@@ -159,7 +159,9 @@ export interface BackupStatus {
   state: 'ok' | 'attention';
   problem?: string;
   lastBackup?: { at: string; ok: boolean; file?: string; bytes?: number; problem?: string };
-  lastRestoreTest?: { at: string; ok: boolean; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
+  /** The last copy off the server (ADR 0060); absent while backups stay on the server only. */
+  offsite?: { at: string; ok: boolean; snapshot?: string; keepDays?: number; problem?: string };
+  lastRestoreTest?: { at: string; ok: boolean; from?: 'local' | 'offsite'; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
 }
 
 /** Whether AUGUR is open to the internet, from infra/deploy/public.sh (see contracts/gateway.openapi.yaml). */

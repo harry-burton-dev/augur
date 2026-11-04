@@ -111,11 +111,23 @@ describe('backupStatus', () => {
     return dir;
   };
   const backup = { at: '2026-10-22T02:00:00Z', ok: true, file: 'platform-2026-10-22.sql.gz', bytes: 52_000 };
-  const restored = { at: '2026-10-19T02:01:00Z', ok: true, file: 'platform-2026-10-19.sql.gz', seconds: 4, people: 3, apps: 1, auditEntries: 120 };
+  const restored = { at: '2026-10-19T02:01:00Z', from: 'offsite', ok: true, file: 'platform-2026-10-19.sql.gz', seconds: 4, people: 3, apps: 1, auditEntries: 120 };
+  const offsite = { at: '2026-10-22T02:01:00Z', ok: true, snapshot: '83ebc741', keepDays: 30 };
+  const all = { 'last-backup.json': backup, 'offsite.json': offsite, 'restore-test.json': restored };
 
-  it('is fine with last night’s backup and a restore test this week', async () => {
-    const status = await backupStatus(await folder({ 'last-backup.json': backup, 'restore-test.json': restored }), now);
-    expect(status).toEqual({ state: 'ok', lastBackup: backup, lastRestoreTest: restored });
+  it('is fine with last night’s backup copied off the server and a restore from that copy this week', async () => {
+    const status = await backupStatus(await folder(all), now);
+    expect(status).toEqual({ state: 'ok', lastBackup: backup, offsite, lastRestoreTest: restored });
+  });
+
+  it('needs a look while backups stay on the server, and when the copy off it fails, is stale or isn’t restored from', async () => {
+    const problem = async (files: Record<string, object>) => (await backupStatus(await folder({ ...all, ...files }), now)).problem;
+    const only = await backupStatus(await folder({ 'last-backup.json': backup, 'restore-test.json': { ...restored, from: 'local' } }), now);
+    expect(only.state).toBe('attention');
+    expect(only.problem).toMatch(/on this server only.*OFFSITE_REPOSITORY/);
+    expect(await problem({ 'offsite.json': { ...offsite, ok: false, problem: 'Backups could not be copied off this server: wrong password.' } })).toMatch(/wrong password/);
+    expect(await problem({ 'offsite.json': { ...offsite, at: '2026-10-20T02:01:00Z' } })).toMatch(/off the server is more than a day old/);
+    expect(await problem({ 'restore-test.json': { ...restored, from: 'local' } })).toMatch(/restored from the off-server copy yet/);
   });
 
   it('needs a look with no backup, a failed or stale one, or no recent good restore', async () => {

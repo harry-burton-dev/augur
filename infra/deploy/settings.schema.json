@@ -481,6 +481,58 @@
       ],
       "x-docs": "docs/deploy.md#backups"
     },
+    "OFFSITE_REPOSITORY": {
+      "type": "string",
+      "description": "The restic repository in an S3-compatible bucket that backups are copied to, off the server (ADR 0060). Empty, backups stay on the server only.",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/deploy.md#off-server-copy"
+    },
+    "OFFSITE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "restic's encryption password for the off-server copy. Keep a copy off the server too.",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/deploy.md#off-server-copy"
+    },
+    "OFFSITE_ACCESS_KEY_ID": {
+      "type": "string",
+      "description": "The id of the bucket's key for the off-server copy.",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/deploy.md#off-server-copy"
+    },
+    "OFFSITE_SECRET_ACCESS_KEY": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The secret of the bucket's key for the off-server copy.",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/deploy.md#off-server-copy"
+    },
+    "OFFSITE_REGION": {
+      "type": "string",
+      "description": "The bucket's region, if its provider wants one.",
+      "default": "",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/deploy.md#off-server-copy"
+    },
+    "OFFSITE_KEEP_DAILY": {
+      "type": "string",
+      "description": "How many days of copies the off-server bucket keeps.",
+      "default": "30",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/deploy.md#off-server-copy"
+    },
     "MODEL_API_URL": {
       "type": "string",
       "description": "An OpenAI-style API for the model behind Agents, or stand-in; without it models stay off.",
