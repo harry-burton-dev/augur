@@ -59,7 +59,7 @@ cosign verify-attestation --type spdxjson --certificate-identity-regexp '^https:
   --certificate-oidc-issuer https://token.actions.githubusercontent.com <image>@<digest> | jq -r .payload | base64 -d | jq .predicate
 ```
 
-(`--type slsaprovenance` for the provenance; an app's release from its own repository names that repository instead.) The mirror's `cosign copy` carries them with the image, so an air-gapped deployment keeps them. A shipped app's image whose own build wrote none is released without them, with a warning in the release run.
+(`--type slsaprovenance1` for the provenance, which is SLSA v1; an app's release from its own repository names that repository instead.) The mirror's `cosign copy` carries them with the image, so an air-gapped deployment keeps them. A shipped app's image whose own build wrote none is released without them, with a warning in the release run.
 
 Dev builds are signed by `augur-dev.yml` (AUGUR) or `app-dev.yml` (apps) on `main`, which the updater takes only for a dev build, and only on the workbench ([AUGUR dev builds](#augur-dev-builds)). `dev` stays on that list until `main` replaces it.
 
