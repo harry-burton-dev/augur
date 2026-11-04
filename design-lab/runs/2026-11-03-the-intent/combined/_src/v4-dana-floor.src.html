@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Combined · V4 · The Department’s intent page</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V4: an intent's page as its owner reads it. Who below has said it back, what was changed within it this week and why, what still asks, and both drifts, each asked once ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.hd{display:flex;gap:var(--space-5);align-items:baseline;flex-wrap:wrap}
+.hd .state{display:inline-flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--ink)}
+.cols{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.25fr) minmax(0,1fr);gap:var(--space-5);min-height:0}
+.col{display:grid;gap:var(--space-3);align-content:start;min-height:0}
+.team{display:grid;gap:var(--space-1);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.team .people{display:flex;gap:var(--space-1);align-items:center;font-size:var(--type-small);color:var(--ink-muted)}
+.team .x{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);align-items:center;font-size:var(--type-small);color:var(--ink-muted)}
+.team .x .tr{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro)}
+.team .x .tr.opening{color:var(--x-proposed-drift)}
+.ch{display:grid;gap:var(--space-1);padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out)}
+.ch .hh{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.ch .s{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.ch p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ch.new{border-color:var(--x-proposed-thread)}
+.ch.wait{opacity:0;transform:translateY(calc(var(--space-2) * -1))}
+.ch.ask{border-color:var(--x-proposed-standby)}
+.ch .acts{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-1)}
+.kind{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;padding:2px var(--space-2);border-radius:var(--radius-key);border:1px solid var(--x-proposed-thread);color:var(--ink)}
+.kind.a{border-color:var(--x-proposed-standby)}
+.kind.d{border-color:var(--x-proposed-drift)}
+.dr{display:grid;gap:var(--space-2);padding:var(--space-3);border-left:2px solid var(--x-proposed-drift);background:var(--x-proposed-drift-wash)}
+.dr .hh{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--ink-muted)}
+.dr .s{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.dr p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.dr .acts{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.mini{display:flex;align-items:flex-end;gap:var(--space-1);height:var(--space-6)}
+.mini i{flex:1;background:color-mix(in srgb,var(--ink) 55%,transparent);border-radius:2px 2px 0 0}
+.mini i.last{background:var(--x-proposed-drift)}
+@media (prefers-reduced-motion: reduce){.ch.wait{transform:none}}
+@media (max-width:1400px){.cols{grid-template-columns:minmax(0,.85fr) minmax(0,1.2fr) minmax(0,1fr);gap:var(--space-4)}.ch{padding:var(--space-2)}.ch p.long{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V4</b> the intent’s page, as its owner reads it: said back below, changed within it and why, what still asks, two drifts asked once</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const n = N('DEP-14'), PL = DATA.plan, R = PL.record, W = DATA.workDrift, all = Object.keys(DATA.intents);
+const S = { arrived: false, seen: false, answer: {} };
+const below = k => { const kids = all.filter(c => N(c).serves === k); return kids.concat(kids.flatMap(below)); };
+function teamHTML(t) {
+  const tn = N(t), kids = below(t), xte = DATA.xte.find(x => x.iid === t);
+  const bb = t === 'TM-31' ? DATA.backbriefs.filter(b => b.state !== 'na') : [];
+  return `<div class="team">${ichip(t, { ring: tn.state === 'force' ? 'confirmed' : 'open' })}
+    <span class="people">${t === 'TM-31' ? bb.map(b => ringHTML(b.state)).join('') + ` <span>${bb.filter(b => b.state === 'confirmed' || b.state === 'corrected').length} of ${bb.length} said back</span>` : tn.state === 'force' ? `said back ${tn.saidAt || ''}` : `<span class="lite">not said back: its changes still ask</span>`}</span>
+    ${xte ? `<span class="x"><span>${FACT(xte.fact).w}: ${xte.now} against ${xte.line}</span><span class="tr ${xte.trend}">${xte.trend}</span></span>` : ''}</div>`;
+}
+function render() {
+  const teams = all.filter(k => N(k).serves === 'DEP-14');
+  const ask = PL.inbox.find(m => m.kind === 'ask');
+  $('#app').innerHTML = topHTML(['Mandate', F('department').name, 'DEP-14'], [['S', 'seen'], ...STD], 'department') +
+  `<main class="main"><div class="wrap">
+    <div class="hd"><h1 class="title">${n.title}</h1>${ichip('DEP-14', { short: true })}<span class="state"><span class="drift"></span>${DATA.states.find(s => s.id === 'revisit').w}: asked once, ${ITEM(PL.breaks).t}</span><span class="small muted">${P(ME).name} · review ${n.review}</span></div>
+    <div class="cols">
+      <section class="col scroll" aria-label="Below this intent"><p class="eyebrow">Below it · said back?</p>${teams.map(teamHTML).join('')}
+        <p class="small muted">Freedom within DEP-14 works only for teams and people who have said it back. Two levels down, every part shows its ring.</p></section>
+      <section class="col scroll" aria-live="polite"><p class="eyebrow">Changed within it this week · told, not asked</p>
+        <div class="ch ${S.arrived ? 'new' : 'wait'}"><span class="hh"><span class="kind">Told</span>${P(R.by).name} · ${PL.noticeAt} · ${ichip('YOU-31a', { short: true })}</span><span class="s">${R.changed.split(':')[0]} <span class="within">${I('git-merge', 12)} within ${R.under}</span></span><p><span class="so">so that</span> ${R.serves}</p><p class="long">Because: ${ITEM(PL.breaks).t} ${ITEM(PL.breaks).short}. ${limitsOf('YOU-31a').length} limits held. Ends ${R.ends}.</p>
+          <span class="acts">${S.seen ? `<span class="small muted">${I('eye', 12)} Seen. Nothing else is needed.</span>` : `<button class="btn sm" data-seen>${I('eye', 14)} Seen <span class="kbd">S</span></button><button class="btn sm">${I('message-circle-question', 14)} Ask a question</button>`}</span></div>
+        ${PL.earlier.map(c => `<div class="ch"><span class="hh"><span class="kind">Told</span>${P(c.by).name} · ${c.at} · ${ichip(c.under, { short: true })}</span><span class="s">${c.w}</span><p><span class="so">so that</span> ${c.serves} · cost: ${c.cost}</p></div>`).join('')}
+        <p class="eyebrow" style="margin-top:var(--space-2)">Still asks</p>
+        <div class="ch ask"><span class="hh"><span class="kind a">Asks</span>${P(ask.from).name} · ${ask.at} · ${ichip(ask.iid, { short: true, ring: 'open' })}</span><span class="s">${ask.w}</span><p>${ask.why}</p><span class="acts"><button class="btn sm go">${I('check', 14)} Yes</button><button class="btn sm">${I('x', 14)} No</button></span></div></section>
+      <section class="col scroll"><p class="eyebrow">Drift · each asked once</p>
+        <div class="dr"><span class="hh"><span class="kind d">The world</span></span><span class="s">${n.assumptions[0].w}: no longer holds</span><p>${n.assumptions[0].now}. ${n.assumptions[1].w.split(' (')[0]}: ${n.assumptions[1].now}.</p>
+          ${S.answer.w ? `<p class="small muted">${S.answer.w}</p>` : `<span class="acts"><button class="btn sm" data-w="keep">Keep DEP-14</button><button class="btn sm" data-w="amend">Amend it</button></span>`}</div>
+        <div class="dr"><span class="hh"><span class="kind d">The work</span>${ichip(W.intent, { short: true })} ${W.task}</span><span class="s">${W.largest.at(-1)}% of gang hours on the largest leaks, from ${W.largest[0]}%</span>
+          <div class="mini" aria-hidden="true">${W.largest.map((v, i) => `<i class="${i === W.largest.length - 1 ? 'last' : ''}" style="height:${v}%"></i>`).join('')}</div>
+          <p>${W.projected} of ${W.target} by ${W.by} at this rate. Asked of ${P(N(W.intent).owner).name}, who holds ${W.intent}; shown here because it touches DEP-14 K2.</p></div>
+        <p class="small muted">Nothing on this page is in the Letterbox or flashes. The change already stands; the questions wait for their owners.</p></section>
+    </div></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-seen]')?.addEventListener('click', () => { S.seen = true; render(); });
+  $$('[data-w]').forEach(b => b.onclick = () => { S.answer.w = b.dataset.w === 'keep' ? `Kept by ${P(ME).name}: the branch covers it; the assumption is marked knowingly crossed.` : 'A new draft opens from this one; the teams work to the old until the new is said back.'; render(); });
+}
+function replay() { clearLater(); S.arrived = false; S.seen = false; S.answer = {}; settle(); render(); later(() => { S.arrived = true; const c = $('.ch.wait'); if (c) { c.classList.remove('wait'); c.classList.add('new'); } }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 's' && S.arrived) { S.seen = true; render(); } });
+replay();
+</script>
+</body>
+</html>

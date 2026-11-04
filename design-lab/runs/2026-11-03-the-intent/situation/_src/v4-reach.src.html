@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent meets the situation · V4 · How far up</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: intent as a filter, with the reach in your hands. How far up the nest should what reaches you go? Beyond it is a count, never a gap ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.reach{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);overflow:hidden}
+.reach button{display:grid;gap:2px;padding:var(--space-3) var(--space-4);border-left:1px solid var(--hairline);text-align:left;transition:background var(--motion-base) var(--ease-standard)}
+.reach button:first-child{border-left:0}
+.reach button b{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.reach button span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.reach button .n{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--light)}
+.reach button.in{background:var(--x-proposed-thread-wash)}
+.reach button[aria-pressed="true"]{background:var(--surface-raised);box-shadow:inset 0 -2px 0 var(--x-proposed-thread)}
+.reach button[aria-pressed="true"] b{color:var(--light)}
+.list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2) var(--space-5);align-content:start;min-height:0}
+.row{display:grid;grid-template-columns:calc(var(--space-6) + var(--space-1)) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline)}
+.row .t{font-family:var(--font-mono);font-size:var(--type-small);color:var(--ink-muted);line-height:var(--leading-meta)}
+.row b{display:block;font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.row span.w{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.row.unseen b{background:var(--x-proposed-unseen);width:fit-content;padding:0 var(--space-2);color:var(--ink-muted)}
+.beyond{grid-column:1/-1;padding:var(--space-3) var(--space-4);border:1px dashed var(--hairline-strong);border-radius:var(--radius-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap}
+.beyond b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.row span.w{display:none}.reach button{padding:var(--space-2) var(--space-3)}.reach button .n{font-size:var(--type-heading)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent meets the situation · V4</b> how far up: intent as a filter with the reach in your hands; beyond it is a count, never a gap · Bratman; ADP 6-0</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const CH = DATA.chain;
+const LV = [['Your part', 'only what touches it', 1], ['One up', `+ ${N(CH[1]).title}`, 2], ['Two up', `+ ${N(CH[2]).title} · the default`, 3], ['Everything', 'every intent, and what touches none', 9]];
+const S = { lv: 3 };
+/* limits travel all the way down: one you inherit reaches you at any reach */
+const MYLIM = limitsOf(CH[0]).map(l => l.id);
+const inLevel = (it, l) => l >= 9 ? true : it.touches.some(t => CH.slice(0, l).includes(t[0]) || (t[1] === 'limit' && MYLIM.includes(t[2])));
+function render() {
+  const lim = LV[S.lv][2], all = ranked();
+  const inn = all.filter(it => inLevel(it, lim)), out = all.filter(it => !inLevel(it, lim));
+  const untouched = S.lv === 3 ? DATA.untouched : [];
+  $('#app').innerHTML = topHTML(['Home', 'This morning', 'Reach'], [['1–4', 'reach'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">How far up should this morning reach ${first(ME)}?</h1><p class="small muted">The rule ranks; you choose how far the list goes. Default: two up. A limit you inherit reaches you at any reach.</p></div>
+    <div class="reach" role="group" aria-label="Reach">${LV.map(([w, d, l], i) => `<button data-l="${i}" aria-pressed="${i === S.lv}" class="${i <= S.lv ? 'in' : ''}"><span class="n">${all.filter(it => inLevel(it, l)).length + (l >= 9 ? DATA.untouched.length : 0)}</span><b>${i + 1} · ${w}</b><span>${d}</span></button>`).join('')}</div>
+    <section class="list scroll" aria-live="polite">
+      ${inn.map(it => `<div class="row ${it.restricted ? 'unseen' : ''}"><span class="t">${it.t}</span><span><b>${it.restricted ? it.short : it.title}</b><span class="w">${it.why}</span></span></div>`).join('')}
+      ${untouched.map(u => `<div class="row"><span class="t">${u.t}</span><span><b>${u.w}</b><span class="w">${u.src} · touches none of your intents</span></span></div>`).join('')}
+      ${S.lv < 3 ? `<div class="beyond">${I('fold-vertical', 16)}<span><b>${out.length + DATA.untouched.length} more beyond this reach</b>: ${out.length} touch intents further up${out.some(i => i.restricted) ? ' (one you can’t open)' : ''}, ${DATA.untouched.length} touch none. Not hidden: press ${S.lv + 2} to widen.</span></div>` : ''}
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-l]').forEach(b => b.onclick = () => { S.lv = +b.dataset.l; render(); });
+}
+function replay() { clearLater(); S.lv = 3; settle(); render(); later(() => { S.lv = 2; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= 4) { S.lv = k - 1; render(); } });
+replay();
+</script>
+</body>
+</html>

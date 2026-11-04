@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Writing an intent · V4 · The limits, from a premortem</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: limits written by imagining the failure. Each story becomes a limit, a branch or a freedom with a condition; a floor may tighten, never loosen ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.q{display:flex;align-items:baseline;gap:var(--space-5);flex-wrap:wrap}
+.q h1{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light);font-style:italic}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) var(--space-6) minmax(0,1.1fr);gap:var(--space-3);min-height:0}
+.stories,.result{display:grid;align-content:start;gap:var(--space-2);min-height:0}
+.story{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);transition:opacity var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out)}
+.story .n{font:300 var(--type-heading)/1 var(--font-sans);color:var(--ink-muted)}
+.story q{quotes:none;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);font-style:italic}
+.story p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.story.done{opacity:var(--x-proposed-quiet)}
+.story.cur{border-color:var(--x-proposed-thread)}
+.arrow{display:flex;align-items:center;justify-content:center;color:var(--ink-muted)}
+.blk{display:grid;gap:var(--space-1);padding-bottom:var(--space-3);border-bottom:1px solid var(--hairline)}
+.blk h3{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);display:flex;gap:var(--space-2);align-items:baseline}
+.blk h3 .muted{font-size:var(--type-small)}
+.from{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--x-proposed-thread);white-space:nowrap}
+.lim .from{margin-left:auto;padding-left:var(--space-3)}
+.fresh{animation:none}
+.lim.new{background:var(--x-proposed-thread-wash)}
+.refused{display:grid;gap:var(--space-1);padding:var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-inset)}
+.refused q{quotes:none;font-size:var(--type-small);color:var(--ink);text-decoration:line-through;text-decoration-color:var(--x-proposed-drift)}
+.refused p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.q h1{font-size:var(--type-heading);line-height:var(--leading-heading)}.story p{display:none}.story .n{font-size:var(--type-lead)}.cols{grid-template-columns:minmax(0,1fr) var(--space-5) minmax(0,1.15fr)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Writing an intent · V4</b> limits from a premortem: each imagined failure becomes a limit, a branch or a freedom · Klein’s premortem (2007)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const n = N('DEP-14'), PM = DATA.premortem, st = PM.stories;
+const S = { k: 0 };
+function render() {
+  const done = st.slice(0, S.k);
+  const added = done.filter(x => x.adds && LIMIT(x.adds)).map(x => Object.assign({ from: st.indexOf(x) + 1, own: true }, LIMIT(x.adds)));
+  const br = done.filter(x => x.to === 'branch'), fr = done.filter(x => x.to === 'freedom');
+  $('#app').innerHTML = topHTML(['Mandate', F('department').name, 'DEP-14 draft', 'Limits'], [['Space', 'next story'], ...STD], 'department') +
+  `<main class="main"><div class="wrap">
+    <div class="q"><h1>It is ${PM.asked}. ${n.title} failed. What happened?</h1><p class="small muted">${PM.by.map(p => P(p).name).join(', ')} · ${st.length} stories</p></div>
+    <div class="cols">
+      <section class="stories scroll" aria-label="Stories">${st.map((x, i) => `<div class="story ${i < S.k - 1 ? 'done' : ''} ${i === S.k - 1 ? 'cur' : ''}"><span class="n">${i + 1}</span><div><q>${x.w}</q><p>${P(x.by).name}${i < S.k ? ' · ' + x.note : ''}</p></div></div>`).join('')}</section>
+      <div class="arrow">${I('arrow-right', 20)}</div>
+      <section class="result scroll" aria-live="polite">
+        <div class="blk"><h3>Limits <span class="muted">${n.inherits.length} inherited, ${added.length} added</span></h3>
+          ${n.inherits.map(id => { const l = LIMIT(id), hit = done.find(x => x.match === id); return `<div class="lim inh"><span class="lid">${id}</span><span>${l.w}</span>${hit ? `<span class="from">story ${st.indexOf(hit) + 1}</span>` : `<span class="lo">${I('lock', 12)}</span>`}</div>`; }).join('')}
+          ${added.map(l => `<div class="lim new"><span class="lid">${l.id}</span><span>${l.w}</span><span class="from">story ${l.from} · ${P(l.owner).name}</span></div>`).join('')}</div>
+        <div class="blk"><h3>Branches</h3>${br.length ? br.map(x => { const b = n.branches.find(b => b.id === x.adds); return `<div class="small"><span class="muted">${b.id} · ${b.if}:</span> ${b.then} <span class="from">story ${st.indexOf(x) + 1}</span></div>`; }).join('') : '<p class="small muted">none yet</p>'}</div>
+        <div class="blk"><h3>Freedom, with its condition</h3>${fr.length ? fr.map(x => `<div class="free">${n.freedom[x.addsFreedom]} <span class="from">story ${st.indexOf(x) + 1}</span></div>`).join('') : '<p class="small muted">none yet</p>'}</div>
+        ${S.k >= st.length ? `<div class="refused"><p class="eyebrow">${I('ban', 12)} Not accepted</p><q>${PM.refused.w}</q><p>${PM.refused.why} ${P(LIMIT(PM.refused.against).owner).name} owns ${PM.refused.against}.</p></div>` : ''}
+      </section></div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.k = 0; settle(); render(); st.forEach((_, i) => later(() => { S.k = i + 1; render(); }, MOMENT() + i * ms('--motion-slow'))); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === ' ') { e.preventDefault(); S.k = S.k >= st.length ? 0 : S.k + 1; render(); } });
+replay();
+</script>
+</body>
+</html>

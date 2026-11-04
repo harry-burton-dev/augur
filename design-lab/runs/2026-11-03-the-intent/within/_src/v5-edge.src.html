@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Acting within intent · V5 · The edge of freedom</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: freedom drawn as a space. What tonight needs is a line; what the intent lets you spend of Thornley is an edge. Every option is a point; a limit it crosses is a cross ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:var(--space-6)}
+.plot{display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-3);min-height:0}
+svg.ch{width:100%;height:100%;overflow:visible}
+svg.ch text{font-family:var(--font-sans);font-size:var(--type-small);fill:var(--ink-muted)}
+svg.ch text.lab{fill:var(--ink)}
+svg.ch text.mono{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro)}
+svg.ch .ax{stroke:var(--hairline-strong)}
+svg.ch .grid{stroke:var(--hairline)}
+svg.ch .free{fill:var(--x-proposed-freedom-wash);stroke:var(--x-proposed-freedom);stroke-dasharray:var(--space-2) var(--space-1)}
+svg.ch .need{stroke:var(--x-proposed-standby);stroke-dasharray:calc(var(--space-1) / 2) var(--space-1)}
+svg.ch .pt{fill:var(--ink);stroke:var(--slate-deep);stroke-width:2;cursor:pointer}
+svg.ch .pt.combo{fill:var(--x-proposed-lit)}
+svg.ch .pt.out{fill:none;stroke:var(--x-proposed-standby);stroke-width:1.5}
+svg.ch .x{stroke:var(--x-proposed-drift);stroke-width:2}
+svg.ch .sel{fill:none;stroke:var(--focus);stroke-width:1.5}
+svg.ch .combo-g{transition:opacity var(--motion-calm) var(--ease-out)}
+.det{display:grid;gap:var(--space-3);align-content:start}
+.det h2{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.det p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.keyl{display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.keyl span{display:flex;gap:var(--space-2);align-items:center}
+.sw{display:inline-block;width:var(--space-4);height:var(--space-3);flex:none}
+.sw.f{background:var(--x-proposed-freedom-wash);border:1px dashed var(--x-proposed-freedom)}
+.sw.n{border-top:1px dashed var(--x-proposed-standby);height:0}
+.picks{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.picks button{padding:2px var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.picks button[aria-pressed="true"]{border-color:var(--focus);color:var(--light)}
+@media (max-width:1400px){.wrap{gap:var(--space-5)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Acting within intent · V5</b> the edge of freedom: the need is a line, the branch cap an edge; options are points, crossed limits crosses · operating envelopes</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PL = DATA.plan, OP = PL.options, o1 = OPTION('o1'), o2 = OPTION('o2');
+const CAP = o2.thornleyMl; /* the branch allows this much Thornley water: 2 Ml/d for 72 hours */
+const COMBO = { id: 'c', w: `${o1.w} and ${lc1(o2.w)}`, gives: o1.gives + o2.gives, thornleyMl: o1.thornleyMl + o2.thornleyMl, cost: o1.cost + o2.cost, verdict: 'against', why: PL.record.serves };
+const S = { sel: 'o1', combo: false };
+function svg() {
+  const W = 760, H = 440, L = 70, B = 380, T = 30, Rx = 720, xmax = 28, ymax = 10;
+  const X = v => L + (v / xmax) * (Rx - L), Y = v => B - (v / ymax) * (B - T);
+  let g = '';
+  for (let v = 0; v <= xmax; v += 4) g += `<line class="grid" x1="${X(v)}" y1="${T}" x2="${X(v)}" y2="${B}"/><text x="${X(v)}" y="${B + 20}" text-anchor="middle">${v}</text>`;
+  for (let v = 0; v <= ymax; v += 2) g += `<line class="grid" x1="${L}" y1="${Y(v)}" x2="${Rx}" y2="${Y(v)}"/><text x="${L - 10}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+  g += `<rect class="free" x="${X(0)}" y="${Y(ymax)}" width="${X(CAP) - X(0)}" height="${Y(0) - Y(ymax)}"/>`;
+  g += `<text class="lab" x="${X(CAP) + 8}" y="${Y(ymax) + 16}">edge: ${CAP} Ml of Thornley, the branch cap</text>`;
+  g += `<line class="need" x1="${L}" y1="${Y(PL.gap)}" x2="${Rx}" y2="${Y(PL.gap)}"/><text class="lab" x="${X(12)}" y="${Y(PL.gap) - 8}">tonight needs ${PL.gap} ${PL.unit}</text>`;
+  g += `<line class="ax" x1="${L}" y1="${B}" x2="${Rx}" y2="${B}"/><line class="ax" x1="${L}" y1="${T}" x2="${L}" y2="${B}"/>`;
+  g += `<text x="${(L + Rx) / 2}" y="${B + 44}" text-anchor="middle">Thornley water used over ${o2.days} days (Ml)</text><text x="${L - 44}" y="${(T + B) / 2}" transform="rotate(-90 ${L - 44} ${(T + B) / 2})" text-anchor="middle">gap filled tonight (${PL.unit})</text>`;
+  OP.forEach(o => {
+    const x = X(o.thornleyMl), y = Y(o.gives), cross = o.verdict === 'limit', out = o.verdict === 'ask';
+    g += cross ? `<g data-p="${o.id}" style="cursor:pointer"><line class="x" x1="${x - 7}" y1="${y - 7}" x2="${x + 7}" y2="${y + 7}"/><line class="x" x1="${x - 7}" y1="${y + 7}" x2="${x + 7}" y2="${y - 7}"/><circle cx="${x}" cy="${y}" r="12" fill="transparent"/></g>`
+      : `<circle class="pt ${out ? 'out' : ''}" data-p="${o.id}" cx="${x}" cy="${y}" r="7"/>`;
+    g += `<text class="mono" x="${x + 12}" y="${y + 4}">${OP.indexOf(o) + 1}</text>`;
+    if (o.id === S.sel) g += `<circle class="sel" cx="${x}" cy="${y}" r="13"/>`;
+  });
+  g += `<g class="combo-g" style="opacity:${S.combo ? 1 : 0}"><line x1="${X(o1.thornleyMl)}" y1="${Y(o1.gives)}" x2="${X(COMBO.thornleyMl)}" y2="${Y(COMBO.gives)}" style="stroke:var(--x-proposed-lit);stroke-dasharray:calc(var(--space-1) * .75) calc(var(--space-1) * .75)"/><line x1="${X(o2.thornleyMl)}" y1="${Y(o2.gives)}" x2="${X(COMBO.thornleyMl)}" y2="${Y(COMBO.gives)}" style="stroke:var(--x-proposed-lit);stroke-dasharray:calc(var(--space-1) * .75) calc(var(--space-1) * .75)"/><circle class="pt combo" data-p="c" cx="${X(COMBO.thornleyMl)}" cy="${Y(COMBO.gives)}" r="8"/><text class="lab" x="${X(COMBO.thornleyMl) + 14}" y="${Y(COMBO.gives) + 22}">1 + 2: on the line, at the edge</text>${S.sel === 'c' ? `<circle class="sel" cx="${X(COMBO.thornleyMl)}" cy="${Y(COMBO.gives)}" r="14"/>` : ''}</g>`;
+  return `<svg class="ch" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Options plotted against the freedom">${g}</svg>`;
+}
+function render() {
+  const o = S.sel === 'c' ? COMBO : OPTION(S.sel);
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', 'Freedom'], [['1–6', 'option'], ['C', 'combine 1 + 2'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <section class="plot"><h1 class="h">Where tonight’s options sit against your freedom</h1>${svg()}</section>
+    <aside class="det" aria-live="polite">
+      <div class="picks" role="group" aria-label="Options">${OP.map((x, i) => `<button data-q="${x.id}" aria-pressed="${S.sel === x.id}">${i + 1}</button>`).join('')}<button data-q="c" aria-pressed="${S.sel === 'c'}">1 + 2</button></div>
+      <p class="eyebrow">${S.sel === 'c' ? 'Combined' : 'Option ' + (OP.indexOf(o) + 1)}</p><h2>${o.w}</h2>
+      <div>${vdHTML(o)}</div>
+      <p>${o.why}</p>
+      <p class="muted">+${o.gives} ${PL.unit} · Thornley ${o.thornleyMl} Ml · £${o.cost}k</p>
+      <div class="keyl"><span><span class="sw f"></span>Inside the dashed box: within the branch, no one’s yes needed</span><span><span class="sw n"></span>Tonight’s need: a point on or above it closes the gap</span><span>${I('circle', 14)} hollow: outside your freedom, ask the named person</span><span>${I('x', 14)} a cross: across a limit; where it sits doesn’t matter</span></div>
+      <p class="small muted">Only Thornley water and the gap fit on two axes. Spend and the other limits are checked by rule and shown as the point’s mark, not its place.</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-p],[data-q]').forEach(b => b.addEventListener('click', () => { S.sel = b.dataset.p || b.dataset.q; if (S.sel === 'c') S.combo = true; render(); }));
+}
+function replay() { clearLater(); S.sel = 'o1'; S.combo = false; settle(); render(); later(() => { S.combo = true; S.sel = 'c'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= OP.length) { S.sel = OP[k - 1].id; render(); } if (e.key.toLowerCase() === 'c') { S.combo = true; S.sel = 'c'; render(); } });
+replay();
+</script>
+</body>
+</html>

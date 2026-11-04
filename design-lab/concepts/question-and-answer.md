@@ -18,3 +18,5 @@ Also in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): tol
 Also in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): an action is asked, accepted, answered and closed; the owner says done, only the asker closes (actions V3, combined V1); the room's assent is an open question until everyone present answers (live V4).
 
 In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): a split between the two voices becomes one question to one person, with no chasing (voices V6).
+
+In [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): a passed-down intent is a question and saying it back answers it; notices, asks and asked-once questions are three distinct kinds (grammar V4, within V6).

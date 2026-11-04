@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Acting within intent · V2 · The change record</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens. All are mixes of kit tokens; listed as
+   "needs token" in each notes.md. Carried marks first, then new.
+   --------------------------------------------------------------- */
+:root{
+  /* carried: not yours to see (135 degree hatch), quiet, micro type, the lit next step */
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-quiet: .62;
+  --x-proposed-type-micro: .6875rem;
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  /* carried: pencil (reference desk), what a model wrote until a person accepts it */
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 70%, transparent);
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--ink) 3%, transparent);
+  /* carried: a visible repair (wear and time) */
+  --x-proposed-seam: color-mix(in srgb, var(--info) 70%, var(--ink));
+  --x-proposed-seam-wash: color-mix(in srgb, var(--info) 8%, transparent);
+  /* carried: the ceiling (apprentice), a solid bar. Here it draws a limit: what must not happen, whatever the plan */
+  --x-proposed-ceiling: color-mix(in srgb, var(--ink) 55%, transparent);
+  /* carried: standby lamp (apprentice), used for an open question: an intent passed down and not yet said back */
+  --x-proposed-standby: color-mix(in srgb, var(--warning) 45%, var(--light));
+  --x-proposed-standby-wash: color-mix(in srgb, var(--warning) 10%, transparent);
+  /* NEW: the thread, the "so that" line from a part to the intent it serves. Cool, quiet, never a floor colour */
+  --x-proposed-thread: color-mix(in srgb, var(--info) 45%, var(--ink-muted));
+  --x-proposed-thread-wash: color-mix(in srgb, var(--info) 6%, transparent);
+  /* NEW: freedom, the space a person may decide in without asking. A wash, edged by a dashed line, never a fill */
+  --x-proposed-freedom: color-mix(in srgb, var(--green) 45%, var(--ink-muted));
+  --x-proposed-freedom-wash: color-mix(in srgb, var(--green) 5%, transparent);
+  /* NEW: drift, work or the world off the intent's line. Warm and muted: a question, never an alarm */
+  --x-proposed-drift: color-mix(in srgb, var(--warning) 50%, var(--ink-muted));
+  --x-proposed-drift-wash: color-mix(in srgb, var(--warning) 6%, transparent);
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+h1,h2,h3,h4,p,ul,ol{margin:0}
+ul,ol{padding:0;list-style:none}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-muted)}
+.lite{color:var(--light)}
+.small{font-size:var(--type-small);line-height:var(--leading-small)}
+.meta{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.micro{font:400 var(--x-proposed-type-micro)/1.45 var(--font-mono);letter-spacing:var(--tracking-soft)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hints .on{color:var(--x-proposed-lit)}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.title{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0}
+.h{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);letter-spacing:var(--tracking-tight)}
+.h3{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.lead{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.rule{height:1px;background:linear-gradient(90deg,var(--hairline-strong),transparent)}
+.pane{background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset);backdrop-filter:blur(var(--surface-blur))}
+.inset{background:var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-inset)}
+
+/* floors */
+[data-tier="department"]{--fc:var(--floor-department-high);--fl:var(--floor-department-low)}
+[data-tier="team"]{--fc:var(--floor-team-high);--fl:var(--floor-team-low)}
+[data-tier="org"]{--fc:var(--floor-org-high);--fl:var(--floor-org-low)}
+[data-tier="you"]{--fc:var(--floor-you-high);--fl:var(--floor-you-low)}
+.fchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-4);height:2px;background:var(--fc);border-radius:1px}
+.fword{color:var(--fc)}
+
+/* two registers: doctrine words one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* the intent chip: floor bar, id, title. The ring says whether its holder has said it back */
+.ichip{display:inline-flex;align-items:center;gap:var(--space-2);text-transform:none;letter-spacing:normal;font-family:var(--font-sans);max-width:100%;min-width:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap;vertical-align:middle}
+.ichip::before{content:"";flex:none;width:3px;height:var(--space-4);border-radius:1px;background:var(--fc)}
+.ichip .iid{font:500 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--fc)}
+.ichip .it{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ichip.lg{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.ichip.lg::before{height:var(--space-5)}
+.ichip.restricted .it{background:var(--x-proposed-unseen);padding:0 var(--space-2);border-radius:2px;color:var(--ink-muted)}
+
+/* said back: hollow while it is an open question, half when corrected, full when confirmed */
+.ring{display:inline-block;flex:none;width:var(--space-3);height:var(--space-3);border-radius:50%;border:1.5px solid var(--x-proposed-standby);vertical-align:-1px}
+.ring.confirmed{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit)}
+.ring.corrected{border-color:var(--x-proposed-lit);background:linear-gradient(90deg,var(--x-proposed-lit) 50%,transparent 50%)}
+.ring.open{background:var(--x-proposed-standby-wash)}
+.ring.na{border-color:var(--hairline-strong);border-style:dotted}
+
+/* a limit: a solid bar on the left, never a hatch (hatch means "not yours to see") */
+.lim{display:flex;gap:var(--space-3);align-items:flex-start;padding:var(--space-1) 0 var(--space-1) var(--space-3);border-left:3px solid var(--x-proposed-ceiling);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.lim .lid{font:500 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted);flex:none;min-width:2.4em}
+.lim .lo{margin-left:auto;color:var(--ink-muted);white-space:nowrap;padding-left:var(--space-3)}
+.lim.inh{border-left-style:double;border-left-width:4px}
+.lim.cross{border-left-color:var(--x-proposed-drift);background:var(--x-proposed-drift-wash)}
+/* freedom: a dashed open edge and a faint wash */
+.free{padding:var(--space-1) var(--space-3);border:1px dashed var(--x-proposed-freedom);border-right:0;border-radius:var(--radius-key) 0 0 var(--radius-key);background:var(--x-proposed-freedom-wash);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+/* the thread: so that */
+.so{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-thread);white-space:nowrap}
+.thread{border-left:1px solid var(--x-proposed-thread);margin-left:var(--space-2);padding-left:var(--space-4)}
+/* within intent: the stamp a change carries */
+.within{display:inline-flex;align-items:center;gap:var(--space-2);padding:2px var(--space-2);border:1px solid var(--x-proposed-thread);border-radius:var(--radius-key);background:var(--x-proposed-thread-wash);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink);white-space:nowrap}
+/* drift */
+.drift{display:inline-flex;align-items:center;gap:var(--space-2);color:var(--ink);white-space:nowrap}
+.drift::before{content:"";width:var(--space-4);height:2px;background:var(--x-proposed-drift);transform:rotate(-14deg);border-radius:1px}
+.driftbox{border-left:2px solid var(--x-proposed-drift);background:var(--x-proposed-drift-wash);padding:var(--space-2) var(--space-3)}
+
+/* verdicts on an option: within, within but against a task, ask someone, across a limit */
+.vd{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);white-space:nowrap;padding:1px var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);color:var(--ink)}
+.vd.within{border-color:var(--x-proposed-freedom);background:var(--x-proposed-freedom-wash);color:var(--light)}
+.vd.against{border-color:var(--x-proposed-freedom);border-style:dashed;color:var(--ink)}
+.vd.ask{border-color:var(--x-proposed-standby);color:var(--ink)}
+.vd.limit{border-color:var(--x-proposed-ceiling);background:var(--surface-inset);color:var(--ink-muted)}
+
+/* pencil and ink */
+.pencil{border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key)}
+.pencil .pt,.pt.pen{font-style:italic;color:var(--ink)}
+.pencil.inked{border-style:solid;border-color:var(--hairline-strong);background:none}
+.pencil.inked .pt{font-style:normal}
+.pen{font-style:italic}
+.seam{border-left:2px solid var(--x-proposed-seam);background:var(--x-proposed-seam-wash);padding:var(--space-1) var(--space-3)}
+.struck{text-decoration:line-through;text-decoration-color:var(--x-proposed-seam);color:var(--ink-muted)}
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);white-space:nowrap}
+
+/* rungs, carried from the situation work: data, information, context */
+.rung{display:inline-flex;align-items:center;gap:2px;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.rung i{display:inline-block;width:var(--space-1);height:var(--space-3);background:var(--hairline-strong);border-radius:1px}
+.rung i.on{background:var(--ink)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);white-space:nowrap;transition:background var(--motion-quick) var(--ease-standard),border-color var(--motion-quick) var(--ease-standard)}
+.btn:hover{background:var(--surface-raised)}
+.btn.sm{height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-3);font-size:var(--type-small)}
+.btn.go{border-color:var(--x-proposed-lit);color:var(--light);background:var(--x-proposed-lit-wash)}
+.btn.ask{border-color:var(--x-proposed-standby);color:var(--light);background:var(--x-proposed-standby-wash)}
+.btn[aria-disabled="true"]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+.btn[aria-pressed="true"]{background:var(--surface-raised);border-color:var(--ink-muted);color:var(--light)}
+
+/* app frame */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.top{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--slate-deep) 70%,transparent);min-width:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0;white-space:nowrap}
+.crumb{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);white-space:nowrap;min-width:0;overflow:hidden}
+.crumb b{font-weight:400;color:var(--light)}
+.crumb svg{opacity:var(--x-proposed-quiet);flex:none}
+.top .hints{margin-left:auto;justify-content:flex-end}
+.main{min-height:0;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));overflow:hidden}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+.x-cap{max-width:calc(100vw - 2 * var(--edge-tight))}
+
+/* a measure: where it started, where it is, where done is. Target is a tick, now is a dot */
+.meas{display:inline-block;width:100%;min-width:calc(var(--space-7) + var(--space-5));vertical-align:middle}
+.m-track{position:relative;display:block;height:var(--space-3);border-bottom:1px solid var(--hairline-strong)}
+.m-track i{position:absolute;display:block}
+.m-run{bottom:-1px;height:2px;background:var(--ink-muted)}
+.m-target{bottom:-1px;width:2px;height:var(--space-3);background:var(--light);transform:translateX(-1px)}
+.m-now{bottom:calc(var(--space-1) * -1 + 0px);width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--ink);transform:translateX(-50%)}
+.m-ghost{bottom:calc(var(--space-1) * -1 + 0px);width:var(--space-2);height:var(--space-2);border-radius:50%;border:1px dashed var(--x-proposed-drift);transform:translateX(-50%)}
+.who{white-space:nowrap}
+
+/* ---- V2: a change made without asking records how it still serves the intent. Built from what was picked and checked, never typed, so it says exactly what it covers ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,1fr);gap:var(--space-6)}
+.rec{display:grid;gap:0;align-content:start;min-height:0}
+.slot{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-3)) minmax(0,1fr);gap:var(--space-4);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);transition:opacity var(--motion-base) var(--ease-out)}
+.slot dt{font-size:var(--type-small);line-height:var(--leading-meta);color:var(--ink-muted)}
+.slot dd{margin:0;display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);align-items:center;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.slot.wait{opacity:0}
+.chip{display:inline-flex;gap:var(--space-1);align-items:center;padding:1px var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);background:var(--surface-inset)}
+.chip.ok{border-color:var(--x-proposed-freedom)}
+.chip .ic{color:var(--x-proposed-lit)}
+.slot .within{white-space:normal}
+.note{font-style:italic;color:var(--ink-muted);font-size:var(--type-small)}
+.out{display:grid;gap:var(--space-3);align-content:start}
+.notice{padding:var(--space-4);display:grid;gap:var(--space-2)}
+.notice .s{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.notice .m{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.notice .acts{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.not{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding:var(--space-3);border:1px dashed var(--hairline);border-radius:var(--radius-inset)}
+.not b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.slot{grid-template-columns:calc(var(--space-8)) minmax(0,1fr);padding:var(--space-1) 0}.slot dd{font-size:var(--type-small);line-height:var(--leading-small)}.notice .s{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Acting within intent · V2</b> the change record: how it still serves the intent, built from what was picked, never typed · say what you sign for</div>
+<script>
+/* Sample data. Every name, label, count, date, limit and floor below is deployment data:
+   nothing in the markup or the scripts repeats any of it. One object for the whole run. */
+const DATA = {
+  org: 'Hollin Water',
+  me: 'p5',
+  today: 'Tue 3 Nov', now: '07:40', since: '05:30',
+  /* floors, top first. reach = people who can read something kept on this floor */
+  floors: {
+    org:        { name: 'Hollin Water',        word: 'Org',        reach: 1240 },
+    department: { name: 'Network Operations',  word: 'Department', reach: 186 },
+    team:       { name: 'North Zone',          word: 'Team',       reach: 11 },
+    you:        { name: 'You',                 word: 'You',        reach: 1 }
+  },
+  floorOrder: ['org', 'department', 'team', 'you'],
+  people: {
+    p1: { name: 'Priya Raman',    role: 'Chief Executive',              floor: 'org' },
+    p2: { name: 'Gareth Lowe',    role: 'Director of Customer',         floor: 'org' },
+    p3: { name: 'Dana Whitlock',  role: 'Head of Network Operations',   floor: 'department' },
+    p4: { name: 'Sam Okafor',     role: 'North Zone lead',              floor: 'team' },
+    p5: { name: 'Ellis Marsh',    role: 'Network controller',           floor: 'team' },
+    p6: { name: 'Hana Sato',      role: 'Water Quality manager',        floor: 'department' },
+    p7: { name: 'Femi Adeyemi',   role: 'Water Resources manager',      floor: 'department' },
+    p8: { name: 'Owen Mercer',    role: 'Deputy head, Network Operations', floor: 'department' },
+    p9: { name: 'Rita Gomez',     role: 'South Zone lead',              floor: 'team' },
+    p10:{ name: 'Lewis Baird',    role: 'Trunk Mains lead',             floor: 'team' },
+    p11:{ name: 'Nadia Kerr',     role: 'Security lead',                floor: 'org' },
+    p12:{ name: 'Jo Varga',       role: 'Leakage technician',           floor: 'team' },
+    p13:{ name: 'Kit Moreau',     role: 'Network controller',           floor: 'team' },
+    p14:{ name: 'Ines Duarte',    role: 'Repair supervisor',            floor: 'team' },
+    p15:{ name: 'Ravi Shah',      role: 'Leakage technician',           floor: 'team' },
+    p16:{ name: 'Mo Clarke',      role: 'Network controller',           floor: 'team' },
+    p17:{ name: 'Beth Annan',     role: 'Pressure engineer',            floor: 'team' },
+    p18:{ name: 'Tariq Noor',     role: 'Repair supervisor',            floor: 'team' }
+  },
+  /* the model gateway, as Admin shows it. It only ever writes in pencil here */
+  gateway: { on: true, admin: 'p11' },
+
+  /* the parts an intent holds, in plain words, with the doctrine words one step down (T) */
+  parts: [
+    { id: 'purpose', w: 'Purpose',   q: 'Why are we doing this?',                    tech: 'purpose · the "in order to" of the mission statement',   klein: ['purpose', 'rationale'] },
+    { id: 'end',     w: 'Done looks like', q: 'How will we know it worked?',         tech: 'end state · measurable conditions, not activities',      klein: ['objective'] },
+    { id: 'task',    w: 'Key tasks', q: 'What must happen, whoever does it?',       tech: 'key tasks · not the plan, and not every task',           klein: ['sequence', 'key decisions'] },
+    { id: 'limit',   w: 'Limits',    q: 'What must not happen, whatever the plan?', tech: 'constraints (must do) and restraints (must not do)',     klein: ['anti-goals', 'constraints'] },
+    { id: 'freedom', w: 'Freedom',   q: 'What may people decide without asking?',   tech: 'disciplined initiative · delegated decision space',     klein: ['key decisions'] },
+    { id: 'nest',    w: 'Serves',    q: 'Which intent above does this serve?',      tech: 'nesting · two levels up',                               klein: [] },
+    { id: 'said',    w: 'Said back', q: 'Who has said it back, in their own words?',tech: 'backbrief (Bungay) · confirmation brief (ADP 6-0)',     klein: [] },
+    { id: 'drift',   w: 'Drift',     q: 'Has the work, or the world, moved off it?',tech: 'cross-track error · assumptions watched (revisit lines)', klein: [] }
+  ],
+  klein: [
+    { id: 'purpose',   w: 'Purpose',      d: 'why the task is wanted', to: 'purpose' },
+    { id: 'objective', w: 'Objective',    d: 'what success looks like', to: 'end' },
+    { id: 'sequence',  w: 'Sequence',     d: 'steps, if order matters', to: 'task' },
+    { id: 'rationale', w: 'Rationale',    d: 'the reasons behind the plan', to: 'purpose' },
+    { id: 'key decisions', w: 'Key decisions', d: 'what will have to be traded off', to: 'freedom' },
+    { id: 'anti-goals', w: 'Anti-goals',  d: 'outcomes we do not want', to: 'limit' },
+    { id: 'constraints', w: 'Constraints', d: 'what may not be done', to: 'limit' }
+  ],
+  /* intent states. An intent passed down is an open question until it is said back */
+  states: [
+    { id: 'draft',   w: 'Draft',          d: 'Being written. Only its writer and the people it asks can see it.', tech: 'draft' },
+    { id: 'briefed', w: 'Passed down',    d: 'Given to the floor below. An open question until each holder says it back.', tech: 'issued · awaiting backbrief' },
+    { id: 'force',   w: 'In force',       d: 'Said back by every holder. Work may act within it.', tech: 'in force' },
+    { id: 'revisit', w: 'Worth revisiting', d: 'An assumption it rests on no longer holds. Its owner is asked once.', tech: 'revisit line crossed' },
+    { id: 'done',    w: 'Done',           d: 'The end state was met, on the date it says.', tech: 'complete' },
+    { id: 'lapsed',  w: 'Lapsed',         d: 'Its date passed without its owner renewing it. Nothing acts within it.', tech: 'expired' }
+  ],
+
+  /* the measures an end state is checked against: each is a fact in Data Atlas */
+  facts: {
+    thornley: { w: 'Thornley group storage', unit: '%', now: 41.2, start: 38.0, target: 75, by: '1 Mar', week: 2.6, needWeek: 2.0, capMl: 8600, src: 'Reservoir telemetry, 06:00' },
+    draw:     { w: 'Thornley draw', unit: 'Ml/d', now: 71, start: 92, target: 60, by: '31 Jan', src: 'Treatment works meters, daily' },
+    leakage:  { w: 'Company leakage', unit: 'Ml/d', now: 124, start: 129, target: 118, by: '1 Mar', src: 'Leakage model, weekly' },
+    northFreed: { w: 'North zone water freed', unit: 'Ml/d', now: 4.6, start: 0, target: 12, by: '31 Jan', src: 'Zone meters, weekly' },
+    kelda:    { w: 'Kelda night feed', unit: 'Ml/d', now: 9.6, start: 0, target: 10, by: 'nightly', src: 'Kelda link meter, 06:00' },
+    leaksFixed: { w: 'Largest North zone leaks fixed', unit: 'of 40', now: 17, start: 0, target: 40, by: '15 Dec', src: 'Repair log' },
+    outages:  { w: 'Interruptions over 12 hours', unit: '', now: 0, start: 0, target: 0, by: 'any time', src: 'Customer contact log' }
+  },
+
+  /* the nest. id, floor, owner, the intent above it (serves), and its parts */
+  intents: {
+    'ORG-07': {
+      floor: 'org', owner: 'p1', title: 'Through the winter without restrictions', state: 'force', decided: '2 Oct', review: '1 Dec',
+      purpose: 'After the dry summer the Thornley reservoirs hold too little. If they are not well refilled by spring we will need a drought permit and household restrictions next summer. Customers have done what we asked; we will not ask more of them.',
+      end: [ { w: 'Thornley group at 75% or more', fact: 'thornley' }, { w: 'No household restrictions announced', fact: null, now: 'none so far' }, { w: 'Leakage below 118 Ml/d', fact: 'leakage' } ],
+      tasks: [ { id: 'K1', w: 'Take load off Thornley onto groundwater, within licence' }, { id: 'K2', w: 'Cut leakage, largest first' }, { id: 'K3', w: 'Keep customers told, in one voice' } ],
+      limits: [
+        { id: 'L1', w: 'Never abstract above a licence', owner: 'p7', tech: 'restraint · abstraction licences' },
+        { id: 'L2', w: 'No household without water for more than 12 hours', owner: 'p3', tech: 'restraint · service level' },
+        { id: 'L3', w: 'Nothing goes into supply from a source with an open quality alert', owner: 'p6', tech: 'restraint · drinking water safety plan' },
+        { id: 'L4', w: 'Only Customer speaks to the public about restrictions', owner: 'p2', tech: 'restraint · release authority' },
+        { id: 'L5', w: 'No spend over £250k without the Executive', owner: 'p1', tech: 'restraint · scheme of delegation' }
+      ],
+      freedom: [ 'How each department takes load off Thornley', 'Which leaks are fixed in which order', 'Overtime and contractors within budget' ],
+      assumptions: [ { w: 'Rainfall November to February near the long-term average', state: 'holds', now: 'November so far 182% of average: refilling faster' } ],
+      serves: null
+    },
+    'DEP-14': {
+      floor: 'department', owner: 'p3', deputy: 'p8', title: 'Rest Thornley this winter', state: 'force', decided: '9 Oct', review: '15 Dec',
+      purpose: 'So the Org can refill Thornley, Network Operations moves as much demand as the licences allow onto the Ashby and Ryecroft boreholes, and fixes the leaks that waste most, without any household going without water.',
+      end: [ { w: 'Thornley draw down to 60 Ml/d by 31 Jan', fact: 'draw' }, { w: 'North zone frees 12 Ml/d by 31 Jan', fact: 'northFreed' }, { w: 'No interruption over 12 hours', fact: 'outages' } ],
+      tasks: [ { id: 'K1', w: 'Run Ashby at its licence and feed North zone at night through the Kelda link' }, { id: 'K2', w: 'Fix the 40 largest North zone leaks by 15 Dec' }, { id: 'K3', w: 'Keep Ryecroft ready as the standby source' } ],
+      limits: [ { id: 'D1', w: 'No planned interruption while a cold-weather amber warning is in force', owner: 'p3', tech: 'restraint · added by the Department' },
+                { id: 'D2', w: 'No spend over £50k per change without the head of department', owner: 'p3', tightens: 'L5', tech: 'restraint · tightens L5' } ],
+      inherits: ['L1', 'L2', 'L3', 'L4', 'L5'],
+      freedom: [ 'Moving supply between zones within licence', 'Bringing a standby source into supply once it has a clear sample', 'Changing the order of repairs', 'Contractors up to £50k per change' ],
+      branches: [ { id: 'B1', if: 'If Ashby is short', then: 'Ryecroft first, then Thornley for up to 72 hours', tech: 'branch plan' } ],
+      assumptions: [ { w: 'Ashby and Ryecroft boreholes both available', state: 'crossed', now: 'Ashby borehole 3 out since 06:10 today' },
+                     { w: 'Thornley stays under 60% before 1 Jan (above it, resting it costs more energy than it saves)', state: 'holds', now: 'projected to reach 60% about 23 Dec if this week’s rate holds' } ],
+      serves: 'ORG-07', servesPart: 'K1', alsoServes: ['K2', 'L2']
+    },
+    'TM-31': {
+      floor: 'team', owner: 'p4', title: 'North zone carries itself at night', state: 'force', decided: '12 Oct', saidAt: '12 Oct', review: '30 Nov',
+      purpose: 'So Thornley can rest, North zone takes its night water from Ashby and loses less of it through leaks.',
+      end: [ { w: 'Kelda carries 10 Ml/d every night', fact: 'kelda' }, { w: '40 largest leaks fixed by 15 Dec', fact: 'leaksFixed' } ],
+      tasks: [ { id: 'K1', w: 'Run the Kelda link every night, 22:00 to 06:00' }, { id: 'K2', w: 'Repair the largest leaks first' }, { id: 'K3', w: 'Hold night pressure down in Hebden and Calder' } ],
+      limits: [ { id: 'T1', w: 'Tell the duty manager before any valve change that affects more than 500 homes', owner: 'p4', tech: 'constraint · added by the Team' } ],
+      inherits: ['L1', 'L2', 'L3', 'L4', 'D1', 'D2'],
+      freedom: [ 'Spend up to £25k per change', 'The order of repairs', 'Night pressure anywhere between 15 and 25 m' ],
+      serves: 'DEP-14', servesPart: 'K1'
+    },
+    'YOU-31a': {
+      floor: 'you', owner: 'p5', title: 'Night feed and the repairs around it', state: 'force', decided: '27 Oct', review: '30 Nov',
+      purpose: 'So North zone frees its 12 Ml/d, I keep the Kelda feed full every night and book repairs so they never cut it.',
+      end: [ { w: 'Kelda carries 10 Ml/d every night', fact: 'kelda' }, { w: 'Calder Lane and Mill Brow mains repaired by 20 Nov', fact: null, now: 'booked 20 Nov' } ],
+      tasks: [ { id: 'K1', w: 'Set up the Kelda feed each evening' }, { id: 'K2', w: 'Book repairs outside 22:00 to 06:00' } ],
+      limits: [], inherits: ['L1', 'L2', 'L3', 'L4', 'D1', 'D2', 'T1'],
+      freedom: [ 'Spend up to £25k per change', 'The order of my repairs', 'Night pressure between 15 and 25 m' ],
+      serves: 'TM-31', servesPart: 'K1'
+    },
+    /* siblings, shown in the nest by title, owner and state */
+    'DEP-09': { floor: 'department', dept: 'Water Resources', owner: 'p7', title: 'Hold every licence; ready a drought permit', state: 'force', serves: 'ORG-07', servesPart: 'K1', alsoServes: ['L1'], sibling: true },
+    'DEP-11': { floor: 'department', dept: 'Customer', owner: 'p2', title: 'One voice on supply', state: 'force', serves: 'ORG-07', servesPart: 'K3', alsoServes: ['L4'], sibling: true },
+    'DEP-12': { floor: 'department', dept: 'Water Quality', owner: 'p6', title: 'No quality alert reaches a tap', state: 'force', serves: 'ORG-07', servesPart: 'L3', sibling: true },
+    'TM-30':  { floor: 'team', team: 'Trunk Mains', owner: 'p10', title: 'Kelda link ready every night', state: 'force', saidAt: '10 Oct', serves: 'DEP-14', servesPart: 'K1', sibling: true },
+    'TM-32':  { floor: 'team', team: 'South Zone', owner: 'p9', title: 'Pressure down, south', state: 'briefed', serves: 'DEP-14', servesPart: 'K2', sibling: true },
+    'YOU-31b': { floor: 'you', owner: 'p12', title: 'Largest leaks first in Calder', state: 'force', serves: 'TM-31', servesPart: 'K2', sibling: true },
+    'YOU-31c': { floor: 'you', owner: 'p17', title: 'Night pressure in Hebden and Calder', state: 'force', serves: 'TM-31', servesPart: 'K3', sibling: true },
+    'YOU-31d': { floor: 'you', owner: 'p13', title: 'Kelda feed on alternate nights', state: 'force', serves: 'TM-31', servesPart: 'K1', sibling: true },
+    'YOU-31e': { floor: 'you', owner: 'p18', title: 'Repairs in Mill Brow', state: 'briefed', serves: 'TM-31', servesPart: 'K2', sibling: true },
+    'SEC-03': { floor: 'department', dept: 'Security', owner: 'p11', title: null, state: 'force', serves: 'ORG-07', restricted: true, sibling: true }
+  },
+  /* the chain for the viewer: own part up to the Org */
+  chain: ['YOU-31a', 'TM-31', 'DEP-14', 'ORG-07'],
+
+  /* what reached Ellis between 05:30 and 07:40. touches: [intent, part kind, part id] */
+  incoming: [
+    { id: 'i1', t: '06:10', from: 'p6', src: 'Water Quality alert', rung: 'context',
+      title: 'Ashby borehole 3: turbidity 1.4 NTU, above the 1.0 action level', short: 'Ashby borehole 3 out of supply',
+      detail: 'Out of supply until two clear samples. Water Quality expects about 72 hours.',
+      touches: [['ORG-07', 'limit', 'L3'], ['DEP-14', 'task', 'K1'], ['YOU-31a', 'task', 'K1']], mine: true, bites: 'tonight 22:00', bitesRank: 1, moves: { fact: 'kelda', to: 2, w: '2 of 10 tonight, unless the plan changes' },
+      why: 'Tonight’s Kelda feed needs Ashby at 24 Ml/d. Without borehole 3 Ashby can spare 2 Ml/d for North zone, not 10.', tag: 'rule' },
+    { id: 'i2', t: '06:45', from: null, src: 'Met Office warning', rung: 'context',
+      title: 'Cold-weather amber, Thu 5 to Sat 7 Nov, lows of −6 °C', short: 'Cold-weather amber from Thursday',
+      detail: 'Burst risk rises from Thursday night.',
+      touches: [['DEP-14', 'limit', 'D1'], ['YOU-31a', 'task', 'K2']], mine: true, bites: 'Wed 17:00', bitesRank: 2, moves: { fact: 'outages', w: 'a 6-hour job inside the amber: a risk to the 12-hour line if a burst follows' },
+      why: 'Your Hebden Road valve job (Thu, 6 hours, 340 homes) falls inside it, and the Department says no planned interruption during an amber.', tag: 'rule' },
+    { id: 'i3', t: '05:30', from: 'p12', src: 'Acoustic logger and a customer call', rung: 'information',
+      title: 'Calder Lane 6-inch main: leak estimated at 1.8 Ml/d', short: 'Calder Lane leak, 1.8 Ml/d',
+      detail: 'Now the third largest open leak in North zone.',
+      touches: [['TM-31', 'task', 'K2'], ['YOU-31a', 'end', 'E2']], mine: true, bites: '20 Nov', bitesRank: 4, moves: { fact: 'northFreed', to: 6.4, w: '1.8 Ml/d to win back' },
+      why: 'Your Calder Lane repair is booked for 20 Nov. At 1.8 Ml/d it is worth bringing forward.', tag: 'rule' },
+    { id: 'i4', t: '07:05', from: 'p14', src: 'Burnside Civils, by email', rung: 'information',
+      title: 'Two extra repair gangs from Mon 9 Nov, £14k a week', short: 'Two extra gangs from Monday',
+      detail: 'Offer holds until Thursday.',
+      touches: [['TM-31', 'freedom', 'F1'], ['DEP-14', 'task', 'K2']], mine: true, bites: 'Thu', bitesRank: 3, moves: { fact: 'leaksFixed', w: 'about 2 more a week from Monday' },
+      why: 'Would bring Calder Lane forward by ten days. Inside your team’s freedom to spend up to £25k a change.', tag: 'rule' },
+    { id: 'i5', t: '07:00', from: null, src: 'Kelda link meter', rung: 'data',
+      title: 'Kelda carried 9.6 Ml/d last night (10 planned)', short: 'Kelda 9.6 of 10 last night',
+      detail: 'Valve KV-2 throttled at 03:10 on a pressure alarm, reopened 04:20.',
+      touches: [['TM-31', 'end', 'E1'], ['YOU-31a', 'end', 'E1']], mine: true, bites: null, bitesRank: 9, moves: { fact: 'kelda', w: 'last night’s reading' },
+      why: 'Your feed, last night. 0.4 short because KV-2 throttled for 70 minutes.', tag: 'rule' },
+    { id: 'i6', t: '07:20', from: null, src: 'General enquiries mailbox', rung: 'data',
+      title: 'Hollin Courier asks: “Is a hosepipe ban coming?”', short: 'Press asks about a hosepipe ban',
+      detail: 'Forwarded to the North zone mailbox by mistake.',
+      touches: [['ORG-07', 'limit', 'L4']], mine: false, bites: 'today', bitesRank: 5,
+      why: 'Not yours to answer: only Customer speaks to the public about restrictions. Gareth Lowe’s office holds it.', tag: 'pencil', pencilWhy: 'the words “hosepipe ban” and “press”' },
+    { id: 'i7', t: '06:00', from: null, src: 'Reservoir telemetry', rung: 'information',
+      title: 'Thornley group at 41.2%, up 2.6 points this week', short: 'Thornley 41.2%, +2.6 this week',
+      detail: 'The line to 75% by 1 Mar needs 2.0 points a week.',
+      touches: [['ORG-07', 'end', 'E1']], mine: false, bites: null, bitesRank: 9, moves: { fact: 'thornley', w: '+2.6 this week; the line needs +2.0' },
+      why: 'Ahead of the line this week, still behind where October’s plan wanted it. Two floors up; nothing for you to do.', tag: 'rule' },
+    { id: 'i8', t: '07:30', from: 'p9', src: 'South Zone', rung: 'information',
+      title: 'South zone pressure trial saved 0.9 Ml/d', short: 'South zone trial saved 0.9 Ml/d',
+      detail: 'Three districts, four weeks.',
+      touches: [['DEP-14', 'end', 'E2']], mine: false, bites: null, bitesRank: 9, moves: { fact: 'draw', w: '0.9 Ml/d less demand, if Hebden copies it' },
+      why: 'A sibling team’s result for the same Department intent. Not yours; worth knowing for Hebden.', tag: 'rule' },
+    { id: 'i9', t: '07:10', from: null, src: 'Security', rung: null, restricted: true, holder: 'p11',
+      title: null, short: 'One item you can’t open',
+      touches: [['ORG-07', 'unseen', null]], mine: false, bites: null, bitesRank: 9,
+      why: 'It touches the Org intent. Nadia Kerr holds it; ask her if you think it bears on your work.', tag: 'rule' },
+    { id: 'i10', t: '07:15', from: 'p7', src: 'Water Resources', rung: 'information',
+      title: 'Regulator’s pre-application advice on a drought permit', short: 'Drought permit advice received',
+      detail: 'Read-only for Network Operations.',
+      touches: [['ORG-07', 'purpose', 'P']], mine: false, bites: null, bitesRank: 9,
+      why: 'Two floors up, about the Org’s purpose. Read it if you have a minute; nothing for you to do.', tag: 'rule' }
+  ],
+  /* how an item was bound to intents: tag, then the record that names it, then the part (situation V6) */
+  traces: {
+    i1: [ { w: 'The alert carries the asset tag “Ashby borehole 3”', by: 'Water Quality’s alert, at source' },
+          { w: 'DEP-14 K1 names the Ashby boreholes', by: 'the intent’s key task, by asset link' },
+          { w: 'Your part YOU-31a K1 sets up the Kelda feed, which DEP-14 K1 feeds from Ashby', by: 'serves chain' },
+          { w: 'ORG-07 L3 names “open quality alert”', by: 'the limit’s trigger: any open alert of this kind' } ],
+    i6: [ { w: 'No tag: it came through the general mailbox', by: 'no rule could place it' },
+          { w: 'A model read it and suggested ORG-07 L4 (only Customer speaks to the public about restrictions)', by: 'pencil, from the words “hosepipe ban” and “press”' },
+          { w: 'Waiting for a person to confirm', by: 'until then it ranks as suggested, marked pencil' } ],
+    i2: [ { w: 'The warning carries the area “North zone” and the level “amber”', by: 'Met Office feed' },
+          { w: 'DEP-14 D1 names “cold-weather amber warning”', by: 'the limit’s trigger' },
+          { w: 'Your booked Hebden Road valve job falls Thu 09:00 to 15:00', by: 'your work plan, by date and area' } ]
+  },
+  /* a model's two-line summary of the situation paragraphs, in pencil (situation V3) */
+  summary: 'Tonight’s Kelda feed is 8 Ml/d short because Ashby borehole 3 is out; that needs a decision before 22:00. Thursday’s amber means the Hebden valve job has to move.',
+  /* things that touch none of the viewer's intents: never hidden, only folded */
+  untouched: [
+    { t: '06:30', w: 'Depot canteen closed Thursday', src: 'Facilities' },
+    { t: '07:00', w: 'Control system patching, Fri 22:00 to 23:00', src: 'IT', pencil: 'may touch the Kelda link’s telemetry', rejected: true },
+    { t: '07:25', w: 'Staff survey closes 13 Nov', src: 'People' }
+  ],
+  /* the ranking rule: an order, not a score. Owned by Mandate, the same for everyone */
+  rankRule: [
+    { n: 1, w: 'Touches a limit and your own part', tech: 'limit ∧ mine' },
+    { n: 2, w: 'Touches your own part', tech: 'mine' },
+    { n: 3, w: 'Touches a limit above you', tech: 'limit, any intent in your chain' },
+    { n: 4, w: 'Touches a task or a freedom above you', tech: 'task ∨ freedom, in your chain' },
+    { n: 5, w: 'Touches a purpose or what done looks like, above you', tech: 'purpose ∨ end, in your chain' },
+    { n: 6, w: 'Touches an intent you can’t open', tech: 'restricted · shown, not opened' },
+    { n: 7, w: 'Touches none of your intents', tech: 'unbound · folded, never hidden' }
+  ],
+
+  /* how much one change may spend without asking, floor by floor (nest V5). k = thousands of pounds */
+  spendCascade: [ { iid: 'ORG-07', k: 250, by: 'L5' }, { iid: 'DEP-14', k: 50, by: 'D2' }, { iid: 'TM-31', k: 25, by: 'F1' }, { iid: 'YOU-31a', k: 25, by: 'F1' } ],
+  /* work that names no intent, found by the floor's own records (nest V4) */
+  orphans: [
+    { iid: 'TM-31', where: 'North Zone', w: 'Customer-reported small leaks', n: 14, unit: 'jobs this week', share: '48% of gang hours', note: 'Not in TM-31, which says largest first. See drift.' },
+    { iid: 'DEP-14', where: 'Network Operations', w: 'Hebden meter replacement programme', n: 1, unit: 'programme', share: '3 people part-time', note: 'Planned before ORG-07; serves no current intent. Keep, pause or tie it to one.' }
+  ],
+  /* the X-matrix's two working quadrants: which task moves which measure (2 strong, 1 some), and who holds it (nest V3) */
+  xmatrix: {
+    measures: ['thornley', 'draw', 'leakage', 'northFreed', 'kelda', 'leaksFixed', 'outages'],
+    rows: [
+      { iid: 'ORG-07', t: 'K1', m: { thornley: 2, draw: 2 } },
+      { iid: 'ORG-07', t: 'K2', m: { leakage: 2, thornley: 1 } },
+      { iid: 'ORG-07', t: 'K3', m: {} },
+      { iid: 'DEP-14', t: 'K1', m: { draw: 2, kelda: 1, thornley: 1 } },
+      { iid: 'DEP-14', t: 'K2', m: { leaksFixed: 2, northFreed: 2, leakage: 1 } },
+      { iid: 'DEP-14', t: 'K3', m: { outages: 1 } },
+      { iid: 'TM-31', t: 'K1', m: { kelda: 2, northFreed: 1, draw: 1 } },
+      { iid: 'TM-31', t: 'K2', m: { leaksFixed: 2, northFreed: 1 } },
+      { iid: 'TM-31', t: 'K3', m: { northFreed: 1, outages: 1 } }
+    ]
+  },
+  /* the plan that broke, the gap, and the options */
+  plan: {
+    tonight: 'Tonight’s night feed', need: 10, ashbyLicence: 24, ashbyOwn: 14, bhOut: 8, unit: 'Ml/d',
+    gap: 8, from: '22:00', to: '06:00', breaks: 'i1',
+    options: [
+      { id: 'o1', w: 'Bring Ryecroft into supply', gives: 6, cost: 18, days: 3, thornleyMl: 0, sample: 'clear sample 28 Oct', start: '4 hours to start',
+        verdict: 'within', why: 'A standby source with a clear sample: inside the Department’s freedom. 6 of its 6 Ml/d licence. £18k, inside the team’s £25k.', checks: { L1: 'ok', L2: 'ok', L3: 'ok', L4: 'na', L5: 'ok', D1: 'na', D2: 'ok', T1: 'ok' }, serves: 'Keeps Thornley resting: the gap comes from groundwater.', freedom: 'DEP-14 · Bringing a standby source into supply once it has a clear sample' },
+      { id: 'o2', w: 'Draw 2 Ml/d more from Thornley for up to 72 hours', gives: 2, cost: 0, days: 3, thornleyMl: 6,
+        verdict: 'against', why: 'Inside every limit and the Department’s branch plan, but it works against a key task. 6 Ml over 3 days is 0.07 points of Thornley.', checks: { L1: 'ok', L2: 'ok', L3: 'ok', L4: 'na', L5: 'ok', D1: 'na', D2: 'ok', T1: 'ok' }, serves: 'The branch plan allows it after Ryecroft. Costs Thornley 0.07 points.', freedom: 'DEP-14 · branch B1: Ryecroft first, then Thornley for up to 72 hours' },
+      { id: 'o3', w: 'Draw all 8 Ml/d from Thornley instead', gives: 8, cost: 0, days: 3, thornleyMl: 24,
+        verdict: 'ask', ask: 'p3', why: 'Inside the limits, but skips Ryecroft, which the branch plan puts first. That choice is the Department head’s.', checks: { L1: 'ok', L2: 'ok', L3: 'ok', L4: 'na', L5: 'ok', D1: 'na', D2: 'ok', T1: 'ok' }, serves: 'Costs Thornley 0.28 points: four times the plan above.', freedom: 'outside: the branch order is not in your freedom' },
+      { id: 'o4', w: 'Lower Hebden night pressure to 12 m', gives: 1.5, cost: 0, days: 3, thornleyMl: 0,
+        verdict: 'ask', ask: 'p4', why: 'Below the 15 m your team may set. Sam Okafor can widen it.', checks: { L1: 'ok', L2: 'risk', L3: 'ok', L4: 'na', L5: 'ok', D1: 'na', D2: 'ok', T1: 'ok' }, serves: 'Saves 1.5 Ml/d; low-lying streets may lose pressure.', freedom: 'outside: 15 to 25 m is the team’s range' },
+      { id: 'o5', w: 'Put borehole 3 back with extra filtration', gives: 8, cost: 9, days: 3, thornleyMl: 0,
+        verdict: 'limit', ask: 'p6', limit: 'L3', why: 'Crosses a limit: nothing goes into supply from a source with an open quality alert. Only Hana Sato can lift it.', checks: { L1: 'ok', L2: 'ok', L3: 'cross', L4: 'na', L5: 'ok', D1: 'na', D2: 'ok', T1: 'ok' }, serves: 'Would close the gap, at the one risk the Org ruled out.', freedom: 'across a limit' },
+      { id: 'o6', w: 'Ask North zone customers to use less tonight', gives: 1, cost: 0, days: 1, thornleyMl: 0,
+        verdict: 'limit', ask: 'p2', limit: 'L4', why: 'Crosses a limit: only Customer speaks to the public about restrictions. Gareth Lowe releases it.', checks: { L1: 'ok', L2: 'ok', L3: 'ok', L4: 'cross', L5: 'ok', D1: 'na', D2: 'ok', T1: 'ok' }, serves: 'Small, and it is the thing the purpose says we won’t do.', freedom: 'across a limit' }
+    ],
+    chosen: ['o1', 'o2'],
+    record: {
+      at: '07:40', by: 'p5', under: 'DEP-14',
+      changed: 'Tonight’s North zone feed: Ryecroft 6 Ml/d and Thornley +2 Ml/d replace Ashby’s missing 8, for up to 72 hours',
+      serves: 'Keeps Kelda at 10 Ml/d, so North zone still carries itself at night; Thornley rests except for 6 Ml (0.07 points), which the branch plan allows.',
+      told: ['p4', 'p3', 'p6'], ends: 'Fri 6 Nov 06:00, or when borehole 3 is back',
+      undo: 'Ryecroft can be stood down at any time; Thornley returns to plan the same night.'
+    },
+    /* before intent, these needed a yes. Within intent they become notices; the rest still ask */
+    becomes: [
+      { w: 'Bring a standby source into supply', before: 'Head of department approves', after: 'Notice to the Department, with how it serves', within: true },
+      { w: 'Move supply between zones, within licence', before: 'Duty manager approves', after: 'Notice to the duty manager', within: true },
+      { w: 'Spend up to £25k on one change', before: 'Team lead approves', after: 'Recorded, team lead told', within: true },
+      { w: 'Change the branch plan’s order', before: 'Head of department approves', after: 'Still asks', within: false },
+      { w: 'Anything across a limit', before: 'The limit’s owner', after: 'Still the limit’s owner, by name', within: false }
+    ],
+    noticeAt: '07:52', seenBy: 'p3',
+    /* what reaches the Department head the same morning (within V6) */
+    inbox: [
+      { kind: 'notice', from: 'p5', at: '07:52', iid: 'YOU-31a' },
+      { kind: 'ask', from: 'p9', at: '07:58', iid: 'TM-32', w: 'Move 1.5 Ml/d from South to North zone tonight, to help cover Ashby', freedom: 'F1', why: 'Inside DEP-14’s freedom, but South Zone hasn’t said DEP-14 back yet, so its changes still ask.' },
+      { kind: 'question', from: null, at: '06:10', iid: 'DEP-14', w: 'An assumption DEP-14 rests on no longer holds: Ashby and Ryecroft both available', why: 'Asked once. Keep it, or amend it.' }
+    ],
+    /* earlier changes within DEP-14 this week, for the Department's view (combined V4) */
+    earlier: [
+      { at: 'Mon 2 Nov 14:20', by: 'p13', under: 'TM-31', w: 'Moved the Mill Brow repair from Tue to Thu night', serves: 'Kept Kelda full on Tuesday, when Trunk Mains needed the link for a valve test', cost: 'none' },
+      { at: 'Sun 1 Nov 09:05', by: 'p10', under: 'DEP-14', w: 'Closed the Kelda link for its Sunday inspection, two hours early', serves: 'Finished before North zone’s morning peak; Ashby covered locally', cost: 'Thornley 0.6 Ml' }
+    ],
+    /* the grant a change within intent runs on: derived, not issued */
+    grant: { holder: 'p5', from: ['DEP-14', 'F2'], via: ['TM-31', 'YOU-31a'], saidBack: '27 Oct', until: '15 Dec', ends: 'the review date, a change to DEP-14 that touches F2, or Ellis leaving the team', audit: 'within-intent change · Ref DEP-14 · record attached' }
+  },
+
+  /* backbriefs on TM-31, as Sam sees them. said: the person's own words */
+  backbriefs: [
+    { who: 'p5', state: 'confirmed', at: '27 Oct', said: 'Thornley has to rest so it refills, so North zone feeds from Ashby at night. My job is to keep Kelda at 10 every night and book repairs so they never cut the feed. I won’t take Thornley water to make up a shortfall without telling Sam, and I won’t put anything into supply that Water Quality has an alert on. Anything said to the public goes through Customer.',
+      gaps: [], correction: { by: 'p4', w: 'Kelda isn’t every night: Trunk Mains closes it on Sundays for inspection. Plan Sundays on Ashby local only.' },
+      spans: [['Thornley has to rest so it refills', 'purpose', 'Purpose'], ['keep Kelda at 10 every night', 'end0', 'Done looks like'], ['book repairs so they never cut the feed', 'task0', 'Key task'], ['I won’t take Thornley water to make up a shortfall without telling Sam', 'own', 'his own limit'], ['I won’t put anything into supply that Water Quality has an alert on', 'L3', 'L3'], ['Anything said to the public goes through Customer', 'L4', 'L4']],
+      covers: ['purpose', 'end0', 'task0', 'L3', 'L4'], notMine: ['end1', 'task1', 'task2'], misses: ['free0', 'free1', 'free2', 'L1', 'L2', 'D1', 'D2', 'T1'], bit: { limit: 'D1', item: 'i2' } },
+    { who: 'p12', state: 'confirmed', at: '19 Oct', said: 'Fix the big leaks first, even when small ones get more calls.', covers: ['purpose', 'task'], misses: [] },
+    { who: 'p13', state: 'confirmed', at: '20 Oct', said: 'Keep the night feed and the pressure down; tell the duty manager before big valve changes.', covers: ['task', 'T1'], misses: [] },
+    { who: 'p14', state: 'corrected', at: '21 Oct', said: 'Get the leak count to 40 by Christmas.', covers: ['end'], misses: ['purpose'], correction: { by: 'p4', w: 'It is the 40 largest, by volume, and by 15 Dec. The count is not the point; the water is.' } },
+    { who: 'p15', state: 'confirmed', at: '22 Oct', said: 'Largest leaks first so Thornley can rest; customer leaks fitted in around them.', covers: ['purpose', 'task'], misses: [] },
+    { who: 'p17', state: 'confirmed', at: '23 Oct', said: 'Night pressure between 15 and 25 m in Hebden and Calder; no lower without Sam.', covers: ['freedom', 'task'], misses: [] },
+    { who: 'p18', state: 'open', at: null, said: null, joined: '2 Nov', note: 'joined the team yesterday (rotation from South Zone)', arrives: { at: '07:44', said: 'Mill Brow repairs by volume, booked outside the night feed. Nothing under 15 m without Sam. Nothing into supply with a quality alert on it.', covers: ['task', 'freedom', 'L3'], misses: ['purpose'] } },
+    { who: 'p16', state: 'open', at: null, said: null, away: 'until 9 Nov', note: 'on leave until 9 Nov' },
+    { who: 'p9', state: 'na', note: 'sibling team lead, reads TM-31 only' }
+  ],
+  /* Bungay's three gaps, with this fortnight's examples (backbrief V2) */
+  gaps: [
+    { id: 'knowledge', w: 'Knowledge', between: 'what we know and what we’d like to know', wrong: 'gather more information', right: 'say what we know and what matters: limit the direction to the intent',
+      cases: [ { who: 'p5', w: 'Didn’t know Kelda closes on Sundays for inspection', closed: 'Sam’s correction to the backbrief, 27 Oct', state: 'closed' },
+               { who: 'p18', w: 'Joined from South Zone yesterday; hasn’t read TM-31', closed: 'open: asked yesterday, not yet said back', state: 'open' } ] },
+    { id: 'alignment', w: 'Alignment', between: 'what we plan and what people do', wrong: 'give more detailed instructions', right: 'pass the intent down and have it said back',
+      cases: [ { who: 'p14', w: 'Said back “40 by Christmas”: a count, not the water', closed: 'corrected: the 40 largest, by volume, by 15 Dec', state: 'closed' },
+               { who: 'p12', w: 'Gangs pulled onto small customer leaks since 24 Oct', closed: 'open: see drift of work', state: 'open' } ] },
+    { id: 'effects', w: 'Effects', between: 'what we expect and what happens', wrong: 'add more controls', right: 'give freedom to adjust within the intent, and watch for drift',
+      cases: [ { who: 'p5', w: 'Kelda 9.6 not 10 last night; tonight 8 short after 06:10', closed: 'changed within intent at 07:40', state: 'closed' },
+               { who: 'p3', w: 'An assumption under DEP-14 no longer holds', closed: 'asked once, 06:10', state: 'open' } ] }
+  ],
+  /* drift of work: share of repair gang-hours on the 40 largest leaks, by week */
+  workDrift: {
+    intent: 'TM-31', task: 'K2', weeks: ['w/c 12 Oct', 'w/c 19 Oct', 'w/c 26 Oct', 'w/c 2 Nov'],
+    largest: [72, 66, 51, 44], customer: [20, 26, 41, 48], other: [8, 8, 8, 8],
+    fixedPerWeek: [5, 5, 4, 3], needPerWeek: 3.3, projected: 31, target: 40, by: '15 Dec',
+    why: 'Customer-reported small leaks are taking the gangs: calls rose after the local paper’s story on 24 Oct.'
+  },
+  /* cross-track error per intent on the chain: where the measure is against where the line says it should be today (backbrief V6).
+     dot = how much one dot is worth; better = which way is good; trend = this week against last */
+  xte: [
+    { iid: 'YOU-31a', fact: 'kelda', line: 10, now: 9.6, dot: 0.5, better: 1, trend: 'closing', note: 'Short 0.4 last night; tonight’s change brings it back to 10.', work: null },
+    { iid: 'TM-31', fact: 'leaksFixed', line: 20, now: 17, dot: 1, better: 1, trend: 'opening', note: '3 behind the line, and the gap grows: the gangs are on small leaks.', work: 'drift of work' },
+    { iid: 'DEP-14', fact: 'draw', line: 85, now: 71, dot: 3, better: -1, trend: 'steady', note: 'Well ahead on draw. An assumption crossed today: worth revisiting, asked once.', work: 'drift of the world' },
+    { iid: 'ORG-07', fact: 'thornley', line: 45.8, now: 41.2, dot: 1, better: 1, trend: 'closing', note: '4.6 points behind October’s line, closing: +2.6 this week against 2.0 needed.', work: null }
+  ],
+  /* the cross-track view: needed line vs actual, Thornley storage by week */
+  track: { weeks: ['2 Oct', '9 Oct', '16 Oct', '23 Oct', '30 Oct', '3 Nov'], need: [38, 39.8, 41.5, 43.3, 45.0, 45.8], actual: [38, 37.6, 37.4, 37.9, 38.6, 41.2], fact: 'thornley', revisitAt: 60, revisitBy: '1 Jan' },
+  /* a last winter log, for rehearsing an intent draft against surprises that really happened */
+  lastWinter: [
+    { d: '14 Dec 2025', w: 'Ashby borehole 1 failed for 5 days', answered: 'Ryecroft first, then Thornley for up to 72 hours; past 72 hours, ask', refs: ['B1', 'F2'], what: 'Ryecroft on day 1; Thornley for days 2 to 3; on day 4, ask Dana.' },
+    { d: '9 Jan 2026', w: 'Freeze: 60 bursts in North zone in two days', answered: 'Nobody without water over 12 hours; repair order is free', refs: ['L2', 'F3', 'D1'], what: 'Re-order repairs by homes affected; cancel planned work while the amber lasts.' },
+    { d: '2 Feb 2026', w: 'A councillor asked controllers to pause repairs on the high street for a market', answered: null, refs: [], missing: 'Nothing says who decides when a repair clashes with a local event, or for how long it may wait.', suggest: 'Moving a repair up to 48 hours for a local event, if no household is without water', suggestTo: 'freedom' }
+  ],
+  /* catchball: the draft of DEP-14 thrown down and back */
+  catchball: [
+    { r: 1, from: 'p3', to: ['p4', 'p9', 'p10'], at: '5 Oct', w: 'Draft: Thornley draw down to 50 Ml/d by 31 Dec.' },
+    { r: 1, from: 'p10', to: ['p3'], at: '6 Oct', w: 'Kelda can carry 10 a night, not 18. 50 by December needs both boreholes and Kelda flat out every night, Sundays included; we inspect on Sundays.', moved: 'end' },
+    { r: 1, from: 'p4', to: ['p3'], at: '6 Oct', w: 'If you want leaks fixed too, North zone needs Ryecroft as a standby, or we have nothing when Ashby trips.', moved: 'task' },
+    { r: 2, from: 'p3', to: ['p4', 'p9', 'p10'], at: '7 Oct', w: 'Draft 2: 60 Ml/d by 31 Jan. Ryecroft kept ready as standby. Branch plan added: Ryecroft first, then Thornley for up to 72 hours.' },
+    { r: 2, from: 'p9', to: ['p3'], at: '8 Oct', w: 'South zone can’t lend gangs to North before December.', moved: 'freedom' },
+    { r: 3, from: 'p3', to: ['p1'], at: '8 Oct', w: 'Thrown up: 60 by 31 Jan rests Thornley less than ORG-07 hoped. The Org’s 75% still holds if rainfall is average.' },
+    { r: 3, from: 'p1', to: ['p3'], at: '9 Oct', w: 'Agreed. Add the rainfall assumption to both intents, and tell me if it fails.', moved: 'assumption' }
+  ],
+  /* what each catchball round changed in DEP-14 (writing V3). from = the reply that moved it */
+  draftRounds: [
+    { r: 1, changes: [], base: {
+      end: ['Thornley draw down to 50 Ml/d by 31 Dec'],
+      task: ['Run Ashby at its licence and feed North zone at night through the Kelda link', 'Fix the 40 largest North zone leaks by 15 Dec'],
+      freedom: ['Moving supply between zones within licence', 'Bringing a standby source into supply once it has a clear sample', 'Changing the order of repairs', 'Lend gangs between zones'],
+      assumption: [] } },
+    { r: 2, changes: [
+      { field: 'end', was: 'Thornley draw down to 50 Ml/d by 31 Dec', now: 'Thornley draw down to 60 Ml/d by 31 Jan', from: 'p10' },
+      { field: 'task', was: null, now: 'Keep Ryecroft ready as the standby source', from: 'p4' },
+      { field: 'freedom', was: null, now: 'Branch: if Ashby is short, Ryecroft first, then Thornley for up to 72 hours', from: 'p4' } ] },
+    { r: 3, changes: [
+      { field: 'freedom', was: 'Lend gangs between zones', now: null, from: 'p9' },
+      { field: 'assumption', was: null, now: 'Rainfall November to February near the long-term average', from: 'p1' } ] }
+  ],
+  /* "it is 1 March and it failed: what happened?" (writing V4). Each story becomes a limit, a branch or a freedom with a condition */
+  premortem: {
+    asked: '1 Mar', by: ['p3', 'p4', 'p9', 'p10'],
+    stories: [
+      { w: 'A street in Hebden lost water for two days in the January freeze.', by: 'p4', to: 'limit', match: 'L2', adds: 'D1', note: 'L2 already covers the outcome. The Department adds how: no planned interruption during a cold-weather amber.' },
+      { w: 'We took Thornley water to cover an Ashby trip for three weeks and nobody above knew.', by: 'p10', to: 'branch', adds: 'B1', note: 'A branch with a cap: Ryecroft first, then Thornley for up to 72 hours. Longer asks.' },
+      { w: 'A controller told the parish council we might have to restrict.', by: 'p9', to: 'limit', match: 'L4', note: 'Already inherited as L4. Nothing to add.' },
+      { w: 'Ryecroft went into supply before its sample came back.', by: 'p4', to: 'freedom', addsFreedom: 1, note: 'Freedom with its condition: a standby source, once it has a clear sample. L3 still holds.' },
+      { w: 'We spent £120k on contractors in one week chasing small leaks.', by: 'p3', to: 'limit', match: 'L5', adds: 'D2', note: 'L5 allows £250k. The Department tightens it: £50k per change.' }
+    ],
+    refused: { w: 'Allow up to 18 hours without water during a freeze', against: 'L2', why: 'Looser than L2 (12 hours). A floor can add or tighten a limit, never loosen one. L2 changes only in ORG-07.' }
+  },
+  /* asking "so that?" until the answer meets the intent above (writing V2) */
+  whyLadder: [
+    { w: 'Run Ashby flat out and feed North zone through Kelda every night.', as: 'method', becomes: 'Left to the teams; kept as key task K1 in their words' },
+    { w: 'So Thornley draws less water this winter.', as: 'end', becomes: 'Done looks like: Thornley draw down to 60 Ml/d by 31 Jan' },
+    { w: 'So Thornley can refill before spring.', as: 'purpose', becomes: 'Purpose: so the Org can refill Thornley' },
+    { w: 'So we get through without household restrictions.', as: 'meets', meets: ['ORG-07', 'K1'] }
+  ],
+  /* the Department head's draft, as she typed it, before sorting (writing surface) */
+  draft: [
+    { s: 'We need to get Thornley’s draw down to 60 Ml/d by the end of January.', kind: 'end', rule: 'a number and a date' },
+    { s: 'Run Ashby flat out and feed North zone through Kelda every night.', kind: 'method', rule: 'starts with a verb of doing' },
+    { s: 'The point is that Thornley refills, so the Org avoids restrictions next summer.', kind: 'purpose', rule: '“the point is”, “so”' },
+    { s: 'Fix the 40 worst leaks in North zone before Christmas.', kind: 'task', rule: 'a verb of doing, and the Org names it' },
+    { s: 'Don’t cut anyone off for long.', kind: 'limit', rule: '“don’t”', vague: 'How long is long? The Org says 12 hours.', fixWith: 'L2' },
+    { s: 'Use Ryecroft if you have to.', kind: 'freedom', rule: '“if you have to”' },
+    { s: 'Kit and Mo should alternate the Kelda shifts.', kind: 'method', rule: 'names people and a rota', pencil: true }
+  ]
+};
+
+/* ---- shared helpers (same in every page of the run) ---- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const I = (n, size = 16, stroke = 1.5) => Icons.svg(n, { size, stroke });
+const P = id => DATA.people[id];
+const F = id => DATA.floors[id];
+const N = id => DATA.intents[id];
+const FACT = id => DATA.facts[id];
+const PART = id => DATA.parts.find(p => p.id === id);
+const first = id => P(id).name.split(' ')[0];
+const fmt = n => typeof n === 'number' ? n.toLocaleString('en-GB') : n;
+const lc1 = s => s.charAt(0).toLowerCase() + s.slice(1);
+const plural = (n, one, many) => `${fmt(n)} ${n === 1 ? one : (many || one + 's')}`;
+const sum = (a, f) => a.reduce((t, x) => t + f(x), 0);
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ms = v => parseFloat(css(v)) || 0;
+const STATE = { tech: false, gateway: DATA.gateway.on };
+let ME = DATA.me;
+
+/* every limit by id, from whichever intent holds it */
+const LIMIT = id => { for (const k in DATA.intents) { const l = (N(k).limits || []).find(x => x.id === id); if (l) return Object.assign({ intent: k }, l); } return null; };
+/* every limit an intent is bound by: inherited first, then its own */
+const limitsOf = id => [...(N(id).inherits || []).map(LIMIT), ...(N(id).limits || []).map(l => Object.assign({ intent: id, own: true }, l))];
+const TASK = (iid, tid) => (N(iid).tasks || []).find(t => t.id === tid);
+const OPTION = id => DATA.plan.options.find(o => o.id === id);
+const ITEM = id => DATA.incoming.find(i => i.id === id);
+const floorOf = iid => N(iid).floor;
+const scopeName = iid => { const n = N(iid); return n.dept || n.team || F(n.floor).name; };
+
+/* chips */
+const fchip = fl => `<span class="fchip" data-tier="${fl}">${F(fl).name} · ${F(fl).word}</span>`;
+function ichip(iid, o = {}) {
+  const n = N(iid);
+  const t = o.short ? '' : n.restricted ? `Restricted · held by ${P(n.owner).name}` : n.title;
+  return `<span class="ichip ${o.lg ? 'lg' : ''} ${n.restricted ? 'restricted' : ''}" data-tier="${n.floor}" title="${n.restricted ? 'You can’t open this intent' : iid + ': ' + n.title}">${o.ring ? ringHTML(o.ring) : ''}<span class="iid">${iid}</span>${t ? `<span class="it">${t}</span>` : ''}</span>`;
+}
+const ringHTML = st => `<span class="ring ${st}" aria-hidden="true"></span>`;
+const RING_WORD = { confirmed: 'Said back and confirmed', corrected: 'Said back, corrected', open: 'Not said back yet: an open question', na: 'Reads only' };
+const person = (id, extra = '') => `<span class="who">${P(id).name}${extra ? ` <span class="muted">${extra}</span>` : ''}</span>`;
+const partWord = id => PART(id) ? PART(id).w : id;
+const limHTML = (l, o = {}) => `<div class="lim ${l.own ? '' : 'inh'} ${o.cross ? 'cross' : ''}"><span class="lid">${l.id}</span><span>${l.w}${o.tk !== false ? `<span class="tk">${l.tech || ''}</span>` : ''}</span>${o.owner === false ? '' : `<span class="lo">${P(l.owner).name}</span>`}</div>`;
+const VERDICT = { within: ['Within intent', 'circle-check'], against: ['Within, against a task', 'circle-dot'], ask: ['Ask', 'hand'], limit: ['Across a limit', 'octagon-x'] };
+const vdHTML = (o) => `<span class="vd ${o.verdict}">${I(VERDICT[o.verdict][1], 12)}${o.verdict === 'ask' || o.verdict === 'limit' ? (o.verdict === 'ask' ? 'Ask ' : 'Only ') + P(o.ask).name : VERDICT[o.verdict][0]}</span>`;
+const rungHTML = r => { const n = { data: 1, information: 2, context: 3 }[r] || 0; return `<span class="rung" title="${r || 'unknown'}"><i class="${n >= 1 ? 'on' : ''}"></i><i class="${n >= 2 ? 'on' : ''}"></i><i class="${n >= 3 ? 'on' : ''}"></i>&nbsp;${r || '—'}</span>`; };
+
+/* what a touch reads as: "limit L3 of ORG-07" */
+function touchWord([iid, kind, ref]) {
+  const n = N(iid);
+  if (kind === 'limit') return `limit ${ref}: ${LIMIT(ref).w}`;
+  if (kind === 'task') return `key task ${ref}: ${TASK(iid, ref).w}`;
+  if (kind === 'end') { const e = n.end[+ref.slice(1) - 1]; return `done looks like: ${e.w}`; }
+  if (kind === 'freedom') return `freedom: ${n.freedom[+ref.slice(1) - 1]}`;
+  if (kind === 'purpose') return 'its purpose';
+  if (kind === 'unseen') return 'a part you can’t open';
+  return kind;
+}
+/* the rank rule: an order, not a score */
+function rankOf(it) {
+  if (!it.touches || !it.touches.length) return 7;
+  const k = it.touches.map(t => t[1]);
+  if (it.restricted) return 6;
+  if (it.mine && k.includes('limit')) return 1;
+  if (it.mine) return 2;
+  if (k.includes('limit')) return 3;
+  if (k.includes('task') || k.includes('freedom')) return 4;
+  return 5;
+}
+const ranked = (items = DATA.incoming) => [...items].sort((a, b) => rankOf(a) - rankOf(b) || a.bitesRank - b.bitesRank || a.t.localeCompare(b.t));
+/* which touch to name first */
+const topTouch = it => [...it.touches].sort((a, b) => ['limit', 'task', 'freedom', 'end', 'purpose', 'unseen'].indexOf(a[1]) - ['limit', 'task', 'freedom', 'end', 'purpose', 'unseen'].indexOf(b[1]))[0];
+
+/* a measure line: start, now, target */
+function measure(fid, o = {}) {
+  const f = FACT(fid), lo = Math.min(f.start, f.target, f.now), hi = Math.max(f.start, f.target, f.now);
+  if (hi === lo) return `<span class="meas flat micro muted">${f.now} so far · held at ${f.target}</span>`;
+  const pad = (hi - lo) * .08 || 1, a = lo - pad, b = hi + pad, x = v => ((v - a) / (b - a)) * 100;
+  const ghost = o.ghost != null ? `<i class="m-ghost" style="left:${x(o.ghost)}%"></i>` : '';
+  return `<span class="meas" title="${f.w}: ${f.now}${f.unit} now, ${f.target}${f.unit} by ${f.by}"><span class="m-track"><i class="m-run" style="left:${Math.min(x(f.start), x(f.now))}%;width:${Math.abs(x(f.now) - x(f.start))}%"></i><i class="m-target" style="left:${x(f.target)}%"></i><i class="m-now" style="left:${x(f.now)}%"></i>${ghost}</span></span>`;
+}
+
+/* top bar */
+function topHTML(crumbs, hints, floor) {
+  const me = P(ME), fl = floor || me.floor;
+  return `<header class="top"><p class="brand">AUGUR</p>
+    <nav class="crumb" aria-label="Where you are">${crumbs.map((c, i) => (i ? I('chevron-right', 14) : '') + (i === crumbs.length - 1 ? `<b>${c}</b>` : `<span>${c}</span>`)).join('')}</nav>
+    <span class="fchip" data-tier="${fl}">${F(fl).name} · ${F(fl).word}</span>
+    <div class="hints">${hints.map(([k, w, id]) => `<span ${id ? `id="${id}"` : ''}><span class="kbd">${k}</span>${w}</span>`).join('')}</div></header>`;
+}
+const STD = [['T', 'doctrine words', 'h-t'], ['R', 'replay']];
+const STDG = [['T', 'doctrine words', 'h-t'], ['G', 'gateway off', 'h-g'], ['R', 'replay']];
+
+/* keys shared by every page */
+function commonKeys(e, rerender, replay) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return false;
+  const k = e.key.toLowerCase();
+  if (k === 'r') { replay(); return true; }
+  if (k === 't') { STATE.tech = !STATE.tech; document.body.classList.toggle('tech', STATE.tech); markKeys(); return true; }
+  if (k === 'g' && $('#h-g')) { STATE.gateway = !STATE.gateway; rerender(); markKeys(); return true; }
+  return false;
+}
+function markKeys() { $('#h-t')?.classList.toggle('on', STATE.tech); $('#h-g')?.classList.toggle('on', !STATE.gateway); }
+
+/* timers for the auto demo, cleared on replay */
+let TIMERS = [];
+const later = (fn, t) => TIMERS.push(setTimeout(fn, reduced ? Math.min(t, 50) : t));
+const clearLater = () => { TIMERS.forEach(clearTimeout); TIMERS = []; };
+const MOMENT = () => ms('--motion-run'); /* the moment plays at ~1.2 s */
+function settle() { document.body.classList.add('pre'); requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre'))); }
+
+const PL = DATA.plan, R = PL.record, OP = PL.chosen.map(OPTION), LIMS = limitsOf('YOU-31a');
+const S = { k: 0, sent: false };
+function slots() {
+  const th = sum(OP, o => o.thornleyMl);
+  return [
+    ['Changed', `<span>${R.changed.split(':')[0]}</span>`],
+    ['To', OP.map(o => `<span class="chip">${o.w} <span class="mono muted">+${o.gives}</span></span>`).join('')],
+    ['Because', `<span class="chip">${ITEM(PL.breaks).t} · ${ITEM(PL.breaks).short}</span>`],
+    ['So that', `<span class="so">so that</span> <span>${N('YOU-31a').end[0].w}</span> ${ichip('TM-31', { short: true })}`],
+    ['Freedom used', OP.map(o => `<span class="within">${I('git-merge', 12)} ${o.freedom}</span>`).join('')],
+    ['Limits held', `<span class="chip ok"><span class="ic">${I('check', 12)}</span>${LIMS.length} of ${LIMS.length}, checked by rule</span><span class="micro muted">${LIMS.map(l => l.id).join(' ')}</span>`],
+    ['Cost to the intent', `<span class="chip">Thornley ${th} Ml · ${(th / FACT('thornley').capMl * 100).toFixed(2)} points</span><span class="chip">£${sum(OP, o => o.cost)}k of £${DATA.spendCascade.find(x => x.iid === 'YOU-31a').k}k</span>`],
+    ['Told', R.told.map(p => `<span class="chip">${P(p).name}</span>`).join('')],
+    ['Ends', `<span>${R.ends}</span>`],
+    ['Undo', `<span>${R.undo}</span>`],
+    ['Note', `<span class="note">optional, one line, the only thing typed</span>`]
+  ];
+}
+function render() {
+  const sl = slots();
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', 'Change'], [['Space', 'record'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <section class="rec scroll" aria-label="The change record"><div style="margin-bottom:var(--space-3)"><p class="eyebrow">${P(R.by).name} · ${DATA.today} ${R.at} · within ${ichip(R.under, { short: true })}</p><h1 class="h">How this change still serves the intent</h1></div>
+      <dl>${sl.map(([k, v], i) => `<div class="slot ${i >= S.k ? 'wait' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+      <p class="tk" style="margin-top:var(--space-2)">disciplined initiative: act within intent and report · the record is an audit event on the intent’s Ref</p></section>
+    <aside class="out" aria-live="polite"><p class="eyebrow">What the floor above gets ${S.sent ? `· sent ${R.at}` : '· when you record it'}</p>
+      <div class="notice inset" data-tier="department"><span>${ichip(R.under)}</span>
+        <p class="s">${P(R.by).name} changed ${lc1(R.changed.split(':')[0])} <span class="within">${I('git-merge', 12)} within ${R.under}</span></p>
+        <p class="m">${R.serves}</p>
+        <p class="m">${LIMS.length} limits held · ends ${R.ends.split(',')[0]}</p>
+        <div class="acts"><button class="btn sm">${I('eye', 14)} Seen</button><button class="btn sm">${I('message-circle-question', 14)} Ask a question</button></div>
+        <p class="micro muted">A notice, not an approval: the change already stands. A question doesn’t undo it.</p></div>
+      <div class="not"><b>What this record doesn’t cover</b>${PL.options.filter(o => !PL.chosen.includes(o.id)).map(o => `<span>${o.w}: not done${o.verdict === 'ask' || o.verdict === 'limit' ? ', would need ' + P(o.ask).name : ''}</span>`).join('')}</div>
+      <button class="btn ${S.k >= sl.length ? 'go' : ''}" ${S.k >= sl.length ? '' : 'aria-disabled="true"'} data-send>${I('git-merge', 14)} ${S.sent ? 'Recorded' : 'Record and act'} <span class="kbd">Space</span></button>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-send]').onclick = send;
+}
+function send() { if (S.k >= slots().length) { S.sent = true; render(); } }
+function replay() { clearLater(); S.k = 0; S.sent = false; settle(); render(); slots().forEach((_, i) => later(() => { S.k = i + 1; render(); }, MOMENT() + i * ms('--motion-instant') * 2)); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === ' ') { e.preventDefault(); send(); } });
+replay();
+</script>
+</body>
+</html>

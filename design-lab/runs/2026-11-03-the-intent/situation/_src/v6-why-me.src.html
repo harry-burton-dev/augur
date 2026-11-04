@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent meets the situation · V6 · Why this reached me</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: every item can say how it reached you: the tag, the record that names it, the part, the rule. You can correct a binding, never reorder by hand ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--space-6)}
+.list{display:grid;align-content:start;gap:0;min-height:0}
+.li{display:grid;grid-template-columns:var(--space-4) calc(var(--space-6) + var(--space-1)) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);text-align:left;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);border-radius:var(--radius-key)}
+.li b{font:500 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.li .t{font-family:var(--font-mono);color:var(--ink-muted)}
+.li[aria-pressed="true"]{background:var(--surface-raised);color:var(--light)}
+.li.pencil-row span.ti{font-style:italic;border-bottom:1px dotted var(--x-proposed-pencil)}
+.li.unseen-row span.ti{background:var(--x-proposed-unseen);padding:0 var(--space-2);border-radius:2px;width:fit-content;color:var(--ink-muted)}
+.trace{display:grid;gap:var(--space-4);align-content:start;min-height:0}
+.trace h2{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.steps{display:grid;gap:0;position:relative}
+.step{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-3);padding-bottom:var(--space-3);position:relative;transition:opacity var(--motion-base) var(--ease-out)}
+.step::before{content:"";position:absolute;left:calc(var(--space-2) + 1px);top:var(--space-5);bottom:0;width:1px;background:var(--x-proposed-thread)}
+.step:last-child::before{display:none}
+.step .n{width:var(--space-5);height:var(--space-5);border-radius:50%;border:1px solid var(--x-proposed-thread);display:flex;align-items:center;justify-content:center;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink)}
+.step p{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.step span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.step.pen .n{border-style:dotted;border-color:var(--x-proposed-pencil)}
+.step.pen p{font-style:italic}
+.step.wait{opacity:0}
+.verdict{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border-left:2px solid var(--x-proposed-thread);background:var(--x-proposed-thread-wash)}
+.verdict b{font-weight:400;color:var(--light)}
+.acts{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.note{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.step p{font-size:var(--type-small);line-height:var(--leading-small)}.wrap{gap:var(--space-5)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent meets the situation · V6</b> why this reached me: tag, record, part, rule; correct a binding, never reorder by hand · the workings show; pencil and ink</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { sel: 'i1', steps: 9, answer: {} };
+const its = ranked();
+function steps(it) {
+  if (DATA.traces[it.id]) return DATA.traces[it.id].map((s, i) => Object.assign({ pen: it.tag === 'pencil' && i > 0 && !S.answer[it.id] }, s));
+  if (it.restricted) return [{ w: `It is tagged to ${it.touches[0][0]}; what it says is held by ${P(it.holder).name}`, by: 'restricted: you see that it exists and who to ask' }];
+  return it.touches.map(t => ({ w: `${t[0]}: ${touchWord(t)}`, by: 'tag on the item, matched to the intent record' }));
+}
+function render() {
+  const it = ITEM(S.sel), st = steps(it), r = rankOf(it), pen = it.tag === 'pencil';
+  const ans = S.answer[it.id];
+  $('#app').innerHTML = topHTML(['Home', 'This morning', 'Why'], [['↑↓', 'item'], ['C', 'confirm'], ['N', 'not this'], ...STDG], 'team') +
+  `<main class="main"><div class="wrap">
+    <section class="list scroll" aria-label="Ranked items">${its.map(x => `<button class="li ${x.tag === 'pencil' && !S.answer[x.id] ? 'pencil-row' : ''} ${x.restricted ? 'unseen-row' : ''}" data-id="${x.id}" aria-pressed="${x.id === S.sel}"><b>${rankOf(x)}</b><span class="t">${x.t}</span><span class="ti">${x.restricted ? x.short : x.title}</span></button>`).join('')}
+      <p class="note" style="padding:var(--space-3)">${DATA.untouched.length} more touch none of your intents. One of them, “${DATA.untouched.find(u => u.pencil).w}”, a model thought ${DATA.untouched.find(u => u.pencil).pencil}; ${first(ME)} said no, so it stays unbound.</p></section>
+    <section class="trace" aria-live="polite">
+      <p class="eyebrow">How it reached ${first(ME)}</p><h2>${it.restricted ? it.short : it.title}</h2>
+      <div class="steps">${st.map((s, i) => `<div class="step ${s.pen ? 'pen' : ''} ${i >= S.steps ? 'wait' : ''}"><span class="n">${i + 1}</span><div><p>${s.w}</p><span>${s.by}</span></div></div>`).join('')}</div>
+      <div class="verdict"><span><b>Rule ${r}:</b> ${DATA.rankRule[r - 1].w.toLowerCase()}${it.bites ? `; bites by ${it.bites}` : ''}.</span><span class="tk">${DATA.rankRule[r - 1].tech}</span>
+        ${pen && !ans ? `<span class="small">${STATE.gateway ? 'The binding is pencil: it counts for ranking, marked, until someone confirms it.' : 'The model gateway is off: suggestions already made stay pencil; no new ones are made.'}</span>
+          <span class="acts"><button class="btn sm go" data-a="yes">${I('check', 14)} Confirm: it touches ${it.touches[0][0]} ${it.touches[0][2]} <span class="kbd">C</span></button><button class="btn sm" data-a="no">${I('x', 14)} Not this intent <span class="kbd">N</span></button></span>`
+          : ans ? `<span class="small">${ans === 'yes' ? `Inked by ${P(ME).name} at ${DATA.now}. Rule 3 now holds without a pencil mark; the binding is on the item for everyone.` : `Unbound by ${P(ME).name}. It moves to “touches none”, folded, and the correction goes to whoever tags the mailbox.`}</span>` : ''}
+        ${!pen && !it.restricted ? `<span class="acts"><button class="btn sm" data-a="wrong">${I('flag', 14)} This binding is wrong</button></span><span class="note">You can’t drag it up or down. If the order is wrong, a binding is wrong, and fixing it fixes it for everyone it reaches.</span>` : ''}
+      </div></section></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-id]').forEach(b => b.onclick = () => pick(b.dataset.id));
+  $$('[data-a]').forEach(b => b.onclick = () => { if (b.dataset.a !== 'wrong') { S.answer[it.id] = b.dataset.a; render(); } });
+}
+function pick(id) { S.sel = id; S.steps = 0; render(); steps(ITEM(id)).forEach((_, i) => later(() => { S.steps = i + 1; render(); }, (i + 1) * ms('--motion-base'))); }
+function replay() { clearLater(); S.answer = {}; S.sel = 'i1'; S.steps = 9; settle(); render(); later(() => pick('i6'), MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = e.key;
+  const i = its.findIndex(x => x.id === S.sel);
+  if (k === 'ArrowDown') pick(its[Math.min(its.length - 1, i + 1)].id);
+  if (k === 'ArrowUp') pick(its[Math.max(0, i - 1)].id);
+  if (ITEM(S.sel).tag === 'pencil' && !S.answer[S.sel] && (k.toLowerCase() === 'c' || k.toLowerCase() === 'n')) { S.answer[S.sel] = k.toLowerCase() === 'c' ? 'yes' : 'no'; render(); } });
+replay();
+</script>
+</body>
+</html>

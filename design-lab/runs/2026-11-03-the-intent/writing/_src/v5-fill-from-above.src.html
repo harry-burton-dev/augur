@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Writing an intent · V5 · Fill from above</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the intent starts from the one above. Limits arrive locked, done-looks-like is picked from facts, and only the difference is typed ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:var(--space-6)}
+.form{display:grid;gap:var(--space-3);align-content:start;min-height:0}
+.row{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-4)) minmax(0,1fr);gap:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid var(--hairline)}
+.row > label,.row > .lab{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding-top:var(--space-1);display:grid;gap:2px}
+.row > .lab b{font-weight:400;color:var(--ink);font-size:var(--type-meta)}
+.val{display:grid;gap:var(--space-1);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.typed{color:var(--light);border-bottom:1px dashed var(--hairline-strong)}
+.given{color:var(--ink-muted)}
+.facts{display:grid;gap:var(--space-1)}
+.fact{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(var(--space-8),1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);transition:background var(--motion-calm) var(--ease-out)}
+.fact .v{font-family:var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.fact.new{background:var(--x-proposed-thread-wash)}
+.picker{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-1)}
+.picker button{padding:2px var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.picker button[aria-pressed="true"]{border-style:solid;border-color:var(--x-proposed-thread);color:var(--light)}
+.lims{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-1) var(--space-4)}
+.side{display:grid;align-content:start;gap:var(--space-4)}
+.count{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3)}
+.count div{border-top:1px solid var(--hairline-strong);padding-top:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.count b{display:block;font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);color:var(--light)}
+.checks li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.checks li .ic{color:var(--x-proposed-lit)}
+.checks li.no .ic{color:var(--x-proposed-drift)}
+.checks li span.muted{display:block}
+@media (max-width:1400px){.row{grid-template-columns:calc(var(--space-8)) minmax(0,1fr);padding-bottom:var(--space-2);gap:var(--space-3)}.val{font-size:var(--type-small);line-height:var(--leading-small)}.lims{grid-template-columns:minmax(0,1fr)}.lims .lim{padding-top:0;padding-bottom:0}.wrap{gap:var(--space-5)}.checks li span.muted{display:none}.row .lab span{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Writing an intent · V5</b> fill from above: limits arrive locked, done is picked from facts, only the difference is typed · strictest wins</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const n = N('DEP-14'), up = N(n.serves);
+const PICK = ['draw', 'northFreed', 'outages', 'thornley', 'leakage', 'kelda'];
+const S = { picked: ['draw', 'outages'] };
+const words = s => s.split(/\s+/).filter(Boolean).length;
+function render() {
+  const ends = n.end.filter(e => S.picked.includes(e.fact));
+  const typed = words(n.purpose.split(',').slice(1).join(',')) + sum(n.tasks, t => words(t.w)) + sum(n.limits, l => words(l.w)) + sum(n.freedom, words);
+  const given = words(n.purpose.split(',')[0]) + sum(n.inherits, id => words(LIMIT(id).w)) + sum(ends, e => words(e.w)) + words(up.title);
+  const checks = [
+    [true, `Serves one task above`, `${n.serves} ${n.servesPart}`],
+    [ends.length === n.end.length, `Every done-looks-like line is a fact`, `${ends.length} of ${n.end.length} picked from Data Atlas`],
+    [true, `Purpose says why`, 'no verb of doing leads it'],
+    [true, `No limit looser than ${n.serves}`, `${n.inherits.length} inherited, ${n.limits.length} tightened or added`],
+    [n.freedom.every(f => !/if you have to/i.test(f)), `Each freedom can be tested`, `${n.freedom.length} of ${n.freedom.length} say what and how far`]
+  ];
+  $('#app').innerHTML = topHTML(['Mandate', F('department').name, 'New intent'], [['Space', 'pick a fact'], ...STD], 'department') +
+  `<main class="main"><div class="wrap">
+    <section class="form scroll" aria-label="Intent">
+      <div class="row"><div class="lab"><b>Serves</b><span>chosen first</span></div><div class="val"><span>${ichip(n.serves)} <span class="given">· ${n.servesPart}: ${TASK(n.serves, n.servesPart).w}</span></span></div></div>
+      <div class="row"><div class="lab"><b>${PART('purpose').w}</b><span>starts from ${n.serves}</span></div><div class="val"><span><span class="given">${n.purpose.split(',')[0]},</span><span class="typed">${n.purpose.split(',').slice(1).join(',')}</span></span></div></div>
+      <div class="row"><div class="lab"><b>${PART('end').w}</b><span>picked, not typed</span></div><div class="val"><div class="facts">${ends.map(e => `<div class="fact ${e.fact === S.fresh ? 'new' : ''}"><span>${e.w}</span>${measure(e.fact)}<span class="v">${FACT(e.fact).now} ${FACT(e.fact).unit} · ${FACT(e.fact).src}</span></div>`).join('')}</div>
+        <div class="picker" role="group" aria-label="Facts in Data Atlas">${PICK.map(f => `<button data-f="${f}" aria-pressed="${S.picked.includes(f)}">${FACT(f).w}</button>`).join('')}</div></div></div>
+      <div class="row"><div class="lab"><b>${PART('task').w}</b><span>typed</span></div><div class="val">${n.tasks.map(t => `<span class="typed" style="width:fit-content">${t.w}</span>`).join('')}</div></div>
+      <div class="row"><div class="lab"><b>${PART('limit').w}</b><span>${n.inherits.length} arrive locked</span></div><div class="val"><div class="lims">${limitsOf('DEP-14').map(l => limHTML(l, { owner: false, tk: false })).join('')}</div></div></div>
+      <div class="row"><div class="lab"><b>${PART('freedom').w}</b><span>typed</span></div><div class="val">${n.freedom.map(f => `<span class="free" style="width:fit-content">${f}</span>`).join('')}</div></div>
+    </section>
+    <aside class="side">
+      <div class="count"><div><b>${typed}</b>words typed by ${first(ME)}</div><div><b>${given}</b>words that came from ${n.serves} and Data Atlas</div></div>
+      <ul class="checks" aria-live="polite"><p class="eyebrow" style="margin-bottom:var(--space-1)">Checked by rule as you go</p>${checks.map(([ok, w, d]) => `<li class="${ok ? '' : 'no'}"><span class="ic">${I(ok ? 'check' : 'circle-dashed', 14)}</span><span>${w}<span class="muted">${d}</span></span></li>`).join('')}</ul>
+      <p class="small muted">No blank form: it opens already holding the intent above. The fields people hate typing (limits, measures) arrive filled; the fields only they can write (why this floor, what it will do, what it lets people decide) are the ones left open.</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-f]').forEach(b => b.onclick = () => toggle(b.dataset.f));
+}
+function toggle(f) { S.picked = S.picked.includes(f) ? S.picked.filter(x => x !== f) : [...S.picked, f]; S.fresh = f; render(); }
+function replay() { clearLater(); S.picked = ['draw', 'outages']; S.fresh = null; settle(); render(); later(() => toggle('northFreed'), MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === ' ') { e.preventDefault(); toggle('northFreed'); } });
+replay();
+</script>
+</body>
+</html>

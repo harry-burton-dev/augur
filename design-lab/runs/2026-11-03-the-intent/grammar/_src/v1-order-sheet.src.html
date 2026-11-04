@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent sheet · V1 · The order sheet</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the five-paragraph order as the sheet. Situation comes before the intent; the method is left out on purpose ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-3)}
+.sheet{min-height:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 var(--space-6);align-content:start}
+.colp{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 var(--space-4);align-content:start}
+.para{display:contents}
+.para .n{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--ink-muted);padding-top:var(--space-3);text-align:right;min-width:var(--space-5)}
+.para .b{padding:var(--space-3) 0 var(--space-3);border-bottom:1px solid var(--hairline);display:grid;gap:var(--space-2)}
+.para .b > .eyebrow{display:flex;gap:var(--space-3);align-items:baseline}
+.para.lit .n{color:var(--light)}
+.para.lit .b > .eyebrow{color:var(--light)}
+.purpose{font-size:var(--type-body);line-height:var(--leading-body);color:var(--light);max-width:var(--measure-read)}
+.ends{display:grid;grid-template-columns:minmax(0,1fr) calc(var(--space-8) + var(--space-6)) auto;gap:var(--space-1) var(--space-4);align-items:center;font-size:var(--type-small);line-height:var(--leading-small)}
+.ends .v{font-family:var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.tasks li{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);display:flex;gap:var(--space-3)}
+.tasks li b{font:500 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.cols{display:grid;gap:var(--space-1)}
+.cols.two{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2) var(--space-3)}
+.sit li{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-3)}
+.sit .t{font-family:var(--font-mono);color:var(--ink-muted)}
+.gone{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);font-style:italic}
+.who{font-size:var(--type-small);line-height:var(--leading-small)}
+.wgrid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small)}
+.wgrid dt{color:var(--ink-muted)}
+.wgrid dd{margin:0;color:var(--ink);display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+aside{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.glos{display:grid;gap:var(--space-2)}
+.glos div{display:grid;gap:2px;padding-bottom:var(--space-2);border-bottom:1px solid var(--hairline)}
+.glos b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.glos span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+@media (max-width:1400px){.para .b{padding:var(--space-2) 0;gap:var(--space-1)}.purpose{font-size:var(--type-meta);line-height:var(--leading-meta)}.cols.two{grid-template-columns:minmax(0,1fr)}.lim{padding-top:0;padding-bottom:0}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent sheet · V1</b> the order sheet: situation, intent, limits, freedom, who · the five-paragraph order, ADP 6-0, Klein</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const ID = 'DEP-14', n = N(ID), up = N(n.serves);
+const S = { lit: 0 };
+function render() {
+  const lims = limitsOf(ID);
+  const paras = [
+    ['Situation', 'what is going on, before what we want', `<ul class="sit">${[DATA.incoming[6], DATA.incoming[0], DATA.incoming[1]].map(i => `<li><span class="t">${i.t}</span><span>${i.title}</span></li>`).join('')}</ul><p class="tk">paragraph 1 · situation (enemy, friendly, terrain, weather) · here: built from the incoming items this intent touches</p>`],
+    ['Intent', 'why, and what done looks like', `<p class="purpose">${n.purpose}</p>
+      <div class="ends">${n.end.map(e => `<span>${e.w}</span>${e.fact ? measure(e.fact) : '<span></span>'}<span class="v">${e.fact ? FACT(e.fact).now + ' ' + FACT(e.fact).unit : e.now || ''}</span>`).join('')}</div>
+      <ul class="tasks">${n.tasks.map(t => `<li><b>${t.id}</b>${t.w}</li>`).join('')}</ul>
+      <p class="gone">The method is left out on purpose: how each team does it is theirs.</p>
+      <p class="tk">paragraph 2 · mission and commander’s intent: purpose, key tasks, end state</p>`],
+    ['Limits', 'what must not happen, whatever the plan', `<div class="cols">${lims.map(l => limHTML(l)).join('')}</div><p class="tk">paragraph 3 · coordinating instructions: constraints and restraints · double bar = inherited from ${n.serves}, can be tightened, never loosened</p>`],
+    ['Freedom', 'what may be decided without asking', `<div class="cols two">${n.freedom.map(f => `<div class="free">${f}</div>`).join('')}</div>${n.branches.map(b => `<p class="small"><span class="muted">${b.id} · ${b.if}:</span> ${b.then}</p>`).join('')}<p class="tk">paragraph 3 · execution: disciplined initiative within intent · branches</p>`],
+    ['Who', 'who holds it, who it serves, who has said it back', `<dl class="wgrid"><dt>Holds it</dt><dd>${person(n.owner, P(n.owner).role)} · deputy ${P(n.deputy).name}</dd>
+      <dt>Serves</dt><dd>${ichip(n.serves)} <span class="muted">· ${TASK(n.serves, n.servesPart).id}: ${TASK(n.serves, n.servesPart).w}</span></dd>
+      <dt>Said back</dt><dd>${['TM-31', 'TM-30', 'TM-32'].map(t => `${ichip(t, { short: true, ring: N(t).state === 'briefed' ? 'open' : 'confirmed' })}`).join(' ')}<span class="muted">· ${N('TM-32').team} hasn’t yet</span></dd>
+      <dt>Drift</dt><dd><span class="drift">${n.assumptions.filter(a => a.state === 'crossed').length} of ${n.assumptions.length} assumptions no longer hold</span><span class="muted">· ${n.assumptions.find(a => a.state === 'crossed').now}</span></dd>
+      <dt>Decided</dt><dd>${n.decided} · review ${n.review}</dd></dl><p class="tk">paragraphs 4 and 5 · support, command and signal · backbrief state per holder</p>`]
+  ];
+  const para = ([w, q, body], i) => `<div class="para dep ${S.lit === i + 1 ? 'lit' : ''}" style="--i:${i}" data-p="${i + 1}"><span class="n">${i + 1}</span><div class="b"><p class="eyebrow"><span>${w}</span><span style="letter-spacing:var(--tracking-soft);text-transform:none">${q}</span></p>${body}</div></div>`;
+  $('#app').innerHTML = topHTML(['Mandate', F(n.floor).name, ID], [['1–5', 'paragraph'], ...STD], n.floor) +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;align-items:baseline;gap:var(--space-5);flex-wrap:wrap"><h1 class="title">${n.title}</h1><p class="eyebrow">${ichip(ID, { short: true })} · ${F(n.floor).name} · an intent in five paragraphs; situation first, method left out</p></div>
+    <section class="sheet" aria-label="${ID}: ${n.title}">
+      <div class="colp">${paras.slice(0, 2).map((x, i) => para(x, i)).join('')}</div>
+      <div class="colp">${paras.slice(2).map((x, i) => para(x, i + 2)).join('')}</div>
+    </section></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.lit = 0; settle(); render(); later(() => { S.lit = 1; render(); }, MOMENT()); later(() => { S.lit = 2; render(); }, MOMENT() + ms('--motion-still')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= 5) { S.lit = k; render(); } });
+replay();
+</script>
+</body>
+</html>

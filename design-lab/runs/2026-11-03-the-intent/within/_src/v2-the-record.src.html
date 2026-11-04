@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Acting within intent · V2 · The change record</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: a change made without asking records how it still serves the intent. Built from what was picked and checked, never typed, so it says exactly what it covers ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,1fr);gap:var(--space-6)}
+.rec{display:grid;gap:0;align-content:start;min-height:0}
+.slot{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-3)) minmax(0,1fr);gap:var(--space-4);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);transition:opacity var(--motion-base) var(--ease-out)}
+.slot dt{font-size:var(--type-small);line-height:var(--leading-meta);color:var(--ink-muted)}
+.slot dd{margin:0;display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);align-items:center;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.slot.wait{opacity:0}
+.chip{display:inline-flex;gap:var(--space-1);align-items:center;padding:1px var(--space-2);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);background:var(--surface-inset)}
+.chip.ok{border-color:var(--x-proposed-freedom)}
+.chip .ic{color:var(--x-proposed-lit)}
+.slot .within{white-space:normal}
+.note{font-style:italic;color:var(--ink-muted);font-size:var(--type-small)}
+.out{display:grid;gap:var(--space-3);align-content:start}
+.notice{padding:var(--space-4);display:grid;gap:var(--space-2)}
+.notice .s{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.notice .m{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.notice .acts{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.not{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding:var(--space-3);border:1px dashed var(--hairline);border-radius:var(--radius-inset)}
+.not b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.slot{grid-template-columns:calc(var(--space-8)) minmax(0,1fr);padding:var(--space-1) 0}.slot dd{font-size:var(--type-small);line-height:var(--leading-small)}.notice .s{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Acting within intent · V2</b> the change record: how it still serves the intent, built from what was picked, never typed · say what you sign for</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PL = DATA.plan, R = PL.record, OP = PL.chosen.map(OPTION), LIMS = limitsOf('YOU-31a');
+const S = { k: 0, sent: false };
+function slots() {
+  const th = sum(OP, o => o.thornleyMl);
+  return [
+    ['Changed', `<span>${R.changed.split(':')[0]}</span>`],
+    ['To', OP.map(o => `<span class="chip">${o.w} <span class="mono muted">+${o.gives}</span></span>`).join('')],
+    ['Because', `<span class="chip">${ITEM(PL.breaks).t} · ${ITEM(PL.breaks).short}</span>`],
+    ['So that', `<span class="so">so that</span> <span>${N('YOU-31a').end[0].w}</span> ${ichip('TM-31', { short: true })}`],
+    ['Freedom used', OP.map(o => `<span class="within">${I('git-merge', 12)} ${o.freedom}</span>`).join('')],
+    ['Limits held', `<span class="chip ok"><span class="ic">${I('check', 12)}</span>${LIMS.length} of ${LIMS.length}, checked by rule</span><span class="micro muted">${LIMS.map(l => l.id).join(' ')}</span>`],
+    ['Cost to the intent', `<span class="chip">Thornley ${th} Ml · ${(th / FACT('thornley').capMl * 100).toFixed(2)} points</span><span class="chip">£${sum(OP, o => o.cost)}k of £${DATA.spendCascade.find(x => x.iid === 'YOU-31a').k}k</span>`],
+    ['Told', R.told.map(p => `<span class="chip">${P(p).name}</span>`).join('')],
+    ['Ends', `<span>${R.ends}</span>`],
+    ['Undo', `<span>${R.undo}</span>`],
+    ['Note', `<span class="note">optional, one line, the only thing typed</span>`]
+  ];
+}
+function render() {
+  const sl = slots();
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', 'Change'], [['Space', 'record'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <section class="rec scroll" aria-label="The change record"><div style="margin-bottom:var(--space-3)"><p class="eyebrow">${P(R.by).name} · ${DATA.today} ${R.at} · within ${ichip(R.under, { short: true })}</p><h1 class="h">How this change still serves the intent</h1></div>
+      <dl>${sl.map(([k, v], i) => `<div class="slot ${i >= S.k ? 'wait' : ''}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
+      <p class="tk" style="margin-top:var(--space-2)">disciplined initiative: act within intent and report · the record is an audit event on the intent’s Ref</p></section>
+    <aside class="out" aria-live="polite"><p class="eyebrow">What the floor above gets ${S.sent ? `· sent ${R.at}` : '· when you record it'}</p>
+      <div class="notice inset" data-tier="department"><span>${ichip(R.under)}</span>
+        <p class="s">${P(R.by).name} changed ${lc1(R.changed.split(':')[0])} <span class="within">${I('git-merge', 12)} within ${R.under}</span></p>
+        <p class="m">${R.serves}</p>
+        <p class="m">${LIMS.length} limits held · ends ${R.ends.split(',')[0]}</p>
+        <div class="acts"><button class="btn sm">${I('eye', 14)} Seen</button><button class="btn sm">${I('message-circle-question', 14)} Ask a question</button></div>
+        <p class="micro muted">A notice, not an approval: the change already stands. A question doesn’t undo it.</p></div>
+      <div class="not"><b>What this record doesn’t cover</b>${PL.options.filter(o => !PL.chosen.includes(o.id)).map(o => `<span>${o.w}: not done${o.verdict === 'ask' || o.verdict === 'limit' ? ', would need ' + P(o.ask).name : ''}</span>`).join('')}</div>
+      <button class="btn ${S.k >= sl.length ? 'go' : ''}" ${S.k >= sl.length ? '' : 'aria-disabled="true"'} data-send>${I('git-merge', 14)} ${S.sent ? 'Recorded' : 'Record and act'} <span class="kbd">Space</span></button>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-send]').onclick = send;
+}
+function send() { if (S.k >= slots().length) { S.sent = true; render(); } }
+function replay() { clearLater(); S.k = 0; S.sent = false; settle(); render(); slots().forEach((_, i) => later(() => { S.k = i + 1; render(); }, MOMENT() + i * ms('--motion-instant') * 2)); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === ' ') { e.preventDefault(); send(); } });
+replay();
+</script>
+</body>
+</html>

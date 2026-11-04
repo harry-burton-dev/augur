@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent sheet · V5 · So that</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the "so that" ladder. Up answers why, down answers how. Two levels up in full; further up folded to a line, never hidden ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,1fr);gap:var(--space-7)}
+.ladder{display:flex;flex-direction:column-reverse;justify-content:flex-end;gap:0;min-height:0}
+.rungx{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr);gap:var(--space-4);align-items:start}
+.rungx .bar{width:3px;justify-self:center;align-self:stretch;background:var(--fc);border-radius:1px;min-height:var(--space-6)}
+.rungx .body{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);display:grid;gap:var(--space-1);text-align:left;width:100%}
+.rungx .body p.pp{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rungx .body .tt{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.rungx.far .body{padding:var(--space-2) var(--space-4);background:none;border-style:dashed}
+.rungx.far .body .tt{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.rungx.far .body p.pp{display:none}
+.rungx.focus .body{border-color:var(--x-proposed-thread);background:var(--x-proposed-thread-wash)}
+.link{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr);gap:var(--space-4);align-items:center;height:calc(var(--space-6) + var(--space-1))}
+.link .ln{justify-self:center;width:1px;height:100%;background:var(--x-proposed-thread);transform-origin:bottom;transform:scaleY(0);transition:transform var(--motion-slow) var(--ease-out)}
+.drawn .link .ln{transform:scaleY(1)}
+.drawn .link:nth-of-type(2) .ln{transition-delay:var(--motion-base)}
+.drawn .link:nth-of-type(3) .ln{transition-delay:var(--motion-calm)}
+.link .lab{display:flex;gap:var(--space-4);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.side{display:grid;align-content:start;gap:var(--space-5)}
+.breath{font-size:var(--type-lead);line-height:calc(var(--leading-lead) + var(--space-1));color:var(--ink);font-weight:300}
+.breath .so{font-size:var(--type-small);vertical-align:1px}
+.breath span.c{transition:opacity var(--motion-calm) var(--ease-out);opacity:var(--x-proposed-quiet)}
+.breath span.c.on{opacity:1;color:var(--light)}
+.rules li{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-3)}
+.rules li b{font:500 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+@media (prefers-reduced-motion: reduce){.link .ln{transition:none}}
+@media (max-width:1400px){.wrap{gap:var(--space-5);grid-template-columns:minmax(0,1.2fr) minmax(300px,1fr)}.rungx .body .tt{font-size:var(--type-body);line-height:var(--leading-body)}.breath{font-size:var(--type-body);line-height:var(--leading-lead)}.link{height:var(--space-6)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent sheet · V5</b> so that: up is why, down is how; two levels up in full · ADP 6-0 nesting, why-how laddering</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { focus: 0, drawn: false };
+const CH = DATA.chain; /* own part first, up to the Org */
+function render() {
+  const up = CH.slice(1);
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', 'So that'], [['↑', 'why?'], ['↓', 'how?'], ...STD], 'team') +
+  `<main class="main"><div class="wrap ${S.drawn ? 'drawn' : ''}">
+    <section class="ladder" aria-label="Your part and the intents it serves">
+      ${CH.map((id, i) => { const n = N(id), far = i > 2, srv = i > 0 ? TASK(id, N(CH[i - 1]).servesPart) : null;
+        return `${i ? `<div class="link"><span class="ln"></span><span class="lab"><span class="so">${I('arrow-up', 12)} so that</span><span>serves ${N(CH[i - 1]).servesPart}: ${srv ? srv.w : ''}</span></span></div>` : ''}
+        <div class="rungx ${far ? 'far' : ''} ${S.focus === i ? 'focus' : ''}" data-tier="${n.floor}"><span class="bar"></span>
+          <button class="body" data-i="${i}"><span class="eyebrow">${ichip(id, { short: true })} · ${i === 0 ? 'your part' : i === 1 ? 'one level up' : i === 2 ? 'two levels up' : 'further up · folded to a line, open it any time'} · ${P(n.owner).name}</span>
+          <span class="tt">${n.title}</span><p class="pp">${n.purpose}</p><span class="tk">${i <= 2 ? 'nesting: understood in full' : 'beyond two levels: read on request'}</span></button></div>`; }).join('')}
+    </section>
+    <aside class="side">
+      <div><p class="eyebrow" style="margin-bottom:var(--space-2)">Said in one breath</p>
+        <p class="breath">${CH.map((id, i) => `<span class="c ${i <= S.focus ? 'on' : ''}">${i === 0 ? N(id).tasks[0].w.replace(/^Set up/, 'I set up') : N(id).title}</span>`).join(' <span class="so">so that</span> ')}.</p></div>
+      <ul class="rules"><li><b>WHY</b>Read up. Each “so that” is the reason for the line below it. If it doesn’t read as a reason, the nesting is wrong.</li>
+        <li><b>HOW</b>Read down. Each line is one way the line above gets done, never the only way.</li>
+        <li><b>TWO UP</b>You see your own part, the floor above and the one above that in full. Further up is one line you can open, never hidden.</li>
+        <li><b>ONE TASK</b>Every part names the one key task above that it serves, so “so that” has an address.</li></ul>
+      <p class="tk">mission statement = task + purpose (“in order to”) · ADP 6-0: understand intent two levels up</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-i]').forEach(b => b.onclick = () => { S.focus = +b.dataset.i; render(); });
+}
+function replay() { clearLater(); S.focus = 0; S.drawn = false; settle(); render(); later(() => { S.drawn = true; $('.wrap').classList.add('drawn'); }, MOMENT()); later(() => { S.focus = 2; render(); }, MOMENT() + ms('--motion-spin')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === 'ArrowUp') { S.focus = Math.min(CH.length - 1, S.focus + 1); render(); } if (e.key === 'ArrowDown') { S.focus = Math.max(0, S.focus - 1); render(); } });
+replay();
+</script>
+</body>
+</html>

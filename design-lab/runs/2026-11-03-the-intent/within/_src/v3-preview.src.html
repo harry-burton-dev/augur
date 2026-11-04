@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Acting within intent · V3 · What the change touches</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: consequence preview for a change of plan. Tonight's water drawn as flows: planned, broken, changed. Beside it, everything the change touches, before it is made ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(320px,1fr);gap:var(--space-6)}
+.flow{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-3);min-height:0}
+.states{display:flex;gap:var(--space-2)}
+.states button{padding:var(--space-1) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.states button[aria-pressed="true"]{border-color:var(--x-proposed-thread);color:var(--light);background:var(--x-proposed-thread-wash)}
+svg.sk{width:100%;height:100%;min-height:0;overflow:visible}
+svg.sk .band{transition:d var(--motion-calm) var(--ease-out),opacity var(--motion-calm) var(--ease-out)}
+svg.sk text{font-family:var(--font-sans);font-size:var(--type-small);fill:var(--ink)}
+svg.sk text.big{font-size:var(--type-meta);fill:var(--light)}
+svg.sk text.mono{font-family:var(--font-mono);fill:var(--ink-muted)}
+.list{display:grid;gap:0;align-content:start;min-height:0}
+.c{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);transition:opacity var(--motion-base) var(--ease-out)}
+.c b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.c .ba{font-family:var(--font-mono);color:var(--ink);white-space:nowrap;text-align:right}
+.c .ba s{color:var(--ink-muted);text-decoration-color:var(--ink-muted)}
+.c .w{grid-column:1/-1;color:var(--ink-muted)}
+.c .meas{grid-column:1/-1}
+.c.dim{opacity:var(--x-proposed-quiet)}
+.verdict{margin-top:var(--space-3);padding:var(--space-3);border-left:2px solid var(--x-proposed-freedom);background:var(--x-proposed-freedom-wash);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+@media (max-width:1400px){.c .w{display:none}.wrap{gap:var(--space-5)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Acting within intent · V3</b> what the change touches: tonight’s water as flows, and every consequence, before it is made · consequence preview; Sankey</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PL = DATA.plan, R = PL.record, o1 = OPTION('o1'), o2 = OPTION('o2');
+const SRC = [['ashby', 'Ashby boreholes'], ['ryecroft', 'Ryecroft borehole'], ['thornley', 'Thornley reservoirs']];
+const FLOWS = { planned: { ashby: PL.need, ryecroft: 0, thornley: 0 }, broken: { ashby: PL.need - PL.gap, ryecroft: 0, thornley: 0 }, change: { ashby: PL.need - PL.gap, ryecroft: o1.gives, thornley: o2.gives } };
+const S = { st: 'broken' };
+function sankey() {
+  const W = 640, H = 360, x0 = 170, x1 = W - 150, scale = 22, f = FLOWS[S.st];
+  let ys = 30, yd = H / 2 - (PL.need * scale) / 2, out = '';
+  SRC.forEach(([k, w], i) => {
+    const v = f[k], h = v * scale, sy = 40 + i * 120;
+    out += `<text class="big" x="0" y="${sy + 6}">${w}</text><text class="mono" x="0" y="${sy + 26}">${v ? v + ' ' + PL.unit : k === 'ryecroft' ? 'standby' : 'resting'}</text>`;
+    if (v) { const a = sy - h / 2 + 4, b = yd; out += `<path class="band" d="M${x0},${a} C${(x0 + x1) / 2},${a} ${(x0 + x1) / 2},${b} ${x1},${b} L${x1},${b + h} C${(x0 + x1) / 2},${b + h} ${(x0 + x1) / 2},${a + h} ${x0},${a + h} Z" style="fill:${k === 'thornley' ? 'color-mix(in srgb, var(--x-proposed-drift) 40%, transparent)' : 'color-mix(in srgb, var(--info) 30%, transparent)'};stroke:${k === 'thornley' ? 'var(--x-proposed-drift)' : 'var(--info)'};stroke-width:1"/>`; yd += h; }
+  });
+  const got = f.ashby + f.ryecroft + f.thornley;
+  if (got < PL.need) out += `<rect x="${x1}" y="${yd}" width="16" height="${(PL.need - got) * scale}" style="fill:none;stroke:var(--x-proposed-standby);stroke-dasharray:var(--space-1) calc(var(--space-1) * .75)"/><text class="mono" x="${x1 + 24}" y="${yd + (PL.need - got) * scale / 2 + 4}" style="fill:var(--x-proposed-standby)">${PL.need - got} short</text>`;
+  const top = H / 2 - (PL.need * scale) / 2;
+  out += `<rect x="${x1}" y="${top}" width="16" height="${PL.need * scale}" style="fill:none;stroke:var(--hairline-strong)"/><text class="big" x="${x1 + 24}" y="${top + 4}">North zone, tonight</text><text class="mono" x="${x1 + 24}" y="${top + 24}">needs ${PL.need} ${PL.unit}</text>`;
+  return `<svg class="sk" viewBox="0 0 ${W + 120} ${H}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="Tonight's supply to North zone: ${S.st}">${out}</svg>`;
+}
+function render() {
+  const ch = S.st === 'change', th = o2.thornleyMl, pts = th / FACT('thornley').capMl * 100;
+  const cons = [
+    ['Kelda tonight', `<s>${PL.need - PL.gap}</s> → ${PL.need} ${PL.unit}`, 'Back to plan: North zone carries itself at night.', measure('kelda', { ghost: ch ? PL.need : PL.need - PL.gap })],
+    ['Thornley storage', `${FACT('thornley').now}% → ${(FACT('thornley').now - pts).toFixed(2)}%`, `${th} Ml over ${o2.days} days: ${pts.toFixed(2)} points of the ${FACT('thornley').target}% the Org needs by ${FACT('thornley').by}.`, ''],
+    ['Ryecroft licence', `0 → ${o1.gives} of ${o1.gives}`, `L1 held, with no headroom. ${o1.sample}; ${o1.start}.`, ''],
+    ['Spend', `£${o1.cost + o2.cost}k of £${DATA.spendCascade.find(x => x.iid === 'YOU-31a').k}k`, 'Inside the team’s freedom; D2 not reached.', ''],
+    ['Water Quality', 'samples daily', `${P('p6').name}’s team samples Ryecroft each day it is in supply. Told, not asked: L3 holds while samples are clear.`, ''],
+    ['Customers', 'none affected', 'No interruption; L2 not touched. Nothing said to the public; L4 not touched.', ''],
+    ['Told', R.told.map(first).join(', '), 'A notice each, with this list. Nobody’s yes is needed.', '']
+  ];
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', 'Preview'], [['1–3', 'planned · broken · change'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <section class="flow"><div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">${PL.tonight}, ${PL.from} to ${PL.to}</h1></div>
+      <div class="states" role="group" aria-label="Show">${[['planned', 'As planned'], ['broken', `After ${ITEM(PL.breaks).t}`], ['change', 'With the change']].map(([k, w], i) => `<button data-s="${k}" aria-pressed="${S.st === k}"><span class="kbd">${i + 1}</span> ${w}</button>`).join('')}</div>
+      ${sankey()}</section>
+    <aside class="list" aria-live="polite"><p class="eyebrow" style="margin-bottom:var(--space-2)">${ch ? 'What the change touches, before you make it' : 'Pick “with the change” to see what it touches'}</p>
+      ${cons.map(([k, ba, w, m]) => `<div class="c ${ch ? '' : 'dim'}"><b>${k}</b><span class="ba">${ch ? ba : '—'}</span><span class="w">${w}</span>${m ? `<span class="meas-wrap" style="grid-column:1/-1">${m}</span>` : ''}</div>`).join('')}
+      ${ch ? `<p class="verdict">${I('circle-check', 14)} Inside every limit. Within ${R.under}’s freedom and its branch plan. Against one key task, by ${pts.toFixed(2)} points, and the record will say so.</p>` : ''}
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-s]').forEach(b => b.onclick = () => { S.st = b.dataset.s; render(); });
+}
+function replay() { clearLater(); S.st = 'broken'; settle(); render(); later(() => { S.st = 'change'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= 3) { S.st = ['planned', 'broken', 'change'][k - 1]; render(); } });
+replay();
+</script>
+</body>
+</html>

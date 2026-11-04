@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The backbrief and drift · V6 · Cross-track error</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: drift as a navigator reads it. Each intent on your chain is a course; the needle is how far today's measure sits off the line, which side, and whether the gap is closing ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.rows{display:grid;align-content:center;gap:var(--space-4)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) minmax(0,1fr);gap:var(--space-6);align-items:center;padding:var(--space-3) 0;border-bottom:1px solid var(--hairline)}
+.row .nm{display:grid;gap:var(--space-1)}
+.row .nm b{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.row .nm span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cdi{position:relative;height:calc(var(--space-6) + var(--space-2))}
+.cdi .dots{position:absolute;left:0;right:0;top:50%;display:flex;justify-content:space-between;transform:translateY(-50%)}
+.cdi .dots i{width:var(--space-2);height:var(--space-2);border-radius:50%;border:1px solid var(--hairline-strong)}
+.cdi .dots i.c{width:2px;height:var(--space-6);border:0;border-radius:0;background:var(--ink-muted)}
+.cdi .needle{position:absolute;top:0;bottom:0;width:3px;border-radius:2px;background:var(--light);transform:translateX(-50%);transition:left var(--motion-spin) var(--ease-out)}
+.cdi .needle.off{background:var(--x-proposed-drift)}
+.cdi .side{position:absolute;bottom:calc(var(--space-4) * -1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.cdi .side.l{left:0}.cdi .side.r{right:0}
+.row .rd{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.row .rd .v{font-family:var(--font-mono);color:var(--ink)}
+.row .rd .tr{display:inline-flex;gap:var(--space-2);align-items:center;color:var(--ink-muted)}
+.row .rd .tr.opening{color:var(--x-proposed-drift)}
+.row .rd .tr.closing{color:var(--x-proposed-lit)}
+.foot{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);max-width:calc(var(--measure-wide) + var(--space-8))}
+@media (prefers-reduced-motion: reduce){.cdi .needle{transition:none}}
+@media (max-width:1400px){.row{gap:var(--space-4);grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) minmax(0,1fr)}.rows{gap:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>The backbrief and drift · V6</b> cross-track error: each intent a course; the needle is how far off the line and whether it closes · navigation, the CDI</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const X = DATA.xte, DOTS = 5;
+const S = { live: false };
+function pos(r) { const off = ((r.now - r.line) * r.better) / r.dot; const c = Math.max(-DOTS, Math.min(DOTS, off)); return 50 + (c / DOTS) * 50; }
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', 'On course?'], [...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">How far each intent on ${first(ME)}’s chain sits off its line today</h1><p class="small muted">One dot is a fixed amount per measure; centre is on the line; right is the good side</p></div>
+    <section class="rows" aria-live="polite">${X.map(r => { const f = FACT(r.fact), p = S.live ? pos(r) : 50, off = S.live && r.trend === 'opening';
+      return `<div class="row"><span class="nm">${ichip(r.iid, { short: true })}<b>${f.w}</b><span>${N(r.iid).title}</span></span>
+        <div class="cdi" role="img" aria-label="${f.w}: ${r.now} against a line of ${r.line}"><div class="dots">${Array.from({ length: DOTS * 2 + 1 }, (_, i) => `<i class="${i === DOTS ? 'c' : ''}"></i>`).join('')}</div><span class="needle ${off ? 'off' : ''}" style="left:${p}%"></span><span class="side l">behind</span><span class="side r">ahead</span></div>
+        <span class="rd"><span class="v">${r.now} against ${r.line} ${f.unit} today</span><span class="tr ${r.trend}">${I(r.trend === 'closing' ? 'arrow-right-to-line' : r.trend === 'opening' ? 'arrow-left-from-line' : 'minus', 14)} ${r.trend}</span><span class="muted">${r.note}</span></span></div>`; }).join('')}</section>
+    <p class="foot">Cross-track error is not a grade. A needle left of centre and closing (the Org) needs nothing; only one off the line and opening, marked in the drift tone, (${F('team').name}) is the question for its owner. Drift of the work moves the needle; drift of the world moves the line itself, and that is a question about the intent, not the people.</p>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.live = false; settle(); render(); later(() => { S.live = true; $$('.needle').forEach((nd, i) => { const p = pos(X[i]); nd.style.left = p + '%'; nd.classList.toggle('off', X[i].trend === 'opening'); }); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

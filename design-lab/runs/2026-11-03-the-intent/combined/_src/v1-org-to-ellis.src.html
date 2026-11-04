@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Combined · V1 · From the Org to Ellis, and back</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V1: the required flow. An Org intent followed down to one person, through a surprise that breaks the plan, a change made within intent without asking, and the floors above seeing why ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-2)}
+.st{display:grid;gap:2px;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);text-align:left;position:relative;transition:border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.st .d{display:flex;gap:var(--space-2);align-items:center;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted)}
+.st .d .kbd{margin-left:auto}
+.st b{font-weight:400;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.st[aria-current="step"]{border-color:var(--x-proposed-thread);background:var(--x-proposed-thread-wash)}
+.st[aria-current="step"] b{color:var(--light)}
+.st.done{border-color:var(--hairline-strong)}
+.st.surprise .d .dot{width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--x-proposed-standby)}
+.body{display:grid;grid-template-columns:calc(var(--measure-rail) * .9) minmax(0,1fr);gap:var(--space-6);min-height:0}
+.nest{display:grid;grid-template-rows:repeat(4,minmax(0,1fr));gap:var(--space-2);min-height:0;position:relative}
+.nb{display:grid;align-content:center;gap:2px;padding:var(--space-2) var(--space-3);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:linear-gradient(90deg,color-mix(in srgb,var(--fl) 22%,transparent),transparent 80%);transition:filter var(--motion-slow) var(--ease-standard),opacity var(--motion-slow) var(--ease-standard),border-color var(--motion-slow) var(--ease-standard)}
+.nb.far{filter:saturate(.35);opacity:var(--x-proposed-quiet)}
+.nb.near{border-color:var(--fc)}
+.nb .w{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--fc)}
+.nb .t{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.nb .o{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.nb .ev{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--x-proposed-thread)}
+.pane2{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-3)}
+.pane2 h1{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light)}
+.pane2 .sub{font-size:var(--type-small);color:var(--ink-muted)}
+.cnt{min-height:0;display:grid;gap:var(--space-4);align-content:start;transition:opacity var(--motion-base) var(--ease-out)}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-5)}
+.blk{display:grid;gap:var(--space-2);align-content:start}
+.blk .eyebrow{margin-bottom:var(--space-1)}
+.big{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300;max-width:var(--measure-read)}
+.ln{display:grid;grid-template-columns:minmax(0,1fr) calc(var(--space-8) + var(--space-5)) auto;gap:var(--space-3);align-items:center;font-size:var(--type-small);line-height:var(--leading-small)}
+.ln .v{font-family:var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.row{display:grid;grid-template-columns:var(--space-5) calc(var(--space-6) + var(--space-1)) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.row b{font:500 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.row .t{font-family:var(--font-mono);color:var(--ink-muted)}
+.row .w{color:var(--ink-muted);display:block}
+.row .ti{color:var(--light)}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:var(--space-3);align-items:center;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small)}
+.opt.on{background:var(--x-proposed-freedom-wash)}
+.opt .g{font-family:var(--font-mono);color:var(--ink-muted)}
+.sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+.sum div{border-top:1px solid var(--hairline-strong);padding-top:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sum b{display:block;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.card{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);display:grid;gap:var(--space-2)}
+.card.lit{border-color:var(--x-proposed-thread)}
+.card .s{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.card p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.card .acts{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.kind{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;padding:2px var(--space-2);border-radius:var(--radius-key);border:1px solid var(--x-proposed-thread);color:var(--ink);width:fit-content}
+.chain{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+q{quotes:none;font-style:italic;color:var(--ink);font-size:var(--type-meta);line-height:var(--leading-meta)}
+@media (max-width:1400px){.body{grid-template-columns:calc(var(--measure-rail) * .8) minmax(0,1fr);gap:var(--space-4)}.st b{font-size:var(--x-proposed-type-micro);line-height:1.4}.pane2 h1{font-size:var(--type-heading);line-height:var(--leading-heading)}.big{font-size:var(--type-body);line-height:var(--leading-body)}.nb .o{display:none}.two{gap:var(--space-4)}.hide-s{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V1</b> from the Org to Ellis, and back: down the nest, a surprise, a change within intent, the floors above see why · mission command end to end</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PL = DATA.plan, R = PL.record, CH = DATA.chain, FL = ['org', 'department', 'team', 'you'];
+const org = N('ORG-07'), dep = N('DEP-14'), tm = N('TM-31'), me = N('YOU-31a'), BB = DATA.backbriefs[0], G = PL.grant;
+const seamEnd = DATA.draftRounds[1].changes[0];
+const STEPS = [
+  { at: org.decided, fl: 'org', who: org.owner, short: `${P(org.owner).name} decides ORG-07`, h: org.title },
+  { at: dep.decided, fl: 'department', who: dep.owner, short: `DEP-14 written under it, by catchball`, h: dep.title },
+  { at: BB.at, fl: 'you', who: BB.who, short: `${first(BB.who)} says his part back`, h: `${me.title}, said back` },
+  { at: ITEM(PL.breaks).t, fl: 'you', who: ME, short: 'The plan breaks', h: `${PL.tonight}: ${PL.gap} ${PL.unit} short`, surprise: true },
+  { at: R.at, fl: 'you', who: R.by, short: 'Changed within intent, not asked', h: 'Changed within intent' },
+  { at: PL.noticeAt, fl: 'department', who: dep.owner, short: 'The floors above see why', h: 'The floors above see why' }
+];
+const S = { k: 4 };
+function nestHTML() {
+  const st = STEPS[S.k];
+  const ev = { org: [0, 5], department: [1, 5], team: [2], you: [2, 3, 4] };
+  return FL.map(fl => { const id = CH.find(c => floorOf(c) === fl), n = N(id), near = st.fl === fl || (S.k === 5 && fl === 'org');
+    return `<div class="nb ${near ? 'near' : 'far'}" data-tier="${fl}"><span class="w">${F(fl).word}</span><span class="t">${ichip(id, { short: true, ring: S.k >= 2 || fl === 'org' ? 'confirmed' : fl === 'department' && S.k >= 1 ? 'confirmed' : 'open' })} ${n.title}</span><span class="o">${P(n.owner).name}</span>${ev[fl].includes(S.k) ? `<span class="ev">${st.at} · ${st.short}</span>` : ''}</div>`; }).join('');
+}
+function content() {
+  const k = S.k;
+  if (k === 0) return `<div class="two"><div class="blk"><p class="eyebrow">${PART('purpose').w}</p><p class="big">${org.purpose}</p>
+      <p class="eyebrow" style="margin-top:var(--space-3)">${PART('end').w}</p>${org.end.map(e => `<div class="ln"><span>${e.w}</span>${e.fact ? measure(e.fact) : '<span></span>'}<span class="v">${e.fact ? FACT(e.fact).now + ' ' + FACT(e.fact).unit : e.now}</span></div>`).join('')}</div>
+    <div class="blk"><p class="eyebrow">${PART('limit').w} · each with the one person who can lift it</p>${org.limits.map(l => limHTML(Object.assign({ own: true }, l))).join('')}
+      <p class="eyebrow" style="margin-top:var(--space-3)">${PART('freedom').w}</p>${org.freedom.map(f => `<div class="free">${f}</div>`).join('')}<p class="small muted">No method. How each department takes load off Thornley is theirs.</p></div></div>`;
+  if (k === 1) return `<div class="two"><div class="blk"><p class="eyebrow">Serves</p><p class="chain">${ichip('DEP-14', { short: true })} <span class="so">so that</span> ${ichip('ORG-07', { short: true })} ${dep.servesPart}: ${TASK('ORG-07', dep.servesPart).w}</p>
+      <p class="eyebrow" style="margin-top:var(--space-3)">${PART('purpose').w}</p><p class="big">${dep.purpose}</p>
+      <p class="eyebrow" style="margin-top:var(--space-3)">Thrown down and back, ${DATA.draftRounds.length} rounds</p><div class="seam"><span class="struck">${seamEnd.was}</span><br>${seamEnd.now} <span class="micro muted">· from ${P(seamEnd.from).name}</span></div></div>
+    <div class="blk"><p class="eyebrow">${PART('limit').w} · ${dep.inherits.length} inherited, ${dep.limits.length} added</p>${dep.limits.map(l => limHTML(Object.assign({ own: true }, l))).join('')}
+      <p class="eyebrow" style="margin-top:var(--space-3)">Branch, agreed in catchball</p><div class="free">${dep.branches[0].id} · ${dep.branches[0].if}: ${dep.branches[0].then}</div>
+      <p class="eyebrow" style="margin-top:var(--space-3)">Passed down</p><p class="chain">${['TM-30', 'TM-31', 'TM-32'].map(t => ichip(t, { ring: N(t).state === 'force' ? 'confirmed' : 'open' })).join(' ')}</p></div></div>`;
+  if (k === 2) return `<div class="two"><div class="blk"><p class="eyebrow">${ringHTML('corrected')} ${P(BB.who).name} says it back, ${BB.at}</p><q>${BB.said}</q>
+      <div class="seam small" style="margin-top:var(--space-2)">${P(BB.correction.by).name}: ${BB.correction.w}</div></div>
+    <div class="blk"><p class="eyebrow">What saying it back unlocks</p><div class="card"><span class="s">${N(G.from[0]).freedom[+G.from[1].slice(1) - 1]}</span><p>From ${G.from.join(' ')} through ${G.via.join(' and ')} · until ${G.until}</p><p>A key derived from the intent, not issued by anyone. Until said back, every change asks.</p></div>
+      <p class="eyebrow" style="margin-top:var(--space-3)">The chain, in one breath</p><p class="chain">${CH.map((c, i) => `<span>${i === 0 ? me.tasks[0].w : N(c).title}</span>`).join(' <span class="so">so that</span> ')}</p></div></div>`;
+  if (k === 3) return `<div class="two"><div class="blk"><p class="eyebrow">What reached ${first(ME)}, ranked by the intents it touches</p>${ranked().slice(0, 4).map(it => `<div class="row"><b>${rankOf(it)}</b><span class="t">${it.t}</span><span><span class="ti">${it.title}</span><span class="w">${it.why}</span></span></div>`).join('')}<p class="small muted">An order set by rule, not a score: a limit and your own part come first.</p></div>
+    <div class="blk"><p class="eyebrow">Against what done looks like</p><div class="ln"><span>${FACT('kelda').w}</span>${measure('kelda', { ghost: PL.need - PL.gap })}<span class="v">${PL.need - PL.gap} of ${PL.need} tonight</span></div>
+      <p class="small">${ITEM(PL.breaks).why}</p><p class="small muted">${ITEM(PL.breaks).detail} Limit L3 of ${LIMIT('L3').intent} keeps borehole 3 out: only ${P(LIMIT('L3').owner).name} can lift it.</p></div></div>`;
+  if (k === 4) { const ch = PL.chosen.map(OPTION);
+    return `<div class="two"><div class="blk"><p class="eyebrow">Every option, checked by rule against ${limitsOf('YOU-31a').length} limits and the freedom</p>${PL.options.map(o => `<div class="opt ${PL.chosen.includes(o.id) ? 'on' : ''}"><span>${o.w}</span><span class="g">+${o.gives}</span>${vdHTML(o)}</div>`).join('')}</div>
+    <div class="blk"><p class="eyebrow">${P(R.by).name} takes branch ${dep.branches[0].id} · ${R.at}</p><div class="sum"><div><b>${sum(ch, o => o.gives)} of ${PL.gap}</b>filled</div><div><b>${sum(ch, o => o.thornleyMl)} Ml</b>Thornley · ${(sum(ch, o => o.thornleyMl) / FACT('thornley').capMl * 100).toFixed(2)} pts</div><div><b>£${sum(ch, o => o.cost)}k</b>of £${DATA.spendCascade.find(x => x.iid === 'YOU-31a').k}k</div><div><b>None</b>need a yes</div></div>
+      <p class="small" style="margin-top:var(--space-2)"><span class="so">so that</span> ${R.serves}</p><p class="chain"><span class="within">${I('git-merge', 12)} within ${R.under}</span><span class="small muted">${limitsOf('YOU-31a').length} of ${limitsOf('YOU-31a').length} limits held · told ${R.told.map(first).join(', ')} · ends ${R.ends.split(',')[0]}</span></p></div></div>`; }
+  return `<div class="two"><div class="blk"><p class="eyebrow">${P(dep.owner).name} · ${F('department').name} · ${PL.noticeAt}</p><div class="card lit"><span class="kind">Told, not asked</span><span class="s">${P(R.by).name} changed ${lc1(R.changed.split(':')[0])} <span class="within">${I('git-merge', 12)} within ${R.under}</span></span>
+      <p class="chain"><span>${me.tasks[0].w}</span><span class="so">so that</span><span>${tm.title}</span><span class="so">so that</span><span>${dep.title}</span></p><p>${R.serves}</p><div class="acts"><button class="btn sm">${I('eye', 14)} Seen</button><button class="btn sm">${I('message-circle-question', 14)} Ask a question</button></div><p class="micro muted">A question undoes nothing. Nobody was asked first.</p></div>
+      <div class="card"><span class="kind" style="border-color:var(--x-proposed-drift)">Asked once</span><span class="s">${dep.assumptions[0].w}: no longer holds</span><p>${dep.assumptions[0].now}. Keep ${R.under}, or amend it? The work goes on meanwhile.</p></div></div>
+    <div class="blk"><p class="eyebrow">${P(org.owner).name} · ${F('org').name} · this week, one line</p><div class="card"><span class="s">${ichip('ORG-07', { short: true })} 1 change within intent in ${F('department').name}</span><p>Thornley ${OPTION('o2').thornleyMl} Ml (${(OPTION('o2').thornleyMl / FACT('thornley').capMl * 100).toFixed(2)} points) for up to 72 hours, by branch ${dep.branches[0].id}, after a quality alert. All ${org.limits.length} Org limits held.</p></div>
+      <p class="small muted">Two levels up from ${first(R.by)}, ${first(dep.owner)} sees the change and why; three up, ${first(org.owner)} sees it folded into one line, open any time. Nobody above was asked, and everyone above can see why.</p></div></div>`;
+}
+function render() {
+  const st = STEPS[S.k];
+  $('#app').innerHTML = topHTML(['Mandate', 'From the Org to one person'], [['1–6', 'step'], ['←→', 'step'], ...STD], st.fl === 'you' ? 'team' : st.fl) +
+  `<main class="main"><div class="wrap">
+    <nav class="strip" aria-label="Steps">${STEPS.map((x, i) => `<button class="st ${i < S.k ? 'done' : ''} ${x.surprise ? 'surprise' : ''}" data-k="${i}" ${i === S.k ? 'aria-current="step"' : ''}><span class="d">${x.surprise ? '<span class="dot"></span>' : ''}${x.at}<span class="kbd">${i + 1}</span></span><b>${x.short}</b></button>`).join('')}</nav>
+    <div class="body"><aside class="nest" aria-label="The nest">${nestHTML()}</aside>
+      <section class="pane2"><div><p class="eyebrow">${st.at} · ${F(st.fl).word} · ${P(st.who).name}</p><h1>${st.h}</h1></div><div class="cnt scroll" aria-live="polite">${content()}</div></section></div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-k]').forEach(b => b.onclick = () => go(+b.dataset.k));
+}
+function go(k) { S.k = Math.max(0, Math.min(STEPS.length - 1, k)); render(); }
+function replay() { clearLater(); S.k = 4; settle(); render(); later(() => go(5), MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= 6) go(k - 1); if (e.key === 'ArrowRight') go(S.k + 1); if (e.key === 'ArrowLeft') go(S.k - 1); });
+replay();
+</script>
+</body>
+</html>

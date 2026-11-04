@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Combined · V2 · Ellis’s morning</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V2: a person's Home on the morning the plan breaks. The chain two up as one line; what reached them ranked by intent with the why; the rank-1 item opened as a change within intent, previewed, then recorded ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.chainbar{display:flex;align-items:center;gap:var(--space-2) var(--space-3);flex-wrap:wrap;padding:var(--space-2) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-pill);background:var(--surface-inset);font-size:var(--type-small);line-height:var(--leading-small)}
+.chainbar .far{opacity:var(--x-proposed-quiet)}
+.chainbar .r{margin-left:auto;color:var(--ink-muted);display:flex;gap:var(--space-3);align-items:center}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:var(--space-6);min-height:0}
+.list{display:grid;align-content:start;gap:0;min-height:0}
+.it{display:grid;grid-template-columns:var(--space-4) calc(var(--space-6) + var(--space-1)) minmax(0,1fr);gap:var(--space-1) var(--space-3);padding:var(--space-2) var(--space-2);border-bottom:1px solid var(--hairline);text-align:left;border-radius:var(--radius-key);transition:background var(--motion-base) var(--ease-standard)}
+.it b{font:500 var(--x-proposed-type-micro)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.it .t{font-family:var(--font-mono);font-size:var(--type-small);line-height:var(--leading-meta);color:var(--ink-muted)}
+.it .ti{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.it .why{grid-column:3;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.it .done{grid-column:3;display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--ink)}
+.it[aria-pressed="true"]{background:var(--surface-raised)}
+.it.unseen-row .ti{background:var(--x-proposed-unseen);width:fit-content;padding:0 var(--space-2);color:var(--ink-muted)}
+.fold{margin-top:var(--space-2);font-size:var(--type-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center;padding:var(--space-2)}
+.act{display:grid;grid-template-rows:auto auto auto minmax(0,1fr) auto;gap:var(--space-3);min-height:0;padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-card);background:var(--surface-pane)}
+.act h2{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.act .meas-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-3);align-items:center;font-size:var(--type-small)}
+.act .meas-row .v{font-family:var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.opts{display:grid;gap:2px;align-content:start;min-height:0}
+.opt{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr) auto auto;gap:var(--space-3);align-items:center;padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);text-align:left}
+.opt .pk{width:var(--space-4);height:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);display:inline-flex;align-items:center;justify-content:center}
+.opt.on{background:var(--x-proposed-freedom-wash)}
+.opt.on .pk{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit)}
+.opt .g{font-family:var(--font-mono);color:var(--ink-muted)}
+.foot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:var(--space-4);align-items:end;padding-top:var(--space-3);border-top:1px solid var(--hairline)}
+.foot div{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.foot b{display:block;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.touch{display:grid;gap:0;margin-top:var(--space-3)}
+.touch div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);padding:var(--space-1) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.touch div b{font-weight:400;font-family:var(--font-mono);color:var(--ink)}
+.rec{display:grid;gap:var(--space-2);padding:var(--space-3);border-left:2px solid var(--x-proposed-thread);background:var(--x-proposed-thread-wash);font-size:var(--type-small);line-height:var(--leading-small)}
+@media (max-width:1400px){.cols{gap:var(--space-4)}.it .why{display:none}.it[aria-pressed="true"] .why{display:block}.act{padding:var(--space-3)}.chainbar .r span.hide-s{display:none}.opt{padding:1px var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V2</b> Ellis’s morning: what reached him ranked by intent, the first item opened as a change within intent, recorded · Home “what needs you”</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PL = DATA.plan, R = PL.record, CH = DATA.chain;
+const S = { sel: PL.breaks, pick: [], done: false };
+function chainHTML() { return CH.map((c, i) => `<span class="${i > 2 ? 'far' : ''}" style="display:inline-flex;gap:var(--space-2);align-items:center">${ichip(c, { short: true, ring: 'confirmed' })}${i < 3 ? `<span>${N(c).title}</span>` : ''}</span>`).join(' <span class="so">so that</span> '); }
+function render() {
+  const its = ranked(), it = ITEM(S.sel), picked = PL.options.filter(o => S.pick.includes(o.id));
+  const filled = sum(picked, o => o.gives), asks = picked.filter(o => o.verdict === 'ask' || o.verdict === 'limit'), ok = filled >= PL.gap && !asks.length;
+  $('#app').innerHTML = topHTML(['Home', 'What needs you'], [['1–6', 'option'], ['Space', 'record'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <div class="chainbar" aria-label="Your intents">${chainHTML()}<span class="r"><span class="hide-s">${P(ME).name} · two up in full</span>${I('eye', 14)}</span></div>
+    <div class="cols">
+      <section class="list scroll" aria-label="What reached you, ranked"><p class="eyebrow" style="margin-bottom:var(--space-2)">${DATA.today} · since ${DATA.since} · ranked by the intents each touches</p>
+        ${its.map(x => `<button class="it ${x.restricted ? 'unseen-row' : ''}" data-i="${x.id}" aria-pressed="${x.id === S.sel}"><b>${rankOf(x)}</b><span class="t">${x.t}</span><span class="ti">${x.restricted ? x.short : x.title}</span>${S.done && x.id === PL.breaks ? `<span class="done"><span class="within">${I('git-merge', 12)} changed within ${R.under} · ${R.at}</span></span>` : `<span class="why">${x.why}</span>`}</button>`).join('')}
+        <p class="fold">${I('fold-vertical', 14)} ${DATA.untouched.length} touch none of your intents, folded</p></section>
+      <section class="act" aria-live="polite">
+        <div><p class="eyebrow">${I('triangle', 12)} ${ITEM(PL.breaks).t} · rank 1 · ${touchWord(topTouch(ITEM(PL.breaks))).split(':')[0]} of ${topTouch(ITEM(PL.breaks))[0]}</p><h2>${PL.tonight}: ${PL.gap} ${PL.unit} short</h2></div>
+        <div class="meas-row"><span class="small">${FACT('kelda').w}</span>${measure('kelda', { ghost: PL.need - PL.gap + filled })}<span class="v">${PL.need - PL.gap + filled} of ${PL.need}</span></div>
+        <p class="eyebrow">Ways to fill it · checked by rule against your ${limitsOf('YOU-31a').length} limits and your freedom</p>
+        <div class="opts scroll">${PL.options.map((o, i) => `<button class="opt ${S.pick.includes(o.id) ? 'on' : ''}" data-o="${o.id}"><span class="pk">${S.pick.includes(o.id) ? I('check', 12) : `<span class="micro">${i + 1}</span>`}</span><span>${o.w}</span><span class="g">+${o.gives}</span>${vdHTML(o)}</button>`).join('')}
+          ${picked.length ? `<div class="touch"><p class="eyebrow" style="margin-bottom:var(--space-1)">What it touches, before you record it</p>${[
+            ['Thornley storage', `${FACT('thornley').now}% → ${(FACT('thornley').now - sum(picked, o => o.thornleyMl) / FACT('thornley').capMl * 100).toFixed(2)}%`],
+            ['Ryecroft licence', S.pick.includes('o1') ? `${OPTION('o1').gives} of ${OPTION('o1').gives} · no headroom` : 'not used'],
+            ['Spend', `£${sum(picked, o => o.cost)}k of £${DATA.spendCascade.find(x => x.iid === 'YOU-31a').k}k`],
+            ['Customers', 'none affected · nothing said to the public']].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>` : ''}</div>
+        ${S.done ? `<div class="rec"><span><span class="within">${I('git-merge', 12)} within ${R.under}</span> recorded at ${R.at}. ${R.told.map(first).join(', ')} told; nobody asked.</span><span class="muted"><span class="so">so that</span> ${R.serves}</span></div>` :
+        `<div class="foot"><div><b>${filled} of ${PL.gap}</b>filled</div><div><b>${sum(picked, o => o.thornleyMl)} Ml</b>Thornley</div><div><b>${asks.length ? asks.map(o => first(o.ask)).join(', ') : 'Nobody'}</b>needs to say yes</div>
+          <button class="btn ${ok ? 'go' : ''}" data-rec ${ok ? '' : 'aria-disabled="true"'}>${I('git-merge', 14)} Record within ${R.under} <span class="kbd">Space</span></button></div>`}
+      </section></div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-i]').forEach(b => b.onclick = () => { S.sel = b.dataset.i; render(); });
+  $$('[data-o]').forEach(b => b.onclick = () => toggle(b.dataset.o));
+  $('[data-rec]')?.addEventListener('click', record);
+}
+function toggle(id) { if (S.done) return; S.pick = S.pick.includes(id) ? S.pick.filter(x => x !== id) : [...S.pick, id]; render(); }
+function record() { const p = PL.options.filter(o => S.pick.includes(o.id)); if (sum(p, o => o.gives) >= PL.gap && !p.some(o => o.verdict === 'ask' || o.verdict === 'limit')) { S.done = true; render(); } }
+function replay() { clearLater(); S.pick = []; S.done = false; S.sel = PL.breaks; settle(); render(); later(() => toggle('o1'), MOMENT() - ms('--motion-slow')); later(() => toggle('o2'), MOMENT()); later(record, MOMENT() + ms('--motion-spin')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= PL.options.length) toggle(PL.options[k - 1].id); if (e.key === ' ') { e.preventDefault(); record(); } });
+replay();
+</script>
+</body>
+</html>

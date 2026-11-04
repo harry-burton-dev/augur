@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent meets the situation · V5 · Against what done looks like</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the morning read against the measures your intents are judged by. Each item lands on the line it moves, with a ghost where it would leave it ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.rows{display:grid;align-content:start;gap:0;min-height:0}
+.r{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.6fr);gap:var(--space-5);align-items:center;padding:var(--space-3) 0;border-bottom:1px solid var(--hairline)}
+.r .nm{display:grid;gap:2px}
+.r .nm b{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.r .nm span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.r .bar{display:grid;gap:var(--space-1)}
+.r .bar .v{display:flex;justify-content:space-between;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted)}
+.r .bar .v b{font-weight:400;color:var(--light)}
+.r .tags{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.tag{display:grid;gap:2px;padding:var(--space-1) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);background:var(--surface-inset);transition:opacity var(--motion-calm) var(--ease-out)}
+.tag b{font-weight:400;color:var(--ink)}
+.tag span{color:var(--ink-muted)}
+.tag.hit{border-color:var(--x-proposed-drift);background:var(--x-proposed-drift-wash)}
+.wait .tag,.wait .m-ghost{opacity:0}
+.m-ghost{transition:opacity var(--motion-calm) var(--ease-out)}
+.r.empty .tags{color:var(--ink-muted);font-size:var(--type-small)}
+.none{display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;font-size:var(--type-small);color:var(--ink-muted)}
+@media (max-width:1400px){.r{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.5fr);gap:var(--space-4);padding:var(--space-2) 0}.tag span{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent meets the situation · V5</b> against what done looks like: each item lands on the measure it moves, a ghost where it would leave it · OKR key results</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const CH = DATA.chain;
+const S = { on: false };
+/* the measures on your chain, nearest intent first, each once */
+function measures() { const seen = new Set(), out = []; CH.forEach(c => (N(c).end || []).forEach(e => { if (e.fact && !seen.has(e.fact)) { seen.add(e.fact); out.push([e.fact, c, e.w]); } })); return out; }
+function render() {
+  const its = DATA.incoming.filter(i => i.moves), none = ranked().filter(i => !i.moves);
+  $('#app').innerHTML = topHTML(['Home', 'This morning', 'Against done'], [['Space', 'ghosts'], ...STD], 'team') +
+  `<main class="main"><div class="wrap ${S.on ? '' : 'wait'}">
+    <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">This morning, against what done looks like</h1><p class="small muted">${measures().length} measures on ${first(ME)}’s intents, nearest first · a dashed ghost is where an item would leave the line</p></div>
+    <section class="rows scroll">${measures().map(([f, c, w]) => { const on = its.filter(i => i.moves.fact === f), fa = FACT(f), g = on.find(i => i.moves.to != null);
+      return `<div class="r ${on.length ? '' : 'empty'}"><span class="nm"><b>${fa.w}</b><span>${ichip(c, { short: true })} ${w}</span></span>
+        <span class="bar">${measure(f, { ghost: g ? g.moves.to : null })}<span class="v"><span>from ${fa.start}</span><b>now ${fa.now} ${fa.unit}</b><span>done ${fa.target} · ${fa.by}</span></span></span>
+        <span class="tags">${on.length ? on.map(i => `<span class="tag ${i.moves.to != null && Math.abs(i.moves.to - fa.target) > Math.abs(fa.now - fa.target) ? 'hit' : ''}"><b>${i.t} · ${i.short}</b><span>${i.moves.w}</span></span>`).join('') : 'nothing this morning moves it'}</span></div>`; }).join('')}</section>
+    <p class="none">${I('circle-dashed', 14)} ${none.length} items move no measure, and still reached you by the rule: ${none.map(i => i.restricted ? `<span class="unseen">${i.short}</span>` : i.short).join(' · ')}</p>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.on = false; settle(); render(); later(() => { S.on = true; $('.wrap').classList.remove('wait'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === ' ') { e.preventDefault(); S.on = !S.on; $('.wrap').classList.toggle('wait', !S.on); } });
+replay();
+</script>
+</body>
+</html>

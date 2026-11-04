@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The backbrief and drift · V2 · Three gaps</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: Bungay's three gaps as the team's working list. Each gap has the wrong fix (more) and the right one (intent, said back, freedom), and this fortnight's cases ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4);min-height:0;align-items:start}
+.gap{display:grid;grid-template-rows:auto auto auto minmax(0,1fr);gap:var(--space-3);padding:var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);min-height:0}
+.gap h2{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.gap .bt{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.fix{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.fix .no{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--x-proposed-drift)}
+.fix .yes{color:var(--ink)}
+.fix .yes b{font-weight:400;color:var(--x-proposed-lit)}
+.cases{display:grid;gap:var(--space-2);align-content:start}
+.case{display:grid;gap:2px;padding:var(--space-2) var(--space-3);border-left:2px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small);transition:border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.case b{font-weight:400;color:var(--light)}
+.case .who{color:var(--ink-muted)}
+.case .st{color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.case.closed{border-left-color:var(--x-proposed-lit)}
+.case.open{border-left-color:var(--x-proposed-standby);background:var(--x-proposed-standby-wash)}
+.case.fresh{border-left-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.tally{display:flex;gap:var(--space-5);font-size:var(--type-small);color:var(--ink-muted);flex-wrap:wrap}
+.tally b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.gap{padding:var(--space-3)}.gap h2{font-size:var(--type-heading);line-height:var(--leading-heading)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>The backbrief and drift · V2</b> three gaps: knowledge, alignment, effects; each with the wrong fix (more) and the right one · Bungay, The Art of Action (2011)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p4';
+const G = DATA.gaps;
+const S = { closedNow: false };
+function render() {
+  const all = G.flatMap(g => g.cases), open = all.filter(c => c.state === 'open').length;
+  $('#app').innerHTML = topHTML(['Mandate', F('team').name, 'Gaps'], [...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">Where ${F('team').name} and ${ichip('TM-31', { short: true })} come apart</h1><p class="small muted">${P(ME).name}’s view · this fortnight · ${open} open</p></div>
+    <section class="cols">${G.map(g => `<article class="gap"><h2>${g.w}</h2><p class="bt">The gap between ${g.between}.</p>
+      <div class="fix"><span class="no">${g.wrong}</span><span class="yes"><b>${I('arrow-right', 12)}</b> ${g.right}</span></div>
+      <div class="cases scroll">${g.cases.map(c => { const st = c.state === 'closed' ? 'closed' : 'open'; const fresh = S.closedNow && c.who === 'p5' && g.id === 'effects';
+        return `<div class="case ${fresh ? 'fresh' : st}"><span class="who">${P(c.who).name}</span><b>${c.w}</b><span class="st">${I(st === 'closed' ? 'check' : 'circle-dashed', 12)} ${c.closed}</span></div>`; }).join('')}</div>
+      <span class="tk">${g.id} gap · ${g.wrong} makes it worse</span></article>`).join('')}</section>
+    <p class="tally"><span>Each gap has an AUGUR answer: <b>knowledge</b> by the situation ranked by intent, <b>alignment</b> by the backbrief, <b>effects</b> by freedom to act within intent and a watch on drift.</span></p>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.closedNow = false; settle(); render(); later(() => { S.closedNow = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

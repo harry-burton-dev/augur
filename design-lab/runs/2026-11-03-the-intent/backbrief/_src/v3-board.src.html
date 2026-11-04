@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The backbrief and drift · V3 · The said-back board</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: the team lead's board. Everyone holding the intent, whether they've said it back, in their words, what they missed and what was corrected. Rotation shows as open rings ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-4)}
+.sum{display:flex;gap:var(--space-5);align-items:center;flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.sum span{display:inline-flex;gap:var(--space-2);align-items:center}
+.sum b{font:300 var(--type-heading)/1 var(--font-sans);color:var(--light)}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--measure-card) * .9),1fr));gap:var(--space-3);align-content:start;min-height:0}
+.p{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);transition:border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.p .hd{display:flex;gap:var(--space-2);align-items:center}
+.p .hd b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.p .hd .r{margin-left:auto;font-size:var(--type-small);color:var(--ink-muted)}
+.p .role{font-size:var(--type-small);color:var(--ink-muted)}
+.p q{quotes:none;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);font-style:italic}
+.p .cor{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-left:2px solid var(--x-proposed-seam);padding-left:var(--space-2)}
+.p .miss{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--x-proposed-standby)}
+.p.open{border-style:dashed}
+.p.new{border-color:var(--x-proposed-thread);background:var(--x-proposed-thread-wash)}
+.p.na{opacity:var(--x-proposed-quiet)}
+.p .acts{display:flex;gap:var(--space-2)}
+@media (max-width:1400px){.board{grid-template-columns:repeat(3,minmax(0,1fr))}.p{padding:var(--space-2) var(--space-3)}.p .cor{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>The backbrief and drift · V3</b> the said-back board: who holds the intent, in their words, what they missed; rotation is an open ring · Bungay</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p4';
+const BB = DATA.backbriefs;
+const S = { arrived: false };
+function state(b) { return b.state; }
+function render() {
+  const holders = BB.filter(b => b.state !== 'na');
+  const count = st => holders.filter(b => state(b) === st || (st === 'confirmed' && state(b) === 'corrected')).length;
+  $('#app').innerHTML = topHTML(['Mandate', F('team').name, 'TM-31', 'Said back'], [...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">Who has said ${ichip('TM-31', { short: true })} back</h1><p class="small muted">${P(ME).name} · ${F('team').name} · ${DATA.today} ${DATA.now}</p></div>
+    <p class="sum"><span><b>${count('confirmed')}</b>${ringHTML('confirmed')} said back</span><span><b>${count('open')}</b>${ringHTML('open')} not yet: an open question</span><span>Freedom within TM-31 unlocks only for the filled rings</span></p>
+    <section class="board scroll">${BB.map(b => { const st = state(b), arr = b.who === 'p18' && S.arrived ? b.arrives : null;
+      return `<article class="p ${st === 'open' ? 'open' : ''} ${arr ? 'new' : ''} ${st === 'na' ? 'na' : ''}"><span class="hd">${ringHTML(st)}<b>${P(b.who).name}</b><span class="r">${arr ? arr.at + ' today · waiting for you' : b.at || ''}</span></span><span class="role">${P(b.who).role}${b.note && !arr ? ' · ' + b.note : ''}</span>
+        ${arr ? `<q>${arr.said}</q><span class="miss">didn’t say: ${arr.misses.map(m => PART(m) ? PART(m).w.toLowerCase() : m).join(', ')}</span>` : b.said ? `<q>${b.said.length > 150 ? b.said.slice(0, 147) + '…' : b.said}</q>${b.correction ? `<span class="cor">${first(b.correction.by)}: ${b.correction.w}</span>` : ''}` : `<span class="small muted">${st === 'na' ? 'Reads TM-31; holds TM-32.' : b.away ? 'Away ' + b.away + '. Asked on return; works to the intent meanwhile, asking for any change.' : 'Asked yesterday. Until it is said back, every change asks.'}</span>`}
+        <span class="acts">${arr ? `<button class="btn sm go">${I('check', 14)} Confirm</button><button class="btn sm">${I('pencil', 14)} Correct: the purpose</button>` : ''}</span></article>`; }).join('')}</section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.arrived = false; settle(); render(); later(() => { S.arrived = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

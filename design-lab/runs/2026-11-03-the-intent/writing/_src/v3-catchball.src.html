@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Writing an intent · V3 · Catchball</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: Hoshin catchball. The draft is thrown down to the people who'll do it and back up to the floor above; every reply that moves a field leaves a seam with its name ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,1fr);gap:var(--space-6)}
+.doc{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-3);min-height:0}
+.rounds{display:flex;gap:var(--space-2)}
+.rounds button{padding:var(--space-1) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.rounds button[aria-pressed="true"]{border-color:var(--x-proposed-thread);color:var(--light);background:var(--x-proposed-thread-wash)}
+.fields{display:grid;gap:var(--space-3);align-content:start}
+.f{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-3)) minmax(0,1fr);gap:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid var(--hairline)}
+.f dt{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);padding-top:2px}
+.f dd{margin:0;display:grid;gap:var(--space-1);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.f dd .seam{display:grid;gap:2px;font-size:var(--type-meta)}
+.f dd .seam .by{font-size:var(--type-small);color:var(--ink-muted)}
+.thread{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-3);border-left:0;padding-left:0;margin-left:0}
+.msgs{display:grid;gap:var(--space-2);align-content:start}
+.msg{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-inset);transition:opacity var(--motion-calm) var(--ease-out)}
+.msg .dir{color:var(--ink-muted);padding-top:2px}
+.msg .h{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);flex-wrap:wrap}
+.msg .h b{font-weight:400;color:var(--ink)}
+.msg p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.msg.cur{background:var(--surface-inset)}
+.msg.later{opacity:var(--x-proposed-quiet)}
+.msg .moved{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--x-proposed-seam)}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,1.1fr) minmax(300px,1fr);gap:var(--space-5)}.f{grid-template-columns:calc(var(--space-8)) minmax(0,1fr)}.f dd{font-size:var(--type-small);line-height:var(--leading-small)}.msg{padding:var(--space-1) var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Writing an intent · V3</b> catchball: thrown down and up; each reply that moves a field leaves a named seam · Hoshin Kanri, ADR 0028</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const n = N('DEP-14'), CB = DATA.catchball, R = DATA.draftRounds;
+const S = { r: 1 };
+const LBL = { end: 'Done looks like', task: 'Key tasks', freedom: 'Freedom', assumption: 'Assumes' };
+function fieldLines(field) {
+  /* the field as it stands at round S.r, with seams for what moved up to then */
+  const base = R[0].base[field];
+  const done = R.filter(x => x.r <= S.r).flatMap(x => x.changes.map(c => Object.assign({ r: x.r }, c))).filter(c => c.field === field);
+  let lines = base.map(w => ({ w }));
+  done.forEach(c => {
+    if (c.was && c.now) lines = lines.map(l => l.w === c.was ? { w: c.now, was: c.was, by: c.from, r: c.r } : l);
+    else if (c.now) lines.push({ w: c.now, added: true, by: c.from, r: c.r });
+    else if (c.was) lines = lines.map(l => l.w === c.was ? { w: c.was, gone: true, by: c.from, r: c.r } : l);
+  });
+  return lines;
+}
+function render() {
+  const msgs = CB;
+  $('#app').innerHTML = topHTML(['Mandate', F('department').name, 'DEP-14 draft', 'Catchball'], [['1–3', 'round'], ...STD], 'department') +
+  `<main class="main"><div class="wrap">
+    <section class="doc"><div style="display:flex;gap:var(--space-4);align-items:center;flex-wrap:wrap"><p class="eyebrow">${ichip('DEP-14', { short: true })} · draft after round</p>
+      <div class="rounds" role="group" aria-label="Round">${R.map(x => `<button data-r="${x.r}" aria-pressed="${x.r === S.r}">${x.r}</button>`).join('')}</div></div>
+      <p class="small muted">${S.r === 1 ? `As ${first(n.owner)} first threw it down on ${CB[0].at}.` : `${R.filter(x => x.r <= S.r).reduce((t, x) => t + x.changes.length, 0)} changes so far, each from a named reply. Nothing is overwritten: the old words stay under a seam.`}</p>
+      <dl class="fields scroll">${['end', 'task', 'freedom', 'assumption'].map(f => `<div class="f"><dt>${LBL[f]}</dt><dd>${fieldLines(f).map(l => l.was ? `<span class="seam"><span class="struck">${l.was}</span><span>${l.w}</span><span class="by">round ${l.r} · from ${P(l.by).name}</span></span>` : l.added ? `<span class="seam"><span>${l.w}</span><span class="by">added in round ${l.r} · from ${P(l.by).name}</span></span>` : l.gone ? `<span class="seam"><span class="struck">${l.w}</span><span class="by">dropped in round ${l.r} · ${P(l.by).name} can’t</span></span>` : `<span>${l.w}</span>`).join('') || '<span class="muted">none yet</span>'}</dd></div>`).join('')}
+        <p class="tk">Hoshin Kanri catchball: targets negotiated between levels; the record keeps each throw</p></dl>
+    </section>
+    <section class="thread"><p class="eyebrow">The throws · on the intent itself</p>
+      <div class="msgs scroll">${msgs.map(m => { const up = N(Object.keys(DATA.intents).find(k => N(k).owner === m.to[0]) || 'DEP-14'); const down = P(m.from).floor === 'department' && m.to.every(t => P(t).floor === 'team'); const toOrg = m.to.some(t => P(t).floor === 'org');
+        return `<div class="msg ${m.r === S.r ? 'cur' : m.r > S.r ? 'later' : ''}"><span class="dir">${I(down ? 'arrow-down' : toOrg ? 'arrow-up' : P(m.from).floor === 'org' ? 'arrow-down' : 'arrow-up', 16)}</span>
+          <div><p class="h"><b>${P(m.from).name}</b><span>to ${m.to.map(t => P(t).name).join(', ')}</span><span>· ${m.at} · round ${m.r}</span></p><p>${m.w}</p>${m.moved ? `<span class="moved">moved: ${LBL[m.moved] || m.moved}</span>` : ''}</div></div>`; }).join('')}
+      </div></section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-r]').forEach(b => b.onclick = () => { S.r = +b.dataset.r; render(); });
+}
+function replay() { clearLater(); S.r = 1; settle(); render(); later(() => { S.r = 2; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= R.length) { S.r = k; render(); } });
+replay();
+</script>
+</body>
+</html>

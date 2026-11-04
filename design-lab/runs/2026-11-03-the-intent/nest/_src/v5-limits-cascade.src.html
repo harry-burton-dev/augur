@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The nest · V5 · Limits flow down</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the nest read by its limits. Each floor inherits every limit above, may add or tighten, never loosen. Freedom only narrows on the way down ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto auto;align-content:start;gap:var(--space-4)}
+.grid{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr));align-content:start;min-height:0;overflow:auto}
+.grid > div{padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);display:flex;align-items:center;gap:var(--space-2);min-width:0}
+.grid .hd{border-bottom-color:var(--hairline-strong);color:var(--ink-muted);align-items:flex-end}
+.grid .lw{color:var(--ink)}
+.grid .lw b{font:500 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);min-width:2.2em}
+.cell{transition:opacity var(--motion-calm) var(--ease-out)}
+.cell.wait{opacity:0}
+.mk{display:inline-block;width:var(--space-5);height:var(--space-4);flex:none}
+.mk.set{border-left:3px solid var(--x-proposed-ceiling);background:var(--surface-raised)}
+.mk.inh{border-left:4px double var(--x-proposed-ceiling)}
+.mk.tight{border-left:3px solid var(--x-proposed-thread);background:var(--x-proposed-thread-wash)}
+.grid .sec{grid-column:1/-1;font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);padding-top:var(--space-4);border-bottom:0}
+.spend{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr));align-items:end}
+.spend > div{padding:var(--space-2) var(--space-3);display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.sbar{height:var(--space-3);background:var(--x-proposed-freedom-wash);border:1px dashed var(--x-proposed-freedom);border-radius:2px;transition:width var(--motion-calm) var(--ease-out)}
+.spend .v{font-family:var(--font-mono);color:var(--light)}
+.legend{display:flex;gap:var(--space-5);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted);align-items:center}
+.legend span{display:inline-flex;gap:var(--space-2);align-items:center}
+@media (max-width:1400px){.grid > div{padding:var(--space-1) var(--space-2)}.grid .hd .ichip .it{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>The nest · V5</b> limits flow down: each floor inherits every limit above, may add or tighten, never loosen · schemes of delegation, strictest wins</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const CH = [...DATA.chain].reverse(); /* Org first */
+const S = { col: 0 };
+function cell(lim, iid) {
+  const at = CH.indexOf(iid), home = CH.indexOf(lim.intent);
+  if (at < home) return '<span class="muted">—</span>';
+  if (at === home) return `<span class="mk set"></span><span>${lim.tight ? 'tightens ' + lim.tight : 'set here'}</span>`;
+  const by = limitsOf(iid).find(x => x.tightens === lim.id);
+  if (by) return `<span class="mk tight"></span><span>tightened by ${by.id}</span>`;
+  return `<span class="mk inh"></span><span class="muted">inherited</span>`;
+}
+function render() {
+  const lims = [...limitsOf('ORG-07'), ...N('DEP-14').limits.map(l => Object.assign({ intent: 'DEP-14' }, l)), ...N('TM-31').limits.map(l => Object.assign({ intent: 'TM-31' }, l))].map(l => Object.assign({}, l, { tight: l.tightens || null }));
+  const max = Math.max(...DATA.spendCascade.map(x => x.k));
+  $('#app').innerHTML = topHTML(['Mandate', 'The nest', 'Limits'], [['Space', 'next floor'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <p class="legend"><span><span class="mk set"></span>set on this floor, with its owner</span><span><span class="mk inh"></span>inherited, can’t be loosened here</span><span><span class="mk tight"></span>tightened below</span><span>${I('arrow-down', 14)} read down: each floor holds everything above it</span></p>
+    <section class="grid" aria-label="Limits by floor">
+      <div class="hd">Limit · who can lift it</div>${CH.map((id, i) => `<div class="hd cell ${i > S.col ? 'wait' : ''}">${ichip(id)}</div>`).join('')}
+      ${lims.map(l => `<div class="lw"><b>${l.id}</b><span>${l.w} <span class="muted">· ${P(l.owner).name}</span></span></div>${CH.map((id, i) => `<div class="cell ${i > S.col ? 'wait' : ''}">${cell(l, id)}</div>`).join('')}`).join('')}
+      <div class="sec">Freedom to spend on one change, without asking</div>
+    </section>
+    <section class="spend" aria-label="Spend freedom by floor"><div class="small muted">Narrows on the way down. Never wider than the floor above.</div>
+      ${DATA.spendCascade.map((x, i) => `<div class="cell ${i > S.col ? 'wait' : ''}"><span class="v">£${x.k}k</span><span class="sbar" style="width:${(x.k / max) * 100}%"></span><span class="micro muted">from ${x.by}${i && x.k === DATA.spendCascade[i - 1].k ? ' · same as above' : ''}</span></div>`).join('')}
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function step() { S.col = Math.min(CH.length - 1, S.col + 1); $$('.cell').forEach(c => c.classList.remove('wait')); render(); }
+function replay() { clearLater(); S.col = 0; settle(); render(); for (let i = 1; i < CH.length; i++) later(() => { S.col = i; render(); }, MOMENT() + (i - 1) * ms('--motion-slow')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === ' ') { e.preventDefault(); S.col = S.col >= CH.length - 1 ? 0 : S.col + 1; render(); } });
+replay();
+</script>
+</body>
+</html>

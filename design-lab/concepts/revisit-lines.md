@@ -16,3 +16,5 @@ Related: [watches say what they can't see](watches-say-what-they-cant-see.md), [
 Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): assumptions' signs and premortem watches become the revisit lines, and a crossing offers the hedge written at the table (combined V3).
 
 In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): the computed view reads only a decision's own lines ("no lines, no evaluation"); when an action's date moves, its line moves or the meeting says why (grammar V4, voices V6).
+
+In [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): the assumptions an intent rests on are watched and asked once at the crossing (grammar V4, backbrief V5).

@@ -1,0 +1,161 @@
+/* ---------------------------------------------------------------
+   Proposed tokens. All are mixes of kit tokens; listed as
+   "needs token" in each notes.md. Carried marks first, then new.
+   --------------------------------------------------------------- */
+:root{
+  /* carried: not yours to see (135 degree hatch), quiet, micro type, the lit next step */
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-quiet: .62;
+  --x-proposed-type-micro: .6875rem;
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  /* carried: pencil (reference desk), what a model wrote until a person accepts it */
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 70%, transparent);
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--ink) 3%, transparent);
+  /* carried: a visible repair (wear and time) */
+  --x-proposed-seam: color-mix(in srgb, var(--info) 70%, var(--ink));
+  --x-proposed-seam-wash: color-mix(in srgb, var(--info) 8%, transparent);
+  /* carried: the ceiling (apprentice), a solid bar. Here it draws a limit: what must not happen, whatever the plan */
+  --x-proposed-ceiling: color-mix(in srgb, var(--ink) 55%, transparent);
+  /* carried: standby lamp (apprentice), used for an open question: an intent passed down and not yet said back */
+  --x-proposed-standby: color-mix(in srgb, var(--warning) 45%, var(--light));
+  --x-proposed-standby-wash: color-mix(in srgb, var(--warning) 10%, transparent);
+  /* NEW: the thread, the "so that" line from a part to the intent it serves. Cool, quiet, never a floor colour */
+  --x-proposed-thread: color-mix(in srgb, var(--info) 45%, var(--ink-muted));
+  --x-proposed-thread-wash: color-mix(in srgb, var(--info) 6%, transparent);
+  /* NEW: freedom, the space a person may decide in without asking. A wash, edged by a dashed line, never a fill */
+  --x-proposed-freedom: color-mix(in srgb, var(--green) 45%, var(--ink-muted));
+  --x-proposed-freedom-wash: color-mix(in srgb, var(--green) 5%, transparent);
+  /* NEW: drift, work or the world off the intent's line. Warm and muted: a question, never an alarm */
+  --x-proposed-drift: color-mix(in srgb, var(--warning) 50%, var(--ink-muted));
+  --x-proposed-drift-wash: color-mix(in srgb, var(--warning) 6%, transparent);
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+h1,h2,h3,h4,p,ul,ol{margin:0}
+ul,ol{padding:0;list-style:none}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-muted)}
+.lite{color:var(--light)}
+.small{font-size:var(--type-small);line-height:var(--leading-small)}
+.meta{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.micro{font:400 var(--x-proposed-type-micro)/1.45 var(--font-mono);letter-spacing:var(--tracking-soft)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hints .on{color:var(--x-proposed-lit)}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.title{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0}
+.h{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);letter-spacing:var(--tracking-tight)}
+.h3{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.lead{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.rule{height:1px;background:linear-gradient(90deg,var(--hairline-strong),transparent)}
+.pane{background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset);backdrop-filter:blur(var(--surface-blur))}
+.inset{background:var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-inset)}
+
+/* floors */
+[data-tier="department"]{--fc:var(--floor-department-high);--fl:var(--floor-department-low)}
+[data-tier="team"]{--fc:var(--floor-team-high);--fl:var(--floor-team-low)}
+[data-tier="org"]{--fc:var(--floor-org-high);--fl:var(--floor-org-low)}
+[data-tier="you"]{--fc:var(--floor-you-high);--fl:var(--floor-you-low)}
+.fchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-4);height:2px;background:var(--fc);border-radius:1px}
+.fword{color:var(--fc)}
+
+/* two registers: doctrine words one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* the intent chip: floor bar, id, title. The ring says whether its holder has said it back */
+.ichip{display:inline-flex;align-items:center;gap:var(--space-2);text-transform:none;letter-spacing:normal;font-family:var(--font-sans);max-width:100%;min-width:0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap;vertical-align:middle}
+.ichip::before{content:"";flex:none;width:3px;height:var(--space-4);border-radius:1px;background:var(--fc)}
+.ichip .iid{font:500 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--fc)}
+.ichip .it{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ichip.lg{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.ichip.lg::before{height:var(--space-5)}
+.ichip.restricted .it{background:var(--x-proposed-unseen);padding:0 var(--space-2);border-radius:2px;color:var(--ink-muted)}
+
+/* said back: hollow while it is an open question, half when corrected, full when confirmed */
+.ring{display:inline-block;flex:none;width:var(--space-3);height:var(--space-3);border-radius:50%;border:1.5px solid var(--x-proposed-standby);vertical-align:-1px}
+.ring.confirmed{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit)}
+.ring.corrected{border-color:var(--x-proposed-lit);background:linear-gradient(90deg,var(--x-proposed-lit) 50%,transparent 50%)}
+.ring.open{background:var(--x-proposed-standby-wash)}
+.ring.na{border-color:var(--hairline-strong);border-style:dotted}
+
+/* a limit: a solid bar on the left, never a hatch (hatch means "not yours to see") */
+.lim{display:flex;gap:var(--space-3);align-items:flex-start;padding:var(--space-1) 0 var(--space-1) var(--space-3);border-left:3px solid var(--x-proposed-ceiling);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.lim .lid{font:500 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted);flex:none;min-width:2.4em}
+.lim .lo{margin-left:auto;color:var(--ink-muted);white-space:nowrap;padding-left:var(--space-3)}
+.lim.inh{border-left-style:double;border-left-width:4px}
+.lim.cross{border-left-color:var(--x-proposed-drift);background:var(--x-proposed-drift-wash)}
+/* freedom: a dashed open edge and a faint wash */
+.free{padding:var(--space-1) var(--space-3);border:1px dashed var(--x-proposed-freedom);border-right:0;border-radius:var(--radius-key) 0 0 var(--radius-key);background:var(--x-proposed-freedom-wash);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+/* the thread: so that */
+.so{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-thread);white-space:nowrap}
+.thread{border-left:1px solid var(--x-proposed-thread);margin-left:var(--space-2);padding-left:var(--space-4)}
+/* within intent: the stamp a change carries */
+.within{display:inline-flex;align-items:center;gap:var(--space-2);padding:2px var(--space-2);border:1px solid var(--x-proposed-thread);border-radius:var(--radius-key);background:var(--x-proposed-thread-wash);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink);white-space:nowrap}
+/* drift */
+.drift{display:inline-flex;align-items:center;gap:var(--space-2);color:var(--ink);white-space:nowrap}
+.drift::before{content:"";width:var(--space-4);height:2px;background:var(--x-proposed-drift);transform:rotate(-14deg);border-radius:1px}
+.driftbox{border-left:2px solid var(--x-proposed-drift);background:var(--x-proposed-drift-wash);padding:var(--space-2) var(--space-3)}
+
+/* verdicts on an option: within, within but against a task, ask someone, across a limit */
+.vd{display:inline-flex;align-items:center;gap:var(--space-1);font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);white-space:nowrap;padding:1px var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);color:var(--ink)}
+.vd.within{border-color:var(--x-proposed-freedom);background:var(--x-proposed-freedom-wash);color:var(--light)}
+.vd.against{border-color:var(--x-proposed-freedom);border-style:dashed;color:var(--ink)}
+.vd.ask{border-color:var(--x-proposed-standby);color:var(--ink)}
+.vd.limit{border-color:var(--x-proposed-ceiling);background:var(--surface-inset);color:var(--ink-muted)}
+
+/* pencil and ink */
+.pencil{border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key)}
+.pencil .pt,.pt.pen{font-style:italic;color:var(--ink)}
+.pencil.inked{border-style:solid;border-color:var(--hairline-strong);background:none}
+.pencil.inked .pt{font-style:normal}
+.pen{font-style:italic}
+.seam{border-left:2px solid var(--x-proposed-seam);background:var(--x-proposed-seam-wash);padding:var(--space-1) var(--space-3)}
+.struck{text-decoration:line-through;text-decoration-color:var(--x-proposed-seam);color:var(--ink-muted)}
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);white-space:nowrap}
+
+/* rungs, carried from the situation work: data, information, context */
+.rung{display:inline-flex;align-items:center;gap:2px;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.rung i{display:inline-block;width:var(--space-1);height:var(--space-3);background:var(--hairline-strong);border-radius:1px}
+.rung i.on{background:var(--ink)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);white-space:nowrap;transition:background var(--motion-quick) var(--ease-standard),border-color var(--motion-quick) var(--ease-standard)}
+.btn:hover{background:var(--surface-raised)}
+.btn.sm{height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-3);font-size:var(--type-small)}
+.btn.go{border-color:var(--x-proposed-lit);color:var(--light);background:var(--x-proposed-lit-wash)}
+.btn.ask{border-color:var(--x-proposed-standby);color:var(--light);background:var(--x-proposed-standby-wash)}
+.btn[aria-disabled="true"]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+.btn[aria-pressed="true"]{background:var(--surface-raised);border-color:var(--ink-muted);color:var(--light)}
+
+/* app frame */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.top{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--slate-deep) 70%,transparent);min-width:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0;white-space:nowrap}
+.crumb{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);white-space:nowrap;min-width:0;overflow:hidden}
+.crumb b{font-weight:400;color:var(--light)}
+.crumb svg{opacity:var(--x-proposed-quiet);flex:none}
+.top .hints{margin-left:auto;justify-content:flex-end}
+.main{min-height:0;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));overflow:hidden}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+.x-cap{max-width:calc(100vw - 2 * var(--edge-tight))}
+
+/* a measure: where it started, where it is, where done is. Target is a tick, now is a dot */
+.meas{display:inline-block;width:100%;min-width:calc(var(--space-7) + var(--space-5));vertical-align:middle}
+.m-track{position:relative;display:block;height:var(--space-3);border-bottom:1px solid var(--hairline-strong)}
+.m-track i{position:absolute;display:block}
+.m-run{bottom:-1px;height:2px;background:var(--ink-muted)}
+.m-target{bottom:-1px;width:2px;height:var(--space-3);background:var(--light);transform:translateX(-1px)}
+.m-now{bottom:calc(var(--space-1) * -1 + 0px);width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--ink);transform:translateX(-50%)}
+.m-ghost{bottom:calc(var(--space-1) * -1 + 0px);width:var(--space-2);height:var(--space-2);border-radius:50%;border:1px dashed var(--x-proposed-drift);transform:translateX(-50%)}
+.who{white-space:nowrap}

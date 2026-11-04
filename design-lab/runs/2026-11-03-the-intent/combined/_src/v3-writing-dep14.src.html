@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Combined · V3 · Writing DEP-14</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V3: the intent editor. Starts from the intent above, limits locked and stories kept, measures picked from facts, catchball seams on what moved; rehearsed on last winter before it is passed down ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:var(--space-6)}
+.form{display:grid;gap:0;align-content:start;min-height:0}
+.row{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-2)) minmax(0,1fr);gap:var(--space-4);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline)}
+.row .lab{font-size:var(--type-small);line-height:var(--leading-meta);color:var(--ink-muted);display:grid;gap:2px;align-content:start}
+.row .lab b{font-weight:400;color:var(--ink);font-size:var(--type-meta)}
+.val{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.given{color:var(--ink-muted)}
+.typed{color:var(--light)}
+.fact{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(var(--space-8),1fr) auto;gap:var(--space-3);align-items:center}
+.fact .v{font-family:var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.story{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--x-proposed-thread);margin-left:auto;padding-left:var(--space-3);white-space:nowrap}
+.seamline{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--x-proposed-seam)}
+.lims{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px var(--space-4)}
+.lims .lim{padding-top:0;padding-bottom:0}
+.side{display:grid;gap:var(--space-4);align-content:start;min-height:0}
+.checks li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2);padding:var(--space-1) 0;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.checks .ic{color:var(--x-proposed-lit)}
+.checks .no .ic{color:var(--x-proposed-drift)}
+.case{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);padding:var(--space-2) var(--space-3);border-left:2px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small);transition:border-color var(--motion-base) var(--ease-standard),opacity var(--motion-calm) var(--ease-out)}
+.case .d{font-family:var(--font-mono);color:var(--ink-muted)}
+.case .a{grid-column:2;color:var(--ink-muted)}
+.case.ok{border-left-color:var(--x-proposed-lit)}
+.case.gap{border-left-color:var(--x-proposed-drift);background:var(--x-proposed-drift-wash)}
+.case.wait{opacity:var(--x-proposed-quiet)}
+.sug{padding:var(--space-2) var(--space-3);display:grid;gap:var(--space-2)}
+.pass{display:grid;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--hairline)}
+.pass .to{display:flex;gap:var(--space-3);flex-wrap:wrap}
+@media (max-width:1400px){.row{grid-template-columns:calc(var(--space-8) - var(--space-3)) minmax(0,1fr);padding:var(--space-1) 0;gap:var(--space-3)}.row .lab span{display:none}.lims{grid-template-columns:minmax(0,1fr)}.wrap{gap:var(--space-4);grid-template-columns:minmax(0,1.45fr) minmax(300px,1fr)}.case .a{display:none}.story{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V3</b> writing DEP-14: from the intent above, limits locked, measures picked, catchball seams, rehearsed before passing down</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const n = N('DEP-14'), up = N(n.serves), LW = DATA.lastWinter, PM = DATA.premortem, CB = DATA.catchball, RD = DATA.draftRounds;
+const S = { k: 0, added: false, passed: false };
+const storyFor = id => { const s = PM.stories.find(x => x.adds === id || x.match === id); return s ? PM.stories.indexOf(s) + 1 : null; };
+const seamFor = field => RD.flatMap(r => r.changes.map(c => Object.assign({ r: r.r }, c))).filter(c => c.field === field && c.now);
+function render() {
+    const gapOpen = S.k >= LW.length && !S.added;
+  const checks = [
+    [true, `Serves ${n.serves} ${n.servesPart}`],
+    [true, `Every done-looks-like line is a fact (${n.end.filter(e => e.fact).length} of ${n.end.length})`],
+    [true, `No limit looser than ${n.serves}`],
+    [true, `Each freedom says how far`],
+    [!gapOpen, gapOpen ? `Rehearsal found 1 gap` : `Rehearsed on last winter`]
+  ];
+  $('#app').innerHTML = topHTML(['Mandate', F('department').name, 'DEP-14', 'Draft 3'], [['A', 'add the line'], ['P', 'pass down'], ...STDG], 'department') +
+  `<main class="main"><div class="wrap">
+    <section class="form scroll" aria-label="DEP-14, draft 3"><div style="margin-bottom:var(--space-2)"><p class="eyebrow">${P(ME).name} · draft 3 · ${RD.length} rounds of catchball</p><h1 class="h">${n.title}</h1></div>
+      <div class="row"><div class="lab"><b>Serves</b><span>chosen first</span></div><div class="val"><span>${ichip(n.serves)} <span class="given">${n.servesPart}: ${TASK(n.serves, n.servesPart).w}</span></span></div></div>
+      <div class="row"><div class="lab"><b>${PART('purpose').w}</b><span>seeded from above</span></div><div class="val"><span><span class="given">${n.purpose.split(',')[0]},</span><span class="typed">${n.purpose.split(',').slice(1).join(',')}</span></span></div></div>
+      <div class="row"><div class="lab"><b>${PART('end').w}</b><span>picked from facts</span></div><div class="val">${n.end.map(e => `<div class="fact"><span>${e.w}</span>${measure(e.fact)}<span class="v">${FACT(e.fact).now} ${FACT(e.fact).unit}</span></div>`).join('')}${seamFor('end').map(c => `<span class="seamline">round ${c.r} · was “${c.was}” · from ${P(c.from).name}</span>`).join('')}</div></div>
+      <div class="row"><div class="lab"><b>${PART('task').w}</b><span>typed</span></div><div class="val">${n.tasks.map(t => `<span class="typed">${t.id} · ${t.w}${seamFor('task').some(c => c.now === t.w) ? ` <span class="seamline">added in catchball · ${P(seamFor('task').find(c => c.now === t.w).from).name}</span>` : ''}</span>`).join('')}</div></div>
+      <div class="row"><div class="lab"><b>${PART('limit').w}</b><span>${n.inherits.length} locked</span></div><div class="val"><div class="lims">${limitsOf('DEP-14').map(l => `<div class="lim ${l.own ? '' : 'inh'}"><span class="lid">${l.id}</span><span>${l.w}</span>${storyFor(l.id) ? `<span class="story">story ${storyFor(l.id)}</span>` : `<span class="lo">${I('lock', 12)}</span>`}</div>`).join('')}</div></div></div>
+      <div class="row"><div class="lab"><b>${PART('freedom').w}</b><span>typed</span></div><div class="val">${n.freedom.map(f => `<span class="free" style="width:fit-content">${f}</span>`).join('')}${S.added ? `<span class="free pencil inked" style="width:fit-content">${LW[2].suggest}</span>` : ''}</div></div>
+      <div class="row"><div class="lab"><b>Branch</b><span>from catchball</span></div><div class="val">${n.branches.map(b => `<span>${b.id} · ${b.if}: ${b.then} <span class="seamline">from ${P(seamFor('freedom')[0].from).name}, round ${seamFor('freedom')[0].r}</span></span>`).join('')}</div></div>
+      <div class="row"><div class="lab"><b>Assumes</b><span>watched</span></div><div class="val">${n.assumptions.map(a => `<span>${a.w}</span>`).join('')}</div></div>
+    </section>
+    <aside class="side scroll" aria-live="polite">
+      <div><p class="eyebrow" style="margin-bottom:var(--space-1)">Checked by rule</p><ul class="checks">${checks.map(([ok, w]) => `<li class="${ok ? '' : 'no'}"><span class="ic">${I(ok ? 'check' : 'circle-dashed', 14)}</span><span>${w}</span></li>`).join('')}</ul></div>
+      <div style="display:grid;gap:var(--space-2)"><p class="eyebrow">Rehearsed on last winter</p>${LW.map((c, i) => { const run = i < S.k, gap = run && !c.answered && !(S.added && i === 2);
+        return `<div class="case ${!run ? 'wait' : gap ? 'gap' : 'ok'}"><span class="d">${c.d.split(' ').slice(0, 2).join(' ')}</span><span>${c.w}</span><span class="a">${!run ? 'not played yet' : gap ? c.missing : c.answered || 'answered by the new freedom line'}</span></div>`; }).join('')}
+        ${gapOpen ? `<div class="sug ${STATE.gateway ? 'pencil' : 'inset'}">${STATE.gateway ? `<span class="pt">Freedom: “${LW[2].suggest}”</span><span class="micro muted">pencil · drafted from the case; yours to change or refuse</span>` : '<span class="small muted">Gateway off: write the line yourself, or pass it down with the gap named.</span>'}<button class="btn sm" data-add>${I('plus', 14)} Add <span class="kbd">A</span></button></div>` : ''}</div>
+      <div class="pass"><p class="eyebrow">Pass down</p><span class="to">${Object.keys(DATA.intents).filter(k => N(k).serves === 'DEP-14').map(t => `<span class="small">${ichip(t, { ring: S.passed ? 'open' : 'na' })}</span>`).join('')}</span>
+        <p class="small muted">${S.passed ? `Passed down. Each team is an open question until it says DEP-14 back; until then their changes still ask.` : 'Each team gets it as an open question: freedom unlocks when they say it back.'}</p>
+        ${S.passed ? '' : `<button class="btn ${gapOpen ? '' : 'go'}" data-pass>${I('send', 14)} Pass down to ${CB[0].to.length} teams <span class="kbd">P</span></button>`}</div>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-add]')?.addEventListener('click', add);
+  $('[data-pass]')?.addEventListener('click', pass);
+}
+function add() { S.added = true; render(); }
+function pass() { S.passed = true; render(); }
+function replay() { clearLater(); S.k = 0; S.added = false; S.passed = false; settle(); render(); LW.forEach((_, i) => later(() => { S.k = i + 1; render(); }, MOMENT() + i * ms('--motion-slow'))); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = e.key.toLowerCase(); if (k === 'a' && S.k >= LW.length && !S.added) add(); if (k === 'p' && !S.passed) pass(); });
+replay();
+</script>
+</body>
+</html>

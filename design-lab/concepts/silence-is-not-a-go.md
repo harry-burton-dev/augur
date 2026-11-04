@@ -10,3 +10,5 @@ An agent does every reversible part of a job itself and holds at the first step 
 First found in: [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/) (standby V5, V1 and V6, combined V3).
 
 Could steer: Approvals, the Letterbox, Upgrade Centre windows, Mandate deadlines.
+
+In [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): a branch's cap is a signal ahead, not a timer (within V4).

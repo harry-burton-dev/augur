@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Writing an intent · V1 · Purpose, not method</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: write it as you'd say it, then each sentence is sorted by rule into a field, or set aside as method. A model only sorts what the rules can't, in pencil ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:var(--space-6)}
+.draft{display:grid;grid-template-rows:auto auto auto auto;align-content:start;gap:var(--space-3);min-height:0}
+.tally{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
+.tally div{padding:var(--space-2) var(--space-3);border-top:1px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.tally b{display:block;font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.paper{padding:var(--space-4) var(--space-5);font-size:var(--type-lead);line-height:calc(var(--leading-lead) + var(--space-1));color:var(--ink);font-weight:300}
+.paper .sn{border-bottom:1px solid transparent;transition:border-color var(--motion-calm) var(--ease-out),color var(--motion-calm) var(--ease-out);cursor:pointer}
+.sorted .paper .sn{border-bottom-color:var(--hairline-strong)}
+.sorted .paper .sn.method{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--hairline-strong)}
+.paper .sn.sel{color:var(--light);border-bottom-color:var(--x-proposed-thread)}
+.paper .tag{display:inline-block;margin:0 var(--space-1);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-thread);vertical-align:2px;opacity:0;transition:opacity var(--motion-calm) var(--ease-out)}
+.sorted .paper .tag{opacity:1}
+.paper .tag.pencil{border:1px dotted var(--x-proposed-pencil);padding:1px var(--space-1);color:var(--ink-muted);font-style:italic}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3);align-content:start;min-height:0}
+.fld{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);display:grid;gap:var(--space-2);align-content:start}
+.fld h3{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);display:flex;gap:var(--space-2);align-items:center}
+.fld h3 .q{margin-left:auto;font-size:var(--type-small);color:var(--ink-muted)}
+.fld li{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-1) 0;border-top:1px solid var(--hairline)}
+.fld li.empty{color:var(--ink-muted);font-style:italic;border-top:0}
+.fld li .fix{display:block;color:var(--ink-muted);margin-top:2px}
+.fld li .fix b{font-weight:400;color:var(--x-proposed-lit)}
+.fld.method{border-style:dashed;background:none;grid-column:1/-1}
+.fld.limit li{border-left:3px solid var(--x-proposed-ceiling);padding-left:var(--space-2)}
+.fld.freedom li{border-left:1px dashed var(--x-proposed-freedom);padding-left:var(--space-2)}
+.how{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.how b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){.paper{font-size:var(--type-body);line-height:var(--leading-lead);padding:var(--space-3) var(--space-4)}.fld{padding:var(--space-2) var(--space-3)}.fld h3 .q{display:none}.wrap{gap:var(--space-5)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Writing an intent · V1</b> purpose, not method: write it as you’d say it; rules sort it, a model only the leftovers, in pencil · Klein</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const S = { sorted: false, sel: null };
+const FL = [['purpose', 'Purpose'], ['end', 'Done looks like'], ['task', 'Key tasks'], ['limit', 'Limits'], ['freedom', 'Freedom']];
+const sentences = DATA.draft;
+const kindOf = (d) => d.pencil && !STATE.gateway ? null : d.kind;
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', F('department').name, 'New intent'], [['Space', 'sort'], ['↑↓', 'sentence'], ...STDG], 'department') +
+  `<main class="main"><div class="wrap ${S.sorted ? 'sorted' : ''}">
+    <section class="draft"><p class="eyebrow">${P(ME).name} writes, as she’d say it · serves ${ichip('ORG-07', { short: true })}</p>
+      <div class="paper inset scroll" aria-label="Draft">${sentences.map((d, i) => { const k = kindOf(d); return `<span class="sn ${k === 'method' ? 'method' : ''} ${S.sel === i ? 'sel' : ''}" data-i="${i}" tabindex="0">${d.s}</span><span class="tag ${d.pencil ? 'pencil' : ''}">${k ? (k === 'method' ? 'method' : PART(k).w) : 'unsorted'}</span> `; }).join('')}</div>
+      <div class="tally">${S.sorted ? `<div><b>${FL.filter(([k]) => sentences.some(d => kindOf(d) === k)).length} of ${FL.length}</b>fields have words</div><div><b>${sentences.filter(d => d.vague).length}</b>limit too vague to test</div><div><b>${sentences.filter(d => kindOf(d) === 'method').length}</b>sentences of method, set aside</div>` : ''}</div>
+      <p class="how">${S.sel != null ? `<b>Why “${kindOf(sentences[S.sel]) ? (kindOf(sentences[S.sel]) === 'method' ? 'method' : PART(kindOf(sentences[S.sel])).w) : 'unsorted'}”:</b> ${sentences[S.sel].pencil ? (STATE.gateway ? `the rules couldn’t place it; the model suggests method (${sentences[S.sel].rule}). Pencil until you accept it.` : 'the rules couldn’t place it and the model gateway is off. You choose.') : 'by rule: ' + sentences[S.sel].rule + '.'}` : `<b>Rules first:</b> a number and a date is done-looks-like; “so”, “the point is” is purpose; “don’t” is a limit; a verb of doing is a task, or method if it names people or a rota. ${STATE.gateway ? 'A model sorts only what no rule placed, in pencil.' : 'The model gateway is off: what no rule placed waits for you.'}`}</p>
+    </section>
+    <section class="fields scroll" aria-live="polite">
+      ${FL.map(([k, w]) => { const got = S.sorted ? sentences.filter(d => kindOf(d) === k) : [];
+        return `<div class="fld ${k}"><h3>${w}<span class="q">${PART(k).q}</span></h3><ul>${got.length ? got.map(d => `<li>${d.s}${d.vague ? `<span class="fix">${I('ruler', 12)} ${d.vague} <b>Use ${d.fixWith} as written</b></span>` : ''}</li>`).join('') : `<li class="empty">${S.sorted ? (k === 'limit' ? '' : 'Nothing yet') : 'Waiting for the draft'}</li>`}${S.sorted && k === 'limit' ? `<li class="muted">+ ${N('ORG-07').limits.length} inherited from ORG-07, shown on the record</li>` : ''}</ul></div>`; }).join('')}
+      <div class="fld method"><h3>${I('hand-helping', 14)} Left to the teams<span class="q">method: how, not what or why</span></h3><ul>${S.sorted ? sentences.filter(d => kindOf(d) === 'method').map(d => `<li class="${d.pencil ? 'pencil' : ''}" style="${d.pencil ? 'padding:var(--space-1) var(--space-2)' : ''}"><span class="${d.pencil ? 'pt' : ''}">${d.s}</span>${d.pencil ? ' <span class="micro muted">pencil · model</span>' : ''}</li>`).join('') + (sentences.some(d => !kindOf(d)) ? `<li class="empty">${sentences.filter(d => !kindOf(d)).length} sentence unsorted: choose a field for it</li>` : '') : '<li class="empty">Waiting for the draft</li>'}</ul>
+        <p class="small muted">Not deleted: kept as a note the teams can read, and out of the intent.</p></div>
+    </section></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.sn').forEach(b => b.onclick = () => { S.sel = +b.dataset.i; render(); });
+}
+function replay() { clearLater(); S.sorted = false; S.sel = null; settle(); render(); later(() => { S.sorted = true; render(); }, MOMENT()); later(() => { S.sel = 1; render(); }, MOMENT() + ms('--motion-still')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return;
+  if (e.key === ' ') { e.preventDefault(); S.sorted = !S.sorted; render(); }
+  if (e.key === 'ArrowDown') { S.sel = S.sel == null ? 0 : Math.min(sentences.length - 1, S.sel + 1); render(); }
+  if (e.key === 'ArrowUp') { S.sel = S.sel == null ? 0 : Math.max(0, S.sel - 1); render(); } });
+replay();
+</script>
+</body>
+</html>

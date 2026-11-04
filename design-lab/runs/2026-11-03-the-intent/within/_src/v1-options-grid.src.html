@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Acting within intent · V1 · Options against the limits</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the plan broke. Every way to fill the gap is checked against every limit and freedom, by rule, and gets a verdict. Pick, and see the sum ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.head{display:flex;gap:var(--space-5);align-items:baseline;flex-wrap:wrap}
+.gap{font:200 var(--type-title-s)/var(--leading-title-s) var(--font-sans);color:var(--light)}
+.gap b{font-weight:300;color:var(--x-proposed-standby)}
+table{border-collapse:collapse;width:100%;font-size:var(--type-small);line-height:var(--leading-small)}
+th,td{padding:var(--space-2) var(--space-2);border-bottom:1px solid var(--hairline);text-align:left;vertical-align:middle}
+thead th{font-weight:400;color:var(--ink-muted);border-bottom-color:var(--hairline-strong);vertical-align:bottom}
+thead th.l{text-align:center;width:calc(var(--space-6) + var(--space-1))}
+thead th.l b{display:block;font:500 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink)}
+td.c{text-align:center;transition:opacity var(--motion-base) var(--ease-out)}
+td.c .ok{color:var(--ink-muted)}
+td.c .cross{color:var(--x-proposed-drift)}
+td.c .risk{color:var(--x-proposed-standby)}
+td.c .na{color:var(--hairline-strong)}
+.wait td.c,.wait td.v{opacity:0}
+td.v{transition:opacity var(--motion-calm) var(--ease-out);white-space:nowrap}
+td.o .in{display:flex;gap:var(--space-3);align-items:center}
+td.o .pick{width:var(--space-4);height:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);display:inline-flex;align-items:center;justify-content:center;flex:none}
+tr.on td{background:var(--x-proposed-freedom-wash)}
+tr.on td.o .pick{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit)}
+tr button{display:contents}
+td.o .g{font-family:var(--font-mono);color:var(--ink-muted);white-space:nowrap;margin-left:auto}
+td.why{color:var(--ink-muted);max-width:calc(var(--measure-card))}
+.sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4)}
+.sum div{display:grid;gap:2px;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sum b{font:300 var(--type-heading)/var(--leading-heading) var(--font-sans);color:var(--light)}
+.sum b.short{color:var(--x-proposed-standby)}
+@media (max-width:1400px){td.why{display:none}th.why{display:none}th,td{padding:var(--space-1)}.sum{padding:var(--space-2) var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Acting within intent · V1</b> options against the limits: every way to fill the gap, checked by rule against every limit and freedom · Bratman; decision matrix</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PL = DATA.plan, OP = PL.options, LIMS = limitsOf('YOU-31a');
+const S = { checked: false, pick: [] };
+const MARK = { ok: ['check', 'ok', 'held'], cross: ['x', 'cross', 'crossed'], risk: ['triangle', 'risk', 'at risk'], na: ['minus', 'na', 'not touched'] };
+function render() {
+  const picked = OP.filter(o => S.pick.includes(o.id)), filled = sum(picked, o => o.gives), cost = sum(picked, o => o.cost), th = sum(picked, o => o.thornleyMl);
+  const asks = picked.filter(o => o.verdict === 'ask' || o.verdict === 'limit');
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', PL.tonight], [['1–6', 'pick'], ['Space', 'record'], ...STD], 'team') +
+  `<main class="main"><div class="wrap ${S.checked ? '' : 'wait'}">
+    <div class="head"><p class="gap">${PL.tonight}: <b>${PL.gap} ${PL.unit}</b> short</p><p class="small muted">${ITEM(PL.breaks).t} · ${ITEM(PL.breaks).title}. Kelda needs ${PL.need}; Ashby can spare ${PL.need - PL.gap}. ${PL.from} to ${PL.to}.</p></div>
+    <section class="scroll"><table aria-label="Options against the limits">
+      <thead><tr><th>Option · what it gives</th>${LIMS.map(l => `<th class="l" title="${l.w}"><b>${l.id}</b></th>`).join('')}<th>Verdict</th><th class="why">Why</th></tr></thead>
+      <tbody>${OP.map((o, i) => `<tr class="${S.pick.includes(o.id) ? 'on' : ''}" data-o="${o.id}"><td class="o"><div class="in"><span class="pick" aria-hidden="true">${S.pick.includes(o.id) ? I('check', 12) : ''}</span><span>${o.w}</span><span class="g">+${o.gives}</span></div></td>
+        ${LIMS.map(l => { const m = MARK[o.checks[l.id] || 'na']; return `<td class="c" title="${l.id} ${m[2]}"><span class="${m[1]}">${I(m[0], 14)}</span></td>`; }).join('')}
+        <td class="v">${vdHTML(o)}</td><td class="why">${o.why}</td></tr>`).join('')}</tbody></table>
+      <p class="small muted" style="margin-top:var(--space-2)">${LIMS.map(l => `<b class="mono">${l.id}</b> ${l.w}`).join(' · ')}</p></section>
+    <section class="sum inset" aria-live="polite">
+      <div><b class="${filled < PL.gap ? 'short' : ''}">${filled} of ${PL.gap}</b>${PL.unit} filled</div>
+      <div><b>${th} Ml</b>from Thornley over ${Math.max(0, ...picked.map(o => o.days))} days${th ? ` · ${(th / FACT('thornley').capMl * 100).toFixed(2)} points` : ''}</div>
+      <div><b>£${cost}k</b>of £${DATA.spendCascade.find(x => x.iid === 'YOU-31a').k}k you may spend</div>
+      <div><b>${asks.length ? asks.length : 'None'}</b>${asks.length ? 'need someone: ' + asks.map(o => P(o.ask).name).join(', ') : 'need anyone’s yes'}</div>
+      <button class="btn ${filled >= PL.gap && !asks.length ? 'go' : ''}" ${filled >= PL.gap && !asks.length ? '' : 'aria-disabled="true"'}>${I('git-merge', 14)} Record within ${PL.record.under} <span class="kbd">Space</span></button>
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-o]').forEach(r => r.onclick = () => toggle(r.dataset.o));
+}
+function toggle(id) { S.pick = S.pick.includes(id) ? S.pick.filter(x => x !== id) : [...S.pick, id]; render(); }
+function replay() { clearLater(); S.checked = false; S.pick = []; settle(); render(); later(() => { S.checked = true; $('.wrap').classList.remove('wait'); }, MOMENT()); later(() => toggle('o1'), MOMENT() + ms('--motion-calm')); later(() => toggle('o2'), MOMENT() + ms('--motion-spin')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= OP.length) toggle(OP[k - 1].id); });
+replay();
+</script>
+</body>
+</html>

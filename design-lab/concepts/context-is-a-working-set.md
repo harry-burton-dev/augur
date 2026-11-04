@@ -12,3 +12,5 @@ Proposed by batch 6 research.
 Could steer: the situation (AB), the intent (AC), the apprentice (Q), handover.
 
 Explored in [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): a versioned Artifacts document of links, each piece with rung, lift, reason, reader and holds-while, filed by the decision's questions, handed over by readback (combined V1, V2).
+
+In [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): context made relative to its reader through their intents, with the why on every item (situation V1).

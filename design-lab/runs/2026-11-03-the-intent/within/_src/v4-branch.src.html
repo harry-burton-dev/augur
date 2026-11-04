@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Acting within intent · V4 · The branch, taken</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: the intent carried a branch for exactly this. Taking it is throwing a set of points: the route lights, the cap is a signal ahead, and the record is one line ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.track{position:relative;min-height:0}
+svg.tr{width:100%;height:100%;overflow:visible}
+svg.tr .rail{fill:none;stroke:var(--hairline-strong);stroke-width:3;stroke-linecap:round}
+svg.tr .rail.lit{stroke:var(--x-proposed-lit);filter:drop-shadow(0 0 var(--space-1) color-mix(in srgb,var(--x-proposed-lit) 60%,transparent))}
+svg.tr .rail.dead{stroke-dasharray:var(--space-2) var(--space-2);opacity:var(--x-proposed-quiet)}
+svg.tr .rail{transition:stroke var(--motion-calm) var(--ease-out)}
+svg.tr text{font-family:var(--font-sans);font-size:var(--type-meta);fill:var(--ink)}
+svg.tr text.s{font-size:var(--type-small);fill:var(--ink-muted)}
+svg.tr text.m{font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);fill:var(--ink-muted);letter-spacing:var(--tracking-caps)}
+svg.tr .node{fill:var(--slate-deep);stroke:var(--hairline-strong);stroke-width:1.5}
+svg.tr .node.lit{stroke:var(--x-proposed-lit)}
+svg.tr .sig{fill:var(--x-proposed-standby)}
+svg.tr .sig.off{fill:var(--slate-deep);stroke:var(--x-proposed-standby)}
+.bottom{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:var(--space-5)}
+.rec{padding:var(--space-3) var(--space-4);display:grid;gap:var(--space-2)}
+.rec .l{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.rec p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.why{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:grid;gap:var(--space-2);align-content:start}
+.why b{font-weight:400;color:var(--ink)}
+@media (max-width:1400px){svg.tr text{font-size:var(--type-small)}.rec .l{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Acting within intent · V4</b> the branch, taken: the intent carried a branch for this; the cap is a signal ahead · branches and sequels; railway points</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const PL = DATA.plan, n = N('DEP-14'), B = n.branches[0], R = PL.record, o1 = OPTION('o1'), o2 = OPTION('o2');
+const CB = DATA.catchball.find(c => c.w.includes('Branch plan')), FROM = DATA.draftRounds.flatMap(r => r.changes).find(c => c.now && c.now.startsWith('Branch'));
+const S = { thrown: false };
+function svg() {
+  const t = S.thrown;
+  return `<svg class="tr" viewBox="0 0 1200 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="The plan and its branch">
+    <text class="m" x="20" y="40">THE PLAN · ${n.tasks[0].id}</text>
+    <path class="rail ${t ? 'dead' : 'lit'}" d="M20,80 L360,80"/><path class="rail ${t ? 'dead' : ''}" d="M360,80 L1180,80"/>
+    <circle class="node ${t ? '' : 'lit'}" cx="20" cy="80" r="8"/><text x="40" y="66">Ashby at ${PL.ashbyLicence} ${PL.unit}</text><text class="s" x="40" y="110">Kelda feeds North zone ${PL.need} ${PL.unit}</text>
+    <circle class="node" cx="360" cy="80" r="10"/><text x="300" y="44">${ITEM(PL.breaks).t}</text><text class="s" x="300" y="62">${B.if}</text>
+    <path class="rail ${t ? 'lit' : ''}" d="M360,80 C430,80 430,200 520,200 L1000,200"/>
+    <text class="m" x="430" y="292">BRANCH ${B.id} · AGREED ${CB.at}</text>
+    <circle class="node ${t ? 'lit' : ''}" cx="600" cy="200" r="8"/><text x="580" y="180">${o1.w.replace(/^Bring /, '')}</text><text class="s" x="580" y="262">+${o1.gives} ${PL.unit} · first</text>
+    <circle class="node ${t ? 'lit' : ''}" cx="800" cy="200" r="8"/><text x="780" y="180">Thornley +${o2.gives} ${PL.unit}</text><text class="s" x="780" y="262">then · ${B.then.split("Thornley ")[1]}</text>
+    <rect class="sig ${t ? '' : 'off'}" x="1000" y="182" width="14" height="36" rx="3"/><text x="1030" y="196">Cap: ${R.ends.split(',')[0]}</text><text class="s" x="1030" y="216">past it, ask ${P(n.owner).name}</text>
+  </svg>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', 'Branch'], [['B', 'take the branch'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">${n.title} carried a branch for this</h1><p class="small muted">${ichip('DEP-14', { short: true })} ${B.id} · ${B.if}: ${B.then}</p></div>
+    <section class="track" aria-live="polite">${svg()}</section>
+    <section class="bottom">
+      <div class="rec inset"><p class="eyebrow">${S.thrown ? `Recorded · ${R.at}` : 'Not taken yet'}</p>
+        <p class="l">${S.thrown ? `${P(R.by).name} took branch ${B.id} of ${R.under} at ${R.at}.` : `<button class="btn go" data-b>${I('git-branch', 14)} Take branch ${B.id} <span class="kbd">B</span></button>`}</p>
+        <p>${S.thrown ? `${o1.w} (+${o1.gives}); ${lc1(o2.w)} (+${o2.gives}). Ends ${R.ends}. Told ${R.told.map(first).join(', ')}.` : `${PL.gap} ${PL.unit} short tonight. The branch fills it: +${o1.gives} then +${o2.gives}.`}</p></div>
+      <div class="why"><b>Why the record is one line</b><span>The thinking was done in October: ${P(FROM.from).name} asked for it in catchball, ${P(n.owner).name} wrote it into ${R.under} on ${CB.at}, and the teams on it said it back. Taking a branch someone agreed is the cheapest change there is.</span>
+        <span>The cap is a signal ahead, not a timer that acts: at ${R.ends.split(',')[0]} nothing happens on its own. Continuing past it needs ${first(n.owner)}.</span><span class="tk">branch: a planned option for an anticipated change · sequel: what follows the current phase (ADP 5-0)</span></div>
+    </section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-b]')?.addEventListener('click', take);
+}
+function take() { S.thrown = true; render(); }
+function replay() { clearLater(); S.thrown = false; settle(); render(); later(take, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 'b' && !S.thrown) take(); });
+replay();
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent sheet · V3 · Seven pieces, five fields</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: Klein's seven pieces of a good intent statement, folded into the five fields Mandate keeps, with a good and a bad line for each ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(200px,.8fr) minmax(220px,.9fr) minmax(0,2fr);gap:var(--space-7);position:relative}
+.col{display:grid;align-content:start;gap:var(--space-2);position:relative;z-index:1}
+.k{display:grid;gap:2px;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--surface-inset)}
+.k b{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.k span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.f{display:grid;gap:2px;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-pane);text-align:left;transition:border-color var(--motion-quick) var(--ease-standard)}
+.f b{font-weight:400;font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.f span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.f[aria-pressed="true"]{border-color:var(--x-proposed-thread);background:var(--x-proposed-thread-wash)}
+.k.on{border-color:var(--x-proposed-thread)}
+svg.lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+svg.lines path{fill:none;stroke:var(--hairline-strong);stroke-width:1;transition:stroke-dashoffset var(--motion-spin) var(--ease-out),stroke var(--motion-quick) var(--ease-standard)}
+svg.lines path.on{stroke:var(--x-proposed-thread);stroke-width:1.5}
+.ex{display:grid;align-content:start;gap:var(--space-4)}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-4)}
+.card{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);display:grid;gap:var(--space-2);align-content:start}
+.card.good{border:1px solid var(--hairline-strong)}
+.card.bad{border:1px dashed var(--hairline-strong);background:var(--surface-inset)}
+.card q{quotes:none;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.card.bad q{color:var(--ink);text-decoration:line-through;text-decoration-color:var(--x-proposed-drift)}
+.card p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.mini{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.mini dt{color:var(--ink-muted);white-space:nowrap}
+.mini dd{margin:0;color:var(--ink-muted)}
+.mini .on{color:var(--light)}
+.test{padding:var(--space-3) var(--space-4);border-left:2px solid var(--x-proposed-thread);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+@media (max-width:1400px){.wrap{gap:var(--space-5);grid-template-columns:minmax(170px,.75fr) minmax(190px,.85fr) minmax(0,2fr)}.k span{display:none}.f{padding:var(--space-2) var(--space-3)}.pair{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent sheet · V3</b> seven pieces, five fields: Klein’s intent statement folded into what Mandate keeps · Klein, Sources of Power (1998); ADP 6-0</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const FIELDS = ['purpose', 'end', 'task', 'limit', 'freedom'];
+const S = { f: 'purpose', drawn: false };
+const n = N('DEP-14');
+/* a good line from DEP-14 and a line from the draft that looks like this field but isn't */
+const EX = {
+  purpose: { good: n.purpose, bad: DATA.draft[1].s, why: 'It says how, not why. A team that can’t run Ashby flat out has nothing left to steer by.', test: 'If the plan breaks, could someone choose a new one from this line alone?' },
+  end: { good: n.end[0].w, bad: 'Make good progress on Thornley this winter.', why: 'No number, no date: nobody can tell when it is done, or when it is drifting.', test: 'Can a fact in Data Atlas say whether it is true?' },
+  task: { good: n.tasks[1].w, bad: DATA.draft[6].s, why: 'A rota is method. Key tasks are what must happen, whoever does them.', test: 'Would it still be true if a different team did it a different way?' },
+  limit: { good: LIMIT('L2').w, bad: DATA.draft[4].s, why: DATA.draft[4].vague, test: 'Does it name what must not happen, and the one person who can lift it?' },
+  freedom: { good: n.freedom[1], bad: DATA.draft[5].s, why: '“If you have to” leaves the judgement unsaid. Say the condition: once it has a clear sample.', test: 'Could someone act on it at 03:00 without waking anyone, and be right?' }
+};
+function render() {
+  const f = S.f, e = EX[f];
+  $('#app').innerHTML = topHTML(['Mandate', 'How an intent is written'], [['1–5', 'field'], ...STD], 'department') +
+  `<main class="main"><div class="wrap" id="wrap"><svg class="lines" id="lines" aria-hidden="true"></svg>
+    <section class="col" aria-label="Klein’s seven pieces"><p class="eyebrow">Klein’s seven</p>${DATA.klein.map(k => `<div class="k ${PART(k.to).id === f ? 'on' : ''}" data-k="${k.id}"><b>${k.w}</b><span>${k.d}</span></div>`).join('')}<p class="tk">Klein (1998): purpose, objective, sequence, rationale, key decisions, anti-goals, constraints</p></section>
+    <section class="col" aria-label="Mandate’s fields"><p class="eyebrow">Mandate keeps five</p>${FIELDS.map((id, i) => `<button class="f" data-f="${id}" aria-pressed="${id === f}"><b>${i + 1} · ${PART(id).w}</b><span>${PART(id).q}</span><span class="tk">${PART(id).tech}</span></button>`).join('')}
+      <p class="small muted" style="margin-top:var(--space-2)">Sequence becomes a key task only when order matters. Rationale folds into the purpose. Anti-goals and constraints are both limits: one list, each with an owner.</p></section>
+    <section class="ex" aria-live="polite"><p class="eyebrow">${PART(f).w} · from ${ichip('DEP-14', { short: true })} and its first draft</p>
+      <div class="pair"><div class="card good"><p class="eyebrow">${I('check', 12)} Is ${PART(f).w.toLowerCase()}</p><q>${e.good}</q></div>
+        <div class="card bad"><p class="eyebrow">${I('x', 12)} Looks like it, isn’t</p><q>${e.bad}</q><p>${e.why}</p></div></div>
+      <div class="test"><p class="eyebrow" style="margin-bottom:var(--space-1)">The test for this field</p>${e.test}</div>
+      <dl class="mini"><dt class="eyebrow" style="grid-column:1/-1">${ichip('DEP-14')} in five fields</dt>${FIELDS.map(id => `<dt class="${id === f ? 'on' : ''}">${PART(id).w}</dt><dd class="${id === f ? 'on' : ''}">${id === 'purpose' ? n.purpose : id === 'end' ? n.end.map(x => x.w).join(' · ') : id === 'task' ? n.tasks.map(x => x.w).join(' · ') : id === 'limit' ? `${n.inherits.length} inherited from ${n.serves}, ${n.limits.length} its own: ` + n.limits.map(x => x.w).join(' · ') : n.freedom.join(' · ')}</dd>`).join('')}</dl>
+      <p class="small muted">Five fields, because seven boxes is a form people hate and the extra two are the same idea twice. What Mandate never asks for is the method: an intent that says how has stopped being one.</p>
+    </section></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-f]').forEach(b => b.onclick = () => { S.f = b.dataset.f; render(); });
+  requestAnimationFrame(draw);
+}
+function draw() {
+  const W = $('#wrap').getBoundingClientRect(), svg = $('#lines');
+  svg.innerHTML = DATA.klein.map(k => {
+    const a = $(`[data-k="${k.id}"]`).getBoundingClientRect(), b = $(`[data-f="${k.to}"]`).getBoundingClientRect();
+    const x1 = a.right - W.left, y1 = a.top + a.height / 2 - W.top, x2 = b.left - W.left, y2 = b.top + b.height / 2 - W.top, mx = (x1 + x2) / 2;
+    return `<path class="${k.to === S.f ? 'on' : ''}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" pathLength="1" style="stroke-dasharray:1;stroke-dashoffset:${S.drawn ? 0 : 1}"/>`;
+  }).join('');
+}
+function replay() { clearLater(); S.drawn = false; S.f = 'purpose'; settle(); render(); later(() => { S.drawn = true; $$('#lines path').forEach(p => p.style.strokeDashoffset = 0); }, MOMENT()); }
+addEventListener('resize', draw);
+document.addEventListener("keydown", e => { if (commonKeys(e, render, replay)) { requestAnimationFrame(draw); return; } const k = +e.key; if (k >= 1 && k <= 5) { S.f = FIELDS[k - 1]; render(); } });
+replay();
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The nest · V6 · From any floor</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: the same nest from four seats. One rule: two up in full, everything you hold below in full, the rest by title, the restricted by holder. Nothing is hidden ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr);gap:var(--space-6)}
+.seats{display:flex;gap:var(--space-2);margin-bottom:var(--space-3);flex-wrap:wrap}
+.seats button{display:flex;gap:var(--space-2);align-items:center;padding:var(--space-1) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.seats button[aria-pressed="true"]{border-color:var(--fc);color:var(--light)}
+.floors{display:grid;gap:var(--space-3);align-content:start}
+.fr{display:grid;grid-template-columns:calc(var(--space-8)) minmax(0,1fr);gap:var(--space-4);align-items:start}
+.fr .lb{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--fc);padding-top:var(--space-2)}
+.cards{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.c{display:grid;gap:2px;padding:var(--space-2) var(--space-3);border-radius:var(--radius-inset);border:1px solid var(--hairline);min-width:0;max-width:calc(var(--measure-card) * .75);transition:opacity var(--motion-base) var(--ease-standard),border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.c .p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c .w{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted)}
+.c.v-full{background:var(--surface-pane);border-color:var(--hairline-strong)}
+.c.v-own{border-color:var(--x-proposed-lit)}
+.c.v-title{background:none}
+.c.v-title .p{display:none}
+.c.v-line{background:none;border-style:dashed}
+.c.v-line .p{display:none}
+.c.v-hatch{background:var(--x-proposed-unseen),var(--surface-inset)}
+.c.v-hatch .p{display:none}
+.side{display:grid;gap:var(--space-4);align-content:start}
+.cnt{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);align-items:center}
+.cnt b{font:300 var(--type-heading)/1 var(--font-sans);color:var(--light);text-align:right}
+.sw{display:inline-block;width:var(--space-5);height:var(--space-3);border-radius:2px;border:1px solid var(--hairline-strong);vertical-align:middle;margin-right:var(--space-2)}
+.sw.full{background:var(--surface-pane)}.sw.line{border-style:dashed}.sw.hatch{background:var(--x-proposed-unseen)}
+@media (max-width:1400px){.c .p{display:none}.c{padding:var(--space-1) var(--space-2)}.fr{grid-template-columns:calc(var(--space-7) + var(--space-3)) minmax(0,1fr)}.wrap{gap:var(--space-5);grid-template-columns:minmax(0,1.8fr) 270px}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>The nest · V6</b> from any floor: two up in full, all you hold below in full, the rest by title, the restricted by holder · ADP 6-0, need-to-know</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const SEATS = [['p1', 'ORG-07'], ['p3', 'DEP-14'], ['p4', 'TM-31'], ['p5', 'YOU-31a']];
+const all = Object.keys(DATA.intents), ROWS = ['org', 'department', 'team', 'you'];
+const S = { seat: 3 };
+const up = k => N(k).serves ? [N(k).serves, ...up(N(k).serves)] : [];
+const down = k => { const kids = all.filter(c => N(c).serves === k); return kids.concat(kids.flatMap(down)); };
+function vis(k) {
+  const [who, mine] = SEATS[S.seat];
+  if (k === mine) return 'own';
+  if (N(k).restricted && N(k).owner !== who) return 'hatch';
+  const u = up(mine); if (u.includes(k)) return u.indexOf(k) < 2 ? 'full' : 'line';
+  if (down(mine).includes(k)) return 'full';
+  return 'title';
+}
+const WORD = { own: 'yours', full: 'in full', line: 'one line · further up', title: 'title, holder, state', hatch: 'restricted · holder only' };
+function render() {
+  const [who] = SEATS[S.seat], vs = all.map(vis);
+  const count = v => vs.filter(x => x === v).length;
+  $('#app').innerHTML = topHTML(['Mandate', 'The nest', 'From any floor'], [['1–4', 'seat'], ...STD], P(who).floor) +
+  `<main class="main"><div class="wrap"><section>
+    <div class="seats" role="group" aria-label="Seen by">${SEATS.map(([p, k], i) => `<button data-s="${i}" data-tier="${N(k).floor}" aria-pressed="${i === S.seat}"><span class="kbd">${i + 1}</span>${P(p).name}</button>`).join('')}</div>
+    <div class="floors">${ROWS.map(fl => `<div class="fr" data-tier="${fl}"><span class="lb">${F(fl).word}</span><div class="cards">${all.filter(k => floorOf(k) === fl).map(k => { const v = vis(k), n = N(k);
+      return `<div class="c ${v === 'own' ? 'v-full v-own' : 'v-' + v}" data-tier="${n.floor}">${ichip(k, { ring: n.restricted ? null : n.state === 'force' ? 'confirmed' : 'open' })}${v !== 'hatch' ? `<span class="p">${n.purpose || ('Serves ' + n.serves + ' ' + n.servesPart)}</span>` : ''}<span class="w">${WORD[v]}${v === 'hatch' ? ' · ask ' + P(n.owner).name : ''}</span></div>`; }).join('')}</div></div>`).join('')}</div>
+  </section>
+  <aside class="side"><p class="eyebrow">What ${P(who).name} sees</p>
+    <div class="cnt">${['full', 'line', 'title', 'hatch'].map(v => `<b>${count(v) + (v === 'full' ? 1 : 0)}</b><span><span class="sw ${v}"></span>${v === 'full' ? 'in full, with yours' : WORD[v]}</span>`).join('')}</div>
+    <p class="small">One rule for every seat: your own intent; the two above it in full; everything that serves yours, all the way down, in full; anything else by title, holder and state; a restricted one by its holder alone.</p>
+    <p class="small muted">Nothing on the floor plan is missing from any seat. ${count('hatch') ? `${count('hatch')} restricted intent shows as a hatch with who to ask.` : 'This seat holds the restricted intent, or none touches it.'}</p>
+    <p class="tk">ADP 6-0: two levels up · need-to-know: content compartmented, existence shown</p>
+  </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-s]').forEach(b => b.onclick = () => { S.seat = +b.dataset.s; render(); });
+}
+function replay() { clearLater(); S.seat = 3; settle(); render(); later(() => { S.seat = 1; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = +e.key; if (k >= 1 && k <= 4) { S.seat = k - 1; render(); } });
+replay();
+</script>
+</body>
+</html>

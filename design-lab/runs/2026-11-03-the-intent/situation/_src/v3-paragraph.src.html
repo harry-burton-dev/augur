@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent meets the situation · V3 · The situation paragraph</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: the situation written as paragraph 1 of an order, one per intent, built by template from the items, each sentence footnoted. A model may add a summary in pencil ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr);gap:var(--space-6)}
+.brief{display:grid;gap:var(--space-4);align-content:start;min-height:0;max-width:calc(var(--measure-read) + var(--space-8))}
+.sum{padding:var(--space-3) var(--space-4)}
+.sum .pt{font-size:var(--type-lead);line-height:var(--leading-lead)}
+.para{display:grid;grid-template-columns:var(--space-1) minmax(0,1fr);gap:var(--space-4);transition:opacity var(--motion-calm) var(--ease-out)}
+.para .bar{background:var(--fc);border-radius:1px}
+.para h3{display:flex;gap:var(--space-3);align-items:baseline;margin-bottom:var(--space-1)}
+.para p{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink)}
+.para p .lv{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-thread);margin-right:var(--space-1)}
+.para sup{font:500 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-thread);margin-left:2px}
+.para.far p{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.para.wait{opacity:0}
+.src{display:grid;gap:0;align-content:start;min-height:0}
+.src li{display:grid;grid-template-columns:var(--space-4) calc(var(--space-6) + var(--space-1)) minmax(0,1fr);gap:var(--space-2);padding:var(--space-1) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.src li b{font:500 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--x-proposed-thread)}
+.src li .t{font-family:var(--font-mono);color:var(--ink-muted)}
+.src li .rg{grid-column:3}
+@media (max-width:1400px){.para p{font-size:var(--type-meta);line-height:var(--leading-meta)}.sum .pt{font-size:var(--type-body);line-height:var(--leading-body)}.brief{gap:var(--space-3)}.src li .rg{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent meets the situation · V3</b> the situation paragraph: one per intent, by template, every sentence footnoted · five-paragraph order; Endsley</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const CH = DATA.chain;
+const S = { k: 0 };
+const nearest = it => CH.find(c => it.touches.some(t => t[0] === c));
+const NUM = {}; ranked().forEach((it, i) => NUM[it.id] = i + 1);
+function sentence(it) {
+  if (it.restricted) return `${it.why}<sup>${NUM[it.id]}</sup>`;
+  return `<span class="lv">what</span>${it.short}${it.detail ? '. ' + it.detail : ''}<sup>${NUM[it.id]}</sup> <span class="lv">so what</span>${it.why}${it.bites ? ` <span class="lv">next</span>Bites by ${it.bites}.` : ''}`;
+}
+function render() {
+  const its = ranked();
+  const SUM = DATA.summary;
+  $('#app').innerHTML = topHTML(['Home', 'This morning', 'Situation'], [...STDG], 'team') +
+  `<main class="main"><div class="wrap">
+    <section class="brief scroll" aria-label="The situation, by intent">
+      <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">Situation, ${DATA.today} ${DATA.now}</h1><p class="small muted">for ${P(ME).name} · paragraph 1, before anything else</p></div>
+      ${STATE.gateway ? `<div class="sum pencil"><p class="eyebrow" style="margin-bottom:var(--space-1)">Said another way · pencil, a model’s two lines from the paragraphs below</p><p class="pt">${SUM}</p></div>` : `<p class="small muted">The model gateway is off: no summary. The paragraphs below are built by template and don’t change.</p>`}
+      ${CH.map((c, i) => { const mine = its.filter(it => nearest(it) === c);
+        return `<div class="para ${i === 3 ? 'far' : ''} ${i >= S.k ? 'wait' : ''}" data-tier="${N(c).floor}"><span class="bar"></span><div><h3>${ichip(c)}<span class="micro muted">${mine.length} item${mine.length === 1 ? '' : 's'}</span></h3>
+          <p>${mine.length ? mine.map(sentence).join(' ') : 'Nothing new touches it.'}</p></div></div>`; }).join('')}
+      <p class="small muted">${DATA.untouched.length} items touched none of your intents and aren’t in the paragraphs: ${DATA.untouched.map(u => u.w).join(' · ')}.</p>
+    </section>
+    <aside class="src"><p class="eyebrow" style="margin-bottom:var(--space-2)">Sources, in rank order</p>
+      <ol>${its.map(it => `<li><b>${NUM[it.id]}</b><span class="t">${it.t}</span><span>${it.restricted ? `<span class="unseen">${it.short}</span>` : it.title}</span><span></span><span></span><span class="rg">${rungHTML(it.rung)} · ${it.src}</span></li>`).join('')}</ol>
+      <p class="small muted" style="margin-top:var(--space-3)">Each paragraph is what, so what and next (perception, comprehension, projection). The words come from the items; the template only joins them, so the same morning always reads the same.</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.k = 0; settle(); render(); DATA.chain.forEach((_, i) => later(() => { S.k = i + 1; render(); }, MOMENT() + i * ms('--motion-slow'))); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

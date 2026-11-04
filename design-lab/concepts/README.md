@@ -115,7 +115,7 @@ app pattern took it), **dropped** (say why in the file).
 | [The model widens, never narrows](the-model-widens-never-narrows.md) | explored | 2026-11-03-the-analysts-bench |
 | [Start from how it usually goes](start-from-the-reference-class.md) | explored | 2026-11-03-the-analysts-bench |
 | [Pause points](pause-points.md) | explored | 2026-11-03-the-analysts-bench |
-| [Intent travels two levels](intent-travels-two-levels.md) | to explore | batch 6 research |
+| [Intent travels two levels](intent-travels-two-levels.md) | explored | batch 6 research |
 | [The technique fits the question](the-technique-fits-the-question.md) | explored | batch 6 research |
 | [People mark moves, records mark positions](moves-and-positions.md) | explored | 2026-11-03-the-annotated-game |
 | [Judged as it stood](judged-as-it-stood.md) | explored | 2026-11-03-the-annotated-game |
@@ -123,4 +123,10 @@ app pattern took it), **dropped** (say why in the file).
 | [The way back is recorded](the-way-back-is-recorded.md) | explored | 2026-11-03-the-annotated-game |
 | [The opening book](the-opening-book.md) | explored | 2026-11-03-the-annotated-game |
 | [Play it first](play-it-first.md) | explored | 2026-11-03-the-annotated-game |
+| [Told, not asked](told-not-asked.md) | explored | 2026-11-03-the-intent |
+| [Said back is the key](said-back-is-the-key.md) | explored | 2026-11-03-the-intent |
+| [Four verdicts](four-verdicts.md) | explored | 2026-11-03-the-intent |
+| [Correct the binding, not the order](correct-the-binding.md) | explored | 2026-11-03-the-intent |
+| [Branches agreed early](branches-agreed-early.md) | explored | 2026-11-03-the-intent |
+| [Two drifts](two-drifts.md) | explored | 2026-11-03-the-intent |
 | [The warrant shows](the-warrant-shows.md) | to explore | batch 6 research |

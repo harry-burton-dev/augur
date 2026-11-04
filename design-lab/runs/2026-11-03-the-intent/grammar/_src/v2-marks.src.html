@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent sheet · V2 · The marks</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: a specimen sheet of the marks intent leaves at text size, then one sentence built from them ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.spec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3) var(--space-5);align-content:start}
+.m{display:grid;grid-template-rows:auto auto 1fr;gap:var(--space-2);padding:var(--space-3) var(--space-4);border-top:1px solid var(--hairline)}
+.m h3{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);display:flex;gap:var(--space-3);align-items:baseline}
+.m h3 .eyebrow{margin-left:auto}
+.m .show{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-3);align-items:center;min-height:var(--space-5)}
+.m p.d{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.sentence{padding:var(--space-4) var(--space-5);display:grid;gap:var(--space-2)}
+.sentence .s{font-size:var(--type-lead);line-height:calc(var(--leading-lead) + var(--space-2));color:var(--ink);max-width:calc(var(--measure-wide) + var(--space-8))}
+.sentence .s > span{transition:opacity var(--motion-calm) var(--ease-out)}
+.sentence .s .w{opacity:0}
+.sentence.on .s .w{opacity:1}
+.sentence .s .w:nth-child(2){transition-delay:var(--motion-quick)}
+.sentence .s .w:nth-child(3){transition-delay:var(--motion-base)}
+.sentence .s .w:nth-child(4){transition-delay:var(--motion-slow)}
+@media (prefers-reduced-motion: reduce){.sentence .s .w{transition-delay:0ms!important}}
+@media (max-width:1400px){.spec{gap:var(--space-2) var(--space-4)}.m h3 .eyebrow{display:none}.m{padding:var(--space-2) var(--space-3)}.sentence .s{font-size:var(--type-body);line-height:var(--leading-lead)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent sheet · V2</b> the marks: chip, ring, limit, freedom, thread, within, verdict, drift, at text size · type specimens, map legends, the apprentice’s marks</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { on: false };
+const rec = DATA.plan.record;
+function render() {
+  const marks = [
+    ['The intent chip', 'which intent', `${ichip('ORG-07')} ${ichip('DEP-14')} ${ichip('TM-31')} ${ichip('YOU-31a')}`, 'A bar in the floor’s colour, its id, its title. Wherever work, a message or a change touches an intent, the chip says which.', 'Ref to a Mandate intent · ADR 0025'],
+    ['Said back', 'understood, not assumed', `${['open', 'corrected', 'confirmed', 'na'].map(r => `<span class="small" style="display:inline-flex;gap:var(--space-2);align-items:center">${ringHTML(r)}${RING_WORD[r].split(':')[0]}</span>`).join('')}`, 'Hollow while the holder hasn’t said the intent back in their own words: an open question. Half when the owner corrected it. Full when confirmed.', 'backbrief state per holder · ADR 0028 thread on the intent'],
+    ['A limit', 'what must not happen', `${limHTML(LIMIT('L3'), { tk: false, owner: false })}${limHTML(Object.assign({ own: true }, LIMIT('D1')), { tk: false, owner: false })}`, 'A solid bar, never a hatch. Double when inherited from the floor above: a floor may add limits and tighten them, never loosen one. Every limit names the one person who can lift it.', 'constraint, restraint · strictest wins'],
+    ['Freedom', 'decide without asking', `<span class="free">${N('DEP-14').freedom[1]}</span>`, 'A dashed open edge and a faint wash: room, not a box. What sits inside needs no approval; it is recorded and the floor above is told.', 'disciplined initiative · delegated decision space'],
+    ['So that', 'how a part serves the intent above', `<span class="small">${N('TM-31').title}</span> <span class="so">so that</span> <span class="small">${N('DEP-14').title}</span>`, 'The thread. Read up, it answers “why?”; read down, “how?”. Every part names the one key task above it that it serves.', 'nesting · two levels up'],
+    ['Within intent', 'on a change', `<span class="within">${I('git-merge', 12)} within ${rec.under} · ${N(rec.under).freedom[1].split(' ').slice(0, 4).join(' ').toLowerCase()}…</span>`, 'On every change made without asking: the intent and the freedom it used. It turns an approval into a notice, and the notice can be traced.', 'initiative within intent · audit event'],
+    ['Verdicts', 'an option against the intent', DATA.plan.options.filter((o, i) => [0, 1, 2, 4].includes(i)).map(vdHTML).join(''), 'Within; within but against a key task (allowed, said); ask a named person (outside freedom); across a limit (only its owner).', 'four outcomes, decided by rule, never by a model'],
+    ['Drift', 'off the line, calmly', `<span class="drift small">work: ${DATA.workDrift.largest.at(-1)}% on the largest leaks</span><span class="drift small">world: an assumption crossed</span>`, 'A short tilted stroke in a muted warm tone. Work drifting from an intent, or an intent drifting from the world. A question for the owner, never an alarm.', 'cross-track error · revisit line'],
+    ['Not yours to see', 'shown, not opened', `${ichip('SEC-03')}`, 'The hatch from earlier runs: something touches your intents and you can’t open it. It says who holds it.', 'restricted · explain, never hide']
+  ];
+  $('#app').innerHTML = topHTML(['Mandate', 'Marks'], [['Space', 'build the sentence'], ...STD], 'org') +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">Intent at text size · nine marks, one sentence</p></div>
+    <section class="spec scroll">${marks.map(([h, sub, show, d, tk], i) => `<article class="m dep" style="--i:${i}"><h3>${h}<span class="eyebrow">${sub}</span></h3><div class="show">${show}</div><p class="d">${d}</p><p class="tk">${tk}</p></article>`).join('')}</section>
+    <section class="sentence inset ${S.on ? 'on' : ''}" aria-live="polite"><p class="eyebrow">The marks in one line, as the floor above reads it at ${DATA.plan.noticeAt}</p>
+      <p class="s"><span>${P(rec.by).name} changed ${lc1(rec.changed.split(':')[0])}</span> <span class="w"><span class="within">${I('git-merge', 12)} within ${rec.under}</span></span> <span class="w"><span class="so">so that</span> ${N('TM-31').title}</span> <span class="w">· ${limitsOf('YOU-31a').length} limits held · Thornley <span class="num">+${OPTION('o2').thornleyMl} Ml</span> ${vdHTML(OPTION('o2'))}</span></p></section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.on = false; settle(); render(); later(() => { S.on = true; $('.sentence').classList.add('on'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === ' ') { e.preventDefault(); S.on = !S.on; $('.sentence').classList.toggle('on', S.on); } });
+replay();
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent sheet · V6 · The filter</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: intent as a filter on options (Bratman). Limits stop, freedom sorts, purpose orders. Nothing is hidden: each bin says why and who ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto auto minmax(0,1fr);gap:var(--space-4)}
+.head{display:flex;gap:var(--space-5);align-items:baseline;flex-wrap:wrap}
+.tray{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-2);min-height:calc(var(--space-7) + var(--space-3))}
+.opt{padding:var(--space-2) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-pane);display:grid;gap:var(--space-1);align-content:start;font-size:var(--type-small);line-height:var(--leading-small)}
+.opt b{font-weight:400;color:var(--light)}
+.opt .g{font-family:var(--font-mono);color:var(--ink-muted)}
+.layers{display:grid;gap:var(--space-1)}
+.layer{display:grid;grid-template-columns:calc(var(--space-8) + var(--space-5)) minmax(0,1fr);gap:var(--space-4);align-items:center;padding:var(--space-2) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.layer b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.layer.l{border-left:3px solid var(--x-proposed-ceiling);background:var(--surface-inset)}
+.layer.f{border:1px dashed var(--x-proposed-freedom);border-right:0;background:var(--x-proposed-freedom-wash)}
+.layer.p{border-left:1px solid var(--x-proposed-thread);background:var(--x-proposed-thread-wash)}
+.bins{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-4);min-height:0}
+.bin{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-2);padding:var(--space-3);border-top:1px solid var(--hairline-strong);min-height:0}
+.bin h3{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light);display:flex;gap:var(--space-2);align-items:center}
+.bin > p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.bin ul{display:grid;gap:var(--space-2);align-content:start}
+.bin li .opt{background:var(--surface-inset)}
+.bin li .why{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.bin.b-within{border-top-color:var(--x-proposed-freedom)}
+.bin.b-limit{border-top-color:var(--x-proposed-ceiling)}
+.bin.b-ask{border-top-color:var(--x-proposed-standby)}
+@media (max-width:1400px){.tray{grid-template-columns:repeat(3,minmax(0,1fr))}.layer{grid-template-columns:calc(var(--space-8) + var(--space-3)) minmax(0,1fr);padding:var(--space-1) var(--space-3)}.bin li .why{display:none}.bins{gap:var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent sheet · V6</b> the filter: limits stop, freedom sorts, purpose orders; each bin says why and who · Bratman (1987), BDI</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { sorted: false };
+const PL = DATA.plan, opts = PL.options;
+const BINS = [['within', 'Within intent', 'circle-check', 'Do it. It is recorded, and the floor above is told how it serves.'],
+  ['against', 'Within, against a task', 'circle-dot', 'Allowed, and the cost to the intent is said in the record.'],
+  ['ask', 'Ask', 'hand', 'Outside your freedom. The person who holds that decision is named.'],
+  ['limit', 'Across a limit', 'octagon-x', 'Only the limit’s owner can lift it. Still shown, never filtered out.']];
+function optHTML(o) { return `<div class="opt"><b>${o.w}</b><span class="g">+${o.gives} ${PL.unit}${o.thornleyMl ? ` · Thornley −${o.thornleyMl} Ml` : ''}${o.cost ? ` · £${o.cost}k` : ''}</span></div>`; }
+function render() {
+  const lims = limitsOf('YOU-31a');
+  $('#app').innerHTML = topHTML(['Mandate', 'My part', 'Options'], [['Space', 'filter'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <div class="head"><h1 class="h">${PL.tonight}: ${PL.gap} ${PL.unit} short</h1><p class="small muted">${ITEM(PL.breaks).title} · ${opts.length} ways to fill it</p></div>
+    <section class="tray" aria-label="Options considered">${S.sorted ? opts.map(o => `<div class="opt" style="opacity:var(--x-proposed-quiet);border-style:dotted"><span class="g">${o.w}</span></div>`).join('') : opts.map((o, i) => `<div class="dep" style="--i:${i}">${optHTML(o)}</div>`).join('')}</section>
+    <section class="layers" aria-label="The intent, as a filter">
+      <div class="layer l"><b>${I('octagon-x', 14)} Limits stop</b><span>${lims.length} limits, from ${[...new Set(lims.map(l => l.intent))].join(', ')}. An option that crosses one goes no further, and says who owns the limit.</span></div>
+      <div class="layer f"><b>${I('square-dashed', 14)} Freedom sorts</b><span>${N('YOU-31a').freedom.concat(N('DEP-14').freedom.slice(0, 2)).join(' · ')}. Outside it, ask the person who holds that choice.</span></div>
+      <div class="layer p"><b>${I('arrow-up', 14)} Purpose orders</b><span>${N('DEP-14').purpose.split(',')[0]}: options that spare Thornley come first; one that costs it says how much.</span></div>
+    </section>
+    <section class="bins" aria-live="polite">${BINS.map(([k, w, ic, d]) => { const in_ = S.sorted ? opts.filter(o => o.verdict === k) : [];
+      return `<div class="bin b-${k === 'against' ? 'within' : k}"><h3>${I(ic, 16)} ${w} <span class="muted num">${S.sorted ? in_.length : ''}</span></h3><p>${d}</p>
+        <ul class="scroll">${in_.map((o, i) => `<li class="dep" style="--i:${i}">${optHTML(o)}<p class="why">${o.why}</p></li>`).join('')}</ul></div>`; }).join('')}</section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  if (S.sorted) { document.body.classList.add('pre'); requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre'))); }
+}
+function replay() { clearLater(); S.sorted = false; settle(); render(); later(() => { S.sorted = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key === ' ') { e.preventDefault(); S.sorted = !S.sorted; render(); } });
+replay();
+</script>
+</body>
+</html>

@@ -24,3 +24,5 @@ Used in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/
 In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the pass shows what will be made, changed and linked, what is set aside or not brought in, and what landing would move in other apps (pass V1, V3, V6).
 
 Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): the draft decision changes line by line as each technique runs, and a cheaper technique says what you give up (combined V1, choose V6).
+
+Used in [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): the cost is shown in the intent's own units, 6 Ml is 0.07 points of the Org's end state (within V1, V3).

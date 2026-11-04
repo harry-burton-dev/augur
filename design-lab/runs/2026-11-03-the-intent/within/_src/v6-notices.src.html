@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Acting within intent · V6 · Approvals become notices</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: what "within intent" unlocks. Some approvals become notices, for holders who said the intent back; the rest still ask. Shown from the Department head's side ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:var(--space-6)}
+.tbl{display:grid;align-content:start;gap:0;min-height:0}
+.tr{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);align-items:start}
+.tr.h{color:var(--ink-muted);border-bottom-color:var(--hairline-strong)}
+.tr .b{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--hairline-strong)}
+.tr.still .b{text-decoration:none}
+.tr .a{color:var(--ink)}
+.tr.on .a{color:var(--light)}
+.tr.still .a{color:var(--x-proposed-standby)}
+.grant{margin-top:var(--space-4);padding:var(--space-3) var(--space-4);border:1px dashed var(--x-proposed-freedom);border-radius:var(--radius-inset);background:var(--x-proposed-freedom-wash);display:grid;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small)}
+.grant dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);margin:0}
+.grant dt{color:var(--ink-muted)}
+.grant dd{margin:0;color:var(--ink)}
+.inbox{display:grid;gap:var(--space-3);align-content:start;min-height:0}
+.msg{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.msg .hd{display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.msg .hd .kind{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;padding:2px var(--space-2);border-radius:var(--radius-key);border:1px solid var(--hairline-strong);color:var(--ink)}
+.msg.notice .kind{border-color:var(--x-proposed-thread)}
+.msg.ask .kind{border-color:var(--x-proposed-standby)}
+.msg .s{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.msg p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.msg .acts{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.msg.new{border-color:var(--x-proposed-thread)}
+.msg.wait{opacity:0;transform:translateY(var(--space-2))}
+@media (prefers-reduced-motion: reduce){.msg.wait{transform:none}}
+@media (max-width:1400px){.tr{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr)}.grant dl{grid-template-columns:minmax(0,1fr)}.grant dt{margin-top:var(--space-1)}.wrap{gap:var(--space-5)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Acting within intent · V6</b> approvals become notices for holders who said the intent back; the rest still ask · keys and doors; delegation of authority</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const PL = DATA.plan, R = PL.record, G = PL.grant;
+const S = { arrived: false, seen: false };
+function msgHTML(m, i) {
+  if (m.kind === 'notice') return `<div class="msg notice ${S.arrived ? 'new' : 'wait'}"><span class="hd"><span class="kind">Told, not asked</span>${P(m.from).name} · ${m.at} · ${ichip(m.iid, { short: true })}</span>
+    <span class="s">${P(m.from).name} changed ${lc1(R.changed.split(':')[0])} <span class="within">${I('git-merge', 12)} within ${R.under}</span></span><p>${R.serves}</p><p>${limitsOf('YOU-31a').length} limits held · ends ${R.ends.split(',')[0]} · ${R.undo}</p>
+    <span class="acts">${S.seen ? `<span class="small muted">${I('eye', 12)} Seen by ${first(ME)}. Nothing else is needed.</span>` : `<button class="btn sm" data-seen>${I('eye', 14)} Seen</button><button class="btn sm">${I('message-circle-question', 14)} Ask a question</button>`}</span></div>`;
+  if (m.kind === 'ask') return `<div class="msg ask"><span class="hd"><span class="kind">Still asks</span>${P(m.from).name} · ${m.at} · ${ichip(m.iid, { short: true, ring: 'open' })}</span><span class="s">${m.w}</span><p>${m.why}</p>
+    <span class="acts"><button class="btn sm go">${I('check', 14)} Yes</button><button class="btn sm">${I('x', 14)} No</button><button class="btn sm">${I('message-circle', 14)} Ask ${first(m.from)} to say it back</button></span></div>`;
+  return `<div class="msg"><span class="hd"><span class="kind">Asked once</span>${m.at} · ${ichip(m.iid, { short: true })}</span><span class="s">${m.w}</span><p>${m.why}</p></div>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Home', 'What needs you'], [['S', 'seen'], ...STD], 'department') +
+  `<main class="main"><div class="wrap">
+    <section class="tbl scroll"><p class="eyebrow" style="margin-bottom:var(--space-2)">What “within intent” changes · ${ichip(R.under, { short: true })}</p>
+      <div class="tr h"><span>A change to</span><span>Before an intent</span><span>Within intent</span></div>
+      ${PL.becomes.map(b => `<div class="tr ${b.within ? 'on' : 'still'}"><span>${b.w}</span><span class="b">${b.before}</span><span class="a">${b.after}</span></div>`).join('')}
+      <p class="small muted" style="margin-top:var(--space-2)">Only for a holder who has said the intent back. An intent passed down and not yet confirmed unlocks nothing.</p>
+      <div class="grant"><p class="eyebrow">The key ${first(G.holder)} acted on · derived, not issued</p><dl>
+        <dt>Opens</dt><dd>${N(G.from[0]).freedom[+G.from[1].slice(1) - 1]}</dd>
+        <dt>From</dt><dd>${G.from[0]} ${G.from[1]}, through ${G.via.join(' and ')}</dd>
+        <dt>Because</dt><dd>${P(G.holder).name} said ${G.via[0]} back on ${G.saidBack}</dd>
+        <dt>Until</dt><dd>${G.until}, or ${G.ends.split(', ').slice(1).join(', ')}</dd>
+        <dt>Leaves</dt><dd class="mono micro">${G.audit}</dd></dl></div>
+    </section>
+    <section class="inbox scroll" aria-live="polite"><div><p class="eyebrow">${P(ME).name} · ${DATA.today}</p><h1 class="h">What reached ${first(ME)} this morning</h1></div>
+      ${[...PL.inbox].sort((a, b) => (a.kind === 'notice' ? -1 : 0) - (b.kind === 'notice' ? -1 : 0)).map(msgHTML).join('')}
+      <p class="small muted">A notice needs nothing pressed: the change already stands. “Seen” is a courtesy; a question is the floor above’s way in, and it undoes nothing. The Department sees why without having been asked first.</p>
+    </section></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-seen]')?.addEventListener('click', () => { S.seen = true; render(); });
+}
+function replay() { clearLater(); S.arrived = false; S.seen = false; settle(); render(); later(() => { S.arrived = true; $('.msg.notice').classList.remove('wait'); $('.msg.notice').classList.add('new'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 's' && S.arrived) { S.seen = true; render(); } });
+replay();
+</script>
+</body>
+</html>

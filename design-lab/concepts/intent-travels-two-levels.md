@@ -1,6 +1,6 @@
 ---
 name: intent-travels-two-levels
-status: to explore
+status: explored
 ---
 
 # Intent travels two levels
@@ -12,3 +12,5 @@ Proposed by batch 6 research.
 Could steer: the intent (AC), Mandate, Home "what needs you", approvals.
 
 In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): a reader's context is information placed against their floor's intent and the one above (readers V4).
+
+Explored in [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): the intent record, the nest rule (two up in full, further up folded), the rank rule, and freedom gated on the backbrief (nest V1 and V6, combined V1).

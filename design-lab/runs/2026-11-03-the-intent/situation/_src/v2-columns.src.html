@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent meets the situation · V2 · Sorted under the nest</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: the morning sorted under the nest. Each item sits under the nearest intent it touches, and marks the others; the nearer the intent, the wider its column ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-3)}
+.cols{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1.25fr) minmax(0,1fr) minmax(0,.8fr);gap:var(--space-3);min-height:0}
+.col{display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-2);min-height:0;padding:var(--space-3);border-radius:var(--radius-inset);background:linear-gradient(180deg,color-mix(in srgb,var(--fl) 16%,transparent),transparent 40%);border-top:2px solid var(--fc)}
+.col h2{display:grid;gap:2px;font-weight:400;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.col h2 .tt{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.cards{display:grid;gap:var(--space-2);align-content:start}
+.card{display:grid;gap:var(--space-1);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);background:var(--surface-pane)}
+.card .h{display:flex;gap:var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small)}
+.card .h .t{font-family:var(--font-mono);color:var(--ink-muted)}
+.card .h b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.card .w{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.card .part{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.card.limit{border-left:3px solid var(--x-proposed-ceiling)}
+.card .also{display:flex;gap:var(--space-2);align-items:center;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted)}
+.card .also i{display:inline-block;width:var(--space-2);height:var(--space-2);border-radius:50%;background:var(--fc)}
+.card.unseen{background:var(--x-proposed-unseen),var(--surface-inset)}
+.col.narrow .card .w{display:none}
+.foot{display:flex;gap:var(--space-5);align-items:center;font-size:var(--type-small);color:var(--ink-muted);flex-wrap:wrap}
+@media (max-width:1400px){.col{padding:var(--space-2)}.card .w{display:none}.col:first-child .card .w{display:block}.cols{gap:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent meets the situation · V2</b> sorted under the nest: each item under the nearest intent it touches; the nearer, the wider · kanban swimlanes, Hoshin</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const CH = DATA.chain;
+const S = { shown: false };
+const nearest = it => CH.find(c => it.touches.some(t => t[0] === c));
+function cardHTML(it, i) {
+  const t = it.touches.find(x => x[0] === nearest(it)), others = it.touches.filter(x => x[0] !== nearest(it));
+  return `<div class="card ${it.touches.some(x => x[1] === 'limit') ? 'limit' : ''} ${it.restricted ? 'unseen' : ''} dep" style="--i:${i}"><span class="h"><span class="t">${it.t}</span><b>${it.short}</b></span>
+    <span class="part">${touchWord(t)}${others.filter(o => o[1] === 'limit').map(o => ` · <span class="lite">limit ${o[2]}</span>`).join('')}</span><span class="w">${it.why}</span>
+    ${others.length ? `<span class="also">also ${others.map(o => `<span data-tier="${N(o[0]).floor}"><i></i> ${o[0]}</span>`).join('')}</span>` : ''}</div>`;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Home', 'This morning', 'By intent'], [...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">What reached ${first(ME)}, under the intent it touches</h1><p class="small muted">${DATA.today} · since ${DATA.since}</p></div>
+    <section class="cols">${CH.map((c, ci) => { const n = N(c), its = S.shown ? ranked().filter(it => nearest(it) === c) : [];
+      return `<div class="col ${ci === 3 ? 'narrow' : ''}" data-tier="${n.floor}"><h2>${ichip(c, { short: true })}<span class="tt">${n.title}</span><span>${ci === 0 ? 'your part' : ci === 1 ? 'one up' : ci === 2 ? 'two up' : 'further up · short form'} · ${its.length}</span></h2>
+        <div class="cards scroll">${its.map(cardHTML).join('')}</div></div>`; }).join('')}</section>
+    <p class="foot"><span>${I('fold-vertical', 14)} ${DATA.untouched.length} touch none of your intents: ${DATA.untouched.map(u => u.w).join(' · ')}</span></p>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.shown = false; render(); later(() => { S.shown = true; settle(); render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

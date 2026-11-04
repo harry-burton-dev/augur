@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent sheet · V4 · The life of an intent</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: an intent's states as questions and answers. Passed down is a question; said back answers it; a crossed assumption asks the owner once ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-5)}
+.rail{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;position:relative}
+.st{position:relative;padding:var(--space-5) var(--space-3) 0 0;display:grid;gap:var(--space-1);align-content:start}
+.st::before{content:"";position:absolute;top:calc(var(--space-2) - 1px);left:0;right:0;height:1px;background:var(--hairline-strong)}
+.st .dot{position:absolute;top:0;left:0;width:var(--space-4);height:var(--space-4);border-radius:50%;border:1.5px solid var(--hairline-strong);background:var(--slate-deep)}
+.st b{font-weight:400;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.st p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.st .qa{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--x-proposed-thread)}
+.st.end::before{right:auto;width:0}
+.st.here .dot{border-color:var(--light);background:var(--light);box-shadow:0 0 var(--space-3) color-mix(in srgb,var(--light) 40%,transparent)}
+.st.here b{color:var(--light)}
+.st.q .dot{border-color:var(--x-proposed-standby);background:var(--x-proposed-standby-wash)}
+.st .dot{transition:background var(--motion-calm) var(--ease-out),border-color var(--motion-calm) var(--ease-out),box-shadow var(--motion-calm) var(--ease-out)}
+.hist{min-height:0;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:var(--space-6)}
+.log{display:grid;align-content:start;gap:0}
+.log .r{display:grid;grid-template-columns:calc(var(--space-7) + var(--space-3)) var(--space-5) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);align-items:start}
+.log .r .d{font-family:var(--font-mono);color:var(--ink-muted)}
+.log .r .s{color:var(--ink-muted);display:flex;justify-content:center;padding-top:2px}
+.log .r.new{background:var(--x-proposed-drift-wash)}
+.holders{display:grid;gap:var(--space-2)}
+.holder{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-2);align-items:center;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-key);font-size:var(--type-small)}
+.holder .w{color:var(--ink-muted);white-space:nowrap}
+.ask{padding:var(--space-4);border:1px solid var(--x-proposed-standby);border-radius:var(--radius-inset);background:var(--surface-pane);display:grid;gap:var(--space-3);transition:opacity var(--motion-calm) var(--ease-out)}
+.ask.hide{opacity:0}
+.ask .btns{display:flex;gap:var(--space-2);flex-wrap:wrap}
+@media (max-width:1400px){.st p{display:none}.hist{grid-template-columns:minmax(0,1.4fr) minmax(280px,1fr);gap:var(--space-5)}.log .r{padding:var(--space-1) 0}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent sheet · V4</b> the life of an intent: passed down asks, said back answers, a crossed assumption asks once · question and answer</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const ID = 'DEP-14', n = N(ID);
+const S = { at: 'force', answer: null };
+const QA = { draft: 'the owner asks', briefed: 'a question to each holder', force: 'answered', revisit: 'a question to the owner', done: 'closed', lapsed: 'closed, unanswered' };
+const holders = ['TM-30', 'TM-31', 'TM-32'];
+function hist() {
+  const cb = DATA.catchball;
+  const h = [
+    [cb[0].at, 'draft', `${P(cb[0].from).name} writes draft 1 and throws it to ${cb[0].to.length} team leads`],
+    [cb[3].at, 'draft', `Draft 2 after ${cb.filter(c => c.r === 1 && c.moved).length} replies: ${cb[3].w.replace(/^Draft 2: /, '')}`],
+    [cb[6].at, 'briefed', `${P(cb[6].from).name} agrees it under ${n.serves}; passed down to ${holders.length} teams`],
+    [N('TM-30').saidAt, 'force', `${N('TM-30').team} says it back; confirmed`],
+    [N('TM-31').saidAt, 'force', `${F('team').name} says it back; confirmed`],
+    [DATA.incoming[0].t + ' today', 'revisit', `Assumption crossed: “${n.assumptions[0].w}”. ${n.assumptions[0].now}.`]
+  ];
+  return h.filter(r => S.at === 'revisit' || r[1] !== 'revisit');
+}
+function render() {
+  const order = DATA.states.map(s => s.id), at = order.indexOf(S.at);
+  $('#app').innerHTML = topHTML(['Mandate', F(n.floor).name, ID, 'Life'], [['A', 'keep'], ['M', 'amend'], ...STD], n.floor) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">${ichip(ID)} · its states, each a question or an answer</p></div>
+    <section class="rail" aria-label="States">${DATA.states.map((s, i) => `<div class="st ${s.id === S.at ? 'here' : ''} ${(s.id === 'revisit' || s.id === 'briefed') ? 'q' : ''} ${i === DATA.states.length - 1 ? 'end' : ''}"><span class="dot"></span><span class="qa">${QA[s.id]}</span><b>${s.w}</b><p>${s.d}</p><span class="tk">${s.tech}</span></div>`).join('')}</section>
+    <section class="hist">
+      <div class="log scroll"><p class="eyebrow" style="margin-bottom:var(--space-2)">${ID}, as it happened</p>${hist().map((r, i) => `<div class="r ${r[1] === 'revisit' ? 'new' : ''}"><span class="d">${r[0]}</span><span class="s">${r[1] === 'revisit' ? '<span class="drift"></span>' : ringHTML(r[1] === 'force' ? 'confirmed' : r[1] === 'briefed' ? 'open' : 'na')}</span><span>${r[2]}</span></div>`).join('')}</div>
+      <div style="display:grid;gap:var(--space-4);align-content:start">
+        <div class="holders"><p class="eyebrow">Each holder’s answer</p>${holders.map(h => { const st = N(h).state === 'briefed' ? 'open' : 'confirmed'; return `<div class="holder">${ichip(h, { ring: st })}<span class="w">${st === 'open' ? 'open since ' + DATA.catchball[6].at : 'said back'}</span></div>`; }).join('')}
+          <p class="small muted">In force for the teams that said it back. ${N('TM-32').team} still works to it, but nobody can know it understood, so its changes within intent still ask.</p></div>
+        <div class="ask ${S.at === 'revisit' ? '' : 'hide'}" aria-live="polite">${S.answer ? `<p class="h3">${S.answer === 'keep' ? 'Kept as it is' : 'Opened to amend'} by ${P(n.owner).name}</p><p class="small muted">${S.answer === 'keep' ? 'Recorded with the reason, and the assumption marked as knowingly crossed. Not asked again for this one.' : 'A new draft starts from this one; teams keep working to the old until the new is said back.'}</p>` : `
+          <p class="eyebrow">${I('help-circle', 12)} Asked once, at ${DATA.incoming[0].t}, of ${P(n.owner).name}</p>
+          <p class="small">An assumption ${ID} rests on no longer holds. Does the intent still fit? The work goes on meanwhile; nothing is paused.</p>
+          <div class="btns"><button class="btn sm" data-a="keep">Keep it <span class="kbd">A</span></button><button class="btn sm" data-a="amend">Amend it <span class="kbd">M</span></button></div>
+          <p class="micro muted">Not asked again. If nobody answers by ${n.review}, the review date asks.</p>`}</div>
+      </div></section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('[data-a]').forEach(b => b.onclick = () => { S.answer = b.dataset.a; render(); });
+}
+function replay() { clearLater(); S.at = 'force'; S.answer = null; settle(); render(); later(() => { S.at = 'revisit'; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; const k = e.key.toLowerCase(); if (S.at === 'revisit' && !S.answer && (k === 'a' || k === 'm')) { S.answer = k === 'a' ? 'keep' : 'amend'; render(); } });
+replay();
+</script>
+</body>
+</html>

@@ -28,3 +28,5 @@ In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): an agent may
 Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): the model's explanation arrives as an empty column that only people mark (explanations V6, grammar V6).
 
 In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): the records' account is by template; the model only drafts lines in pencil and never marks (marking V6, voices V2).
+
+In [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): a model may sort leftover sentences, draft a missing freedom line, bind untagged items and match backbrief phrases, all in pencil (writing V1 and V6, situation V6, backbrief V1).

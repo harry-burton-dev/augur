@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The nest · V4 · Coverage</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V4: the nest read from the top. Every part of the Org intent says what serves it and how deep that goes; work that serves nothing is shown too ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:var(--space-6)}
+.cov{display:grid;align-content:start;gap:0;min-height:0}
+.r{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.4fr) calc(var(--space-8) + var(--space-4));gap:var(--space-4);align-items:center;padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small)}
+.r.h{color:var(--ink-muted);border-bottom-color:var(--hairline-strong)}
+.r .part{display:flex;gap:var(--space-3);align-items:baseline;color:var(--ink)}
+.r .part b{font:500 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);min-width:2.2em}
+.r.lim .part{border-left:3px solid var(--x-proposed-ceiling);padding-left:var(--space-2)}
+.r .by{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3)}
+.depth{display:flex;align-items:center;gap:var(--space-2)}
+.depth .bar{display:flex;gap:2px}
+.depth .bar i{width:var(--space-2);height:var(--space-3);border-radius:1px;background:var(--hairline-strong)}
+.depth .bar i.on{background:var(--ink)}
+.depth .bar i.open{background:none;outline:1.5px solid var(--x-proposed-standby);outline-offset:-1.5px}
+.r .none{color:var(--ink-muted);font-style:italic}
+.r.flag{background:var(--x-proposed-drift-wash)}
+.side{display:grid;gap:var(--space-4);align-content:start;min-height:0}
+.orph{display:grid;gap:var(--space-1);padding:var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-inset)}
+.orph b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.orph p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.orph .n{font-family:var(--font-mono);color:var(--ink)}
+@media (max-width:1400px){.r{grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr) calc(var(--space-8));padding:var(--space-1) 0}.r .by .ichip .it{max-width:calc(var(--space-8) + var(--space-5))}.wrap{grid-template-columns:minmax(0,1.7fr) 270px;gap:var(--space-5)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>The nest · V4</b> coverage: every part of the Org intent says what serves it and how deep; work serving nothing is shown too · Hoshin cascade, OKR alignment</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p1';
+const ID = 'ORG-07', n = N(ID), all = Object.keys(DATA.intents);
+const S = { shown: 0 };
+const servers = part => all.filter(k => N(k).serves === ID && (N(k).servesPart === part || (N(k).alsoServes || []).includes(part)));
+/* how deep: the teams and people under an intent, and whether each has said it back */
+function below(k) { const kids = all.filter(c => N(c).serves === k); return kids.concat(kids.flatMap(below)); }
+function depthHTML(ks) {
+  const d = [...new Set(ks.flatMap(below))];
+  if (!ks.length) return '';
+  if (!d.length) return '<span class="micro muted">none below yet</span>';
+  return `<span class="depth"><span class="bar">${d.slice(0, 10).map(c => `<i class="${N(c).state === 'force' ? 'on' : 'open'}" title="${c}"></i>`).join('')}</span><span class="muted num">${d.filter(c => N(c).state === 'force').length}/${d.length}</span></span>`;
+}
+function render() {
+  const rows = [...n.tasks.map(t => ['task', t.id, t.w]), ...n.limits.map(l => ['lim', l.id, l.w])];
+  const restricted = all.filter(k => N(k).serves === ID && N(k).restricted);
+  $('#app').innerHTML = topHTML(['Mandate', F('org').name, ID, 'Coverage'], [...STD], 'org') +
+  `<main class="main"><div class="wrap">
+    <section class="cov scroll" aria-label="What serves each part"><div style="margin-bottom:var(--space-3)">${ichip(ID, { lg: true })}<p class="small muted" style="margin-top:var(--space-1)">${P(ME).name}’s view · every key task and limit, what serves it, and how many below have said it back</p></div>
+      <div class="r h"><span>Part of ${ID}</span><span>Served by</span><span>Said back below</span></div>
+      ${rows.map(([k, id, w], i) => { const sv = servers(id), half = sv.some(s => below(s).some(c => N(c).state !== 'force')), show = i < S.shown;
+        return `<div class="r ${k} ${show && !sv.length && k === 'task' ? 'flag' : ''}" style="opacity:${show ? 1 : 0};transition:opacity var(--motion-calm) var(--ease-out)"><span class="part"><b>${id}</b>${w}</span>
+          <span class="by">${sv.length ? sv.map(s => ichip(s, { ring: N(s).state === 'force' ? 'confirmed' : 'open' })).join('') : k === 'lim' ? `<span class="none">held by ${P(LIMIT(id).owner).name} directly; no intent needed</span>` : '<span class="none">nothing serves it</span>'}</span>
+          <span>${depthHTML(sv)}</span></div>`; }).join('')}
+      ${restricted.length ? `<div class="r" style="opacity:${S.shown >= rows.length ? 1 : 0}"><span class="part"><b>—</b><span class="unseen">part not shown to you</span></span><span class="by">${restricted.map(k => ichip(k)).join('')}</span><span class="small muted">ask ${P(N(restricted[0]).owner).name}</span></div>` : ''}
+    </section>
+    <aside class="side"><p class="eyebrow">Work that serves no intent</p>
+      ${DATA.orphans.map(o => `<div class="orph"><span>${ichip(o.iid, { short: true })} <span class="small muted">· ${o.where}</span></span><b>${o.w}</b><p><span class="n">${o.n}</span> ${o.unit} · ${o.share}</p><p>${o.note}</p></div>`).join('')}
+      <p class="small muted">Found from the floors’ own records: jobs, programmes and documents that name no intent. Not wrong by default; the owner is asked once whether to keep it, pause it or tie it to an intent.</p>
+      <p class="tk">Hoshin: every tactic traces to an objective · OKR alignment: orphan objectives</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.shown = 0; settle(); render(); const total = N(ID).tasks.length + N(ID).limits.length; for (let i = 1; i <= total; i++) later(() => { S.shown = i; render(); }, MOMENT() + (i - 1) * ms('--motion-instant')); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

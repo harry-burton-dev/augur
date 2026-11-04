@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The backbrief and drift · V5 · The world drifts</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: an intent drifting from the world. Each assumption it rests on is watched; one crossed this morning, one is projected to cross. The owner is asked once, at the crossing, not before ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr);gap:var(--space-6)}
+.chart{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-3);min-height:0}
+svg.ch{width:100%;height:100%;overflow:visible}
+svg.ch text{font-family:var(--font-sans);font-size:var(--type-small);fill:var(--ink-muted)}
+svg.ch text.lab{fill:var(--ink)}
+svg.ch .grid{stroke:var(--hairline)}
+svg.ch .need{fill:none;stroke:var(--ink-muted);stroke-dasharray:var(--space-1) var(--space-1)}
+svg.ch .act{fill:none;stroke:var(--light);stroke-width:2}
+svg.ch .proj{fill:none;stroke:var(--x-proposed-drift);stroke-width:1.5;stroke-dasharray:var(--space-2) var(--space-1);transition:stroke-dashoffset var(--motion-spin) var(--ease-out)}
+svg.ch .rev{stroke:var(--x-proposed-thread);stroke-width:1.5}
+svg.ch .now{stroke:var(--hairline-strong)}
+svg.ch .dot{fill:var(--light)}
+svg.ch .cross{fill:none;stroke:var(--x-proposed-drift);stroke-width:1.5}
+.legend{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted)}
+.legend span{display:inline-flex;gap:var(--space-2);align-items:center}
+.ln{display:inline-block;width:var(--space-5);height:0;border-top:2px solid var(--light)}
+.ln.n{border-top:1px dashed var(--ink-muted)}.ln.p{border-top:1.5px dashed var(--x-proposed-drift)}.ln.r{border-top:1.5px solid var(--x-proposed-thread)}
+.asm{display:grid;gap:var(--space-3);align-content:start}
+.a{display:grid;gap:var(--space-1);padding:var(--space-3);border-left:2px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small)}
+.a b{font-weight:400;color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.a .st{display:flex;gap:var(--space-2);align-items:center;color:var(--ink-muted)}
+.a.crossed{border-left-color:var(--x-proposed-drift);background:var(--x-proposed-drift-wash)}
+.a.watch{border-left-color:var(--x-proposed-thread)}
+.a.holds{border-left-color:var(--x-proposed-lit)}
+@media (max-width:1400px){.wrap{gap:var(--space-5)}.a{padding:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>The backbrief and drift · V5</b> the world drifts: each assumption is watched; one crossed today, one is projected to; asked at the crossing · revisit lines</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+ME = 'p3';
+const T = DATA.track, f = FACT(T.fact), n = N('DEP-14'), org = N('ORG-07');
+const WEEKS_TO_END = 21, REV_WEEK = 13; /* 2 Oct + 21 weeks = 1 Mar; + 13 weeks = 1 Jan: chart geometry, from the dates in DATA */
+const S = { drawn: false };
+function svg() {
+  const W = 760, H = 380, L = 50, R = 720, Tp = 20, B = 340, y0 = 30, y1 = 80;
+  const X = w => L + (w / WEEKS_TO_END) * (R - L), Y = v => B - ((v - y0) / (y1 - y0)) * (B - Tp);
+  const wk = [0, 1, 2, 3, 4, 4.6];
+  let g = '';
+  for (let v = 30; v <= 80; v += 10) g += `<line class="grid" x1="${L}" y1="${Y(v)}" x2="${R}" y2="${Y(v)}"/><text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${v}%</text>`;
+  [[0, T.weeks[0]], [4.6, T.weeks.at(-1)], [REV_WEEK, T.revisitBy], [WEEKS_TO_END, f.by]].forEach(([w, l]) => g += `<text x="${X(w)}" y="${B + 20}" text-anchor="middle">${l}</text>`);
+  g += `<path class="need" d="M${X(0)},${Y(f.start)} L${X(WEEKS_TO_END)},${Y(f.target)}"/><text class="lab" x="${X(WEEKS_TO_END) - 4}" y="${Y(f.target) - 8}" text-anchor="end">${f.target}% by ${f.by}</text>`;
+  g += `<line class="rev" x1="${X(0)}" y1="${Y(T.revisitAt)}" x2="${X(REV_WEEK)}" y2="${Y(T.revisitAt)}"/><text class="lab" x="${X(0) + 6}" y="${Y(T.revisitAt) - 8}">revisit line: ${T.revisitAt}% before ${T.revisitBy}</text>`;
+  g += `<path class="act" d="${T.actual.map((v, i) => (i ? 'L' : 'M') + X(wk[i]) + ',' + Y(v)).join(' ')}"/>`;
+  T.actual.forEach((v, i) => g += `<circle class="dot" cx="${X(wk[i])}" cy="${Y(v)}" r="3"/>`);
+  const cw = 4.6 + (T.revisitAt - f.now) / f.week;
+  if (S.drawn) g += `<path class="proj" d="M${X(4.6)},${Y(f.now)} L${X(cw)},${Y(T.revisitAt)}"/><circle class="cross" cx="${X(cw)}" cy="${Y(T.revisitAt)}" r="8"/><text class="lab" x="${X(cw) + 12}" y="${Y(T.revisitAt) + 20}">${n.assumptions[1].now.replace(/^projected to reach \d+% /, 'crosses ')}</text>`;
+  g += `<line class="now" x1="${X(4.6)}" y1="${Tp}" x2="${X(4.6)}" y2="${B}"/><text x="${X(4.6) + 6}" y="${Tp + 12}">today</text>`;
+  return `<svg class="ch" viewBox="0 0 ${W} ${H + 20}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${f.w}: actual, needed and projected">${g}</svg>`;
+}
+function render() {
+  const rows = [...n.assumptions.map(a => ['DEP-14', a]), ...org.assumptions.map(a => ['ORG-07', a])];
+  $('#app').innerHTML = topHTML(['Mandate', F('department').name, 'DEP-14', 'Assumptions'], [...STD], 'department') +
+  `<main class="main"><div class="wrap">
+    <section class="chart"><div><p class="eyebrow">${f.w} · ${f.src}</p><h1 class="h">Is “${n.title}” still the right intent?</h1></div>${svg()}
+      <p class="legend"><span><i class="ln"></i>actual</span><span><i class="ln n"></i>October’s line to ${f.target}%</span><span><i class="ln p"></i>at this week’s rate</span><span><i class="ln r"></i>DEP-14’s revisit line</span></p></section>
+    <aside class="asm" aria-live="polite"><p class="eyebrow">What the intents rest on, watched</p>
+      ${rows.map(([iid, a]) => { const st = a.state === 'crossed' ? 'crossed' : iid === 'DEP-14' ? 'watch' : 'holds';
+        return `<div class="a ${st}">${ichip(iid, { short: true })}<b>${a.w}</b><span class="st">${I(st === 'crossed' ? 'triangle' : st === 'watch' ? 'eye' : 'check', 14)} ${a.now}</span>${st === 'crossed' ? `<span class="small">Crossed. ${P(N(iid).owner).name} asked once, at ${ITEM(DATA.plan.breaks).t}; the work goes on meanwhile.</span>` : st === 'watch' ? `<span class="small">Not crossed. Watched daily; ${first(N(iid).owner)} will be asked if it is, not before.</span>` : ''}</div>`; }).join('')}
+      <p class="small muted">An intent drifts from the world when what it assumed stops being true. Behind October’s line overall, ahead of it this week: if the rain keeps on, resting Thornley stops paying for itself before the new year. That is a question for ${first(n.owner)} then, not a worry now.</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.drawn = false; settle(); render(); later(() => { S.drawn = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; });
+replay();
+</script>
+</body>
+</html>

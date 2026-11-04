@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Intent meets the situation · V1 · Ranked by what it touches</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: what reached you this morning, in an order set by rule from the intents each item touches. Each says which, and why it matters to you. Nothing is dropped ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,calc(var(--measure-card) * .8));gap:var(--space-6)}
+.list{display:grid;align-content:start;gap:0;min-height:0}
+.grp{display:flex;gap:var(--space-3);align-items:baseline;padding:var(--space-3) 0 var(--space-1);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.grp b{font-weight:500;color:var(--ink)}
+.it{display:grid;grid-template-columns:calc(var(--space-6) + var(--space-1)) minmax(0,1fr) auto;gap:var(--space-1) var(--space-4);padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);align-items:start}
+.it .t{font-family:var(--font-mono);font-size:var(--type-small);line-height:var(--leading-meta);color:var(--ink-muted)}
+.it .ti{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.it .why{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);grid-column:2}
+.it .tch{grid-column:2;display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.it .tch .lim-w{border-left:3px solid var(--x-proposed-ceiling);padding-left:var(--space-2)}
+.it .by{font:400 var(--x-proposed-type-micro)/var(--leading-meta) var(--font-mono);color:var(--ink-muted);white-space:nowrap;text-align:right}
+.it .by b{font-weight:400;color:var(--x-proposed-standby)}
+.it.r1{background:linear-gradient(90deg,var(--x-proposed-thread-wash),transparent 70%)}
+.it.unseen-row .ti{background:var(--x-proposed-unseen);padding:0 var(--space-2);border-radius:2px;color:var(--ink-muted);width:fit-content}
+.fold{display:grid;gap:var(--space-1);padding:var(--space-2) var(--space-3);border:1px dashed var(--hairline);border-radius:var(--radius-key);margin-top:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.fold button{text-align:left;color:var(--ink)}
+.fold li{display:flex;gap:var(--space-3)}
+.fold .pencil{padding:0 var(--space-2)}
+.side{display:grid;gap:var(--space-3);align-content:start}
+.rules li{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr) auto;gap:var(--space-2);padding:var(--space-1) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.rules li b{font:500 var(--x-proposed-type-micro)/var(--leading-small) var(--font-mono);color:var(--ink-muted)}
+.rules li .n{font-family:var(--font-mono);color:var(--ink-muted)}
+@media (max-width:1400px){.it .tch{display:none}.it{padding:var(--space-1) var(--space-2)}.wrap{gap:var(--space-5);grid-template-columns:minmax(0,1fr) 240px}.grp{padding-top:var(--space-2)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Intent meets the situation · V1</b> ranked by what it touches: an order set by rule, each item says which intent and why it matters to you · Bratman; Endsley</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { open: false, shown: false };
+function itemHTML(it) {
+  const r = rankOf(it), tt = topTouch(it);
+  return `<div class="it r${r} ${it.restricted ? 'unseen-row' : ''} dep" style="--i:${DATA.incoming.indexOf(it)}">
+    <span class="t">${it.t}</span><span class="ti">${it.restricted ? `${I('lock', 12)} ${it.short}` : it.title}</span><span class="by">${it.bites ? `bites by <b>${it.bites}</b>` : ''}</span>
+    <span class="why">${it.why}</span>
+    <span class="tch">${it.touches.map(t => `<span class="${t[1] === 'limit' ? 'lim-w' : ''}">${ichip(t[0], { short: true })} ${t[1] === 'unseen' ? 'a part you can’t open' : touchWord(t).split(':')[0]}</span>`).join('')} <span>· ${it.src}</span>${it.tag === 'pencil' ? ` <span class="pencil micro" style="padding:0 var(--space-1)"><span class="pt">placed by a model in pencil: ${it.pencilWhy}</span></span>` : ''}</span>
+  </div>`;
+}
+function render() {
+  const items = ranked(), groups = [...new Set(items.map(rankOf))];
+  $('#app').innerHTML = topHTML(['Home', 'This morning'], [['U', 'untouched'], ...STD], 'team') +
+  `<main class="main"><div class="wrap">
+    <section class="list scroll" aria-label="What reached you, ranked">
+      <div style="display:flex;gap:var(--space-4);align-items:baseline;flex-wrap:wrap"><h1 class="h">${DATA.today}, ${DATA.now}</h1><p class="small muted">${items.length + DATA.untouched.length} things reached ${first(ME)} since ${DATA.since} · ranked by the intents they touch</p></div>
+      ${S.shown ? groups.map(g => `<p class="grp"><b>${g}</b>${DATA.rankRule[g - 1].w}</p>${items.filter(i => rankOf(i) === g).map(itemHTML).join('')}`).join('') : ''}
+      <div class="fold"><button data-u aria-expanded="${S.open}">${I(S.open ? 'chevron-down' : 'chevron-right', 14)} ${DATA.untouched.length} touch none of your intents · folded, never hidden <span class="kbd">U</span></button>
+        ${S.open ? `<ul>${DATA.untouched.map(u => `<li><span class="mono">${u.t}</span><span>${u.w} · ${u.src}</span>${u.pencil ? `<span class="pencil"><span class="pt struck">pencil: ${u.pencil}</span></span><span>${first(ME)} said no</span>` : ''}</li>`).join('')}</ul>` : ''}</div>
+    </section>
+    <aside class="side"><p class="eyebrow">The rule · an order, not a score</p>
+      <ol class="rules">${DATA.rankRule.map(r => `<li><b>${r.n}</b><span>${r.w}<span class="tk">${r.tech}</span></span><span class="n">${r.n === 7 ? DATA.untouched.length : DATA.incoming.filter(i => rankOf(i) === r.n).length}</span></li>`).join('')}</ol>
+      <p class="small muted">The same rule for everyone, owned by Mandate. Ties go to whatever bites first. No model ranks anything; a model may only suggest which intent an untagged item touches, in pencil, for you to confirm.</p>
+      <p class="small muted">Your intents: ${DATA.chain.map(c => ichip(c, { short: true })).join(' ')}</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-u]').onclick = () => { S.open = !S.open; render(); };
+}
+function replay() { clearLater(); S.shown = false; S.open = false; render(); later(() => { S.shown = true; settle(); render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 'u') { S.open = !S.open; render(); } });
+replay();
+</script>
+</body>
+</html>

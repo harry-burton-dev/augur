@@ -10,3 +10,5 @@ When values meet, the strictest marking wins, uses narrow to what every part all
 First found in: [`2026-11-03-the-label`](../runs/2026-11-03-the-label/) (record V1, sharing V1 and V2, combined V1 and V3).
 
 Could steer: Artifacts publishing, the edition (S), the case file (U).
+
+In [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): limits only tighten going down the nest, and each names who can lift it; a looser line is refused when tried (nest V5, writing V4).

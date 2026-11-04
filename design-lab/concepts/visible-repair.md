@@ -24,3 +24,5 @@ Also in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/
 In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): undo keeps the recipe line struck through; recipe versions carry the reason for each change; a late answer from the tray is a seam with who and how (combined V4).
 
 In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): a corrected mark is a new dated mark beside the old; a draft changed after a precedent keeps a seam naming the game (learning V6, combined V4).
+
+In [`2026-11-03-the-intent`](../runs/2026-11-03-the-intent/): catchball changes are kept as named seams (writing V3).
