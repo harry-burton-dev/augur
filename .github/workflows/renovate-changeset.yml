@@ -6,11 +6,19 @@ name: Renovate changeset
 # workflow's own token starts no CI, and the PR's checks must run on the commit that has the
 # changeset. That push stops the CI run on Renovate's commit, so only one run goes to the end.
 # Renovate keeps updating the branch: renovate.json lists this commit's author in gitIgnoredAuthors.
+#
+# On the kit's PR (renovate/augur-kit) it also re-pins the kit (release/kit.json, scripts/kit.mjs) and
+# rewrites the open-source notices from what is installed, as the Lockfile workflow does, so the pin
+# moves with the packages and `pnpm check:kit` stays green.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 permissions:
   contents: read
+  packages: read
+env:
+  # Reads AUGUR's kit packages from GitHub Packages (.npmrc), for the kit's PR only.
+  NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 concurrency:
   group: renovate-changeset-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -18,7 +26,7 @@ jobs:
   changeset:
     if: startsWith(github.head_ref, 'renovate/') && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Is the deploy key set?
         id: key
@@ -36,6 +44,17 @@ jobs:
           ssh-key: ${{ secrets.RENOVATE_CHANGESET_KEY }}
       - if: steps.key.outputs.set == 'true'
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - if: steps.key.outputs.set == 'true' && github.head_ref == 'renovate/augur-kit'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - if: steps.key.outputs.set == 'true' && github.head_ref == 'renovate/augur-kit'
+        name: Pin the kit the PR installs
+        run: |
+          pnpm install --no-frozen-lockfile --ignore-scripts
+          node scripts/kit.mjs pin
+          node scripts/licences.mjs notices
+          git add pnpm-lock.yaml release/kit.json THIRD_PARTY_NOTICES.md
       - if: steps.key.outputs.set == 'true'
         name: Add the changeset
         run: |
@@ -43,7 +62,7 @@ jobs:
           git add .changeset
           if git diff --cached --quiet; then exit 0; fi
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit -q -m "Add a changeset for this dependency update"
+            commit -q -m "Add a changeset for this dependency update, and the kit pin with a kit update"
           git push origin "HEAD:$BRANCH"
         env:
           BASE: ${{ github.base_ref }}
