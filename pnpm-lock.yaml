@@ -1210,6 +1210,12 @@ packages:
   '@harry-burton-dev/augur-kit-bundle@0.5.0':
     resolution: {integrity: sha512-70WnY9IYtHlGrRIjzNlxtoL8SVNeLNrBKdawktqNY9kr+bmOyK+lc4yEC40POsOSnQxCCJ+AT0df6S/LTKo/fw==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-bundle/0.5.0/e67aa4dfd684eba74292f62d4a82fdf6b255582a}
 
+  '@harry-burton-dev/augur-kit-common@0.2.0':
+    resolution: {integrity: sha512-AqpeL98AHlkVfhPfmSmwXGR1NrxN/YfkUVrvvPlqp5110OSYAm7vz2vmnj9Bp+lzUgmLF4p08y5FMzCFSYZjJg==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-common/0.2.0/e40370119beaab39ecb5248bd85de45a59cebcc8}
+    peerDependencies:
+      react: ^19.3.1
+      react-dom: ^19.3.1
+
   '@harry-burton-dev/augur-kit-common@0.7.0':
     resolution: {integrity: sha512-pFx0ACk8BlSja0YT3VkEP5A2hVAtJoMuMlHQqaHZ+q1THnyVXAOryHR/F5qeX+B8xC29WSVu6Gsbv5TzHz/NhA==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-common/0.7.0/b83017f3de21b5989f5f02b0f0729c5a0455095a}
     peerDependencies:
@@ -4944,6 +4950,15 @@ snapshots:
       - '@types/react'
       - react
       - react-dom
+
+  '@harry-burton-dev/augur-kit-common@0.2.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+    dependencies:
+      lucide-react: 1.62.0(@types/react@19.3.0)(react@19.3.1)
+      react: 19.3.1
+      react-aria-components: 1.22.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react-dom: 19.3.1(react@19.3.1)
+    transitivePeerDependencies:
+      - '@types/react'
 
   '@harry-burton-dev/augur-kit-common@0.7.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
