@@ -18,7 +18,7 @@
     "realm": [
       {
         "name": "admin",
-        "description": "Runs the platform; sees the Admin app"
+        "description": "Runs AUGUR; sees the Admin app"
       },
       {
         "name": "editor",

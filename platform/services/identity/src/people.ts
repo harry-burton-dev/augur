@@ -158,7 +158,7 @@ export const peopleRoutes =
         const principals = req.query.principals.split(',').map((s) => s.trim()).filter(Boolean);
         // Who holds a role is the platform's business: an app tells people, not "every admin".
         if (asker !== 'platform' && principals.some((p) => p.startsWith('role:'))) {
-          return reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can reach people by role.' });
+          return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can reach people by role.' });
         }
         await teams?.ready();
         const [all, folks, members] = await Promise.all([workspaces.teams(), everyone(), workspaces.memberships()]);
