@@ -1,0 +1,104 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>App owner · V1 Delivery report</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-3);height:100%}
+.hd{display:flex;align-items:baseline;gap:var(--space-4);flex-wrap:wrap}
+.hd .sum{margin-left:auto;font-size:var(--type-meta);color:var(--ink-muted)}
+.hd .sum b{font:400 var(--type-lead)/1 var(--font-mono);color:var(--light)}
+.flow{position:relative;min-height:0}
+.flow svg{width:100%;height:100%;display:block;overflow:visible}
+rect.node{fill:var(--ink);opacity:.85}
+rect.node.stop{fill:var(--x-proposed-blocked)}
+rect.node.held{fill:url(#hatch)}
+rect.node.urgent{fill:var(--danger)}
+rect.node.good{fill:var(--x-proposed-lit)}
+rect.node.dim{fill:var(--ink-muted);opacity:.5}
+path.link{fill:none;stroke:var(--ink);stroke-opacity:.14;transition:stroke-opacity var(--motion-base)}
+path.link.stop{stroke:var(--warning);stroke-opacity:.22}
+path.link.hi{stroke-opacity:.38}
+path.link{stroke-dasharray:var(--len);stroke-dashoffset:var(--len)}
+.drawn path.link{stroke-dashoffset:0;transition:stroke-dashoffset var(--motion-run) var(--ease-standard),stroke-opacity var(--motion-base)}
+text{font-family:var(--font-sans);font-size:var(--type-meta);fill:var(--ink)}
+text.n{font-family:var(--font-mono);fill:var(--light)}
+text.s{fill:var(--ink-muted);font-size:var(--x-proposed-type-micro)}
+.col-h{font:400 var(--type-label)/1 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;fill:var(--ink-muted)}
+.foot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4)}
+.foot .pane{padding:var(--space-3) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.foot .pane b{font-weight:400;color:var(--light)}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <div class="hd"><p class="eyebrow">Admin · Apps · Notices</p><h1 class="heading" id="h"></h1><span class="sum" id="sum"></span></div>
+    <div class="flow" id="flow"></div>
+    <div class="foot" id="foot"></div>
+  </div></main>
+</div>
+<div class="x-cap"><b>App owner · V1</b> delivery report: where the app’s notices went, person by person, and where they stopped · Sankey diagrams, Royal Mail tracking, email delivery reports</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const APP = 'repairs', app = A(APP);
+const rs = ALL().filter(r => r.n.app === APP), ds = rs.flatMap(r => r.deliveries);
+$('#top').innerHTML = topHTML(['Admin', 'Apps', app.name, 'Notices'], [['hover', 'a flow'], ['R', 'replay'], ['T', 'technical words', 'h-t']], 'department');
+$('#h').textContent = `Where ${app.name}’s notices went last week`;
+$('#sum').innerHTML = `<b>${rs.length}</b> sent · <b>${ds.length}</b> times someone was told · owner ${P(app.owner).name}`;
+/* nodes and flows, counted in people (one person told once = 1) */
+const blockedP = rs.filter(r => r.blocked?.rule === 'permission').reduce((a, r) => a + r.blocked.would, 0);
+const teamoffP = rs.filter(r => r.blocked?.rule === 'teamoff').reduce((a, r) => a + r.blocked.would, 0);
+const repeatP = rs.filter(r => r.blocked?.rule === 'repeat').reduce((a, r) => a + r.blocked.would, 0);
+const by = f => ds.filter(f).length;
+const G = {
+  cols: ['Addressed', 'Routed', 'How it reached them', 'Receipt'],
+  nodes: [
+    { id: 'all', c: 0, v: blockedP + teamoffP + repeatP + ds.length, w: 'People it named', cls: '' },
+    { id: 'perm', c: 1, v: blockedP, w: 'Not allowed on this floor', s: `${rs.filter(r => r.blocked?.rule === 'permission').length} notices · ${DATA.floors.department.name}`, cls: 'stop' },
+    { id: 'teamoff', c: 1, v: teamoffP, w: 'Team notices off', s: DATA.teams.planned.name, cls: 'stop' },
+    { id: 'del', c: 1, v: ds.length, w: 'Delivered', s: `${ds.filter(d => d.via === 'escalation' || d.via === 'cover').length} of them asked next by the policy`, cls: 'good' },
+    { id: 'live', c: 2, v: by(d => d.rule === 'live'), w: 'Told live', cls: '' },
+    { id: 'quiet', c: 2, v: by(d => d.rule === 'quiet'), w: 'Held for quiet hours', cls: 'held' },
+    { id: 'away', c: 2, v: by(d => d.rule === 'away'), w: 'On a “while you were out” card', cls: 'held' },
+    { id: 'muted', c: 2, v: by(d => d.rule === 'muted'), w: 'List only (muted)', cls: 'dim' },
+    { id: 'urgent', c: 2, v: by(d => d.rule === 'urgent'), w: 'Urgent', s: `${rs.filter(r => r.cls === 'urgent').length} of ${app.urgent.perWeek} this week`, cls: 'urgent' },
+    { id: 'seen', c: 3, v: by(d => d.seen != null), w: 'Seen', cls: 'good' },
+    { id: 'unseen', c: 3, v: by(d => d.seen == null), w: 'Not seen yet', cls: 'dim' }
+  ],
+  links: []
+};
+G.links.push(['all', 'perm', blockedP, 'stop'], ['all', 'teamoff', teamoffP, 'stop'], ['all', 'del', ds.length]);
+['live', 'quiet', 'away', 'muted', 'urgent'].forEach(k => G.links.push(['del', k, G.nodes.find(n => n.id === k).v]));
+['live', 'quiet', 'away', 'muted', 'urgent'].forEach(k => { const f = d => d.rule === k; G.links.push([k, 'seen', by(d => f(d) && d.seen != null)], [k, 'unseen', by(d => f(d) && d.seen == null)]); });
+G.nodes = G.nodes.filter(n => n.v > 0); G.links = G.links.filter(l => l[2] > 0);
+function draw() {
+  const box = $('#flow').getBoundingClientRect(), W = box.width, Hh = box.height, top = 34, gap = 14, nw = 10;
+  const colX = c => 8 + c * (W - 240) / 3;
+  const total = G.nodes.filter(n => n.c === 0).reduce((a, n) => a + n.v, 0);
+  const maxCount = Math.max(...[0, 1, 2, 3].map(c => G.nodes.filter(n => n.c === c).length));
+  const k = (Hh - top - 10 - gap * (maxCount - 1)) / total;
+  const pos = {};
+  [0, 1, 2, 3].forEach(c => { let y = top; G.nodes.filter(n => n.c === c).forEach(n => { pos[n.id] = { x: colX(c), y, h: Math.max(2, n.v * k), out: 0, in: 0, n }; y += Math.max(2, n.v * k) + gap; }); });
+  let s = `<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--surface-raised)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--ink-muted)" stroke-width="2"/></pattern></defs>`;
+  s += G.cols.map((c, i) => `<text class="col-h" x="${colX(i)}" y="12">${c}</text>`).join('');
+  G.links.forEach(([a, b, v, cls]) => {
+    const A1 = pos[a], B1 = pos[b], w = v * k, y1 = A1.y + A1.out + w / 2, y2 = B1.y + B1.in + w / 2; A1.out += w; B1.in += w;
+    const x1 = A1.x + nw, x2 = B1.x, mx = (x1 + x2) / 2, len = Math.round(x2 - x1 + Math.abs(y2 - y1));
+    s += `<path class="link ${cls || ''}" data-a="${a}" data-b="${b}" style="--len:${len}" stroke-width="${Math.max(1, w)}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"><title>${v} people</title></path>`;
+  });
+  Object.values(pos).forEach(p => {
+    s += `<rect class="node ${p.n.cls}" x="${p.x}" y="${p.y}" width="${nw}" height="${p.h}" rx="1" data-id="${p.n.id}"/>`;
+    s += `<text x="${p.x + nw + 8}" y="${p.y + Math.min(p.h / 2, 14) + 4}"><tspan class="n">${p.n.v}</tspan> ${p.n.w}</text>`;
+    if (p.n.s) s += `<text class="s" x="${p.x + nw + 8}" y="${p.y + Math.min(p.h / 2, 14) + 19}">${p.n.s}</text>`;
+  });
+  $('#flow').innerHTML = `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Flow of ${app.name}'s notices">${s}</svg>`;
+  $$('#flow rect.node').forEach(r => r.addEventListener('mouseenter', () => $$('#flow path.link').forEach(l => l.classList.toggle('hi', l.dataset.a === r.dataset.id || l.dataset.b === r.dataset.id))));
+}
+const acted = rs.filter(r => r.acted), tta = acted.map(r => r.acted.acted - r.t).sort((a, b) => a - b);
+$('#foot').innerHTML = `<div class="pane"><b>${blockedP + teamoffP} of ${blockedP + teamoffP + ds.length}</b> people your notices named were never told. ${app.mayWhy} Today only your service’s log says so (a 403).</div>
+  <div class="pane"><b>${by(d => d.held)}</b> waited for someone’s working hour or return. That is the routing working, not a fault: you see “held”, never whose hours.</div>
+  <div class="pane"><b>${acted.length} of ${rs.filter(r => r.cls === 'needs' || r.cls === 'urgent').length}</b> needs-you notices were acted on. Median time to act: <b>${dur(tta[Math.floor(tta.length / 2)])}</b> on the wall clock.</div>`;
+function play() { clearLater(); document.body.classList.add('pre'); draw(); later(() => document.body.classList.remove('pre'), 60); later(() => $('#flow svg').classList.add('drawn'), 1200); }
+document.addEventListener('keydown', e => commonKeys(e, play));
+addEventListener('resize', () => { draw(); $('#flow svg').classList.add('drawn'); });
+Icons.hydrate(document.body); play();
+</script></body></html>
