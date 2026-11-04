@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Explanations · V3 · What to find next</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Explanations V3: a differential diagnosis. The problem, the explanations still in play, and the next fact that would tell them apart ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr) minmax(0,1.2fr);gap:var(--space-5)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.h2{font-weight:200;font-size:var(--type-lead);line-height:var(--leading-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.chart{width:100%;height:auto;display:block}
+.chart text{font:400 var(--x-proposed-type-micro) var(--font-mono);fill:var(--ink-muted)}
+.chart .b{fill:color-mix(in srgb,var(--ink) 35%,transparent)}
+.chart .b.up{fill:var(--ink)}
+.chart .base{stroke:var(--x-proposed-lit);stroke-dasharray:3 3}
+.dx{display:grid;gap:var(--space-2)}
+.d{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px var(--space-3);padding:var(--space-2) var(--space-3);border-left:2px solid var(--hairline-strong);font-size:var(--type-small);line-height:var(--leading-small)}
+.d b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.d .by{grid-column:1/-1;color:var(--ink-muted)}
+.d.stand{border-left-color:var(--x-proposed-lit)}
+.d.out{opacity:var(--x-proposed-quiet)}
+.d.pen{border-left-style:dotted}
+.d.pen b{font-style:italic}
+.tests{display:grid;gap:var(--space-2)}
+.tt{border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-3);display:grid;gap:var(--space-1);transition:border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.tt.best{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.tt.low{opacity:var(--x-proposed-quiet)}
+.tt .f{color:var(--light);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.tt .chips{display:flex;gap:var(--space-1);flex-wrap:wrap;align-items:center}
+.chip{border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);padding:0 var(--space-2);font-size:var(--type-small);line-height:1.6;color:var(--ink)}
+.chip.st{border-color:var(--x-proposed-lit)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Explanations · V3</b> what to find next: the differential, and the one fact that would tell the standing explanations apart · clinical differential diagnosis, Heuer’s diagnosticity</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { lit: false, pick: null };
+function chart() {
+  const M = DATA.missedByMonth, W = 300, Hh = 150, mx = Math.max(...M.n), bw = W / M.n.length;
+  const base = sum(M.n.slice(0, 3), x => x) / 3, y = v => Hh - 20 - v / mx * (Hh - 34);
+  return `<svg class="chart" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Missed collections a month, ${M.months[0]} to ${M.months[M.months.length - 1]}">${M.n.map((v, i) => `<rect class="b ${i >= 3 ? 'up' : ''}" x="${i * bw + 6}" y="${y(v)}" width="${bw - 12}" height="${Hh - 20 - y(v)}" rx="2"/><text x="${i * bw + bw / 2}" y="${Hh - 6}" text-anchor="middle">${M.months[i]}</text><text x="${i * bw + bw / 2}" y="${y(v) - 4}" text-anchor="middle">${v}</text>`).join('')}<line class="base" x1="0" x2="${W}" y1="${y(base)}" y2="${y(base)}"/></svg>`;
+}
+function render() {
+  const hs = hypsShown(), standing = hs.filter(h => tested(h.id) && against(h.id) === 0).map(h => h.id);
+  const open = hs.filter(h => !tested(h.id)).map(h => h.id);
+  const worth = t => t.splits.filter(id => standing.includes(id) || open.includes(id)).length;
+  const tests = X.tests.filter(t => STATE.gateway || !t.splits.every(id => H(id).pencil)).sort((a, b) => worth(b) - worth(a));
+  const best = tests[0];
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, T('ach').name], [...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="col scroll"><p class="h2">The problem</p><p class="small">${X.question}</p>${chart()}<p class="small muted">Dashed: the April to June average. ${yw('missed')} · ${DATA.sources.s3.name}</p></section>
+    <section class="col scroll"><p class="h2">Still in play</p>
+      <div class="dx">${hs.map(h => { const a = against(h.id), t = tested(h.id), rule = X.rows.filter(r => r.m[h.id] === 'II');
+        return `<div class="d ${!t ? 'pen' : a === 0 ? 'stand' : a >= 4 ? 'out' : ''}"><b>${h.short}</b><span class="num small">${!t ? 'untested' : a + ' against'}</span>
+        <span class="by">${!t ? 'from the assistant; no fact tests it yet' : a === 0 ? 'nothing against it' : rule.length ? 'ruled out by: ' + rule.map(r => DATA.facts[r.fact].say.split(':')[0].lc()).join('; ') : 'some facts against it'}</span></div>`; }).join('')}</div>
+      <p class="small muted">Ranked by what is against each, least first. Nothing here ranks by how much fits.</p></section>
+    <section class="col scroll"><p class="h2">What to find next</p>
+      <div class="tests">${tests.map((t, i) => `<div class="tt ${S.lit && t === best ? 'best' : ''} ${worth(t) === 0 ? 'low' : ''}"><span class="f">${t.fact}</span>
+        <span class="small muted">${P(t.who).name} · ${t.from} · ${t.takes}</span>
+        <span class="chips"><span class="small muted">would tell apart</span>${t.splits.map(id => `<span class="chip ${standing.includes(id) ? 'st' : ''}">${H(id).short}</span>`).join('')}</span>
+        <span class="small">${t.tells}</span>${S.lit && t === best ? `<button class="btn sm go" style="justify-self:start">${I('send', 13)}Ask ${first(t.who)}</button>` : ''}</div>`).join('')}</div>
+      <p class="small muted">The best next fact splits the explanations still standing. One that can only add to what is already set aside is listed last and says so.</p>
+      ${gatewayNote()}</section>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.lit = false; settle(); render(); later(() => { S.lit = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

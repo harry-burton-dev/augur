@@ -1,26 +1,348 @@
+# Generated from platform/services/events: its routes' TypeBox schemas and src/contract.ts (ADR 0055).
+# Change those, then run pnpm contracts. CI fails when this file is out of step.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.7.0
-  description: >
-    Notifications for the Shell's stream, and the platform's audit log.
-    People reach it through the gateway, which passes the caller in x-user-*
-    headers. Services call it on the internal network (see @augur/service-kit:
-    notify, recordAudit). An app's service signs in as itself (a bearer token
-    for its Keycloak client app-<id>, audience platform-services), may send only
-    for itself, and needs the scope (notifications:send, audit:write) that the
-    registry grants it on the floor named by x-workspace-id; otherwise 403, or
-    503 while that can't be checked. Platform services sign in the same way as
-    their own clients (platform-<name>). A service call that names a floor
-    (x-workspace-id) records it, with the floor's path from the root as it
-    stands then (asked of identity), on each notification and audit entry: 400
-    for a floor that doesn't exist, 503 while identity can't be reached.
-# Paths below are relative to the server: the major of info.version is the path prefix.
-# A breaking change bumps the major and is served under /v2 beside /v1.
-servers:
-  - url: /v1
+  version: 1.8.0
+  description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
+components:
+  schemas:
+    Refusal:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
+        - error
+        - message
+      properties:
+        type:
+          type: string
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
+          type: string
+          description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
+    NewNotification:
+      type: object
+      required:
+        - app
+        - recipients
+        - level
+        - title
+      properties:
+        app:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{1,39}$
+          description: The app it is about; the Shell opens it
+        recipients:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 500
+          uniqueItems: true
+          description: User ids; empty only with toTeam or audience
+        toTeam:
+          type: boolean
+          description: To everyone on the team the call's floor names, instead of recipients
+        audience:
+          type: array
+          items:
+            type: string
+            pattern: ^(org|(person|team|tree|role):[A-Za-z0-9_.:-]{1,100})$
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          description: Platform services only. Principals such as role:deployment-admin, worked out by identity as it's sent, instead of recipients
+        key:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The sender's name for this news; each person is told an app's key once
+        level:
+          enum:
+            - needs
+            - info
+            - done
+            - failed
+          description: '"needs" when the person has to act'
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        detail:
+          type: string
+          maxLength: 2000
+        link:
+          type: string
+          pattern: ^/
+          maxLength: 500
+          description: Path inside the app to open
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationAction"
+          maxItems: 2
+          description: Buttons on it in the Shell; pressing one raises its intent through the shell and marks it read
+      additionalProperties: false
+    NotificationAction:
+      type: object
+      required:
+        - label
+        - intent
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 30
+          description: '"Approve", "Open"'
+        intent:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              pattern: ^[a-z][a-z0-9.-]*$
+              maxLength: 80
+              description: An intent type some app handles
+            payload:
+              description: The app's own; at most 1024 bytes as JSON
+          additionalProperties: false
+      additionalProperties: false
+    Notification:
+      type: object
+      required:
+        - id
+        - app
+        - level
+        - title
+        - createdAt
+      properties:
+        id:
+          type: string
+        app:
+          type: string
+        level:
+          enum:
+            - needs
+            - info
+            - done
+            - failed
+        title:
+          type: string
+        detail:
+          type: string
+        link:
+          type: string
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationAction"
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type: string
+          format: date-time
+        workspace:
+          $ref: "#/components/schemas/EventFloor"
+    NewAuditEntry:
+      type: object
+      required:
+        - actor
+        - app
+        - action
+      properties:
+        actor:
+          type: object
+          required:
+            - id
+            - kind
+          properties:
+            id:
+              type: string
+              minLength: 1
+              maxLength: 100
+              description: A person's id or a service's name
+            kind:
+              enum:
+                - user
+                - service
+          additionalProperties: false
+        app:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: The app or service it happened in
+        action:
+          type: string
+          pattern: ^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$
+          maxLength: 80
+          description: A dotted verb, e.g. "document.published"
+        target:
+          type: string
+          maxLength: 200
+        detail:
+          type: object
+          maxProperties: 50
+          additionalProperties: {}
+      additionalProperties: false
+    AuditEntry:
+      allOf:
+        - $ref: "#/components/schemas/NewAuditEntry"
+        - type: object
+          required:
+            - id
+            - at
+          properties:
+            id:
+              type: string
+            at:
+              type: string
+              format: date-time
+            workspace:
+              $ref: "#/components/schemas/EventFloor"
+    EventFloor:
+      type: object
+      required:
+        - id
+        - path
+      properties:
+        id:
+          type: string
+        path:
+          type: array
+          items:
+            type: string
+      description: The floor it happened on, and its path from the root as it stood then
+    TeamNotices:
+      type: object
+      required:
+        - workspace
+        - on
+      properties:
+        workspace:
+          type: string
+        on:
+          type: boolean
+    NewDomainEvent:
+      type: object
+      required:
+        - topic
+        - id
+        - payload
+      properties:
+        topic:
+          type: string
+          pattern: ^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$
+          maxLength: 120
+          examples:
+            - folio.document.published
+        id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The publisher's own id for it
+        workspace:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The floor it happened on
+        payload: {}
+      additionalProperties: false
+    DomainEvent:
+      type: object
+      required:
+        - seq
+        - topic
+        - id
+        - publisher
+        - at
+        - payload
+      properties:
+        seq:
+          type: string
+        topic:
+          type: string
+        id:
+          type: string
+        publisher:
+          type: string
+        at:
+          type: string
+          format: date-time
+        workspace:
+          $ref: "#/components/schemas/EventFloor"
+        payload: {}
 paths:
   /notifications:
+    post:
+      summary: Notify people (services only)
+      description: With toTeam and no recipients, to everyone on the team the call's floor names (its members and those of the teams below), asked of identity as it's sent. Only a team that has turned team notices on (403 otherwise). With audience (platform services only, ADR 0044), to everyone the principals reach now, asked of identity, such as role:deployment-admin. With key, nobody who already has a notification from that app with that key is told again, read or not.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewNotification"
+      responses:
+        "202":
+          description: Sent, one notification per recipient
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sent
+                properties:
+                  sent:
+                    type: integer
+                description: Sent, one notification per recipient
+        "400":
+          description: Invalid notification, an unknown floor, or toTeam not on a team
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a signed-in service, not granted this, or team notices are off
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, grants or an audience can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     get:
       summary: The caller's unread notifications, newest first (up to 50)
       responses:
@@ -28,41 +350,40 @@ paths:
           description: Unread notifications
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/Notification" } }
-        "401": { description: No signed-in caller }
-    post:
-      summary: Notify people (services only)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/NewNotification" }
-      description: >
-        With toTeam and no recipients, to everyone on the team the call's floor
-        names (its members and those of the teams below), asked of identity as
-        it's sent. Only a team that has turned team notices on (403 otherwise).
-        With audience (platform services only, ADR 0044), to everyone the
-        principals reach now, asked of identity, such as role:deployment-admin.
-        With key, nobody who already has a notification from that app with that
-        key is told again, read or not.
-      responses:
-        "202": { description: "Sent, one notification per recipient: { sent: number }" }
-        "400": { description: Invalid notification, an unknown floor, or toTeam not on a team }
-        "403": { description: Not a signed-in service, not granted this, or team notices are off }
-        "503": { description: Floors, grants or an audience can't be checked right now }
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+                description: Unread notifications
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /team-notices/{workspace}:
-    parameters:
-      - { name: workspace, in: path, required: true, schema: { type: string } }
     get:
       summary: Whether a team has turned team notices on (its leads and admins)
       description: A lead must be standing on the team (x-workspace-id, checked by the gateway).
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: workspace
+          required: true
       responses:
         "200":
           description: The setting
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TeamNotices" }
-        "403": { description: Not a lead standing on that team, nor an admin }
+              schema:
+                $ref: "#/components/schemas/TeamNotices"
+        "403":
+          description: Not a lead standing on that team, nor an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     put:
       summary: Turn team notices on or off for a team (its leads and admins)
       description: Audited as team-notices.on or team-notices.off, on that floor.
@@ -72,123 +393,157 @@ paths:
           application/json:
             schema:
               type: object
-              additionalProperties: false
-              required: [on]
+              required:
+                - on
               properties:
-                on: { type: boolean }
+                on:
+                  type: boolean
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: workspace
+          required: true
       responses:
         "200":
           description: The setting now
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TeamNotices" }
-        "403": { description: Not a lead standing on that team, nor an admin }
+              schema:
+                $ref: "#/components/schemas/TeamNotices"
+        "403":
+          description: Not a lead standing on that team, nor an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notifications/{id}/read:
+    post:
+      summary: Mark one of the caller's notifications read
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Marked read
+        "404":
+          description: The caller has no such notification
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Mark it unread again (Undo)
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Marked unread
+        "404":
+          description: The caller has no such notification
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /notifications/stream:
     get:
       summary: Each new notification for the caller, as server-sent events
-      description: >
-        Events are named "notification" and carry a Notification as JSON.
-        Comment lines are sent as keep-alives. Read with fetch so the sign-in
-        token can be sent; reload the list after reconnecting.
+      description: Events are named "notification" and carry a Notification as JSON. Comment lines are sent as keep-alives. Read with fetch so the sign-in token can be sent; reload the list after reconnecting.
       responses:
         "200":
           description: An open event stream
           content:
-            text/event-stream: {}
-  /notifications/{id}/read:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
-    post:
-      summary: Mark one of the caller's notifications read
-      responses:
-        "204": { description: Marked read }
-        "404": { description: The caller has no such notification }
-    delete:
-      summary: Mark it unread again (Undo)
-      responses:
-        "204": { description: Marked unread }
-        "404": { description: The caller has no such notification }
-  /audit:
-    get:
-      summary: The audit log, newest first (admins; leads for their own floor)
-      description: >
-        To page, ask again with `before` set to the id of the oldest entry
-        already shown; a page shorter than `limit` is the last one. With
-        `workspace`, only entries on that floor or a floor below it, as the
-        tree stood when each was written. Admins read the whole log; a lead
-        standing on a floor (x-workspace-id, checked by the gateway) reads that
-        floor's with `workspace` set to it.
-      parameters:
-        - { name: app, in: query, schema: { type: string } }
-        - { name: actor, in: query, schema: { type: string } }
-        - { name: since, in: query, schema: { type: string, format: date-time }, description: Only entries at or after this time }
-        - { name: until, in: query, schema: { type: string, format: date-time }, description: Only entries before this time }
-        - { name: before, in: query, schema: { type: string, pattern: "^[0-9]+$" }, description: An entry's id; only entries older than it }
-        - { name: workspace, in: query, schema: { type: string }, description: Only entries on this floor or below it }
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
-      responses:
-        "200":
-          description: Audit entries
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
-        "403": { description: Not an admin, nor a lead asking for their own floor }
-    post:
-      summary: Record an audit entry (services only). Entries are never changed or removed.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/NewAuditEntry" }
-      responses:
-        "201": { description: Recorded }
-        "400": { description: Invalid entry, or an unknown floor }
-        "403": { description: Not a signed-in service, or not granted this }
-        "503": { description: Floors or grants can't be checked right now }
+            text/event-stream:
+              schema: {}
   /domain-events:
     post:
       summary: Publish domain events (services only)
-      description: >
-        An app publishes on its own topics ("<app id>.<what happened>") with the
-        events:publish scope; platform services on "platform.*". Every event in
-        one call is on the same publisher's topics. An event whose id the
-        publisher already sent is kept once. Payloads are at most 16 KB: ids and a
-        little context, never content a follower might not be allowed to see.
-        The events service itself publishes platform.person.*, platform.team.*
-        and platform.app.* as identity and the registry record those changes.
+      description: "An app publishes on its own topics (\"<app id>.<what happened>\") with the events:publish scope; platform services on \"platform.*\". Every event in one call is on the same publisher's topics. An event whose id the publisher already sent is kept once. Payloads are at most 16 KB: ids and a little context, never content a follower might not be allowed to see. The events service itself publishes platform.person.*, platform.team.* and platform.app.* as identity and the registry record those changes."
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              additionalProperties: false
-              required: [events]
+              required:
+                - events
               properties:
                 events:
                   type: array
+                  items:
+                    $ref: "#/components/schemas/NewDomainEvent"
                   minItems: 1
                   maxItems: 100
-                  items: { $ref: "#/components/schemas/NewDomainEvent" }
+              additionalProperties: false
       responses:
         "202":
           description: Kept
           content:
             application/json:
-              schema: { type: object, properties: { added: { type: integer }, repeated: { type: integer } } }
-        "400": { description: "A topic outside the publisher's, an unknown floor, or a payload over 16 KB" }
-        "403": { description: "Not a service, not this publisher's topics, or no events:publish scope" }
+              schema:
+                type: object
+                required:
+                  - added
+                  - repeated
+                properties:
+                  added:
+                    type: integer
+                  repeated:
+                    type: integer
+                description: Kept
+        "400":
+          description: A topic outside the publisher's, an unknown floor, or a payload over 16 KB
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a service, not this publisher's topics, or no events:publish scope
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors or grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
     get:
       summary: Read domain events in order (services only, events:subscribe)
-      description: >
-        Events on the topics asked for, in the one order every follower reads
-        in. Keep the last `seq` handled and pass it as `after`: delivery is at
-        least once, never with a gap. Events are kept 30 days
-        (DOMAIN_EVENTS_KEEP_DAYS).
+      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS)."
       parameters:
-        - { name: topics, in: query, required: true, schema: { type: string }, description: "Comma separated topics, or families such as folio.*" }
-        - { name: after, in: query, schema: { type: string, pattern: "^[0-9]+$" } }
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 2000
+          in: query
+          name: topics
+          required: true
+          description: Comma separated topics, or families such as folio.*
+        - schema:
+            type: string
+            pattern: ^[0-9]+$
+            maxLength: 19
+          in: query
+          name: after
+          required: false
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          in: query
+          name: limit
+          required: false
       responses:
         "200":
           description: The next events, and the cursor after them
@@ -196,116 +551,166 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                  - events
+                  - next
                 properties:
-                  events: { type: array, items: { $ref: "#/components/schemas/DomainEvent" } }
-                  next: { type: string }
-        "403": { description: "Not a service, or no events:subscribe scope" }
-components:
-  schemas:
-    NewNotification:
-      type: object
-      additionalProperties: false
-      required: [app, recipients, level, title]
-      properties:
-        app: { type: string, description: The app it is about; the Shell opens it }
-        recipients: { type: array, maxItems: 500, items: { type: string }, description: User ids; empty only with toTeam or audience }
-        toTeam: { type: boolean, description: To everyone on the team the call's floor names, instead of recipients }
-        audience:
-          type: array
-          maxItems: 20
-          items: { type: string, pattern: "^(org|(person|team|tree|role):[A-Za-z0-9_.:-]{1,100})$" }
-          description: Platform services only. Principals such as role:deployment-admin, worked out by identity as it's sent, instead of recipients
-        key: { type: string, maxLength: 200, description: "The sender's name for this news; each person is told an app's key once" }
-        level: { enum: [needs, info, done, failed], description: '"needs" when the person has to act' }
-        title: { type: string, maxLength: 200 }
-        detail: { type: string, maxLength: 2000 }
-        link: { type: string, pattern: "^/", description: Path inside the app to open }
-        actions:
-          type: array
-          maxItems: 2
-          description: Buttons on it in the Shell; pressing one raises its intent through the shell and marks it read
-          items: { $ref: "#/components/schemas/NotificationAction" }
-    NotificationAction:
-      type: object
-      additionalProperties: false
-      required: [label, intent]
-      properties:
-        label: { type: string, minLength: 1, maxLength: 30, description: '"Approve", "Open"' }
-        intent:
-          type: object
-          additionalProperties: false
-          required: [type]
-          properties:
-            type: { type: string, pattern: "^[a-z][a-z0-9.-]*$", maxLength: 80, description: An intent type some app handles }
-            payload: { description: The app's own; at most 1024 bytes as JSON }
-    Notification:
-      type: object
-      required: [id, app, level, title, createdAt]
-      properties:
-        id: { type: string }
-        app: { type: string }
-        level: { enum: [needs, info, done, failed] }
-        title: { type: string }
-        detail: { type: string }
-        link: { type: string }
-        actions: { type: array, items: { $ref: "#/components/schemas/NotificationAction" } }
-        createdAt: { type: string, format: date-time }
-        readAt: { type: string, format: date-time }
-        workspace: { $ref: "#/components/schemas/EventFloor" }
-    NewAuditEntry:
-      type: object
-      additionalProperties: false
-      required: [actor, app, action]
-      properties:
-        actor:
-          type: object
-          required: [id, kind]
-          properties:
-            id: { type: string, description: A person's id or a service's name }
-            kind: { enum: [user, service] }
-        app: { type: string, description: The app or service it happened in }
-        action: { type: string, description: 'A dotted verb, e.g. "document.published"' }
-        target: { type: string }
-        detail: { type: object }
-    AuditEntry:
-      allOf:
-        - $ref: "#/components/schemas/NewAuditEntry"
-        - type: object
-          required: [id, at]
-          properties:
-            id: { type: string }
-            at: { type: string, format: date-time }
-            workspace: { $ref: "#/components/schemas/EventFloor" }
-    EventFloor:
-      type: object
-      required: [id, path]
-      description: The floor it happened on, and its path from the root as it stood then
-      properties:
-        id: { type: string }
-        path: { type: array, items: { type: string } }
-    TeamNotices:
-      type: object
-      required: [workspace, on]
-      properties:
-        workspace: { type: string }
-        on: { type: boolean }
-    NewDomainEvent:
-      type: object
-      additionalProperties: false
-      required: [topic, id, payload]
-      properties:
-        topic: { type: string, pattern: "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$", example: folio.document.published }
-        id: { type: string, maxLength: 100, description: "The publisher's own id for it" }
-        workspace: { type: string, description: The floor it happened on }
-        payload: {}
-    DomainEvent:
-      type: object
-      required: [seq, topic, id, publisher, at, payload]
-      properties:
-        seq: { type: string }
-        topic: { type: string }
-        id: { type: string }
-        publisher: { type: string }
-        at: { type: string, format: date-time }
-        workspace: { type: object, properties: { id: { type: string }, path: { type: array, items: { type: string } } } }
-        payload: {}
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DomainEvent"
+                  next:
+                    type: string
+                description: The next events, and the cursor after them
+        "400":
+          description: A topic that is not a topic, nor a family such as folio.*
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a service, or no events:subscribe scope
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /domain-events/stream:
+    get:
+      summary: Domain events on the caller's floor, as server-sent events (people, for the shell)
+      description: 'Each domain event on the topics asked for, published on the floor the caller stands on (x-workspace-id, checked by the gateway), as it is published. Events on no floor or on another floor never reach it. Events are named "domain-event" and carry a DomainEvent as JSON. It is a hint to refresh what is on screen, not a record: there is no catching up, so after a reconnect load fresh. Comment lines are keep-alives. Read with fetch so the sign-in token can be sent.'
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 4000
+          in: query
+          name: topics
+          required: true
+          description: Comma separated topics, or families such as folio.*; at most 100
+      responses:
+        "200":
+          description: An open event stream
+          content:
+            text/event-stream:
+              schema: {}
+        "400":
+          description: A topic that is not a topic, too many topics, or no floor named
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /audit:
+    post:
+      summary: Record an audit entry (services only). Entries are never changed or removed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewAuditEntry"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEntry"
+        "400":
+          description: Invalid entry, or an unknown floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a signed-in service, or not granted this
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors or grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    get:
+      summary: The audit log, newest first (admins; leads for their own floor)
+      description: To page, ask again with `before` set to the id of the oldest entry already shown; a page shorter than `limit` is the last one. With `workspace`, only entries on that floor or a floor below it, as the tree stood when each was written. Admins read the whole log; a lead standing on a floor (x-workspace-id, checked by the gateway) reads that floor's with `workspace` set to it.
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: app
+          required: false
+        - schema:
+            type: string
+          in: query
+          name: actor
+          required: false
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: since
+          required: false
+          description: Only entries at or after this time
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: until
+          required: false
+          description: Only entries before this time
+        - schema:
+            type: string
+            pattern: ^[0-9]+$
+            maxLength: 19
+          in: query
+          name: before
+          required: false
+          description: An entry's id; only entries older than it
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: Only entries on this floor or below it
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEntry"
+                description: Audit entries
+        "403":
+          description: Not an admin, nor a lead asking for their own floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+servers:
+  - url: /v1

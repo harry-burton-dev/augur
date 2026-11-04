@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Record V1 · Banner and portion marks</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V1: the record carries a banner (its strictest part) and a portion mark on every value. Quoting carries the mark ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(360px,1fr);gap:var(--space-5)}
+.rec,.draft{display:flex;flex-direction:column;min-height:0;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);overflow:hidden}
+.rec .in,.draft .in{flex:1;min-height:0;padding:var(--space-4) var(--space-5);display:flex;flex-direction:column;gap:var(--space-3)}
+.rec h1,.draft h1{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.facts{list-style:none;margin:0;padding:0;display:grid}
+.fact{display:grid;grid-template-columns:calc(var(--space-7) - var(--space-2)) minmax(150px,.8fr) minmax(0,1.4fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-2) 0;border-bottom:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.fact .k{color:var(--ink-muted)}
+.fact .val{color:var(--light)}
+.fact .pmw{justify-self:start}
+.fact.hot{background:var(--x-proposed-lit-wash)}
+.qbtn{opacity:0;transition:opacity var(--motion-quick) var(--ease-standard)}
+.fact:hover .qbtn,.fact:focus-within .qbtn,.fact.hot .qbtn{opacity:1}
+.glomar{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-top:1px dashed var(--hairline);padding-top:var(--space-2);margin-top:auto}
+.para{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink)}
+.para .pm{margin-right:var(--space-2)}
+.quote{display:inline;border-bottom:1px solid var(--hairline-strong);color:var(--light)}
+.quote .src{font-size:var(--type-small);color:var(--ink-muted)}
+.cause{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:grid;gap:var(--space-1)}
+.cause b{font-weight:400;color:var(--ink)}
+.banner{transition:border-color var(--motion-calm) var(--ease-out)}
+.rise{animation:rise var(--motion-calm) var(--ease-out)}
+@keyframes rise{from{background:var(--x-proposed-lit-wash)}}
+@media (max-width:1400px){.fact{grid-template-columns:calc(var(--space-7) - var(--space-2)) minmax(120px,.7fr) minmax(0,1.4fr) auto}.rec .in,.draft .in{padding:var(--space-3) var(--space-4)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Record · V1</b> banner and portion marks: the record shows its strictest part at head and foot; a quote carries its mark and raises the draft · UK GSC banner and portion marking</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = DATA.record, me = READERS.leah;
+const S = { quoted: [], hot: null, rose: false };
+const visible = () => R.facts.filter(f => viewFact(f, me).state !== 'hidden');
+const draftText = 'The Marlow Star grounded on the falling tide at Halden Bar.';
+function render() {
+  const vis = visible();
+  const recLb = combine(vis.filter(f => viewFact(f, me).state === 'open').map(f => f.label));
+  const dLb = combine(['lbOff', ...S.quoted.map(id => FACT(id).label)]);
+  const raised = S.quoted.filter(id => MK(L(FACT(id).label).marking).rank === MK(dLb.marking).rank && MK(dLb.marking).rank > 0);
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Groundings', R.title], [['↑ ↓', 'a value'], ['Q', 'quote it'], ['X', 'remove last quote'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <section class="rec">
+      <div class="banner" data-rank="${MK(recLb.marking).rank}">${markWord(recLb)}<span class="r">· the strictest value you can see on this record</span></div>
+      <div class="in">
+        <div><p class="eyebrow">${R.kind} · ${R.id} · kept by ${F(R.keptOn).name}</p><h1>${R.title}</h1></div>
+        <ul class="facts">${vis.map((f, i) => { const v = viewFact(f, me); return `<li class="fact dep ${S.hot === f.id ? 'hot' : ''}" style="--i:${i}" data-f="${f.id}">
+          <span class="pmw">${whyBtn(f.label, pmHTML(f.label), `${R.title}, ${f.src}`)}</span><span class="k">${f.k}</span><span>${valueHTML(f, me)}${v.via === 'share' ? ` <span class="who">shared with you by ${P(v.share.from).name} until ${v.share.until}</span>` : ''}${v.via === 'consent' ? ` <span class="who">given to you by consent ${v.consent.id}</span>` : ''}</span>
+          ${v.state === 'open' ? `<button class="btn sm qbtn" data-q="${f.id}">${I('quote', 12)} Quote</button>` : '<span></span>'}</li>`; }).join('')}</ul>
+        <p class="glomar">${I('info', 12)} ${GLOMAR()}</p>
+      </div>
+      <div class="banner" data-rank="${MK(recLb.marking).rank}">${markWord(recLb)}</div>
+    </section>
+    <section class="draft">
+      <div class="banner ${S.rose ? 'rise' : ''}" data-rank="${MK(dLb.marking).rank}">${markWord(dLb)}</div>
+      <div class="in">
+        <div><p class="eyebrow">Artifacts · draft · ${P(me.person).name}</p><h1>${DATA.briefing.title}</h1></div>
+        <p class="para">${pmHTML('lbOff')}${draftText}</p>
+        ${S.quoted.map(id => { const f = FACT(id); return `<p class="para dep">${pmHTML(f.label)}${f.k}: <span class="quote">${f.v} <span class="src">(${R.title}, ${f.src})</span></span></p>`; }).join('')}
+        <div class="cause" style="margin-top:auto">
+          ${raised.length ? `<p>${I('arrow-up', 12)} <b>Raised to ${MK(dLb.marking).word}</b> by ${andList(raised.map(id => `the quote “${FACT(id).k.toLowerCase()}”`))}. Remove ${raised.length > 1 ? 'them' : 'it'}, or quote ${raised.length > 1 ? 'them' : 'it'} as a count, and it drops back.</p>` : `<p>${I('check', 12)} Every part is ${MK(dLb.marking).word}, so the draft is too.</p>`}
+          ${S.quoted.length ? `<p>${I('circle-check', 12)} <b>Uses now</b> ${usesHTML(dLb, { compact: false, verdict: false })}</p>` : ''}
+          ${dLb.caveat ? `<p>${I('corner-down-right', 12)} <b>Readers outside Pilotage</b> will get the quote said another way: ${tpl(dLb.caveat.plain)}</p>` : ''}
+          <p class="tk">draft label = combine(${['lbOff', ...S.quoted.map(id => FACT(id).label)].join(', ')}) · banner = max(rank) · uses = min per use</p>
+        </div>
+      </div>
+      <div class="banner" data-rank="${MK(dLb.marking).rank}">${markWord(dLb)}</div>
+    </section>
+  </div></main>`;
+  afterRender();
+  $$('[data-q]').forEach(b => b.onclick = () => quote(b.dataset.q));
+  $$('.fact').forEach(r => r.onmouseenter = () => { S.hot = r.dataset.f; $$('.fact').forEach(x => x.classList.toggle('hot', x === r)); });
+}
+function quote(id) { if (S.quoted.includes(id)) return; S.quoted.push(id); S.rose = true; render(); S.rose = false; }
+function replay() {
+  clearLater(); closeDeed(); S.quoted = []; S.hot = null; settleIn(); render();
+  later(() => { S.hot = 'f5'; render(); }, MOMENT() * .6);
+  later(() => quote('f5'), MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const k = e.key.toLowerCase(), vis = visible().map(f => f.id);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const i = vis.indexOf(S.hot); S.hot = vis[(i + (e.key === 'ArrowDown' ? 1 : -1) + vis.length) % vis.length]; render(); }
+  if (k === 'q' && S.hot && viewFact(FACT(S.hot), me).state === 'open') quote(S.hot);
+  if (k === 'x') { S.quoted.pop(); render(); }
+});
+replay();
+</script>
+</body>
+</html>

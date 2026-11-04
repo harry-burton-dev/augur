@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { conflictFor, menuWarnings, platformApps, type AppEntry } from './manifest.ts';
+import { CATEGORY_REFUSED, categoryOf, conflictFor, menuWarnings, platformApps, type AppEntry } from './manifest.ts';
 
 const app = (over: Partial<AppEntry>): Pick<AppEntry, 'name' | 'icon' | 'menu' | 'areas'> => ({ name: 'Board', icon: 'chart', ...over });
 
@@ -74,7 +74,28 @@ describe('an app’s id', () => {
     expect(conflictFor(entry('events', '/notes'), [])).toBe('"events" is kept for the events service, a part of AUGUR. Choose another id for the app.');
     expect(conflictFor(entry('keycloak', '/notes'), [])).toContain('the sign-in service');
     expect(conflictFor(entry('augur-notes'), [])).toContain('starts with augur-');
-    expect(conflictFor(entry('admin'), [])).toBe('"admin" is one of the platform\'s own apps.');
+    expect(conflictFor(entry('admin'), [])).toBe('"admin" is one of AUGUR\'s own apps.');
     expect(conflictFor(entry('notes'), [])).toBeUndefined();
+  });
+});
+
+describe('categoryOf (ADR 0032)', () => {
+  const nobody = { ships: false, fromFeed: false };
+
+  it('counts the registry’s own apps as platform apps, whatever else is said', () => {
+    for (const app of platformApps) expect(categoryOf({ id: app.id, category: 'pillar' }, nobody), app.id).toEqual({ category: 'platform' });
+  });
+
+  it('honours the claim of an app that ships with AUGUR or came from its app feed', () => {
+    expect(categoryOf({ id: 'auspex', category: 'platform' }, { ships: true, fromFeed: false })).toEqual({ category: 'platform' });
+    expect(categoryOf({ id: 'mandate', category: 'pillar' }, { ships: false, fromFeed: true })).toEqual({ category: 'pillar' });
+  });
+
+  it('keeps any other app’s claim out of force, and says why', () => {
+    expect(categoryOf({ id: 'rogue', category: 'platform' }, nobody)).toEqual({ refused: { asked: 'platform', why: CATEGORY_REFUSED } });
+  });
+
+  it('gives an app that claims nothing no kind, even when it ships', () => {
+    expect(categoryOf({ id: 'folio' }, { ships: true, fromFeed: false })).toEqual({});
   });
 });

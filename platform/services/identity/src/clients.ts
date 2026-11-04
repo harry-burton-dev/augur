@@ -1,7 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import Type from 'typebox';
 import { appClientId, callerFromHeaders, identifyService, ServiceAuthUnavailable, SERVICES_AUDIENCE, type NewAuditEntry, type ServiceVerifier } from '@augur/service-kit';
 import { DirectoryError, type KeycloakDirectory } from './directory.ts';
+import { AppParams, refused } from './schemas.ts';
 
 /**
  * Each app's own sign-in: a Keycloak client `app-<id>` that can only get
@@ -34,7 +37,7 @@ const audienceMapper = {
 export const serviceClient = (clientId: string, secret: string) => ({
   clientId,
   name: clientId.startsWith('platform-') ? `${clientId.slice('platform-'.length)} (platform service)` : `${clientId.replace(/^app-/, '')} (app service)`,
-  description: 'Made by the platform’s identity service. Its secret is issued and replaced from Admin, or set in the server’s settings.',
+  description: 'Made by AUGUR’s identity service. Its secret is issued and replaced from Admin, or set in the server’s settings.',
   enabled: true,
   publicClient: false,
   clientAuthenticatorType: 'client-secret',
@@ -143,13 +146,42 @@ interface ClientRoutesOptions {
 /** The platform service that runs apps: it sets the sign-in of each app it installs. */
 const APP_RUNNER = 'updater';
 
+/** When the sign-in service fails: 503 while it can't be reached, 502 when it answers with an error. */
+const signInServiceFailed = {
+  502: refused('The sign-in service refused the change'),
+  503: refused("Identity isn't connected to the sign-in service, or can't reach it"),
+};
+
 /** Admins issue an app's sign-in, and replace it when it may have leaked. Audited, never with the secret. */
 export const appClientRoutes =
   ({ clients, audit }: ClientRoutesOptions) =>
-  async (app: FastifyInstance) => {
-    app.post<{ Params: { id: string } }>(
+  async (plain: FastifyInstance) => {
+    const app = plain.withTypeProvider<TypeBoxTypeProvider>();
+    app.post(
       '/:id/credential',
-      { schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' } } } } },
+      {
+        schema: {
+          summary: "Issue an app's own sign-in, or replace its secret (admins only)",
+          description: [
+            "Makes the app's Keycloak client (app-<id>: client credentials only,",
+            '5-minute tokens for the audience platform-services), or gives it a new',
+            'secret, after which the old one stops working. The secret is in this',
+            "answer only; the app's service is given it as SERVICE_CLIENT_SECRET.",
+            'Audited as app.credential-issued, without the secret.',
+          ].join(' '),
+          params: AppParams,
+          response: {
+            201: Type.Object(
+              { clientId: Type.String({ examples: ['app-library'] }), secret: Type.String() },
+              { description: "The app's client and its secret" },
+            ),
+            400: refused('Not an app id'),
+            401: refused('No signed-in caller'),
+            403: refused('Not an admin'),
+            ...signInServiceFailed,
+          },
+        },
+      },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can issue an app’s sign-in.' });
@@ -172,18 +204,32 @@ export const appClientRoutes =
 /** For the platform's services rather than people: the app runner setting the sign-in of an app it installs. */
 export const appRunnerRoutes =
   ({ clients, audit, verifyService }: ClientRoutesOptions) =>
-  async (app: FastifyInstance) => {
+  async (plain: FastifyInstance) => {
+    const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /**
      * The app runner sets the sign-in of an app it installs to the secret it works out from
      * APP_SECRETS_KEY (service kit's appSecretFor), so it can give the app that secret without
      * keeping it anywhere. Only the runner: it already decides what runs on the server.
      */
-    app.put<{ Params: { id: string }; Body: { secret: string } }>(
+    app.put(
       '/:id/credential',
       {
         schema: {
-          params: { type: 'object', required: ['id'], properties: { id: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,39}$' } } },
-          body: { type: 'object', additionalProperties: false, required: ['secret'], properties: { secret: { type: 'string', pattern: '^[0-9a-f]{64}$' } } },
+          summary: "Set an app's sign-in to a given secret (the app runner only)",
+          description: [
+            'The app runner (platform-updater) sets the sign-in of an app it',
+            'installs to the secret it works out from APP_SECRETS_KEY, making the',
+            "client if it's missing. Audited as app.credential-set, without the secret.",
+          ].join(' '),
+          params: AppParams,
+          body: Type.Object({ secret: Type.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false }),
+          response: {
+            200: Type.Object({ clientId: Type.String({ examples: ['app-notes'] }) }, { description: "The app's client" }),
+            400: refused('Not an app id, or not 64 hex characters'),
+            403: refused('Not the app runner'),
+            ...signInServiceFailed,
+            503: refused("The caller's token can't be checked right now, or identity isn't connected to the sign-in service or can't reach it"),
+          },
         },
       },
       async (req, reply) => {

@@ -1,0 +1,75 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why was I told? · V3 What would change it</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{display:flex;flex-direction:column;justify-content:center;gap:var(--space-5);max-width:calc(var(--measure-wide) + var(--space-8) * 3);margin:0 auto;height:100%}
+.n{display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap}
+.because{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light);letter-spacing:var(--tracking-tight);max-width:none}
+.cl{background-image:linear-gradient(var(--x-proposed-lit),var(--x-proposed-lit));background-size:0 1px;background-repeat:no-repeat;background-position:0 100%;transition:background-size var(--motion-calm) var(--ease-out);padding-bottom:2px}
+.cl.in{background-size:100% 1px}
+.cl sup{font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-lit);margin-left:2px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-4)}
+.cf{padding:var(--space-4);display:flex;flex-direction:column;gap:var(--space-2)}
+.cf .q{font-size:var(--type-body);line-height:var(--leading-body);color:var(--light)}
+.cf .q sup{font:400 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-lit);margin-right:var(--space-1)}
+.cf .a{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.cf .own{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);margin-top:auto;padding-top:var(--space-2);border-top:1px solid var(--hairline)}
+.cf .own b{font-weight:400;color:var(--ink)}
+.diff{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;font-size:var(--type-small);line-height:var(--leading-small)}
+.diff .was{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--hairline-strong)}
+.diff .now{color:var(--light)}
+.cf.mine{border-color:var(--x-proposed-lit)}
+.foot{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <div class="n" id="n"></div>
+    <p class="because" id="because"></p>
+    <div class="cards" id="cards"></div>
+    <p class="foot" id="foot"></p>
+  </div></main>
+</div>
+<div class="x-cap"><b>Why was I told? · V3</b> because, and what would have changed it, worked out by running the rules again · counterfactual explanations, consequence preview</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const ME = DATA.me, NID = 'n16';
+const base = route(NID), n = base.n, d0 = base.deliveries.find(d => d.p === ME);
+const st = base.steps.find(s => s.k === d0.step);
+const prevTold = base.deliveries.filter(d => d.p !== ME && d.told < d0.sent);
+$('#top').innerHTML = topHTML(['Inbox', n.title, 'Why you?'], [['1–4', 'try one'], ['R', 'replay'], ['T', 'technical words', 'h-t']]);
+$('#n').innerHTML = `${lvl(n)} ${appTag(n.app)} <span class="meta">${n.title}</span> <span class="small muted">· asked you ${at(d0.told)}</span>`;
+$('#because').innerHTML = `You were asked <span class="cl" data-c="1">because you’re on call on ${dayName(d0.sent)}<sup>1</sup></span>, and <span class="cl" data-c="2">nobody had taken it by ${hhmm(d0.sent)}, its limit<sup>2</sup></span>. It reached you <span class="cl" data-c="3">live, with a toast<sup>3</sup></span>, <span class="cl" data-c="4">because Mandate isn’t muted<sup>4</sup></span>.`;
+/* each card changes one setting, runs every rule again, and reports what would have happened to this notice */
+const near = pid => { const x = route(NID).deliveries.find(d => d.p === pid); return x; };
+const CF = [
+  { c: 1, q: `If someone else were on call on ${dayName(d0.sent)}`, own: `${P(DATA.rota.setBy).name}’s rota`, act: ['calendar-days', `Ask ${first(P(DATA.rota.setBy).name)} to swap`],
+    mod: D => { D.rota.byDay[dayOf(d0.sent)] = 'p5'; },
+    say: () => { const x = route(NID).deliveries.find(d => d.p === 'p5'); const me = near(ME); return { a: `${P('p5').name} would have been asked at ${hhmm(x.told)} instead${me ? '' : ', and you not at all'}.`, was: `you, ${hhmm(d0.told)}`, now: `${first(P('p5').name)}, ${hhmm(x.told)}` }; } },
+  { c: 2, q: `If ${first(P(prevTold[prevTold.length - 1].p).name)} had taken it when she saw it`, own: `${P(prevTold[prevTold.length - 1].p).name}, as ${first(P(prevTold[0].p).name)}’s cover`, act: null,
+    mod: D => { const pid = prevTold[prevTold.length - 1].p; const o = D.notices.find(x => x.id === NID).out[pid]; o.accepted = o.seen; },
+    say: () => { const r2 = route(NID); return { a: `${P(r2.by).name} would have had it from ${at(r2.resolved)}. Nobody else would have been asked.`, was: `${base.deliveries.length} people asked`, now: `${r2.deliveries.length} people asked` }; } },
+  { c: 3, q: `If your working day ended at 12:00`, own: 'You, in My switchboard', act: ['sliders-horizontal', 'Change my hours'],
+    mod: D => { D.people[ME].hours.to = '12:00'; const o = D.notices.find(x => x.id === NID).out; delete o[ME]; delete o.p2; },
+    say: () => { const x = near(ME), r2 = route(NID), nx = r2.deliveries.find(d => d.told > x.told && d.p !== ME); return { a: `It would have waited for you until ${at(x.told)}. The policy’s clock waits for you too, so ${nx ? `${P(nx.p).name} would have been asked at ${at(nx.told)}` : 'nobody else would have been asked that day'}.`, was: `told ${at(d0.told)}`, now: `held to ${at(x.told)}` }; } },
+  { c: 4, q: `If you had muted Mandate`, own: 'You, in My switchboard', act: ['bell-off', 'Mute Mandate'],
+    mod: D => { D.people[ME].muted = ['mandate']; },
+    say: () => { const x = near(ME); return { a: `You would still have been asked: muting never takes you off a rota. It would have been in your ${x.ch.map(c => CHANNELS[c].word).join(' and ')}, with no pulse or toast.`, was: d0.ch.map(c => CHANNELS[c].word).join(', '), now: x.ch.map(c => CHANNELS[c].word).join(', ') }; } }
+];
+const RES = CF.map(c => whatIf(c.mod, c.say));
+$('#cards').innerHTML = CF.map((c, i) => `<article class="pane cf dep" data-c="${c.c}" style="--i:${i * 3}"><p class="q"><sup>${c.c}</sup>${c.q}</p>
+  <p class="diff"><span class="was">${RES[i].was}</span>${I('arrow-right', 12)}<span class="now">${RES[i].now}</span></p>
+  <p class="a">${RES[i].a}</p>
+  <p class="own">Whose setting: <b>${c.own}</b></p>${c.act ? `<button class="btn sm">${I(c.act[0], 14)} ${c.act[1]}</button>` : ''}</article>`).join('');
+$('#foot').innerHTML = `Every card is worked out by running last week’s rules again with one thing changed. Nothing here changes a setting until you press its button. <span class="tk">whatIf(mod, route) · ${NID}</span>`;
+function focusC(c) { $$('.cf').forEach(x => x.classList.toggle('mine', +x.dataset.c === c)); }
+function play() {
+  clearLater(); document.body.classList.add('pre'); $$('.cl').forEach(x => x.classList.remove('in')); focusC(0);
+  later(() => document.body.classList.remove('pre'), 60);
+  $$('.cl').forEach((x, i) => later(() => x.classList.add('in'), 1200 + i * 220));
+}
+$$('.cl').forEach(x => { x.addEventListener('mouseenter', () => focusC(+x.dataset.c)); });
+document.addEventListener('keydown', e => { if (commonKeys(e, play)) return; if (/^[1-4]$/.test(e.key)) focusC(+e.key); });
+Icons.hydrate(document.body); play();
+</script></body></html>

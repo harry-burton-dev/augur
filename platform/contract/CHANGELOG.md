@@ -1,5 +1,20 @@
 # @augur/contract-tests
 
+## 0.1.14
+
+### Patch Changes
+
+- 832fba7: The contract tests keep one frozen build for each set of SDK minors whose builds were byte-for-byte the same (`sdk-1.3` now stands for 1.3 to 1.8), and `freeze` keeps nothing when the new build matches the newest kept one. Folio's checks run against today's build only. The reference app now draws with React and Quill from the shell, and checks `previewOn` and a floor's `level`.
+- 2eae812: AUGUR serves kit 0.4.0 (Common 0.6.0, Quill 0.6.0) and the shell draws on Aerie 0.5.0. Apps' frames keep one layout at every width and fold their drawer and rail over the page when narrow; the floor gauge keeps a lane of its own, so it never covers an app; danger actions can ask twice; Reduce motion stops every loop; and floors move with Alt+Page Up and Alt+Page Down, leaving Page Up and Page Down to the app.
+- 8a161b9: AUGUR serves kit 0.5.0 (Common 0.7.0, Quill 0.6.1) and the shell draws on Aerie 0.5.1. The kit now brings its own typefaces (Jost and Nunito, served with the kit at `KIT_URL`) and its reduced-motion values, so a deployment that serves the kit from another site shows the same type and calms the same moves.
+- 86c3cd1: The shell follows the events service's browser stream once, for the floor the person is on and the topics of the apps they have there (and `platform.*`), and puts each domain event on `ctx.bus` under its topic, so the app kit's `useData(…, { refreshOn })` refreshes without polling. `pnpm dev:app` stands in for the stream: send an event from the console with `augur:dev-domain-event`. The contract tests check an app reloads when one arrives.
+- Updated dependencies [2c37293]
+- Updated dependencies [2ad8555]
+- Updated dependencies [5ad27cc]
+- Updated dependencies [8a89c6f]
+- Updated dependencies [49a631f]
+  - @augur/mfe-sdk@1.11.0
+
 ## 0.1.13
 
 ### Patch Changes

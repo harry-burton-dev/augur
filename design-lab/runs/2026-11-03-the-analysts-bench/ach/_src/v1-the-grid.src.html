@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Explanations · V1 · The grid</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Explanations V1: Heuer's grid on Data Atlas facts. Only what is against counts; the facts that rule something out are lit ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,var(--measure-drawer));gap:var(--space-5)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.q{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.legend{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:var(--space-1)}
+.legend .cm{width:var(--space-5);height:var(--space-4)}
+.res{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.hold .tot b,.hold .tot i{opacity:0}
+.tot b,.tot i{transition:opacity var(--motion-calm) var(--ease-out)}
+.side .card{transition:opacity var(--motion-calm) var(--ease-out)}
+.hold-side .later{opacity:0}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Explanations · V1</b> the grid: judged by what is against, never by what fits; the facts that rule out are lit · Heuer (1999), ACH</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { done: false, hot: null };
+function render() {
+  const hs = hypsShown();
+  const lit = new Set(S.done ? X.rows.filter(r => hs.some(h => r.m[h.id] === 'II')).map(r => r.id) : []);
+  const ranked = hs.filter(h => tested(h.id)).sort((a, b) => against(a.id) - against(b.id));
+  const least = ranked.filter(h => against(h.id) === against(ranked[0].id));
+  $('#app').innerHTML = topHTML(['Mandate', DATA.intent.id, T('ach').name], [['1–6', 'an explanation'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="col scroll ${S.done ? '' : 'hold'}"><p class="eyebrow">${T('ach').name} · ${mins(T('ach').minutes)} · ${X.markedBy.map(p => P(p).name).join(' and ')}</p><span class="tk">${T('ach').tech}</span>
+      <p class="q">${X.question}</p>
+      <div class="legend"><span>${cm('II')}rules it out</span><span>${cm('I')}against</span><span>${cm('C')}fits (not counted)</span><span>${cm('')}says nothing</span><span>Facts in grey fit everything, so they can’t tell explanations apart.</span></div>
+      ${matrixHTML({ lit, hot: S.hot })}
+    </section>
+    <aside class="col side scroll ${S.done ? '' : 'hold-side'}">
+      <div class="card later"><p class="lbl">Least against it</p><p class="res">${least.map(h => h.short).join(' and ')}</p><p class="small">${X.result}</p><p class="small muted">Two survive together because nothing in the grid separates them. That is a result too.</p></div>
+      <div class="card later"><p class="lbl">Most against it</p><p class="small"><b class="lite">${ranked[ranked.length - 1].short}</b> (${ranked[ranked.length - 1].by}): ${against(ranked[ranked.length - 1].id)} against, two facts rule it out. It is set aside, not deleted.</p></div>
+      <div class="card later"><p class="lbl">What would split the two</p><p class="small">${X.split.fact}. ${P(X.split.who).name} could get it.</p><p class="small muted">${X.split.why}</p></div>
+      ${STATE.gateway ? `<div class="card pencil later"><p class="lbl">Not tested</p><p class="small pt">“${H('h6').say}”</p><p class="small muted">Proposed by the assistant; nobody has marked it. An explanation no fact tests can’t be least against, so it is shown apart.</p></div>` : gatewayNote()}
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.done = false; settle(); render(); later(() => { S.done = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (/^[1-6]$/.test(e.key)) { const h = hypsShown()[+e.key - 1]; S.hot = h && S.hot !== h.id ? h.id : null; render(); }
+});
+replay();
+</script>
+</body>
+</html>

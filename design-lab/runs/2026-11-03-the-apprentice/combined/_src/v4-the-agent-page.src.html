@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Combined · V4 · The agent's page</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V4: an agent's page in Admin. Who it works under, what it may do and for how long, what it never does, its record. Numbered pins show what ADR 0014 would have to add ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,var(--measure-drawer));gap:var(--space-5)}
+.page{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.hd{display:flex;align-items:center;gap:var(--space-4)}
+.sent{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.sent b{font-weight:400;color:var(--light)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:var(--space-4);flex:none}
+.sent.hot{outline:1px solid var(--x-proposed-lit);outline-offset:var(--space-2);border-radius:var(--radius-key)}
+.page > *{flex:none}
+.card{position:relative;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);display:grid;gap:var(--space-2);align-content:start}
+.card h3{margin:0;font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+table{width:100%;border-collapse:collapse;font-size:var(--type-small);line-height:var(--leading-small)}
+td,th{padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--hairline);text-align:left;vertical-align:middle}
+th{font-weight:400;color:var(--ink-muted)}
+td{color:var(--ink)}
+td.n{font-family:var(--font-mono);text-align:right}
+.exp{font-family:var(--font-mono);color:var(--ink-muted)}
+.exp.susp{color:var(--x-proposed-disagree)}
+.ceil{border-top:3px solid var(--x-proposed-ceiling)}
+.ceil ul{margin:0;padding:0;list-style:none;columns:2;column-gap:var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.ceil li{break-inside:avoid;margin-bottom:2px}
+.fence{display:grid;grid-template-columns:auto repeat(4,minmax(0,1fr));gap:2px;font-size:var(--x-proposed-type-micro);line-height:1.4}
+.fence span{padding:2px var(--space-1);border-radius:2px;text-align:center;color:var(--ink-muted)}
+.fence .fh{font-family:var(--font-mono);text-transform:uppercase}
+.fence .read{background:var(--surface-raised);color:var(--ink)}
+.fence .propose{border:1px dotted var(--x-proposed-pencil);color:var(--ink);font-style:italic}
+.fence .act{background:color-mix(in srgb,var(--ink) 18%,transparent);color:var(--light)}
+.fence .supervisor{background:var(--surface-raised);color:var(--ink)}
+.fence .none{background:var(--x-proposed-unseen)}
+.fence .fl{text-align:left;color:var(--fc)}
+.hist{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small)}
+.hist div{display:grid;grid-template-columns:calc(var(--space-7) + var(--space-2)) minmax(0,1fr);gap:var(--space-2);color:var(--ink)}
+.hist .d{font-family:var(--font-mono);color:var(--ink-muted)}
+.pins{position:absolute;top:calc(var(--space-2) * -1);right:var(--space-2);display:flex;gap:var(--space-1);z-index:1}
+.pin{display:inline-grid;place-items:center;width:var(--space-5);height:var(--space-5);border-radius:50%;background:var(--x-proposed-lit);color:var(--slate-deep);font:500 var(--type-small)/1 var(--font-mono);transition:opacity var(--motion-base) var(--ease-out),transform var(--motion-base) var(--ease-spring)}
+.pin.off{opacity:0;transform:scale(.6)}
+.pin.inl{position:static;margin-left:var(--space-2);vertical-align:2px}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.add{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:left;width:100%}
+.add b{display:block;font-weight:400;color:var(--ink);font-size:var(--type-meta)}
+.add .pin{position:static;opacity:1;transform:none}
+.add.hot{background:var(--surface-raised)}
+.card.hot{border-color:var(--x-proposed-lit)}
+@media (max-width:1400px){.ceil ul{columns:1}.ceil li:nth-child(n+6){display:none}.add span span{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V4</b> the agent's page; pins show what ADR 0014 would add · grammar V1, V2, V6; scope V1–V4</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const AG = 'a1', a = A(AG), G = DATA.scopeGrid;
+/* what ADR 0014 would have to add, and where each shows on this page */
+const ADDS = [
+  { b: 'A supervisor and a deputy', w: 'named in the grants at start; no supervisor, no run', at: 'who' },
+  { b: 'A rung per kind of work, with a cap', w: 'four rungs, no rung above 3; caps set by AUGUR and the app', at: 'kinds' },
+  { b: 'An end date on every widening', w: `renewed by a person every ${DATA.permitWeeks} weeks, or it drops back`, at: 'kinds' },
+  { b: 'The ceiling', w: 'a fixed set of standby checkpoints no grant can remove', at: 'ceil' },
+  { b: 'Standby states', w: 'standing by, go, hold, lapsed (not done); a go-by and a deputy', at: 'ceil' },
+  { b: 'proposedBy and acceptedBy', w: 'on every output, kept after acceptance; batch accepts record their sample', at: 'record' },
+  { b: 'The site diary', w: 'a day page built from run steps, countersigned', at: 'record' },
+  { b: 'Now, next and why', w: 'the current step, the armed step and a reason on every change', at: 'mode' },
+  { b: 'Pause one kind of work', w: 'open to anyone who can see the work; only the supervisor resumes', at: 'kinds' }
+];
+const S = { pins: false, hot: null };
+const pin = (n, inl) => `<span class="pin ${inl ? 'inl' : ''} ${S.pins ? '' : 'off'}">${n}</span>`;
+const pinsFor = at => `<span class="pins">${ADDS.map((x, i) => x.at === at ? i + 1 : 0).filter(Boolean).map(n => pin(n)).join('')}</span>`;
+const WORD = { read: 'reads', propose: 'proposes', act: 'acts', supervisor: 'tells sup.', none: '—' };
+function render() {
+  const hot = S.hot !== null ? ADDS[S.hot].at : null;
+  $('#app').innerHTML = topHTML(['Admin', 'Agents', a.name], [['1–9', 'an addition'], ['P', 'pins'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="page scroll">
+      <div class="hd">${mm(AG, true, true)}<div><p class="eyebrow">Agent · an app · ${F(a.floor).name}</p><h1 class="title">${a.name}</h1></div></div>
+      <p class="sent ${hot === 'who' ? 'hot' : ''}" style="position:relative;padding-right:var(--space-6)">${pinsFor('who')}<b>${a.name}</b> ${a.does}. It works under <b>${P(a.supervisor).name}</b>; <b>${P(a.deputy).name}</b> stands in. It runs ${a.schedule}, with up to <b>${a.calls.limit}</b> model calls a day.</p>
+      <div class="${hot === 'mode' ? 'card hot' : ''}" style="position:relative">${modeHTML(AG)}${pinsFor('mode')}</div>
+      <div class="grid2">
+        <div class="card ${hot === 'kinds' ? 'hot' : ''}">${pinsFor('kinds')}<h3>What it may do, kind by kind</h3>
+          <table><thead><tr><th>Kind of work</th><th>Rung</th><th>Until</th><th class="n">Record</th></tr></thead><tbody>
+          ${DATA.kinds.map(k => `<tr><td>${k.w}</td><td>${lvl(k.level, k.cap)}</td><td><span class="exp ${k.id === 'k2' ? 'susp' : ''}">${k.id === 'k2' ? 'narrowed ' + DATA.mistake.narrowedAt.split(' ')[0] : k.until || '—'}</span></td><td class="n">${k.acc + k.chg + k.rej ? `${k.acc}/${k.acc + k.chg + k.rej}` : '—'}</td></tr>`).join('')}
+          </tbody></table></div>
+        <div style="display:grid;gap:var(--space-3);align-content:start">
+          <div class="card"><h3>Where</h3><div class="fence"><span></span>${G.cols.map(c => `<span class="fh">${c}</span>`).join('')}${G.rows.map(r => `<span class="fl" data-tier="${r.floor}">${F(r.floor).word}</span>${r.cells.map(c => `<span class="${c}">${WORD[c]}</span>`).join('')}`).join('')}</div></div>
+          <div class="card ceil ${hot === 'ceil' ? 'hot' : ''}">${pinsFor('ceil')}<h3>At every rung, it stands by before it would</h3><ul>${DATA.ceiling.map(c => `<li>${c.w.toLowerCase()}</li>`).join('')}</ul></div>
+        </div>
+      </div>
+      <div class="card ${hot === 'record' ? 'hot' : ''}">${pinsFor('record')}<h3>Its record</h3><div class="hist">${a.history.map(h => `<div><span class="d">${h.d}</span><span>${P(h.by).name} ${h.w}${h.why ? ': “' + h.why + '”' : ''}</span></div>`).join('')}<div><span class="d">${DATA.today}</span><span>Diary: ${D.waiting()} waiting, ${D.n('limit')} couldn’t do, nobody called · <a href="#" style="color:var(--info)">open</a></span></div></div></div>
+    </section>
+    <aside class="side scroll"><p class="eyebrow">What ADR 0014 would add</p>
+      ${ADDS.map((x, i) => `<button class="add ${S.hot === i ? 'hot' : ''}" data-i="${i}">${pin(i + 1, true).replace('inl', '').replace(' off', '')}<span><b>${x.b}</b><span>${x.w}</span></span></button>`).join('')}
+      <p class="small muted">It already has: agents as apps, durable runs, grants at start, checkpoints to the Inbox, budgets, cancel and audit. The model gateway already audits every call before making it.</p>
+      <p class="tk">ADR 0014 (Proposed part): runs service · grants at start · checkpoints → Inbox (ADR 0026) · budgets · cancel · audit · manifest agents block</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.add').forEach(b => { b.onmouseenter = () => { S.hot = +b.dataset.i; S.pins = true; render(); }; b.onclick = b.onmouseenter; });
+}
+function replay() { clearLater(); S.pins = false; S.hot = null; settle(); render(); later(() => { S.pins = true; render(); }, MOMENT()); later(() => { S.hot = 1; render(); }, MOMENT() + ms('--motion-run')); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.key.toLowerCase() === 'p') { S.pins = !S.pins; render(); }
+  if (/^[1-9]$/.test(e.key)) { S.hot = +e.key - 1; S.pins = true; render(); }
+});
+replay();
+</script>
+</body>
+</html>

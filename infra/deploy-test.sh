@@ -5,6 +5,7 @@
 #   infra/deploy-test.sh fresh                    # a new server on the images built from this checkout
 #   infra/deploy-test.sh upgrade <from-version>   # that release first, with data, then this checkout, then back
 #   infra/deploy-test.sh broken                   # a fresh install with the updater, broken on purpose: its check must see it
+#   THEN='<command>' infra/deploy-test.sh fresh   # a fresh install that allows sample data, with <command> run against it
 #
 # The release under test is PLATFORM_VERSION=$LOCAL_TAG: a published release's version, whose images
 # are pulled, or (default "ci") images built from this checkout first, which BUILD=1 does. Tailscale isn't started: the front door is published on
@@ -70,6 +71,9 @@ cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_de
   esac
   echo "$key=$value"
 done > "$deploy/.env"
+
+# A command run against a fresh install (the run suite's dry run) seeds it first, so the install allows sample data.
+if [ -n "${THEN:-}" ]; then echo 'SEED_ALLOWED=true' >> "$deploy/.env"; fi
 
 # Broken mode runs the updater too (its profile), which reads the deploy folder at its path here and
 # signs in with its own secret, as on a server that turned it on (docs/upgrade.md, "The updater").
@@ -195,6 +199,22 @@ kept() {
 
 up() { pc up -d --no-build --remove-orphans $(services) >&2; }
 
+# The first admin signs in in a real browser, and Home and each app that ships with AUGUR render with
+# the kit from KIT_URL (infra/deploy-browser-check.mjs, in Playwright's own image). BROWSER_CHECK=0 skips it;
+# BROWSER_CHECK_OUT keeps its screenshots.
+PLAYWRIGHT=1.56.1
+browser_check() {
+  # It changes the first admin's password, which THEN's command still has to change itself.
+  [ "${BROWSER_CHECK:-1}" = 1 ] && [ -z "${THEN:-}" ] || return 0
+  local env=$deploy/.env apps shots="${BROWSER_CHECK_OUT:-$work/browser-check}"
+  apps="home $( [ -e "$here/../release/shipped-apps.json" ] && jq -r '.apps | keys | join(" ")' "$here/../release/shipped-apps.json")"
+  mkdir -p "$shots"
+  docker run --rm --network host --ipc=host -e OUT=/out -v "$shots:/out" \
+    -v "$here/deploy-browser-check.mjs:/check/check.mjs:ro" "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble" \
+    sh -c 'cd /check && npm install --silent --no-save --no-audit --no-fund "playwright@$0" >/dev/null && node check.mjs "$@"' \
+    "$PLAYWRIGHT" "http://localhost:$port" "$(sed -n 's/^PLATFORM_ADMIN_USER=//p' "$env")" "$(sed -n 's/^PLATFORM_ADMIN_PASSWORD=//p' "$env")" $apps >&2
+}
+
 # One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
 # wanted: `pass`, or `fail <part>`, which must be named among the problems. Its exit code must agree.
 check_until() {
@@ -251,6 +271,15 @@ case "$mode" in
     wait_ready "Fresh install of this checkout"
     no_restarts
     on_version "$local_tag"
+    browser_check
+    # THEN runs once the install is ready, before it is removed, with its address and the first admin's
+    # sign-in (whose password must be changed at first sign-in). Its exit status is the test's.
+    if [ -n "${THEN:-}" ]; then
+      setting() { grep -m1 "^$1=" "$deploy/.env" | cut -d= -f2-; }
+      echo "Running against the fresh install: $THEN" >&2
+      AUGUR_URL="http://localhost:$port" AUGUR_ADMIN_USER=$(setting PLATFORM_ADMIN_USER) AUGUR_ADMIN_PASSWORD=$(setting PLATFORM_ADMIN_PASSWORD) bash -c "$THEN"
+      no_restarts
+    fi
     ;;
   upgrade)
     [ -n "$from" ] || { echo "upgrade needs the release to start from, such as 0.13.1" >&2; exit 2; }

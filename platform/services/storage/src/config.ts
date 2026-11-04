@@ -71,7 +71,7 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
       continue;
     }
     if (app.startsWith('augur-')) {
-      problems.push(`"${app}" in APP_STORAGE starts with augur-, which is kept for the platform's own buckets.`);
+      problems.push(`"${app}" in APP_STORAGE starts with augur-, which is kept for AUGUR's own buckets.`);
       continue;
     }
     const reserved = reservedIdProblem(app);

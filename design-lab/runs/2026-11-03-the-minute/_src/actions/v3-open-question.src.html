@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Actions V3 · An open question</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: an action is a question the chair asked. Asked, acknowledged, answered, resolved: four states, two people ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-5)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4) var(--space-5)}
+.side .hd{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3)}
+.q{display:grid;gap:var(--space-3);padding:var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-inset);transition:border-color var(--motion-calm) var(--ease-out)}
+.q.res{border-color:var(--x-proposed-lit)}
+.q .t{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.q .m{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0}
+.st{position:relative;display:grid;gap:2px;padding-top:var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.st::before{content:"";position:absolute;top:calc(var(--space-2) - 1px);left:0;right:0;height:2px;background:var(--hairline)}
+.st::after{content:"";position:absolute;top:0;left:0;width:var(--space-4);height:var(--space-4);border-radius:var(--radius-pill);border:1px solid var(--hairline-strong);background:var(--slate-deep)}
+.st.on{color:var(--ink)}
+.st.on::before{background:var(--ink-muted)}
+.st.on::after{background:var(--ink);border-color:var(--ink)}
+.st.on.last::after{background:var(--x-proposed-lit);border-color:var(--x-proposed-lit)}
+.st.wait::after{border-style:dashed;border-color:var(--x-proposed-lit)}
+.st b{font-weight:400;color:var(--light)}
+.st .who3{font-size:var(--type-small)}
+.ev{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);line-height:var(--leading-small);padding:var(--space-2) var(--space-3);border-left:2px solid var(--hairline-strong)}
+.btns{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.note{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.note b{font-weight:400;color:var(--x-proposed-warn)}
+.count{font:300 var(--type-title-s)/1 var(--font-mono);color:var(--light)}
+@media (max-width:1400px){.side{padding:var(--space-3)}.q .t{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Actions · V3</b> an open question: the owner answers “done”; only the person who asked can close it · question and answer, RAID logs</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = '2026-07-30';
+const NEXT = DATA.meetings.find(m => ts(m.date) > ts(NOW));
+const S = { closed: [] };
+const Q4 = [['asked', 'Asked', 'the chair, at the meeting'], ['acknowledged', 'Acknowledged', 'the owner says “mine”'], ['answered', 'Answered', 'the owner says “done”, with what shows it'], ['resolved', 'Resolved', 'the person who asked closes it']];
+function stage(id) {
+  const s = actionAt(id); if (!s) return -1;
+  if (S.closed.includes(id) || s.s === 'discharged') return 3;
+  return { given: 0, accepted: 1, part: 1, done: 2 }[s.s] ?? 0;
+}
+function qHTML(id, view) {
+  const a = Ac(id), s = actionAt(id), k = stage(id), h = a.history;
+  const when = st => { const m = { asked: 'given', acknowledged: 'accepted', answered: 'done', resolved: 'discharged' }[st]; const e = h.find(x => x[1] === m && le(x[0], NOW)); return st === 'resolved' && S.closed.includes(id) ? dt(NOW, 'short') : e ? dt(e[0], 'short') : ''; };
+  const done = h.find(x => x[1] === 'done' && le(x[0], NOW));
+  return `<div class="q dep ${k === 3 ? 'res' : ''}"><p class="m">${id} · from ${did(a.from)} · asked by ${who(a.setBy)} of ${who(a.owner)}</p><p class="t">${a.text}</p>
+    <div class="steps">${Q4.map(([key, w, by], i) => `<div class="st ${i <= k ? 'on' : ''} ${i === k && k === 3 ? 'last' : ''} ${i === k + 1 && k === 2 ? 'wait' : ''}"><b>${w}</b><span>${when(key) || (i === k + 1 && k === 2 ? 'waiting for ' + first(a.setBy) : '')}</span><span class="tk">${by}</span></div>`).join('')}</div>
+    ${done ? `<div class="ev">${I('paperclip', 14)} ${first(a.owner)}: “${done[2] || 'done'}” · ${dt(done[0], 'short')}</div>` : ''}
+    ${view === 'chair' && k === 2 ? `<div class="btns"><button class="btn go sm" data-close="${id}">${I('check', 12)} Close it</button><button class="btn sm">${I('undo-2', 12)} Send back, with a reason</button><span class="note">waiting ${days(done[0], NOW)} days${NEXT ? ` · if left for matters arising on ${dt(NEXT.date, 'short')}, <b>${days(done[0], NEXT.date)} days</b>` : ''}</span></div>` : ''}
+    ${view === 'owner' && k === 2 ? `<p class="note">You have answered. It is off your list, but it stays open on ${first(a.setBy)}’s until he closes it or sends it back. You’ll be told either way.</p>` : ''}
+    ${k === 3 ? `<p class="note" style="color:var(--x-proposed-lit)">Resolved. Nobody else was notified.</p>` : ''}</div>`;
+}
+function render() {
+  const all = Object.keys(DATA.actions).filter(id => actionAt(id));
+  const waiting = all.filter(id => Ac(id).setBy === B.chair && stage(id) === 2);
+  const owner = 'p8', mine = all.filter(id => Ac(id).owner === owner && stage(id) >= 0 && stage(id) < 3 && le(Ac(id).set, NOW));
+  $('#app').innerHTML = topHTML(['Inbox'], [['C', 'close the oldest'], ['T', 'record fields', 'h-t'], ['R', 'replay']], { as: NOW }) +
+    `<main class="main"><div class="wrap">
+    <section class="side pane scroll" aria-label="Owner's view"><div class="hd"><div><p class="eyebrow">The owner’s view · ${P(owner).name}</p><p class="h2">Questions asked of you</p></div><span class="count">${mine.filter(id => stage(id) < 2).length}</span></div>
+      <p class="small muted">An action is a question someone asked you. It stays open until they say it is answered.</p>
+      ${mine.map(id => qHTML(id, 'owner')).join('')}</section>
+    <section class="side pane scroll" aria-label="Chair's view"><div class="hd"><div><p class="eyebrow">The chair’s view · ${P(B.chair).name}</p><p class="h2">Answers waiting for you</p></div><span class="count">${waiting.length}</span></div>
+      <p class="small muted">Owners have said these are done. Closing one is a second, separate act: only the person who asked can do it.</p>
+      ${waiting.map(id => qHTML(id, 'chair')).join('') || '<p class="mk-gap">none waiting</p>'}
+      ${S.closed.map(id => qHTML(id, 'chair')).join('')}</section>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-close]').forEach(b => b.onclick = () => { S.closed.push(b.dataset.close); render(); });
+}
+function replay() {
+  clearLater(); S.closed = []; render(); settle();
+  /* the moment: the chair closes the newest answer; the older one, from Sam, still waits */
+  later(() => { S.closed = ['A-309']; render(); }, MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key.toLowerCase() === 'c') { const w = Object.keys(DATA.actions).filter(id => actionAt(id) && Ac(id).setBy === B.chair && stage(id) === 2); if (w[0]) { S.closed.push(w[0]); render(); } }
+});
+replay();
+</script>
+</body>
+</html>

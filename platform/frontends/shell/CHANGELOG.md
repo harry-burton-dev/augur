@@ -1,5 +1,30 @@
 # @augur/shell
 
+## 0.15.0
+
+### Minor Changes
+
+- 5ad27cc: Back and Forward inside an app no longer throw away what it holds (PER-308). SDK 1.11 adds `followsAddress` to the manifest, for an app that follows the address itself, and `navigated(el, path)` on the app. While an app with both stays open on the same floor and nothing is waiting for it, the shell keeps it mounted on a move inside its route and calls `navigated` with the new path; an intent, a request, another floor or a changed preview still mounts it again. An app without `navigated` is mounted again as before, since the shell's own moves push the address without a popstate. The registry accepts the flag (contract 1.33.0).
+- 2eae812: AUGUR serves kit 0.4.0 (Common 0.6.0, Quill 0.6.0) and the shell draws on Aerie 0.5.0. Apps' frames keep one layout at every width and fold their drawer and rail over the page when narrow; the floor gauge keeps a lane of its own, so it never covers an app; danger actions can ask twice; Reduce motion stops every loop; and floors move with Alt+Page Up and Alt+Page Down, leaving Page Up and Page Down to the app.
+- 8a161b9: AUGUR serves kit 0.5.0 (Common 0.7.0, Quill 0.6.1) and the shell draws on Aerie 0.5.1. The kit now brings its own typefaces (Jost and Nunito, served with the kit at `KIT_URL`) and its reduced-motion values, so a deployment that serves the kit from another site shows the same type and calms the same moves.
+- 86c3cd1: The shell follows the events service's browser stream once, for the floor the person is on and the topics of the apps they have there (and `platform.*`), and puts each domain event on `ctx.bus` under its topic, so the app kit's `useData(…, { refreshOn })` refreshes without polling. `pnpm dev:app` stands in for the stream: send an event from the console with `augur:dev-domain-event`. The contract tests check an app reloads when one arrives.
+
+### Patch Changes
+
+- 2ad8555: `ctx.fetch` adds the person's token and the floor only to requests for AUGUR's own origin (the gateway); a request to another site goes without them, so an app fetching a public resource never hands it the person's sign-in. The production import map's `react/jsx-dev-runtime` now has a working `jsxDEV` (made from `jsx`), so an app built in development mode renders against a production shell.
+- 46f349a: The shell's Content Security Policy lets fonts load from the kit's site as well as AUGUR's own, so the kit's typefaces arrive when KIT_URL points elsewhere, and from nowhere else. The app patterns guide gains the one-layout-at-every-width rule.
+- 8d48714: Fixes from the 2 Nov audit. In Admin → People, a person's sign-in (on or off, a new one-time password) sits in its own section that says it takes effect at once: each asks first, acts straight away and says what happened, while their name, email, department and roles change only on Save. Agents stay among the Shell's functions and say they aren't here yet, and Home keeps the card of an app this shell can't open, saying why and who can change it, instead of hiding either. Messages people read say AUGUR, not "the platform", and `pnpm check:reasons` now catches it. The centre menu's transitions stop for AUGUR's own reduced-motion setting as well as the system's and are timed from motion tokens; the lifecycle's divider uses the hairline token; overlay shadows use the shadow token. A new test holds the Lit kit and AUGUR's frontends to tokens only.
+- Updated dependencies [2c37293]
+- Updated dependencies [2ad8555]
+- Updated dependencies [5ad27cc]
+- Updated dependencies [2eae812]
+- Updated dependencies [8a161b9]
+- Updated dependencies [8a89c6f]
+- Updated dependencies [49a631f]
+- Updated dependencies [8d48714]
+  - @augur/mfe-sdk@1.11.0
+  - @augur/ui-kit@1.9.2
+
 ## 0.14.0
 
 ### Minor Changes

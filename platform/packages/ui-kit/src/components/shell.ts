@@ -996,7 +996,7 @@ export class UiShell extends LitElement {
       .gauge .label em.waiting { color: var(--ink-muted); }
       .gauge .label .bound { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-1); color: var(--ink); }
       .gauge .label .bound ui-icon { color: var(--floor-mark); }
-      .gauge:hover, .gauge:has(:focus-visible) { background: color-mix(in srgb, var(--slate-deep) 94%, transparent); backdrop-filter: blur(12px); border-color: var(--hairline); box-shadow: 0 12px 40px rgb(0 0 0 / 0.35); }
+      .gauge:hover, .gauge:has(:focus-visible) { background: color-mix(in srgb, var(--slate-deep) 94%, transparent); backdrop-filter: blur(12px); border-color: var(--hairline); box-shadow: var(--shadow-overlay); }
       .gauge ol { transition: gap var(--motion-base) var(--ease-standard); }
       .gauge:hover ol, .gauge:has(:focus-visible) ol { gap: var(--space-4); }
       .gauge:hover .label, .gauge:has(:focus-visible) .label { grid-template: minmax(0, 1fr) / minmax(0, 1fr); opacity: 1; transition-delay: 0s, 0s, var(--motion-instant); }

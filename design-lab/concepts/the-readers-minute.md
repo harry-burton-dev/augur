@@ -10,3 +10,5 @@ Each part of a briefing has a reading-time budget measured from its words. Whate
 First found in: [`2026-11-03-the-briefing`](../runs/2026-11-03-the-briefing/) (minute V5 and V3, grammar V6, combined).
 
 Could steer: Home "what needs you", the edition (S), the case file (U).
+
+In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): the nut graf as the one signed per-reader paragraph (rungs V2).
