@@ -34,7 +34,7 @@ then write the prompt with "what to take from each".
 | Ritual and ceremony | threshold, procession, liturgy, rite of passage, call and response | van Gennep; Victor Turner | onboarding, approvals, floors | |
 | Architecture and space | prospect-refuge, *A Pattern Language*, threshold, enfilade, light from two sides | Alexander; Kahn; Pallasmaa | floors, layout, focus | |
 | Weather forecasting | synoptic chart, ensemble, cone of uncertainty, nowcast, warnings matrix | Met Office warnings impact matrix | forecasts, risk, Upgrade Centre | |
-| Libraries and archives | finding aid, provenance (respect des fonds), shelf list, accession register | archival description standards (ISAD(G)) | Artifacts, provenance | batch 3 (H, partly) |
+| Libraries and archives | finding aid, provenance (respect des fonds), shelf list, accession register | archival description standards (ISAD(G)) | Artifacts, provenance | batch 3 (H, partly); the label (closure periods, partly) |
 | Telecoms and switchboards | patch panel, busy lamp field, line status, operator console | historic switchboard manuals | presence, routing | batch 4 (O); the switchboard (run) |
 | Theatre stagecraft | prompt book, cue sheet, standby/go, blocking, lighting state | stage management handbooks | sequenced actions, approvals | the apprentice (standby); the minute (live V6) |
 | Library classification | faceted classification, PMEST, Colon Classification, UDC, catalogue card, authority file, controlled vocabulary | Ranganathan; Wikidata item pages | Data Atlas structure, finding | batch 3 (H) |
@@ -42,7 +42,7 @@ then write the prompt with "what to take from each".
 | End-user querying | query by example, dynamic queries, pivot table, faceted search, natural-language interface to databases | Zloof (1975); Shneiderman (1992) | search, Data Atlas | batch 3 (I) |
 | Data wrangling | predictive interaction, transformation by example, applied steps, clustering near-duplicates | Wrangler; OpenRefine; Power Query | imports, Triage | batch 3 (J) |
 | Maintenance engineering | planned preventive maintenance, MOT, advisory, condition-based maintenance, jidoka | fleet and building manuals | upkeep, Upgrade Centre | batch 3 (K); the apprentice (jidoka, partly) |
-| Markings and labels | security classification, handling caveat, allergen label, traffic-light label, licence deed, chain of custody, consent receipt | UK GSC; Dataset Nutrition Label; Creative Commons | governance, sharing | batch 3 (L) |
+| Markings and labels | security classification, handling caveat, allergen label, traffic-light label, licence deed, chain of custody, consent receipt | UK GSC; Dataset Nutrition Label; Creative Commons | governance, sharing | batch 3 (L); the label (run) |
 | Statistical communication | Isotype, transformer, BLUF, probability yardstick, calibrated uncertainty, explorable explanation | Neurath; Rosling; IPCC; Our World in Data | briefings, Home | batch 3 (M) |
 | Natural history and citizen science | Grinnell system, field notebook, species account, complete checklist, research grade | MVZ Berkeley; eBird; iNaturalist | capture, Triage, quality | batch 3 (W3) |
 | Locks and keys | master keying, keying chart, change key, visitor badge, delegation of authority, access recertification, break glass | locksmith keying charts; hospital break-glass policies | identity, access, Admin | batch 4 (N); the apprentice (delegation, partly) |
@@ -55,7 +55,7 @@ then write the prompt with "what to take from each".
 | Bundles and case files | court bundle, exhibit, continuity, data room, discharge summary | UK practice directions; due diligence practice | reports, handover | batch 5 (U) |
 | Commissioning and procurement | brief, Plan of Work, purchase order, goods received note, change order, acceptance criteria | RIBA; procurement practice | Mandate asks, sign-off | batch 5 (V) |
 | Form design | one thing per page, check answers, pause point, document assembly, mail merge | GOV.UK Design System; Gawande; Jarrett | templates, repeatable outputs | batch 5 (X) |
-| Hallmarking and marks | hallmark, maker's mark, assay office, date letter, title block, kitemark, content credentials | Hallmarking Act 1973; C2PA | output quality, signing | batch 5 (W5) |
+| Hallmarking and marks | hallmark, maker's mark, assay office, date letter, title block, kitemark, content credentials | Hallmarking Act 1973; C2PA | output quality, signing | batch 5 (W5); the label (seals, partly) |
 | Art and print traditions | bokashi, ukiyo-e, chiaroscuro, tenebrism, colour interaction, colour field, art direction, graphics standards manual | Albers *Interaction of Color*; NASA Graphics Standards Manual; British Rail identity manual | art direction, empty states, Home, onboarding | batch 6 (Y) |
 | Argumentation and logic | Toulmin model, warrant, qualifier, rebuttal, pyramid principle, SCQA, MECE, Wigmore chart, argument map, IBIS, IRAC | Toulmin (1958); Minto (1987); Kunz and Rittel (1970) | outputs, briefings, decisions | batch 6 (Z); the minute (record V4) |
 | Intelligence analysis and forecasting | structured analytic techniques, ACH, key assumptions check, indicators, premortem, red team, outside view, reference class, Cynefin, Fermi estimate | Heuer (1999); Tradecraft Primer (2009); Tetlock | judgement, planning, Explorer | batch 6 (AA) |
@@ -73,6 +73,10 @@ then write the prompt with "what to take from each".
 | Newspaper editions | edition times, stop press, front page, late final, fixed running order | newspaper production; shipping forecast | digests, Home | the switchboard |
 | Law reporting and citators | headnote, catchwords, held, citator, Shepard's, KeyCite, treatment, followed, distinguished, overruled, law digest | Shepard's Citations; KeyCite; BAILII and the ICLR law reports | status of cited records, decision logs, search by subject | the minute (record V3, grammar V4, log V5) |
 | Meeting procedure | agenda and papers, motion, seconder, amendment, putting the question, quorum, matters arising, rescind, read-back, confirming the minutes | Robert's Rules of Order; Citrine, *ABC of Chairmanship*; ICSA guidance on minutes | meetings, approvals, body settings | the minute (live, actions V4, revisit V4) |
+| Hazard communication | GHS label, signal word, H and P statements, pictogram, safety data sheet, ISO 7010 | UN GHS "Purple Book"; ISO 7010 | labels, warnings, phrase lists | the label |
+| Disclosure control | statistical disclosure control, minimum cell size, small-number suppression, differencing, k-anonymity, Five Safes | ONS SDC guidance; UK Data Service Five Safes | counts, privacy, Explorer | the label |
+| Just culture and safety reporting | just culture, confidential reporting, CHIRP, ASRS, no-blame, safety data protection | CHIRP Maritime; NASA ASRS; Dekker *Just Culture* | approvals, purpose limits, Mandate | the label |
+| Freedom of information and redaction | FOI exemption codes, redaction, Glomar response, neither confirm nor deny, closure period | UK FOI Act guidance (ICO); The National Archives closure | not for you, hidden existence | the label |
 
 ## Techniques worth a search on their own
 consequence preview · small multiples · sparkline · micro/macro reading ·

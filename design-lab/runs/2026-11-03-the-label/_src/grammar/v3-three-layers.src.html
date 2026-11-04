@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Grammar V3 · Badge, deed, policy</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: three layers, as Creative Commons does it: the badge, the deed, the clause. Rows line up across ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.cols{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr) minmax(0,1.3fr);align-content:start;gap:0;min-height:0;overflow:auto;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);overflow:hidden}
+.col{display:grid;grid-template-rows:auto;align-content:start;min-height:0;border-left:1px solid var(--hairline)}
+.col:first-child{border-left:0}
+.ch{padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--hairline)}
+.ch + .ch,.row:not(.b){border-left:1px solid var(--hairline)}
+.row.b .mk{font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-soft)}
+.ch .eyebrow{display:flex;gap:var(--space-2);align-items:center}
+.ch p.sub{font-size:var(--type-small);line-height:var(--leading-small)}
+.row{display:flex;align-items:center;gap:var(--space-2);min-height:calc(var(--space-6) + var(--space-2));padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--hairline);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);transition:background var(--motion-base) var(--ease-standard)}
+.row b{font-weight:400;color:var(--light)}
+.row.on{background:var(--x-proposed-lit-wash)}
+.row.b.on{box-shadow:inset 2px 0 0 var(--x-proposed-lit)}
+.row.clause{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.row.clause b{color:var(--ink)}
+.badge{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center}
+.scheme{display:grid;grid-template-columns:auto repeat(3,minmax(0,1fr));gap:var(--space-1) var(--space-4);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);align-items:center}
+.scheme .on{color:var(--light)}
+.scheme .h{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase}
+.mach{display:none;margin:0;padding:var(--space-3) var(--space-4);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);white-space:pre-wrap}
+.tech .mach{display:block}
+@media (max-width:1400px){.row{min-height:var(--space-6);padding:var(--space-1) var(--space-3)}.row.clause{font-size:var(--x-proposed-type-micro)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V3</b> badge, deed, clause: three layers of the same label, rows aligned, the scheme from the policy · Creative Commons licence layers</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const f = FACT('f5'), lb = L(f.label);
+const S = { on: null };
+function rows() {
+  const r = [];
+  r.push({ id: 'marking', badge: markHTML(lb), deed: `<b>${MK(lb.marking).word}</b>: ${MK(lb.marking).plain}`, clause: POL.clauses.marking });
+  lb.desc.forEach(d => r.push({ id: d, badge: `<span class="use"><span class="ic">${I(DS(d).icon, 12)}</span><span class="w"><b>${DS(d).word}</b></span></span>`, deed: `<b>${DS(d).word}</b>: ${DS(d).plain} Only ${P(DS(d).owner).name} may take this off.`, clause: POL.clauses[d] || POL.clauses.personal }));
+  USE_IDS().forEach(u => {
+    const v = lb.uses[u];
+    const clause = v === 'no' ? (POL.clauses[u] || POL.clauses.marking) : v === 'count' ? POL.clauses.count : v === 'ask' ? POL.clauses.outside : null;
+    r.push({ id: 'u-' + u, badge: useHTML(u, v), deed: `${US(u).long}: <b>${POL.useWords[v]}</b>${v === 'count' ? `, over ${POL.minGroup} or more, naming none` : ''}.`, clause });
+  });
+  r.push({ id: 'keep', badge: `<span class="use"><span class="ic">${I('hourglass', 12)}</span><span class="w">${lb.keepDate}</span></span>`, deed: `Kept <b>${keepWord(lb)}</b>, here and wherever it was quoted.`, clause: POL.clauses.keep });
+  return r;
+}
+function render() {
+  const R = rows();
+  const mark = id => POL.markings[id];
+  $('#app').innerHTML = topHTML(['Label sheet', 'Badge, deed, policy'], [['↑ ↓', 'a row'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">The label · grammar · ${f.k} on ${DATA.record.title}</p><h1 class="title">Three layers</h1></div>
+    <div class="cols" role="table" aria-label="The same label in three layers">
+      <div class="ch" role="columnheader"><p class="eyebrow">${I('tag', 12)} Badge</p><p class="sub">what you read in a second</p></div>
+      <div class="ch" role="columnheader"><p class="eyebrow">${I('message-square-text', 12)} Deed</p><p class="sub">plain words, one click away</p></div>
+      <div class="ch clause" role="columnheader"><p class="eyebrow">${I('scroll-text', 12)} Policy</p><p class="sub">${POL.name}, ${POL.version} · owner ${P(POL.owner).name}</p></div>
+      ${R.map((x, i) => `<div class="row b dep ${S.on === i ? 'on' : ''}" style="--i:${i}" data-r="${i}" role="cell">${x.badge}</div><div class="row dep ${S.on === i ? 'on' : ''}" style="--i:${i}" data-r="${i}" role="cell"><span>${x.deed}</span></div><div class="row clause dep ${S.on === i ? 'on' : ''}" style="--i:${i}" data-r="${i}" role="cell"><span>${x.clause ? tpl(x.clause) : '<span class="muted">No clause: allowed unless something says otherwise.</span>'}</span></div>`).join('')}
+      <div></div><div></div><pre class="mach">${JSON.stringify({ marking: lb.marking, descriptors: lb.desc, uses: lb.uses, keep: lb.keep, caveat: lb.caveat?.id, policy: POL.id })}</pre>
+    </div>
+    <div class="scheme" aria-label="Marking schemes">
+      <span class="h">This deployment</span>${['off', 'os', 'sec'].map(k => `<span class="${POL === DATA.policies[0] ? 'on' : ''}">${DATA.policies[0].markings[k].word}${DATA.policies[0].markings[k].notHere ? ' · not kept in AUGUR' : ''}</span>`).join('')}
+      <span class="h">Another (S)</span>${['off', 'os', 'sec'].map(k => `<span class="${POL === DATA.policies[1] ? 'on' : ''}">${DATA.policies[1].markings[k].word}${DATA.policies[1].markings[k].notHere ? ' · not kept in AUGUR' : ''}</span>`).join('')}
+    </div>
+  </div></main>`;
+  afterRender();
+  $$('.row[data-r]').forEach(r => { r.onmouseenter = () => light(+r.dataset.r); });
+}
+function light(i) { S.on = i; $$('.row[data-r]').forEach(r => r.classList.toggle('on', +r.dataset.r === i)); }
+function replay() {
+  clearLater(); S.on = null; settleIn(); render();
+  /* the moment: "not for appraisal" lights across badge, deed and clause */
+  later(() => light(rows().findIndex(r => r.id === 'u-appraisal')), MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const n = rows().length; light(((S.on ?? -1) + (e.key === 'ArrowDown' ? 1 : -1) + n) % n); }
+});
+replay();
+</script>
+</body>
+</html>

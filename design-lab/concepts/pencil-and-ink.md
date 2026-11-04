@@ -16,3 +16,5 @@ Could steer: The apprentice (Q), the briefing (M), Mandate drafting, every place
 Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): agent work is pencil until a person accepts it, then keeps its maker's mark; the model is one step of six, and G removes it without changing a number (proposal V3, grammar V4).
 
 Used in [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/): the model hears a meeting in pencil; only the room's read-back inks the minute (live V2, combined V3).
+
+In [`2026-11-03-the-label`](../runs/2026-11-03-the-label/): suggested labels are pencil until inked; the model gateway refuses labelled values.
