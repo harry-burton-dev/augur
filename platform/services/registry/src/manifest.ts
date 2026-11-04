@@ -132,7 +132,12 @@ export const appEntrySchema = Type.Object(
     id: Type.String({ pattern: '^[a-z][a-z0-9-]{1,39}$', description:'The app\'s id, such as "board"; its route, client and storage are named after it' }),
     name: Type.String({ minLength: 1, maxLength: 60, description: 'What people call the app' }),
     route: Type.String({ pattern: '^/[a-z0-9][a-z0-9/-]*$', maxLength: 100, description: 'Route prefix the shell maps to this app' }),
-    entry: Type.String({ minLength: 1, maxLength: 500, description: "URL of the app's ES module entry" }),
+    entry: Type.String({
+      minLength: 1,
+      maxLength: 500,
+      pattern: '^[^\\\\\\u0000-\\u001f\\u007f]+$',
+      description: "URL of the app's ES module entry: a path on AUGUR (/apps/…) or a full https address. No backslashes or control characters.",
+    }),
     version: Type.String({ minLength: 1, maxLength: 40, description: "The app's release, semver" }),
     sdk: Type.String({
       minLength: 1,
@@ -439,18 +444,30 @@ export const parseOrigin = (input: string): { origin: string } | { problem: stri
   return { origin: url.origin };
 };
 
+/** A stand-in for AUGUR's own address: an entry that resolves against it and keeps it is a path on AUGUR. */
+const OWN_ORIGIN = 'https://platform.invalid';
+/** Characters a browser reads differently from how they look in an address (WHATWG URL): backslashes and controls. */
+// eslint-disable-next-line no-control-regex
+const UNSAFE_IN_ENTRY = /[\\\u0000-\u001f\u007f]/;
+
 /**
  * Why an app may not load from where its entry is, or undefined when it may.
  * A path ("/apps/x/entry.js") is served by the platform itself and always may;
  * a full address must be on an origin an admin has allowed.
  */
 export const entryOriginProblem = (entry: Pick<AppEntry, 'name' | 'entry'>, allowed: string[]): string | undefined => {
-  if (entry.entry.startsWith('/') && !entry.entry.startsWith('//')) return undefined;
+  // Browsers read a backslash as a slash and drop tabs and newlines, so "/\\evil.example/x.js" is another
+  // site. Refuse those outright, then judge the address the way the shell's import() will resolve it.
+  if (UNSAFE_IN_ENTRY.test(entry.entry)) return `${entry.name}'s entry "${entry.entry}" has a backslash or a control character, which browsers read differently from how it looks.`;
   let url: URL;
   try {
-    url = new URL(entry.entry);
+    url = new URL(entry.entry, OWN_ORIGIN);
   } catch {
     return `${entry.name}'s entry "${entry.entry}" is neither a path on AUGUR's own address nor a full web address.`;
+  }
+  if (url.origin === OWN_ORIGIN) {
+    if (entry.entry.startsWith('/')) return undefined;
+    return `${entry.name}'s entry "${entry.entry}" is neither a path on AUGUR's own address (starting with /) nor a full web address.`;
   }
   if (allowed.includes(url.origin)) return undefined;
   return `${entry.name} loads from ${url.origin}, which isn't a place apps are allowed to load from. An admin can allow it in Admin, Apps.`;
