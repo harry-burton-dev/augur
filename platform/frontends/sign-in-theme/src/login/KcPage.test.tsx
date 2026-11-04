@@ -1,7 +1,7 @@
 import { createGetKcContextMock } from 'keycloakify/login/KcContext';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { kcEnvDefaults, themeNames } from '../kc.gen';
 import type { KcContextExtension } from './KcContext';
 import KcPage from './KcPage';
@@ -15,8 +15,9 @@ const render = async (kcContext: Parameters<typeof KcPage>[0]['kcContext']) => {
   const el = document.createElement('div');
   document.body.replaceChildren(el);
   await act(async () => createRoot(el).render(<KcPage kcContext={kcContext} />));
-  // Keycloakify loads each page lazily.
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+  // Keycloakify loads each page lazily: wait until the page is in.
+  await vi.waitFor(() => expect(el.querySelector('#kc-page-title form, #kc-content form')).not.toBeNull(), { timeout: 5000, interval: 20 });
+  await act(async () => undefined);
   return el;
 };
 
