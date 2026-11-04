@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-referen
 Could steer: Search and the command palette (P), Mandate asks, forms (X).
 
 In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): settle what the file's evidence settles and show the evidence; ask only the two questions that change what lands (bring-in V5).
+
+Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): AUGUR reads the intent and asks the one question that changes the offer (choose V2).
