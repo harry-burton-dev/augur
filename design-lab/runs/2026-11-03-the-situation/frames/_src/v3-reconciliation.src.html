@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Frames V3 · The reconciliation</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V3: two counts of the same month, walked from one to the other line by line, as an accountant reconciles a statement ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:var(--space-6)}
+.stmt{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.ln{display:grid;grid-template-columns:minmax(0,1fr) 90px;gap:var(--space-4);align-items:baseline;padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--hairline);opacity:0;transform:translateY(var(--space-1));transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}
+.ln.in{opacity:1;transform:none}
+.ln p{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.ln .src{margin-top:var(--space-1)}
+.ln .n{font:300 var(--type-heading)/1 var(--font-mono);text-align:right;color:var(--light)}
+.ln.tot{border-top:1px solid var(--hairline-strong);border-bottom:2px solid var(--hairline-strong)}
+.ln.tot .n{font-weight:400}
+.ln.sub{padding-left:var(--space-6)}
+.ln.sub .n{font-size:var(--type-lead);color:var(--ink)}
+.ln.open{background:var(--x-proposed-disagree-wash);border-left:2px solid var(--x-proposed-disagree)}
+.ln.agreed{border-left:2px solid var(--x-proposed-lit)}
+.who2{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-1);font-size:var(--type-small);color:var(--ink-muted)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.side h2{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.box{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.box p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.box b{font-weight:400;color:var(--light)}
+.box.settle{border-color:var(--x-proposed-lit)}
+@media (prefers-reduced-motion: reduce){.ln{transform:none}}
+@media (max-width:1400px){.ln{padding:var(--space-2) var(--space-3)}.ln p{font-size:var(--type-small);line-height:var(--leading-small)}.ln .n{font-size:var(--type-lead)}.box:last-child{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Frames · V3</b> the reconciliation: two counts walked from one to the other, line by line; what is agreed, what is open, and what would close it · bank reconciliation, statement of differences</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { n: 0 };
+const open = R.noAccess - R.noAccessWithPhotos;
+/* the walk from our count to theirs: each line a reason, a number and whose evidence */
+const LINES = [
+  { cls: 'tot', p: 'd1', n: R.series.at(-1).v, w: `Our count for October: every scheduled bin not emptied.` },
+  { cls: '', n: -R.noAccess, w: `Less: “no access” calls. ${T.supplierShort} leaves these out: it says the bin wasn’t out or the road was blocked.`, p: 'i3' },
+  { cls: 'tot', p: 'd3', n: R.supplierCount, w: `${T.supplierShort}’s count for October.` },
+  { cls: 'sub agreed', n: R.noAccessWithPhotos, w: `Of the ${R.noAccess}: crews have photos of the bin out on the day. Theirs to count, on our evidence.`, ev: 'Crew photos, kept on the Team floor' },
+  { cls: 'sub open', n: open, w: `Of the ${R.noAccess}: no photos either way. Open.`, ev: 'Nothing yet' }
+];
+const sign = n => n < 0 ? '−' + Math.abs(n) : n;
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Two counts'], [['→', 'next line'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="stmt"><div><p class="eyebrow">Two frames · two ways of counting the same month</p><h1 class="title">From ${R.series.at(-1).v} to ${R.supplierCount}</h1></div>
+      ${LINES.map((l, k) => `<div class="ln ${l.cls} ${S.n > k ? 'in' : ''}"><div><p>${l.w}</p>${l.p ? srcHTML(PC(l.p).src) : ''}${l.ev ? `<span class="who2">${I(l.cls.includes('open') ? 'circle-dashed' : 'camera', 12)} ${l.ev}</span>` : ''}</div><span class="n">${sign(l.n)}</span></div>`).join('')}
+    </div>
+    <aside class="side"><h2>So</h2>
+      <div class="box"><p><b>The counts don’t disagree about what happened.</b> They disagree about what to count. Both are kept, each with its definition, and the set says which one the contract uses (ours: ${R.limitWhere} counts every scheduled bin).</p></div>
+      <div class="box"><p><b>Agreed on evidence: ${R.noAccessWithPhotos}.</b> The crews’ photos show the bin out. If ${T.supplierShort} accepts them, its count becomes ${R.supplierCount + R.noAccessWithPhotos}.</p></div>
+      <div class="box settle"><p><b>What would settle the last ${open}:</b> ${T.supplierShort}’s own vehicle tracking for those streets on those days, or the residents’ cases if they reported it. Asked of ${whoHTML('kerry')} by ${whoHTML(T.owner)}.</p></div>
+      <div class="box"><p>${rm('info')} Kept as information in ${T.id}, marked <span class="mk-disagree"></span> until the last ${open} close. It never becomes one number by averaging: ${(R.series.at(-1).v + R.supplierCount) / 2} would be a count of nothing.</p></div></aside>
+  </div></main>`;
+  hydrate($('#app'));
+}
+const show = () => $$('.ln').forEach((el, k) => el.classList.toggle('in', k < S.n));
+play(() => { S.n = 0; render(); }, () => {
+  const step = ms('--motion-slow');
+  LINES.forEach((l, k) => later(() => { S.n = k + 1; show(); }, k * step));
+}, (e) => { if (e.key === 'ArrowRight') { S.n = Math.min(LINES.length, S.n + 1); show(); } });
+</script>
+</body>
+</html>

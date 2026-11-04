@@ -10,3 +10,5 @@ When the structure changes, the gaps it opens become named rounds of small jobs 
 First found in: [`2026-11-03-the-catalogue`](../runs/2026-11-03-the-catalogue/) (change V4, V6 and V1, combined).
 
 Could steer: The groundskeeper (K), care is scheduled, Upgrade Centre (a release that adds fields).
+
+Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): a recall turns one flag into a round of checks on the lot (mistake V2).

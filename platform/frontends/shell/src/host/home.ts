@@ -43,6 +43,8 @@ export interface HomeCard {
   app: string;
   name: string;
   icon?: string;
+  /** Why the app can't be opened, and who can change that. Home shows the card with this instead of mounting it. */
+  unavailable?: string;
 }
 
 export interface HomeState {
@@ -84,17 +86,23 @@ export function cardOf(app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'r
   return fits.find((s) => s.role) ?? fits[0];
 }
 
-/** The cards for Home on this floor: apps the person opened most recently first, then the catalogue's order, at most six. */
+/**
+ * The cards for Home on this floor: apps the person opened most recently first, then the catalogue's order, at most six.
+ * An app this shell can't open keeps its card, which says why and who can change it (Nothing is obtuse).
+ */
 export function cardsFor(manifest: AppManifestEntry[], floor: Pick<Workspace, 'kind' | 'role'>, recent: string[]): HomeCard[] {
   const order = (a: AppManifestEntry) => {
     const at = recent.indexOf(a.id);
     return at < 0 ? recent.length + manifest.indexOf(a) : at;
   };
   return manifest
-    .filter((a) => !incompatibility(a) && cardOf(a, floor))
+    .filter((a) => cardOf(a, floor))
     .sort((a, b) => order(a) - order(b))
     .slice(0, MAX_CARDS)
-    .map((a) => ({ app: a.id, name: a.name, ...(a.icon ? { icon: a.icon } : {}) }));
+    .map((a) => {
+      const why = incompatibility(a);
+      return { app: a.id, name: a.name, ...(a.icon ? { icon: a.icon } : {}), ...(why ? { unavailable: why } : {}) };
+    });
 }
 
 const isSurface = (x: unknown): x is Surface => !!x && typeof x === 'object' && typeof (x as Surface).mount === 'function';

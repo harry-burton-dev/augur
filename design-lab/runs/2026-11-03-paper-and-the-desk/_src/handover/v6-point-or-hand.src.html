@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Handover V6 · Point out or hand over</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V6: two different verbs. point out: they see it, you keep it. hand over: it becomes theirs. both cross floors ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-5)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-5);min-height:0;align-items:start}
+.verb{display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4) var(--space-5);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);text-align:left;transition:border-color var(--motion-base) var(--ease-standard)}
+.verb[aria-pressed="true"]{border-color:var(--x-proposed-lit);background:color-mix(in srgb,var(--surface-inset) 80%,var(--green) 4%)}
+.verb h2{margin:0;display:flex;gap:var(--space-3);align-items:center;font-weight:300;font-size:var(--type-heading);color:var(--light)}
+.verb h2 .kbd{margin-left:auto}
+.verb ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-2)}
+.verb li{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.verb li svg{margin-top:2px;color:var(--ink-muted)}
+/* the floor stack: the fact is kept on the Team floor; Lena is on the Org floor */
+.stack{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2) var(--space-4);align-items:center}
+.fl{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--ink-muted);white-space:nowrap}
+.fl::before{content:"";width:var(--space-4);height:2px;background:var(--fc)}
+.lanep{position:relative;height:var(--space-6);border-bottom:1px solid var(--hairline);display:flex;align-items:center;gap:var(--space-2)}
+.marks{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.seen{display:inline-flex;gap:var(--space-1);align-items:center;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink);border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);padding:var(--space-1) var(--space-2)}
+.seen.new{border-color:var(--x-proposed-lit);color:var(--x-proposed-lit);animation:land var(--motion-base) var(--ease-out)}
+@media (max-width:1400px){.verb li{font-size:var(--type-small);line-height:var(--leading-small)}.verb{padding:var(--space-3) var(--space-4)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Handover · V6</b> point out or hand over: two verbs, never blurred; pointing out leaves a "seen" mark and keeps it yours · ATC "point-out" versus handoff</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const it = ITEM('F-3301'), f = DATA.fact, to = f.steward, me = DATA.me;
+const S = { pick: 'point', seen: false };
+function render() {
+  const pt = S.pick === 'point';
+  $('#app').innerHTML = topHTML(['Data Atlas', f.subject, f.field], [['P', 'point out'], ['H', 'hand over'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div><p class="eyebrow">${it.id} · ${it.state} · ${it.line}</p><h1 class="t" style="margin-top:var(--space-1)">${it.title}</h1></div>
+      <div class="panel stack">
+        ${DATA.floorOrder.map(fl => `<span class="fl" data-tier="${fl}">${F(fl).word}</span><div class="lanep">${fl === it.floor ? stripHTML({ ...it, line: S.pick === 'hand' && S.seen ? 'offered up to ' + P(to).name : it.line, to: S.pick === 'hand' && S.seen ? to : null }, { noCock: true }) : fl === P(to).floor ? `${pchip(to, { role: true })}<span class="note" style="margin-left:var(--space-3)">${F(fl).name} · keeps the facts register</span>` : ''}</div>`).join('')}
+        <span></span><div class="marks"><span class="note">Marks on it:</span><span class="seen">${ini('rui', 'sm')} second source · 29 Oct</span><span class="seen">${ini(me, 'sm')} held for triage · 30 Oct</span>
+          ${S.seen ? (pt ? `<span class="seen new">${I('eye', 12)} pointed out to ${P(to).ini} · ${DATA.now.time}</span>${S.opened ? `<span class="seen new">${ini(to, 'sm')} seen · 10:41</span>` : ''}` : `<span class="seen new">${I('hand-helping', 12)} offered to ${P(to).ini} · ${DATA.now.time}</span>`) : ''}</div></div>
+      <div class="two">
+        <button class="verb" aria-pressed="${pt}" data-v="point"><h2>${I('eye', 20)} Point it out to ${first(to)}<span class="kbd">P</span></h2><ul>
+          <li>${I('user-round', 16)}<span>It stays <b>yours</b>. You still decide which year is right, and you still answer for it.</span></li>
+          <li>${I('eye', 16)}<span>${first(to)} gets one line and the strip shows on her desk as <b>pointed out</b>, faint, with your name.</span></li>
+          <li>${I('stamp', 16)}<span>When she opens it, a <b>seen</b> mark goes on the fact with her initials. That is all it asks of her.</span></li>
+          <li>${I('message-square-quote', 16)}<span>Use it for: “you’ll want to know this”, “this touches your register”.</span></li></ul></button>
+        <button class="verb" aria-pressed="${!pt}" data-v="hand"><h2>${I('hand-helping', 20)} Hand it up to ${first(to)}<span class="kbd">H</span></h2><ul>
+          <li>${I('user-round', 16)}<span>It becomes <b>${first(to)}’s</b> once she reads it back. Until then it is yours, offered.</span></li>
+          <li>${I('arrow-up-right', 16)}<span>It crosses from the ${F(it.floor).word} floor to the ${F(P(to).floor).word} floor. She can open everything behind it; you keep read access.</span></li>
+          <li>${I('notebook-pen', 16)}<span>It needs an SBAR card: the four boxes, with your assessment (“the data plate says 06/2017”).</span></li>
+          <li>${I('message-square-quote', 16)}<span>Use it for: “this is yours to decide, not mine”.</span></li></ul></button>
+      </div>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.verb').forEach(b => b.onclick = () => pick(b.dataset.v));
+}
+function pick(v) { S.pick = v; S.seen = false; S.opened = false; render(); }
+function replay() {
+  clearLater(); S.pick = 'point'; S.seen = false; S.opened = false; render(); settle();
+  /* the moment: Amara points it out; Lena's "seen" mark lands on the fact, and it is still Amara's */
+  later(() => { S.seen = true; render(); }, ms('--motion-run'));
+  later(() => { S.opened = true; render(); }, ms('--motion-run') + ms('--motion-calm'));
+}
+onKeys({ r: replay, p: () => { pick('point'); later(() => { S.seen = true; render(); }, ms('--motion-calm')); }, h: () => { pick('hand'); later(() => { S.seen = true; render(); }, ms('--motion-calm')); } });
+replay();
+</script>
+</body>
+</html>

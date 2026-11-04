@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The annotated game · Two voices V4 · Then, now, and the mark</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Two voices V4: three readings of each critical move: the records as at then, the records now, the person's mark. Against outcome bias ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-3)}
+.cols,.rw{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:var(--space-4)}
+.cols{padding:0 var(--space-4)}
+.cols .c{display:grid;gap:2px}
+.cols .c b{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.cols .c span{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.rows{min-height:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.rw{padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-pane);align-items:start;font-size:var(--type-small);line-height:var(--leading-small)}
+.rw .mvc{display:grid;gap:var(--space-1)}
+.rw .mvc b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.cell{display:grid;gap:var(--space-1)}
+.cell .tp{display:flex;align-items:center;gap:var(--space-2)}
+.cell .tp .gl{font-size:var(--type-heading)}
+.now{border-radius:var(--radius-key);padding:var(--space-2);margin:calc(var(--space-2) * -1);transition:opacity var(--motion-calm) var(--ease-out),filter var(--motion-calm) var(--ease-out)}
+.now.on{background:var(--x-proposed-hindsight)}
+.now.off{filter:blur(var(--x-proposed-future-blur));opacity:var(--x-proposed-quiet)}
+.now .hl{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-soft);text-transform:uppercase;color:var(--info)}
+.rw.bias{border-color:var(--x-proposed-warn)}
+.note{padding:var(--space-3) var(--space-4);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.note b{font-weight:400;color:var(--light)}
+@media (max-width:1400px){.rw{padding:var(--space-2) var(--space-3)}.cols,.rw{gap:var(--space-3)}.note{padding:var(--space-2) var(--space-3)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Two voices · V4</b> then, now, and the mark: the records as at the move, the records today, and the person’s judgement; marking by today’s column is “resulting” · Baron and Hershey on outcome bias, Annie Duke’s “resulting”</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const ROWS = [4, 6, 11, 13];
+const S = { now: false };
+function render() {
+  const end = posAt(DEC.ended);
+  $('#app').innerHTML = topHTML(['Mandate', 'Reviews', DEC.id, 'Then and now'], [['H', 'hindsight column', 'h-h'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="intro"><h1 class="h1">Then, now, and the mark</h1><p class="lede">Three readings of each critical move. A mark is fair when it agrees with what could be known then, not with how it ended. Poker players call judging a decision by its result “resulting”; the hindsight column is here so you can see it and not do it.</p></div>
+    <div class="cols"><span class="c"><b>The move</b><span>as it was played</span></span><span class="c"><b>Then</b><span>the records as at that date</span></span><span class="c"><b>Now</b><span>the records as at ${dt(DEC.ended, 'short')}: hindsight</span></span><span class="c"><b>The mark</b><span>people, judging as it stood</span></span></div>
+    <section class="rows scroll">${ROWS.map(n => { const m = MV(n), t = posOfMove(n), rm = reviewMarks(n), bias = n === 13;
+      return `<div class="rw ${bias && S.now ? 'bias' : ''}"><div class="mvc"><span class="mono muted">${n} · ${dt(m.on, 'short')}</span><b>${m.san}</b><span class="muted">${m.side === 'us' ? P(m.by).name : ''}</span></div>
+        <div class="cell"><p class="tp">${posGl(t.s)} ${t.w}</p><p class="muted">${t.say}</p></div>
+        <div class="cell now ${S.now ? 'on' : 'off'}" ${S.now ? '' : 'aria-hidden="true"'}><p class="hl">${I('history', 11)} known later</p><p class="tp">${posGl(end.s)} ${end.w}</p><p>${DATA.hindsight[n]}</p></div>
+        <div class="cell"><p class="tp">${rm.map(a => gl(a.g)).join(' ')}</p><p>${rm[0].line}</p>${rm[1] ? `<p class="muted">${first(rm[1].by)}: ${rm[1].line}</p>` : ''}</div></div>`; }).join('')}</section>
+    <p class="note pane">${S.now ? `${I('scale', 14)} Read across move 13. <b>Then</b> the records were already ${posGl(MV(13) && posOfMove(13).s)}, and a fitter was due the next day: ${gl('!?')} names a risk taken knowingly. <b>Now</b> we know overdue rose from 2 to 7, which would make it ${gl('?')}. Ade’s ${gl('?')} rests on a number known then (18 vans, one fitter), so it isn’t resulting either. Both marks stand.` : `${I('eye-off', 14)} Hindsight is out of focus. Mark first; press H to bring it in.`}</p>
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $('#h-h')?.classList.toggle('on', S.now);
+}
+function replay() { clearLater(); S.now = false; render(); settle(); later(() => { S.now = true; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) return; if (e.key.toLowerCase() === 'h') { S.now = !S.now; render(); } });
+replay();
+</script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Label · Record V2 · Quote it as</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: quoting asks how: as it is, as a count, or as a link. Each choice shows the label it brings and who reads what ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(300px,.8fr) minmax(0,1.6fr);gap:var(--space-5)}
+.side{display:flex;flex-direction:column;gap:var(--space-3);min-height:0}
+.side .sel{padding:var(--space-3) var(--space-4);border:1px solid var(--x-proposed-lit);border-radius:var(--radius-inset);background:var(--x-proposed-lit-wash)}
+.side .sel .v{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light)}
+.side li{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);list-style:none;padding:var(--space-1) 0;border-bottom:1px solid var(--hairline);display:flex;gap:var(--space-2)}
+.side ul{margin:0;padding:0}
+.dlg{display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4) var(--space-5);border:1px solid var(--hairline-strong);border-radius:var(--radius-card);background:var(--surface-overlay);box-shadow:var(--shadow-overlay);min-height:0}
+.dlg h2{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.opts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
+.opt{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-inset);text-align:left;transition:border-color var(--motion-base) var(--ease-standard),background var(--motion-base) var(--ease-standard)}
+.opt[aria-checked="true"]{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.opt .n{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted)}
+.opt .s{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--light)}
+.opt .lbl{margin-top:auto}
+.opt .mk{font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-soft);white-space:normal}
+.prev{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:var(--space-4);border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.doc{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);display:grid;gap:var(--space-2)}
+.doc .eyebrow{margin-bottom:var(--space-1)}
+.doc .pm{margin-right:var(--space-2)}
+.doc .new{background:var(--x-proposed-lit-wash);border-radius:2px;padding:0 2px}
+.readers{display:grid;gap:var(--space-2)}
+.rd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);align-items:center}
+.rd b{font-weight:400;color:var(--ink)}
+.bar{grid-column:1 / -1;display:flex;height:var(--space-2);border-radius:1px;overflow:hidden;background:var(--hairline)}
+.bar i{display:block;height:100%}
+.bar .o{background:var(--ink)}
+.bar .s{background:var(--x-proposed-said-other)}
+.bar .u{background:var(--x-proposed-unseen)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);margin-top:auto}
+@media (max-width:1400px){.dlg{padding:var(--space-3) var(--space-4)}.opt .s{font-size:var(--type-small);line-height:var(--leading-small)}.side .sel .v{font-size:var(--type-heading)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Record · V2</b> quote it as: the value as it is, as a count, or as a link; each shows the label it brings and what each reader gets · CC deed, quotation vs transclusion (Nelson)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const f = FACT('f5'), A = DATA.answer, me = READERS.leah, target = 'mops';
+const S = { pick: 0, open: false };
+const people = { all: F(target).people, inside: F('pil').people };
+const countLb = () => ({ ...L('lbHours'), desc: [], why: tpl(POL.rules[2]) });
+const OPTS = () => [
+  { id: 'as', w: 'As it is', s: `“${f.v}”`, lb: L(f.label), sent: `The pilot had been on duty for <span class="new">${f.v}</span>.`,
+    split: { o: people.inside, s: 0, u: people.all - people.inside }, note: `Only Pilotage’s ${people.inside} see the figure. The other ${people.all - people.inside} get “counted, not shown”: the caveat travels with the quote.` },
+  { id: 'count', w: 'As a count', s: `“${A.n} of ${A.of} groundings over 12 hours”`, lb: countLb(), sent: `In <span class="new">${A.n} of ${A.of}</span> groundings this year, the pilot had been on duty for more than 12 hours.`,
+    split: { o: people.all, s: 0, u: 0 }, note: `Counted over ${A.of} groundings, none named, so PERSONAL comes off by rule 3. It stays ${MK('os').word}. All ${people.all} can read it.` },
+  { id: 'link', w: 'As a link', s: `“see ${f.k.toLowerCase()} on ${DATA.record.title}”`, lb: L('lbOff'), sent: `See <span class="new">${f.k.toLowerCase()} ↗</span> on ${DATA.record.title}.`,
+    split: { o: people.inside + 1, s: 0, u: people.all - people.inside - 1 }, note: `The draft holds no value, so it stays ${MK('off').word}. Each reader who follows the link gets their own view of the record.` }
+];
+function render() {
+  const O = OPTS(), o = O[S.pick];
+  const dLb = combine(['lbOff', o.id === 'link' ? 'lbOff' : 'lbHours']);
+  const draftLb = o.id === 'count' ? { ...dLb, desc: [] } : o.id === 'link' ? L('lbOff') : dLb;
+  const pc = n => (n / people.all * 100).toFixed(1) + '%';
+  $('#app').innerHTML = topHTML(['Data Atlas', DATA.record.title, f.k], [['1–3', 'how to quote'], ['Enter', 'quote'], ...STD_HINTS]) +
+  `<main class="main"><div class="wrap">
+    <aside class="side"><p class="eyebrow">${DATA.record.kind} · ${DATA.record.id}</p>
+      <div class="sel"><p class="who">${f.k} ${pmHTML(f.label)}</p><p class="v">${f.v}</p><p class="who">Shared with you by ${P(DATA.shares[0].from).name} for ${US(DATA.shares[0].purpose).word.toLowerCase()} until ${DATA.shares[0].until}</p></div>
+      <p class="sub">A quote is a copy, and a copy carries its label. So before the value leaves the record, AUGUR asks how to say it, and shows what each way brings with it.</p>
+      <ul>${DATA.record.facts.slice(0, 5).map(x => `<li>${pmHTML(x.label)} ${x.k}</li>`).join('')}</ul>
+    </aside>
+    <section class="dlg ${S.open ? '' : 'dep'}" role="dialog" aria-label="Quote it as">
+      <p class="eyebrow">Quote into · ${DATA.briefing.title} · draft, ${F(target).name}</p>
+      <h2>How should the quote say it?</h2>
+      <div class="opts" role="radiogroup">${O.map((x, i) => `<button class="opt" role="radio" aria-checked="${S.pick === i}" data-i="${i}"><span class="n">${i + 1} · ${x.w}</span><span class="s">${x.s}</span><span class="lbl">${markHTML(x.id === 'count' ? countLb() : x.lb)}</span></button>`).join('')}</div>
+      <div class="prev">
+        <div class="doc"><p class="eyebrow">The draft would read</p><p>${pmHTML('lbOff')}The Marlow Star grounded on the falling tide at Halden Bar.</p><p>${pmHTML(o.id === 'count' ? countLb() : o.lb)}${o.sent}</p>
+          <p class="who">Draft label becomes ${markHTML(draftLb)}</p><p class="who">${usesHTML(draftLb, { only: ['no', 'count'] })}</p></div>
+        <div class="readers"><p class="eyebrow">Who reads what · ${fmt(people.all)} people in ${F(target).name}</p>
+          <div class="rd"><span><b>${o.split.o}</b> read it as written</span><span>${o.split.u ? `<b>${o.split.u}</b> don’t get the figure` : ''}</span>
+            <span class="bar" aria-hidden="true"><i class="o" style="width:${pc(o.split.o)}"></i><i class="u" style="width:${pc(o.split.u)}"></i></span></div>
+          <p class="who">${o.note}</p></div>
+      </div>
+      <div class="foot"><span class="who">${I('history', 12)} Whichever you choose is kept in the value’s custody: “quoted ${o.w.toLowerCase()} by ${P(me.person).name}”.</span><button class="btn go">${I('quote', 14)} Quote ${o.w.toLowerCase()}</button></div>
+    </section>
+  </div></main>`;
+  afterRender();
+  $$('.opt').forEach(b => { b.onclick = () => { S.pick = +b.dataset.i; render(); $(`.opt[data-i="${S.pick}"]`).focus(); }; });
+}
+function replay() {
+  clearLater(); closeDeed(); S.pick = 0; settleIn(); render();
+  later(() => { S.pick = 1; render(); }, MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (/^[1-3]$/.test(e.key)) { S.pick = +e.key - 1; render(); }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { S.pick = (S.pick + (e.key === 'ArrowRight' ? 1 : 2)) % 3; render(); $(`.opt[data-i="${S.pick}"]`).focus(); }
+});
+replay();
+</script>
+</body>
+</html>

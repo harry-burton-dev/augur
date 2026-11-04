@@ -37,7 +37,7 @@ const audienceMapper = {
 export const serviceClient = (clientId: string, secret: string) => ({
   clientId,
   name: clientId.startsWith('platform-') ? `${clientId.slice('platform-'.length)} (platform service)` : `${clientId.replace(/^app-/, '')} (app service)`,
-  description: 'Made by the platform’s identity service. Its secret is issued and replaced from Admin, or set in the server’s settings.',
+  description: 'Made by AUGUR’s identity service. Its secret is issued and replaced from Admin, or set in the server’s settings.',
   enabled: true,
   publicClient: false,
   clientAuthenticatorType: 'client-secret',
@@ -164,7 +164,7 @@ export const appClientRoutes =
           summary: "Issue an app's own sign-in, or replace its secret (admins only)",
           description: [
             "Makes the app's Keycloak client (app-<id>: client credentials only,",
-            '5-minute tokens for the platform-services audience), or gives it a new',
+            '5-minute tokens for the audience platform-services), or gives it a new',
             'secret, after which the old one stops working. The secret is in this',
             "answer only; the app's service is given it as SERVICE_CLIENT_SECRET.",
             'Audited as app.credential-issued, without the secret.',

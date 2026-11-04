@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Home V5 · The desk top</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: your own arrangement. you place strips; AUGUR only fills the in-tray and never tidies ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-3)}
+.head{display:flex;align-items:flex-end;gap:var(--space-5)}
+.head .lede{margin-left:auto;max-width:60ch;text-align:right}
+.desk{position:relative;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:radial-gradient(90% 80% at 40% 30%,color-mix(in srgb,var(--slate) 70%,transparent),var(--surface-inset));overflow:hidden}
+.pile{position:absolute;border:1px dashed var(--hairline);border-radius:var(--radius-inset);padding:var(--space-6) var(--space-3) var(--space-3)}
+.pile .lab{position:absolute;top:var(--space-2);left:var(--space-3);font-style:italic;font-size:var(--type-meta);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.pile .lab .by{font:400 var(--x-proposed-type-micro)/1 var(--font-mono);font-style:normal;opacity:var(--x-proposed-quiet)}
+.tray{position:absolute;right:var(--space-4);top:var(--space-4);width:calc(var(--measure-card) + var(--space-7));min-height:calc(var(--space-8) + var(--space-4));border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-inset);padding:var(--space-6) var(--space-3) var(--space-3)}
+.tray .lab{position:absolute;top:var(--space-2);left:var(--space-3);font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink);display:flex;gap:var(--space-2);align-items:center}
+.ds{position:absolute;width:calc(var(--measure-card) + var(--space-6));cursor:grab;touch-action:none;transition:left var(--motion-calm) var(--ease-out),top var(--motion-calm) var(--ease-out),opacity var(--motion-base) var(--ease-out)}
+.ds.drag{transition:none;cursor:grabbing;z-index:5}
+.ds .strip{grid-template-columns:var(--x-proposed-strip-edge) minmax(0,1fr) calc(var(--space-7) + var(--space-1)) calc(var(--space-8) + var(--space-3));box-shadow:var(--shadow-raised)}
+.ds .strip .fid{display:none}
+.ds .strip .due{white-space:nowrap}
+.tray .ds{position:static;width:auto;cursor:default;transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out)}.ds.fresh{opacity:0;transform:translateY(calc(var(--space-5) * -1))}
+.list{position:absolute;inset:var(--space-4);display:grid;align-content:start;gap:var(--space-2);background:var(--surface-overlay);backdrop-filter:blur(var(--surface-blur));border-radius:var(--radius-inset);padding:var(--space-4);z-index:9}
+.legend{position:absolute;left:var(--space-4);bottom:var(--space-3);font-size:var(--type-small);color:var(--ink-muted);display:flex;gap:var(--space-4)}
+@media (max-width:1400px){.head .lede{display:none}.ds{width:calc(var(--measure-card) - var(--space-4))}.ds .strip .ln{display:none}.ds .strip{min-height:var(--target-sm)}.tray{width:calc(var(--measure-card) - var(--space-1))}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Home · V5</b> the desk top: strips stay where you put them; only the in-tray fills by itself · Sellen and Harper, Malone's "piles" (1983)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* where you left each strip (fractions of the desk). your arrangement, kept per person */
+const HOME = { 'M-207': [.03, .12], 'F-3301': [.05, .27], 'S-44': [.07, .42], 'A-118': [.39, .14], 'F-3290': [.40, .62], 'Y-09': [.05, .70], 'M-212': [.70, .14] };
+const PILES = [
+  { lab: 'Elm Court, this week', at: [.015, .03, .31, .55] },
+  { lab: 'to sign', at: [.375, .03, .27, .3] },
+  { lab: 'with other people', at: [.375, .52, .27, .3] }
+];
+const S = { pos: {}, arrived: false, list: false };
+const me = DATA.me;
+const onDesk = () => DATA.items.filter(x => (x.holder === me || x.pointedBy) && x.id !== 'A-121');
+function place() { Object.entries(HOME).forEach(([k, v]) => S.pos[k] = S.pos[k] || [...v]); }
+function render() {
+  const d = $('#desk');
+  const W = d ? d.clientWidth : innerWidth - 48;
+  const strips = onDesk();
+  const all = onDesk().concat(S.arrived ? [ITEM('M-212')] : []);
+  $('#app').innerHTML = topHTML(['Home', 'What needs you'], [['drag', 'or Tab + arrows to move'], ['L', 'in time order'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <div class="head"><div><p class="eyebrow">Your desk</p><h1 class="t">What needs you</h1></div>
+        <p class="lede">Strips stay where you put them, for as long as you hold them: your layout is a memory. AUGUR only puts new arrivals in the in-tray, and never tidies. L lays them out in time order for a moment, without moving anything.</p></div>
+      <div class="desk" id="desk">
+        ${PILES.map(p => `<div class="pile" style="left:${p.at[0] * 100}%;top:${p.at[1] * 100}%;width:${p.at[2] * 100}%;height:${p.at[3] * 100}%"><span class="lab">${I('pencil', 12)}${p.lab}<span class="by">your label</span></span></div>`).join('')}
+        <div class="tray"><span class="lab">${I('inbox', 14)} In-tray · ${S.arrived ? 1 : 0}</span>${S.arrived ? `<div class="ds ${S.shown ? '' : 'fresh'}" data-id="M-212">${stripHTML(ITEM('M-212'), { noCock: true })}</div><p class="note" style="margin-top:var(--space-2)">Offered by Tom Reyes at ${ITEM('M-212').offered}. It stays in the tray, not on your desk, until you read it back and take it.</p>` : '<p class="note">Empty. Anything handed to you lands here first, and stays here until you take it.</p>'}</div>
+        ${strips.map((it, i) => `<div class="ds" data-id="${it.id}" tabindex="0" style="left:${S.pos[it.id][0] * 100}%;top:${S.pos[it.id][1] * 100}%" aria-label="${it.title}. Use arrow keys to move it.">${stripHTML(it, { i, noCock: true })}</div>`).join('')}
+        <div class="legend"><span>${I('move', 12)} drag to place</span><span>dashed: offered, not taken</span><span>warm time: past it, wherever it sits</span></div>
+        ${S.list ? `<div class="list"><p class="eyebrow">In time order · release L to go back to your desk</p>${all.slice().sort((a, b) => a.h - b.h).map((it, i) => stripHTML(it, { i, noCock: true })).join('')}</div>` : ''}
+      </div></div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.desk > .ds').forEach(drag);
+}
+function drag(el) {
+  const id = el.dataset.id;
+  el.onpointerdown = e => {
+    const desk = $('#desk').getBoundingClientRect(), r = el.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
+    el.classList.add('drag'); el.setPointerCapture(e.pointerId);
+    el.onpointermove = m => { const x = (m.clientX - desk.left - ox) / desk.width, y = (m.clientY - desk.top - oy) / desk.height; S.pos[id] = [Math.max(0, Math.min(.8, x)), Math.max(0, Math.min(.9, y))]; el.style.left = S.pos[id][0] * 100 + '%'; el.style.top = S.pos[id][1] * 100 + '%'; };
+    el.onpointerup = () => { el.classList.remove('drag'); el.onpointermove = null; };
+  };
+  el.onkeydown = e => {
+    const st = { ArrowLeft: [-.01, 0], ArrowRight: [.01, 0], ArrowUp: [0, -.02], ArrowDown: [0, .02] }[e.key];
+    if (!st) return; e.preventDefault(); e.stopPropagation();
+    S.pos[id] = [S.pos[id][0] + st[0], S.pos[id][1] + st[1]]; el.style.left = S.pos[id][0] * 100 + '%'; el.style.top = S.pos[id][1] * 100 + '%';
+  };
+}
+function replay() {
+  clearLater(); S.pos = {}; place(); S.arrived = false; S.shown = false; S.list = false; render(); settle();
+  /* the moment: Tom's strip lands in the in-tray. Nothing else on the desk moves */
+  later(() => { S.arrived = true; render(); requestAnimationFrame(() => requestAnimationFrame(() => { S.shown = true; $('.tray .ds').classList.remove('fresh'); })); }, ms('--motion-run'));
+}
+document.addEventListener('keydown', e => { if (e.key.toLowerCase() === 'l' && !S.list) { S.list = true; render(); } });
+document.addEventListener('keyup', e => { if (e.key.toLowerCase() === 'l') { S.list = false; render(); } });
+onKeys({ r: replay });
+place(); replay();
+</script>
+</body>
+</html>

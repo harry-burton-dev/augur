@@ -66,7 +66,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       const platformOnly = async (req: FastifyRequest, reply: FastifyReply) => {
         try {
           if ((await identifyService(req.headers, verifyService))?.kind === 'platform') return true;
-          void reply.code(403).send({ error: 'forbidden', message: 'Only the platform’s own services can look floors up.' });
+          void reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can look floors up.' });
         } catch (err) {
           if (!(err instanceof ServiceAuthUnavailable)) throw err;
           void reply.code(503).send({ error: 'unavailable', message: err.message });
@@ -87,7 +87,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
           schema: {
             summary: 'Where a floor sits (platform services only)',
             description: [
-              "For the platform's services, signed in as themselves, which store only",
+              "For AUGUR's own services, signed in as themselves, which store only",
               "a floor's id. Archived teams are still found, so old records resolve.",
               `"${ORG_FLOOR}" in place of an id names the organisation's own floor.`,
             ].join(' '),

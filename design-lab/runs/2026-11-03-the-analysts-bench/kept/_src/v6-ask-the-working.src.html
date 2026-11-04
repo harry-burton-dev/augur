@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Kept · V6 · Ask the working</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Kept V6: a reader a year on asks the decision a question. The answer is built from the working's records by template, each line pointing at its entry ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,var(--measure-drawer));gap:var(--space-6)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.ask{display:flex;align-items:center;gap:var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4);background:var(--surface-inset);font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.ask .ph{color:var(--ink-muted)}
+.as-read{font-size:var(--type-small);line-height:var(--leading-small)}
+.ans{display:grid;gap:var(--space-2);transition:opacity var(--motion-calm) var(--ease-out)}
+.ans.hold{opacity:0}
+.ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink);padding:var(--space-2) 0;border-bottom:1px solid var(--hairline)}
+.ln b{font-weight:400;color:var(--light)}
+.ref{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);white-space:nowrap;text-align:right}
+.qs{display:grid;gap:var(--space-1)}
+.qs button{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);text-align:left}
+.qs button[aria-pressed="true"]{background:var(--surface-raised);color:var(--light)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Kept · V6</b> ask the working: a reader’s question answered from the working’s records, every line with its entry · the reference desk, the lead’s questions (briefing run)</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DATA.decision, LT = DATA.later, wk = id => DATA.working.find(w => w.tid === id);
+const ref = (tid, part) => `${T(tid).name.lc()} · ${wk(tid).on}${part ? ' · ' + part : ''}`;
+/* the questions a reader of a decision can ask, each answered by a template over the working's records */
+const QS = [
+  { q: 'Did anyone think Calder’s price would go up?', typed: 'did anyone think the price would rise', a: () => { const a = A('a3'); return [
+    [`Yes. The assumptions check listed <b>${a.say.lc()}</b>.`, ref('kac', a.id)],
+    [`It was marked <b>${DATA.marks[markOf(a)].word.lc()}</b>: ${why(a.fact)}`, ref('kac', a.id)],
+    [`Its sign: ${a.sign.lc()}. AUGUR couldn’t watch it: ${a.cant}.`, ref('kac', 'watch')],
+    [`What happened: ${LT.assumptions.a3}.`, `score · ${LT.today}`]]; } },
+  { q: 'Why 12 months and not five?', a: () => [
+    [`Because <b>${DATA.outsideView.classes[0].yes} of ${DATA.outsideView.classes[0].n}</b> renewals like this recovered within 6 months.`, ref('outside')],
+    [`Five years was dropped: ${DATA.options[0].why}`, ref('outside', 'option A')],
+    [`The break at 6 months came from the assumptions check: <b>${A(D.weakest).say.lc()}</b> was load-bearing and ${DATA.marks[markOf(A(D.weakest))].word.lc()}.`, ref('kac', D.weakest)]] },
+  { q: 'Who said it was road closures, and what happened to that?', a: () => [
+    [`${H('h1').by} said so.`, ref('ach', 'h1')],
+    [`Two facts ruled it out: ${X.rows.filter(r => r.m.h1 === 'II').map(r => DATA.facts[r.fact].say.lc()).join('; ')}.`, ref('ach')],
+    [`It was set aside, not deleted. The result: ${X.result.lc()}`, ref('ach', 'result')]] },
+  { q: 'What did they expect to go wrong?', a: () => { const pm = DATA.premortem; return [
+    [`<b>${pm.reasons.length} reasons</b> from ${pm.room.length} people and the assistant, in ${pm.clusters.length} groups.`, ref('pre')],
+    [`They became ${pm.clusters.filter(c => c.to === 'watch').length} watches, ${pm.clusters.filter(c => c.to === 'change').length} changes and ${pm.clusters.filter(c => c.to === 'accept').length} risk accepted by name.`, ref('pre', 'sorting')],
+    [`What happened: ${Object.values(LT.reasons).filter(t => /^happened|^partly/.test(t)).length} happened at least partly. ${LT.reasons.r5.charAt(0).toUpperCase() + LT.reasons.r5.slice(1)} (Low Moor phase 2).`, `score · ${LT.today}`]]; } },
+  { q: 'What couldn’t AUGUR see?', a: () => DATA.watches.filter(w => !w.sees).map(w => [`<b>${w.say}</b> (${w.line}): ${w.cant}.`, `watch ${w.id.toUpperCase()}`]) }
+];
+const S = { q: 0, typed: 0, shown: false };
+function render() {
+  const Q = QS[S.q], g = STATE.gateway, typed = Q.typed && g;
+  $('#app').innerHTML = topHTML(['Mandate', D.id, 'Ask the working'], [['1–5', 'a question'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="col scroll"><p class="eyebrow">${D.id} · asked by ${P(LT.reader).name}, ${LT.today}</p>
+      <div class="ask">${I('message-circle-question', 20)}<span>${typed ? Q.typed.slice(0, S.typed) : Q.q}${typed && S.typed < Q.typed.length ? '<span class="ph">|</span>' : ''}</span></div>
+      ${typed && S.shown ? `<p class="as-read pencil" style="padding:var(--space-1) var(--space-3)"><span class="pt">read as “${Q.q}”</span> <span class="byline">${I('pencil', 10)}assistant · press 1–5 if it misread</span></p>` : ''}
+      <div class="ans ${S.shown ? '' : 'hold'}">${Q.a().map(([t, r]) => `<div class="ln"><span>${t}</span><span class="ref">${r}</span></div>`).join('')}</div>
+      <p class="small muted">Every line is built from the working’s records by a template, and points at the entry it came from. ${g ? 'The model only matched your words to a question; it wrote none of the answer.' : 'The model is off: pick a question below. The answers are the same.'}</p>
+    </section>
+    <aside class="col scroll"><p class="eyebrow">Questions a reader can ask a decision</p>
+      <div class="qs">${QS.map((x, i) => `<button aria-pressed="${S.q === i}" data-i="${i}"><span class="kbd">${i + 1}</span>${x.q}</button>`).join('')}</div>
+      <div class="card"><p class="lbl">Can’t answer</p><p class="small">“Was it the right decision?” isn’t a question the working can answer. It can say what was tested, what was expected and what happened; the judgement stays with the reader.</p></div>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.qs button').forEach(b => b.onclick = () => pick(+b.dataset.i, false));
+}
+function pick(i, type) { clearLater(); S.q = i; S.shown = !type; S.typed = type ? 0 : 999; render(); }
+function replay() {
+  clearLater(); S.q = 0; S.typed = 0; S.shown = false; settle(); render();
+  const t = QS[0].typed; for (let k = 1; k <= 12; k++) later(() => { S.typed = Math.ceil(t.length * k / 12); render(); }, k * ms('--motion-instant'));
+  later(() => { S.typed = t.length; S.shown = true; render(); }, MOMENT());
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (/^[1-5]$/.test(e.key)) pick(+e.key - 1, false);
+});
+replay();
+</script>
+</body>
+</html>
