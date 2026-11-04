@@ -24,7 +24,7 @@
     "build-storybook": "storybook build -o storybook-static"
   },
   "dependencies": {
-    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.6.0",
+    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.7.0",
     "@fontsource/jost": "5.2.8",
     "@fontsource/nunito": "5.2.7",
     "lit": "^3.3.0",
