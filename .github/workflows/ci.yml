@@ -13,6 +13,8 @@ on:
 # What each run does, and what it costs, is in docs/ci-cd.md. In short: a pull request runs only the
 # jobs its change needs (scripts/ci-changes.sh); the push that merges it runs only build-test, because
 # the pull request already ran the rest on the same code. The kit's Storybook is published from augur-kit.
+permissions:
+  contents: read
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -35,7 +37,7 @@ jobs:
       images: ${{ steps.changes.outputs.images }}
       scaffold: ${{ steps.changes.outputs.scaffold }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - id: changes
@@ -63,12 +65,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # Changesets compares the branch with its base to find what it changes.
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -76,7 +78,7 @@ jobs:
       # On GitHub's runners the turbo cache starts empty, so every task ran every time. Keep it in
       # GitHub's cache instead: restored from this branch's (or its base's) last run, entries older
       # than a week dropped, saved again under this commit.
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.TURBO_CACHE_DIR }}
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
@@ -89,6 +91,7 @@ jobs:
       - run: pnpm check:versions
       - run: pnpm check:release
       - run: pnpm check:catalog
+      - run: pnpm check:licences
       - run: pnpm test:scripts
       # Into a hotfix's release/<unit>-<major.minor> branch only that unit's fixes go, as patches
       # (docs/release-channels.md).
@@ -157,9 +160,9 @@ jobs:
     if: needs.changes.outputs.scaffold == 'true'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -182,9 +185,9 @@ jobs:
     if: needs.changes.outputs.contract == 'true'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-24.04"') }} # Playwright 1.56 has no browsers for ubuntu-latest (26.04) yet
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -192,7 +195,7 @@ jobs:
       # On GitHub's runners the turbo cache starts empty, so every task ran every time. Keep it in
       # GitHub's cache instead: restored from this branch's (or its base's) last run, entries older
       # than a week dropped, saved again under this commit.
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.TURBO_CACHE_DIR }}
           key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
@@ -203,7 +206,7 @@ jobs:
       - run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
       - run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/shell^... --filter=@augur/home
       # Folio, which the tests mount beside the reference app, from the release AUGUR ships (ADR 0049).
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
       - run: infra/shipped-app.sh folio
         env:
           APP_RELEASES_TOKEN: ${{ secrets.APP_RELEASES_TOKEN }}
@@ -214,7 +217,7 @@ jobs:
       - name: Playwright version
         id: playwright
         run: echo "version=$(pnpm --filter @augur/contract-tests exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
@@ -230,7 +233,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: No secrets in the commits (gitleaks)
@@ -274,7 +277,7 @@ jobs:
     if: needs.changes.outputs.images == 'true'
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Compose file is valid
         run: |
           sed -e 's/=$/=ci-placeholder/' infra/deploy/.env.example > /tmp/ci.env
@@ -286,8 +289,8 @@ jobs:
       # The workspace's install as the last dev build left it (augur-dev.yml saves it, with the same key):
       # read only, so a change to infra or the deploy files doesn't install every package again. A change
       # to the dependencies misses it and installs, as before.
-      - uses: docker/setup-buildx-action@v3
-      - uses: actions/cache/restore@v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/buildx-deps
           key: buildx-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'package.json', 'platform/*/*/package.json', 'platform/contract/package.json', 'apps/*/*/package.json', 'scripts/templates/*/*/package.json', 'infra/*.Dockerfile') }}

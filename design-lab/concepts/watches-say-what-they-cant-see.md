@@ -10,3 +10,5 @@ A watch lists the events that would move what it watches and marks those AUGUR c
 First found in: [`2026-11-03-the-briefing`](../runs/2026-11-03-the-briefing/) (action V5, combined).
 
 Could steer: The switchboard (O), the events service, the groundskeeper (K).
+
+In [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/), escalation needs the same events-service clock as watches.

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Scope and level · V5 · The masterpiece</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: before a widening, the agent does last month's work again in the shadow, and it is marked against what people decided ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(320px,1fr);gap:var(--space-6)}
+.left{min-height:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.score{display:flex;align-items:baseline;gap:var(--space-4)}
+.score .big{font:200 var(--type-display)/1 var(--font-sans);color:var(--light)}
+.score .of{font-size:var(--type-lead);color:var(--ink-muted)}
+.cells{display:grid;grid-template-columns:repeat(30,minmax(0,1fr));gap:2px}
+.c{aspect-ratio:1;border-radius:1px;background:var(--hairline);transition:background var(--motion-quick) linear}
+.c.ok{background:color-mix(in srgb,var(--ink) 55%,transparent)}
+.c.diff{background:var(--x-proposed-disagree)}
+.c.hot{outline:1.5px solid var(--light);outline-offset:1px}
+.diffs{display:grid;gap:var(--space-2)}
+.df{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr);gap:var(--space-3);padding:var(--space-2) var(--space-3);border-left:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash);text-align:left;width:100%}
+.df .n{font:300 var(--type-heading)/1 var(--font-mono);color:var(--light)}
+.df b{display:block;font-weight:400;color:var(--ink);font-size:var(--type-meta)}
+.df span.s{font-size:var(--type-small);color:var(--ink-muted)}
+.right{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.dec{padding:var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);display:grid;gap:var(--space-3);background:var(--surface-pane)}
+.dec h2{margin:0;font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light)}
+.dec .why{padding:var(--space-2) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);line-height:var(--leading-meta)}
+.sugg{padding:var(--space-2) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.cost{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.cost b{font-weight:400;color:var(--ink);font-family:var(--font-mono)}
+@media (max-width:1400px){.score .big{font-size:var(--type-title)}.cells{grid-template-columns:repeat(30,minmax(0,1fr))}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Scope and level · V5</b> the masterpiece: last month's work done again in the shadow, marked against people's decisions · the guild masterpiece, shadow mode</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const AG = 'a1', a = A(AG), R = DATA.replay, KD = K('k1');
+/* which of the checked details differ: spread through the month, deterministic */
+const DIFF = new Set(Array.from({ length: R.differ }, (_, i) => Math.floor((i + .5) * R.checked / R.differ) + (i % 3)));
+const groupOf = i => { const idx = [...DIFF].sort((x, y) => x - y).indexOf(i); let acc = 0; for (let g = 0; g < R.differWhy.length; g++) { acc += R.differWhy[g].n; if (idx < acc) return g; } return 0; };
+const S = { shown: 0, hot: null };
+function render() {
+  const g = STATE.gateway, done = S.shown >= R.checked;
+  const agreeSoFar = [...Array(S.shown).keys()].filter(i => !DIFF.has(i)).length, diffSoFar = S.shown - agreeSoFar;
+  $('#app').innerHTML = topHTML(['Admin', 'Agents', a.name, 'Replay'], [['1 2', 'a kind of difference'], ...STD]) +
+  `<main class="main"><div class="wrap">
+    <section class="left"><div><p class="eyebrow">${mm(AG)} ${KD.w} · ${R.of}’s work, done again in the shadow</p><h1 class="title">The masterpiece</h1></div>
+      <div class="score"><span class="big num">${agreeSoFar}</span><span class="of">of ${S.shown} agree with what people decided${done ? '' : ' so far'}</span></div>
+      <div class="cells" role="img" aria-label="${R.checked} details, ${R.agree} agree, ${R.differ} differ">${Array.from({ length: R.checked }, (_, i) => `<i class="c ${i < S.shown ? (DIFF.has(i) ? 'diff' : 'ok') : ''} ${S.hot !== null && DIFF.has(i) && groupOf(i) === S.hot ? 'hot' : ''}"></i>`).join('')}</div>
+      <p class="small muted">Each square is one detail a person checked in ${R.of}. Nothing the shadow run wrote was kept: it was only compared.</p>
+      ${done ? `<div class="diffs">${R.differWhy.map((d, i) => `<button class="df" data-g="${i}"><span class="n">${d.n}</span><span><b>${d.w}</b><span class="s">${i === 0 ? 'Fixed since: dates are read in the issuer’s own order. Shown again in the replay: none.' : 'Not fixed: a report without an IMO number on page 1 is now held one by one.'}</span></span></button>`).join('')}</div>` : ''}
+    </section>
+    <aside class="right">
+      <div class="dec"><p class="eyebrow">Your decision · not ${a.name}’s, not AUGUR’s</p><h2>Widen ${KD.w.toLowerCase()} to ${L(2).name.toLowerCase()}?</h2>
+        <div class="why">${done ? `${R.agree} of ${R.checked} agree. ${R.differWhy.map(d => `${d.n} were ${d.w}`).join('; ')}.` : '…'}</div>
+        <p class="small muted">The reason above is filled from the replay by template. You can add to it; it goes on the record with your name.</p>
+        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap"><button class="btn go" ${done ? '' : 'aria-disabled="true"'}>${I('arrow-up', 14)} Widen, with this reason</button><button class="btn">${I('x', 14)} Not yet</button></div></div>
+      <div class="sugg pencil"><span class="pen">AUGUR noticed ${K('k1').run} in a row accepted as read on ${DATA.week[1].d} and suggested a replay.</span> <span class="small muted">A suggestion only, in pencil: AUGUR never widens anything.</span></div>
+      <p class="cost">${g ? `The replay used <b>${R.checked * 2}</b> model calls, run overnight so ${a.name}’s day of <b>${a.calls.limit}</b> was not touched.` : `<b>The model gateway is off.</b> A replay needs the model, so it can’t run now. ${P(DATA.gateway.admin).name} can turn it on. The decision can wait: nothing widens without it.`}</p>
+      <p class="tk">shadow run (rung 0) over audited inputs · outputs compared with Triage verdicts, then discarded · costs budget</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $$('.df').forEach(b => { b.onmouseenter = () => { S.hot = +b.dataset.g; render(); }; b.onfocus = b.onmouseenter; });
+}
+function replay() {
+  clearLater(); S.shown = 0; S.hot = null; settle(); render();
+  /* the moment: the month is marked through, square by square, once */
+  const steps = 12; for (let k = 1; k <= steps; k++) later(() => { S.shown = Math.round(R.checked * k / steps); render(); }, MOMENT() * .6 + k * ms('--motion-instant'));
+}
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); return; } if (e.key === '1' || e.key === '2') { S.hot = +e.key - 1; render(); } });
+replay();
+</script>
+</body>
+</html>
