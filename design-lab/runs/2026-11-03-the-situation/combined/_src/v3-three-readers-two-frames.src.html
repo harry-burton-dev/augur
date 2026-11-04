@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Combined V3 · Three readers, two frames</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V3: the information once; each reader's context from one template; two frames kept apart until a test agreed in advance settles them, and each reader's paragraph says so ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-3)}
+.band{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);background:var(--surface-inset)}
+.band p{font-size:var(--type-body);line-height:var(--leading-body);color:var(--ink)}
+.band .d{font-family:var(--font-mono);color:var(--light)}
+.cols{min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-top:2px solid var(--fc);border-radius:var(--radius-inset);background:var(--surface-pane);overflow:auto;scrollbar-width:thin}
+.col .ask{font-style:italic;color:var(--ink-muted);font-size:var(--type-small);display:flex;gap:var(--space-2);align-items:baseline}
+.col .nut{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);border-left:2px solid var(--fc);padding-left:var(--space-3)}
+.col .nut .d{font-family:var(--font-mono);font-weight:400}
+.col .fr{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);padding:var(--space-2) var(--space-3);border:1px dashed var(--hairline-strong);border-radius:var(--radius-key)}
+.col .fr.set{border-style:solid;border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.col .info{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.from{display:grid;gap:var(--space-1)}
+.from li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.from li .unseen{grid-column:2;justify-self:start}
+.col .reach{margin-top:auto;font-size:var(--type-small);color:var(--ink-muted);padding-top:var(--space-2);border-top:1px solid var(--hairline)}
+.frames{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1fr);gap:var(--space-3);align-items:stretch}
+.fb{display:grid;gap:var(--space-1);padding:var(--space-2) var(--space-3);border:1px solid color-mix(in srgb,var(--fc) 40%,transparent);border-left:3px solid var(--fc);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.fb b{font-weight:400;color:var(--light)}
+.fb q{font-style:italic;color:var(--ink-muted)}
+.fb .out{color:var(--light);display:none}
+.ran .fb .out{display:block}
+.test{display:grid;gap:var(--space-2);padding:var(--space-2) var(--space-3);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);background:var(--surface-inset)}
+.test p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.test .bar{display:flex;height:var(--space-3);border-radius:2px;overflow:hidden;background:var(--hairline)}
+.test .bar i{display:block;height:100%;width:0;transition:width var(--motion-calm) var(--ease-out)}
+.test .bar i.b{background:var(--floor-team-high)}
+.test .bar i.a{background:var(--floor-department-high)}
+.check{display:flex;gap:var(--space-2);align-items:center;font-size:var(--type-small);color:var(--x-proposed-lit)}
+@media (max-width:1400px){.from li:nth-child(n+4){display:none}.col .nut{font-size:var(--type-body);line-height:var(--leading-body)}.col{padding:var(--space-2) var(--space-3)}.col .info{display:none}.fb q{display:none}.band p{font-size:var(--type-meta);line-height:var(--leading-meta)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V3</b> three readers, two frames: the information once, each reader’s context from one template, two frames kept apart until an agreed test settles them · nut graf, Tilden, data/frame, double crux</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { ran: false };
+const [A, B] = DATA.frames, ST = DATA.settle;
+const d = n => `<span class="d">${n}</span>`;
+/* the shared part, the same words and digits for everyone */
+const SHARED = `${R.place} missed ${d(R.series.at(-1).v)} collections in October, up from ${d(13)} in July, and over the contract’s limit of ${d(R.limit)} for a second month. Two frames read it differently; both are kept.`;
+/* each reader's slots; the frame line changes once the test has run */
+const SLOTS = {
+  mira:  { nut: `For your crews: ${d(R.byRound.Oct.changed)} of the ${d(R.series.at(-1).v)} were on ${R.changedRounds.join(' and ')}, the rounds changed on ${R.changedOn}. That part is yours to change.`,
+           before: `Frame B is yours: “${B.name}”. ${first(A.who)} reads it as the supplier failing.`,
+           after: `The test: ${ST.onChanged} of the ${ST.rise} extra misses are on ${R.changedRounds.join(' and ')}. Your frame holds for most of it; the other ${R.rounds - 2} rounds rose too.` },
+  grace: { nut: `For your decision by ${T.decideBy.replace(' 2026', '')}: one more month over ${d(R.limit)} is a service failure under ${R.limitWhere}, and you can decline to renew without penalty.`,
+           before: `Two frames: ${first(A.who)}’s “${A.name}” and ${first(B.who)}’s “${B.name}”. They agree a test, below.`,
+           after: `Both hold in part. Without the route change, October would have been about ${d(ST.withoutChange)}: just under the limit. November decides it.` },
+  owen:  { nut: `For the Org: ${d(1)} of ${d(R.otherContracts)} service contracts is over its limit. It reaches the board only if it goes to retender, by 15 Jan.`,
+           before: 'The Department is weighing two readings of the cause. Nothing for the Org yet.',
+           after: 'Settled in part at the Department. Still nothing for the Org unless it retenders.' }
+};
+const digits = h => (h.match(/<span class="d">(\d+)<\/span>/g) || []).map(x => x.replace(/\D/g, ''));
+function render() {
+  const shared = digits(SHARED);
+  const ok = DATA.readers.every(r => digits(SLOTS[r.id].nut).filter(n => shared.includes(n)).every(n => shared.includes(n)));
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Readers'], [['Space', 'run the agreed test'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap ${S.ran ? 'ran' : ''}">
+    <div><p class="eyebrow">Same information, three readers, two frames · ${T.id}</p></div>
+    <div class="band">${rm('info', { lg: true })}<p>${SHARED}</p><span class="check" title="Every shared digit appears the same in all three readers’ copies">${I('check', 14)} same digits in all three</span></div>
+    <div class="cols">${DATA.readers.map(r => { const p = P(r.id), sl = SLOTS[r.id], it = INTENT(r.intent), uses = r.uses.map(PC), open = uses.filter(u => canOpen(u.src, r.id)).length;
+      return `<section class="col" data-tier="${p.floor}">${whoHTML(r.id, { role: true })}<p class="ask">${I('circle-help', 14)} ${r.asks}</p>
+        <p class="nut">${sl.nut}</p>
+        <p class="fr ${S.ran ? 'set fresh' : ''}">${I(S.ran ? 'scale' : 'split', 12)} ${S.ran ? sl.after : sl.before}</p>
+        <p class="info">${rm('context')} for ${first(r.id)} · serves ${it.id} · ${r.does[0]}, by ${r.horizon}</p>
+        <p class="eyebrow" style="margin-top:var(--space-1)">Drawn from ${T.id}</p><ul class="from">${uses.map(u => `<li>${rm(u.rung, { word: false })}<span>${u.text}</span>${canOpen(u.src, r.id) ? '' : `<span class="unseen">${I('lock', 12)} ask ${P(u.src.keeper).name}</span>`}</li>`).join('')}</ul>
+        <p class="reach">${first(r.id)} can open ${open} of ${uses.length} records behind it${open < uses.length ? `; for the rest, ask ${[...new Set(uses.filter(u => !canOpen(u.src, r.id)).map(u => P(u.src.keeper).name))].join(', ')}` : ''}.</p></section>`; }).join('')}</div>
+    <div class="frames">
+      <div class="fb" data-tier="${P(A.who).floor}"><b>Frame A · ${A.name}</b><span>${whoHTML(A.who)}</span><q>Would change my mind: more than half the rise on ${R.changedRounds.join(' and ')}.</q><span class="out">${I('check', 12)} Met: ${ST.onChanged} of ${ST.rise}. ${first(A.who)} accepts the route change as a main cause.</span></div>
+      <div class="test"><p><b class="lite">Agreed test</b>, written by both on 30 Oct: ${ST.test}</p><div class="bar" role="img" aria-label="${ST.onChanged} on the changed rounds, ${ST.onOther} on the others"><i class="b" style="width:${S.ran ? ST.onChanged / ST.rise * 100 : 0}%"></i><i class="a" style="width:${S.ran ? ST.onOther / ST.rise * 100 : 0}%"></i></div><p class="muted">${S.ran ? `${ST.onChanged} on ${R.changedRounds.join(' and ')} · ${ST.onOther} on the other ${R.rounds - 2}. Run once, by template. ${ST.next}` : 'Not run yet. Neither frame is shown as right until it is.'}</p></div>
+      <div class="fb" data-tier="${P(B.who).floor}"><b>Frame B · ${B.name}</b><span>${whoHTML(B.who)}</span><q>Would change my mind: the other ${R.rounds - 2} rounds up by more than 4.</q><span class="out">${I('check', 12)} Met: up by ${ST.onOther}. ${first(B.who)} accepts the supplier is failing too.</span></div>
+    </div>
+  </div></main>`;
+  hydrate($('#app'));
+}
+function run() { if (S.ran) return; S.ran = true; render(); }
+play(() => { S.ran = false; render(); }, run, (e) => { if (e.key === ' ') { e.preventDefault(); run(); } });
+</script>
+</body>
+</html>

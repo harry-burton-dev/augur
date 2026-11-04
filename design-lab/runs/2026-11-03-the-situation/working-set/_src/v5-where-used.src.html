@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Situation · Working set V5 · Where used</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: the set as a bill of materials. Context at the top, the information and data it rests on under it; pick a reading and see where it is used ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,1fr);gap:var(--space-6)}
+.tree{min-height:0;overflow:auto;scrollbar-width:thin;display:flex;flex-direction:column;gap:var(--space-1)}
+.node{display:grid;grid-template-columns:calc(var(--d) * var(--space-6)) auto minmax(0,1fr) auto;gap:var(--space-3);align-items:center;padding:var(--space-1) var(--space-3);border-radius:var(--radius-key);border:1px solid transparent;transition:background var(--motion-base) var(--ease-out),border-color var(--motion-base) var(--ease-out),opacity var(--motion-base) var(--ease-out)}
+.node .ind{height:100%;border-right:1px solid var(--hairline);justify-self:end;width:var(--space-3)}
+.node p{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.node .u{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);color:var(--ink-muted);white-space:nowrap}
+.node.root p{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.node:hover{background:var(--surface-inset)}
+.node.hit{background:var(--x-proposed-lit-wash);border-color:var(--x-proposed-lit)}
+.node.path{background:var(--surface-raised)}
+.dim .node:not(.hit):not(.path):not(.root){opacity:var(--x-proposed-quiet)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.side h2{font-weight:300;font-size:var(--type-lead);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--light)}
+.card{display:grid;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-key)}
+.card p{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.card b{font-weight:400;color:var(--light)}
+.card ul{display:grid;gap:var(--space-1)}
+.card li{display:flex;gap:var(--space-2);align-items:baseline;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.picker{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+@media (max-width:1400px){.node{grid-template-columns:calc(var(--d) * var(--space-5)) auto minmax(0,1fr) auto;padding:2px var(--space-2)}.node p{font-size:var(--type-small);line-height:var(--leading-small)}.node .rw{display:none}.card:last-child{display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Working set · V5</b> where used: the set as a bill of materials; pick a reading and see every piece of context that rests on it · indented BOM and where-used, the recipe is the record</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const S = { sel: null };
+/* the assembly: the question at the top, context under it, then what each rests on. Pieces with no "from" rest on their own source */
+const ROOTS = ['c1', 'c2', 'c3', 'c4', 'i1', 'i3', 'i4', 'i5'];
+const kids = id => (PC(id).from || []);
+const usedBy = id => DATA.pieces.filter(p => (p.from || []).includes(id)).map(p => p.id);
+/* everything above a piece: its users, their users, and so on */
+function above(id, acc = new Set()) { usedBy(id).forEach(u => { if (!acc.has(u)) { acc.add(u); above(u, acc); } }); return acc; }
+function rows(id, d, out) { out.push([id, d]); kids(id).forEach(k => rows(k, d + 1, out)); return out; }
+const TREE = ROOTS.reduce((o, r) => rows(r, 1, o), []);
+const loose = DATA.pieces.filter(p => !TREE.some(([id]) => id === p.id)).map(p => p.id);
+function render() {
+  const up = S.sel ? above(S.sel) : new Set();
+  const ctx = [...up].filter(id => PC(id).rung === 'context');
+  $('#app').innerHTML = topHTML(['Artifacts', 'Working sets', T.id, 'Where used'], [['1–5', 'pick a reading'], ['Esc', 'clear'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="tree ${S.sel ? 'dim' : ''}">
+      <div class="node root" style="--d:0"><span></span>${I('circle-help', 18)}<p>${T.question}</p><span class="u">${T.id}</span></div>
+      ${TREE.map(([id, d]) => { const p = PC(id); const n = usedBy(id).length; return `<div class="node ${S.sel === id ? 'hit' : ''} ${up.has(id) ? 'path' : ''}" style="--d:${d}" data-id="${id}"><span class="ind"></span>${rm(p.rung)}<p class="${p.rung === 'data' ? 'as-data' : ''}">${p.text}</p><span class="u">${n ? `used in ${n}` : p.from ? '' : 'rests on its source'}</span></div>`; }).join('')}
+      ${loose.map(id => { const p = PC(id); return `<div class="node ${S.sel === id ? 'hit' : ''}" style="--d:1" data-id="${id}"><span class="ind"></span>${rm(p.rung)}<p class="as-data">${p.text}</p><span class="u">used in nothing · on its own</span></div>`; }).join('')}
+    </div>
+    <aside class="side"><p class="eyebrow">Working set · ${T.id} · where used</p><h2>What rests on what</h2>
+      <div class="card"><p>Pick a reading:</p><div class="picker">${DATA.pieces.filter(p => p.rung === 'data').map((p, k) => `<button class="tab" data-id="${p.id}" aria-pressed="${S.sel === p.id}"><span class="kbd">${k + 1}</span>${p.text.split(' ').slice(0, 4).join(' ')}…</button>`).join('')}</div></div>
+      ${S.sel ? `<div class="card fresh"><b>${PC(S.sel).text}</b><p>${up.size ? `${up.size} piece${up.size > 1 ? 's' : ''} rest on it${ctx.length ? `, ${ctx.length} of them context for the decision` : ''}:` : 'Nothing else in the set rests on it.'}</p>
+        <ul>${[...up].map(id => `<li>${rm(PC(id).rung, { word: false })}<span>${PC(id).text}</span></li>`).join('')}</ul>
+        <p class="muted">If it changed or were withdrawn, these would say so, and their owner would be asked to look again. ${srcHTML(PC(S.sel).src)}</p></div>` : `<div class="card"><p>The set is assembled like a product: context is made from information, information from readings. A reading used in many places is where a change does the most damage.</p></div>`}
+      <div class="card"><p><b>Why it matters at handover:</b> the next owner sees which readings carry the decision, and which sit in the set on their own and could go without anything falling.</p></div>
+    </aside>
+  </div></main>`;
+  hydrate($('#app'));
+  $$('.picker .tab, .node[data-id]').forEach(b => b.onclick = () => { S.sel = S.sel === b.dataset.id ? null : b.dataset.id; render(); });
+}
+play(() => { S.sel = null; render(); }, () => { S.sel = 'd1'; render(); }, (e, k) => { const d = DATA.pieces.filter(p => p.rung === 'data')[+k - 1]; if (d) { S.sel = d.id; render(); } if (e.key === 'Escape') { S.sel = null; render(); } });
+</script>
+</body>
+</html>

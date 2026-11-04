@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mise en place · Combined V3 · The pass at both ends</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Combined V3: the pass a person can ship: the rail, the balance, a taste, what it moves; then the same bundle in Triage ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-3)}
+.head{display:flex;align-items:baseline;gap:var(--space-4);flex-wrap:wrap}
+.tabs{display:flex;gap:var(--space-1);margin-left:auto}
+.tabs button{padding:var(--space-1) var(--space-3);border:1px solid var(--hairline);border-radius:var(--radius-pill);font-size:var(--type-small);color:var(--ink-muted)}
+.tabs button[aria-pressed="true"]{border-color:var(--light);color:var(--light)}
+.rail{position:relative;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--space-2);padding-top:var(--space-2)}
+.rail::before{content:"";position:absolute;left:0;right:0;top:0;height:var(--space-1);border-radius:var(--radius-pill);background:linear-gradient(var(--hairline-strong),var(--hairline))}
+.tk-c{display:grid;gap:2px;padding:var(--space-2) var(--space-3);border:1px solid var(--hairline);border-top:0;border-radius:0 0 var(--radius-key) var(--radius-key);background:var(--surface-pane);text-align:left}
+.tk-c .v{font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.tk-c .n{font:300 var(--type-heading)/1 var(--font-mono);color:var(--light)}
+.tk-c .w{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.tk-c.aside{border-style:dashed;border-top:0;border-color:var(--x-proposed-aside-edge);background:var(--x-proposed-aside-wash)}
+.tk-c.held{border-color:var(--x-proposed-disagree)}
+.tk-c.held .n{color:var(--x-proposed-disagree)}
+.tk-c .st{font-size:var(--type-small);color:var(--x-proposed-lit)}
+.tk-c.held .st{color:var(--x-proposed-disagree)}
+.body{min-height:0;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr);gap:var(--space-4)}
+.pn{min-height:0;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-pane);overflow:hidden}
+.pn p{margin:0;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.pn p.s{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.pn b{font-weight:400;color:var(--light)}
+.ledger{display:grid;gap:2px}
+.ledger .l{display:grid;grid-template-columns:var(--space-4) minmax(0,1fr) auto;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.ledger .l b{font-family:var(--font-mono);font-weight:400;color:var(--ink);text-align:right}
+.ledger .l.sum{border-top:1px solid var(--hairline-strong);padding-top:2px;color:var(--ink)}
+.ledger .l.sum b{color:var(--light)}
+.ledger .l.ok{color:var(--x-proposed-lit)}
+.ledger .l.ok b{color:var(--x-proposed-lit)}
+.taste{display:grid;gap:var(--space-1)}
+.taste .t{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr) auto;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);align-items:baseline}
+.taste .t .n{font-family:var(--font-mono);color:var(--ink-muted);text-align:right}
+.taste .t .ok{color:var(--x-proposed-lit);font-family:var(--font-mono);font-size:var(--x-proposed-type-micro);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+.taste .t .why{grid-column:2 / span 2;color:var(--ink-muted)}
+.mv{display:grid;gap:var(--space-2)}
+.mv .m{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-1) var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.mv .m svg{color:var(--ink-muted);margin-top:2px}
+.mv .m .was{color:var(--ink-muted);text-decoration:line-through}
+.mv .m .now{color:var(--light);border-bottom:1px dotted var(--x-proposed-seam)}
+.mv .m small{display:block;color:var(--ink-muted)}
+.note{border-left:2px solid var(--x-proposed-disagree);padding:var(--space-1) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.note small{display:block;color:var(--ink-muted);font-size:var(--type-small)}
+.go{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border:1px solid var(--x-proposed-pass-edge);border-radius:var(--radius-inset);background:var(--surface-pane);font-size:var(--type-meta)}
+.go .acts{margin-left:auto;display:flex;gap:var(--space-2)}
+@media (max-width:1400px){.tk-c{padding:var(--space-1) var(--space-2)}.tk-c .n{font-size:var(--type-lead)}.pn{padding:var(--space-2) var(--space-3)}.pn p{font-size:var(--type-small);line-height:var(--leading-small)}.taste .t .why{display:none}.go{font-size:var(--type-small)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Combined · V3</b> the pass at both ends: rail, balance, taste, what it moves; then the same bundle in Triage · pass V1 V2 V4 V5 V6</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const R = run('oct'), PL = plate(R), recs = R.recs, K = DATA.kinds.inspection, F0 = R.file, ask = DATA.asked[0], H = DATA.triageHold, me = P(DATA.me), boss = P(H.by), DS = downstream(R);
+const total = recs.length + PL.fresh.length + PL.odo.length, newInsp = recs.filter(r => r.van.status === 'new').length;
+const touched = [...recs.filter(r => r.van.status === 'new').map(r => [r, 'you proposed a new van']), ...recs.filter(r => r.v.odometer.aside).map(r => [r, 'you set its odometer aside']), ...recs.filter(r => DATA.model.spellings.some(s => s.raw === r.v.depot.raw)).slice(0, 1).map(r => [r, `you joined “${r.v.depot.raw}”`])];
+const rest = recs.filter(r => !touched.some(t => t[0] === r)), seed = F0.doc.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+const TASTE = [...touched, ...[0, 1, 2].map(i => [rest[(seed * (i + 1) * 7) % rest.length], 'at random'])];
+const S = { end: 'bench', tasted: 0 };
+function rail(tri) {
+  const T = [
+    { v: 'make', n: recs.length, w: `new ${K.word}s`, st: tri ? `${recs.length - newInsp} kept · ${newInsp} held` : '' , held: false },
+    { v: 'make', n: PL.fresh.length, w: `new van ${PL.fresh[0]}`, st: tri ? 'held' : '', held: tri },
+    { v: 'change', n: PL.odo.length, w: 'odometers', st: tri ? 'kept' : '' },
+    { v: 'link', n: PL.depots.length + 1, w: 'kept things, not changed', st: tri ? 'kept' : '' },
+    { v: 'set aside', n: PL.aside.length + PL.valuesAside.length, w: 'stay at the bench', cls: 'aside', st: '' },
+    { v: 'not brought in', n: PL.copies.length + PL.notRecords.length + F0.otherSheets.length, w: 'lines and sheets, said', cls: 'aside', st: '' },
+    { v: 'waiting', n: recs.length, w: `on “${ask.word}”`, cls: 'aside', st: '' }
+  ];
+  return `<div class="rail">${T.map((t, i) => `<div class="tk-c ${t.cls || ''} ${t.held ? 'held' : ''} dep" style="--i:${i}"><span class="v">${t.v}</span><span class="n">${t.n}</span><span class="w">${t.w}</span>${t.st ? `<span class="st">${t.st}</span>` : ''}</div>`).join('')}</div>`;
+}
+function balance() {
+  return `<div class="ledger">${[['', `lines in ${F0.sheet}`, R.lines.length], ['−', 'title, names, empty, TOTAL', PL.notRecords.length], ['=', 'lines of visits', PL.data, 'sum'], ['−', 'exact copy', PL.copies.length], ['=', `visits; the file says ${R.total.said}`, PL.data - PL.copies.length, PL.data - PL.copies.length === R.total.said ? 'sum ok' : 'sum'], ['−', 'set aside', PL.aside.length], ['=', `${K.word}s land`, PL.land, 'sum']].map(([o, w, n, c]) => `<span class="l ${c || ''}"><span>${o}</span><span>${w}${c && c.includes('ok') ? ' ✓' : ''}</span><b>${n}</b></span>`).join('')}</div>`;
+}
+function render() {
+  const tri = S.end === 'triage';
+  $('#app').innerHTML = topHTML(tri ? [DATA.app, 'Triage', `${FIRM.short}, ${F0.month}`] : [DATA.app, DATA.bench, F0.name, 'The pass'], [['B', 'bench'], ['V', 'Triage'], ['Y', 'taste next'], ['T', 'admin words', 'h-t'], ['R', 'replay']]) +
+  `<main class="main"><div class="wrap">
+    <div class="head"><h1 class="t">${tri ? `${FIRM.short}’s ${F0.month} visits, from ${me.name}` : 'The pass'}</h1><span class="lede">${tri ? `${plural(total, 'proposal')}, one bundle, made by “${DATA.recipe.name}” v${DATA.recipe.version} from ${F0.doc.id}` : 'Nothing has left the bench. Everything it would send, and everything it wouldn’t, on one rail.'}</span>
+      <span class="tabs"><button data-e="bench" aria-pressed="${!tri}">${I('chef-hat', 12)} ${me.name.split(' ')[0]}’s bench</button><button data-e="triage" aria-pressed="${tri}">${I('clipboard-check', 12)} ${boss.name.split(' ')[0]}’s Triage</button></span></div>
+    ${rail(tri)}
+    <div class="body">
+      <section class="pn"><p class="eyebrow">${I('scale', 12)} It balances</p>${balance()}<p class="s">The difference between ${PL.data} lines and ${R.total.said} visits is the copy; the file’s own comment says its TOTAL excludes it.</p></section>
+      <section class="pn"><p class="eyebrow">${I('utensils', 12)} Tasted ${tri ? TASTE.length : S.tasted} of ${PL.land} ${tri ? `by ${me.name.split(' ')[0]}; the same ${TASTE.length} for you` : ''}</p>
+        <div class="taste">${TASTE.map(([r, w], i) => `<span class="t"><span class="n">${r.n}</span><span>${r.v.van.val} · ${r.v.on.val} · ${r.v.result.val}${r.v.odometer.val ? ` · ${r.v.odometer.val}` : ' · <span class="mk-gap"></span>'}</span><span class="ok">${tri || i < S.tasted ? 'same' : ''}</span><span class="why">${w}</span></span>`).join('')}</div>
+        <p class="s">Every plate one of ${tri ? `${me.name.split(' ')[0]}’s` : 'your'} answers touched, and three at random, seeded by the file.</p></section>
+      <section class="pn"><p class="eyebrow">${I('waypoints', 12)} What it moves, if kept</p>
+        <div class="mv">${DS.map(d => `<span class="m">${I(d.icon, 14)}<span>${d.what}<br><span class="was">${d.now}</span> → <span class="now">${d.after}</span><small>${d.why}</small></span></span>`).join('')}</div></section>
+    </div>
+    ${tri ? `<div class="go"><span class="note">“${esc(H.note)}”<small>${boss.name} · ${H.at} · holds the new van and its ${K.word}</small></span><span class="acts"><span class="heard">${I('check', 12)} kept ${total - PL.fresh.length - newInsp} of ${total}</span></span></div>`
+      : `<div class="go"><span>${plural(total, 'proposal')} to ${boss.name}’s Triage for ${F(DATA.myFloor).name}, with the recipe, your answers and what you tasted. The tray stays with you.</span><span class="acts">${S.tasted >= TASTE.length ? `<button class="btn go" data-send>${I('send', 14)} Send to Triage</button>` : `<button class="btn" aria-disabled="true">${I('utensils', 14)} Taste ${TASTE.length - S.tasted} more first</button>`}</span></div>`}
+  </div></main>`;
+  Icons.hydrate($('#app'));
+  $$('[data-e]').forEach(b => b.onclick = () => { S.end = b.dataset.e; document.body.classList.add('pre'); render(); settle(ms('--motion-instant')); });
+  $('[data-send]') && ($('[data-send]').onclick = () => { S.end = 'triage'; document.body.classList.add('pre'); render(); settle(ms('--motion-instant')); });
+}
+function replay() { clearLater(); Object.assign(S, { end: 'bench', tasted: 0 }); document.body.classList.add('pre'); render(); settle(ms('--motion-quick')); TASTE.forEach((_, i) => later(() => { S.tasted = i + 1; render(); }, ms('--motion-run') + i * ms('--motion-base'))); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'b' || k === 'v') { S.end = k === 'b' ? 'bench' : 'triage'; render(); }
+  if (k === 'y') { S.tasted = Math.min(TASTE.length, S.tasted + 1); render(); }
+});
+replay();
+</script>
+</body>
+</html>

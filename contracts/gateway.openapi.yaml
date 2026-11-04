@@ -211,7 +211,7 @@ paths:
                 description: The keys
   /status:
     get:
-      summary: Whether every part of the platform is answering (admins only)
+      summary: Whether every part of AUGUR is answering (admins only)
       description: The gateway checks every service's /healthz and the sign-in service's signing keys every 30 seconds and keeps the last answer, so this never waits on a slow service. A component that failed its last check, or has not answered for 2 minutes, is down. `backups` is present when the gateway is told where the backup container writes (BACKUP_DIR). `seeding` says whether sample data may be added here (SEED_ALLOWED).
       responses:
         "200":

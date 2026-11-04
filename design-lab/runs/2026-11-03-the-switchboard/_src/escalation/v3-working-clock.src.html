@@ -1,0 +1,95 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Escalation · V3 The working clock</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>/*@CSS@*/
+.wrap{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-3);height:100%}
+.hd{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap}
+.tabs{display:flex;gap:var(--space-1);margin-left:auto}
+.tabs button{font-size:var(--type-small);padding:var(--space-1) var(--space-2);border:1px solid var(--hairline);border-radius:var(--radius-key);color:var(--ink-muted)}
+.tabs button[aria-pressed="true"]{border-color:var(--x-proposed-lit);color:var(--light)}
+.chart{position:relative;display:grid;grid-template-columns:11rem minmax(0,1fr);row-gap:var(--space-3);align-content:start;padding-top:var(--space-6)}
+.lab{font-size:var(--type-meta);line-height:var(--leading-meta);display:flex;flex-direction:column;justify-content:center}
+.lab small{font-size:var(--type-small);color:var(--ink-muted)}
+.track{position:relative;height:calc(var(--target-md) + var(--space-4));background:color-mix(in srgb,var(--slate-deep) 50%,transparent);border-radius:var(--radius-key)}
+.seam{position:absolute;top:0;bottom:0;width:var(--space-3);margin-left:calc(var(--space-3) / -2);background:var(--x-proposed-night);border-left:1px dashed var(--hairline-strong);border-right:1px dashed var(--hairline-strong);pointer-events:none}
+.seam span{position:absolute;top:0;left:50%;transform:translateX(-50%);font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);color:var(--ink-muted);white-space:nowrap;background:var(--slate-deep);padding:0 var(--space-1);border-radius:2px}
+.win{position:absolute;top:var(--space-2);bottom:var(--space-2);border-radius:2px;background:color-mix(in srgb,var(--ink) 10%,transparent);border:1px solid var(--hairline-strong)}
+.win.took{background:var(--x-proposed-lit-wash);border-color:var(--x-proposed-lit)}
+.ev{position:absolute;top:50%;transform:translate(-50%,-50%);color:var(--ink);display:flex;align-items:center;justify-content:center;width:var(--space-5);height:var(--space-5);border-radius:50%;background:var(--slate-deep);border:1px solid var(--hairline-strong)}
+.ev.k{color:var(--x-proposed-lit);border-color:var(--x-proposed-lit)}
+.lim{position:absolute;top:0;bottom:0;width:0;border-left:1px solid var(--warning);pointer-events:none}
+.lim span{position:absolute;top:0;left:var(--space-1);font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);color:var(--warning);white-space:nowrap}
+.now{position:absolute;top:0;bottom:0;width:0;border-left:1px solid var(--x-proposed-lit);pointer-events:none;transition:left var(--motion-run) linear}
+.now span{position:absolute;top:0;right:var(--space-1);font:400 var(--x-proposed-type-micro)/1.2 var(--font-mono);color:var(--x-proposed-lit);white-space:nowrap}
+.layer{position:absolute;top:0;bottom:0;left:11rem;right:0;pointer-events:none}
+.axis{grid-column:2;position:relative;height:var(--space-5);font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.axis span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.key{display:flex;gap:var(--space-4);flex-wrap:wrap;font-size:var(--type-small);color:var(--ink-muted);align-items:center}
+.key span{display:inline-flex;gap:var(--space-1);align-items:center}
+.say{font-size:var(--type-meta);line-height:var(--leading-meta);max-width:var(--measure-wide)}
+.say b{font-weight:400;color:var(--light)}
+</style></head><body class="pre">
+<div class="app-frame">
+  <div id="top"></div>
+  <main class="main"><div class="wrap">
+    <div class="hd"><p class="eyebrow">Escalation</p><h1 class="heading" id="h"></h1><div class="tabs" id="tabs"></div></div>
+    <p class="say" id="say"></p>
+    <div class="chart" id="chart"></div>
+    <div class="key" id="key"></div>
+  </div></main>
+</div>
+<div class="x-cap"><b>Escalation · V3</b> the working clock: waits count working hours, so nights fold into seams · train graphs, shift clocks, SLA business hours</div>
+<script>/*@DATA@*/
+/*@LIB@*/
+const EX = ['n16', 'n30'];
+let cur = 0;
+$('#top').innerHTML = topHTML(['Inbox', 'Escalation', 'Working clock'], [['1–2', 'item'], ['R', 'replay'], ['T', 'technical words', 'h-t']]);
+$('#tabs').innerHTML = EX.map((id, i) => `<button data-i="${i}"><span class="kbd">${i + 1}</span> ${N(id).title.slice(0, 28)}…</button>`).join('');
+$('#key').innerHTML = `<span>${I('eye', 14)} seen</span><span>${I('forward', 14)} passed on</span><span>${I('hand', 14)} took it</span><span>${I('check-check', 14)} acted</span><span><i style="display:inline-block;width:var(--space-4);height:var(--space-3);background:var(--x-proposed-night);border:1px dashed var(--hairline-strong)"></i> night or weekend, folded: the clock doesn’t run</span><span><i style="display:inline-block;width:1px;height:var(--space-4);background:var(--warning)"></i> the item’s limit</span>`;
+/* a working-time axis: each working minute is one unit; quiet time folds to a seam */
+function axis(t0, t1) {
+  const segs = []; let t = nextStart(TEAMH, t0);
+  if (t0 < t) t = t0;
+  while (t < t1) { const s = Math.max(t, dayOf(t) * DAY + TEAMH.from), e = Math.min(t1, dayOf(t) * DAY + TEAMH.to); if (e > s && TEAMH.days.includes(dayOf(t) % 7)) segs.push([s, e]); t = nextStart(TEAMH, dayOf(t) * DAY + TEAMH.to); if (t <= s) break; }
+  const total = segs.reduce((a, [s, e]) => a + e - s, 0);
+  const x = tt => { let acc = 0; for (const [s, e] of segs) { if (tt < s) return acc / total; if (tt <= e) return (acc + tt - s) / total; acc += e - s; } return 1; };
+  return { segs, x };
+}
+function render() {
+  const r = route(EX[cur]), n = r.n;
+  $$('#tabs button').forEach((b, i) => b.setAttribute('aria-pressed', i === cur));
+  $('#h').textContent = n.title;
+  const t0 = r.t, last = Math.max(...r.deliveries.map(d => Math.max(d.acted ?? 0, d.taken ?? 0, d.told))), t1 = addWork(TEAMH, last, 60);
+  const { segs, x } = axis(t0, t1), P100 = v => (x(v) * 100).toFixed(2) + '%';
+  let html = '';
+  r.deliveries.forEach(d => {
+    const st = r.steps.find(s => s.k === d.step) || r.steps[0];
+    const end = d.p === r.by ? (r.acted ? r.acted.acted : r.resolved) : (d.stoodDown ?? d.passed ?? st.until ?? t1);
+    html += `<div class="lab">${who(d.p)}<small>${d.via === 'addressed' ? 'named' : d.via === 'cover' ? 'cover' : st.who === 'rota' ? 'on call' : st.who === 'lead' ? 'team lead' : 'Department admin'}</small></div><div class="track"><span class="win ${d.p === r.by ? 'took' : ''}" style="left:${P100(d.told)};width:calc(${P100(Math.min(end, t1))} - ${P100(d.told)})"></span>
+      ${d.seen != null ? `<span class="ev" style="left:${P100(d.seen)}" title="seen ${at(d.seen)}">${I('eye', 12)}</span>` : ''}
+      ${d.passed != null ? `<span class="ev" style="left:${P100(d.passed)}" title="passed on ${at(d.passed)}">${I('forward', 12)}</span>` : ''}
+      ${d.taken != null ? `<span class="ev k" style="left:${P100(d.taken)}" title="took it ${at(d.taken)}">${I('hand', 12)}</span>` : ''}
+      ${d.acted != null ? `<span class="ev k" style="left:${P100(d.acted)}" title="${d.act} ${at(d.acted)}">${I('check-check', 12)}</span>` : ''}</div>`;
+  });
+  const ticks = segs.flatMap(([s, e]) => [s, ...(e - s > 240 ? [s + Math.round((e - s) / 2 / 30) * 30] : [])]);
+  html += `<div class="axis">${ticks.map(tt => `<span style="left:${P100(tt)}">${tt % DAY === TEAMH.from ? dayName(tt) + ' ' : ''}${hhmm(tt)}</span>`).join('')}</div>`;
+  const seams = segs.slice(1).map((s, i) => ({ at: s[0], gap: s[0] - segs[i][1] }));
+  html += `<div class="layer">${seams.map(s => `<span class="seam" style="left:${P100(s.at)}"><span>${dur(s.gap)} folded</span></span>`).join('')}${n.limit ? `<span class="lim" style="left:${P100(tm(n.limit))}"><span>limit ${hhmm(tm(n.limit))}</span></span>` : ''}<span class="now" id="now" style="left:0"><span></span></span></div>`;
+  $('#chart').innerHTML = html;
+  const wall = (r.acted ? r.acted.acted : r.resolved) - r.t, work = segs.reduce((a, [s, e]) => a + Math.max(0, Math.min(e, r.acted ? r.acted.acted : r.resolved) - Math.max(s, r.t)), 0);
+  $('#say').innerHTML = `From raised to done took <b>${dur(wall)}</b> on the wall clock, but only <b>${dur(work)}</b> of working time, which is what the policy counts. Each grey bar is one person’s turn: it starts when they were asked and ends when they took it, passed it on, or the next step began.`;
+  Icons.hydrate(document.body);
+  return { t0, t1, x, r };
+}
+function play() {
+  clearLater(); document.body.classList.add('pre'); const { t0, t1, x, r } = render();
+  later(() => document.body.classList.remove('pre'), 60);
+  const now = $('#now');
+  later(() => { now.style.left = '100%'; now.querySelector('span').textContent = `now`; }, 1200);
+}
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { cur = +b.dataset.i; play(); } });
+document.addEventListener('keydown', e => { if (commonKeys(e, play)) return; if (/^[12]$/.test(e.key)) { cur = +e.key - 1; play(); } });
+addEventListener('resize', render);
+Icons.hydrate(document.body); play();
+</script></body></html>

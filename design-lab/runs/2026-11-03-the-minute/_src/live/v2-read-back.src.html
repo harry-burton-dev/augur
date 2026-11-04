@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Live V2 · Read back</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: what was heard (pencil) and what was agreed (ink). Nothing becomes the record until it is read back ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:var(--space-5)}
+.col{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.col .hd{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3)}
+.heard{min-height:0;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-inset)}
+.hl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);font-size:var(--type-meta);line-height:var(--leading-meta);padding:var(--space-1) var(--space-2);border-radius:var(--radius-key);transition:background var(--motion-base) var(--ease-standard)}
+.hl .t{font:400 var(--type-small)/var(--leading-meta) var(--font-mono);color:var(--ink-muted)}
+.hl .tx{font-style:italic;color:var(--ink)}
+.hl .tx b{font-style:normal;font-weight:400;color:var(--ink-muted);margin-right:var(--space-1)}
+.hl.used{background:var(--surface-raised)}
+.hl .n{font:500 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--info);margin-left:var(--space-1)}
+.off{display:flex;flex-direction:column;gap:var(--space-2);align-items:flex-start;padding:var(--space-4);border:1px dashed var(--hairline);border-radius:var(--radius-inset);color:var(--ink-muted);font-size:var(--type-meta)}
+.keep{font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted)}
+.minute{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4) var(--space-5)}
+.prev{display:grid;gap:var(--space-1);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);border-bottom:1px solid var(--hairline);padding-bottom:var(--space-3)}
+.prev div{display:grid;grid-template-columns:var(--space-5) minmax(0,1fr);gap:var(--space-2)}
+.item{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light)}
+.draft{position:relative;border-radius:var(--radius-key);padding:var(--space-3) var(--space-4);transition:border-color var(--motion-calm) var(--ease-out),background var(--motion-calm) var(--ease-out)}
+.draft .pl{display:flex;align-items:center;gap:var(--space-2);font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink-muted);margin-bottom:var(--space-2)}
+.draft p.s{font-size:var(--type-body);line-height:var(--leading-body);margin-bottom:var(--space-2)}
+.draft.pencil p.s{font-style:italic}
+.draft.typed{border:1px solid var(--hairline-strong)}
+.draft.ink{border:1px solid var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.draft.ink p.s{color:var(--light)}
+.draft .res{font-size:var(--type-lead);line-height:var(--leading-lead);font-style:normal!important}
+.reading{display:flex;align-items:center;gap:var(--space-3);font-size:var(--type-meta);color:var(--light);border-top:1px solid var(--hairline);padding-top:var(--space-3)}
+.reading .faces{display:flex;gap:var(--space-1);margin-left:auto}
+.go{display:flex;gap:var(--space-2);margin-top:auto}
+@media (max-width:1400px){.wrap{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:var(--space-4)}.minute{padding:var(--space-3)}.prev{display:none}.draft p.s{font-size:var(--type-meta);line-height:var(--leading-meta)}.draft .res{font-size:var(--type-body);line-height:var(--leading-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Minuting live · V2</b> read back: what was heard stays pencil; only what the room agreed to hear read back becomes the minute · Hansard, pencil and ink, agreed minutes</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+NOW = '2026-05-12';
+const MT = meetingOf('D-118'), D = Dn('D-118'), H = DATA.heard;
+/* the model's summary: each sentence names the heard lines it comes from, so it can be checked */
+const SUM = [
+  { text: 'Priya Nair moved that van inspections at the North depot move in-house from 1 July, seconded by Jo Barnes.', from: [0] },
+  { text: 'Ade Bello asked for it to be a trial, as the costing has no figure for cover when a fitter is away. The mover agreed.', from: [1, 2] },
+  { text: D.words, from: [0, 1, 2], res: true },
+  { text: 'It comes back to this meeting if ' + D.revisitIf[0].text + ', and in November in any case.', from: [2, 5] }
+];
+const S = { step: 3 }; /* 0 heard only, 1 drafted, 2 read back, 3 agreed */
+function draftHTML() {
+  if (S.step < 1) return `<div class="draft" style="border:1px dashed var(--hairline)"><p class="pl">${I('pencil', 12)} No summary yet</p><p class="keep">The model drafts one when ${first(B.secretary)} closes the discussion (D).</p></div>`;
+  const model = STATE.gateway;
+  const cls = S.step >= 3 ? 'ink' : model ? 'pencil' : 'typed';
+  const lab = S.step >= 3 ? `${I('stamp', 12)} Agreed at 10:52 by the ${MT.present.length} present · read back by ${P(B.chair).name} · now the minute`
+    : model ? `${I('pencil', 12)} Drafted by the model from what it heard · ${first(B.secretary)} has not accepted it` : `${I('keyboard', 12)} Typed by ${P(B.secretary).name} · the model is off`;
+  return `<div class="draft ${cls}"><p class="pl">${lab}</p>${SUM.map(s => `<p class="s ${s.res ? 'res' : ''}">${s.res ? '<span class="rv">Resolved</span>' : ''}${s.text}${model && S.step < 3 ? `<span class="ptr">${s.from.map(f => H[f].t).join(', ')}</span>` : ''}</p>`).join('')}</div>`;
+}
+function render() {
+  const used = S.step >= 1 ? new Set(SUM.flatMap(s => s.from)) : new Set();
+  $('#app').innerHTML = topHTML(['Mandate', B.short, MT.no, 'Live'], [['D', 'draft'], ['Space', 'read back'], ['A', 'agreed'], ['G', 'model off', 'h-g'], ['T', 'record fields', 'h-t'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+    <section class="col" aria-label="What was heard"><div class="hd"><div><p class="eyebrow">Heard · item ${D.item}</p><p class="h2">What was said</p></div><span class="small muted">pencil · not the record</span></div>
+      ${STATE.gateway ? `<div class="heard scroll">${H.map((h, i) => `<div class="hl dep ${used.has(i) ? 'used' : ''}" style="--i:${i}"><span class="t">${h.t}</span><span class="tx"><b>${P(h.by).name}</b>${h.text}${used.has(i) ? `<span class="n">used</span>` : ''}</span></div>`).join('')}</div>
+      <p class="keep">${I('clock', 12)} What was heard is kept with the meeting for 30 days, for checking the minute, then deleted. Only the agreed minute is the record.<span class="tk">retention: heard[] 30d (body setting) · minute: permanent</span></p>`
+      : `<div class="off">${I('mic-off', 20)}<p>The model gateway is off, so nothing is heard or drafted.</p><p>${P(B.secretary).name} types the minute. What the room agrees, and every part of the record, stays the same.</p></div>`}
+    </section>
+    <section class="minute pane scroll" aria-label="The minute"><div class="hd"><div><p class="eyebrow">The minute · ${MT.no}</p><p class="h2">What was agreed</p></div></div>
+      <div class="prev">${DATA.agenda.slice(0, 3).map(a => `<div><span class="mono">${a.no}</span><span>${a.title}${a.decision ? ` · ${did(a.decision)} agreed` : ' · noted'}</span></div>`).join('')}</div>
+      <p class="item">${D.item}. ${DATA.agenda[3].title}</p>
+      ${draftHTML()}
+      ${S.step === 2 ? `<div class="reading">${I('mic', 16)} ${P(B.chair).name} is reading it back to the room <span class="faces">${MT.present.map(p => face(p, 'sm')).join('')}</span></div>` : ''}
+      ${S.step >= 3 ? `<p class="keep">${D.vote.for.length} for, ${D.vote.abstain.length} abstained (${P(D.vote.abstain[0]).name}). Numbered ${did('D-118')}. The draft of the whole minute goes to members tonight; the June meeting confirms it.</p>` : ''}
+      <div class="go">${S.step === 1 ? `<button class="btn go">${I('mic', 14)} Read it back <span class="kbd">Space</span></button><button class="btn">${I('pencil', 14)} Edit first</button>` : S.step === 2 ? `<button class="btn go">${I('check', 14)} The room agrees <span class="kbd">A</span></button><button class="btn">${I('undo-2', 14)} Not quite: change it</button>` : ''}</div>
+    </section></div></main>`;
+  Icons.hydrate($('#app'));
+}
+function replay() {
+  clearLater(); S.step = 0; render(); settle();
+  /* the moment: the model drafts a summary that points at what it heard; the chair reads it back */
+  later(() => { S.step = 1; render(); }, MOMENT());
+  later(() => { S.step = 2; render(); }, MOMENT() + ms('--motion-run'));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'd') { S.step = Math.max(S.step, 1); render(); }
+  if (k === ' ') { e.preventDefault(); S.step = Math.min(3, S.step + 1); render(); }
+  if (k === 'a') { S.step = 3; render(); }
+});
+replay();
+</script>
+</body>
+</html>

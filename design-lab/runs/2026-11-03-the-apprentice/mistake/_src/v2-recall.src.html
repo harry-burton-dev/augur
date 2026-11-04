@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A mistake · V2 · Recall by lot</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: one wrong detail recalls its lot: everything made the same way (same kind, same issuer, same runs) is pulled for checking together ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:var(--space-4)}
+.lot{display:flex;flex-wrap:wrap;gap:var(--space-5);align-items:baseline;padding:var(--space-3) var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-inset);font-size:var(--type-meta);color:var(--ink-muted)}
+.lot b{font-weight:400;color:var(--light)}
+.lot .no{font:400 var(--type-small)/1 var(--font-mono);color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);align-content:start}
+.v{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-1) var(--space-3);padding:var(--space-3) var(--space-4);border-radius:var(--radius-inset);border:1px solid var(--hairline);background:var(--surface-inset);transition:border-color var(--motion-base) var(--ease-standard)}
+.v b{font-weight:400;color:var(--light);font-size:var(--type-meta)}
+.v .val{font-family:var(--font-mono);font-size:var(--type-lead);color:var(--ink);text-align:right}
+.v .s{grid-column:1 / -1;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:flex;gap:var(--space-2);align-items:center}
+.v.first{outline:1.5px solid var(--light);outline-offset:-1px}
+.v.wrong{border-color:var(--x-proposed-seam);background:var(--x-proposed-seam-wash)}
+.v.right{border-color:var(--hairline-strong)}
+.v.wait .val{opacity:.4}
+.sum{display:flex;gap:var(--space-5);flex-wrap:wrap;align-items:center;font-size:var(--type-meta);color:var(--ink)}
+.sum b{font-weight:400;color:var(--light);font-family:var(--font-mono)}
+@media (max-width:1400px){.v{padding:var(--space-2) var(--space-3)}.v .val{font-size:var(--type-body)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A mistake · V2</b> recall by lot: one wrong detail pulls in everything made the same way · product recalls by batch, airworthiness directives</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const MK = DATA.mistake, f = MK.fact, AG = 'a1', a = A(AG), SIB = MK.siblings;
+const S = { checked: 0, undone: false };
+function render() {
+  const wrong = SIB.filter(s => s.proposed !== s.right), done = S.checked >= SIB.length;
+  $('#app').innerHTML = topHTML(['Data Atlas', 'Triage', a.name, 'Recall'], [['Space', 'check the next'], ['U', 'undo the wrong ones'], ['R', 'replay'], ['T', 'ADR words']]) +
+  `<main class="main"><div class="wrap">
+    <div><p class="eyebrow">${mm(AG)} From one flag by ${P(MK.found.who).name}, ${MK.found.at}</p><h1 class="title">Recall by lot</h1></div>
+    <div class="lot"><span>Lot <span class="no">${MK.lot.runs}</span></span><span>Made by <b>${a.name}</b></span><span>Kind <b>${MK.lot.rule}</b></span><span>Detail <b>${f.k}</b></span><span>Since <b>${MK.lot.since}</b></span><span class="tk">recall = every accepted detail with the same agent, kind, issuer and detail type, by run</span></div>
+    <div class="grid">${SIB.map((s, i) => { const seen = i < S.checked, bad = s.proposed !== s.right; return `<div class="v dep ${i === 0 ? 'first' : ''} ${seen ? (bad ? 'wrong' : 'right') : 'wait'}" style="--i:${i}">
+      <b>${s.v}</b><span class="val">${seen && bad ? (S.undone ? `<span class="struck">${s.proposed}</span> ${s.right}` : `<span class="struck">${s.proposed}</span>`) : s.proposed}</span>
+      <span class="s">${seen ? (bad ? `${I('x', 14)} net tonnage read as gross · ${s.layout} layout${s.used ? ` · used in ${plural(s.used, 'place')}` : ''}` : `${I('check', 14)} right · ${s.layout} layout`) : `${I('clock', 14)} to check`}</span></div>`; }).join('')}</div>
+    <div class="sum">${done ? `<span><b>${wrong.length}</b> of <b>${SIB.length}</b> wrong, all in the old layout. <b>${SIB.length - wrong.length}</b> right, all in the new.</span>${S.undone ? `<span class="lite">${I('check', 16)} ${wrong.length} undone and repaired, each with a seam. ${P(a.supervisor).name}, ${MK.repairedAt}.</span>` : `<button class="btn go" data-u>${I('undo-2', 14)} Undo and repair the ${wrong.length} <span class="kbd">U</span></button>`}` : `<span>Checking ${S.checked} of ${SIB.length}. Until checked, the lot is marked “recalled” wherever it is shown, and nothing new is made the same way.</span>`}</div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+  $('[data-u]') && ($('[data-u]').onclick = () => { S.undone = true; render(); });
+}
+function replay() { clearLater(); S.checked = 0; S.undone = false; settle(); render(); SIB.forEach((_, i) => later(() => { S.checked = i + 1; render(); }, MOMENT() + i * ms('--motion-instant') * 2)); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.key === ' ') { e.preventDefault(); S.checked = Math.min(SIB.length, S.checked + 1); render(); }
+  if (e.key.toLowerCase() === 'u' && S.checked >= SIB.length) { S.undone = true; render(); }
+});
+replay();
+</script>
+</body>
+</html>

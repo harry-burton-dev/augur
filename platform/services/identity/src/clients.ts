@@ -34,7 +34,7 @@ const audienceMapper = {
 export const serviceClient = (clientId: string, secret: string) => ({
   clientId,
   name: clientId.startsWith('platform-') ? `${clientId.slice('platform-'.length)} (platform service)` : `${clientId.replace(/^app-/, '')} (app service)`,
-  description: 'Made by the platform’s identity service. Its secret is issued and replaced from Admin, or set in the server’s settings.',
+  description: 'Made by AUGUR’s identity service. Its secret is issued and replaced from Admin, or set in the server’s settings.',
   enabled: true,
   publicClient: false,
   clientAuthenticatorType: 'client-secret',

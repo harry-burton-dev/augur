@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The minute · Revisiting V5 · The line of a question</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V5: every decision on one question, in order, with how each treated the one before; and the answer over time ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--space-4)}
+.q{display:flex;align-items:end;justify-content:space-between;gap:var(--space-5)}
+.q .ask{font-weight:300;font-size:var(--type-title-s);line-height:var(--leading-title-s);color:var(--light)}
+.q p.l{max-width:var(--measure-read);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.line{position:relative;min-height:0;padding:var(--space-4) var(--space-5)}
+.line svg.e{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.line svg.e path{fill:none;stroke:var(--hairline-strong);stroke-width:1.25}
+.line svg.e path.rev{stroke:var(--ink);stroke-dasharray:4 3}
+.line svg.e path.aff{stroke:var(--x-proposed-lit)}
+.line svg.e path.amd{stroke:var(--info)}
+.line svg.e text{font:400 var(--x-proposed-type-micro) var(--font-mono);letter-spacing:var(--tracking-caps);fill:var(--ink-muted);text-transform:uppercase}
+.nodes{position:relative;height:100%}
+.nd{position:absolute;width:calc(var(--measure-rail) - var(--space-2));padding:var(--space-2) var(--space-3);border-radius:var(--radius-inset);border:1px solid var(--hairline-strong);background:var(--surface-pane);display:grid;gap:var(--space-1);transition:opacity var(--motion-calm) var(--ease-out)}
+.nd.hide{opacity:0}
+.nd .t{font-size:var(--type-small);line-height:var(--leading-small);color:var(--light)}
+.nd .m{font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted)}
+.nd.st-reversed,.nd.st-amended{background:var(--x-proposed-stale),var(--surface-inset)}
+.nd.main{border-color:var(--light)}
+.ans{display:grid;grid-template-columns:var(--measure-rail) minmax(0,1fr);gap:var(--space-4);align-items:center}
+.strip{position:relative;height:var(--space-6)}
+.seg{position:absolute;top:0;height:var(--space-5);display:flex;align-items:center;padding:0 var(--space-2);border-radius:var(--radius-key);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap;overflow:hidden;border:1px solid var(--hairline-strong);transition:opacity var(--motion-calm) var(--ease-out)}
+.seg.k{background:color-mix(in srgb,var(--floor-org-high) 14%,transparent)}
+.seg.i{background:color-mix(in srgb,var(--green) 14%,transparent)}
+.seg.f{background:none;border-style:dashed;color:var(--ink-muted)}
+.seg.hide{opacity:0}
+.tick{position:absolute;top:calc(var(--space-5) + var(--space-1));font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted)}
+.nowl{position:absolute;top:calc(var(--space-1) * -1);height:calc(var(--space-6) + var(--space-1));width:1px;background:var(--light)}
+@media (max-width:1400px){.q .ask{font-size:var(--type-heading);line-height:var(--leading-heading)}.q p.l{display:none}.nd{width:calc(var(--measure-rail) - var(--space-6))}.ans{grid-template-columns:180px minmax(0,1fr)}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Revisiting · V5</b> the line of a question: every decision on one matter, how each treated the last, and the answer on any date · precedent, legislation’s point-in-time</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const FROM = '2025-11-01', TO = '2027-01-31';
+/* the decisions on this question, and how each treated an earlier one (from their own links) */
+const CHAIN = ['D-097', 'D-118', 'D-125', 'D-128', 'D-130', 'D-131'];
+const EDGES = [['D-097', 'D-118', 'amd', 'amended by'], ['D-118', 'D-125', '', 'followed up'], ['D-118', 'D-128', 'aff', 'kept by'], ['D-118', 'D-130', '', 'review brought forward'], ['D-118', 'D-131', 'rev', 'reversed by']];
+/* the answer to "who inspects North depot vans?" on each date, read from what was in force */
+const ANS = [['2025-12-01', '2026-07-01', 'k', 'Kestrel, under D-097'], ['2026-07-01', '2026-12-01', 'i', 'Our own fitters, under D-118'], ['2026-12-01', TO, 'f', 'An outside contractor, under D-131']];
+const S = { n: 99 };
+function pos() {
+  /* lay nodes out on the time axis, alternating rows so neighbours don't collide */
+  const W = $('#nodes').clientWidth, H = $('#nodes').clientHeight, X = scaleX(FROM, TO, W - 220);
+  const rowY = [0.12, 0.45, 0.9, 0.58, 0.02, 0.3];
+  return CHAIN.map((id, i) => ({ id, x: Math.min(W - 230, X(meetingOf(id).date)), y: rowY[i] * (H - 90) }));
+}
+function render() {
+  const X = scaleX(FROM, TO, 100);
+  $('#app').innerHTML = topHTML(['Mandate', 'Decisions', 'Kestrel'], [['Space', 'step'], ['T', 'record fields', 'h-t'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+    <div class="q"><div><p class="eyebrow">The line of a question · ${CHAIN.length} decisions · ${B.short}</p><p class="ask">Who inspects the North depot’s vans?</p></div>
+      <p class="l">Decisions on one matter form a line: each one keeps, changes or undoes the one before. Read as a line, a reversal is not a failure but the next answer, and the record shows what was in force on any date.</p></div>
+    <section class="line pane" aria-label="The decisions, in order"><div class="nodes" id="nodes"></div><svg class="e" id="edges" aria-hidden="true"></svg></section>
+    <div class="ans"><p class="lab">The answer, on each date</p><div class="strip">${ANS.map(([a, b, k, w], i) => `<span class="seg ${k} ${i < S.n - CHAIN.length || S.n >= 99 ? '' : 'hide'}" style="left:${X(a)}%;width:calc(${X(b) - X(a)}% - 2px)">${w}</span>`).join('')}
+      ${['2025-12-01', '2026-03-01', '2026-06-01', '2026-09-01', '2026-12-01'].map(d => `<span class="tick" style="left:${X(d)}%">${dt(d, 'month')}</span>`).join('')}<span class="nowl" style="left:${X(NOW)}%" title="now"></span></div></div>
+    </div></main>`;
+  Icons.hydrate($('#app'));
+  draw();
+}
+function draw() {
+  const P2 = pos(), box = $('#nodes');
+  box.innerHTML = P2.map((p, i) => { const d = Dn(p.id), st = statusAt(p.id); return `<div class="nd ${ST[st].cls} ${p.id === 'D-118' ? 'main' : ''} ${i < S.n ? '' : 'hide'}" id="n-${p.id}" style="left:${p.x}px;top:${p.y}px"><p class="m">${did(p.id)} ${dt(meetingOf(p.id).date, 'month')}</p><p class="t">${d.title}</p>${stHTML(st)}</div>`; }).join('');
+  const lr = $('.line').getBoundingClientRect();
+  const r = id => { const b = $('#n-' + id).getBoundingClientRect(); return { l: b.left - lr.left, r: b.right - lr.left, cy: (b.top + b.bottom) / 2 - lr.top, t: b.top - lr.top, b: b.bottom - lr.top, cx: (b.left + b.right) / 2 - lr.left }; };
+  $('#edges').innerHTML = EDGES.filter(([, b]) => CHAIN.indexOf(b) < S.n).map(([a, b, k, w]) => { const A = r(a), Bx = r(b); const x1 = A.r, y1 = A.cy, x2 = Bx.l, y2 = Bx.cy, mx = (x1 + x2) / 2;
+    return `<path class="${k}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/><text x="${x2 - 8}" y="${y2 - 10}" text-anchor="end">${w}</text>`; }).join('');
+}
+addEventListener('resize', render);
+function replay() {
+  clearLater(); S.n = 0; render(); settle();
+  /* the moment: the decisions arrive in order, each joined to the one it treated; then the answer strip fills */
+  for (let i = 1; i <= CHAIN.length + 3; i++) later(() => { S.n = i; render(); }, MOMENT() + (i - 1) * ms('--motion-base'));
+}
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) return;
+  if (e.key === ' ') { e.preventDefault(); S.n = S.n >= CHAIN.length + 3 ? 1 : S.n + 1; render(); }
+});
+replay();
+</script>
+</body>
+</html>

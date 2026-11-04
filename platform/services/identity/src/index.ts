@@ -1,8 +1,9 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
 import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, steadyPool } from '@augur/service-kit';
-import { ensureClients, KeycloakAppClients, parseClientSecrets, retrying, type AppClients } from './clients.ts';
-import { DEPLOYMENT_ADMIN_ROLE, KeycloakDirectory, PLATFORM_ROLES, type Directory } from './directory.ts';
+import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
+import { KeycloakDirectory, type Directory } from './directory.ts';
+import { IDENTITY_RIGHTS } from './realm.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
 
@@ -17,10 +18,8 @@ loadConfigOrExit('identity', [
   commonSettings.gateway,
   { name: 'KEYCLOAK_URL', about: 'Keycloak as identity reaches it, such as http://keycloak:8080/sso.', required: true },
   { name: 'KEYCLOAK_REALM', about: 'the Keycloak realm people sign in to (default platform).' },
-  { name: 'KEYCLOAK_ADMIN_USER', about: 'Keycloak’s own admin, set only for one start to repair identity’s own sign-in if it has lost its rights in the realm.' },
+  { name: 'KEYCLOAK_ADMIN_USER', about: 'Keycloak’s own admin, only for a local stack with no SERVICE_CLIENT_SECRET; on a server the realm job uses it, never identity.' },
   { name: 'KEYCLOAK_ADMIN_PASSWORD', about: 'that admin’s password.', secret: true },
-  { name: 'SERVICE_CLIENT_SECRETS', about: 'each platform service’s sign-in secret, client=secret, comma separated, for identity to make their Keycloak clients.', secret: true },
-  { name: 'PLATFORM_ADMIN_USER', about: 'the first admin’s username, who is given the deployment-admin role when nobody has it.' },
   { name: 'ORG_NAME', about: 'what the top floor, the whole organisation, is called (default Organisation).' },
 ]);
 
@@ -51,52 +50,35 @@ const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEY
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD ?? (production ? undefined : 'admin');
 const IDENTITY_CLIENT = 'platform-identity';
 const ownSecret = process.env.SERVICE_CLIENT_SECRET;
-const keycloakAdmin = KEYCLOAK_ADMIN_USER && KEYCLOAK_ADMIN_PASSWORD ? { user: KEYCLOAK_ADMIN_USER, password: KEYCLOAK_ADMIN_PASSWORD } : undefined;
-// The platform's own services (and, locally, the sample apps) sign in with secrets from the server's settings;
-// identity makes their Keycloak clients, since the realm file is only read when Keycloak first starts.
-const secrets = parseClientSecrets(process.env.SERVICE_CLIENT_SECRETS);
+// Keycloak's master admin is only for a local stack without secrets. On a server the realm job
+// (realm-job.ts) holds it, sets the realm up and gives identity's own client its rights.
+const keycloakAdmin = !ownSecret && KEYCLOAK_ADMIN_USER && KEYCLOAK_ADMIN_PASSWORD ? { user: KEYCLOAK_ADMIN_USER, password: KEYCLOAK_ADMIN_PASSWORD } : undefined;
+if (ownSecret && production && process.env.KEYCLOAK_ADMIN_PASSWORD) {
+  console.warn("Keycloak's admin password is in identity's settings but identity never uses it: take KEYCLOAK_ADMIN_PASSWORD out of identity's environment. The realm job is the only part that needs it.");
+}
 let directory: Directory | undefined;
 let appClients: AppClients | undefined;
 if (ownSecret || keycloakAdmin) {
-  // Identity manages people as its own client, whose rights stop at this realm. Keycloak's master admin,
-  // when it is set, is used once at start to give that client those rights, and never after.
+  // Identity manages people as its own client, whose rights stop at people, departments and apps'
+  // sign-ins in this realm (IDENTITY_RIGHTS): it can't change how anyone signs in.
   const keycloak = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, signIn: ownSecret ? { client: { id: IDENTITY_CLIENT, secret: ownSecret } } : { admin: keycloakAdmin! } });
   directory = keycloak;
   appClients = new KeycloakAppClients(keycloak);
-  const prepare = async () => {
-    // The realm file gives identity's own sign-in its rights on a new server, and earlier starts gave
-    // them on older ones, so Keycloak's master admin is only a way to repair a sign-in that lost them.
-    if (ownSecret && !(await keycloak.hasRealmAdmin())) {
-      if (!keycloakAdmin) {
-        throw new Error(
-          `identity's own sign-in (${IDENTITY_CLIENT}) can't manage the ${KEYCLOAK_REALM} realm, and Keycloak's admin isn't in its settings to repair it. ` +
-            'Give identity KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD for one start (docs/deploy.md, "Keycloak\'s admin"), then take them out again',
-        );
-      }
-      const bootstrap = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, signIn: { admin: keycloakAdmin } });
-      await new KeycloakAppClients(bootstrap).ensure(IDENTITY_CLIENT, ownSecret);
-      const granted = await bootstrap.grantRealmAdmin(IDENTITY_CLIENT);
-      console.info(`Identity's own sign-in (${IDENTITY_CLIENT}) may now manage the ${KEYCLOAK_REALM} realm${granted.length ? ` (${granted.join(', ')})` : ''}. Take Keycloak's admin out of identity's settings again: it isn't needed after this start.`);
-      keycloak.forgetSignIn();
-    } else if (ownSecret && keycloakAdmin && production) {
-      console.warn("Keycloak's admin password is in identity's settings but isn't needed: identity's own sign-in already manages the realm. Take KEYCLOAK_ADMIN_PASSWORD out of identity's environment.");
-    } else if (!ownSecret) {
-      console.warn("SERVICE_CLIENT_SECRET is not set: identity manages people as Keycloak's own admin.");
-    }
-    // A server set up before a role was added gets it now; Keycloak reads its realm file only when it first starts.
-    const made = await keycloak.ensureRoles(PLATFORM_ROLES);
-    if (made.length) console.info(`Added the ${made.join(', ')} role${made.length === 1 ? '' : 's'} to the sign-in service.`);
-    if (await keycloak.ensureSignInPolicy()) console.info('The sign-in service now slows down repeated wrong passwords.');
-    const { PLATFORM_ADMIN_USER } = process.env;
-    if (PLATFORM_ADMIN_USER && (await keycloak.ensureRoleHolder(DEPLOYMENT_ADMIN_ROLE.name, PLATFORM_ADMIN_USER))) {
-      console.info(`${PLATFORM_ADMIN_USER} is now a deployment admin: they'll set up a one-time code when they next sign in.`);
-    }
-    if (await keycloak.ensureOtpFor(DEPLOYMENT_ADMIN_ROLE.name)) console.info('Deployment admins now sign in with a one-time code as well as their password.');
-  };
-  // Keycloak may still be starting: keep trying, then make the services' sign-ins.
-  retrying(prepare)
-    .then(() => (secrets.length ? ensureClients(appClients!, secrets, (message) => console.info(message)) : undefined))
-    .catch((err: Error) => console.error(`The sign-in service couldn't be prepared: people can't be managed and the platform's services may not sign in (${err.message}).`));
+  if (ownSecret) {
+    // Keycloak may still be starting: keep trying, then say plainly if identity's own sign-in can't do its job.
+    retrying(() => keycloak.hasRights(IDENTITY_RIGHTS))
+      .then((ok) => {
+        if (!ok) {
+          console.error(
+            `identity's own sign-in (${IDENTITY_CLIENT}) doesn't have the rights it needs in the ${KEYCLOAK_REALM} realm (${IDENTITY_RIGHTS.join(', ')}), so admins can't manage people. ` +
+              'Run the realm job, which gives them: pc run --rm keycloak-config (docs/deploy.md, "The realm job").',
+          );
+        }
+      })
+      .catch((err: Error) => console.error(`The sign-in service couldn't be reached: people can't be managed until it can (${err.message}).`));
+  } else {
+    console.warn("SERVICE_CLIENT_SECRET is not set: identity manages people as Keycloak's own admin. That's for a local stack only.");
+  }
 } else {
   console.warn('Neither SERVICE_CLIENT_SECRET nor KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD is set: admins cannot manage people and departments.');
 }

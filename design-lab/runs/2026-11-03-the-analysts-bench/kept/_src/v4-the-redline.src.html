@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Kept · V4 · The redline</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Kept V4: the draft that went into the bench and the words that came out, as a redline; every change carries the technique that made it ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:var(--space-5)}
+.versions{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:var(--space-4);align-items:stretch}
+.ver{border:1px solid var(--hairline);border-radius:var(--radius-inset);padding:var(--space-3) var(--space-4);display:grid;gap:var(--space-2);align-content:start}
+.ver .w{font-weight:300;font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.ver.after .w{color:var(--light)}
+.arrowc{display:grid;place-items:center;color:var(--ink-muted);gap:var(--space-1);text-align:center;font-size:var(--type-small)}
+.red{font-weight:300;font-size:var(--type-heading);line-height:calc(var(--leading-heading) + var(--space-2));color:var(--light);max-width:92ch}
+.red del{color:var(--ink-muted);text-decoration:line-through;text-decoration-color:var(--x-proposed-against);text-decoration-thickness:2px}
+.red ins{text-decoration:none;border-bottom:2px solid var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.red .kept{border-bottom:2px dotted var(--x-proposed-lit)}
+.red .tag{display:inline-flex;align-items:center;gap:2px;vertical-align:super;font:500 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--x-proposed-lit);margin-left:2px}
+.red ins,.red del,.red .kept{border-bottom:2px dotted var(--x-proposed-lit)}
+.red .tag{transition:opacity var(--motion-calm) var(--ease-out)}
+.hold .red ins,.hold .red .kept{border-bottom:2px dotted var(--x-proposed-lit)}
+.red .tag{opacity:0}
+.hold .red del{text-decoration-color:transparent;color:var(--light)}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--space-3);align-content:start}
+.lg{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-1) var(--space-3);font-size:var(--type-small);line-height:var(--leading-small)}
+.lg .n{font:500 var(--type-small)/1 var(--font-mono);color:var(--x-proposed-lit)}
+.lg .muted{grid-column:2;color:var(--ink-muted)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Kept · V4</b> the redline: draft in, decision out; each change carries the technique that made it · Keeling schedules, legal redlines</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const D = DATA.decision;
+const S = { shown: false };
+/* the redline, built from the decision's recorded changes: removed words struck, added words underlined, each with its number */
+function redline() {
+  let out = D.words, n = 0;
+  D.changes.forEach((c, i) => {
+    const key = c.to.split(',')[0], tag = `<span class="tag">${i + 1}</span>`;
+    if (!out.includes(key)) return;
+    out = out.replace(key, !c.from && D.draft.includes(key) ? `<span class="kept">${key}</span>${tag}` : (c.from ? `<del>${c.from}</del> ` : '') + `<ins>${key}</ins>${tag}`);
+  });
+  return out;
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Mandate', F('fac').name, 'Decisions', D.id, 'Draft to decision'], [...STD]) +
+  `<main class="main"><div class="wrap ${S.shown ? '' : 'hold'}">
+    <div class="versions"><div class="ver"><p class="lbl">Draft · ${DATA.working[0].on} · before the bench</p><p class="w">${D.draft}</p></div>
+      <div class="arrowc">${I('arrow-right', 20, 1.25)}<span>${DATA.working.length} techniques<br>${sum(DATA.working, w => w.took)} min</span></div>
+      <div class="ver after"><p class="lbl">Decided · ${D.on}</p><p class="w">${D.words}</p></div></div>
+    <p class="red">${redline()}</p>
+    <div class="legend scroll">${D.changes.map((c, i) => `<div class="lg"><span class="n">${i + 1}</span><span>${tq(c.tid, 14)}</span><span class="muted">${c.why}</span></div>`).join('')}
+      <div class="lg"><span class="n">·</span><span class="muted">Dotted: words kept, but now resting on a technique’s result. Words without a number came through the bench unchanged. Nothing was changed by the model.</span></div></div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.shown = false; settle(); render(); later(() => { S.shown = true; $('.wrap').classList.remove('hold'); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

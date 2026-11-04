@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Grammar · V6 · Widen, never narrow</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- Grammar V6: who does what in each technique. People judge, records supply, the model only widens, and some things nobody does ---- */
+.wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4)}
+.hd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-5);align-items:end}
+.grid{display:grid;grid-template-columns:minmax(180px,1fr) repeat(4,minmax(0,1.25fr));align-content:start;min-height:0}
+.grid > div{padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--hairline);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);min-width:0}
+.grid .gh{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);display:flex;align-items:center;gap:var(--space-2);border-bottom-color:var(--hairline-strong)}
+.grid .m{transition:opacity var(--motion-calm) var(--ease-out)}
+.grid .m .pencil{display:block;padding:var(--space-1) var(--space-2)}
+.grid .m.hide{opacity:0}
+.grid .m.off{color:var(--ink-muted)}
+.grid .no{color:var(--ink-muted)}
+.grid .no b{color:var(--ink);font-weight:400}
+.verbs{display:flex;gap:var(--space-5)}
+.verbs div{display:grid;gap:var(--space-1)}
+.verbs .chips{display:flex;gap:var(--space-1);flex-wrap:wrap}
+.chip{border:1px solid var(--hairline-strong);border-radius:var(--radius-pill);padding:0 var(--space-2);font-size:var(--type-small);line-height:1.6}
+.chip.w{border-style:dotted;font-style:italic}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Grammar · V6</b> widen, never narrow: the model adds possibilities and never removes one · Tradecraft Primer devil’s advocacy, pencil and ink</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+/* per technique: what people do, what records supply, and what nobody does (AUGUR refuses it in code) */
+const LANES = {
+  outside: { you: 'choose the class of past cases; move from the count, one stated step at a time', rec: 'past cases and their outcomes from the contract outcomes register', no: 'forecast without a class' },
+  ach:     { you: 'list explanations; mark each fact against each one', rec: 'facts, each with its yardstick word; totals of what is against', no: 'call an explanation true because most facts fit it' },
+  kac:     { you: 'say what the plan assumes; lower a mark with a reason', rec: 'the mark, worked out from the fact’s word', no: 'raise a mark above what its fact allows' },
+  pre:     { you: 'write reasons alone first, then cluster; turn each into a change, a watch or a risk accepted', rec: 'the intent, the plan, the watches it can and can’t see', no: 'show anyone’s reasons before everyone has written' },
+  qic:     { you: 'say which judgement rests on which source', rec: 'each source’s grade, and where two copy one origin', no: 're-grade a source from here' },
+  against: { you: 'answer each point, or change the choice', rec: 'the facts under each side', no: 'declare a side the winner' }
+};
+const S = { shown: false };
+function render() {
+  const g = STATE.gateway;
+  $('#app').innerHTML = topHTML(['Explorer', 'The bench', 'Who does what'], [...STD]) +
+  `<main class="main"><div class="wrap">
+    <div class="hd"><div><p class="eyebrow">Who does what, technique by technique</p><p class="sent"><b>The model widens; it never narrows.</b> It may add an explanation, a reason, a case or a fact to look for. It never marks, ranks, drops, chooses or words.</p></div>
+      <div class="verbs"><div><span class="lbl">Widen</span><span class="chips">${['add an explanation', 'add a reason', 'argue the other side', 'suggest a fact to find'].map(v => `<span class="chip w">${v}</span>`).join('')}</span></div>
+        <div><span class="lbl">Narrow</span><span class="chips">${['mark', 'rank', 'drop', 'choose', 'set a word'].map(v => `<span class="chip">${v}</span>`).join('')}</span></div></div></div>
+    <div class="grid scroll">
+      <div class="gh">Technique</div><div class="gh">${I('user-round', 14)}People</div><div class="gh">${I('database', 14)}Records</div><div class="gh">${I('pencil', 14)}The model, in pencil</div><div class="gh">${I('ban', 14)}Nobody</div>
+      ${DATA.kinds.map((k, i) => { const t = T(k.tid), L = LANES[k.tid];
+        return `<div>${tq(k.tid, 14)}<span class="tk">${t.tech}</span></div><div>${L.you}</div><div>${L.rec}</div>
+        <div class="m ${S.shown ? '' : 'hide'} ${g ? '' : 'off'}" style="transition-delay:calc(${i} * var(--motion-instant))">${g ? `<span class="pencil"><span class="pt">may ${t.may}</span></span>` : `off: ${P(DATA.gateway.admin).name} can turn it on`}</div>
+        <div class="no"><b>the model:</b> ${t.never}.<br><b>anyone:</b> ${L.no}.</div>`; }).join('')}
+      <div style="grid-column:1/-1;border:0;padding-top:var(--space-3)" class="muted">${g ? 'Press G: every technique still runs with the model off. Only the pencil column empties; no mark, count or word changes.' : 'The model is off. Every technique still runs, and no mark, count or word changed: the model never set one.'}</div>
+    </div>
+  </div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.shown = false; settle(); render(); later(() => { S.shown = true; $$('.m').forEach(m => m.classList.remove('hide')); }, MOMENT()); }
+document.addEventListener('keydown', e => { if (commonKeys(e, render, replay)) { markKeys(); } });
+replay();
+</script>
+</body>
+</html>

@@ -1,20 +1,57 @@
 import type { SelectOption, StatusName } from '@augur/app-kit';
-import { SDK_VERSION } from '@augur/mfe-sdk';
+import { APP_CATEGORIES, SDK_VERSION, type AppCategory } from '@augur/mfe-sdk';
 import semver from 'semver';
 import type { AppVersion, CatalogueApp, Department, FloorRule } from './api.js';
 
 /** A change to how an app takes releases, kept in this tab while its admin enters their password again. */
 export const FOLLOW_KEY = 'augur.app-follow';
 
-/** Where an app stands: off, on, or on but unable to open in this platform. */
+/** Where an app stands: off, on, or on but unable to open on this deployment. */
 export const appStatus = (app: CatalogueApp, sdkVersion = SDK_VERSION): { status: StatusName; label: string; why?: string } => {
   if (!app.enabled) return { status: 'paused', label: 'Off', why: 'Nobody is offered it until it’s turned on.' };
   if (app.blocked) return { status: 'warning', label: 'Blocked', why: app.blocked };
   const range = semver.validRange(app.sdk);
   if (!range || !semver.satisfies(sdkVersion, range, { includePrerelease: true })) {
-    return { status: 'warning', label: 'Won’t open', why: `It works with platform SDK ${app.sdk}; this platform has ${sdkVersion}.` };
+    return { status: 'warning', label: 'Won’t open', why: `It works with AUGUR SDK ${app.sdk}; this deployment has ${sdkVersion}.` };
   }
   return { status: 'done', label: 'On' };
+};
+
+/**
+ * The kind of app it is (ADR 0032), as the registry says it's in force. A registry from before kinds
+ * sends none, so its built-in apps are still platform apps; a kind this Admin doesn't know is no kind.
+ */
+export const kindOf = (app: Pick<CatalogueApp, 'category' | 'platform'>): AppCategory | undefined => {
+  const kind: string | undefined = app.category ?? (app.platform ? 'platform' : undefined);
+  return APP_CATEGORIES.find((c) => c === kind);
+};
+
+/** Whether it ships with AUGUR: `ships`, or `pillar` from a registry that doesn't send `ships` yet. */
+export const shipsWithAugur = (app: Pick<CatalogueApp, 'ships' | 'pillar'>) => app.ships ?? app.pillar ?? false;
+
+/** Each kind's name in the Kind column, and the sentence the app's dialog says it in (ADR 0032's words). */
+export const KIND_WORDS: Record<AppCategory | 'app', { label: string; fact: string; a: string }> = {
+  platform: { label: 'Platform app', fact: 'Platform app: for using and managing AUGUR', a: 'a platform app' },
+  pillar: { label: 'Pillar app', fact: 'Pillar app: the foundation of what AUGUR produces', a: 'a pillar app' },
+  app: { label: 'App', fact: 'App', a: 'an app' },
+};
+
+/** The words for an app's kind. */
+export const kindWords = (app: Pick<CatalogueApp, 'category' | 'platform'>) => KIND_WORDS[kindOf(app) ?? 'app'];
+
+/** What the app's dialog says it is, over its name. */
+export const appEyebrow = (app: Pick<CatalogueApp, 'category' | 'platform' | 'ships' | 'pillar' | 'registeredBy'>): string => {
+  const kind = kindOf(app);
+  const where = app.platform ? 'built into AUGUR' : shipsWithAugur(app) ? 'ships with AUGUR' : `registered by ${app.registeredBy ?? 'its service'}`;
+  if (kind) return `${KIND_WORDS[kind].label} · ${where}`;
+  return where.charAt(0).toUpperCase() + where.slice(1);
+};
+
+/** Why the kind its manifest claims isn't the one it's listed as, or '' when nothing was refused. */
+export const refusedKindNote = (app: Pick<CatalogueApp, 'categoryRefused'>): string => {
+  const asked = APP_CATEGORIES.find((c) => c === app.categoryRefused?.asked);
+  if (!asked) return '';
+  return `Its manifest says it’s ${KIND_WORDS[asked].a}. Only apps that ship with AUGUR or come from its app feed can be one, so it’s listed as an app.`;
 };
 
 /** "Follow new versions" in the version picker. */
@@ -36,7 +73,7 @@ export const SCOPE_WORDS: Record<string, string> = {
   'people:read': 'Look up people and teams',
 };
 
-/** What an app may do on the platform, as a fact's value. */
+/** What an app may do on AUGUR, as a fact's value. */
 export const scopeWords = (scopes: string[] | undefined) =>
   scopes?.length ? scopes.map((s) => SCOPE_WORDS[s] ?? s).join(', ') : 'Nothing beyond registering itself';
 

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Desk · Approvals V2 · What you sign for</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/*@CSS@*/
+/* ---- V2: the stamp is built from what you checked. its words are its scope; what nobody checked is named ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.9fr);gap:var(--space-6)}
+.doc .sec{cursor:pointer}
+.tick{display:inline-flex;align-items:center;justify-content:center;width:var(--space-5);height:var(--space-5);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);color:var(--x-proposed-lit)}
+.tick[aria-pressed="true"]{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit-wash)}
+.right{display:flex;flex-direction:column;gap:var(--space-5);min-height:0}
+/* the big stamp: its body is a sentence that grows as you tick */
+.bigstamp{border:2px solid var(--fc);border-radius:var(--radius-inset);padding:var(--space-4) var(--space-5);display:grid;gap:var(--space-2);background:color-mix(in srgb,var(--fc) 5%,transparent);transition:opacity var(--motion-base) var(--ease-standard)}
+.bigstamp .w{font:500 var(--type-meta)/1 var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--fc)}
+.bigstamp .body{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--light);font-weight:300}
+.bigstamp .body em{font-style:normal;color:var(--fc)}
+.bigstamp .not{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted)}
+.bigstamp .foot{display:flex;gap:var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);color:var(--ink-muted);border-top:1px solid var(--hairline);padding-top:var(--space-2)}
+.bigstamp.draft{border-style:dashed}
+.others{display:grid;gap:var(--space-2)}
+.oth{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--space-3);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+.oth b{font-weight:400;color:var(--ink-muted);font-family:var(--font-mono);font-size:var(--x-proposed-type-micro)}
+@media (max-width:1400px){.sec .sw{font-size:var(--x-proposed-type-micro)}.bigstamp .body{font-size:var(--type-body);line-height:var(--leading-body)}.oth:nth-child(n+3){display:none}}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>Approvals · V2</b> what you sign for: tick what you checked and the stamp writes its own scope; what nobody checked is named · laboratory "checked by / approved by", GDP signatures</div>
+<script>
+/*@DATA@*/
+/*@LIB@*/
+const me = DATA.me, mine = AP.route.find(r => r.who === me);
+const S = { ticked: new Set(), done: false };
+const secName = n => AP.sections.find(s => s.n === n).t.toLowerCase();
+const list = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+function stampBody() {
+  const t = [...S.ticked].sort();
+  if (!t.length) return `<span class="muted">Tick the sections you checked. Your stamp will say exactly that, and nothing more.</span>`;
+  return `I checked <em>${list(t.map(n => n + ' ' + secName(n)))}</em> against how Repairs North works, and I stand by ${t.length === 1 ? 'it' : 'them'}.`;
+}
+function notChecked() {
+  const changed = AP.sections.filter(s => s.ch !== 'same').map(s => s.n);
+  const anyone = n => signedFor(n).length || S.ticked.has(n);
+  const left = changed.filter(n => !anyone(n));
+  return left.length ? `Not checked by anyone on the row: ${list(left.map(n => n + ' ' + secName(n)))}.` : 'Every changed section is signed for by someone.';
+}
+function render() {
+  $('#app').innerHTML = topHTML(['Artifacts', AP.library, AP.doc], [['3 5 6', 'tick a section'], ['S', 'stamp'], ['R', 'replay']]) +
+    `<main class="main"><div class="wrap">
+      <section class="doc scroll"><div class="doc-h"><p class="eyebrow">${AP.version} · what you are asked to check: ${mine.covers.map(n => n + ' ' + secName(n)).join(', ')}</p><h2 class="h">${AP.doc}</h2></div>
+        ${sectionsHTML({ hot: mine.covers, mine: n => '' })}</section>
+      <section class="right">
+        <div><p class="eyebrow">Your initial</p><h1 class="t" style="margin-top:var(--space-1)">What you sign for</h1></div>
+        <div class="panel" style="display:grid;gap:var(--space-2)">${AP.sections.filter(s => s.ch !== 'same').map(s => `<div style="display:flex;gap:var(--space-3);align-items:center"><button class="tick" data-n="${s.n}" aria-pressed="${S.ticked.has(s.n)}" ${S.done ? 'disabled' : ''} aria-label="I checked section ${s.n}">${S.ticked.has(s.n) ? I('check', 14) : ''}</button><span class="note"><b>${s.n} ${s.t}</b> · ${mine.covers.includes(s.n) ? 'you were asked' : signedFor(s.n).length ? 'signed for by ' + signedFor(s.n).map(first).join(' and ') : 'nobody asked'}</span><span class="kbd" style="margin-left:auto">${s.n}</span></div>`).join('')}</div>
+        <div class="bigstamp ${S.done ? '' : 'draft'}" data-tier="${ME().floor}"><span class="w">${S.done ? 'Initialled' : 'Your stamp, as it will read'}</span>
+          <p class="body" style="margin:0">${stampBody()}</p><p class="not" style="margin:0">${notChecked()}</p>
+          <span class="foot">${ini(me, 'sm')}${ME().name} · ${ME().role} · ${S.done ? DATA.now.day + ' ' + DATA.now.time : 'not yet stamped'}</span></div>
+        ${S.done ? '' : `<button class="btn go" data-stamp ${S.ticked.size ? '' : 'aria-disabled="true"'}>${I('stamp', 14)} Stamp it with these words <span class="kbd">S</span></button>`}
+        <div class="others"><p class="eyebrow">What the others signed for</p>${AP.route.filter(r => r.at).map(r => `<div class="oth">${ini(r.who, 'sm')}<span><b>${P(r.who).name.toUpperCase()} · ${r.at}</b><br>${r.says} (sections ${r.covers.join(', ')})</span></div>`).join('')}</div>
+      </section></div></main>`;
+  Icons.hydrate($('#app'));
+  $$('.tick').forEach(b => b.onclick = () => tick(+b.dataset.n));
+  $('[data-stamp]') && ($('[data-stamp]').onclick = stamp);
+}
+function tick(n) { if (S.done || !AP.sections.find(s => s.n === n && s.ch !== 'same')) return; S.ticked.has(n) ? S.ticked.delete(n) : S.ticked.add(n); render(); }
+function stamp() { if (!S.ticked.size) return; S.done = true; render(); }
+function replay() {
+  clearLater(); S.ticked.clear(); S.done = false; render(); settle();
+  /* the moment: you tick 3 and 5; the stamp writes its own scope and still names section 6 */
+  later(() => tick(3), ms('--motion-run') - ms('--motion-calm'));
+  later(() => tick(5), ms('--motion-run'));
+}
+onKeys({ r: replay, s: stamp, 2: () => tick(2), 3: () => tick(3), 5: () => tick(5), 6: () => tick(6) });
+replay();
+</script>
+</body>
+</html>
