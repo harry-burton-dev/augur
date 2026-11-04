@@ -61,7 +61,8 @@ describe('starting', () => {
     expect(started[0]).toMatchObject({ version: '0.15.0', logsURL: `${TELEMETRY_URL}/v1/logs`, tracesURL: `${TELEMETRY_URL}/v1/traces` });
     expect(await started[0].authorization()).toMatch(/^Bearer t\d$/);
     appOnScreen({ id: 'folio', version: '0.4.1' });
-    expect(started[0].beforeSend({ type: 'exception', payload: {}, meta: {} }).payload.context).toMatchObject({ app: 'folio' });
+    const bare: Item = { type: 'exception', payload: {}, meta: {} };
+    expect(started[0].beforeSend(bare).payload.context).toMatchObject({ app: 'folio' });
   });
 
   it('never throws when Faro can’t start', async () => {
