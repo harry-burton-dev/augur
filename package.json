@@ -32,6 +32,8 @@
     "lint": "eslint .",
     "check:kit": "node scripts/kit.mjs check",
     "kit:pin": "node scripts/kit.mjs pin",
+    "contracts": "node scripts/check-contracts.mjs write",
+    "check:contracts": "node scripts/check-contracts.mjs check",
     "check:api": "node scripts/check-api.mjs",
     "api:update": "node scripts/check-api.mjs update"
   },
