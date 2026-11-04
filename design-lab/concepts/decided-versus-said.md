@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-minute`](../runs/2026-11-03-the-minute/) (gramm
 Could steer: Mandate discussion threads, meeting notes, the reference desk's answers.
 
 Related: [the warrant shows](the-warrant-shows.md): record V4 drew a decision as a Toulmin argument, and the unstated rule (the warrant) was the leg that broke.
+
+Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): assumptions are found in the plan's own words and inked in place (assumptions V3).

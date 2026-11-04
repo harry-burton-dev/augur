@@ -18,3 +18,5 @@ Used in [`2026-11-03-the-apprentice`](../runs/2026-11-03-the-apprentice/): "Nobo
 Applied to a team board in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): one warning only, held by someone who is away (board V5).
 
 In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the andon board and the quiet rerun; a normal month makes no noise (next month V3, V6).
+
+Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): tripwires draw only their line until crossed (premortem V6).

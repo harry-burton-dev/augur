@@ -24,3 +24,5 @@ In [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a 
 In [`2026-11-03-mise-en-place`](../runs/2026-11-03-mise-en-place/): the model proposes links between lines from their notes, never codes; G changes no count (mapping V6).
 
 In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): an agent may propose a judgement lift in pencil; only a person signs it (ladder V5).
+
+Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): the model's explanation arrives as an empty column that only people mark (explanations V6, grammar V6).
