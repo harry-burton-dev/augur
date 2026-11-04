@@ -304,6 +304,7 @@ Images AUGUR's Compose file starts but doesn't build. Each is its own program, u
 | pgvector/pgvector | PostgreSQL | https://github.com/pgvector/pgvector |  |
 | postgres | PostgreSQL | https://www.postgresql.org |  |
 | quay.io/keycloak/keycloak | Apache-2.0 | https://www.keycloak.org | The base of AUGUR's own Keycloak image (infra/service.Dockerfile, target keycloak). |
+| restic/restic | BSD-2-Clause | https://restic.net | Only its binary, copied into the backup container, which runs it as its own program (ADR 0060) |
 | tailscale/tailscale | BSD-3-Clause | https://tailscale.com |  |
 | tecnativa/docker-socket-proxy | Apache-2.0 | https://github.com/Tecnativa/docker-socket-proxy |  |
 

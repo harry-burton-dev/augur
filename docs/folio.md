@@ -221,7 +221,7 @@ All of the following are in **Admin → Apps → Artifacts** unless it says othe
 | Let someone publish to the whole org | Give them the **publisher** role in **Admin → People**. |
 | Keep the org's tags | The leads on the org's floor do this from **Tags** (right-click the grid) in any collection on the org's floor. |
 
-**Where things are kept.** Documents' details live in Artifacts' own schema (`folio`) in the database. The files themselves (originals, reader copies, thumbnails and pictures) live in Artifacts' own bucket. The nightly backup takes both ([deploy.md](deploy.md#backups)). This means a document removed after its retention period stays in older backups until they age out (`BACKUP_KEEP_DAYS`, 14 days by default).
+**Where things are kept.** Documents' details live in Artifacts' own schema (`folio`) in the database. The files themselves (originals, reader copies, thumbnails and pictures) live in Artifacts' own bucket. The nightly backup takes both ([deploy.md](deploy.md#backups)). This means a document removed after its retention period stays in older backups until they age out (`BACKUP_KEEP_DAYS`, 14 days by default, and `OFFSITE_KEEP_DAILY` in the off-server copy, 30 days by default).
 
 **Reader copies.** The `folio-worker` container makes them, using Docling, one version at a time. If documents stay at "Making the reader copy…" for a long time, check that the container is running and look at its logs (`pc logs folio-worker`). A copy that failed can be asked for again from its document.
 
