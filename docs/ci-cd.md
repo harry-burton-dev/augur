@@ -194,8 +194,9 @@ The rest lives in GitHub's settings, which a cloud session can't change. The own
   force pushes or deletion, changes through a pull request with CI green;
 - a ruleset on `release/**` that lets only the owner create, push or delete those branches, since
   the updater and the registry trust signatures from any `release/<unit>-<x>.<y>` branch;
-- `APP_RELEASES_TOKEN` as a fine-grained token limited to the repositories it writes to, rotated
-  every 90 days.
+- `APP_RELEASES_TOKEN` as a fine-grained token with only what it is used for: Contents read on the app
+  repositories (their releases and source) and Actions write on this one (an app's release starts the
+  Release feed), set in this repository and each app repository, expiring after 90 days.
 
 The deploy test runs Trivy over every image a release runs, third-party ones included
 ([deploy-test.md](deploy-test.md)).
