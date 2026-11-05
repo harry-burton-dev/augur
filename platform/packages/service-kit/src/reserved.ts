@@ -41,6 +41,9 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   platform: 'AUGUR’s database, sign-in realm and Compose project',
   public: 'the database’s shared schema',
   'information-schema': 'the database’s own schema',
+  // Settings of the same shape as an app's own in .env (<ID>_BUCKET_SECRET, <ID>_CLIENT_SECRET), which an app with the id would be given.
+  frontends: 'the registry’s key to the frontends bucket, FRONTENDS_BUCKET_SECRET',
+  entra: 'the organisation’s Entra sign-in, ENTRA_CLIENT_SECRET',
 };
 
 /** Beginnings an app's id may not have, and what they're kept for. */
@@ -55,5 +58,7 @@ export const reservedIdProblem = (id: string): string | undefined => {
   if (kept) return `"${id}" is kept for ${kept}, a part of AUGUR. Choose another id for the app.`;
   const prefix = Object.keys(RESERVED_APP_ID_PREFIXES).find((p) => id.startsWith(p));
   if (prefix) return `"${id}" starts with ${prefix}, which is kept for ${RESERVED_APP_ID_PREFIXES[prefix]}. Choose another id for the app.`;
+  // "notes-jobs" would have the schema notes_jobs, which is where "notes" keeps its jobs.
+  if (id.endsWith('-jobs')) return `"${id}" ends with -jobs, which is kept for the jobs schema of the app named before it. Choose another id for the app.`;
   return undefined;
 };
