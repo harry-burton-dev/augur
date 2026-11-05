@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, errors, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { withDeadline } from './deadline.js';
 
 /**
  * Each app's service signs in to the platform as itself: a Keycloak client
@@ -54,7 +55,7 @@ export const clientCredentials = ({ tokenUrl, clientId, clientSecret, fetchImpl 
   const fetchToken = async () => {
     let res: Response;
     try {
-      res = await fetchImpl(tokenUrl, {
+      res = await withDeadline(fetchImpl)(tokenUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret }),

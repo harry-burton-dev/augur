@@ -32,6 +32,24 @@ export const inboxKindSchema = Type.Object(
 );
 export type InboxKind = Static<typeof inboxKindSchema>;
 
+/** How many kinds of notification one app may declare. */
+export const MAX_NOTIFICATION_KINDS = 10;
+
+/**
+ * A kind of notification the app's service sends (ADR 0036), named so each person can choose,
+ * in Account's Notifications, which kinds reach them out loud and which wait quietly.
+ * A notification of a kind the manifest doesn't declare is refused.
+ */
+export const notificationKindSchema = Type.Object(
+  {
+    id: Type.String({ pattern: '^[a-z][a-z0-9-]{0,39}$', description: 'How the app\'s service names it: "comment"' }),
+    label: Type.String({ minLength: 1, maxLength: 40, description: 'What Account shows for it: "Comments on your documents"' }),
+    detail: Type.Optional(Type.String({ maxLength: 120, description: 'A sentence on when it is sent' })),
+  },
+  { additionalProperties: false },
+);
+export type NotificationKind = Static<typeof notificationKindSchema>;
+
 /** What an app may be sent in one request when its manifest doesn't say: enough for any form, not for files. */
 export const DEFAULT_UPLOAD_MB = 10;
 /** The most any app may ask for. */
@@ -196,6 +214,12 @@ export const appEntrySchema = Type.Object(
       Type.Object(
         { kinds: Type.Array(inboxKindSchema, { minItems: 1, maxItems: MAX_INBOX_KINDS }) },
         { additionalProperties: false, description: "The kinds of work the app puts in people's inboxes, with inbox:write (ADR 0026)" },
+      ),
+    ),
+    notifications: Type.Optional(
+      Type.Object(
+        { kinds: Type.Array(notificationKindSchema, { minItems: 1, maxItems: MAX_NOTIFICATION_KINDS }) },
+        { additionalProperties: false, description: 'The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)' },
       ),
     ),
     scopes: Type.Optional(
@@ -409,7 +433,7 @@ export const surfaceProblem = (entry: AppEntry): string | undefined => {
   return stray ? `${entry.name} has a ${stray.slot} for the ${stray.floor} floor, but its floors don't include ${stray.floor}.` : undefined;
 };
 
-/** What's wrong with the settings, feature previews and inbox kinds an app offers, or undefined when nothing is. */
+/** What's wrong with the settings, feature previews, inbox kinds and notification kinds an app offers, or undefined when nothing is. */
 export const settingsProblem = (entry: AppEntry): string | undefined => {
   const previews = new Set<string>();
   for (const preview of entry.previews ?? []) {
@@ -421,6 +445,11 @@ export const settingsProblem = (entry: AppEntry): string | undefined => {
   for (const kind of entry.inbox?.kinds ?? []) {
     if (kinds.has(kind.id)) return `${entry.name} declares the inbox kind "${kind.id}" twice.`;
     kinds.add(kind.id);
+  }
+  const told = new Set<string>();
+  for (const kind of entry.notifications?.kinds ?? []) {
+    if (told.has(kind.id)) return `${entry.name} declares the notification kind "${kind.id}" twice.`;
+    told.add(kind.id);
   }
   const seen = new Set<string>();
   for (const setting of entry.settings ?? []) {

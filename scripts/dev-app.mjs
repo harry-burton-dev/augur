@@ -47,8 +47,9 @@ const run = (args, env) => {
 const servicePkg = join(dir, 'service/package.json');
 if (existsSync(servicePkg)) {
   const { name } = JSON.parse(readFileSync(servicePkg, 'utf8'));
-  // No REGISTRY_URL or sign-in: the stand-in shell lists the app itself.
-  run(['--filter', name, 'dev'], { PORT: port, REGISTRY_URL: '', SERVICE_CLIENT_SECRET: '' });
+  // No REGISTRY_URL or sign-in: the stand-in shell lists the app itself, and sends its stand-in person as plain
+  // x-user-* headers, which the service believes only because it is told to here.
+  run(['--filter', name, 'dev'], { PORT: port, REGISTRY_URL: '', SERVICE_CLIENT_SECRET: '', AUGUR_INSECURE_DEV_CALLERS: '1' });
 }
 // Live on the workbench: this machine's name on the tailnet, which `tailscale serve` answers on with https.
 let liveEnv = {};

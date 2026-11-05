@@ -64,6 +64,8 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 ### Restoring the database to a point in time
 
+**From** unreleased
+
 From this release Postgres archives its changes as it makes them, and the backup container takes a base backup each night beside the dump, so the database can go back to any moment in the last 7 days (ADR 0064; [deploy.md](deploy.md#restore-to-a-point-in-time)). The Upgrade Centre doesn't restart Postgres or the backup container: after upgrading, run `pc up -d postgres backup` once. Postgres restarts with archiving on (a few seconds without the database), then the backup container takes the first base backup and tests a replay. Until then Admin → Status says "Backups need a look" and why. It needs disk for 7 base backups, each about the size of the database, beside the dumps.
 
 ### SDK 2: the shell stops serving Lit

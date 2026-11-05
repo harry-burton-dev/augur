@@ -40,6 +40,9 @@ export interface AppManifestEntry {
     menu?: AppMenuCategory[];
     // (undocumented)
     name: string;
+    notifications?: {
+        kinds: NotificationKind[];
+    };
     orbit?: boolean;
     previews?: FeaturePreview[];
     previewsOn?: string[];
@@ -424,10 +427,18 @@ export interface NotificationAction {
 }
 
 // @public
+export interface NotificationKind {
+    detail?: string;
+    id: string;
+    label: string;
+}
+
+// @public
 export interface NotifyMessage {
     actions?: NotificationAction[];
     // (undocumented)
     body?: string;
+    kind?: string;
     needsYou?: boolean;
     // (undocumented)
     title: string;
