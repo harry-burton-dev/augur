@@ -81,7 +81,6 @@ import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts'
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
 import {
-  MemoryAppStore,
   RouteTakenError,
   UnknownVersionError,
   type AppRecord,
@@ -98,7 +97,7 @@ export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
 
 export interface RegistryOptions {
-  store?: AppStore;
+  store: AppStore;
   /** Checks apps' and platform services' own sign-in tokens. Without it only admins can change the catalogue. */
   verifyService?: ServiceVerifier;
   /** Where changes to the catalogue are recorded, with the floor a change is about. Without it nothing is audited. */
@@ -199,7 +198,7 @@ const RULE_ACTIONS: Record<FloorRule['state'] | 'inherit', string> = { on: 'app.
  * registers itself, and each person is shown only the apps their roles allow.
  */
 export const buildApp = async ({
-  store = new MemoryAppStore(),
+  store,
   verifyService,
   audit,
   floors,
@@ -217,7 +216,7 @@ export const buildApp = async ({
   alerts = {},
   timeZone = 'UTC',
   now = () => new Date(),
-}: RegistryOptions = {}) => {
+}: RegistryOptions) => {
   const isPillar = (id: string) => pillars.includes(id);
   /** The apps the app runner installed from the signed app feed, whose kind is honoured too. */
   const feedApps = async () => new Set((await store.installedApps()).map((i) => i.app));
