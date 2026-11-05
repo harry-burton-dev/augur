@@ -456,6 +456,30 @@ describe.runIf(DATABASE_URL)('events', () => {
       controller.abort();
     });
 
+    it('checks the grant on each floor the events name, whatever floor the call names', async () => {
+      const app = (open = await db.app({ verifyService, floors, grants: async (_, workspace) => (workspace === 'w-legal' ? ([] as const) : (['events:publish'] as const)) }));
+      const publish = (headers: Record<string, string>, events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers, payload: { events } });
+      const blocked = await publish({ ...as('folio'), 'x-workspace-id': 'w-finance' }, [published('d1', 'w-finance'), published('d2', 'w-legal')]);
+      expect([blocked.statusCode, blocked.json().message]).toEqual([400, 'folio isn’t granted events:publish on that floor.']);
+      expect((await publish(as('folio'), [published('d3', 'w-legal')])).statusCode).toBe(403);
+      expect((await publish(platform, [{ topic: 'platform.team.renamed', id: 'p1', payload: {}, workspace: 'w-legal' }])).statusCode).toBe(202);
+      expect((await publish(as('folio'), [published('d4', 'w-finance'), published('d5')])).json()).toEqual({ added: 2, repeated: 0 });
+      // None of a refused batch is kept.
+      await expect.poll(async () => (await db.store.readEvents({ topics: ['folio.*'], limit: 10 })).map((e) => e.id)).toEqual(['d4', 'd5']);
+      const down = await db.app({ verifyService, floors, grants: async (_, workspace) => (workspace ? Promise.reject(new GrantsUnavailable('down')) : (['events:publish'] as const)) });
+      expect((await down.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('d6', 'w-finance')] } })).statusCode).toBe(503);
+      await down.close();
+    });
+
+    it('ends a browser stream after its lifetime, so the browser comes back through the gateway’s checks', async () => {
+      const app = (open = await db.app({ verifyService, grants, floors, streamLifetimeMs: 50 }));
+      const url = await app.listen({ port: 0, host: '127.0.0.1' });
+      const onFinance = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });
+      const res = await fetch(`${url}/v1/domain-events/stream?topics=folio.*`, { headers: onFinance });
+      // Reading to the end only finishes because the service ended it.
+      expect(await res.text()).toContain(': connected');
+    });
+
     it('opens a browser stream only for someone signed in, on a floor, following real topics', async () => {
       const app = (open = await db.app({ verifyService, grants, floors }));
       const onFinance = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });

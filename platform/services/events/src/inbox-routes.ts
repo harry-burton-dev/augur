@@ -55,7 +55,7 @@ export const releaseLeaver = async (store: EventStore, person: string, team?: st
     const page = await inbox.list({ person, teams: [], tab: 'you', before, limit: PAGE });
     for (const item of page) {
       if (item.owner.kind !== 'team' || item.takenBy !== person || (team && item.owner.id !== team)) continue;
-      const r = await inbox.act(item.id, { action: 'released', by: person });
+      const r = await inbox.act(item.id, { action: 'released', by: person }, item);
       if (!('item' in r)) continue;
       released++;
       await store.appendAudit(
@@ -149,6 +149,7 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
   const notThere = (reply: FastifyReply, r: Exclude<StepResult, { item: InboxItem }>) => {
     if ('missing' in r) return reply.code(404).send({ error: 'not_found', message: 'There is no such item.' });
     if ('closed' in r) return reply.code(409).send({ error: 'conflict', message: `This was already closed (${r.closed.state}).` });
+    if ('changed' in r) return reply.code(409).send({ error: 'conflict', message: 'This changed a moment ago. Look at it again before you act on it.' });
     return reply.code(409).send({ error: 'conflict', message: 'Someone took this a moment ago.', takenBy: r.takenBy });
   };
 
@@ -432,7 +433,7 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
             step = { action: 'done', by: caller.id };
           }
         }
-        const r = await inbox.act(item.id, step);
+        const r = await inbox.act(item.id, step, item);
         if (!('item' in r)) return notThere(reply, r);
         await told(r.item, r.step, action, caller.id, step.action === 'handed-on' ? { to: ownerPrincipal(step.to) } : {});
         return shown(r.item);

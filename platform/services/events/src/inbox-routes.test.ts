@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callerHeaders, serviceHeaders, type FloorPlace, type Scope } from '@augur/service-kit';
 import type { buildApp } from './app.ts';
 import { DATABASE_URL, eventsDb } from './db.testing.ts';
@@ -114,6 +114,18 @@ describe.runIf(DATABASE_URL)('the inbox', () => {
       ['platform.inbox.taken', 'events', { item: id, app: 'mandate', key: 't', by: 'u-sam' }, 'w-finance'],
       ['platform.inbox.released', 'events', { item: id, app: 'mandate', key: 't', by: 'u-sam' }, 'w-finance'],
     ]);
+  });
+
+  it('answers 409 when someone’s take commits between the check on a step and the step', async () => {
+    const { store, put, act } = await setUp();
+    const { id } = (await put('t', forFinance)).json();
+    const before = await store.inbox.get(id);
+    await act(id, 'take', sam);
+    // Nora's read of the item happened just before Sam's take.
+    vi.spyOn(store.inbox, 'get').mockResolvedValueOnce(before);
+    const late = await act(id, 'decline', nora, { note: 'No' });
+    expect([late.statusCode, late.json().takenBy]).toEqual([409, 'u-sam']);
+    expect(await store.inbox.get(id)).toMatchObject({ takenBy: 'u-sam', state: 'open' });
   });
 
   it('shows a leads-only item whole to a lead on the team, and only that it’s there to other members', async () => {
