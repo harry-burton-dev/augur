@@ -6,9 +6,10 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { parse, stringify } from 'yaml';
+import { AUGUR_HOME } from './repo.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
-const REPO = 'harry-burton-dev/augur';
+const REPO = AUGUR_HOME;
 const SOURCE = `https://github.com/${REPO}/tree/main`;
 const OWNER = 'group:default/augur-core';
 const HEADER = '# Written by `pnpm catalog` from the repository (docs/catalog.md). Don\'t edit it by hand.\n';
