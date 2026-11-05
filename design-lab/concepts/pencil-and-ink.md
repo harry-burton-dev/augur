@@ -28,3 +28,5 @@ In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): an agent may
 Used in [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analysts-bench/): the model's explanation arrives as an empty column that only people mark (explanations V6, grammar V6).
 
 In [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotated-game/): the records' account is by template; the model only drafts lines in pencil and never marks (marking V6, voices V2).
+
+In [`2026-11-05-the-type-specimen`](../runs/2026-11-05-the-type-specimen/) (data track): a model's guess is a Triage item, never an entity or a link; identity V4 made the guess a node and counted it (8 instead of 7).

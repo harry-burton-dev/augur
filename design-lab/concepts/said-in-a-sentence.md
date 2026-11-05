@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-catalogue`](../runs/2026-11-03-the-catalogue/) 
 Also used in [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-reference-desk/): ask by example loosens a record's sentence, and the answer comes back in the same sentence.
 
 Could steer: The reference desk (I), the briefing (M), the index (P), search and the command palette.
+
+On the writing track, in [`2026-11-05-the-safety-card`](../runs/2026-11-05-the-safety-card/): every note's heading is a sentence with a verb, and the consequence goes in it ("Don't skip the release that comes with the repository's new name"). The reader test showed no speed gain from sentence headings alone (card per note).
