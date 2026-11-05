@@ -35,6 +35,7 @@ import {
   floorFromPath,
   floorHref,
   fromServer,
+  isQuiet,
   AppSearch,
   HOME_CHANNEL,
   InboxClient,
@@ -132,6 +133,13 @@ export const alphaFunctions = defaultFunctions
   .filter((f) => f.id !== 'settings')
   .map((f) => (f.id === 'agents' ? { ...f, id: AGENTS_UNAVAILABLE } : f.id === 'account' ? { ...f, id: ACCOUNT_AREA } : f));
 /** For an app's developers: its pull requests' previews, to switch to for themselves. */
+/** The stream again after the person changed which kinds are quiet: each notification from the events service marked as its kind now is. */
+const requieted = (list: ShellNotification[], known: ReadonlyMap<string, ServerNotification>, quiet: readonly string[]) =>
+  list.map((n) => {
+    const server = known.get(n.id);
+    const q = !!server && isQuiet(server, quiet);
+    return q === !!n.quiet ? n : { ...n, quiet: q };
+  });
 /** Pinned apps first, in their order, then the few opened most recently. */
 const keptClose = (pinned: string[] = [], recent: string[] = []) => [...new Set([...pinned, ...recent.slice(0, 6)])];
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
@@ -210,6 +218,8 @@ export function Host({
   const [switching, setSwitching] = useState(false);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
+  /** The kinds of notification the person made quiet, as "<app>:<kind>", read as each one arrives. */
+  const quietRef = useRef<string[]>([]);
   /** What each notification's buttons raise; the Shell only has their labels. */
   const actions = useRef(new NotificationActions());
   /** An action pressed on a notification from another floor: raised once that floor's catalogue has loaded. */
@@ -264,6 +274,7 @@ export function Host({
       shell.away = !!now.away;
       shell.muted = now.muted ?? [];
       if (key === 'recent' || key === 'pinned') shell.recent = keptClose(now.pinned, key === 'recent' ? [] : shell.recent);
+      if (key === 'quietKinds') shell.notifications = requieted(shell.notifications, fromEvents.current, (quietRef.current = now.quietKinds ?? []));
     },
     [prefs],
   );
@@ -820,12 +831,12 @@ export function Host({
           actions.current.remember(n.id, n.actions);
         });
         const local = shell.notifications.filter((n) => !known.has(n.id));
-        shell.notifications = [...list.map(fromServer), ...local];
+        shell.notifications = [...list.map((n) => fromServer(n, quietRef.current)), ...local];
       },
       onNotification: (n) => {
         known.set(n.id, n);
         actions.current.remember(n.id, n.actions);
-        tell(fromServer(n));
+        tell(fromServer(n, quietRef.current));
       },
       onState: (state) => shell.setStream(state),
       onInbox: () => {
@@ -870,6 +881,7 @@ export function Host({
       shell.away = !!now.away;
       shell.muted = p.muted ?? [];
       shell.recent = keptClose(now.pinned, [...shell.recent, ...(p.recent ?? [])]);
+      shell.notifications = requieted(shell.notifications, fromEvents.current, (quietRef.current = now.quietKinds ?? []));
       // Arriving at the front door opens the floor they chose to start on, when it's still one of theirs.
       const { floors, own } = startFrom.current;
       const start = now.startFloor ? floors.find((f) => f.id === now.startFloor) : undefined;
@@ -1083,7 +1095,7 @@ export function Host({
           onPreference={choose}
           onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
           onSignOut={() => void session.signOut()}
-          apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name }))}
+          apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}
           floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
           ownFloor={home.id}
           appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}

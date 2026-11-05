@@ -120,6 +120,8 @@ export interface AppNotice {
   link?: string;
   actions?: NotificationAction[];
   level?: NotificationLevel;
+  /** One of the app's `notifications.kinds`, so people can choose how it reaches them. */
+  kind?: string;
 }
 
 export type AppNotify = (notice: AppNotice) => Promise<void>;

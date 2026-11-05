@@ -231,6 +231,13 @@ export const Preferences = Type.Object(
         description: 'App ids whose notifications land in the stream silently and never on Home',
       }),
     ),
+    quietKinds: Type.Optional(
+      Type.Array(Type.String({ pattern: '^[a-z][a-z0-9-]{1,39}:[a-z][a-z0-9-]{0,39}$' }), {
+        maxItems: 200,
+        uniqueItems: true,
+        description: 'Kinds of notification, as "<app>:<kind>", that land in the stream silently and never on Home or as a toast',
+      }),
+    ),
     pinned: Type.Optional(
       Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
         maxItems: 12,
