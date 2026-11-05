@@ -64,19 +64,19 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 ### The deployment watches itself
 
-**From** unreleased
+**From** augur@0.19.0
 
 otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72 hours and runs AUGUR's alert rules ([observability.md](observability.md#alerts)). Its alerts reach deployment admins as notices through the registry, with `ALERT_WEBHOOK_TOKEN`: the updater makes it up when you upgrade from the Upgrade Centre; by hand, add it to `.env` (`openssl rand -hex 32`) before `pc up -d`. Set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`) too, to sign in to Grafana. It takes up to 2 GB of memory (`OTEL_LGTM_MEM_LIMIT`); a server with its own collector sets `OTEL_EXPORTER_OTLP_ENDPOINT` to it and `OTEL_LGTM_REPLICAS=0`. The `observability` profile does nothing now and can come out of `COMPOSE_PROFILES`. The registry's report to Backstage now goes every 15 minutes.
 
 ### Email through your relay (optional)
 
-**From** unreleased
+**From** augur@0.19.0
 
 AUGUR can now send email through the organisation's SMTP relay: password resets and address checks from the sign-in pages. Nothing changes until you add `SMTP_HOST` and `SMTP_FROM` (and `SMTP_USER` and `SMTP_PASSWORD` if the relay wants a sign-in) to `.env` and run `pc up -d`; see [Email](deploy.md#email). `pc logs keycloak-config` then says the relay is set.
 
 ### Mandate ships with AUGUR
 
-**From** unreleased
+**From** augur@0.19.0
 
 Mandate, intent passed down the floors, now ships with every release like Artifacts, Explorer and Data Atlas: a new container, `mandate`, at the release `release/shipped-apps.json` pins. Admin → Apps no longer lists it as something to install, and it's upgraded with AUGUR from now on.
 
@@ -88,13 +88,13 @@ Going back to a release before this one: Mandate's data stays in the database, a
 
 ### Settings the guides named now reach their services
 
-**From** unreleased
+**From** augur@0.19.0
 
 Some settings the guides told you to put in `.env` never reached the service that reads them: `FEED_SIGNER`, `IMAGE_SIGNER`, `AUGUR_DEV_SIGNER`, `DOMAIN_EVENTS_KEEP_DAYS`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`. From this release compose passes them, with `MODEL_TIMEOUT_SECONDS`, `IMAGE_SIGNER_ISSUER` and `CALLER_SIGNING_KEY`. Nothing to do unless one is already in your `.env`: it takes effect at the upgrade, so check it says what you want. Every setting is now described in `infra/deploy/settings.schema.json` ([deploy.md](deploy.md#settings-and-secrets)).
 
 ### AUGUR's sign-in pages and emails
 
-**From** unreleased
+**From** augur@0.19.0
 
 Keycloak now runs from AUGUR's own image (`ghcr.io/harry-burton-dev/im-platform/keycloak`, tagged and signed like the others) instead of Keycloak's, with the same Keycloak version and AUGUR's sign-in and email theme (ADR 0041). The realm job turns the theme on. Nothing to do: the pages show `ORG_NAME`, as identity does. Optional, in `.env`: `ORG_LOGO_URL` for a logo on the sign-in pages, and `REALM_LANGUAGES` (say `en,de,fr`) to offer more languages than English (docs/deploy.md, "What's in it"). Going back to a release before this one puts Keycloak's own image back: sign-in shows Keycloak's own look again, and Keycloak's log says it can't find the `augur` theme each time a page is shown, which is harmless.
 
@@ -132,7 +132,7 @@ pc up -d --remove-orphans
 
 ### Artifacts, Explorer and Data Atlas come from their own repositories
 
-**From** unreleased
+**From** augur@0.19.0
 
 Since augur@0.17.0, AUGUR no longer builds Artifacts, Explorer and Data Atlas itself. Each one is released in its own repository (`augur-folio`, `augur-auspex`, `augur-atlas`), and AUGUR's release takes the release `release/shipped-apps.json` pins, checks that repository signed it, and signs it again as AUGUR's ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)). Nothing changes on the server: the images keep their names under `PLATFORM_IMAGES`, they still come with each AUGUR release, and the apps keep their tables and buckets. An app the app runner installs (Mandate) moves the same way, and the updater takes a backup before its first release from the new repository (docs/ship-an-app.md, "An app in its own repository").
 
