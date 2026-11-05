@@ -65,7 +65,7 @@ The API is `PUT`, `PATCH` and `GET /v1/inbox/items/{app}/{key}` in [contracts/ev
 
 ## What people do
 
-In the shell's Inbox people take a team item (it becomes theirs, and the team sees who took it), give it back, decline it (saying why), hand it on to someone else or another team, mark it done where the app lets them, or open it. Opening raises the item's `open` intent or opens the app at its `path`, exactly as a notification's action does: the work happens in the app, and the app's service closes the item.
+The Inbox is a function beside Find; its label carries the count ("Inbox 3", "Inbox 99+") of items on the person and untaken items for their teams. It has three tabs: **For you** (overdue first, then newest), **Your teams** and **Done** (the last 30 days). Home lists up to five open items for its floor above the notifications that need you, then "{n} more in your Inbox". In the shell's Inbox people take a team item (it becomes theirs, and the team sees who took it), give it back, decline it (saying why), hand it on to someone else or another team, mark it done where the app lets them, or open it. Opening raises the item's `open` intent or opens the app at its `path`, exactly as a notification's action does: the work happens in the app, and the app's service closes the item.
 
 A team item is for everyone on the team until one of them takes it. Of two people taking it at once, one gets it and the other is told who did. A leads-only item is shown whole to a lead standing on the team; anyone else on the team sees that it's there and that it's for the leads, but not what it is.
 
