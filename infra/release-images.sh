@@ -39,8 +39,9 @@ fi
 
 # What is inside an image and how it was built, signed beside its signature (PER-270): BuildKit writes a
 # Syft SBOM (SPDX) and SLSA provenance into every image it pushes (--sbom, --provenance), and cosign attests
-# both keylessly as this workflow, so `cosign verify-attestation --type spdxjson|slsaprovenance` checks
-# them with the same identity as the image. attest <ref> [required|optional]: an image copied from an
+# both keylessly as this workflow, so `cosign verify-attestation --type spdxjson|slsaprovenance1` checks
+# them with the same identity as the image. BuildKit writes SLSA v1 provenance (buildDefinition); an older
+# one wrote v0.2 (builder), so the type follows what the predicate holds. attest <ref> [required|optional]: an image copied from an
 # app's release carries what that release's build wrote; one without says so and goes on.
 attest() {
   local ref=$1 need=${2:-required} dir sbom provenance
@@ -57,7 +58,11 @@ attest() {
     printf '%s' "$value" > "$dir/$kind.json"
   done
   if [ -s "$dir/sbom.json" ]; then cosign attest --yes --type spdxjson --predicate "$dir/sbom.json" "$ref" >&2; fi
-  if [ -s "$dir/provenance.json" ]; then cosign attest --yes --type slsaprovenance --predicate "$dir/provenance.json" "$ref" >&2; fi
+  if [ -s "$dir/provenance.json" ]; then
+    local slsa=slsaprovenance
+    if jq -e 'has("buildDefinition")' "$dir/provenance.json" >/dev/null; then slsa=slsaprovenance1; fi
+    cosign attest --yes --type "$slsa" --predicate "$dir/provenance.json" "$ref" >&2
+  fi
   rm -rf "$dir"
 }
 

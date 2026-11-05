@@ -54,7 +54,8 @@ const notesFor = (version) =>
 /**
  * What is inside the service image and how it was built, signed beside its signature: BuildKit writes a
  * Syft SBOM (SPDX) and SLSA provenance into the image (--sbom, --provenance), and cosign attests both
- * keylessly as this workflow, as AUGUR's own release does (PER-270).
+ * keylessly as this workflow, as AUGUR's own release does (PER-270). Provenance is SLSA v1
+ * (buildDefinition) from current BuildKit and v0.2 (builder) from older ones; the type follows it.
  */
 const attest = (ref, out) => {
   for (const [kind, field, type] of [['sbom', '.SBOM.SPDX', 'spdxjson'], ['provenance', '.Provenance.SLSA', 'slsaprovenance']]) {
@@ -62,7 +63,8 @@ const attest = (ref, out) => {
     if (!value || value === 'null') throw new Error(`${ref} has no ${kind}: build it with --sbom=true --provenance=true.`);
     const file = join(out, `${kind}.json`);
     writeFileSync(file, value);
-    run('cosign', ['attest', '--yes', '--type', type, '--predicate', file, ref], { stdio: ['ignore', 2, 2] });
+    const as = kind === 'provenance' && 'buildDefinition' in JSON.parse(value) ? 'slsaprovenance1' : type;
+    run('cosign', ['attest', '--yes', '--type', as, '--predicate', file, ref], { stdio: ['ignore', 2, 2] });
   }
 };
 

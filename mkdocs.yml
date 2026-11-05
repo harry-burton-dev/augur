@@ -1,7 +1,7 @@
 # Written by `pnpm catalog` from the repository (docs/catalog.md). Don't edit it by hand.
 site_name: AUGUR
 docs_dir: docs
-repo_url: https://github.com/harry-burton-dev/im-platform
+repo_url: https://github.com/harry-burton-dev/augur
 edit_uri: edit/dev/docs/
 plugins:
   - techdocs-core
@@ -94,4 +94,5 @@ nav:
       - 0057. The realm is kept as code and applied by identity's realm job, which alone holds Keycloak's admin: decisions/0057-realm-as-code-applied-by-identitys-realm-job.md
       - 0058. Quill's Editor is built on Tiptap, and keeps writing the same small Markdown: decisions/0058-editor-on-tiptap.md
       - 0059. A deployment watches itself with Grafana alerting as files and Faro in the shell, and Backstage watches for silence: decisions/0059-grafana-alerting-and-faro.md
+      - 0060. Backups are copied off the server with restic, encrypted on the server, to a bucket each deployment names: decisions/0060-off-server-backups-with-restic.md
       - 0063. Accessibility is checked by axe in CI, failing on serious findings: decisions/0063-accessibility-checked-by-axe.md

@@ -414,3 +414,25 @@ jobs:
             postgres:16-alpine /bin/sh /backup/backup.sh --restore-test
           cat /tmp/backups/restore-test.json
           grep -q '"ok":true' /tmp/backups/restore-test.json
+      - name: The off-server copy is made with restic, and the restore test restores from it
+        run: |
+          # restic, as the backup-tools container hands it over; a local folder stands in for the bucket.
+          mkdir -p /tmp/tools /tmp/offsite
+          docker run --rm -v /tmp/tools:/tools --entrypoint sh "$(sed -n 's/^ *image: \(restic\/restic:.*\)$/\1/p' infra/deploy/compose.yml)" \
+            -c 'cp /usr/bin/restic /tools/restic.new && mv /tools/restic.new /tools/restic'
+          offsite() {
+            docker run --rm -e RESTIC_REPOSITORY=/offsite/repo -e RESTIC_PASSWORD="$1" \
+              -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro \
+              postgres:16-alpine /bin/sh /backup/backup.sh "${@:2}"
+          }
+          offsite ci --offsite
+          grep -q '"ok":true' /tmp/backups/offsite.json
+          # Restored from the copy alone: the local dumps are put aside first.
+          mkdir -p /tmp/aside && sudo mv /tmp/backups/platform-*.sql.gz /tmp/aside/
+          offsite ci --restore-test --offsite
+          cat /tmp/backups/restore-test.json
+          grep -q '"from":"offsite".*"ok":true' /tmp/backups/restore-test.json
+          # The wrong password is said in words, and the local backups are left alone.
+          sudo mv /tmp/aside/* /tmp/backups/
+          ! offsite wrong --offsite
+          grep -q '"ok":false.*wrong password' /tmp/backups/offsite.json

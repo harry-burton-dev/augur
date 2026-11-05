@@ -3,3 +3,13 @@
 # id = "GHSA-xxxx-xxxx-xxxx"
 # ignoreUntil = 2026-12-01
 # reason = "Only reachable from the dev server, never in a release."
+
+# minimatch 5.1.9 (ReDoS in glob patterns) comes in through openapi-typescript's @redocly/openapi-core,
+# which @augur/clients runs at build time only. It matches URLs against patterns from a Redocly config,
+# and the build passes none, so no pattern reaches it; nothing ships it. No 5.x release is patched, and
+# minimatch 10 can't stand in (openapi-core calls the module itself). Look again when openapi-typescript
+# moves to @redocly/openapi-core 2.
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-01
+reason = "minimatch 5.1.9 through @redocly/openapi-core: build-time code generation for @augur/clients only, with no glob patterns given; never in a release."

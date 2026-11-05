@@ -81,7 +81,7 @@ export const haltOf = (x: unknown): Halt | undefined => {
 };
 
 /** This repo's GitHub releases: the feed every deployment reads unless RELEASE_FEED_URL points at a mirror. */
-export const DEFAULT_FEED_URL = 'https://api.github.com/repos/harry-burton-dev/im-platform/releases?per_page=100';
+export const DEFAULT_FEED_URL = 'https://api.github.com/repos/harry-burton-dev/augur/releases?per_page=100';
 
 /**
  * The same releases, and apps' releases, as one file the Release workflow pushes to GitHub's container

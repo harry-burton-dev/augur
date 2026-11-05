@@ -23,7 +23,7 @@ The server doesn't need Tailscale installed itself. The `tailscale` container jo
 ## First start
 
 ```sh
-git clone https://github.com/harry-burton-dev/im-platform.git platform && cd platform
+git clone https://github.com/harry-burton-dev/augur.git platform && cd platform
 git checkout augur@0.1.1        # the release you'll run: the newest augur@ under Releases
 cp infra/deploy/.env.example infra/deploy/.env
 ```
@@ -89,7 +89,44 @@ The `backup` container dumps the whole database every night at 02:00 UTC into `i
 
 Once a week (Sunday, after the backup; `RESTORE_TEST_WEEKDAY` changes the day) it also **tests a restore**: it loads the newest backup into a throwaway database inside the backup container, checks the platform's tables and Keycloak's people came back, then throws it away. The live database is never touched. It runs once on first start too. **Admin → Status** shows the last backup and the last restore test, and its heading says "Backups need a look" when the last backup failed or is over a day old, or the last restore test failed or is over a week old.
 
-The backups sit on the same disk as the database, so copy `infra/deploy/backups/` somewhere else now and then (another machine, or cloud storage).
+The backups sit on the same disk as the database, so a lost server loses them too. The **off-server copy** below fixes that; until it's set up, Admin → Status says backups are kept on this server only.
+
+### Off-server copy
+
+Once it's set up, each night's dump and apps' files are also copied to a bucket the deployment names, with [restic](https://restic.net) (ADR 0060). restic encrypts everything on the server before it leaves, keeps 30 days of copies (`OFFSITE_KEEP_DAILY`), and sends only what changed since the night before. The weekly restore test then restores the newest dump **from the bucket**, so it proves the copy, not only the file on this disk. Admin → Status shows the last copy and where the last restore came from, and says "Backups need a look" when a copy failed or is over a day old.
+
+Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, MinIO, a second Garage, or the organisation's own object store). Where the bucket lives is this deployment's choice about where its data may be kept: write it down with the deployment's other settings.
+
+1. **Make a bucket** for this deployment, with **versioning on** and a lifecycle rule that deletes noncurrent versions after, say, 60 days.
+2. **Make a key that can add but not erase.** restic needs to read, list, write and delete objects in its bucket (it tidies its own locks and old copies). Give the key exactly those on that one bucket, and nothing else: not `s3:DeleteObjectVersion`, not `s3:PutBucket*` or `s3:PutLifecycleConfiguration`. With versioning on, a delete only hides an object, so someone who takes over the server can hide copies but not erase them; the lifecycle rule erases them later. On AWS that policy is:
+   ```json
+   { "Version": "2012-10-17", "Statement": [
+     { "Effect": "Allow", "Action": ["s3:ListBucket", "s3:GetBucketLocation"], "Resource": "arn:aws:s3:::augur-backups" },
+     { "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": "arn:aws:s3:::augur-backups/*" } ] }
+   ```
+3. **Make the encryption password** (`openssl rand -hex 32`) and **keep a copy off the server** (a password manager): without it nobody, you included, can read the copies.
+4. **Set it in `.env`**, then `pc up -d backup`:
+   ```sh
+   OFFSITE_REPOSITORY=s3:https://s3.eu-west-2.amazonaws.com/augur-backups/<this deployment>
+   OFFSITE_PASSWORD=<the password>
+   OFFSITE_ACCESS_KEY_ID=<the key's id>
+   OFFSITE_SECRET_ACCESS_KEY=<the key's secret>
+   OFFSITE_REGION=eu-west-2   # if the provider wants one
+   ```
+   The backup container makes the repository on first use, copies today's backup straight away, and restores it from the bucket once to prove it. `pc logs backup` shows each step; `infra/deploy/backups/offsite.json` and `restore-test.json` hold the results.
+
+- **Copy now**: `pc exec backup /bin/sh /backup/backup.sh --offsite`.
+- **Test a restore from the bucket now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test --offsite`.
+- **List the copies**: `pc exec backup /tools/restic snapshots`.
+- **Restore from the bucket** (the server's own backups are gone): on the new server, set the same `OFFSITE_*` in `.env`, start Postgres and the backup container, fetch the newest copy into `infra/deploy/backups/`, then restore it as above:
+  ```sh
+  pc up -d postgres backup
+  pc exec backup /tools/restic restore latest --host augur --tag augur-db --target /backups/from-offsite
+  # The dump is in infra/deploy/backups/from-offsite/backups/; load it as in "Restore" above.
+  pc exec backup /tools/restic restore latest --host augur --tag augur-files --target /backups/from-offsite
+  # Apps' files are in .../from-offsite/objects/{data,meta}: copy them into Garage's volumes as in
+  # "Restore apps' files" above, in place of unpacking the archive.
+  ```
 
 - **Take one now**: `pc exec backup /bin/sh /backup/backup.sh --once` (it skips a day that already has one; delete today's file first to force it).
 - **Test a restore now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test`. The result is in `infra/deploy/backups/restore-test.json`.
