@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { runMigrations, type Migration } from '@augur/service-kit';
-import { organisationMigrations } from './organisation.ts';
+import { organisationIdleMigrations, organisationMigrations } from './organisation.ts';
 import { signInMigrations } from './sign-ins.ts';
 import { lifecycleMigrations } from './lifecycle.ts';
 import { reconcileMigrations } from './reconcile.ts';
@@ -102,6 +102,7 @@ export const migrations: Migration[] = [
   ...signInMigrations,
   ...lifecycleMigrations,
   ...reconcileMigrations,
+  ...organisationIdleMigrations,
 ];
 
 export class PgPreferenceStore implements PreferenceStore {

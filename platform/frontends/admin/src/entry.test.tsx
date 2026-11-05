@@ -8,7 +8,7 @@ import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kind
 import { headline, stateOf } from './status.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
 import { placeOf, portalLink } from './line.js';
-import { changesFrom, orgNameCheck, zoneLabel } from './organisation.js';
+import { changesFrom, daysCheck, orgNameCheck, zoneLabel } from './organisation.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -295,13 +295,18 @@ describe('Departments', () => {
 });
 
 describe('Organisation', () => {
-  const org = { name: 'Northwind', timeZone: 'UTC', sender: { name: 'Northwind' } };
+  const org = { name: 'Northwind', timeZone: 'UTC', sender: { name: 'Northwind' }, idle: { on: true, warningDays: 60, turnOffDays: 90 } };
 
   it('sends only what changed, and takes a sender address away when it’s emptied', () => {
     expect(changesFrom(org, { name: ' Northwind ', timeZone: 'UTC', senderName: 'Northwind', senderAddress: '' })).toEqual({});
     expect(changesFrom(org, { name: 'Northwind Trading', timeZone: 'Europe/London', senderName: 'Northwind', senderAddress: '' })).toEqual({ name: 'Northwind Trading', timeZone: 'Europe/London' });
     expect(changesFrom(org, { senderAddress: 'augur@northwind.example' })).toEqual({ sender: { name: 'Northwind', address: 'augur@northwind.example' } });
     expect(changesFrom({ ...org, sender: { name: 'Northwind', address: 'a@b.example' } }, { senderAddress: '' })).toEqual({ sender: { name: 'Northwind', address: null } });
+    expect(changesFrom(org, { idleOn: 'on', warningDays: '60', turnOffDays: '120' })).toEqual({ idle: { turnOffDays: 120 } });
+    expect(changesFrom(org, { idleOn: 'off', warningDays: '60', turnOffDays: '90' })).toEqual({ idle: { on: false } });
+    expect(daysCheck(7, 723)('3')?.state).toBe('error');
+    expect(daysCheck(7, 723)('6.5')?.state).toBe('error');
+    expect(daysCheck(7, 723)('60')).toBeNull();
     expect(orgNameCheck('North/wind')?.state).toBe('error');
     expect(orgNameCheck('Northwind')).toBeNull();
   });
@@ -395,6 +400,7 @@ describe('Activity', () => {
     expect(sentence(entry('app.blocked', { app: 'registry', target: 'library', detail: { workspace: 'd-1' } }), names)).toBe('Alex Rivera blocked Library for Finance and every team below it');
     expect(sentence(entry('organisation.changed', { target: 'organisation', detail: { from: { name: 'Old' }, to: { name: 'Northwind' } } }), names)).toBe('Alex Rivera renamed the organisation to Northwind');
     expect(sentence(entry('organisation.changed', { target: 'organisation', detail: { from: {}, to: { timeZone: 'Europe/London', sender: { name: 'N' } } } }), names)).toBe('Alex Rivera changed the organisation’s time zone and email sender');
+    expect(sentence(entry('organisation.changed', { target: 'organisation', detail: { from: {}, to: { idle: { on: false } } } }), names)).toBe('Alex Rivera changed the organisation’s idle-account days');
     expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
   });
 

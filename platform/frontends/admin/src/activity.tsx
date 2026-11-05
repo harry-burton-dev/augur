@@ -84,7 +84,7 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} renamed ${String(d.from)} to ${String(d.to)}`;
     case 'organisation.changed': {
       const to = (d.to ?? {}) as Record<string, unknown>;
-      const what = [to.name !== undefined ? 'name' : '', to.timeZone !== undefined ? 'time zone' : '', to.sender !== undefined ? 'email sender' : ''].filter(Boolean);
+      const what = [to.name !== undefined ? 'name' : '', to.timeZone !== undefined ? 'time zone' : '', to.sender !== undefined ? 'email sender' : '', to.idle !== undefined ? 'idle-account days' : ''].filter(Boolean);
       return to.name !== undefined && what.length === 1
         ? `${who} renamed the organisation to ${String(to.name)}`
         : `${who} changed the organisation’s ${what.length ? what.join(' and ') : 'settings'}`;
