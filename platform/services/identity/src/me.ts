@@ -39,8 +39,8 @@ export const PROFILE_FIELDS = ['firstName', 'lastName', 'email', 'jobTitle', 'ph
 export type ProfileField = (typeof PROFILE_FIELDS)[number];
 const FIELD_WORDS: Record<ProfileField, string> = { firstName: 'first name', lastName: 'last name', email: 'email address', jobTitle: 'job title', phone: 'phone', pronouns: 'pronouns', picture: 'picture', locale: 'language' };
 /** What a person changes here. The email address changes on Keycloak's screen, which checks it. */
-export type ProfileChanges = Partial<Pick<Profile, 'firstName' | 'lastName' | 'jobTitle' | 'phone' | 'pronouns' | 'picture'>>;
-const EDITABLE = ['firstName', 'lastName', 'jobTitle', 'phone', 'pronouns', 'picture'] as const satisfies readonly (keyof ProfileChanges)[];
+export type ProfileChanges = Partial<Pick<Profile, 'firstName' | 'lastName' | 'jobTitle' | 'phone' | 'pronouns' | 'picture' | 'locale'>>;
+const EDITABLE = ['firstName', 'lastName', 'jobTitle', 'phone', 'pronouns', 'picture', 'locale'] as const satisfies readonly (keyof ProfileChanges)[];
 /** The facts kept as user-profile attributes rather than Keycloak's own fields. */
 const ATTRIBUTES = ['jobTitle', 'phone', 'pronouns', 'picture', 'locale'] as const;
 
@@ -394,9 +394,19 @@ export const knownTimeZone = (zone: string) => {
   }
 };
 
+/** Whether `tag` is a language tag this runtime can write dates in. */
+export const knownRegion = (tag: string) => {
+  try {
+    return Intl.DateTimeFormat.supportedLocalesOf([tag]).length === 1;
+  } catch {
+    return false;
+  }
+};
+
 /** What's wrong with preferences the schema let through, or undefined. */
 export const preferencesProblem = (prefs: Prefs): string | undefined => {
   if (prefs.timeZone !== undefined && !knownTimeZone(prefs.timeZone)) return `“${prefs.timeZone}” isn’t a time zone. Use a name such as Europe/London.`;
+  if (prefs.dateFormat !== undefined && !knownRegion(prefs.dateFormat)) return `“${prefs.dateFormat}” isn’t a way of writing dates this server knows. Use a tag such as en-GB.`;
   const q = prefs.notifications?.quietHours;
   if (q && q.from === q.to) return 'Quiet hours need to start and end at different times.';
   return undefined;
@@ -422,6 +432,7 @@ export const AccountProfile = Type.Object(
     locale: opt(Type.String({ description: 'Their language (the user profile’s locale), which sign-in pages use too' })),
     managed: Type.Array(choice([...PROFILE_FIELDS]), { description: 'Fields their organisation’s sign-in sets at every sign-in, so they can’t be changed here' }),
     managedBy: opt(Type.String({ description: 'That sign-in’s name' })),
+    languages: opt(Type.Array(Type.String(), { description: 'The languages this deployment offers, the first its default (since 1.20)' })),
   },
   { $id: 'AccountProfile' },
 );
@@ -435,6 +446,7 @@ export const AccountProfileChanges = Type.Object(
     phone: opt(Type.String({ maxLength: 40, pattern: '^[+0-9 ()-]*$' })),
     pronouns: opt(text(40)),
     picture: opt(Type.String({ maxLength: 2048, description: 'A link, or empty to take it away' })),
+    locale: opt(Type.String({ maxLength: 35, description: 'One of `languages`, or empty for the deployment’s default (since 1.20)' })),
   },
   { $id: 'AccountProfileChanges', additionalProperties: false, minProperties: 1, description: 'Only what changes. An empty string takes a fact away. The email address changes through the email action.' },
 );
@@ -511,6 +523,8 @@ export interface MeOptions {
   tell?: (n: NewNotification) => Promise<void>;
   /** What another service keeps about a person, for their download, by the name of the service. */
   dataFrom?: Record<string, (person: string) => Promise<unknown>>;
+  /** The languages this deployment offers (REALM_LANGUAGES, as the realm job sets them), the first the default. */
+  languages?: string[];
 }
 
 /** Who acts on a request to leave: the people who run AUGUR (ADR 0040's leaver flow is theirs). */
@@ -529,7 +543,7 @@ const unavailable = 'Your account can’t be read right now: the sign-in service
 
 /** The /me/* routes beside /me itself: preferences, and the account. Registered under /v1, behind the signed-in check. */
 export const meRoutes =
-  ({ store, accounts, audit, tell, dataFrom = {} }: MeOptions) =>
+  ({ store, accounts, audit, tell, dataFrom = {}, languages = ['en'] }: MeOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const unauthenticated = refused('No signed-in caller');
@@ -591,7 +605,7 @@ export const meRoutes =
           response: { 200: { ...ref(AccountProfile), description: 'Their profile' }, 401: unauthenticated, 503: noAccounts },
         },
       },
-      async (req) => acct().profile(caller(req.headers).id),
+      async (req) => ({ ...(await acct().profile(caller(req.headers).id)), languages }),
     );
 
     app.patch(
@@ -614,7 +628,9 @@ export const meRoutes =
         const now = await acct().profile(id);
         const managed = (Object.keys(req.body) as ProfileField[]).find((k) => now.managed.includes(k) && req.body[k as keyof ProfileChanges] !== now[k]);
         if (managed) throw new DirectoryError(`${now.managedBy ?? 'Your organisation’s sign-in'} sets your ${FIELD_WORDS[managed]}, so it’s changed there.`, 409);
-        return acct().updateProfile(id, req.body);
+        const locale = req.body.locale?.trim();
+        if (locale && !languages.includes(locale)) throw new DirectoryError(`${locale} isn’t one of the languages offered here (${languages.join(', ')}). A deployment admin can offer more.`, 400);
+        return { ...(await acct().updateProfile(id, req.body)), languages };
       },
     );
 
