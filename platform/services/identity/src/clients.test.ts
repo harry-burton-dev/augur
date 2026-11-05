@@ -20,6 +20,19 @@ describe('apps’ sign-ins', () => {
     expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/Not_An_App/credential', headers: admin })).statusCode).toBe(400);
   });
 
+  it('refuses an id AUGUR keeps for itself, so no app signs in as a part of AUGUR', async () => {
+    const appClients = new MemoryAppClients();
+    const app = await buildApp({ appClients, verifyService: async () => ({ kind: 'platform' as const, name: 'updater' }) });
+    for (const id of ['registry', 'augur-notes']) {
+      const issued = await app.inject({ method: 'POST', url: `/v1/admin/apps/${id}/credential`, headers: admin });
+      expect(issued.statusCode).toBe(400);
+      expect(issued.json().message).toMatch(/kept for/);
+      const set = await app.inject({ method: 'PUT', url: `/v1/admin/apps/${id}/credential`, headers: { authorization: 'Bearer x' }, payload: { secret: 'a'.repeat(64) } });
+      expect(set.statusCode).toBe(400);
+    }
+    expect(appClients.secrets.size).toBe(0);
+  });
+
   it('lets only the app runner set an app’s sign-in to the secret it works out', async () => {
     const entries: unknown[] = [];
     const appClients = new MemoryAppClients();
