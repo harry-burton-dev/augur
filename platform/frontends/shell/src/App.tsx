@@ -1,4 +1,4 @@
-import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxCounts, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import {
   Button,
   CentreMenu,
@@ -40,6 +40,7 @@ import {
   HOME_CHANNEL,
   InboxClient,
   INBOX_MORE,
+  type ShellInboxCounts,
   inboxNeeds,
   itemOfNeed,
   withInbox,
@@ -211,7 +212,7 @@ export function Host({
   const pinned = chosen.pinned;
   /** The Inbox (ADR 0026): whether its view is open, the counts in its label, and Home's first items on this floor. */
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [inboxCounts, setInboxCounts] = useState<InboxCounts | undefined>(undefined);
+  const [inboxCounts, setInboxCounts] = useState<ShellInboxCounts | undefined>(undefined);
   const [inboxForHome, setInboxForHome] = useState<InboxItem[]>([]);
   /** Bumped when the stream says an item changed, so the view's tab loads again. */
   const [inboxVersion, setInboxVersion] = useState(0);

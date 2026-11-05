@@ -46,4 +46,5 @@ export {
   type InboxMenuEntry,
   type InboxTab,
   type InboxVerb,
+  type ShellInboxCounts,
 } from './inbox.js';
