@@ -13,6 +13,7 @@ import {
   identifyService,
   packageVersion,
   recordAudit,
+  ruleChain,
   SCOPES,
   ServiceAuthUnavailable,
   problemDetails,
@@ -315,7 +316,7 @@ export const buildApp = async ({
             // The limit the gateway holds requests to the app's service to (SDK 1.3), and the version's own copy of its code:
             // for a developer trying one of its pull requests, that build's. And the feature previews on for this person (SDK 1.7).
             .map((r) => {
-              const on = previewsOnFor(r, optIns, updates.ring, at);
+              const on = previewsOnFor(r, optIns, updates.ring, at, place ? ruleChain(place) : []);
               const served = servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept);
               // Live on the workbench: this developer's own machine's frontend, in place of any build.
               const from = live.of(caller?.id, r.entry.id);
@@ -646,7 +647,19 @@ export const buildApp = async ({
       const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
-      await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record }));
+      /** A floor's rule chain for feature previews targeted at floors: undefined for no such floor, null when floors can't be looked up. */
+      const chainOf = floors
+        ? async (workspace: string) => {
+            try {
+              const place = await floors(workspace);
+              return place && ruleChain(place);
+            } catch (err) {
+              if (!(err instanceof FloorsUnavailable)) throw err;
+              return null;
+            }
+          }
+        : undefined;
+      await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
       await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).

@@ -194,7 +194,10 @@ export const StoredFrontend = Type.Object(
   { $id: 'StoredFrontend' },
 );
 
-export const FeaturePreviewMode = Type.Enum(['off', 'opt-in', 'everyone'], { $id: 'FeaturePreviewMode' });
+export const FeaturePreviewMode = Type.Enum(['off', 'opt-in', 'everyone', 'floors'], {
+  $id: 'FeaturePreviewMode',
+  description: 'Who gets a feature preview: nobody, those who turn it on, everyone, or chosen floors and the floors beneath them',
+});
 
 export const ServerRing = Type.Enum(['dev', 'preview', 'production'], {
   $id: 'ServerRing',
@@ -212,6 +215,7 @@ export const FeaturePreviewsAdmin = Type.Object(
         Type.Object({
           mode: ref(FeaturePreviewMode),
           ended: Type.Boolean(),
+          floors: Type.Optional(Type.Array(Type.String(), { description: 'With mode floors: the floors it is on for' })),
           chosen: Type.Boolean({ description: "An admin chose its mode; false means the server's default" }),
           setBy: Type.Optional(Type.String()),
           setAt: Type.Optional(Type.String({ format: 'date-time' })),
