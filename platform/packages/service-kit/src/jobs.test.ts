@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createJobs, jobsSchemaFor, memoryJobs, type JobAuditEntry } from './jobs.js';
+import { createJobs, jobsSchemaFor, memoryJobs, prepareJobsSchema, type JobAuditEntry } from './jobs.js';
 
 const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 const until = async (check: () => Promise<boolean>, ms = 15_000) => {
@@ -167,5 +167,46 @@ describe.runIf(process.env.DATABASE_URL)('jobs on Postgres', () => {
   it('keeps its runs in the app’s own jobs schema', async () => {
     const { rows } = await admin.query('select 1 from information_schema.tables where table_schema = $1 and table_name = $2', [schema, 'workflow_status']);
     expect(rows).toHaveLength(1);
+  });
+});
+
+// A server's login, made as the storage service makes it: it owns its jobs schema but can't create schemas.
+describe.runIf(process.env.DATABASE_URL)('jobs with a login that cannot create schemas', () => {
+  const role = `kit_jobs_login_${process.pid}`;
+  const schema = jobsSchemaFor(`kit-login-${process.pid}`);
+  let admin: pg.Pool;
+  let url: string;
+
+  beforeAll(async () => {
+    admin = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    const { rows } = await admin.query<{ db: string }>('select current_database() as db');
+    await admin.query(`drop schema if exists ${schema} cascade`);
+    await admin.query(`do $$ begin if exists (select 1 from pg_roles where rolname = '${role}') then drop owned by ${role}; drop role ${role}; end if; end $$`);
+    await admin.query(`create role ${role} login nosuperuser nocreatedb nocreaterole noinherit password 'jobs'`);
+    await admin.query(`grant connect on database ${pg.escapeIdentifier(rows[0].db)} to ${role}`);
+    await admin.query(`create schema ${schema} authorization ${role}`);
+    const u = new URL(process.env.DATABASE_URL!);
+    u.username = role;
+    u.password = 'jobs';
+    url = u.toString();
+  });
+
+  afterAll(async () => {
+    await admin.query(`drop schema if exists ${schema} cascade`);
+    await admin.query(`drop owned by ${role}`);
+    await admin.query(`drop role if exists ${role}`);
+    await admin.end();
+  });
+
+  it('readies the schema storage made, so DBOS makes its tables in it', async () => {
+    const login = new pg.Pool({ connectionString: url });
+    await expect(login.query(`create schema if not exists ${schema}`)).rejects.toThrow(/permission denied/);
+    await prepareJobsSchema(url, schema);
+    await prepareJobsSchema(url, schema);
+    const { ensureSystemDatabase } = await import('@dbos-inc/dbos-sdk/internal/system_database');
+    await ensureSystemDatabase(url, { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never, login as never, schema);
+    const { rows } = await admin.query('select 1 from information_schema.tables where table_schema = $1 and table_name = $2', [schema, 'workflow_status']);
+    expect(rows).toHaveLength(1);
+    await login.end();
   });
 });
