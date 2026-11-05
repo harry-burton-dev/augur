@@ -13,6 +13,7 @@ import {
   WORKSPACE_HEADERS,
   type Caller,
   type GrantLookup,
+  type RequiredRoleLookup,
   type NewAuditEntry,
   type ServiceCredentials,
   type ServiceVerifier,
@@ -39,6 +40,8 @@ export interface ModelsOptions {
   verifyService?: ServiceVerifier;
   /** What an app is granted on a floor: it needs models:use to call the model. */
   grants?: GrantLookup;
+  /** The role an app's manifest says a person needs (registryRequiredRole): someone talking to an AI app's agent must have it. */
+  requiredRole?: RequiredRoleLookup;
   /**
    * Where every call and change is recorded, before it happens: a call that
    * can't be recorded isn't made. Without it nothing can be called.
@@ -72,7 +75,7 @@ type Asker = { app: string; actor: NewAuditEntry['actor']; workspace?: string };
  * call in the audit log before making it, and holds each app to a number of
  * calls a day. It is off until an admin turns it on.
  */
-export const buildApp = async ({ store = new MemoryModelStore(), provider, verifyService, grants, audit, now = () => new Date(), callers }: ModelsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryModelStore(), provider, verifyService, grants, requiredRole, audit, now = () => new Date(), callers }: ModelsOptions = {}) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -108,6 +111,24 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
         }
       };
 
+      /** Whether the person has the role an app needs, as the gateway holds the app's own API to it. Undefined when the reply has been sent. */
+      const hasRole = async (req: FastifyRequest, reply: FastifyReply, forApp: string, caller: Caller): Promise<boolean | undefined> => {
+        let role: string | null | undefined;
+        try {
+          if (!requiredRole) throw new GrantsUnavailable('The model gateway has no registry to check roles with.');
+          role = await requiredRole(forApp);
+          if (role === undefined) throw new GrantsUnavailable('The registry doesn’t say which role the app needs.');
+        } catch (err) {
+          if (!(err instanceof GrantsUnavailable)) throw err;
+          req.log.error({ err: err.message, app: forApp }, 'role check failed');
+          void reply.code(503).send({ error: 'unavailable', message: 'Whether you can use this app can’t be checked right now. Try again in a moment.' });
+          return undefined;
+        }
+        if (!role || caller.roles.includes(role)) return true;
+        void reply.code(403).send({ error: 'forbidden', message: `${forApp} needs the ${role} role, which an admin can give you.` });
+        return false;
+      };
+
       /**
        * An app's service, by its own token, for itself; or a person through the
        * gateway, talking to `agent`: the shell's own, or an AI app's.
@@ -137,6 +158,7 @@ export const buildApp = async ({ store = new MemoryModelStore(), provider, verif
           const ok = await granted(req, reply, agent, caller.workspace?.id);
           if (ok === undefined) return undefined;
           if (!ok) return void reply.code(403).send({ error: 'forbidden', message: `${agent} isn’t granted models:use on this floor.` });
+          if (!(await hasRole(req, reply, agent, caller))) return undefined;
         }
         return { app: agent, actor: { id: caller.id, kind: 'user' }, workspace: caller.workspace?.id };
       };
