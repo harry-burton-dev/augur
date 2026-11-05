@@ -116,7 +116,7 @@ pnpm build && pnpm test
 pnpm check:boundaries
 ```
 
-- One service with live reload: `pnpm --filter @augur/registry dev`. Without `DATABASE_URL`, registry keeps data in memory; identity and events need Postgres.
+- One service with live reload: `pnpm --filter @augur/registry dev`. Without `DATABASE_URL`, registry keeps data in memory; identity, events and models need Postgres.
 - Tests run services' stores on real Postgres, never an in-memory copy. CI starts one. Locally, give them a database of their own, because the tests empty their service's schema: `docker compose -f infra/docker-compose.yml up -d postgres`, `docker compose -f infra/docker-compose.yml exec postgres createdb -U platform augur_test`, then `DATABASE_URL=postgres://platform:platform-local-only@localhost:5432/augur_test pnpm test`. Without `DATABASE_URL`, those tests are skipped.
 - Full local stack: `docker compose -f infra/docker-compose.yml up --build`, then `pnpm --filter @augur/shell dev` and open http://localhost:5173. Sign in as `alex` (admin) or `sam`; see [infra/keycloak](infra/keycloak/README.md).
 - New app: make a repository from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), then `pnpm dev:app ../augur-<id>` runs it in a stand-in shell.

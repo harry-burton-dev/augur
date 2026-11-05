@@ -23,7 +23,7 @@ import {
 import { describeApi } from './contract.ts';
 import { ProviderError, type ModelProvider } from './provider.ts';
 import { ChatAnswer, ChatRequest, Embeddings, EmbeddingsRequest, ModelsStatus, ref, refused, Settings, SettingsChange, UsageReport } from './schemas.ts';
-import { MemoryModelStore, type ModelStore } from './store.ts';
+import type { ModelStore } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -33,7 +33,7 @@ const version = packageVersion(import.meta.url);
 export const ASSISTANT = 'assistant';
 
 export interface ModelsOptions {
-  store?: ModelStore;
+  store: ModelStore;
   /** The model behind the gateway. Without one, models can't be turned on. */
   provider?: ModelProvider;
   /** Checks apps' and platform services' own sign-in tokens. */
@@ -75,7 +75,7 @@ type Asker = { app: string; actor: NewAuditEntry['actor']; workspace?: string };
  * call in the audit log before making it, and holds each app to a number of
  * calls a day. It is off until an admin turns it on.
  */
-export const buildApp = async ({ store = new MemoryModelStore(), provider, verifyService, grants, requiredRole, audit, now = () => new Date(), callers }: ModelsOptions = {}) => {
+export const buildApp = async ({ store, provider, verifyService, grants, requiredRole, audit, now = () => new Date(), callers }: ModelsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
