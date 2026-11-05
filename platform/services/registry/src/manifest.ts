@@ -14,6 +14,24 @@ export const MAX_SETTINGS = 10;
 /** How many feature previews one app may offer at once. */
 export const MAX_FEATURE_PREVIEWS = 8;
 
+/** How many kinds of inbox item one app may declare. */
+export const MAX_INBOX_KINDS = 10;
+
+/**
+ * A kind of work the app puts in people's inboxes (ADR 0026), with the words and icon the shell
+ * shows for it, so nothing in the Inbox is the platform's guess. An item of a kind the manifest
+ * doesn't declare is refused.
+ */
+export const inboxKindSchema = Type.Object(
+  {
+    id: Type.String({ pattern: '^[a-z][a-z0-9-]{0,39}$', description: 'How the app\'s service names it: "assignment"' }),
+    label: Type.String({ minLength: 1, maxLength: 40, description: 'What the Inbox shows for it: "Assigned to you"' }),
+    icon: Type.Optional(Type.String({ maxLength: 40, description: 'A UI kit icon name' })),
+  },
+  { additionalProperties: false },
+);
+export type InboxKind = Static<typeof inboxKindSchema>;
+
 /** What an app may be sent in one request when its manifest doesn't say: enough for any form, not for files. */
 export const DEFAULT_UPLOAD_MB = 10;
 /** The most any app may ask for. */
@@ -173,6 +191,12 @@ export const appEntrySchema = Type.Object(
     ),
     settings: Type.Optional(
       Type.Array(appSettingSchema, { maxItems: MAX_SETTINGS, description: 'Settings the app offers admins in Admin, Apps; its service reads them from the registry' }),
+    ),
+    inbox: Type.Optional(
+      Type.Object(
+        { kinds: Type.Array(inboxKindSchema, { minItems: 1, maxItems: MAX_INBOX_KINDS }) },
+        { additionalProperties: false, description: "The kinds of work the app puts in people's inboxes, with inbox:write (ADR 0026)" },
+      ),
     ),
     scopes: Type.Optional(
       Type.Array(Type.Enum([...SCOPES]), {
@@ -385,13 +409,18 @@ export const surfaceProblem = (entry: AppEntry): string | undefined => {
   return stray ? `${entry.name} has a ${stray.slot} for the ${stray.floor} floor, but its floors don't include ${stray.floor}.` : undefined;
 };
 
-/** What's wrong with the settings and feature previews an app offers, or undefined when nothing is. */
+/** What's wrong with the settings, feature previews and inbox kinds an app offers, or undefined when nothing is. */
 export const settingsProblem = (entry: AppEntry): string | undefined => {
   const previews = new Set<string>();
   for (const preview of entry.previews ?? []) {
     if (previews.has(preview.id)) return `${entry.name} offers the preview "${preview.id}" twice.`;
     previews.add(preview.id);
     if (preview.until && Number.isNaN(Date.parse(`${preview.until}T00:00:00Z`))) return `${entry.name}'s preview "${preview.id}" runs until "${preview.until}", which isn't a day.`;
+  }
+  const kinds = new Set<string>();
+  for (const kind of entry.inbox?.kinds ?? []) {
+    if (kinds.has(kind.id)) return `${entry.name} declares the inbox kind "${kind.id}" twice.`;
+    kinds.add(kind.id);
   }
   const seen = new Set<string>();
   for (const setting of entry.settings ?? []) {
