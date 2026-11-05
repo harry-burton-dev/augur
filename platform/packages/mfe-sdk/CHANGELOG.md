@@ -1,5 +1,16 @@
 # @augur/mfe-sdk
 
+## 2.0.0
+
+### Major Changes
+
+- cbd1abc: SDK 2.0 (PER-264). The shell no longer serves `lit` or `@augur/ui-kit`: `sharedModules` lists React, `react/jsx-runtime`, `react/jsx-dev-runtime`, `react-dom`, `react-dom/client`, `@augur/kit-common` and `@augur/app-kit`, and nothing else. Everything else in the SDK is as it was in 1.11. An app built against 1.x that never imported Lit keeps working: widen its manifest's `sdk` range to `^1.x || ^2.0.0` and it opens on a 2.0 shell. An app that imports Lit must move to React and Quill first (docs/build-an-app.md).
+
+### Minor Changes
+
+- f12bbaf: Apps get the person's date formats (PER-323): `ctx.formats` (SDK 2.0) carries their `language`, the `locale` to write dates in, their `timeZone` and `hourCycle`, read live from Account's Language and region. Additive: an older shell leaves it out.
+- 4f8d944: Apps declare the kinds of notification they send in `notifications.kinds` (id, label, detail; up to 10), and `NotifyMessage` gains `kind` (SDK 1.13). The registry names them in an app's grants, and the service kit's `registryNotificationKinds` looks them up, so the events service can check them and people can choose each kind in Account.
+
 ## 1.12.0
 
 ### Minor Changes

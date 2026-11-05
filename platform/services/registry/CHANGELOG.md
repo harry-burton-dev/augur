@@ -1,5 +1,32 @@
 # @augur/registry
 
+## 0.17.0
+
+### Minor Changes
+
+- 4f8d944: Apps declare the kinds of notification they send in `notifications.kinds` (id, label, detail; up to 10), and `NotifyMessage` gains `kind` (SDK 1.13). The registry names them in an app's grants, and the service kit's `registryNotificationKinds` looks them up, so the events service can check them and people can choose each kind in Account.
+- ff1c7c5: Settings entered for an upgrade that a registry restart lost end the upgrade at once, saying to ask again; the registry refuses a signed feed older than the newest it took; Grafana's admin password is required.
+
+### Patch Changes
+
+- cbd1abc: SDK 2 drops Lit and the Lit kit (`@augur/ui-kit`, PER-264). The shell no longer builds or serves them: its import map holds React, Common and Quill from the kit bundle, and in production the shell's own stand-in for `react/jsx-dev-runtime` at `/shared/`. The shell's build stops if the pinned kit doesn't serve every module the SDK promises apps. An app that still imports `lit` or `@augur/ui-kit` doesn't load. The typefaces (Jost and Nunito) now come with the kit's styles (kit 0.5.0). `pnpm dev:app` drops its `--kit` switch, and the registry takes a `.tsx` entry for Live on the workbench. `pnpm check:boundaries` fails on any import of Lit or the Lit kit under `platform/`.
+- 439fd3c: AUGUR's upgrade routes move out of the registry's app.ts into their own module, behind a checked seam between the app catalogue and update control (ADR 0067). No route or table changes.
+- 1e58d38: A printable card for the admin who wakes to an upgrade that went back by itself, didn't install, or kept running after its watch saw a problem: docs/upgrade-went-back.md. The updater's, the after-watch's and the Upgrade Centre's messages now point at it. deploy.md's restore now stops everything but Postgres, as its words always said.
+- Updated dependencies [1f83a5f]
+- Updated dependencies [f12bbaf]
+- Updated dependencies [2f2b01a]
+- Updated dependencies [7886a1e]
+- Updated dependencies [f902da5]
+- Updated dependencies [866c076]
+- Updated dependencies [04d7ed1]
+- Updated dependencies [4f8d944]
+- Updated dependencies [cbd1abc]
+- Updated dependencies [90057d9]
+- Updated dependencies [858fad1]
+- Updated dependencies [33b6fa3]
+  - @augur/service-kit@0.14.0
+  - @augur/mfe-sdk@2.0.0
+
 ## 0.16.0
 
 ### Minor Changes
