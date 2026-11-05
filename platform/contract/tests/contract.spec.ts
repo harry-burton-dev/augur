@@ -179,6 +179,8 @@ test('fetch sends the token and the floor the app is on', async ({ page }) => {
     return route.fulfill({ body: `${h['x-workspace-id']} ${h.authorization}` });
   });
   await page.goto('/@org/reference');
+  // The shell settles on the floor (its ground stops covering the stage) before the app is pressed.
+  await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
   await press(page, 'fetch');
   await expect(check(page, 'fetched')).toHaveText('dev-org Bearer dev-token');
 });
