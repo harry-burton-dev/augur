@@ -9,7 +9,7 @@ From a new app to running on your servers, with no manual update at any step. Ea
 | [Release it](#3-release-it) | CI | Merge, then merge Version packages |
 | [Servers take it](#4-servers-take-it) | Each server | Nothing, unless it asks for something new |
 
-This is for apps the app runner installs: every app in `apps/`, or in its own repository ([below](#an-app-in-its-own-repository)), but those that ship with AUGUR (Artifacts, Explorer and Data Atlas), which come with AUGUR's own releases at the version `release/shipped-apps.json` pins ([upgrade.md](upgrade.md)).
+This is for apps the app runner installs: every app in `apps/`, or in its own repository ([below](#an-app-in-its-own-repository)), but those that ship with AUGUR (Artifacts, Explorer, Data Atlas and Mandate), which come with AUGUR's own releases at the version `release/shipped-apps.json` pins ([upgrade.md](upgrade.md)).
 
 ## Once per server (an admin)
 

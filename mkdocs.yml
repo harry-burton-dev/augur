@@ -6,6 +6,7 @@ edit_uri: edit/dev/docs/
 plugins:
   - techdocs-core
 nav:
+  - Your account: account.md
   - Agents and models: agents.md
   - API contracts: api-contracts.md
   - App patterns: app-patterns.md

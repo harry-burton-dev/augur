@@ -51,6 +51,7 @@ import { AfterWatch, PlatformUpdates, strings, Upgrade as UpgradeSchema, Upgrade
 import { AUGUR_UNIT, resolvedState } from './desired-state.ts';
 import { overviewBuilder, overviewRoutes } from './overview.ts';
 import { reportRoutes, ReportSender, type Reporting } from './report.ts';
+import { alertRoutes, type AlertRouteOptions } from './alerts.ts';
 import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
@@ -138,6 +139,8 @@ export interface RegistryOptions {
   reportFetch?: typeof fetch;
   /** The workbench's own tailnet, from PLATFORM_URL: Live on the workbench loads only from machines on it. */
   tailnet?: string;
+  /** Grafana's alerts as notices (ADR 0059): its token, and how a notice is sent. Refused without a token. */
+  alerts?: AlertRouteOptions;
   /** The deployment's time zone (DEPLOYMENT_TIME_ZONE), which upgrade windows are in unless a unit names its own. */
   timeZone?: string;
   now?: () => Date;
@@ -226,6 +229,7 @@ export const buildApp = async ({
   reporting = { mode: 'off', why: 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage (org/deployments.yaml).' },
   reportFetch,
   tailnet,
+  alerts = {},
   timeZone = 'UTC',
   now = () => new Date(),
 }: RegistryOptions = {}) => {
@@ -655,6 +659,8 @@ export const buildApp = async ({
       await app.register(reportRoutes({ reporting, store, sender, overview, now }));
       sender.start();
       app.addHook('onClose', async () => sender.stop());
+      // Grafana's alerts, told to deployment admins (ADR 0059).
+      await app.register(alertRoutes(alerts));
 
       app.put(
         '/apps/:id',
