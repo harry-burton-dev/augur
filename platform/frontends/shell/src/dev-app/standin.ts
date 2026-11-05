@@ -1,4 +1,4 @@
-import type { AppManifestEntry, User, Workspace, WorkspaceRef } from '@augur/mfe-sdk';
+import type { AppManifestEntry, InboxCounts, InboxItem, User, Workspace, WorkspaceRef } from '@augur/mfe-sdk';
 import type { Session } from '../host/index.js';
 
 /**
@@ -43,6 +43,7 @@ export const devHome: AppManifestEntry = { id: 'home', name: 'Home', route: '/ho
  */
 export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...args) => fetch(...args), also: AppManifestEntry[] = []): typeof fetch => {
   let preferences: unknown = {};
+  const inbox = devInbox(app);
   const catalogue = [...(app.id === devHome.id ? [app] : [devHome, app]), ...also.filter((a) => a.id !== app.id && a.id !== devHome.id)];
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://stand-in');
@@ -55,14 +56,21 @@ export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...arg
     }
     if (path === '/api/events/v1/notifications') return json([]);
     if (path === '/api/events/v1/notifications/stream') {
-      // Open until the shell stops listening, with nothing ever on it.
+      // Open until the shell stops listening, with nothing on it but the stand-in inbox's changes.
+      let hear: ((e: Event) => void) | undefined;
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
-          init?.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')));
+          hear = (e: Event) => controller.enqueue(new TextEncoder().encode(`event: inbox\ndata: ${JSON.stringify((e as CustomEvent).detail)}\n\n`));
+          inbox.changes.addEventListener('change', hear);
+          init?.signal?.addEventListener('abort', () => {
+            inbox.changes.removeEventListener('change', hear!);
+            controller.error(new DOMException('Aborted', 'AbortError'));
+          });
         },
       });
       return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
     }
+    if (path.startsWith('/api/events/v1/inbox')) return inbox.answer(path, url.searchParams, init);
     if (path.startsWith('/api/events/v1/notifications/')) return new Response(null, { status: 204 });
     if (path === '/api/events/v1/domain-events/stream') return devEventStream(url.searchParams.get('topics') ?? '', new Headers(init?.headers).get('x-workspace-id'), init?.signal);
     return real(input, init);
@@ -100,4 +108,76 @@ const devEventStream = (topics: string, floor: string | null, signal?: AbortSign
     },
   });
   return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
+};
+
+/** The window event `pnpm dev:app` turns into an item in the stand-in person's inbox. */
+export const DEV_INBOX = 'augur:dev-inbox-item';
+
+/**
+ * The stand-in for the events service's Inbox, so an app's items can be seen as people will see them.
+ * Nothing is in it until an item is sent from the page, as from the console:
+ * `dispatchEvent(new CustomEvent('augur:dev-inbox-item', { detail: { title: 'Check claim 42', open: { type: 'claim.open', payload: { id: 42 } } } }))`.
+ * Left out, `app` is the app being developed, `kind` its first declared kind, and the owner the stand-in person.
+ * Take, give back, decline, hand on and mark done change it as the events service would, and the
+ * notification stream says so; items last until the page reloads.
+ */
+export const devInbox = (app: AppManifestEntry) => {
+  const items: InboxItem[] = [];
+  const changes = new EventTarget();
+  const tell = (id: string, change: 'added' | 'changed' | 'closed') => changes.dispatchEvent(new CustomEvent('change', { detail: { id, change } }));
+  let n = 0;
+  if (typeof window !== 'undefined')
+    window.addEventListener(DEV_INBOX, (e) => {
+      const detail = ((e as CustomEvent<Partial<InboxItem>>).detail ?? {}) as Partial<InboxItem>;
+      const at = new Date().toISOString();
+      const id = detail.id ?? `dev-item-${++n}`;
+      items.push({
+        app: app.id,
+        key: id,
+        kind: app.inbox?.kinds[0]?.id ?? 'item',
+        owner: { kind: 'person', id: 'dev-person' },
+        state: 'open',
+        createdAt: at,
+        updatedAt: at,
+        ...detail,
+        id,
+        allow: { decline: true, handOn: true, selfComplete: false, ...detail.allow },
+      });
+      tell(id, 'added');
+    });
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const open = (i: InboxItem) => i.state === 'open';
+  const answer = (path: string, query: URLSearchParams, init?: RequestInit) => {
+    const rest = path.slice('/api/events/v1/inbox'.length);
+    if (rest === '' || rest === '/') {
+      const tab = query.get('tab') ?? 'you';
+      return json(
+        items.filter((i) => (tab === 'done' ? !open(i) : open(i) && (tab === 'teams' ? i.owner.kind === 'team' && !i.takenBy : i.owner.kind === 'person' || i.takenBy === 'dev-person'))).reverse(),
+      );
+    }
+    if (rest === '/counts') {
+      const you = items.filter((i) => open(i) && (i.owner.kind === 'person' || i.takenBy === 'dev-person'));
+      const counts: InboxCounts = { you: you.length, teams: items.filter((i) => open(i) && i.owner.kind === 'team' && !i.takenBy).length, overdue: you.filter((i) => i.overdue).length };
+      return json(counts);
+    }
+    const [, id, verb] = rest.split('/').map(decodeURIComponent);
+    const item = items.find((i) => i.id === id);
+    if (!item) return json({ detail: 'There’s no such item in your inbox.' }, 404);
+    if (!verb) return json(item);
+    const body = JSON.parse(String(init?.body ?? '{}')) as { note?: string; to?: string };
+    const at = new Date().toISOString();
+    if (verb === 'take') item.takenBy = 'dev-person';
+    else if (verb === 'release') delete item.takenBy;
+    else if (verb === 'hand-on') {
+      const [kind, to] = (body.to ?? '').split(':');
+      item.owner = { kind: kind === 'team' ? 'team' : 'person', id: to ?? '' };
+      delete item.takenBy;
+    } else if (verb === 'decline' || verb === 'done') {
+      Object.assign(item, { state: verb === 'done' ? 'done' : 'declined', closedAt: at, closedBy: 'dev-person', ...(body.note ? { closeNote: body.note } : {}) });
+    } else return json({ detail: `The inbox doesn’t ${verb}.` }, 404);
+    item.updatedAt = at;
+    tell(item.id, open(item) ? 'changed' : 'closed');
+    return json(item);
+  };
+  return { answer, changes };
 };
