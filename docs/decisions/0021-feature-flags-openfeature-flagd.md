@@ -27,6 +27,10 @@ Option 1. The registry writes the flag file from manifests' `previews` and Admin
 
 For the alpha, flags stay AUGUR's feature previews, with floor targeting added: Admin can turn a preview on for chosen floors as well as off, opt-in or everyone, without a release. OpenFeature and flagd are deferred to beta, so no new dependency or service lands now. Apps keep the same API (`ctx.previewOn` and the service kit), so the later move to OpenFeature changes nothing for them.
 
+## Built so far
+
+None of OpenFeature or flagd: by the amendment above, feature previews with floor targeting are the alpha's flags.
+
 ## Links
 
 - Linear PER-177

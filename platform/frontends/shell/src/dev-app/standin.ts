@@ -34,7 +34,7 @@ export const devSession = (user: User): Session => ({
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 
 /** Home, from its build in `frontends/home/dist`, so an app's glance card can be seen where it goes. */
-export const devHome: AppManifestEntry = { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.0.0', sdk: '^1.0.0', icon: 'home', description: 'What needs you' };
+export const devHome: AppManifestEntry = { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.0.0', sdk: '^1.0.0 || ^2.0.0', icon: 'home', description: 'What needs you' };
 
 /**
  * Answers the platform's own endpoints for the shell, so the real shell runs

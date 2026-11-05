@@ -22,6 +22,10 @@ const UPGRADE_SHOWN_MS = 7 * 24 * 60 * 60 * 1000;
 /** The platform service that applies upgrades on a Compose deployment (its Keycloak client is platform-updater). */
 const UPDATER = 'updater';
 
+/** Why an upgrade ended before it started: the settings entered for it went with a restart. */
+export const settingsLostMessage = (names: string[]) =>
+  `The settings entered for this upgrade (${names.join(', ')}) were lost when the registry restarted before the updater took them. Nothing was changed: ask for the upgrade again and enter them again.`;
+
 const OUTCOME_ACTIONS: Record<UpgradeOutcome, string> = { done: 'platform.upgraded', 'rolled-back': 'platform.upgrade-rolled-back', failed: 'platform.upgrade-failed' };
 
 export interface PlatformUpgradeOptions {
@@ -146,7 +150,8 @@ export const platformUpgradeRoutes =
             'Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as',
             'platform.upgrade-requested. `settings` are new settings for `.env`, each one the release',
             "has: they're kept in memory for the updater until the upgrade ends, never stored, and only",
-            'their names are audited. An empty value is left out.',
+            'their names are stored and audited. If the registry restarts before the updater takes them,',
+            'the upgrade ends failed and says to ask again. An empty value is left out.',
           ].join(' '),
           body: Type.Object(
             {
@@ -190,10 +195,10 @@ export const platformUpgradeRoutes =
         const unknown = Object.keys(settings).filter((key) => key === 'PLATFORM_VERSION' || !manifest?.settings?.all.includes(key));
         if (unknown.length) return reply.code(400).send({ error: 'bad_request', message: `AUGUR ${view.next} has no setting ${unknown.join(', ')}.` });
         const id = randomUUID();
-        if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: caller.id, requestedByName: caller.name }))) {
+        if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: caller.id, requestedByName: caller.name, settingNames: Object.keys(settings) }))) {
           return reply.code(409).send({ error: 'conflict', message: 'An upgrade is already waiting or under way.' });
         }
-        // Kept in memory only, for the updater to write to .env: never stored, and only their names audited.
+        // Kept in memory only, for the updater to write to .env: never stored. Only their names are stored and audited.
         upgradeSettings = Object.keys(settings).length ? { id, settings } : undefined;
         req.log.info({ by: caller.id, from: view.running.version, to: view.next, settings: Object.keys(settings) }, 'upgrade requested');
         await record(req, {
@@ -417,6 +422,23 @@ export const platformUpgradeRoutes =
         }
       }
       if (upgrade?.state !== 'requested' && upgrade?.state !== 'running') return reply.code(204).send();
+      // Settings entered for it live only in this process: after a restart they're gone, so the
+      // upgrade can't go ahead as asked. It ends here, saying so, before anything changes.
+      if (upgrade.state === 'requested' && upgrade.settingNames?.length && upgradeSettings?.id !== upgrade.id) {
+        const message = settingsLostMessage(upgrade.settingNames);
+        const ended = await store.progressUpgrade(upgrade.id, { step: 'preflight', state: 'failed', message }, { state: 'failed', message });
+        if (ended) {
+          req.log.warn({ upgrade: upgrade.id, settings: upgrade.settingNames }, 'upgrade settings lost in a restart');
+          await record(req, {
+            actor: { id: 'registry', kind: 'service' },
+            app: 'registry',
+            action: OUTCOME_ACTIONS.failed,
+            target: upgrade.version,
+            detail: { from: upgrade.from, settings: upgrade.settingNames, reason: 'settings-lost' },
+          });
+        }
+        return reply.code(204).send();
+      }
       const { id, from, version, images, state } = upgrade;
       const manifest = updates.result.releases.find((r) => r.version === version)?.manifest;
       // Moving forward is watched before it's done (ADR 0020); going back by itself is unsafe past a breaking release.

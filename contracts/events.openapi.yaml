@@ -1520,7 +1520,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /audit:
     post:
-      summary: Record an audit entry (services only). Entries are never changed or removed.
+      summary: Record an audit entry (services only). Entries are never changed, except to remove a deleted person’s details, and go only after the retention period.
       requestBody:
         required: true
         content:
@@ -1596,6 +1596,28 @@ paths:
           required: false
           description: Only entries on this floor or below it
         - schema:
+            type: string
+            maxLength: 200
+          in: query
+          name: target
+          required: false
+          description: Only entries about this target
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: person
+          required: false
+          description: Only entries by, about or naming this person (the actor, the target or detail.person)
+        - schema:
+            enum:
+              - change
+              - sign-in
+          in: query
+          name: kind
+          required: false
+          description: Only sign-ins (detail.kind is sign-in), or only every other change
+        - schema:
             type: integer
             minimum: 1
             maximum: 500
@@ -1615,6 +1637,131 @@ paths:
                 description: Audit entries
         "403":
           description: Not an admin, nor a lead asking for their own floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /audit/export:
+    get:
+      summary: Download Activity as CSV or JSON lines (admins)
+      description: "The same filters as the audit log, newest first, at most 366 days at a time: `until` defaults to now and `since` to 366 days before it. CSV columns: at, actor, actorKind, app, action, target, floor, detail (as JSON). The download is itself recorded in Activity, as `audit.exported` with the filters used."
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: app
+          required: false
+        - schema:
+            type: string
+          in: query
+          name: actor
+          required: false
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: since
+          required: false
+          description: Only entries at or after this time
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: until
+          required: false
+          description: Only entries before this time
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: Only entries on this floor or below it
+        - schema:
+            type: string
+            maxLength: 200
+          in: query
+          name: target
+          required: false
+          description: Only entries about this target
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: person
+          required: false
+          description: Only entries by, about or naming this person (the actor, the target or detail.person)
+        - schema:
+            enum:
+              - change
+              - sign-in
+          in: query
+          name: kind
+          required: false
+          description: Only sign-ins (detail.kind is sign-in), or only every other change
+        - schema:
+            enum:
+              - csv
+              - jsonl
+            default: csv
+          in: query
+          name: format
+          required: false
+      responses:
+        "200":
+          description: The file, as `text/csv` or `application/x-ndjson`
+          content:
+            application/json:
+              schema:
+                description: The file, as `text/csv` or `application/x-ndjson`
+        "400":
+          description: The range is longer than the most one download holds, or ends before it starts
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /audit/redact:
+    post:
+      summary: Remove a deleted person's personal values from Activity, and their notifications (identity only)
+      description: In every entry by, about or naming them, each personal value (the keys in service-kit's PERSONAL_DETAIL_KEYS, also inside from/to pairs) becomes "[removed]"; their id stays, now pseudonymous. Their notifications are deleted. Recorded in Activity as `audit.redacted`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - person
+              properties:
+                person:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+              additionalProperties: false
+      responses:
+        "200":
+          description: How many entries were changed and notifications deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - entries
+                  - notifications
+                properties:
+                  entries:
+                    type: integer
+                  notifications:
+                    type: integer
+                description: How many entries were changed and notifications deleted
+        "403":
+          description: Not identity
           content:
             application/problem+json:
               schema:

@@ -171,13 +171,18 @@ export interface FeedChecking {
  * GitHub's releases, read directly, aren't signed. A refused feed is a FeedProblem that says why.
  */
 export const feedSource =
-  ({ token, key, fetchImpl = (...args) => fetch(...args), check, signer, now = () => new Date() }: { token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking) =>
-  async (target: string, accept: string): Promise<{ body: unknown; trust: FeedTrust }> => {
+  ({ token, key, fetchImpl = (...args) => fetch(...args), check, signer, now = () => new Date() }: { token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking) => {
+  // When the newest feed this registry accepted was issued, so an older one can't be replayed. It lives as
+  // long as this process: after a restart, a replayed feed still has to be signed and in date.
+  let newest: string | undefined;
+  return async (target: string, accept: string): Promise<{ body: unknown; trust: FeedTrust }> => {
     if (target.startsWith('oci:')) {
       const { text, bundle } = await ociFiles(target, key, fetchImpl);
       try {
-        const trust = await checkPublisherFeed({ text, bundle, check, signer, now: now() });
-        return { body: parseJson(text), trust };
+        const trust = await checkPublisherFeed({ text, bundle, check, signer, now: now(), newest });
+        const body = parseJson(text);
+        if (trust.issued) newest = trust.issued;
+        return { body, trust };
       } catch (err) {
         if (err instanceof FeedTrustProblem) throw new FeedProblem(err.message);
         throw err;
@@ -189,6 +194,7 @@ export const feedSource =
     }
     return { body, trust: { state: 'mirror', note: 'A mirror’s own feed: the organisation that runs the mirror vouches for the list, and the updater still checks every image’s signature.' } };
   };
+};
 
 const parseJson = (text: string) => {
   try {
@@ -255,10 +261,12 @@ const ociFiles = async (target: string, key: ReadKey | undefined, fetchImpl: typ
  * On GitHub a release marked pre-release is beta; promoting it to stable is unticking that.
  */
 export const releaseFeed =
-  ({ url, token, key, fetchImpl, ...checking }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking): ReleaseFeed =>
-  async (running) => {
+  ({ url, token, key, fetchImpl, ...checking }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking): ReleaseFeed => {
+  // One source for every read, so it remembers the newest feed it accepted.
+  const source = feedSource({ token, key, fetchImpl, ...checking });
+  return async (running) => {
     const get = feedReader({ token, key, fetchImpl });
-    const { body, trust } = await feedSource({ token, key, fetchImpl, ...checking })(url, 'application/vnd.github+json, application/json');
+    const { body, trust } = await source(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { releases?: unknown })?.releases) ? (body as { releases: unknown[] }).releases : [];
 
     if (items.some(isManifest)) {
@@ -294,6 +302,7 @@ export const releaseFeed =
     );
     return { releases: read, trust };
   };
+};
 
 /**
  * The deployment's read key: a token in secrets/github-read-key (or GITHUB_READ_KEY) that can read this

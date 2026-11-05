@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
@@ -31,7 +32,37 @@ import {
 import { describeApi } from './contract.ts';
 import { inboxRoutes, releaseLeaver, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
-import { MemoryEventStore, topicMatches, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
+import { MemoryEventStore, topicMatches, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
+
+/** Filters the audit log and its download share, beyond time and floor. */
+const AUDIT_FILTERS = {
+  target: Type.Optional(Type.String({ maxLength: 200, description: 'Only entries about this target' })),
+  person: Type.Optional(Type.String({ maxLength: 100, description: 'Only entries by, about or naming this person (the actor, the target or detail.person)' })),
+  kind: Type.Optional(Type.Enum(['change', 'sign-in'], { description: 'Only sign-ins (detail.kind is sign-in), or only every other change' })),
+};
+
+/** The most days one Activity download covers. */
+export const EXPORT_MAX_DAYS = 366;
+const DAY_MS = 86_400_000;
+
+const csvCell = (v: unknown) => {
+  const s = v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v);
+  // Quote every cell, and defuse a leading formula character so a spreadsheet shows it as text.
+  return `"${(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replaceAll('"', '""')}"`;
+};
+
+/** Activity between two times, newest first as the log reads, a page at a time so a long range is never held whole. */
+async function* exportLines(store: EventStore, filter: Omit<AuditFilter, 'limit' | 'before'>, format: 'csv' | 'jsonl') {
+  if (format === 'csv') yield 'at,actor,actorKind,app,action,target,floor,detail\n';
+  let before: string | undefined;
+  for (;;) {
+    const page: AuditRecord[] = await store.audit({ ...filter, before, limit: 500 });
+    for (const e of page)
+      yield format === 'csv' ? `${[e.at, e.actor.id, e.actor.kind, e.app, e.action, e.target, e.workspace?.id, e.detail].map(csvCell).join(',')}\n` : `${JSON.stringify(e)}\n`;
+    if (page.length < 500) return;
+    before = page[page.length - 1]!.id;
+  }
+}
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -74,7 +105,7 @@ const PERSON_FIELDS: Record<string, string> = { firstName: 'name', lastName: 'na
 const changedOf = (detail: Record<string, unknown> | undefined) => [...new Set(Object.keys(detail ?? {}).flatMap((k) => (PERSON_FIELDS[k] ? [PERSON_FIELDS[k]] : [])))];
 
 /**
- * The platform's own domain events, published as identity and the registry record
+ * AUGUR's own domain events, published as identity and the registry record
  * the change in the audit log, so the two can't disagree. Keyed by "<service> <action>".
  */
 const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntry) => Record<string, unknown> }> = {
@@ -82,6 +113,11 @@ const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntr
   'identity person.updated': { topic: 'platform.person.changed', payload: (e) => ({ person: e.target, changed: changedOf(e.detail) }) },
   'identity person.disabled': { topic: 'platform.person.disabled', payload: (e) => ({ person: e.target }) },
   'identity person.enabled': { topic: 'platform.person.enabled', payload: (e) => ({ person: e.target }) },
+  // A leaver (ADR 0040): apps hand on or archive what they own, to handOverTo when an admin named someone.
+  'identity person.left': {
+    topic: 'platform.person.left',
+    payload: (e) => ({ person: e.target, ...(typeof e.detail?.handOverTo === 'string' ? { handOverTo: e.detail.handOverTo } : {}) }),
+  },
   'identity department.created': { topic: 'platform.team.created', payload: (e) => ({ team: e.target, name: e.detail?.name }) },
   'identity department.renamed': { topic: 'platform.team.renamed', payload: (e) => ({ team: e.target, name: e.detail?.to }) },
   'identity department.member-added': { topic: 'platform.team.member-added', payload: (e) => ({ team: e.target, person: e.detail?.person }) },
@@ -121,7 +157,7 @@ const forBrowser = ({ seq, topic, id, publisher, at, workspace, payload }: Domai
 const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
 
 /**
- * Notifications for the Shell's stream, and the platform's audit log. Services
+ * Notifications for the Shell's stream, and AUGUR's audit log. Services
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
@@ -252,7 +288,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
           }
         }
         if (principals) {
-          // Reaching people by role or across the org is the platform's: an app names the people it means.
+          // Reaching people by role or across the org is AUGUR's own: an app names the people it means.
           if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services send to an audience. Name the recipients.' });
           if (toTeam || notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Send to an audience, the team or recipients: one of them.' });
           try {
@@ -570,7 +606,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         '/audit',
         {
           schema: {
-            summary: 'Record an audit entry (services only). Entries are never changed or removed.',
+            summary: 'Record an audit entry (services only). Entries are never changed, except to remove a deleted person’s details, and go only after the retention period.',
             body: ref(NewAuditEntrySchema),
             response: {
               201: { ...ref(AuditEntry), description: 'Recorded' },
@@ -620,6 +656,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
               until: Type.Optional(Type.String({ format: 'date-time', description: 'Only entries before this time' })),
               before: Type.Optional(Type.String({ pattern: '^[0-9]+$', maxLength: 19, description: "An entry's id; only entries older than it" })),
               workspace: Type.Optional(Type.String({ maxLength: 100, description: 'Only entries on this floor or below it' })),
+              ...AUDIT_FILTERS,
               limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),
             }),
             response: {
@@ -631,12 +668,91 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         async (req, reply) => {
           const caller = signedIn(req, reply);
           if (!caller) return reply;
-          const { app: forApp, actor, since, until, before, workspace, limit = 100 } = req.query;
+          const { app: forApp, actor, since, until, before, workspace, target, person, kind, limit = 100 } = req.query;
           // Admins read the whole log; a lead reads their own floor's, and the floors below it.
           if (!caller.roles.includes('admin') && !(workspace && leadsOrAdmin(caller, workspace))) {
             return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can read the whole audit log; a lead can read their own floor’s.' });
           }
-          return store.audit({ app: forApp, actor, since, until, before, workspace, limit });
+          return store.audit({ app: forApp, actor, since, until, before, workspace, target, person, kind, limit });
+        },
+      );
+
+      app.get(
+        '/audit/export',
+        {
+          schema: {
+            summary: 'Download Activity as CSV or JSON lines (admins)',
+            description: [
+              'The same filters as the audit log, newest first, at most',
+              `${EXPORT_MAX_DAYS} days at a time: \`until\` defaults to now and \`since\` to`,
+              `${EXPORT_MAX_DAYS} days before it. CSV columns: at, actor, actorKind, app,`,
+              'action, target, floor, detail (as JSON). The download is itself recorded',
+              'in Activity, as `audit.exported` with the filters used.',
+            ].join(' '),
+            querystring: Type.Object({
+              app: Type.Optional(Type.String()),
+              actor: Type.Optional(Type.String()),
+              since: Type.Optional(Type.String({ format: 'date-time', description: 'Only entries at or after this time' })),
+              until: Type.Optional(Type.String({ format: 'date-time', description: 'Only entries before this time' })),
+              workspace: Type.Optional(Type.String({ maxLength: 100, description: 'Only entries on this floor or below it' })),
+              ...AUDIT_FILTERS,
+              format: Type.Optional(Type.Enum(['csv', 'jsonl'], { default: 'csv' })),
+            }),
+            response: {
+              200: { description: 'The file, as `text/csv` or `application/x-ndjson`' },
+              400: refused('The range is longer than the most one download holds, or ends before it starts'),
+              403: refused('Not an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = signedIn(req, reply);
+          if (!caller) return reply;
+          if (!caller.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can download Activity.' });
+          const { format = 'csv', since: from, until: to, ...rest } = req.query;
+          const until = to ? new Date(to) : new Date();
+          const since = from ? new Date(from) : new Date(until.getTime() - EXPORT_MAX_DAYS * DAY_MS);
+          if (since > until) return reply.code(400).send({ error: 'invalid_range', message: 'The range ends before it starts.' });
+          if (until.getTime() - since.getTime() > EXPORT_MAX_DAYS * DAY_MS)
+            return reply.code(400).send({ error: 'range_too_long', message: `One download holds at most ${EXPORT_MAX_DAYS} days. Download a shorter range, or several.` });
+          const filter = { ...rest, since: since.toISOString(), until: until.toISOString() };
+          await store.appendAudit({ actor: { id: caller.id, kind: 'user' }, app: 'events', action: 'audit.exported', detail: { ...filter, format } }, undefined, 'events');
+          const day = (d: Date) => d.toISOString().slice(0, 10);
+          void reply
+            .header('content-type', format === 'csv' ? 'text/csv; charset=utf-8' : 'application/x-ndjson; charset=utf-8')
+            .header('content-disposition', `attachment; filename="activity-${day(since)}-${day(until)}.${format}"`);
+          return reply.send(Readable.from(exportLines(store, filter, format)));
+        },
+      );
+
+      // Forgets a deleted person's personal values (ADR 0040). Identity asks once their retention period has passed.
+      app.post(
+        '/audit/redact',
+        {
+          schema: {
+            summary: "Remove a deleted person's personal values from Activity, and their notifications (identity only)",
+            description: [
+              'In every entry by, about or naming them, each personal value (the keys in',
+              "service-kit's PERSONAL_DETAIL_KEYS, also inside from/to pairs) becomes",
+              '"[removed]"; their id stays, now pseudonymous. Their notifications are',
+              'deleted. Recorded in Activity as `audit.redacted`.',
+            ].join(' '),
+            body: Type.Object({ person: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false }),
+            response: {
+              200: Type.Object({ entries: Type.Integer(), notifications: Type.Integer() }, { description: 'How many entries were changed and notifications deleted' }),
+              403: refused('Not identity'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await fromService(req, reply, undefined, 'audit:write');
+          if (!service) return reply;
+          if (service.kind !== 'platform' || service.name !== 'identity') return reply.code(403).send({ error: 'forbidden', message: 'Only identity removes a deleted person’s details.' });
+          const { person } = req.body;
+          const removed = await store.redactPerson(person);
+          await store.appendAudit({ actor: { id: 'identity', kind: 'service' }, app: 'events', action: 'audit.redacted', detail: { person, entries: removed.entries } }, undefined, serviceName(service));
+          req.log.info({ person, ...removed }, 'a deleted person’s details removed');
+          return removed;
         },
       );
 

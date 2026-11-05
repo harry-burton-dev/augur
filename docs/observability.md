@@ -6,7 +6,7 @@ Every AUGUR service sends traces, metrics and logs over OpenTelemetry (ADR 0034)
 
 It's on in every deployment: compose runs otel-lgtm (Grafana's all-in-one OpenTelemetry image) and every service sends to it at `http://otel-lgtm:4318`.
 
-1. In `.env`, set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`). `ALERT_WEBHOOK_TOKEN` is required (`openssl rand -hex 32`); an upgrade from the Upgrade Centre makes it up. Then run `pc up -d`. A deployment that had the `observability` profile can take it out of `COMPOSE_PROFILES`; it does nothing now.
+1. In `.env`, set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`) and `ALERT_WEBHOOK_TOKEN` (`openssl rand -hex 32`). Both are required, even with `OTEL_LGTM_REPLICAS=0`, since Grafana with no password would take admin/admin; an upgrade from the Upgrade Centre makes both up. Then run `pc up -d`. A deployment that had the `observability` profile can take it out of `COMPOSE_PROFILES`; it does nothing now.
 2. Grafana answers on the server only, at `http://127.0.0.1:3001`. From your own machine, run `ssh -L 3001:127.0.0.1:3001 <server>` and open `http://localhost:3001`. Sign in as `admin`. AUGUR's dashboard and alert rules are in the AUGUR folder.
 
 It keeps 72 hours of traces, metrics and logs and is held to `OTEL_LGTM_MEM_LIMIT` (2 GB unless set).
@@ -62,6 +62,14 @@ The gateway records, as metrics:
 - `augur_component_up`: each part it checks every 30 seconds (`component`, `kind`), 1 when it answered, 0 when it's down. Nothing until its first check.
 - `augur_gateway_requests_total`: the calls it answered, by `part` (`platform` or `apps`) and `status_class` (`2xx`, `4xx`, `5xx`).
 - `augur_backup_ok`: 1 when the last backup and restore test can be relied on, 0 when not. Only when the gateway is told where backups are (`BACKUP_DIR`).
+
+## Activity
+
+Activity is AUGUR's record of who did what, kept by the events service (`events.audit`) and read in Admin.
+
+- **Kept for the retention period.** The organisation's policy sets it (365 days when identity can't say, and the events log says it used the default). Each night at 03:00 UTC older entries are removed, and the removal is itself an entry (`audit.pruned`).
+- **Entries are never edited, except redaction of a deleted person's personal values; they're removed only by the retention period. Both are recorded in Activity.** When identity deletes someone, it asks events to replace every value under service-kit's `PERSONAL_DETAIL_KEYS` (names, usernames, email and IP addresses, free text) with `[removed]` in entries by, about or naming them, and to delete their notifications (`audit.redacted`). Their id stays, now pseudonymous. A service writing Activity keeps personal values only under those keys, so redaction finds them.
+- **Download.** An admin downloads Activity as CSV or JSON lines, with the same filters as the list (app, actor, target, person, kind, floor), at most 366 days at a time (`GET /v1/audit/export`). Each download is recorded (`audit.exported`). Cells a spreadsheet would run as a formula start with `'`.
 
 ## For a service
 
