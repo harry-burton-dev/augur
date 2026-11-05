@@ -68,3 +68,23 @@ html[data-density='compact'] {
 .account-native input:focus-visible { outline: none; border-bottom-color: var(--focus); }
 .account-keys { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-4); margin: 0; }
 .account-keys dd { margin: 0; color: var(--ink-muted); }
+
+/* The Inbox (ADR 0026): rows of work that waits, each with Open and a menu. */
+.inbox ul { list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+.inbox-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.inbox-row.redacted { color: var(--ink-muted); }
+.inbox-what { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.inbox-what small { color: var(--ink-muted); }
+.inbox-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-what small.inbox-late { color: var(--warning); }
+.inbox-what small.inbox-problem { color: var(--ink); }
+.inbox-actions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+.inbox-empty, .inbox-stale { color: var(--ink-muted); margin: var(--space-4) 0; }
+.inbox-found { list-style: none; margin: var(--space-2) 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
