@@ -70,6 +70,8 @@ otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72
 
 ### Email through your relay (optional)
 
+**From** unreleased
+
 AUGUR can now send email through the organisation's SMTP relay: password resets and address checks from the sign-in pages. Nothing changes until you add `SMTP_HOST` and `SMTP_FROM` (and `SMTP_USER` and `SMTP_PASSWORD` if the relay wants a sign-in) to `.env` and run `pc up -d`; see [Email](deploy.md#email). `pc logs keycloak-config` then says the relay is set.
 
 ### Mandate ships with AUGUR
