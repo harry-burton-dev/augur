@@ -1,7 +1,7 @@
 import { AppFrame, AskTwice, Button, Choice, Notice, Note, PageHead, RailLink, Rows, Section, Select, State, TextField, Toggle, type IconName } from '@augur/app-kit';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Preferences } from '../host/preferences.js';
-import { AccountError, type AccountApi, type AccountSession, type HeldCredential, type ProfileChanges, type Security, type SignIn } from './api.js';
+import { type AccountApi, type AccountSession, type HeldCredential, type ProfileChanges, type Security, type SignIn } from './api.js';
 import { currentFormats, writeDate, type Formats } from '../host/formats.js';
 import { actionWords, ago, clientWords, DATE_REGIONS, dayAndTime, languageName, regionName, signInWords, timeZones } from './words.js';
 
@@ -897,5 +897,3 @@ function Key({ k, children }: { k: string; children: ReactNode }) {
     </>
   );
 }
-
-export { AccountError };

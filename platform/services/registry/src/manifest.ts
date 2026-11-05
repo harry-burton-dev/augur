@@ -30,7 +30,6 @@ export const inboxKindSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type InboxKind = Static<typeof inboxKindSchema>;
 
 /** How many kinds of notification one app may declare. */
 export const MAX_NOTIFICATION_KINDS = 10;
@@ -48,7 +47,6 @@ export const notificationKindSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type NotificationKind = Static<typeof notificationKindSchema>;
 
 /** What an app may be sent in one request when its manifest doesn't say: enough for any form, not for files. */
 export const DEFAULT_UPLOAD_MB = 10;
@@ -98,7 +96,6 @@ export const appSettingSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type AppSetting = Static<typeof appSettingSchema>;
 
 /**
  * One thing an app shows on one kind of floor. Several surfaces can share a
@@ -115,7 +112,6 @@ export const surfaceSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type Surface = Static<typeof surfaceSchema>;
 
 export const appMenuItemSchema = Type.Object(
   {
@@ -129,7 +125,6 @@ export const appMenuItemSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type AppMenuItem = Static<typeof appMenuItemSchema>;
 
 export const appMenuCategorySchema = Type.Object(
   {
@@ -142,7 +137,6 @@ export const appMenuCategorySchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type AppMenuCategory = Static<typeof appMenuCategorySchema>;
 
 export const appAreaSchema = Type.Object(
   {
@@ -153,7 +147,6 @@ export const appAreaSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type AppArea = Static<typeof appAreaSchema>;
 
 /**
  * What a registering app may send: its manifest.json, the registry's AppManifestEntry. Published as

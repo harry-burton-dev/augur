@@ -17,8 +17,6 @@ import { upstreamProblem } from './upstreams.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
 
-/** What an app release file must say before the runner is asked to install it: AppRelease in app-runner-schemas.ts. */
-export { APP_RELEASE_SCHEMA } from './app-runner-schemas.ts';
 
 /** How recently an admin must have entered their password to install code on the server. */
 const INSTALL_SIGN_IN_MS = 10 * 60 * 1000;
