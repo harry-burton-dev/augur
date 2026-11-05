@@ -504,8 +504,8 @@
     },
     "PLATFORM_ADMIN_DEPARTMENT": {
       "type": "string",
-      "description": "That person's department.",
-      "default": "Platform",
+      "description": "That person's department, made at first start. People see its name in Admin and on floors.",
+      "default": "Administration",
       "x-services": [
         "keycloak"
       ],

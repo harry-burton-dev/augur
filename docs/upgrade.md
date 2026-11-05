@@ -62,6 +62,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 AUGUR's email now comes from the sender set in Admin → Organisation: the organisation's name unless an admin changed it, rather than the product's name. Once an address is set there, it replaces `SMTP_FROM`. Nothing to do. The realm job now also reads identity's database, using the `IDENTITY_DATABASE_PASSWORD` identity already uses. After changing the sender, run `pc up -d` so Keycloak's emails pick it up.
 
+### The first admin's department is called Administration on new servers
+
+**From** unreleased
+
+Nothing to do on a server that's already running: its departments keep their names, because the realm reads `PLATFORM_ADMIN_DEPARTMENT` only at first start. On a new server, the first admin's department is now called `Administration` instead of `Platform` unless `PLATFORM_ADMIN_DEPARTMENT` names another. To rename an existing one, use Admin → Departments.
+
 ### Desktops without a GPU can go without blur
 
 **From** augur@0.22.0
