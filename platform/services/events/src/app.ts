@@ -19,6 +19,8 @@ import {
   type GrantLookup,
   type MemberLookup,
   type AudienceLookup,
+  type DirectorySearch,
+  type PrincipalLookup,
   type NewAuditEntry,
   type Scope,
   type ServiceIdentity,
@@ -27,6 +29,7 @@ import {
   type CallerCheck,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
+import { inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
 import { MemoryEventStore, topicMatches, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
@@ -46,6 +49,12 @@ export interface EventsOptions {
   members?: MemberLookup;
   /** Who an audience reaches now, from identity, for platform services' notifications (ADR 0044). */
   audience?: AudienceLookup;
+  /** Who can sign in, from identity's directory: an inbox item's owner must be someone who can. */
+  directory?: DirectorySearch;
+  /** Which teams a person is on, from identity: their teams' inbox items, and who hears of a change. */
+  principals?: PrincipalLookup;
+  /** The inbox kinds each app's manifest declares, from the registry; without it kinds aren't checked. */
+  inboxKinds?: InboxKindLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
@@ -108,7 +117,7 @@ const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, directory, principals, inboxKinds, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -183,6 +192,10 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         }
         return undefined;
       };
+
+      // ---- the Inbox: work that waits on someone (ADR 0026) ----
+
+      inboxRoutes(app, { inbox: store.inbox, store, floors, directory, principals, kinds: inboxKinds, signedIn, fromService, floorOf });
 
       // ---- notifications ----
 
@@ -347,7 +360,9 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
           schema: {
             summary: 'Each new notification for the caller, as server-sent events',
             description: [
-              'Events are named "notification" and carry a Notification as JSON.',
+              'Events are named "notification" and carry a Notification as JSON. Events named',
+              '"inbox" carry { id, change } (added, changed or closed) when an inbox item the caller',
+              'can see changes: reload the counts, and the list if it is showing.',
               'Comment lines are sent as keep-alives. Read with fetch so the sign-in',
               'token can be sent; reload the list after reconnecting.',
             ].join(' '),
@@ -364,10 +379,21 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const unsubscribe = store.subscribe((n) => {
           if (n.recipient === caller.id) res.write(`event: notification\ndata: ${JSON.stringify(forCaller(n))}\n\n`);
         });
+        // Who the caller is to the Inbox: themselves and their teams, asked as each change comes (identity's answer is cached).
+        const me = `person:${caller.id}`;
+        const stopInbox = store.inbox.onChange((s) => {
+          if (s.principals.includes(me)) return void res.write(`event: inbox\ndata: ${JSON.stringify({ id: s.id, change: s.change })}\n\n`);
+          if (!s.principals.some((p) => p.startsWith('team:'))) return;
+          void teamsOf(caller, principals).then(
+            (teams) => s.principals.some((p) => teams.includes(p.slice(5)) && p.startsWith('team:')) && res.write(`event: inbox\ndata: ${JSON.stringify({ id: s.id, change: s.change })}\n\n`),
+            () => undefined,
+          );
+        });
         const heartbeat = setInterval(() => res.write(': still here\n\n'), heartbeatMs);
         req.raw.on('close', () => {
           clearInterval(heartbeat);
           unsubscribe();
+          stopInbox();
         });
         },
       );

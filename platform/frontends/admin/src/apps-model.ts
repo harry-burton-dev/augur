@@ -71,6 +71,7 @@ export const SCOPE_WORDS: Record<string, string> = {
   'events:publish': 'Tell other services what happened',
   'events:subscribe': 'Hear what other services did',
   'people:read': 'Look up people and teams',
+  'inbox:write': 'Put work in people’s inboxes',
 };
 
 /** What an app may do on AUGUR, as a fact's value. */

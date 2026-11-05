@@ -362,15 +362,15 @@ export interface AppJob {
   finishedAt?: string;
 }
 
-/** Who gets a feature preview: nobody, those who turn it on, or everyone. */
-export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone';
+/** Who gets a feature preview: nobody, those who turn it on, everyone, or chosen floors and those beneath them. */
+export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone' | 'floors';
 
 /** An app's feature previews as Admin shows them. */
 export interface FeaturePreviews {
   /** Who gets one nobody chose for: opt-in on a dev or preview server, off on a production one. */
   defaultMode: FeaturePreviewMode;
   ring: 'dev' | 'preview' | 'production';
-  previews: { id: string; name: string; detail?: string; until?: string; mode: FeaturePreviewMode; ended: boolean; chosen: boolean; setBy?: string; setAt?: string; optedIn: number }[];
+  previews: { id: string; name: string; detail?: string; until?: string; mode: FeaturePreviewMode; floors?: string[]; ended: boolean; chosen: boolean; setBy?: string; setAt?: string; optedIn: number }[];
 }
 
 /** stable is production releases, beta preview releases too, dev dev builds too (a dev or preview server only). */
@@ -536,8 +536,9 @@ export class AdminApi {
   /** Who gets each of an app's feature previews, and how many turned each on. */
   featurePreviews = (id: string) => this.call<FeaturePreviews>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews`);
   /** Sets who gets one of an app's feature previews; `null` goes back to the server's default. */
-  setFeaturePreview = (id: string, preview: string, mode: FeaturePreviewMode | null) =>
-    this.call<FeaturePreviews>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews/${encodeURIComponent(preview)}`, { mode });
+  /** With mode `floors`, `floors` says which: it's on there and on the floors beneath them. */
+  setFeaturePreview = (id: string, preview: string, mode: FeaturePreviewMode | null, floors?: string[]) =>
+    this.call<FeaturePreviews>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews/${encodeURIComponent(preview)}`, { mode, ...(floors ? { floors } : {}) });
   grantScopes = (id: string, scopes: string[]) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/scopes`, { scopes });
   /** The org's own floor, which every app rule starts from. */
   org = async () => {
