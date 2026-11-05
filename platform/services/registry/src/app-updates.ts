@@ -13,7 +13,7 @@ export type AppPolicy = 'automatic' | 'ask' | 'hold';
  * One app release in the feed. Its release file is missing when it couldn't be read (or wasn't needed).
  * A pull request's build (a version such as 1.3.0-pr.12.4) is on the `preview` channel, which no
  * deployment follows: it's only ever run beside the app, for the app's developers. A dev build (a version
- * such as 1.3.1-dev.40, from a merge into dev) is on the `dev` channel, which only a preview server follows.
+ * such as 1.3.1-dev.40, from a merge into main) is on the `dev` channel, which only a preview server follows.
  */
 export interface AppFeedRelease {
   app: string;

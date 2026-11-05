@@ -4,8 +4,8 @@
 //
 // The rules:
 //   - a migration that shipped in an AUGUR release never changes and is never removed: servers have run it.
-//     Add a new migration instead. On a pull request into dev, one already on dev counts as shipped too
-//     (MIGRATIONS_FROZEN_AT=origin/dev): the preview server has run it, from a dev build.
+//     Add a new migration instead. On a pull request into main, one already on main counts as shipped too
+//     (MIGRATIONS_FROZEN_AT=origin/main): the workbench has run it, from a dev build.
 //   - within a major version, migrations only add. A new one that drops, renames, truncates, deletes rows,
 //     changes a column's type or makes one required would break the release before it, which is what a
 //     deployment rolls back to. It needs a major bump of its service (a major changeset), so the AUGUR

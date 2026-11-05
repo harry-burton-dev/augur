@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-11-01
 - **Decided by:** Harry
-- **Replaces:** [0004](0004-ui-kit-lit-tokens-lucide.md) once accepted; changes the shared modules in [0003](0003-import-maps-not-module-federation.md)
+- **Replaces:** [0004](0004-ui-kit-lit-tokens-lucide.md); changes the shared modules in [0003](0003-import-maps-not-module-federation.md)
 
 ## Context
 

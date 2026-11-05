@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import Ajv2020Module from 'ajv/dist/2020.js';
-import { manifestSchemaText, SCHEMA_FILE } from './manifest.schema.mjs';
+import { manifestSchemaText, SCHEMA_FILE, SCHEMA_FILES } from './manifest.schema.mjs';
 
 const Ajv2020 = Ajv2020Module.default ?? Ajv2020Module;
 const root = new URL('..', import.meta.url).pathname;
@@ -21,10 +21,14 @@ if (!existsSync(built)) {
 
 const problems = [];
 
-// The published schema must be what the registry's schema generates.
+// Both published copies must be what the registry's schema generates.
 const schemaPath = join(root, SCHEMA_FILE);
 const published = existsSync(schemaPath) ? readFileSync(schemaPath, 'utf8') : '';
-if (published !== (await manifestSchemaText())) problems.push(`${SCHEMA_FILE} is out of step with the registry's manifest schema. Run: pnpm build && pnpm manifest-schema`);
+const expected = await manifestSchemaText();
+for (const name of SCHEMA_FILES) {
+  const path = join(root, name);
+  if (!existsSync(path) || readFileSync(path, 'utf8') !== expected) problems.push(`${name} is out of step with the registry's manifest schema. Run: pnpm build && pnpm manifest-schema`);
+}
 
 /** Where in a manifest an Ajv error is, in plain words. */
 const where = (instancePath) => {
