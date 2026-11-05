@@ -24,7 +24,6 @@
     "version-packages": "changeset version && node scripts/versions.mjs sync && node scripts/augur-release.mjs version && node scripts/catalog.mjs && node scripts/licences.mjs notices",
     "check:manifest": "node scripts/check-manifests.mjs",
     "manifest-schema": "node scripts/manifest.schema.mjs",
-    "create-app": "node scripts/create-app.mjs",
     "dev:app": "node scripts/dev-app.mjs",
     "check:reasons": "node scripts/check-reasons.mjs",
     "catalog": "node scripts/catalog.mjs",
