@@ -3,7 +3,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Location
 metadata:
   name: augur
-  description: "Everything in im-platform: register this one file in Backstage"
+  description: "Everything in the augur repository: register this one file in Backstage"
 spec:
   targets:
     - ./augur.yaml

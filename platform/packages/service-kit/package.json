@@ -41,5 +41,8 @@
     "@opentelemetry/instrumentation-undici": "^0.34.0",
     "@opentelemetry/sdk-node": "^0.300.0",
     "jose": "^6.2.12"
+  },
+  "peerDependencies": {
+    "fastify": "^5.6.0"
   }
 }

@@ -18,7 +18,7 @@ import { parseChangeset, readParts } from './augur-release.mjs';
 import { AUGUR, tagOf, versionsFrom } from './promote.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
-const REPO = process.env.GITHUB_REPOSITORY ?? 'harry-burton-dev/im-platform';
+const REPO = process.env.GITHUB_REPOSITORY ?? 'harry-burton-dev/augur';
 /** Where the images, and so the feed, are: IMAGE_REPO, or the repository's own path. */
 const IMAGES = (process.env.IMAGE_REPO || `ghcr.io/${REPO}`).toLowerCase();
 /** The pipeline's media type in the registry. */

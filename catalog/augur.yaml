@@ -25,7 +25,7 @@ metadata:
   title: AUGUR platform
   description: The shell, SDK, UI kit, gateway, identity, registry, events, models, storage and updater
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
+    github.com/project-slug: harry-burton-dev/augur
     backstage.io/techdocs-ref: dir:..
     augur.dev/release-unit: augur
     augur.dev/version: 0.18.0
@@ -40,8 +40,8 @@ metadata:
   title: "@augur/admin"
   description: "Admin: people, departments, apps, status and activity. Built as one ES module the shell imports from the registry's entry URL."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/admin/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/admin/
     augur.dev/package: "@augur/admin"
     augur.dev/version: 0.13.0
     augur.dev/release-unit: augur
@@ -58,8 +58,8 @@ metadata:
   title: "@augur/home"
   description: "Home: the platform's landing app. Built as one ES module the shell imports from the registry's entry URL."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/home/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/home/
     augur.dev/package: "@augur/home"
     augur.dev/version: 0.3.3
     augur.dev/release-unit: augur
@@ -76,8 +76,8 @@ metadata:
   title: "@augur/shell"
   description: "The shell host: wraps ui-shell, loads apps from the registry manifest, mounts the current app and routes intents."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/shell/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/shell/
     augur.dev/package: "@augur/shell"
     augur.dev/version: 0.15.0
     augur.dev/release-unit: augur
@@ -94,8 +94,8 @@ metadata:
   title: "@augur/sign-in-theme"
   description: AUGUR's sign-in and email theme for Keycloak (ADR 0041), built with Keycloakify from Common's tokens and parts. Shipped as a jar in AUGUR's Keycloak image.
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/sign-in-theme/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/sign-in-theme/
     augur.dev/package: "@augur/sign-in-theme"
     augur.dev/version: 0.0.0
     augur.dev/release-unit: augur
@@ -112,8 +112,8 @@ metadata:
   title: "@augur/upgrades"
   description: "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/frontends/upgrades/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/upgrades/
     augur.dev/package: "@augur/upgrades"
     augur.dev/version: 0.1.3
     augur.dev/release-unit: augur
@@ -130,8 +130,8 @@ metadata:
   title: "@augur/app-tools"
   description: "The release steps every AUGUR app shares: dev builds, previews, signed bundles and the app-release.json a deployment installs from, as the augur-app command for an app in its own repository."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/app-tools/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/app-tools/
     augur.dev/package: "@augur/app-tools"
     augur.dev/version: 0.2.1
     augur.dev/release-unit: augur
@@ -148,8 +148,8 @@ metadata:
   title: "@augur/clients"
   description: "Typed clients for AUGUR's platform APIs, generated from contracts/*.openapi.yaml: one factory per service, called through the gateway."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/clients/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/clients/
     augur.dev/package: "@augur/clients"
     augur.dev/version: 0.0.0
     augur.dev/release-unit: augur
@@ -166,8 +166,8 @@ metadata:
   title: "@augur/mfe-sdk"
   description: "The contract between the shell and micro frontends: registration, mount context, event bus and intents."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/mfe-sdk/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/mfe-sdk/
     augur.dev/package: "@augur/mfe-sdk"
     augur.dev/version: 1.11.0
     augur.dev/release-unit: augur
@@ -184,8 +184,8 @@ metadata:
   title: "@augur/records"
   description: "The shapes every app's records share: levels a tree of units is built from, lifecycles, who may do what, tags, relationships, and publishing up the floors with one owner."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/records/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/records/
     augur.dev/package: "@augur/records"
     augur.dev/version: 0.1.0
     augur.dev/release-unit: augur
@@ -202,8 +202,8 @@ metadata:
   title: "@augur/service-kit"
   description: "What a backend service needs to know who is calling: the caller the gateway verified, carried in request headers."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/service-kit/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/service-kit/
     augur.dev/package: "@augur/service-kit"
     augur.dev/version: 0.12.0
     augur.dev/release-unit: augur
@@ -220,8 +220,8 @@ metadata:
   title: "@augur/ui-kit"
   description: Design tokens, base CSS and web components rebuilt from the Wave design system.
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/packages/ui-kit/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/ui-kit/
     augur.dev/package: "@augur/ui-kit"
     augur.dev/version: 1.9.2
     augur.dev/release-unit: augur
@@ -237,8 +237,8 @@ metadata:
   name: augur-events
   title: "@augur/events"
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/events/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/events/
     augur.dev/package: "@augur/events"
     augur.dev/version: 0.7.0
     augur.dev/release-unit: augur
@@ -263,8 +263,8 @@ metadata:
   name: augur-gateway
   title: "@augur/gateway"
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/gateway/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/gateway/
     augur.dev/package: "@augur/gateway"
     augur.dev/version: 0.9.0
     augur.dev/release-unit: augur
@@ -288,8 +288,8 @@ metadata:
   name: augur-identity
   title: "@augur/identity"
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/identity/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/identity/
     augur.dev/package: "@augur/identity"
     augur.dev/version: 1.0.0
     augur.dev/release-unit: augur
@@ -315,8 +315,8 @@ metadata:
   name: augur-models
   title: "@augur/models"
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/models/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/models/
     augur.dev/package: "@augur/models"
     augur.dev/version: 0.3.3
     augur.dev/release-unit: augur
@@ -341,8 +341,8 @@ metadata:
   name: augur-registry
   title: "@augur/registry"
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/registry/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/registry/
     augur.dev/package: "@augur/registry"
     augur.dev/version: 0.15.0
     augur.dev/release-unit: augur
@@ -367,8 +367,8 @@ metadata:
   name: augur-storage
   title: "@augur/storage"
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/storage/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/storage/
     augur.dev/package: "@augur/storage"
     augur.dev/version: 0.4.1
     augur.dev/release-unit: augur
@@ -388,8 +388,8 @@ metadata:
   name: augur-updater
   title: "@augur/updater"
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/services/updater/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/updater/
     augur.dev/package: "@augur/updater"
     augur.dev/version: 0.8.1
     augur.dev/release-unit: augur
@@ -410,8 +410,8 @@ metadata:
   title: "@augur/contract-tests"
   description: "The shell's promise to apps, tested: a reference app, and frozen builds of it from each SDK release, mounted by the real shell in a browser."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
-    backstage.io/source-location: url:https://github.com/harry-burton-dev/im-platform/tree/dev/platform/contract/
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/contract/
     augur.dev/package: "@augur/contract-tests"
     augur.dev/version: 0.1.14
     augur.dev/release-unit: augur
@@ -428,7 +428,7 @@ metadata:
   title: Events API
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
+    github.com/project-slug: harry-burton-dev/augur
     augur.dev/contract-version: 1.8.0
 spec:
   type: openapi
@@ -445,7 +445,7 @@ metadata:
   title: Gateway API
   description: The gateway's own API, beside the services it forwards to. Reached at /api/gateway/v1 by a signed-in caller. Everything else under /api/<service> is forwarded to that service with the caller in x-user-* headers and in x-augur-caller, a token the gateway signs (EdDSA, one minute) for that service alone (its `aud` is the service's name), and without the caller's Authorization header. Services that check callers believe only the signed one. Every path but /healthz and /caller-keys needs a signed-in caller, however it is spelt. x-user-signed-in-at (and the token's `signedInAt`) carries when the caller last entered their password (the token's auth_time, ISO 8601), for a service that wants a fresh sign-in for something drastic; the shell's /auth/again?return=<path> asks for the password and comes back.
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
+    github.com/project-slug: harry-burton-dev/augur
     augur.dev/contract-version: 1.7.0
 spec:
   type: openapi
@@ -462,7 +462,7 @@ metadata:
   title: Identity API
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
+    github.com/project-slug: harry-burton-dev/augur
     augur.dev/contract-version: 1.15.0
 spec:
   type: openapi
@@ -483,7 +483,7 @@ metadata:
     Apps' services may also turn text into vectors (/embeddings, 1.1), to match by meaning, when an embedding model is set up (MODEL_EMBEDDING_NAME; the stand-in always has one). Each request counts as one call and is recorded as model.embedded, with how many texts and never what they say.
     Every call is written to the audit log (model.called, with the model, how many messages and which tools, never what was said) before it is made; a call that can't be recorded isn't made (503). Each app (the shell's assistant counts as one) gets a number of calls a day, UTC (429 after). Models are off until an admin turns them on (403 while off).
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
+    github.com/project-slug: harry-burton-dev/augur
     augur.dev/contract-version: 1.1.0
 spec:
   type: openapi
@@ -500,7 +500,7 @@ metadata:
   title: Registry API
   description: Catalogue of apps and micro frontends; serves the shell manifest.
   annotations:
-    github.com/project-slug: harry-burton-dev/im-platform
+    github.com/project-slug: harry-burton-dev/augur
     augur.dev/contract-version: 1.31.0
 spec:
   type: openapi

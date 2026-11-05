@@ -1,33 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { appCredentialsFromEnv, publishFrontend, registerApp } from '@augur/service-kit';
+import { readManifest, startAppService } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 
-const port = Number(process.env.PORT ?? 8090);
-const app = await buildApp();
-await app.listen({ port, host: '0.0.0.0' });
-
-// Put __NAME__ in the platform's catalogue, so the shell can offer it.
-// It signs in as itself with SERVICE_CLIENT_SECRET (issued for it by an admin in Admin, Apps, or
-// by the app runner when it installs the app). The build puts the manifest beside the code; from source
-// it's in apps/__ID__. A released image carries the built frontend too (APP_FRONTEND, or /app/frontend),
-// which it gives the registry first, so the shell loads this version's own copy of it.
-const { REGISTRY_URL, APP_MANIFEST, APP_FRONTEND } = process.env;
-const credentials = appCredentialsFromEnv('__ID__');
-if (REGISTRY_URL && credentials) {
-  const built = new URL('./manifest.json', import.meta.url);
-  const manifest = JSON.parse(readFileSync(APP_MANIFEST ?? (existsSync(built) ? built : new URL('../../manifest.json', import.meta.url)), 'utf8'));
-  const frontend = APP_FRONTEND ?? fileURLToPath(new URL('../frontend/', import.meta.url));
-  const giveFrontend = existsSync(join(frontend, 'entry.js'))
-    ? publishFrontend({ registryUrl: REGISTRY_URL, credentials, app: manifest.id, version: manifest.version, dir: frontend })
-        .then((kept) => app.log.info({ version: manifest.version, kept }, kept ? 'frontend kept by version' : 'this deployment doesn’t keep frontends by version'))
-        .catch((err: Error) => app.log.error(err.message))
-    : Promise.resolve();
-  void giveFrontend
-    .then(() => registerApp({ registryUrl: REGISTRY_URL, credentials, manifest }))
-    .then(() => app.log.info({ app: manifest.id, version: manifest.version }, 'registered with the platform'))
-    .catch((err: Error) => app.log.error(err.message));
-} else {
-  app.log.info('REGISTRY_URL or the app’s sign-in (SERVICE_CLIENT_SECRET) is not set, so __NAME__ is not in the catalogue (fine under pnpm dev:app).');
-}
+// Builds the service, listens on PORT, runs its jobs, gives the registry its frontend and puts it in
+// the platform's catalogue (signed in as itself with SERVICE_CLIENT_SECRET). See docs/build-an-app.md.
+const manifest = readManifest(import.meta.url);
+await startAppService({ manifest, buildApp: ({ jobs }) => buildApp({ manifest, jobs }) });

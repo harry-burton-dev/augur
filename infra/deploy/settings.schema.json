@@ -1051,6 +1051,16 @@
       "description": "Where a service fetches its own tokens (default: from OIDC_INTERNAL_URL).",
       "x-internal": "default"
     },
+    "APP_MANIFEST": {
+      "type": "string",
+      "description": "An app service's manifest file (default: the manifest.json its build put beside the code).",
+      "x-internal": "default"
+    },
+    "APP_FRONTEND": {
+      "type": "string",
+      "description": "The folder holding an app service's built frontend, which it publishes at start (default: frontend/ beside the code).",
+      "x-internal": "default"
+    },
     "SERVICE_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
