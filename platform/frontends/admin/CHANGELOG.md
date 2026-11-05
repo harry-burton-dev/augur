@@ -1,5 +1,21 @@
 # @augur/admin
 
+## 0.17.0
+
+### Minor Changes
+
+- 325b583: Admin → Organisation shows the organisation's name, time zone and email sender, and lets an admin change them in one form that sends only what changed (ADR 0042). It says plainly that AUGUR's email doesn't use the organisation's sender yet: mail still goes from the relay's address (`SMTP_FROM`) under the product's name. Activity writes `organisation.changed` as a sentence, and Admin's menu gains a Settings group in the Organisation area.
+
+### Patch Changes
+
+- c0de29b: Email comes from the organisation's sender (Admin → Organisation) instead of SMTP_FROM and the product's name. The service kit's `Mailer` takes a `sender` lookup (`organisationSender` reads identity's `GET /v1/organisation`), Admin → Status shows the name and address mail comes from, and the realm job gives Keycloak the same sender on every run.
+- 6236e98: A deployment can choose how depth is drawn behind dialogs, menus and the palette (ADR 0068, PDR-010 amendment 2): `FOCUS_DEPTH` (`veil`, `lens` or `scrim`) reaches the shell's page as an `augur-depth` meta, which Quill reads for the shell and every app. `scrim` blurs nothing, for desktops without a GPU. Unset, each app chooses as before.
+
+  Serves Quill 0.11.0 (Common 0.9.0, kit bundle 0.5.6), which reads it, and PDR-010's tile amendments: a dimmer document tile and a "more" mark on tiles.
+
+- Updated dependencies [8eba62b]
+  - @augur/mfe-sdk@2.1.0
+
 ## 0.16.0
 
 ### Minor Changes

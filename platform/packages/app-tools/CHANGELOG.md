@@ -1,5 +1,15 @@
 # @augur/app-tools
 
+## 0.4.1
+
+### Patch Changes
+
+- 400916d: `augur-app bundle` no longer fails with `spawnSync docker ENOBUFS` when it attests a service image's SBOM. Reading the SBOM back from `docker buildx imagetools inspect` overflowed Node's 1 MB output limit, which broke app previews and releases on app-tools 0.4.0. It now allows up to 512 MB.
+- Updated dependencies [c0de29b]
+- Updated dependencies [8eba62b]
+- Updated dependencies [ab9f61f]
+  - @augur/service-kit@0.16.0
+
 ## 0.4.0
 
 ### Minor Changes
