@@ -1,5 +1,6 @@
 import type { Scope } from './apps.js';
 import { serviceHeaders, type ServiceCredentials } from './service.js';
+import { withDeadline } from './deadline.js';
 
 /** The registry could not say what an app is granted; the call should be refused for now, not let through. */
 export class GrantsUnavailable extends Error {}
@@ -32,7 +33,7 @@ export const registryGrants = ({ registryUrl, credentials, ttlMs = 30_000, fetch
     if (workspace) url.searchParams.set('workspace', workspace);
     let res: Response;
     try {
-      res = await fetchImpl(url, { headers: await serviceHeaders(credentials) });
+      res = await withDeadline(fetchImpl)(url, { headers: await serviceHeaders(credentials) });
     } catch (err) {
       throw new GrantsUnavailable(`The registry could not be reached (${(err as Error).message}).`);
     }
@@ -59,7 +60,7 @@ export const registryInboxKinds = ({ registryUrl, credentials, ttlMs = 30_000, f
     if (hit && now() - hit.at < ttlMs) return hit.kinds;
     let res: Response;
     try {
-      res = await fetchImpl(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/grants`, { headers: await serviceHeaders(credentials) });
+      res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/grants`, { headers: await serviceHeaders(credentials) });
     } catch (err) {
       throw new GrantsUnavailable(`The registry could not be reached (${(err as Error).message}).`);
     }

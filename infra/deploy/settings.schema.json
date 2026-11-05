@@ -1028,6 +1028,23 @@
       ],
       "x-docs": "docs/observability.md#for-a-service"
     },
+    "SERVICE_CALL_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long one service waits for another before saying it can't be reached (calls to the model gateway and frontend uploads get longer).",
+      "default": "5",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
     "SEED_ALLOWED": {
       "type": "string",
       "description": "true lets a deployment admin fill this deployment with synthetic sample data (pnpm seed). Never where real people work.",
