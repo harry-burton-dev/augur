@@ -1,6 +1,6 @@
 # 0072. Identity deletes a leaver's account after the retention period, in a fixed order; Keycloak's Workflows only handle idle accounts
 
-- **Status:** Proposed
+- **Status:** Accepted (Harry, 2026-11-05)
 - **Date:** 2026-11-05
 - **Decided by:** Harry
 - **Replaces:** none. It settles how [0040](0040-account-lifecycle-and-personal-data.md)'s "deletion follows the deployment's retention period" is done.
