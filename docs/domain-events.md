@@ -60,7 +60,7 @@ It's a hint, not a record. There's no `after` and no catching up: a screen that 
 
 ## The platform's topics
 
-The events service publishes these as identity and the registry record the change in the audit log, so the two always agree:
+The events service publishes these as identity and the registry record the change in the audit log, so the two always agree, and the Inbox's as people act on items:
 
 | Topic | Payload | When |
 | --- | --- | --- |
@@ -71,6 +71,8 @@ The events service publishes these as identity and the registry record the chang
 | `platform.team.member-added`, `platform.team.member-removed` | `{ team, person }` | Someone joins or leaves a team, however an admin did it, on that team's floor |
 | `platform.app.turned-off`, `platform.app.turned-on`, `platform.app.removed` | `{ app }` | An admin turns an app off or on, everywhere or on one floor (the event's floor), or removes it |
 | `platform.app.blocked`, `platform.app.rule-cleared` | `{ app }` | An admin blocks an app on a floor and every floor below it, or clears a floor's rule so it follows the floor above |
+| `platform.inbox.taken`, `.released`, `.declined`, `.done` | `{ item, app, key, by }` | Someone takes a team's inbox item, gives it back, declines it or marks it done ([The Inbox](inbox.md)) |
+| `platform.inbox.handed-on` | `{ item, app, key, by, to }` | Someone hands an item on; `to` is `person:<id>` or `team:<id>` |
 
 Person events are on no floor, so they reach services, not browsers; team and membership events are on the team's floor, so its screens hear them too. Changes a person makes to their own name or email in their account (in Keycloak, ADR 0039) and the lifecycle events of ADR 0040 (`left`, `deleted`) aren't sent yet.
 

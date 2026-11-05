@@ -12,6 +12,7 @@ describe('browser telemetry settings', () => {
 
   it('is off, saying why and who can change it, without a collector', () => {
     expect(browserTelemetryFrom({})).toMatchObject({ on: false, why: expect.stringContaining('OTEL_EXPORTER_OTLP_ENDPOINT') });
+    expect(browserTelemetryFrom({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://otel-lgtm:4318', OTEL_SDK_DISABLED: 'true' })).toMatchObject({ on: false, why: expect.stringContaining('OTEL_SDK_DISABLED') });
   });
 
   it('reads OTEL-style pairs', () => {

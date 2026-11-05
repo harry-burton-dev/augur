@@ -54,6 +54,10 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### The deployment watches itself
+
+otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72 hours and runs AUGUR's alert rules ([observability.md](observability.md#alerts)). Its alerts reach deployment admins as notices through the registry, with `ALERT_WEBHOOK_TOKEN`: the updater makes it up when you upgrade from the Upgrade Centre; by hand, add it to `.env` (`openssl rand -hex 32`) before `pc up -d`. Set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`) too, to sign in to Grafana. It takes up to 2 GB of memory (`OTEL_LGTM_MEM_LIMIT`); a server with its own collector sets `OTEL_EXPORTER_OTLP_ENDPOINT` to it and `OTEL_LGTM_REPLICAS=0`. The `observability` profile does nothing now and can come out of `COMPOSE_PROFILES`. The registry's report to Backstage now goes every 15 minutes.
+
 ### Mandate ships with AUGUR
 
 Mandate, intent passed down the floors, now ships with every release like Artifacts, Explorer and Data Atlas: a new container, `mandate`, at the release `release/shipped-apps.json` pins. Admin → Apps no longer lists it as something to install, and it's upgraded with AUGUR from now on.

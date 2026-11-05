@@ -16,20 +16,40 @@ export const ended = (preview: Pick<FeaturePreview, 'until'>, now: Date) => Bool
 /** One of an app's feature previews as it stands: who gets it, whether its time is up, and whether an admin chose that. */
 export const previewState = (record: AppRecord, preview: FeaturePreview, ring: Ring, now: Date) => {
   const set = record.featurePreviews?.[preview.id];
-  return { mode: set?.mode ?? defaultMode(ring), ended: ended(preview, now), ...(set ? { setBy: set.setBy, setAt: set.setAt } : {}) };
+  return {
+    mode: set?.mode ?? defaultMode(ring),
+    ended: ended(preview, now),
+    ...(set?.mode === 'floors' ? { floors: set.floors ?? [] } : {}),
+    ...(set ? { setBy: set.setBy, setAt: set.setAt } : {}),
+  };
 };
 
-/** The ids of an app's feature previews that are on for one person: every one for everyone, and the opt-in ones they turned on. Never an ended one. */
-export const previewsOnFor = (record: AppRecord, optIns: FeatureOptIn[], ring: Ring, now: Date) =>
+/**
+ * Whether a preview targeted at floors is on where someone stands: on a chosen floor or on a floor
+ * beneath one. `chain` is the floor's rule chain, from the org down to it (service-kit's ruleChain),
+ * so a personal floor counts as under the org. Without a floor it's off: there is nowhere to match.
+ */
+export const onForFloors = (floors: string[] | undefined, chain: string[]) => Boolean(floors?.some((f) => chain.includes(f)));
+
+/**
+ * The ids of an app's feature previews that are on for one person standing on a floor: every one for
+ * everyone, the floor-targeted ones whose floors include where they stand or a floor above it, and the
+ * opt-in ones they turned on. Never an ended one.
+ */
+export const previewsOnFor = (record: AppRecord, optIns: FeatureOptIn[], ring: Ring, now: Date, chain: string[] = []) =>
   (record.entry.previews ?? [])
     .filter((p) => {
       const state = previewState(record, p, ring, now);
       if (state.ended) return false;
+      if (state.mode === 'floors') return onForFloors(state.floors, chain);
       return state.mode === 'everyone' || (state.mode === 'opt-in' && optIns.some((o) => o.app === record.entry.id && o.preview === p.id));
     })
     .map((p) => p.id);
 
-export const MODE_WORDS: Record<FeaturePreviewMode, string> = { off: 'off', 'opt-in': 'for those who turn it on', everyone: 'on for everyone' };
+export const MODE_WORDS: Record<FeaturePreviewMode, string> = { off: 'off', 'opt-in': 'for those who turn it on', everyone: 'on for everyone', floors: 'on for chosen floors' };
+
+/** The most floors one preview can be targeted at. */
+export const MAX_PREVIEW_FLOORS = 100;
 
 export interface FeaturePreviewRouteOptions {
   store: AppStore;
@@ -37,6 +57,11 @@ export interface FeaturePreviewRouteOptions {
   now?: () => Date;
   serviceOf: (req: FastifyRequest, reply: FastifyReply) => Promise<ServiceIdentity | null | undefined>;
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
+  /**
+   * A floor's rule chain (org down to it), undefined when there is no such floor, or null when floors
+   * can't be looked up. Without it, previews targeted at floors are off everywhere and can't be chosen.
+   */
+  chainOf?: (workspace: string) => Promise<string[] | undefined | null>;
 }
 
 /**
@@ -46,10 +71,12 @@ export interface FeaturePreviewRouteOptions {
  * off for everyone, and Admin says the app should drop it or make it everyone's.
  */
 export const featurePreviewRoutes =
-  ({ store, ring, now = () => new Date(), serviceOf, record }: FeaturePreviewRouteOptions) =>
+  ({ store, ring, now = () => new Date(), serviceOf, record, chainOf }: FeaturePreviewRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const findApp = async (id: string) => (await store.records()).find((r) => r.entry.id === id);
+    /** Where someone stands, as a rule chain; empty when they stand nowhere or it can't be told, so floor previews stay off. */
+    const chainAt = async (workspace: string | undefined) => (workspace && chainOf ? ((await chainOf(workspace)) ?? []) : []);
 
     /** The feature previews of every app the caller can open, and whether each is on for them. */
     app.get(
@@ -59,8 +86,10 @@ export const featurePreviewRoutes =
           summary: "Apps' feature previews, and whether each is on for the caller (SDK 1.7)",
           description: [
             'Every app the caller can open that lists `previews` in its manifest. A preview is on for',
-            'everyone, for those who turned it on (opt-in), or off; one past its `until` day is ended',
-            'and off. On a preview server one nobody chose for is opt-in, on a production server off.',
+            'everyone, for chosen floors and the floors beneath them, for those who turned it on (opt-in),',
+            'or off; one past its `until` day is ended and off. On a preview server one nobody chose for is',
+            "opt-in, on a production server off. Floor-targeted ones are on when the caller's floor",
+            '(X-Workspace-Id, checked by the gateway) is one of them or beneath one.',
           ].join(' '),
           response: {
             200: Type.Object(
@@ -87,17 +116,18 @@ export const featurePreviewRoutes =
       async (req, reply) => {
       const caller = callerFromHeaders(req.headers);
       if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to see previews.' });
-      const [records, optIns] = await Promise.all([store.records(), store.featureOptIns({ person: caller.id })]);
+      const [records, optIns, chain] = await Promise.all([store.records(), store.featureOptIns({ person: caller.id }), chainAt(caller.workspace?.id)]);
       const at = now();
       return {
         apps: records
           .filter((r) => r.enabled && r.entry.previews?.length && (!r.entry.requiredRole || caller.roles.includes(r.entry.requiredRole)))
           .map((r) => {
-            const on = previewsOnFor(r, optIns, ring, at);
+            const on = previewsOnFor(r, optIns, ring, at, chain);
             return {
               app: r.entry.id,
               name: r.entry.name,
               previews: r.entry.previews!.map((p) => {
+                // Which floors stays Admin's business: a person sees only whether it's on where they stand.
                 const { mode, ended } = previewState(r, p, ring, at);
                 return { ...p, mode, ...(ended ? { ended } : {}), on: on.includes(p.id) };
               }),
@@ -183,13 +213,32 @@ export const featurePreviewRoutes =
       {
         schema: {
           summary: "Set who gets one of an app's feature previews (admins)",
-          description: "`null` goes back to the server's default. Kept when the app registers new versions. Audited as app.preview-set.",
+          description: [
+            "`null` goes back to the server's default. `floors` turns it on for the floors listed in `floors`",
+            'and the floors beneath them, and for nobody else. Kept when the app registers new versions.',
+            'Audited as app.preview-set.',
+          ].join(' '),
           params: params('id', 'preview'),
-          body: Type.Object({ mode: Type.Union([ref(FeaturePreviewModeSchema), Type.Null()]) }, { additionalProperties: false }),
+          body: Type.Object(
+            {
+              mode: Type.Union([ref(FeaturePreviewModeSchema), Type.Null()]),
+              floors: Type.Optional(
+                Type.Array(Type.String({ minLength: 1, maxLength: 100 }), {
+                  minItems: 1,
+                  maxItems: MAX_PREVIEW_FLOORS,
+                  uniqueItems: true,
+                  description: 'The floors it is on for, with mode `floors` (and only then)',
+                }),
+              ),
+            },
+            { additionalProperties: false },
+          ),
           response: {
             200: { ...ref(FeaturePreviewsAdmin), description: 'Its feature previews as they now are' },
+            400: refused('Mode `floors` without floors, floors with another mode, or a floor that does not exist (error bad_floors)'),
             403: refused('Not an admin'),
             404: refused('No such app, or it offers no such preview'),
+            503: refused("Floors can't be looked up right now, so they can't be checked"),
           },
         },
       },
@@ -199,13 +248,23 @@ export const featurePreviewRoutes =
         const found = await findApp(req.params.id);
         const preview = found?.entry.previews?.find((p) => p.id === req.params.preview);
         if (!found || !preview) return reply.code(404).send({ error: 'not_found', message: `${found ? found.entry.name : req.params.id} has no preview "${req.params.preview}".` });
-        const changed = (await store.setFeaturePreview(found.entry.id, preview.id, req.body.mode, caller.id))!;
+        const { mode, floors } = req.body;
+        if (mode === 'floors' && !floors) return reply.code(400).send({ error: 'bad_floors', message: `Choose at least one floor to turn ${preview.name} on for.` });
+        if (mode !== 'floors' && floors) return reply.code(400).send({ error: 'bad_floors', message: 'Floors go only with the mode floors.' });
+        if (floors) {
+          if (!chainOf) return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up: the registry has no way to reach identity.' });
+          const chains = await Promise.all(floors.map((f) => chainOf(f)));
+          if (chains.some((c) => c === null)) return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now. Try again in a moment.' });
+          const missing = floors.filter((_, i) => chains[i] === undefined);
+          if (missing.length) return reply.code(400).send({ error: 'bad_floors', message: `There is no floor ${missing.map((m) => `"${m}"`).join(', ')}.` });
+        }
+        const changed = (await store.setFeaturePreview(found.entry.id, preview.id, mode, caller.id, floors))!;
         await record(req, {
           actor: { id: caller.id, kind: 'user' },
           app: 'registry',
           action: 'app.preview-set',
           target: found.entry.id,
-          detail: { preview: preview.id, name: preview.name, mode: req.body.mode ?? defaultMode(ring), ...(req.body.mode === null ? { default: true } : {}) },
+          detail: { preview: preview.id, name: preview.name, mode: mode ?? defaultMode(ring), ...(floors ? { floors } : {}), ...(mode === null ? { default: true } : {}) },
         });
         return adminView(changed);
       },
@@ -217,7 +276,9 @@ export const featurePreviewRoutes =
       {
         schema: {
           summary: "Which of an app's feature previews are on for one person (the app's own service, or admins)",
+          description: 'With `workspace`, the floor they stand on, so previews targeted at floors count too; without it those are off.',
           params: params('id', 'person'),
+          querystring: Type.Object({ workspace: Type.Optional(Type.String({ maxLength: 100, description: 'The floor they stand on' })) }),
           response: {
             200: Type.Object({ on: Type.Array(Type.String()) }, { description: 'The ids on for them' }),
             403: refused("Neither the app's own service nor an admin"),
@@ -233,7 +294,8 @@ export const featurePreviewRoutes =
         if (!own && !callerFromHeaders(req.headers)?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only the app itself or an admin can ask whose previews are on.' });
         const found = await findApp(req.params.id);
         if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-        return { on: previewsOnFor(found, await store.featureOptIns({ person: req.params.person, app: found.entry.id }), ring, now()) };
+        const [optIns, chain] = await Promise.all([store.featureOptIns({ person: req.params.person, app: found.entry.id }), chainAt(req.query.workspace)]);
+        return { on: previewsOnFor(found, optIns, ring, now(), chain) };
       },
     );
   };

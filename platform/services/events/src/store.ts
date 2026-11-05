@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
+import { INBOX_CHANNEL, inboxMigration, MemoryInboxStore, PgInboxStore, type InboxStore } from './inbox.ts';
 import { runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
@@ -94,6 +95,8 @@ export const topicMatches = (topic: string, wanted: string[]) =>
   wanted.some((w) => (w.endsWith('.*') ? topic.startsWith(w.slice(0, -1)) : topic === w));
 
 export interface EventStore {
+  /** The Inbox's items (ADR 0026), in the same database. */
+  readonly inbox: InboxStore;
   /**
    * Adds one notification per recipient and tells every listener, on every instance.
    * With a key, skips anyone who already has one from that app with that key.
@@ -141,6 +144,7 @@ const under = (floor: EventFloor | undefined, workspace: string) => !!floor?.pat
 
 /** For tests, and for running locally without Postgres. Forgets everything on restart. */
 export class MemoryEventStore implements EventStore {
+  readonly inbox = new MemoryInboxStore();
   private notifications: Notification[] = [];
   private entries: AuditEntry[] = [];
   private emitter = new EventEmitter().setMaxListeners(0);
@@ -318,6 +322,7 @@ export const migrations: Migration[] = [
       alter table events.notifications add column key text;
       create unique index notifications_once on events.notifications (recipient, app, key) where key is not null;`,
   },
+  inboxMigration,
 ];
 
 const CHANNEL = 'events_notification';
@@ -405,8 +410,11 @@ export class PgEventStore implements EventStore {
   private emitter = new EventEmitter().setMaxListeners(0);
   private listening?: pg.PoolClient;
   private closed = false;
+  readonly inbox: PgInboxStore;
 
-  constructor(private readonly pool: pg.Pool) {}
+  constructor(private readonly pool: pg.Pool) {
+    this.inbox = new PgInboxStore(pool);
+  }
 
   static async connect(connectionString: string) {
     const store = new PgEventStore(steadyPool(new pg.Pool({ connectionString })));
@@ -444,6 +452,7 @@ export class PgEventStore implements EventStore {
     client.on('end', () => again('it ended'));
     client.on('notification', (msg) => {
       if (msg.channel === EVENT_CHANNEL && msg.payload) return void this.heardEvent(msg.payload);
+      if (msg.channel === INBOX_CHANNEL && msg.payload) return void this.inbox.heard(msg.payload);
       if (msg.channel !== CHANNEL || !msg.payload) return;
       const sent = JSON.parse(msg.payload) as Notification | { ref: string };
       if (!('ref' in sent)) return void this.emitter.emit('notification', sent);
@@ -455,6 +464,7 @@ export class PgEventStore implements EventStore {
     });
     await client.query(`listen ${CHANNEL}`);
     await client.query(`listen ${EVENT_CHANNEL}`);
+    await client.query(`listen ${INBOX_CHANNEL}`);
   }
 
   private heardEvent(payload: string) {

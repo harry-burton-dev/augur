@@ -14,14 +14,20 @@ describe('which releases an app follows', () => {
 describe('who gets a feature preview', () => {
   const preview = { id: 'board', name: 'Board view', mode: 'opt-in' as const, ended: false, chosen: false, optedIn: 2 };
   it('offers the server’s default first, and only Off for one that has ended', () => {
-    expect(featureModeChoices(preview, 'opt-in').map((c) => c.value)).toEqual(['default', 'off', 'opt-in', 'everyone']);
+    expect(featureModeChoices(preview, 'opt-in').map((c) => c.value)).toEqual(['default', 'off', 'opt-in', 'everyone', 'floors']);
     expect(featureModeChoices(preview, 'off')[0].label).toBe('As this server does: off');
     const ended = featureModeChoices({ ...preview, ended: true, until: '2026-01-01' }, 'off');
-    expect(ended.filter((c) => c.disabled).map((c) => c.value)).toEqual(['opt-in', 'everyone']);
+    expect(ended.filter((c) => c.disabled).map((c) => c.value)).toEqual(['opt-in', 'everyone', 'floors']);
   });
 
   it('says how many turned it on, and what to do once it has ended', () => {
     expect(featureHint(preview)).toBe('2 people have turned it on.');
     expect(featureHint({ ...preview, ended: true, until: '2026-01-01' })).toMatch(/should drop it or make it everyone’s/);
+  });
+
+  it('names the floors one is on for', () => {
+    const names: Record<string, string> = { f: 'Finance', l: 'Legal', p: 'Payroll' };
+    expect(featureHint({ ...preview, mode: 'floors', floors: ['f'] }, (id) => names[id])).toBe('On for Finance and the floors beneath, without a release; off everywhere else.');
+    expect(featureHint({ ...preview, mode: 'floors', floors: ['f', 'l', 'p'] }, (id) => names[id])).toMatch(/^On for Finance, Legal and Payroll /);
   });
 });
