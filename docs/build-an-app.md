@@ -62,7 +62,7 @@ import { App, places } from './app.js';
 export default defineReactApp<MountContext>({ name: manifest.name, App, routes: places });
 ```
 
-`places` are the app's places on the address bar (`placeRoutes`, `place('/claims/:claim', Claim)`), and `useData` loads what each shows, kept per floor and refreshed by `refreshOn`. Add a `Glance` for a card on Home, a `Picker` to answer requests, and `intents` to open at a place. Apps written before the React kits mount Lit with `defineMicroFrontend` from the SDK, and the parts below have the same names there (`ui-page-head` for `PageHead`).
+`places` are the app's places on the address bar (`placeRoutes`, `place('/claims/:claim', Claim)`), and `useData` loads what each shows, kept per floor and refreshed by `refreshOn`. Add a `Glance` for a card on Home, a `Picker` to answer requests, and `intents` to open at a place. An app can also default-export `defineMicroFrontend` from the SDK and render into `el` itself.
 
 Everything you need from outside your app comes through `ctx`:
 
@@ -81,7 +81,7 @@ Everything you need from outside your app comes through `ctx`:
 
 **What your app can reach.** Your app runs in the shell's own window with the signed-in person's session, so it can call anything that person can, admin routes included. That's why only apps the deployment's own team wrote or reviewed are installed this way ([ADR 0024](decisions/0024-apps-are-trusted-code.md)). Apps from anyone else will run sandboxed, with a token limited to their own upstreams. Your service still only gets the scopes the registry granted it, and the gateway still applies floor rules on every call.
 
-Build screens from the kit's components (run `pnpm --filter @augur/ui-kit storybook` to see them) and its tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of the kit or Lit: the shell serves one copy to every app, and `vite.config.ts` keeps `lit`, `lit/*` and `@augur/ui-kit` out of your bundle. Anything else you import, you bundle.
+Build screens from Quill's parts (`@augur/app-kit`, which also carries all of Common; see them in the `augur-kit` repository's Storybook) and AUGUR's tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of React or the kit: the shell serves one copy to every app, and `vite.config.ts` keeps them out of your bundle (`isSharedModule`). Anything else you import, you bundle. Lit and the Lit kit (`@augur/ui-kit`) went with SDK 2: an app that still imports them doesn't load.
 
 ### The app kit
 
@@ -91,30 +91,30 @@ Apps show more than the shell does, but each thing in them still says little: **
 - **Marks before words, words before sentences.** A colour never stands alone.
 - **Counts until asked.** Show five, then "8 more".
 - **Things open; text doesn't link.** A row has at most two actions, as words.
-- **Explain on demand.** The reason sits behind the line (`ui-note why="…"`), not in a paragraph above the form.
-- **Nothing is obtuse.** A control you can't use now stays, dimmed, and says why: give every `ui-button` and `ui-icon-button` that can be disabled a `reason` ("Only its leads can pass it down."), and list rows, list actions and menu entries a `reason` too. It stays focusable and shows on hover and focus. If it's only waiting for a request, use `busy` instead. `pnpm check:reasons` fails a platform screen that disables a control without one, and the kit warns on localhost.
+- **Explain on demand.** The reason sits behind the line (`<Note why="…">`), not in a paragraph above the form.
+- **Nothing is obtuse.** A control you can't use now stays, dimmed, and says why: give every `Button` and `IconButton` that can be disabled a `reason` ("Only its leads can pass it down."), and list rows, list actions and menu entries a `reason` too. It stays focusable and shows on hover and focus. If it's only waiting for a request, use `busy` instead. `pnpm check:reasons` fails a platform screen that disables a control without one, and the kit warns on localhost.
 - **One heading, one primary.**
 
 | Part | For |
 | --- | --- |
-| `ui-notice` | One sentence in a page that needs attention, with one action: `tone` needs, warning, refused or info |
-| `ui-note` | A quiet line that explains; `why` keeps the longer reason one press away; `live` for an action's result ("Saved.") |
-| `ui-can` | What you can do from here (up to two actions), and who can do the rest |
-| `ui-app-frame` | The page: the slate ground, an optional `rail` slot (folds to icons), the main column, an optional `aside` slot and an optional `drawer` slot at the right edge (folds away; says more about what's on screen). `measure` is `wide`, `read` or `full`; set `screen` to the screen's id and the main column and drawer change together |
-| `ui-tile` in `ui-tiles` | One thing you walk into, by its icon or picture and name alone. Its actions open in a `ui-radial-menu` on right-click, never on the tile. `add` makes the dashed tile that makes another; `rank` (`high`, `mid`, `low`) says how high it is, which sets its hover |
-| `ui-toolbar` | Above a grid: a search (`ui-search`), filters in its slot, and one `add` (`ui-add`) |
-| `ui-radial-menu` | An object's actions in a ring around it: `show(target)`, then `ui-select` with the action or `ui-close` |
-| `ui-page-head` | The trail of what it's inside, eyebrow, title, one line of summary, and its `.actions`: two show (one primary at most), the rest go in ⋯ |
-| `ui-section` | A labelled part with its count, one quiet `action` and a `why`; shows five children and folds the rest behind "3 more" |
-| `ui-card` in `ui-cards` | One thing in a grid. Its floor is a dot in the floor's colour with the floor's name (never a coloured edge), `.meta` takes up to three facts, `note` is the one line that changes what you'd do. A `ui-tally` goes in its `tally` slot. `unavailable` with a `reason` keeps it in the grid, locked, saying why |
-| `ui-tally` | Counts drawn as segments, one per thing. Mark the counts that need attention `loud`; only those, and the total, are said in words |
-| `ui-details` | The properties of the thing that's open. Empty values say "Not known"; `explained` marks the one someone asked about |
-| `ui-timeline` | History as `{ at, who, what }`, grouped Today, Yesterday, Tue 27 Oct |
-| `ui-path` | Line of sight: steps from the top floor down to `here`, each opening on `ui-open` |
-| `ui-ref`, `ui-refs` | Things from other apps (an `EntityRef`, `DocumentRef`, intent, person or team) as chips: the kind's icon, the name, a floor dot when it's kept elsewhere. On `ui-open`, raise the matching intent (`openEntity`, `openDocument`); `removable` fires `ui-remove`. Give `closed-count` and `closed-reason` for the ones the person can't open |
-| `ui-date` | A day, value YYYY-MM-DD. It shows "Fri 13 Nov · in 15 days", reads "13 nov", "friday", "end of month" or "+2w", and `empty` says what no day means ("Today", "Still holds"). `.quick` takes up to four choices. Works in `ui-dialog` like a text field |
-| `ui-people-picker` | Give it `.search` (people and teams by name, through the SDK) and, if some can't be chosen, `.check` returning why. Fires `ui-pick`; with `multiple`, chosen ones gather as chips in `.value` |
-| `ui-editor` | For writing more than a line. Its value is Markdown with mentions as `[@Name](person:id)` links, and `.refs` lists them. Give `.mentionSource` to turn on `@` and `#`. `guide="2 sentences"` counts and never blocks. Show what it writes with `ui-prose` |
+| `Notice` | One sentence in a page that needs attention, with one action: `tone` needs, warning, refused or info |
+| `Note` | A quiet line that explains; `why` keeps the longer reason one press away; `live` for an action's result ("Saved.") |
+| `AppFrame` | The page: the app's name and icon, an optional `rail` of `RailLink`s (folds to a strip), the main column, an optional `aside` and an optional `drawer` at the right edge, usually `About` (folds away; says more about what's on screen) |
+| `KindTile`, `AddTile` in `Tiles` | One thing you walk into, by its kind's shape and name alone; `AddTile` makes another. Its actions open in a `RadialMenu` on right-click, never on the tile |
+| `RadialMenu` | An object's actions in a ring around it |
+| `PageHead` | The trail of what it's inside, eyebrow, title, one line of summary, and its `actions`: two show (one primary at most), the rest go in ⋯ |
+| `Section` | A labelled part with its count, one quiet `action` and a `why`; shows five children and folds the rest behind "3 more" |
+| `Card` in `Cards` | One thing in a grid. Its floor is a dot in the floor's colour with the floor's name (never a coloured edge), `meta` takes up to three facts, `note` is the one line that changes what you'd do. `unavailable` with a `reason` keeps it in the grid, locked, saying why |
+| `Tally` | Counts drawn as segments, one per thing. Mark the counts that need attention `loud`; only those, and the total, are said in words |
+| `Details` | The properties of the thing that's open. Empty values say "Not known" |
+| `Timeline` | History as `{ at, who, what }`, grouped Today, Yesterday, Tue 27 Oct |
+| `Path` | Line of sight: steps from the top floor down to here, each opening with `onOpen` |
+| `Ref`, `Refs` | Things from other apps (an `EntityRef`, `DocumentRef`, intent, person or team) as chips: the kind's icon, the name, a floor dot when it's kept elsewhere. In `onOpen`, raise the matching intent (`openEntity`, `openDocument`); `onRemove` makes them removable. Give `closedCount` and `closedReason` for the ones the person can't open |
+| `DateField` | A day, value YYYY-MM-DD. It shows "Fri 13 Nov · in 15 days", reads "13 nov", "friday", "end of month" or "+2w", and `empty` says what no day means ("Today", "Still holds"). `quick` takes up to four choices. Works in a `Dialog` like a text field |
+| `PeoplePicker` | Give it `search` (people and teams by name, through the SDK) and, if some can't be chosen, `check` returning why. `onPick` fires; with `multiple`, chosen ones gather as chips (`onChange`) |
+| `Editor` | For writing more than a line. Its value is Markdown with mentions as `[@Name](person:id)` links (`readMentions`). Give `mentionSource` to turn on `@` and `#`. `guide="2 sentences"` counts and never blocks. Show what it writes with `Prose` |
+
+Events are callbacks (`onOpen`, `onAction`), and behaviour comes from React Aria. For an app's own layout, use Tailwind with only AUGUR's tokens (`@import '@augur/app-kit/theme.css'`), as the platform frontends do.
 
 ## 4. The service
 
@@ -217,17 +217,26 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 
 A `card` surface puts a tile on Home on that kind of floor: a quick look at the app's state with one way in, never a whole screen. Home shows up to six, the apps the person opened most recently first. The `module` names a key of `surfaces` on the entry's default export, and the card is mounted with the same `ctx` as the app (at path `/`), so `ctx.fetch`, `ctx.raise` and `ctx.workspace` work as they do in the app:
 
-```ts
+```tsx
 export default defineMicroFrontend({
   mount(el, ctx) { /* the app */ },
   surfaces: {
     './TeamClaims': {
       async mount(el, ctx) {
         const { waiting } = await (await ctx.fetch('/api/expenses/v1/summary')).json();
-        render(html`<ui-facts .items=${[{ value: waiting, label: 'Waiting for you' }]}></ui-facts>
-          <ui-button kind="secondary" @click=${() => ctx.raise({ type: 'expense.open', payload: {} })}>Open claims</ui-button>`, el);
+        const root = createRoot(el);
+        roots.set(el, root);
+        root.render(
+          <>
+            <Facts items={[{ value: waiting, label: 'Waiting for you' }]} />
+            <Button kind="secondary" onPress={() => ctx.raise({ type: 'expense.open', payload: {} })}>Open claims</Button>
+          </>,
+        );
       },
-      unmount(el) { render(html``, el); },
+      unmount(el) {
+        roots.get(el)?.unmount();
+        roots.delete(el);
+      },
     },
   },
 });
@@ -334,7 +343,7 @@ await explainEntity(ctx, ship); // the same, with why it shows from this floor m
 
 When no app the person can open handles `entity.pick`, `pickEntities` rejects with an `IntentError`: keep the control that would use it in sight, disabled, saying so.
 
-An app that shows documents can offer what a passage names with `entity.propose` (`proposeEntity`, SDK 1.5). Data Atlas asks the person what kind of thing it is and files it in the floor's Triage, where a lead decides; nothing is added to what's known until then. `ui-reader`'s `marked()` gives the selected words, the block they're in and its text:
+An app that shows documents can offer what a passage names with `entity.propose` (`proposeEntity`, SDK 1.5). Data Atlas asks the person what kind of thing it is and files it in the floor's Triage, where a lead decides; nothing is added to what's known until then. Quill's `Reader`, through its ref, has `marked()`, which gives the selected words, the block they're in and its text:
 
 ```ts
 import { proposeEntity } from '@augur/mfe-sdk';

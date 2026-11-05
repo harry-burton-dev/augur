@@ -11,7 +11,7 @@ const kit = {
   integrity: Object.fromEntries(Object.entries(files).map(([f, b]) => [f, sri(b)])),
 };
 const hash = 'sha384-kitjson';
-const shared = ['lit', 'react', 'react-dom', '@augur/kit-common', '@augur/app-kit'];
+const shared = ['react', 'react-dom', '@augur/kit-common', '@augur/app-kit'];
 const read = (f) => {
   if (!files[f]) throw new Error('missing');
   return files[f];
