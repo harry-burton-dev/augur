@@ -80,3 +80,33 @@ export const registryInboxKinds = registryKinds('inboxKinds');
 
 /** Which notification kinds an app declares (its `notifications.kinds`). An app that isn't registered has none. */
 export const registryNotificationKinds = registryKinds('notificationKinds');
+
+/**
+ * The role an app's manifest says a person needs to use it (`requiredRole`), or null for none. Undefined
+ * from a registry too old to say. A service that a person reaches an app through, such as models for an
+ * AI app's agent, checks it as the gateway checks it for the app's own API.
+ */
+export type RequiredRoleLookup = (app: string) => Promise<string | null | undefined>;
+
+/** Asks the registry for an app's required role, with the same call as its grants, remembering each answer for 30 seconds. An app that isn't registered needs none: it has no grants either. */
+export const registryRequiredRole = ({ registryUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: GrantsOptions): RequiredRoleLookup => {
+  const cache = new BoundedMap<string, { role: string | null | undefined; at: number }>();
+  return async (app) => {
+    const hit = cache.get(app);
+    if (hit && now() - hit.at < ttlMs) return hit.role;
+    let res: Response;
+    try {
+      res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/grants`, { headers: await serviceHeaders(credentials) });
+    } catch (err) {
+      throw new GrantsUnavailable(`The registry could not be reached (${(err as Error).message}).`);
+    }
+    let role: string | null | undefined;
+    if (res.status === 404) role = null;
+    else if (res.ok) {
+      const body = (await res.json()) as { requiredRole?: string | null };
+      role = 'requiredRole' in body ? (body.requiredRole ?? null) : undefined;
+    } else throw new GrantsUnavailable(`The registry answered ${res.status}.`);
+    cache.set(app, { role, at: now() });
+    return role;
+  };
+};
