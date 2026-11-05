@@ -78,6 +78,7 @@ The events service publishes these as identity and the registry record the chang
 | `platform.person.changed` | `{ person, changed }` | An admin changes someone's details. `changed` lists which, of `name`, `email`, `roles` and `teams`, never the values: ask identity for those |
 | `platform.person.disabled`, `platform.person.enabled` | `{ person }` | An admin turns someone's sign-in off or on. Turning it off also signs them out everywhere |
 | `platform.person.left` | `{ person, handOverTo? }` | An admin runs the leaver flow (ADR 0040): their sign-in is off (a `disabled` comes first if it was on) and they're signed out everywhere. Hand on or archive what they own, to `handOverTo` when it's there; keep it until then otherwise |
+| `platform.person.deleted` | `{ person }` | A leaver's account is deleted (ADR 0072), after the organisation's leaver retention or when a deployment admin deletes it at once. Activity no longer holds their personal values and identity has forgotten them. Delete or anonymise anything personal you still keep about them; their id is all that's left |
 | `platform.team.created`, `platform.team.renamed` | `{ team, name }` | A team is made or renamed |
 | `platform.team.member-added`, `platform.team.member-removed` | `{ team, person }` | Someone joins or leaves a team, however an admin did it, on that team's floor |
 | `platform.app.turned-off`, `platform.app.turned-on`, `platform.app.removed` | `{ app }` | An admin turns an app off or on, everywhere or on one floor (the event's floor), or removes it |

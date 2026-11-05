@@ -1,6 +1,6 @@
 import { AskTwice, Button, Checkbox, CheckboxGroup, DateField, Details, Dialog, Select, Status, Table, TextField, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
-import { departmentPath, fullName, type AdminApi, type Department, type LeaveRequest, type LifecycleInfo, type Person, type Role } from './api.js';
+import { ApiError, departmentPath, fullName, type AdminApi, type Department, type LeaveRequest, type LifecycleInfo, type Person, type Role } from './api.js';
 import { day, lastSignIn, lifecycleFacts, Page, PasswordNote, Problem, statusOf } from './parts.js';
 
 const NO_DEPARTMENT = '';
@@ -199,6 +199,23 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
     await api.unlock(p.id);
     replace({ ...p, locked: false, ...(p.lockout ? { lockout: { ...p.lockout, locked: false } } : {}) });
     setLiveResult('Unlocked: they can sign in again now.');
+  };
+
+  /** Deletes a leaver's account now (ADR 0072); when the password is needed again, goes to enter it and comes back here. */
+  const deleteNow = async (p: Person) => {
+    setLiveResult('');
+    setLiveError('');
+    try {
+      await api.deletePerson(p.id);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') {
+        window.location.assign(`/auth/again?return=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
+        return;
+      }
+      throw err;
+    }
+    setPeople((all) => all.filter((x) => x.id !== p.id));
+    setEditing(undefined);
   };
 
   /** Cancels a leaver flow set for after their last day; nothing had happened to them yet. */
@@ -423,6 +440,18 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
                 <Button kind="secondary" size="sm" busyLabel="Cancelling…" onPress={() => cancelLeaving(person).catch((err: Error) => setLiveError(err.message))}>
                   Cancel leaving
                 </Button>
+              ) : null}
+              {person.state === 'left' ? (
+                <AskTwice
+                  size="sm"
+                  confirm="Press again: their account is deleted for good"
+                  busyLabel="Deleting…"
+                  disabled={Boolean(person.deleting)}
+                  reason="Deleting their account has started; it carries on by itself."
+                  onPress={() => deleteNow(person).catch((err: Error) => setLiveError(err.message))}
+                >
+                  Delete their account now
+                </AskTwice>
               ) : null}
             </div>
             {liveResult ? (

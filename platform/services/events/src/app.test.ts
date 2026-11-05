@@ -416,6 +416,7 @@ describe.runIf(DATABASE_URL)('events', () => {
       // A leaver, handed over and not: who takes on their things, never the admin's note.
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-9', detail: { username: 'jo', asked: true, handOverTo: 'u-2', note: 'Agreed' } });
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-8', detail: { username: 'al', asked: false } });
+      await audit(platform, { actor: { id: 'identity', kind: 'service' }, app: 'identity', action: 'person.deleted', target: 'u-7', detail: {} });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.disabled', target: 'notes' });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.blocked', target: 'notes' }, 'w-legal');
       // Followers see an event once every earlier transaction on the database has settled.
@@ -426,6 +427,7 @@ describe.runIf(DATABASE_URL)('events', () => {
         { topic: 'platform.person.changed', publisher: 'identity', payload: { person: 'u-9', changed: ['name', 'teams'] } },
         { topic: 'platform.person.left', publisher: 'identity', payload: { person: 'u-9', handOverTo: 'u-2' } },
         { topic: 'platform.person.left', publisher: 'identity', payload: { person: 'u-8' } },
+        { topic: 'platform.person.deleted', publisher: 'identity', payload: { person: 'u-7' } },
         { topic: 'platform.app.turned-off', publisher: 'registry', payload: { app: 'notes' } },
         { topic: 'platform.app.blocked', payload: { app: 'notes' }, workspace: { id: 'w-legal' } },
       ]);

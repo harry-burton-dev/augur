@@ -37,7 +37,15 @@ export interface Lifecycle {
   leaving?: Leaving;
   /** When they first signed in through the organisation's sign-in (Entra), which they sign in with since. */
   federatedAt?: string;
+  /** How far their deletion got (ADR 0072), while it is under way. */
+  deletingStep?: DeletingStep;
+  /** When their account was deleted; only their id and the dates are kept. */
+  deletedAt?: string;
 }
+
+/** The steps of deleting an account, in order (ADR 0072). */
+export const DELETING_STEPS = ['redacted', 'tidied', 'keycloak-deleted'] as const;
+export type DeletingStep = (typeof DELETING_STEPS)[number];
 
 /** A leaver flow an admin set for later: it runs once `on`, their last day, is over. */
 export interface Leaving {
@@ -72,6 +80,12 @@ export interface LifecycleStore {
   dueLeavers(today: string): Promise<(Leaving & { person: string })[]>;
   /** They signed in through the organisation's sign-in for the first time; false if that was already known. */
   federated(person: string, at: string): Promise<boolean>;
+  /** Leavers who left before `before` and aren't deleted yet, oldest first. */
+  dueDeletions(before: string): Promise<string[]>;
+  /** Their deletion got as far as `step`. */
+  deleting(person: string, step: DeletingStep): Promise<void>;
+  /** Deleted: everything but their id, when they left and when they were deleted, is forgotten. */
+  deleted(person: string, at: string): Promise<void>;
 }
 
 /** The organisation's idle-account days, and whether the sign-in service can warn anyone (email works). */
@@ -80,6 +94,8 @@ export interface IdlePolicy {
   warningDays: number;
   turnOffDays: number;
   canEmail: boolean;
+  /** Days after leaving before a leaver's account is deleted (ADR 0072). */
+  leaverDeleteAfterDays?: number;
 }
 
 /** When someone's sign-in turns off for being idle, or why it doesn't (PER-194 spec 3.2 and 4.7). */
@@ -129,7 +145,8 @@ export const withLifecycle = <P extends Person>(p: P, l: Lifecycle = {}, now = n
   ...(l.lastSignInAt ? { lastSignInAt: l.lastSignInAt } : {}),
   ...(l.joinedAt ? { joinedAt: l.joinedAt } : {}),
   ...(!p.enabled && !l.left && l.disabledCause ? { disabledCause: l.disabledCause } : {}),
-  ...(l.left ? { left: l.left } : {}),
+  ...(l.left ? { left: { ...l.left, ...(policy?.leaverDeleteAfterDays ? { deleteAfter: new Date(Date.parse(l.left.at) + policy.leaverDeleteAfterDays * DAY).toISOString() } : {}) } } : {}),
+  ...(l.deletingStep ? { deleting: l.deletingStep } : {}),
   ...(stateOf(p, l) === 'active' && lockedOf(l, now) ? { locked: true } : {}),
   ...(!l.left && l.leaving ? { leaving: { on: l.leaving.on, ...(l.leaving.handOverTo ? { handOverTo: l.leaving.handOverTo } : {}) } } : {}),
   ...(policy && stateOf(p, l) === 'active' ? { idle: idleOf(p, l, policy, now) } : {}),
@@ -187,6 +204,19 @@ export const lifecycleLeavingMigrations: Migration[] = [
   },
 ];
 
+/** Added after the organisation's logo, notice, languages and security settings, so it runs after them. */
+export const lifecycleDeletionMigrations: Migration[] = [
+  {
+    id: 'lifecycle_005_deletion',
+    sql: `
+      -- Deleting a leaver's account after the retention period (ADR 0072): how far it got, and when it was done.
+      alter table identity.person_lifecycle
+        add column deleting_step text check (deleting_step in ('redacted', 'tidied', 'keycloak-deleted')),
+        add column deleted_at timestamptz;
+      create index person_lifecycle_to_delete on identity.person_lifecycle (left_at) where left_at is not null and deleted_at is null;`,
+  },
+];
+
 interface Row {
   person: string;
   invite_method: InviteMethod | null;
@@ -206,6 +236,8 @@ interface Row {
   leave_handover_to: string | null;
   leave_note: string | null;
   federated_at: Date | null;
+  deleting_step: DeletingStep | null;
+  deleted_at: Date | null;
 }
 
 const iso = (d: Date | null) => (d ? d.toISOString() : undefined);
@@ -241,6 +273,8 @@ export class PgLifecycleStore implements LifecycleStore {
           ...(r.locked_at ? { lockedAt: iso(r.locked_at) } : {}),
           ...(r.leave_day ? { leaving: leavingOf(r) } : {}),
           ...(r.federated_at ? { federatedAt: iso(r.federated_at) } : {}),
+          ...(r.deleting_step ? { deletingStep: r.deleting_step } : {}),
+          ...(r.deleted_at ? { deletedAt: iso(r.deleted_at) } : {}),
         },
       ]),
     );
@@ -329,6 +363,30 @@ export class PgLifecycleStore implements LifecycleStore {
       [person, at],
     );
     return (rowCount ?? 0) > 0;
+  }
+
+  async dueDeletions(before: string) {
+    const { rows } = await this.pool.query<{ person: string }>(
+      'select person from identity.person_lifecycle where left_at is not null and deleted_at is null and left_at < $1 order by left_at, person',
+      [before],
+    );
+    return rows.map((r) => r.person);
+  }
+
+  async deleting(person: string, step: DeletingStep) {
+    await this.pool.query('update identity.person_lifecycle set deleting_step = $2, updated_at = now() where person = $1', [person, step]);
+  }
+
+  async deleted(person: string, at: string) {
+    // Only the id (now pseudonymous), when they left and when they were deleted are kept (ADR 0072).
+    await this.pool.query(
+      `update identity.person_lifecycle set deleted_at = $2, deleting_step = null, left_by = null, handover_to = null, joined_at = null,
+         last_sign_in_at = null, disabled_at = null, disabled_cause = null, invite_method = null, invite_sent_at = null, invite_expires_at = null,
+         invite_count = 0, locked_at = null, leave_on = null, leave_by = null, leave_handover_to = null, leave_note = null, federated_at = null,
+         updated_at = now()
+       where person = $1`,
+      [person, at],
+    );
   }
 
   async dueLeavers(today: string) {

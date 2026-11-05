@@ -111,6 +111,10 @@ export class TeamDirectory implements Directory {
     return this.signIn.unlock(id);
   }
 
+  deletePerson(id: string) {
+    return this.signIn.deletePerson(id);
+  }
+
   roles() {
     return this.signIn.roles();
   }

@@ -119,6 +119,8 @@ const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntr
     topic: 'platform.person.left',
     payload: (e) => ({ person: e.target, ...(typeof e.detail?.handOverTo === 'string' ? { handOverTo: e.detail.handOverTo } : {}) }),
   },
+  // A deleted account (ADR 0072): the last event about them. Followers forget what they keep about the person.
+  'identity person.deleted': { topic: 'platform.person.deleted', payload: (e) => ({ person: e.target }) },
   'identity department.created': { topic: 'platform.team.created', payload: (e) => ({ team: e.target, name: e.detail?.name }) },
   'identity department.renamed': { topic: 'platform.team.renamed', payload: (e) => ({ team: e.target, name: e.detail?.to }) },
   'identity department.member-added': { topic: 'platform.team.member-added', payload: (e) => ({ team: e.target, person: e.detail?.person }) },

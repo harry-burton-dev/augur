@@ -467,6 +467,7 @@ describe('Activity', () => {
     expect(sentence(entry('person.enabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true } }), names)).toBe('Sam Okafor’s sign-in was turned back on in the sign-in service, not in AUGUR');
     expect(sentence(entry('person.added', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { method: 'federated' } }), names)).toBe('Sam Okafor joined through the organisation’s sign-in');
     expect(sentence(entry('person.unlocked', { target: 'u-2' }), names)).toBe('Alex Rivera unlocked Sam Okafor after repeated wrong passwords');
+    expect(sentence(entry('person.deleted', { target: 'u-2', detail: { now: true } }), names)).toBe('Alex Rivera deleted a leaver’s account; only its id is kept');
     expect(sentence(entry('person.leave-scheduled', { target: 'u-2', detail: { lastDay: '2026-11-20' } }), names)).toBe(`Alex Rivera set Sam Okafor to leave after ${new Date('2026-11-20T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
     expect(sentence(entry('person.leave-cancelled', { target: 'u-2' }), names)).toBe('Alex Rivera cancelled Sam Okafor’s leaving');
     expect(sentence(entry('person.left', { target: 'u-2', detail: { lastDay: '2026-11-20', handOverTo: 'u-1' } }), names)).toMatch(/^Sam Okafor left after their last day, .+, handing their work to Alex Rivera$/);
