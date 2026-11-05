@@ -1149,9 +1149,6 @@ export const platformCredentialsFromEnv: (service: string, env?: NodeJS.ProcessE
 } | undefined;
 
 // @public
-export function prepareJobsSchema(databaseUrl: string, schema: string): Promise<void>;
-
-// @public
 export const previewOf: (env?: Record<string, string | undefined>) => number | undefined;
 
 // @public

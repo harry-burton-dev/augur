@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createJobs, jobsSchemaFor, memoryJobs, prepareJobsSchema, type JobAuditEntry } from './jobs.js';
+import { createJobs, jobsSchemaFor, memoryJobs, type JobAuditEntry } from './jobs.js';
+import { prepareJobsSchema } from './jobs-schema.js';
 
 const quiet = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 const until = async (check: () => Promise<boolean>, ms = 15_000) => {
