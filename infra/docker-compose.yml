@@ -103,7 +103,18 @@ services:
       PLATFORM_ADMIN_USER: alex
       REALM_LANGUAGES: ${REALM_LANGUAGES:-en}
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
-    depends_on: [keycloak]
+      # Mail goes to Mailpit below, never out: read it at http://localhost:8025 (ADR 0065).
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+      SMTP_FROM: augur@localhost
+    depends_on: [keycloak, mailpit]
+
+  # Catches every email the local stack sends, so nothing reaches a real inbox (ADR 0065).
+  # Its inbox is http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    ports: ["8025:8025", "1025:1025"]
 
   # ---- the platform ----
   gateway:
