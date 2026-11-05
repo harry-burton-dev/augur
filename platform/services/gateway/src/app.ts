@@ -9,6 +9,7 @@ import {
   CALLER_TOKEN_HEADER,
   callerHeaders,
   callerSignerFromEnv,
+  GATEWAY_CALLER,
   health,
   packageVersion,
   REQUEST_ID_HEADER,
@@ -30,7 +31,7 @@ import { GatewayMetrics } from './metrics.ts';
 import { browserTelemetryFrom, forward, ForwardFailed, SendLimit, stamped, TELEMETRY_BODY_LIMIT, type BrowserTelemetry as BrowserTelemetrySettings, type Signal } from './telemetry.ts';
 import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
 import { Readable } from 'node:stream';
-import { Mailer, mailRelayFromEnv, type MailStatus } from '@augur/service-kit/mail';
+import { Mailer, mailRelayFromEnv, organisationSender, type MailStatus } from '@augur/service-kit/mail';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
 
 /** The major version of the gateway's own API (Status); see contracts/ for its full version. */
@@ -133,7 +134,16 @@ export interface GatewayOptions {
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
 export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer }: GatewayOptions = {}) => {
-  const mail = mailer ?? new Mailer({ relay: mailRelayFromEnv(process.env, (message) => console.warn(message)) });
+  // Mail comes from the organisation's sender (Admin → Organisation), read from identity as the gateway.
+  const sender = upstreams.identity
+    ? organisationSender({
+        identityUrl: upstreams.identity,
+        headers: async () => ({ ...callerHeaders(GATEWAY_CALLER), ...(signer ? await signedCallerHeaders(signer, GATEWAY_CALLER, 'identity') : {}) }),
+        fetchImpl,
+        warn: (message) => console.warn(message),
+      })
+    : undefined;
+  const mail = mailer ?? new Mailer({ relay: mailRelayFromEnv(process.env, (message) => console.warn(message)), sender });
   /** Status never waits long on the relay: a check slower than 2 seconds carries on behind, and says so meanwhile. */
   let lastEmail: MailStatus | undefined;
   const emailStatus = async (): Promise<MailStatus> => {

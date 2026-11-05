@@ -1,5 +1,15 @@
 # @augur/models
 
+## 0.3.7
+
+### Patch Changes
+
+- 5084794: The model gateway keeps its settings and each app's use in Postgres, locally too: its in-memory store is gone, and it won't start without `DATABASE_URL`. Its tests run on real Postgres (PER-271).
+- Updated dependencies [c0de29b]
+- Updated dependencies [8eba62b]
+- Updated dependencies [ab9f61f]
+  - @augur/service-kit@0.16.0
+
 ## 0.3.6
 
 ### Patch Changes

@@ -27,7 +27,9 @@ import { appRelease, appTag, changelogSection, channelOf, devVersion, FRONTEND_M
 const root = process.cwd();
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const writeJson = (path, json) => writeFileSync(join(root, path), `${JSON.stringify(json, null, 2)}\n`);
-const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { cwd: root, encoding: 'utf8', ...opts });
+// An image's SBOM alone can run to tens of megabytes, past execFileSync's 1 MB default (ENOBUFS).
+const OUTPUT_LIMIT = 512 * 1024 * 1024;
+const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { cwd: root, encoding: 'utf8', maxBuffer: OUTPUT_LIMIT, ...opts });
 const parts = ['frontend', 'service'].filter((p) => existsSync(join(root, p, 'package.json')));
 
 const manifest = () => {

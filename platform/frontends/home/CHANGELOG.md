@@ -1,5 +1,16 @@
 # @augur/home
 
+## 0.4.1
+
+### Patch Changes
+
+- 6236e98: A deployment can choose how depth is drawn behind dialogs, menus and the palette (ADR 0068, PDR-010 amendment 2): `FOCUS_DEPTH` (`veil`, `lens` or `scrim`) reaches the shell's page as an `augur-depth` meta, which Quill reads for the shell and every app. `scrim` blurs nothing, for desktops without a GPU. Unset, each app chooses as before.
+
+  Serves Quill 0.11.0 (Common 0.9.0, kit bundle 0.5.6), which reads it, and PDR-010's tile amendments: a dimmer document tile and a "more" mark on tiles.
+
+- Updated dependencies [8eba62b]
+  - @augur/mfe-sdk@2.1.0
+
 ## 0.4.0
 
 ### Minor Changes
