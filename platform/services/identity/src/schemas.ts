@@ -212,6 +212,9 @@ export const Caller = Type.Object(
   { $id: 'Caller' },
 );
 
+/** A time of day, 00:00 to 23:59. */
+const HHMM = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
+
 /** Refused, not dropped, when unknown: a misspelt setting should fail loudly, not vanish. */
 export const Preferences = Type.Object(
   {
@@ -227,6 +230,24 @@ export const Preferences = Type.Object(
         uniqueItems: true,
         description: 'App ids whose notifications land in the stream silently and never on Home',
       }),
+    ),
+    awayMessage: Type.Optional(Type.String({ maxLength: 140, description: 'What their away status says' })),
+    awayUntil: Type.Optional(Type.String({ format: 'date-time', description: 'When being away ends by itself' })),
+    timeZone: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: "IANA, such as Europe/London; without it the organisation's, then the browser's" })),
+    notifications: Type.Optional(
+      Type.Object(
+        {
+          email: Type.Optional(Type.Boolean({ description: 'An email for each thing that needs them; on unless false' })),
+          digest: Type.Optional(choice(['off', 'daily', 'weekly'], { description: 'One email gathering the rest; off unless chosen' })),
+          quietHours: Type.Optional(
+            Type.Object(
+              { from: Type.String({ pattern: HHMM }), to: Type.String({ pattern: HHMM }) },
+              { additionalProperties: false, description: 'HH:MM in their time zone: no toasts and no email between them' },
+            ),
+          ),
+        },
+        { additionalProperties: false },
+      ),
     ),
   },
   { $id: 'Preferences', additionalProperties: false, description: "Every field is optional; what's missing takes the shell's default." },
