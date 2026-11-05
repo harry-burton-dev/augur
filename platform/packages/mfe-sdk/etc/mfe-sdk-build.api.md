@@ -7,7 +7,7 @@
 // @public
 export const isSharedModule: (id: string) => boolean;
 
-// @public (undocumented)
+// @public
 export const sharedModules: readonly string[];
 
 // (No @packageDocumentation comment for this package)
