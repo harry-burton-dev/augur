@@ -14,6 +14,8 @@ export interface Person {
   createdAt?: string;
   /** Where their account is in its life (ADR 0040). Older identities don't send it. */
   state?: 'invited' | 'active' | 'disabled' | 'left';
+  /** How they were asked to start. */
+  invite?: { method: 'email' | 'temporary-password'; sentAt?: string; expiresAt?: string; expired: boolean; count: number };
   /** Their last sign-in that AUGUR has seen. */
   lastSignInAt?: string;
   /** Why their sign-in is off, when AUGUR knows. */
@@ -488,6 +490,17 @@ export interface NewPerson {
   username?: string;
   roles: string[];
   departments: string[];
+  /** An invite email, or a one-time password; identity picks email when it works. */
+  start?: 'email' | 'temporary-password';
+}
+
+/** How someone was asked to start, as identity answers it. */
+export interface InviteResult {
+  method: 'email' | 'temporary-password';
+  sentTo?: string;
+  expiresAt?: string;
+  /** The account was made but the email couldn't be sent. */
+  error?: string;
 }
 
 export type PersonChanges = Partial<Pick<Person, 'firstName' | 'lastName' | 'email' | 'enabled' | 'roles' | 'departments'>>;
@@ -535,7 +548,11 @@ export class AdminApi {
   }
 
   people = () => this.call<Person[]>('GET', '/api/identity/v1/admin/people');
-  addPerson = (person: NewPerson) => this.call<{ person: Person; temporaryPassword: string }>('POST', '/api/identity/v1/admin/people', person);
+  addPerson = (person: NewPerson) => this.call<{ person: Person; invite?: InviteResult; temporaryPassword?: string }>('POST', '/api/identity/v1/admin/people', person);
+  /** A new invite email for someone who hasn't set up yet. */
+  resendInvite = (id: string) => this.call<{ invite: InviteResult }>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/invite`);
+  /** What the account lifecycle can do here: whether invites can be emailed. */
+  lifecycle = () => this.call<{ email: boolean }>('GET', '/api/identity/v1/admin/lifecycle');
   updatePerson = (id: string, changes: PersonChanges) => this.call<Person>('PATCH', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`, changes);
   resetPassword = (id: string) => this.call<{ temporaryPassword: string }>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/password`);
   leaveRequests = () => this.call<LeaveRequest[]>('GET', '/api/identity/v1/admin/leave-requests');

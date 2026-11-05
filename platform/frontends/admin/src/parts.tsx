@@ -11,13 +11,15 @@ export const Page = ({ heading, summary, actions, onAction, children }: { headin
 );
 
 /** Where someone's sign-in stands, as a status mark and its word. */
-export const statusOf = (p: Pick<Person, 'enabled' | 'invited' | 'state'>): { status: StatusName; label: string } =>
+export const statusOf = (p: Pick<Person, 'enabled' | 'invited' | 'state' | 'invite'>): { status: StatusName; label: string } =>
   p.state === 'left'
     ? { status: 'paused', label: 'Left' }
     : !p.enabled
       ? { status: 'paused', label: 'Off' }
       : (p.state ?? (p.invited ? 'invited' : 'active')) === 'invited'
-        ? { status: 'queued', label: 'Invited' }
+        ? p.invite?.expired
+          ? { status: 'warning', label: 'Invite expired' }
+          : { status: 'queued', label: 'Invited' }
         : { status: 'done', label: 'Active' };
 
 /** When someone last signed in, as a date, or why there's none. */

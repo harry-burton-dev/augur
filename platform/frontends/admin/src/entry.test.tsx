@@ -155,7 +155,8 @@ describe('People', () => {
     await type(fieldNamed('Last name'), 'Smith');
     await type(fieldNamed('Email'), 'jo@example.org');
     await press(button('Add'));
-    expect(sent.find((c) => c.method === 'POST')!.body).toEqual({ firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', roles: [], departments: [] });
+    // Email isn't set up here, so a one-time password it is.
+    expect(sent.find((c) => c.method === 'POST')!.body).toEqual({ start: 'temporary-password', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', roles: [], departments: [] });
     expect(document.querySelector('[data-password]')!.textContent!.trim()).toBe('abcd-efgh-jkmn');
     await press(button('Done'));
     expect(document.querySelector('[data-password]')).toBeNull();
@@ -220,6 +221,29 @@ describe('People', () => {
     await press(live.querySelector('[data-armed]'));
     expect(sent.find((c) => c.url.endsWith('/u-2/leave'))!.body).toEqual({});
     expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/They’ve left: signed out everywhere\. Apps keep what they own/);
+  });
+
+  it('invites by email when email works, says until when, and sends a new invite from their details', async () => {
+    const invitee = { ...sam, id: 'u-3', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', enabled: true, invited: true, state: 'invited', invite: { method: 'email', expired: false, count: 1 } };
+    const { sent } = gateway((method, url) => {
+      if (url === '/api/identity/v1/admin/lifecycle') return Response.json({ email: true });
+      if (url === '/api/identity/v1/admin/people' && method === 'POST')
+        return Response.json({ person: invitee, invite: { method: 'email', sentTo: 'jo@example.org', expiresAt: '2026-11-08T09:00:00Z' } }, { status: 201 });
+      if (url === '/api/identity/v1/admin/people/u-3/invite') return Response.json({ invite: { method: 'email', sentTo: 'jo@example.org', expiresAt: '2026-11-08T10:00:00Z' } });
+      return undefined;
+    });
+    const el = await open('/people/new');
+    await type(fieldNamed('First name'), 'Jo');
+    await type(fieldNamed('Last name'), 'Smith');
+    await type(fieldNamed('Email'), 'jo@example.org');
+    await press(button('Add'));
+    expect((sent.find((c) => c.method === 'POST')!.body as { start: string }).start).toBe('email');
+    expect(document.querySelector('[data-password]')).toBeNull();
+    expect(el.querySelector('[data-notice]')!.textContent).toContain('Invite sent to jo@example.org');
+    await openRow(el, 'Jo Smith');
+    await press(button('Send a new invite'));
+    expect(sent.some((c) => c.url === '/api/identity/v1/admin/people/u-3/invite' && c.method === 'POST')).toBe(true);
+    expect(document.querySelector('[data-live-result]')!.textContent).toContain('New invite sent to jo@example.org');
   });
 
   it('shows each account’s state and last sign-in, and keeps a leaver from coming back', async () => {
