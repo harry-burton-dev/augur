@@ -96,7 +96,7 @@ const PERSON_FIELDS: Record<string, string> = { firstName: 'name', lastName: 'na
 const changedOf = (detail: Record<string, unknown> | undefined) => [...new Set(Object.keys(detail ?? {}).flatMap((k) => (PERSON_FIELDS[k] ? [PERSON_FIELDS[k]] : [])))];
 
 /**
- * The platform's own domain events, published as identity and the registry record
+ * AUGUR's own domain events, published as identity and the registry record
  * the change in the audit log, so the two can't disagree. Keyed by "<service> <action>".
  */
 const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntry) => Record<string, unknown> }> = {
@@ -148,7 +148,7 @@ const forBrowser = ({ seq, topic, id, publisher, at, workspace, payload }: Domai
 const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
 
 /**
- * Notifications for the Shell's stream, and the platform's audit log. Services
+ * Notifications for the Shell's stream, and AUGUR's audit log. Services
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
@@ -279,7 +279,7 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
           }
         }
         if (principals) {
-          // Reaching people by role or across the org is the platform's: an app names the people it means.
+          // Reaching people by role or across the org is AUGUR's to do: an app names the people it means.
           if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services send to an audience. Name the recipients.' });
           if (toTeam || notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Send to an audience, the team or recipients: one of them.' });
           try {
