@@ -5,6 +5,7 @@ import { UserManager } from 'oidc-client-ts';
 import { createRoot } from 'react-dom/client';
 import { Host, SignInProblem } from './App.js';
 import { CALLBACK_PATH, startSession } from './host/index.js';
+import { startTelemetry } from './host/telemetry.js';
 
 // Locally this is the Keycloak realm in infra/keycloak; each deployment sets its own.
 // A path (like /sso/realms/platform) means the sign-in service is on this site, wherever it is served.
@@ -21,7 +22,10 @@ const root = createRoot(document.getElementById('root')!);
 
 startSession(auth, { location: window.location, history: window.history })
   .then((session) => {
-    if (session !== 'redirecting') root.render(<Host session={session} />);
+    if (session === 'redirecting') return;
+    root.render(<Host session={session} />);
+    // Browser errors and traces, when this deployment collects them (ADR 0059). Never in the way of the first screen.
+    void startTelemetry({ getToken: () => session.getToken(), version: __SHELL_VERSION__ });
   })
   .catch((err: Error) => {
     root.render(<SignInProblem message={err.message} onSignIn={() => void auth.signinRedirect({ state: '/' })} />);

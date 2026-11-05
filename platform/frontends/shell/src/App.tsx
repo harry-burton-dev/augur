@@ -78,6 +78,7 @@ import {
 } from './host/index.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { pageKit, versionLine } from './host/kit.js';
+import { appOnScreen } from './host/telemetry.js';
 
 export interface HostProps {
   session: Session;
@@ -473,6 +474,7 @@ export function Host({
     }
     if (screen.kind !== 'app') {
       void mounter.current.unmount();
+      appOnScreen(null);
       shellRef.current?.settleStage();
       setOpening(false);
       setProblem(null);
@@ -491,6 +493,7 @@ export function Host({
     const ctx = contextFor(app, path, intent);
     setProblem(null);
     shellRef.current?.setCurrent(app.id);
+    appOnScreen(app);
     prefs.opened(app.id);
     // a slow app's place says it's opening after a moment, rather than sitting blank
     const slow = setTimeout(() => setOpening(true), SLOW_APP_MS);
