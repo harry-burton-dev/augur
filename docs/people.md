@@ -33,7 +33,17 @@ Last sign-in starts when identity first runs with this version. Before that, Peo
 
 ### Idle accounts
 
-Admin → Organisation keeps when idle accounts are dealt with: a warning email after 60 days without a sign-in and the sign-in turned off at 90, unless an admin changes them or turns it off (`idle` in `/v1/organisation`). The turn-off is at least 7 days after the warning, and at most 730 days. Every sign-in starts the count again. The days are kept now; the sign-in service's idle-account Workflow that applies them comes in a later release, and Admin says so.
+Admin → Organisation keeps when idle accounts are dealt with: a warning email after 60 days without a sign-in and the sign-in turned off at 90, unless an admin changes them or turns it off (`idle` in `/v1/organisation`). The turn-off is at least 7 days after the warning, and at most 730 days. Every sign-in starts the count again.
+
+The realm job (ADR 0057) applies them as Keycloak's idle-account Workflow, `augur-idle-accounts-{warning}-{turn-off}`, each time AUGUR starts or upgrades, so a change in Admin applies then:
+
+- Keycloak enrols a person at each sign-in (`user-authenticated`), and starts their count again at the next one. People who haven't signed in since the Workflow was made aren't counted until they do.
+- After the warning days it sends its own "Account Disable Warning" email, in the person's language and AUGUR's email theme, saying how many days are left; at the turn-off days it turns their sign-in off.
+- Deployment admins are left out, so a deployment can't lose its last admin by their being away. Service accounts never enrol.
+- New days make a new Workflow and the old one is deleted, because Keycloak won't change steps people are waiting on. Deleting cancels what was waiting, so a change only ever delays a turn-off.
+- Without email (no `SMTP_HOST` and no relay in Keycloak's console) there is no Workflow, as nobody could be warned. Idle accounts off in Admin takes it away too. A Keycloak without Workflows (before 26.6) is warned about in the realm job's log and left alone.
+
+Keycloak's Workflow ends no sessions and tells nobody, so identity notices the turn-off (below), ends their sessions and records it in Activity as "turned off after 90 days without a sign-in", with `detail.cause` `idle`.
 
 ### Changes made in Keycloak itself
 

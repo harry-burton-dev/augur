@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { NewAuditEntry } from '@augur/service-kit';
 import { DATABASE_URL, identityDb } from './db.testing.ts';
 import { MemoryDirectory } from './directory.ts';
-import { PgReconcileStore, reconcile } from './reconcile.ts';
+import { causeOf, PgReconcileStore, reconcile } from './reconcile.ts';
 
 const person = (dir: MemoryDirectory, username: string) =>
   dir.createPerson({ username, email: `${username}@example.org`, firstName: username, lastName: 'Test', roles: [], departments: [] });
@@ -47,6 +47,29 @@ describe.runIf(DATABASE_URL)('noticing sign-ins turned off or on in Keycloak', (
     // Nothing changed since: nothing more to say.
     expect(await run()).toEqual({ disabled: [], enabled: [], noted: [] });
     expect(entries).toHaveLength(1);
+  });
+
+  it('puts a turn-off down to being idle when their last sign-in is as old as the turn-off days', async () => {
+    const directory = new MemoryDirectory();
+    const entries: NewAuditEntry[] = [];
+    const store = new PgReconcileStore(db.pool);
+    const run = () =>
+      reconcile({ directory, lifecycle: db.lifecycle, store, audit: async (e) => entries.push(e), idle: async () => ({ on: true, turnOffDays: 90 }), now: () => '2026-11-05T06:00:00.000Z' });
+    const p = await person(directory, 'away');
+    await db.lifecycle.signedIn(p.id, '2026-08-01T00:00:00.000Z');
+    await run();
+    await directory.updatePerson(p.id, { enabled: false });
+    await run();
+    expect(entries[0].detail).toEqual({ username: 'away', outside: true, cause: 'idle', days: 90 });
+    expect((await db.lifecycle.get([p.id])).get(p.id)?.disabledCause).toBe('idle');
+  });
+
+  it('only calls it idle when idle accounts are on and the last sign-in is old enough', () => {
+    const at = '2026-11-05T00:00:00.000Z';
+    expect(causeOf('2026-08-07T00:00:00.000Z', at, { on: true, turnOffDays: 90 })).toBe('idle');
+    expect(causeOf('2026-10-01T00:00:00.000Z', at, { on: true, turnOffDays: 90 })).toBeUndefined();
+    expect(causeOf('2026-01-01T00:00:00.000Z', at, { on: false, turnOffDays: 90 })).toBeUndefined();
+    expect(causeOf(undefined, at, { on: true, turnOffDays: 90 })).toBeUndefined();
   });
 
   it('hears someone turned back on in Keycloak', async () => {

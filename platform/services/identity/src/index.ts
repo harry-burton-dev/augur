@@ -7,7 +7,7 @@ import { KeycloakAccounts, type AccountSource } from './me.ts';
 import { IDENTITY_RIGHTS, realmLookFromEnv } from './realm.ts';
 import { PgPreferenceStore } from './store.ts';
 import { PgWorkspaceStore } from './workspaces.ts';
-import { PgOrganisationStore } from './organisation.ts';
+import { organisationSettings, PgOrganisationStore } from './organisation.ts';
 import { PgLifecycleStore } from './lifecycle.ts';
 import { reconcile, PgReconcileStore } from './reconcile.ts';
 import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
@@ -135,7 +135,7 @@ if (keycloakEvents && audit) {
 if (directory) {
   const people = directory;
   const compare = () =>
-    reconcile({ directory: people, lifecycle, store: reconcileStore, audit }).catch((err: Error) =>
+    reconcile({ directory: people, lifecycle, store: reconcileStore, audit, idle: async () => (await organisationSettings(workspaces, organisation)).idle }).catch((err: Error) =>
       log.error(`Identity couldn't compare sign-ins with Keycloak this time; it tries again in five minutes (${err.message}).`),
     );
   setInterval(compare, 5 * 60_000).unref();

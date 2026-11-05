@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Idle accounts are warned, then turned off
+
+**From** unreleased
+
+Where email is set up, Keycloak now emails someone who hasn't signed in for 60 days and turns their sign-in off at 90 (Admin → Organisation, Idle accounts, to change the days or turn it off). The count starts at each person's next sign-in after this upgrade, so nobody is turned off sooner than 90 days from now. Deployment admins are never turned off. If you'd rather not, turn idle accounts off in Admin → Organisation, then run `pc up -d keycloak-config` so it applies straight away (docs/people.md, Idle accounts).
+
 ### People are emailed when how they sign in changes
 
 **From** unreleased

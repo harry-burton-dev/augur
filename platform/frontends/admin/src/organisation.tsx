@@ -125,8 +125,8 @@ export function Organisation({ api }: { api: AdminApi }) {
                   : [{ label: 'Idle accounts', value: 'Never turned off' }]
               }
             />
-            <Notice tone="info" heading="Not applied yet.">
-              These days are kept for the sign-in service’s idle-account rule, which comes in a later release. Until then nobody is warned or turned off for being idle.
+            <Notice tone="info" heading="Changes apply when AUGUR next starts or upgrades.">
+              The sign-in service counts from each person’s next sign-in, and deployment admins are never turned off. Without email nobody could be warned, so nobody is turned off: Admin → Status says whether email works.
             </Notice>
           </Section>
           <p className="admin-quiet">{changed(settings)}</p>
