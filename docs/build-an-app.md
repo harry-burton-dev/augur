@@ -255,7 +255,7 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
   ```
 - `storage` says the app keeps its own database schema (`"database": true`) or files (`"bucket": true`) on the platform; an admin gives it them, and its service reads them with `appStorageFromEnv()`. See [App storage](app-storage.md).
 
-`pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
+`pnpm check:manifest` checks every app's manifest with the registry's own schema and rules, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
 
 ### Checking a manifest
 
@@ -280,7 +280,7 @@ pnpm build
 node scripts/check-manifests.mjs path/to/manifest.json
 ```
 
-Each manifest is checked against the schema first, and each problem names where it is in plain words (`menu[0].items[2].path doesn't have the form it needs`). One that passes is then put to the registry in memory, for the rules a schema can't say: a semver version and range, surfaces on the app's floors, a route of its own. The check also fails when `contracts/manifest.schema.json`, or its copy in `@augur/app-tools`, is out of step with the registry; `pnpm build && pnpm manifest-schema` writes it again.
+Each manifest is checked against the schema first, and each problem names where it is in plain words (`menu[0].items[2].path doesn't have the form it needs`). One that passes then meets the registry's own rules, the ones its `PUT /apps/:id` applies, for what a schema can't say: a semver version and range, surfaces on the app's floors, a route of its own. The check also fails when `contracts/manifest.schema.json`, or its copy in `@augur/app-tools`, is out of step with the registry; `pnpm build && pnpm manifest-schema` writes it again.
 
 ### Find
 

@@ -123,6 +123,8 @@ services:
       KIT_URL: ${KIT_URL:-/kit/}
       # The product's name in the browser tab (docs/deploy.md, "First start"); AUGUR unless set.
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
+      # How focus is drawn: scrim for desktops without a GPU (docs/deploy.md, "Desktops without a GPU"); each app's choice unless set.
+      FOCUS_DEPTH: ${FOCUS_DEPTH:-}
       # The front door's limits (docs/deploy.md, "Limits at the front door"); the image's defaults when unset.
       API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
       API_RATE_BURST: ${API_RATE_BURST:-200}
