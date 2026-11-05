@@ -132,6 +132,8 @@ export const AGENTS_WHY =
 export const ACCOUNT_AREA = 'account-area';
 /** Where the Account area is in the address: `?account=<section>`, so a reload and Keycloak's screens come back to it. */
 export const ACCOUNT_PARAM = 'account';
+/** What a notice email links to: `?notice=<id>` opens that notification as clicking it in the Shell would (ADR 0044, D7). */
+export const NOTICE_PARAM = 'notice';
 /** What the Shell offers; floors replace Switch workspace. */
 export const alphaFunctions = defaultFunctions
   .filter((f) => f.id !== 'settings')
@@ -1076,6 +1078,27 @@ export function Host({
       shell.removeEventListener('ui-pick', onPick);
     };
   }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, showAccount, inboxForHome, openInboxItem]);
+
+  // A notice email's link: once the apps on this floor are known, open the notification it names, read or not, on its own floor.
+  const noticeAsked = useRef(new URLSearchParams(window.location.search).get(NOTICE_PARAM));
+  useEffect(() => {
+    const id = noticeAsked.current;
+    const f = feed.current;
+    if (!id || !manifest || !homeAsks.current || !f) return;
+    noticeAsked.current = null;
+    const url = new URL(window.location.href);
+    url.searchParams.delete(NOTICE_PARAM);
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    const cant = (detail: string) => tell({ id: `notice:${id}`, app: 'shell', level: 'info', title: 'That notification can’t be opened', detail, time: Date.now() });
+    f.get(id).then(
+      (n) => {
+        if (!n) return cant('It was sent to someone else, or it has gone. Notifications go after a while, and when the person they were for is removed.');
+        fromEvents.current.set(n.id, n);
+        homeAsks.current?.open(n.id);
+      },
+      (err: Error) => cant(`Notifications couldn’t be reached (${err.message}). Try the link again in a moment.`),
+    );
+  }, [manifest, tell]);
 
   // The open app is a pull request's preview: say so, with the way back.
   const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;

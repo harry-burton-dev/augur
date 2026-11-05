@@ -136,6 +136,25 @@ describe('the Account area', () => {
     expect(props.onPreference).not.toHaveBeenCalled();
   });
 
+  it('says whether email reaches them, and why not', async () => {
+    const security = answers['GET /me/security'] as { emails: object };
+    const was = security.emails;
+    try {
+      expect((await open('notifications')).text()).toContain('AUGUR emails you at alex@example.org.');
+      act(() => root?.unmount());
+      security.emails = { on: false };
+      expect((await open('notifications')).text()).toContain('AUGUR can’t send email on this deployment yet.');
+      act(() => root?.unmount());
+      security.emails = { on: true, address: 'alex@example.org', verified: false };
+      const unchecked = await open('notifications');
+      expect(unchecked.text()).toContain('alex@example.org isn’t checked yet, so nothing is emailed to it.');
+      await act(async () => unchecked.button('Open Profile')!.click());
+      expect(unchecked.props.onSection).toHaveBeenCalledWith('profile');
+    } finally {
+      security.emails = was;
+    }
+  });
+
   it('pins apps, clears recent ones and mounts each app’s own settings', async () => {
     const mountSettings = vi.fn(async (el: HTMLElement) => {
       el.textContent = 'Board’s own choices';
