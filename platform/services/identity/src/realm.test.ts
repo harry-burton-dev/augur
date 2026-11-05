@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KeycloakDirectory } from './directory.ts';
-import { applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
+import { applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -254,5 +254,94 @@ describe('email through the organisation’s relay (ADR 0035)', () => {
     expect(none.realm()).toMatchObject({ verifyEmail: false, resetPasswordAllowed: false, eventsListeners: ['jboss-logging', 'metrics'] });
     expect(none.realm().smtpServer).toBeUndefined();
     expect(changes).toEqual(['email: verifyEmail off, resetPasswordAllowed off, security-change emails off']);
+  });
+});
+
+describe('idle accounts through Keycloak’s Workflow (PER-194)', () => {
+  const days = { on: true, warningDays: 60, turnOffDays: 90 };
+  /** Keycloak's workflows, as a list the fake answers from. */
+  const workflowsAt = (start: { id: string; name: string }[], status?: number) => {
+    let workflows = [...start];
+    let next = 1;
+    const calls: Call[] = [];
+    const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/protocol/openid-connect/token')) return Response.json({ access_token: 't', expires_in: 300 });
+      const method = init?.method ?? 'GET';
+      const path = url.replace('http://kc/admin/realms/platform', '');
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      calls.push({ method, path, body });
+      if (status) return Response.json({ errorMessage: 'nope' }, { status });
+      if (method === 'GET' && path.startsWith('/workflows')) return Response.json(workflows);
+      if (method === 'POST' && path === '/workflows') workflows.push({ id: `w-${next++}`, name: body.name });
+      if (method === 'DELETE') workflows = workflows.filter((w) => !path.endsWith(`/${w.id}`));
+      return new Response(null, { status: method === 'POST' ? 201 : 204 });
+    }) as typeof fetch;
+    const kc = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn: { admin: { user: 'a', password: 'p' } }, fetchImpl });
+    return { kc, calls, workflows: () => workflows };
+  };
+
+  it('warns after the warning days and turns off after the rest, leaving deployment admins out and restarting at each sign-in', () => {
+    expect(idleWorkflow(days)).toEqual({
+      name: `${IDLE_WORKFLOW}-60-90`,
+      on: 'user-authenticated',
+      if: 'not has-role(deployment-admin)',
+      concurrency: { 'restart-in-progress': 'true' },
+      steps: [
+        { uses: 'notify-user', after: '60d' },
+        { uses: 'disable-user', after: '30d' },
+      ],
+    });
+  });
+
+  it('makes the Workflow once, and leaves it alone when nothing changed', async () => {
+    const t = workflowsAt([]);
+    const changes: string[] = [];
+    await applyIdleWorkflow(t.kc, days, true, changes);
+    expect(t.workflows().map((w) => w.name)).toEqual([`${IDLE_WORKFLOW}-60-90`]);
+    expect(changes).toEqual(['idle accounts: warned after 60 days, turned off after 90']);
+    await applyIdleWorkflow(t.kc, days, true, changes);
+    expect(changes).toHaveLength(1);
+    expect(t.calls.filter((c) => c.method !== 'GET')).toHaveLength(1);
+  });
+
+  it('replaces the Workflow when the days change, as Keycloak won’t change parked steps', async () => {
+    const t = workflowsAt([{ id: 'old', name: `${IDLE_WORKFLOW}-60-90` }, { id: 'theirs', name: 'someone-elses' }]);
+    await applyIdleWorkflow(t.kc, { ...days, turnOffDays: 120 }, true, []);
+    expect(t.workflows().map((w) => w.name)).toEqual(['someone-elses', `${IDLE_WORKFLOW}-60-120`]);
+  });
+
+  it('takes the Workflow away when idle accounts are off, or when nobody could be warned by email', async () => {
+    const off = workflowsAt([{ id: 'old', name: `${IDLE_WORKFLOW}-60-90` }]);
+    const changes: string[] = [];
+    await applyIdleWorkflow(off.kc, { ...days, on: false }, true, changes);
+    expect(off.workflows()).toEqual([]);
+    expect(changes).toEqual(['idle accounts: no longer turned off']);
+
+    const noEmail = workflowsAt([{ id: 'old', name: `${IDLE_WORKFLOW}-60-90` }]);
+    const warnings: string[] = [];
+    await applyIdleWorkflow(noEmail.kc, days, false, [], (m) => warnings.push(m));
+    expect(noEmail.workflows()).toEqual([]);
+    expect(warnings).toEqual([expect.stringContaining('email isn’t set up')]);
+  });
+
+  it('warns, and changes nothing, on a Keycloak without Workflows or one that refuses this one', async () => {
+    const warnings: string[] = [];
+    await applyIdleWorkflow(workflowsAt([], 404).kc, days, true, [], (m) => warnings.push(m));
+    const refusing = workflowsAt([]);
+    const kc = refusing.kc;
+    const post = kc.call.bind(kc);
+    kc.call = (async (method: string, path: string, body?: unknown) => {
+      if (method === 'POST') return workflowsAt([], 400).kc.call(method, path, body);
+      return post(method, path, body);
+    }) as typeof kc.call;
+    await applyIdleWorkflow(kc, days, true, [], (m) => warnings.push(m));
+    expect(warnings).toEqual([expect.stringContaining('no Workflows'), expect.stringContaining('refused the idle-account Workflow')]);
+  });
+
+  it('leaves the Workflow alone when the days couldn’t be read', async () => {
+    const t = workflowsAt([{ id: 'old', name: `${IDLE_WORKFLOW}-60-90` }]);
+    await applyIdleWorkflow(t.kc, undefined, true, []);
+    expect(t.calls).toEqual([]);
   });
 });

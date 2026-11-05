@@ -10,6 +10,9 @@ import type { LifecycleStore } from './lifecycle.ts';
  * their sessions (when turned off), keeps the change, and records it in Activity as Keycloak's doing, so
  * followers hear platform.person.disabled or platform.person.enabled as they do for an admin's change.
  *
+ * A turn-off is put down to being idle when the person's last sign-in is as old as the organisation's turn-off
+ * days, which is when Keycloak's idle-account Workflow turns them off.
+ *
  * The first run only takes note: accounts already off then were turned off before identity kept why, so they
  * are kept as off with no cause and nothing is announced. A leaver turned back on in Keycloak's console is
  * left alone here: Admin still shows them as left.
@@ -26,6 +29,15 @@ export interface ReconcileStore {
   alone(fn: () => Promise<void>): Promise<boolean>;
 }
 
+const DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Why a sign-in went off in Keycloak: for being idle (its Workflow) when idle accounts are on and the last
+ * sign-in is at least the turn-off days old, less a day for the Workflow's own timing; otherwise unknown.
+ */
+export const causeOf = (lastSignInAt: string | undefined, at: string, idle?: { on: boolean; turnOffDays: number }): 'idle' | undefined =>
+  idle?.on && lastSignInAt && new Date(at).getTime() - new Date(lastSignInAt).getTime() >= (idle.turnOffDays - 1) * DAY ? 'idle' : undefined;
+
 export interface ReconcileResult {
   disabled: string[];
   enabled: string[];
@@ -38,12 +50,15 @@ export async function reconcile({
   lifecycle,
   store,
   audit,
+  idle,
   now = () => new Date().toISOString(),
 }: {
   directory: Pick<Directory, 'people' | 'person' | 'endSessions'>;
   lifecycle: Pick<LifecycleStore, 'get' | 'disabled' | 'enabled'>;
   store: ReconcileStore;
   audit?: (entry: NewAuditEntry) => Promise<unknown>;
+  /** The organisation's idle-account days, to tell a turn-off for being idle from one made by hand. */
+  idle?: () => Promise<{ on: boolean; turnOffDays: number }>;
   now?: () => string;
 }): Promise<ReconcileResult | undefined> {
   const result: ReconcileResult = { disabled: [], enabled: [], noted: [] };
@@ -52,6 +67,7 @@ export async function reconcile({
     const people = await directory.people();
     const known = await lifecycle.get(people.map((p) => p.id));
     const offHere = (id: string) => !!known.get(id)?.disabledAt;
+    const days = idle ? await idle().catch(() => undefined) : undefined;
     const changed = people.filter((p) => !known.get(p.id)?.left && p.enabled === offHere(p.id));
     for (const listed of changed) {
       // An admin's change in AUGUR writes Keycloak first and identity's record just after: look again, so a
@@ -59,8 +75,9 @@ export async function reconcile({
       const [person, again] = await Promise.all([directory.person(listed.id), lifecycle.get([listed.id]).then((m) => m.get(listed.id))]);
       if (again?.left || person.enabled !== !!again?.disabledAt) continue;
       const at = now();
+      const cause = first ? undefined : causeOf(again?.lastSignInAt, at, days);
       if (!person.enabled) {
-        await lifecycle.disabled(person.id, undefined, at);
+        await lifecycle.disabled(person.id, cause, at);
         if (first) {
           result.noted.push(person.id);
           continue;
@@ -77,7 +94,7 @@ export async function reconcile({
         app: 'identity',
         action: person.enabled ? 'person.enabled' : 'person.disabled',
         target: person.id,
-        detail: { username: person.username, outside: true },
+        detail: { username: person.username, outside: true, ...(!person.enabled && cause ? { cause, days: days!.turnOffDays } : {}) },
       });
     }
     if (first) await store.started(now());

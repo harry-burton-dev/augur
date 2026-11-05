@@ -471,6 +471,92 @@ export const applyMail = async (kc: KeycloakDirectory, mail: RealmMail | undefin
   changes.push(`email: ${differs.map(said).join(', ')}`);
 };
 
+/**
+ * Idle accounts (PER-194 spec 4.7): Keycloak's own Workflow, enrolled at each sign-in, emails the person
+ * after `warningDays` without one and turns their sign-in off at `turnOffDays`. Every sign-in starts the
+ * count again (`restart-in-progress`). Deployment admins are left out, so nobody locks the deployment out by
+ * being away; service accounts never enrol, as they don't sign in through LOGIN. The warning is Keycloak's own
+ * "Account Disable Warning" email, in each person's language and AUGUR's email theme, and counts the days left.
+ *
+ * Keycloak refuses to change a Workflow's steps while people are parked on them, so the days are in its name:
+ * new days make a new Workflow and the old one is deleted, which cancels its parked steps. A change therefore
+ * only ever delays a turn-off, and never brings one forward without a warning.
+ */
+export const IDLE_WORKFLOW = 'augur-idle-accounts';
+
+export interface IdleDays {
+  on: boolean;
+  warningDays: number;
+  turnOffDays: number;
+}
+
+interface KcWorkflow {
+  id?: string;
+  name: string;
+  on?: string;
+  if?: string;
+  concurrency?: Record<string, string>;
+  steps?: { uses: string; after?: string; with?: Record<string, string[]> }[];
+}
+
+/** The Workflow for these days. Its name carries the days, so new days are a new Workflow. */
+export const idleWorkflow = (idle: IdleDays): KcWorkflow => ({
+  name: `${IDLE_WORKFLOW}-${idle.warningDays}-${idle.turnOffDays}`,
+  on: 'user-authenticated',
+  if: `not has-role(${DEPLOYMENT_ADMIN_ROLE.name})`,
+  concurrency: { 'restart-in-progress': 'true' },
+  steps: [
+    { uses: 'notify-user', after: `${idle.warningDays}d` },
+    { uses: 'disable-user', after: `${idle.turnOffDays - idle.warningDays}d` },
+  ],
+});
+
+/**
+ * Keeps exactly one idle-account Workflow in step with the organisation's days, or none when idle accounts
+ * are off. None either without email: an account must never turn off without a warning. A Keycloak without
+ * Workflows (before 26.6, or with the feature turned off) is warned about and left as it is.
+ */
+export const applyIdleWorkflow = async (
+  kc: KeycloakDirectory,
+  idle: IdleDays | undefined,
+  canEmail: boolean,
+  changes: Changes,
+  warn: (message: string) => void = () => undefined,
+) => {
+  if (!idle) return;
+  let existing: KcWorkflow[];
+  try {
+    existing = (await kc.call<KcWorkflow[]>('GET', `/workflows?search=${encodeURIComponent(IDLE_WORKFLOW)}&max=100`)).data.filter((w) => w.name.startsWith(IDLE_WORKFLOW));
+  } catch (err) {
+    if (err instanceof DirectoryError && err.status === 404) {
+      warn('This Keycloak has no Workflows (26.6 or later, with the feature on), so idle accounts aren’t warned or turned off.');
+      return;
+    }
+    throw err;
+  }
+  if (idle.on && !canEmail) warn('Idle accounts aren’t turned off: email isn’t set up (SMTP_HOST), so nobody could be warned first.');
+  const want = idle.on && canEmail ? idleWorkflow(idle) : undefined;
+  if (want && !existing.some((w) => w.name === want.name)) {
+    try {
+      await kc.call('POST', '/workflows', want);
+    } catch (err) {
+      // Never fail the realm job, and with it an upgrade, over this: keep what was there, and say why.
+      if (!(err instanceof DirectoryError) || err.status !== 400) throw err;
+      warn(`Keycloak refused the idle-account Workflow (${err.message}), so the days in Admin → Organisation aren’t applied.`);
+      return;
+    }
+    changes.push(`idle accounts: warned after ${idle.warningDays} days, turned off after ${idle.turnOffDays}`);
+  }
+  for (const old of existing.filter((w) => w.name !== want?.name)) {
+    await kc.call('DELETE', `/workflows/${encodeURIComponent(old.id!)}`);
+    if (!want) changes.push('idle accounts: no longer turned off');
+  }
+};
+
+/** Whether Keycloak can send email: the organisation's relay, or one set in Keycloak's console. */
+const canEmail = async (kc: KeycloakDirectory, mail: RealmMail | undefined) =>
+  Boolean(mail) || Boolean((await kc.call<{ smtpServer?: { host?: string } }>('GET', '')).data.smtpServer?.host);
+
 export interface ApplyOptions {
   settings: RealmSettings;
   /** The product's name (`productNameFromEnv`), set as the realm's display name. */
@@ -490,6 +576,8 @@ export interface ApplyOptions {
   mail?: RealmMail;
   /** The organisation's sender (`realmSenderFromDb`): its address replaces SMTP_FROM and its name the product's as the sender. */
   sender?: { name: string; address?: string };
+  /** The organisation's idle-account days (`realmIdleFromDb`); without them the idle Workflow is left as it is. */
+  idle?: IdleDays;
 }
 
 /**
@@ -502,6 +590,7 @@ export const applyRealm = async (kc: KeycloakDirectory, options: ApplyOptions): 
   if (options.look) await applyLook(kc, options.look, changes, options.warn);
   const { mail, fromName } = withSender(options.mail, options.sender, options.productName);
   await applyMail(kc, mail, changes, fromName);
+  await applyIdleWorkflow(kc, options.idle, await canEmail(kc, mail), changes, options.warn);
   await applyRequiredActions(kc, changes);
   await applyRoles(kc, changes);
   await applyUserProfile(kc, changes);

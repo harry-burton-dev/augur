@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { realmSenderFromDb } from './realm-sender.ts';
+import { realmIdleFromDb, realmSenderFromDb } from './realm-sender.ts';
 
 describe('the organisation’s sender, for the realm job', () => {
   it('says nothing, and warns, when the database can’t be read', async () => {
@@ -33,5 +33,20 @@ describe.runIf(process.env.DATABASE_URL)('the organisation’s sender, read from
     await q('create table identity.organisation (only_row boolean primary key default true, sender_name text, sender_address text)');
     await q("insert into identity.organisation (sender_name, sender_address) values ('Finance notices', 'notices@finance.example')");
     expect(await read()).toEqual({ name: 'Finance notices', address: 'notices@finance.example' });
+  });
+
+  it('reads the idle-account days, with the defaults for what isn’t set or before identity has them', async () => {
+    const q = (sql: string) => admin.query(sql.replaceAll('identity.', 'realm_sender_test.'));
+    const defaults = { on: true, warningDays: 60, turnOffDays: 90 };
+    const read = () => realmIdleFromDb(url, defaults, undefined, 'realm_sender_test');
+    await q('drop table if exists identity.organisation');
+    expect(await read()).toEqual(defaults);
+    await q('create table identity.organisation (only_row boolean primary key default true, sender_name text)');
+    expect(await read()).toEqual(defaults);
+    await q('alter table identity.organisation add column idle_on boolean, add column idle_warning_days int, add column idle_turn_off_days int');
+    await q('insert into identity.organisation (idle_turn_off_days) values (120)');
+    expect(await read()).toEqual({ on: true, warningDays: 60, turnOffDays: 120 });
+    await q('update identity.organisation set idle_on = false');
+    expect((await read())?.on).toBe(false);
   });
 });

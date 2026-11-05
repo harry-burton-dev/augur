@@ -42,6 +42,7 @@ export const describe = (e: AuditEntry, names: Names): string => {
       if (d.outside) return `${names.person(target)}’s sign-in was turned back on in the sign-in service, not in AUGUR`;
       return `${who} turned on ${names.person(target)}’s sign-in`;
     case 'person.disabled':
+      if (d.cause === 'idle') return `${names.person(target)}’s sign-in was turned off after ${String(d.days)} days without a sign-in`;
       if (d.outside) return `${names.person(target)}’s sign-in was turned off in the sign-in service, not in AUGUR`;
       return `${who} turned off ${names.person(target)}’s sign-in`;
     case 'person.password-reset':
