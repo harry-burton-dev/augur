@@ -143,10 +143,10 @@ When the SDK makes a breaking change it goes to `2.0.0`. Apps keep `^1.0.0` and 
 
 ### The API report (ADR 0052)
 
-What the SDK exports is written down, by API Extractor, in `platform/packages/mfe-sdk/etc/*.api.md`: one report per entry point (`@augur/mfe-sdk` and `@augur/mfe-sdk/build`). The reports are committed, so a reviewer sees every change to the contract as a diff. `pnpm check:api`, in CI's `build-test`, fails when:
+What the SDK exports is written down, by API Extractor, in `platform/packages/mfe-sdk/etc/*.api.md`: one report per entry point (`@augur/mfe-sdk` and `@augur/mfe-sdk/build`). The records package and the service kit (`@augur/service-kit`, `/telemetry` and `/mail`) have theirs in their own `etc/`. The reports are committed, so a reviewer sees every change to the contract as a diff. `pnpm check:api`, in CI's `build-test` (on a pull request, when `platform/packages` or the check changed), fails when:
 
 - a report doesn't match the built types: run `pnpm build && pnpm api:update` and commit the report with the change;
-- a report names a type from another package: the SDK wraps third-party libraries in its own types, so their next major never forces an SDK major;
+- a report names a type from another package: the SDK wraps third-party libraries in its own types, so their next major never forces an SDK major. The one exception is the service kit, which may name Fastify's and jose's types (`ALLOWED_FOREIGN` in `scripts/check-api.mjs`), since a service is built on Fastify (ADR 0005); every other library it uses, such as Nodemailer, stays behind its own types;
 - a pull request changes a report without a changeset of the right size for the package: a minor for additions, a major for anything removed or changed. When a change only looks breaking (a widened type, say), a minor changeset with a line starting `Not breaking:` that says why will do.
 
 A library joins by adding an `api-extractor*.json` beside its `package.json`. Before any library is published, and on every pull request that touches `platform/packages`, `scripts/publish-packages.mjs --check` packs each one and runs publint and Are the Types Wrong on it.
