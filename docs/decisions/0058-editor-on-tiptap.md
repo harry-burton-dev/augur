@@ -1,8 +1,8 @@
 # 0058. Quill's Editor is built on Tiptap, and keeps writing the same small Markdown
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-04
-- **Decided by:** Harry
+- **Decided by:** Harry (accepted 2026-11-05, PER-314)
 - **Replaces:** none. Reopens the Lit kit's default "own textarea editor, not Tiptap" (app kit plan, K5, 29 October 2026) for the React kit only. Builds on [0015](0015-react-kits-tailwind.md) and [0054](0054-app-frontend-starter-libraries.md).
 
 ## Context
