@@ -38,7 +38,11 @@ A notification that needs someone (`needs`) is also emailed to them (ADR 0044, D
 - **Sent** through the organisation's relay with `@augur/service-kit/mail`, from the organisation's sender (Admin, Organisation). The subject is the notification's title and the body its detail. Its link (`PLATFORM_URL/?notice=<id>`) opens the notification in the shell as clicking it there would, on its floor, read or not (`GET /v1/notifications/{id}`); one that isn't theirs, or has gone, says so. The words around it are in the person's language, falling back to English (`EMAIL_WORDS` in the events service).
 - **Tried again** in 5 minutes when the relay refuses it, and skipped after 5 tries.
 
-Each notification keeps how its email ended (`emailed_at`, or `email_skipped` and why), for anyone looking into one that didn't arrive. The events service needs `PLATFORM_URL` and the `SMTP_*` settings (docs/deploy.md, Email); without a relay it logs that no notice is emailed. Other levels aren't emailed one by one.
+Each notification keeps how its email ended (`emailed_at`, or `email_skipped` and why), for anyone looking into one that didn't arrive. The events service needs `PLATFORM_URL` and the `SMTP_*` settings (docs/deploy.md, Email); without a relay it logs that no notice is emailed. Other levels aren't emailed one by one; the digests gather them.
+
+### Digests
+
+People who choose a digest in Account, Notifications get one email gathering what they haven't read and weren't already emailed: **daily** at 08:00 their time (their time zone, else the organisation's), **weekly** at 08:00 on Mondays. The events service's `digests` job looks every hour, across instances, and asks identity who is on each (`GET /v1/notice-settings?digest=daily|weekly`). A digest waits out quiet hours, goes only to a confirmed address, and isn't sent when there's nothing new. It names up to 15 notifications, newest first, and counts the rest; its link opens AUGUR, or the one notification when there's only one. Each person's last digest of each kind is kept (`events.digests`), so a repeated run never sends one twice; a refused send is tried again the next hour, still for that morning. A first digest looks back a day (a week for weekly).
 
 ## What AUGUR itself tells people
 

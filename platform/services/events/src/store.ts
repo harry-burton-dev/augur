@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
+import { digestMigration, PgDigestStore, type DigestStore } from './digests.ts';
 import { emailMigration, PgEmailOutbox, type EmailOutbox } from './email-outbox.ts';
 import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
 import { PERSONAL_DETAIL_KEYS, REMOVED, runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
@@ -144,6 +145,8 @@ export interface EventStore {
   readonly inbox: InboxStore;
   /** The notifications waiting to be emailed (ADR 0044, D7). */
   readonly emails: EmailOutbox;
+  /** Each person's last daily and weekly digest. */
+  readonly digests: DigestStore;
   /**
    * Adds one notification per recipient and tells every listener, on every instance.
    * With a key, skips anyone who already has one from that app with that key.
@@ -288,6 +291,7 @@ export const migrations: Migration[] = [
       create index audit_detail_person on events.audit ((detail->>'person'));`,
   },
   emailMigration,
+  digestMigration,
 ];
 
 const CHANNEL = 'events_notification';
@@ -379,6 +383,7 @@ export class PgEventStore implements EventStore {
   private closed = false;
   readonly inbox: PgInboxStore;
   readonly emails: PgEmailOutbox;
+  readonly digests: PgDigestStore;
 
   constructor(
     private readonly pool: pg.Pool,
@@ -386,6 +391,7 @@ export class PgEventStore implements EventStore {
   ) {
     this.inbox = new PgInboxStore(pool, options.inboxDoneDays);
     this.emails = new PgEmailOutbox(pool);
+    this.digests = new PgDigestStore(pool);
   }
 
   static async connect(connectionString: string, options: { inboxDoneDays?: number } = {}) {

@@ -1,6 +1,7 @@
 import { callerCheckFromEnv, commonSettings, createJobs, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { Mailer, mailRelayFromEnv, organisationSender } from '@augur/service-kit/mail';
 import { buildApp } from './app.ts';
+import { identityDigestPeople, sendDigests } from './digests.ts';
 import { identityNoticeSettings, sendDueEmails } from './notice-emails.ts';
 import { policyKeepDays, pruneActivity, untilNight } from './retention.ts';
 import { PgEventStore, type EventStore } from './store.ts';
@@ -109,6 +110,14 @@ if (credentials) {
   jobs.schedule('notice-emails', '* * * * *', async () => {
     const done = await sendDueEmails({ outbox: store.emails, settings, mailer, platformUrl: process.env.PLATFORM_URL, log: app.log });
     if (done.sent || done.failed) app.log.info(done, 'notice emails');
+  });
+  // The daily and weekly digests, each person's at 08:00 their time (Mondays for weekly): looked at every hour.
+  const people = identityDigestPeople({ identityUrl: IDENTITY_URL, credentials });
+  jobs.schedule('digests', '0 * * * *', async () => {
+    for (const kind of ['daily', 'weekly'] as const) {
+      const done = await sendDigests({ kind, people, store: store.digests, mailer, platformUrl: process.env.PLATFORM_URL, log: app.log });
+      if (done.sent || done.failed) app.log.info({ kind, ...done }, 'digests');
+    }
   });
 } else log.warn('SERVICE_CLIENT_SECRET is not set: identity can’t be asked how people want notices, so none is emailed.');
 await jobs.launch();
