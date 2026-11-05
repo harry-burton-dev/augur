@@ -656,6 +656,46 @@ export const buildApp = async ({
         },
       );
 
+      /**
+       * The apps that link their things to entities (manifest links.entities, SDK 2.1) and the types
+       * they bind, so a follower such as the entity catalogue subscribes to exactly those topics
+       * (`<app>.<type>.entity-bound` and `-unbound`, ADR 0066) rather than every event each app sends.
+       */
+      app.get(
+        '/entity-links',
+        {
+          schema: {
+            summary: 'The apps that bind their things to entities, and the types they bind (services only)',
+            description: [
+              'Every registered app whose manifest sets links.entities, with the types of thing it names in',
+              'bindings, each published on <app>.<type>.entity-bound and <app>.<type>.entity-unbound (ADR 0066).',
+              'An app that sets links.entities without bindings has no types listed: follow its <app>.* topics',
+              "and read each event with the service kit's readBinding. For any service, AUGUR's own or an app's.",
+            ].join(' '),
+            response: {
+              200: Type.Array(
+                Type.Object({
+                  app: Type.String({ description: "The app's id" }),
+                  types: Type.Array(Type.String(), { description: 'The types of thing it binds (its manifest\'s bindings)' }),
+                }),
+                { description: 'The apps that link to entities, by id' },
+              ),
+              403: refused('Not a service'),
+              503: refused("The sign-in service that checks the caller's token can't be reached right now"),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          if (!service) return reply.code(403).send({ error: 'forbidden', message: 'Only a service can ask which apps link to entities.' });
+          return (await store.records())
+            .filter((r) => r.entry.links?.entities)
+            .map((r) => ({ app: r.entry.id, types: r.entry.bindings ?? [] }))
+            .sort((a, b) => a.app.localeCompare(b.app));
+        },
+      );
+
       /** The catalogue changed either way; a failed audit write is logged, not turned into a failed request. */
       const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
