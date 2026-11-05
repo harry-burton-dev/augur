@@ -105,6 +105,8 @@ The `backup` container dumps the whole database every night at 02:00 UTC into `i
 
 Once a week (Sunday, after the backup; `RESTORE_TEST_WEEKDAY` changes the day) it also **tests a restore**: it loads the newest backup into a throwaway database inside the backup container, checks the platform's tables and Keycloak's people came back, then throws it away. The live database is never touched. It runs once on first start too. **Admin → Status** shows the last backup and the last restore test, and its heading says "Backups need a look" when the last backup failed or is over a day old, or the last restore test failed or is over a week old.
 
+A nightly dump can only take the database back to last night. **Restoring to a point in time**, below, goes back to any moment in the last 7 days.
+
 The backups sit on the same disk as the database, so a lost server loses them too. The **off-server copy** below fixes that; until it's set up, Admin → Status says backups are kept on this server only.
 
 ### Off-server copy
@@ -159,6 +161,35 @@ Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, Min
   pc run --rm --no-deps -v platform_garage-meta:/r/meta -v platform_garage-data:/r/data -v "$PWD/infra/deploy/backups:/backups:ro" \
     --entrypoint sh backup -c 'cd /r && tar -xzf /backups/objects-2026-10-18.tar.gz && cp "meta/snapshots/$(ls meta/snapshots | sort | tail -n 1)/db.sqlite" meta/db.sqlite && rm -f meta/db.sqlite-wal meta/db.sqlite-shm'
   pc up -d
+  ```
+
+### Restore to a point in time
+
+Postgres archives every change it makes (its write-ahead log, WAL) into the `wal-archive` volume as it goes, gzipped, at most 15 minutes after it was made (`PITR_ARCHIVE_SECONDS`), and the backup container takes a **base backup** of the whole database each night beside the dump, as `base-YYYY-MM-DD/` (ADR 0064). Replaying the archived changes onto a base backup brings the database back as it was at any moment you choose, from the oldest base backup to the newest archived change: a row deleted by mistake at 10:31 can be had back by going to 10:30. The last 7 base backups are kept (`PITR_KEEP_DAYS`), and archived changes older than the oldest go.
+
+With the off-server copy set up, the newest base backup and the WAL archive are copied to the bucket too, every hour, and the bucket keeps the same 7 days of them. So a lost server loses at most about an hour of changes, not a day.
+
+Once a week the restore test also proves this: it marks a moment on the live database, restores the newest base backup into a throwaway Postgres, replays every archived change since, and checks the result reached the mark and that the platform's and Keycloak's tables are there. **Admin → Status** shows "Point in time" with how far back the database can go and the last test, and says "Backups need a look" when Postgres isn't archiving or its archiving fails, a base backup failed, the copy off the server failed, or the test failed or is over a week old. The results are in `infra/deploy/backups/pitr.json` and `pitr-test.json`.
+
+The first start after this arrived restarts Postgres with archiving on (`pc up -d` does it); the backup container then takes the first base backup and runs the first test straight away.
+
+- **Test it now**: `pc exec backup /bin/sh /backup/backup.sh --pitr-test`.
+- **Go back to a moment.** It replaces the whole database (every app's data and Keycloak's) with how it was then: everything after that moment is gone from the live database, though the current data is kept in `infra/deploy/backups/` first. Times are UTC.
+  ```sh
+  pc stop                            # everything, Postgres too
+  pc run --rm --no-deps -v platform_pgdata:/pgdata --entrypoint /bin/sh backup \
+    /backup/restore-to-time.sh "2026-11-05 10:30:00"
+  pc up -d postgres
+  pc logs -f postgres                # wait for "archive recovery complete"
+  pc up -d
+  ```
+  It picks the newest base backup taken before that moment, keeps the current data as `pgdata-before-restore-<now>.tar.gz` (delete it once you are happy with the result; nothing else does), and tells Postgres to replay the archive up to the moment and then open. A moment later than the newest archived change makes Postgres stop with "recovery ended before configured recovery target was reached": run it again with an earlier time. To undo a restore, stop Postgres and unpack that tarball into the volume the same way.
+- **Go back to a moment when the server is lost**: on the new server, set the same `OFFSITE_*` in `.env`, fetch the base backups and the archive from the bucket, then go back as above:
+  ```sh
+  pc up -d backup-tools && pc run --rm --no-deps --entrypoint /tools/restic backup restore latest --host augur --tag augur-wal --target /
+  pc run --rm --no-deps --entrypoint /tools/restic backup restore latest --host augur --tag augur-base --target /
+  # For an older base backup: pc run --rm --no-deps --entrypoint /tools/restic backup snapshots --tag augur-base,
+  # then restore that snapshot's id in place of latest.
   ```
 
 ## What's in it

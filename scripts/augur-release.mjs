@@ -32,6 +32,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import semver from 'semver';
 import { layoutProblems, readShipped, shippedParts, SHIPPED_FILE } from './shipped-apps.mjs';
+import { NOTES_FILE, stamp } from './upgrade-notes.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const RELEASE_FILE = 'release/augur-release.json';
@@ -309,6 +310,9 @@ const main = () => {
     const next = nextRelease(previous, parts, readSettings(), new Date().toISOString().slice(0, 10), names);
     if (next === previous) return console.log(`AUGUR stays at ${previous.version}: no part changed.`);
     write(next);
+    // Each upgrade note added since the last release says it came in this one (docs/upgrade.md).
+    const notes = join(root, NOTES_FILE);
+    writeFileSync(notes, stamp(readFileSync(notes, 'utf8'), next.version));
     console.log(`AUGUR ${previous?.version ?? '(none)'} → ${titleOf(next)}${next.breaking.length ? ' (breaking)' : ''}.`);
     if (!next.name && names.length) console.warn(`::warning::${NAMES_FILE} has no name left for AUGUR ${next.version}: add more at the end.`);
   } else if (mode === 'dev') {

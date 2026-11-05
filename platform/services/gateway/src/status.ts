@@ -192,6 +192,20 @@ export interface RestoreTest extends BackupRun {
   auditEntries?: number;
 }
 
+/** Restoring the database to a point in time (ADR 0064), as the backup container noted it hourly in pitr.json. */
+export interface PointInTime {
+  at: string;
+  ok: boolean;
+  bases?: number;
+  /** When the oldest base backup was taken: the earliest moment the database can go back to. */
+  earliest?: string;
+  archivedAt?: string;
+  copiedAt?: string;
+  problem?: string;
+  /** The weekly test, from pitr-test.json. */
+  lastTest?: { at: string; ok: boolean; base?: string; seconds?: number; mark?: string; reached?: string; problem?: string };
+}
+
 export interface BackupStatus {
   /** `attention` when backups can't be relied on right now; `problem` says why. */
   state: 'ok' | 'attention';
@@ -199,6 +213,8 @@ export interface BackupStatus {
   lastBackup?: BackupRun;
   /** Absent until a copy has been made: then backups stay on this server only. */
   offsite?: OffsiteCopy;
+  /** Absent on a deployment whose compose file doesn't archive WAL yet. */
+  pointInTime?: PointInTime;
   lastRestoreTest?: RestoreTest;
 }
 
@@ -233,12 +249,16 @@ const OFFSITE_HOW = 'Set OFFSITE_REPOSITORY, OFFSITE_PASSWORD and the bucket key
 /**
  * What the backup container last wrote beside the backups: the night's dump (expected within a day), its
  * copy off the server (expected within a day; ADR 0060) and the weekly restore test (expected within 8
- * days, and from the off-server copy once there is one).
+ * days, and from the off-server copy once there is one); then restoring to a point in time (ADR 0064):
+ * pitr.json, which the container rewrites every hour, and its weekly test.
  */
 export const backupStatus = async (dir: string, now = Date.now()): Promise<BackupStatus> => {
   const lastBackup = await readJson<BackupRun>(join(dir, 'last-backup.json'));
   const offsite = await readJson<OffsiteCopy>(join(dir, 'offsite.json'));
   const lastRestoreTest = await readJson<RestoreTest>(join(dir, 'restore-test.json'));
+  const pitr = await readJson<PointInTime>(join(dir, 'pitr.json'));
+  const pitrTest = await readJson<PointInTime['lastTest']>(join(dir, 'pitr-test.json'));
+  const pointInTime = pitr ? { ...pitr, ...(pitrTest ? { lastTest: pitrTest } : {}) } : undefined;
   const age = (run?: { at: string }) => (run ? now - Date.parse(run.at) : Infinity);
   const problem = !lastBackup
     ? 'No backup has been taken yet.'
@@ -260,12 +280,33 @@ export const backupStatus = async (dir: string, now = Date.now()): Promise<Backu
                     ? 'The last copy off the server is more than a day old. Check the backup container is running.'
                     : lastRestoreTest.from !== 'offsite'
                       ? 'No backup has been restored from the off-server copy yet. It runs with the next restore test.'
-                      : undefined;
+                      : pointInTimeProblem(pointInTime, age);
   return {
     state: problem ? 'attention' : 'ok',
     ...(problem ? { problem } : {}),
     ...(lastBackup ? { lastBackup } : {}),
     ...(offsite ? { offsite } : {}),
+    ...(pointInTime ? { pointInTime } : {}),
     ...(lastRestoreTest ? { lastRestoreTest } : {}),
   };
 };
+
+/**
+ * Why the database can't be relied on to go back to a moment: pitr.json is rewritten hourly, so over three
+ * hours old means the backup container stopped; the weekly test, like the restore test, within 8 days.
+ * Nothing is said before pitr.json first appears: an older compose file, whose deployment still has its dumps.
+ */
+const pointInTimeProblem = (pitr: PointInTime | undefined, age: (run?: { at: string }) => number): string | undefined =>
+  !pitr
+    ? undefined
+    : !pitr.ok
+      ? (pitr.problem ?? 'The database cannot be restored to a point in time right now.')
+      : age(pitr) > 3 * 3_600_000
+        ? 'Restoring to a point in time has not been checked for over three hours. Check the backup container is running.'
+        : !pitr.lastTest
+          ? 'Restoring to a point in time has not been tested yet. It runs with the next restore test.'
+          : !pitr.lastTest.ok
+            ? `The last point-in-time restore test failed: ${pitr.lastTest.problem ?? 'it didn’t say why.'}`
+            : age(pitr.lastTest) > 8 * DAY
+              ? 'No point-in-time restore test has run for over a week. Check the backup container is running.'
+              : undefined;

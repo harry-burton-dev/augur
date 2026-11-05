@@ -15,6 +15,10 @@ export interface Preferences {
   recent?: string[];
   /** App ids whose notifications land in the stream silently and never on Home. */
   muted?: string[];
+  /** App ids kept first on Home and in the list of apps. */
+  pinned?: string[];
+  /** The floor id AUGUR opens on when an address names none. */
+  startFloor?: string;
   /** What their away status says, and when it ends (ISO date-time); away ends then by itself. */
   awayMessage?: string;
   awayUntil?: string;
